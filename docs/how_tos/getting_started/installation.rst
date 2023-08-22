@@ -26,7 +26,7 @@ Installation
 
 .. code-block:: console
 
-    $ pip install git+ssh://git@github.nrel.gov/viz/wms.git@v0.1.13#subdirectory=torc_package \
+    $ pip install git+ssh://git@github.nrel.gov/viz/wms.git@v0.1.14#subdirectory=torc_package \
         git+https://github.nrel.gov/dthom/resource_monitor@v0.1.2
 
 Note that you can also install the ``torc`` package from a clone of the repository. This will give
