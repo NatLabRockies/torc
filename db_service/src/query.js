@@ -1058,7 +1058,7 @@ function prepareJobsForSubmission(workflow, workerResources, limit, reason) {
     action: function() {
       const cursor = query({count: true})`
         FOR job IN ${collection}
-          FILTER job.status == ${JobStatus.Ready} || job.status == ${JobStatus.Scheduled}
+          FILTER (job.status == ${JobStatus.Ready} || job.status == ${JobStatus.Scheduled})
             && job.internal.memory_bytes <= ${availableMemory}
             && job.internal.num_cpus <= ${availableCpus}
             && job.internal.num_gpus <= ${availableGpus}
