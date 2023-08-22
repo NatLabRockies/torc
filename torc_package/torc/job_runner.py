@@ -28,7 +28,6 @@ from resource_monitor.models import (
 from resource_monitor.resource_monitor import run_monitor_async
 from resource_monitor.timing.timer_stats import Timer
 from torc.swagger_client import DefaultApi
-from torc.swagger_client.rest import ApiException
 from torc.swagger_client.models.workflow_compute_nodes_model import WorkflowComputeNodesModel
 from torc.swagger_client.models.workflow_compute_node_stats_model import (
     WorkflowComputeNodeStatsModel,
@@ -200,9 +199,9 @@ class JobRunner:
         try:
             self._run_until_complete()
         finally:
-            self._complete_compute_node()
-            if self._stats.is_enabled():
+            if self._parent_monitor_conn is not None:
                 self._stop_resource_monitor()
+            self._complete_compute_node()
 
     def _run_until_complete(self):
         os.environ["TORC_WORKFLOW_KEY"] = self._workflow.key
@@ -325,7 +324,7 @@ class JobRunner:
                 self._workflow.key,
                 self._compute_node.key,
             )
-        except ApiException:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.exception("Failed to put_workflows_workflow_compute_nodes_key")
 
     def _complete_job(self, job, result, status):
