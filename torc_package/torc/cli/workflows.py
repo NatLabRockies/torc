@@ -62,6 +62,32 @@ def cancel(ctx, api: DefaultApi, workflow_keys: tuple[str]) -> None:
 
 
 @click.command()
+@click.pass_obj
+@click.pass_context
+def cancel_all(ctx, api: DefaultApi) -> None:
+    """Cancel all active workflows being run by the current user."""
+    setup_cli_logging(ctx, __name__)
+    check_database_url(api)
+    user = get_user_from_context(ctx)
+    keys = [x.key for x in iter_documents(api.list_workflows, user=user)]
+
+    final_keys = []
+    for key in keys:
+        if has_scheduled_compute_nodes(api, key):
+            final_keys.append(key)
+
+    if not final_keys:
+        logger.info("There are no active workflows to cancel.")
+        return
+
+    keys_str = " ".join(final_keys)
+    msg = f"This command will cancel these workflow keys: {keys_str}"
+    confirm_change(ctx, msg)
+    for key in final_keys:
+        cancel_workflow(api, key)
+
+
+@click.command()
 @click.option(
     "-U",
     "--update-rc-with-key",
@@ -973,6 +999,7 @@ def _update_torc_rc(api: DefaultApi, workflow: WorkflowModel) -> None:
 
 
 workflows.add_command(cancel)
+workflows.add_command(cancel_all)
 workflows.add_command(create)
 workflows.add_command(create_from_commands_file)
 workflows.add_command(create_from_json_file)
