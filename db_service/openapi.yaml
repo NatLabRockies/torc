@@ -4,7 +4,7 @@ info:
   license:
     name: BSD 3-Clause
   title: torc
-  version: v0.4.1
+  version: v0.4.2
 servers:
 - url: /_db/test-workflows/torc-service
 paths:

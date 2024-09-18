@@ -1,4 +1,3 @@
-# This will become 7.1.0 whenever that is released (to support pydantic v2).
 OPENAPI_CLI_VERSION=latest
 
 set -x

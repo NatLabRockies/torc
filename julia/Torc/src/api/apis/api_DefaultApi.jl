@@ -1393,9 +1393,9 @@ function _oacinternal_get_events_after_timestamp(_api::DefaultApi, key::String, 
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_get_events_after_timestamp_DefaultApi, "/workflows/{key}/events_after_timestamp/{timestamp}", [])
     OpenAPI.Clients.set_param(_ctx.path, "key", key)  # type String
     OpenAPI.Clients.set_param(_ctx.path, "timestamp", timestamp)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "category", category)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "skip", skip)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "limit", limit)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "category", category; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "skip", skip; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Float64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -1736,7 +1736,7 @@ const _returntypes_get_ready_job_requirements_DefaultApi = Dict{Regex,Type}(
 function _oacinternal_get_ready_job_requirements(_api::DefaultApi, key::String; scheduler_config_id=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_get_ready_job_requirements_DefaultApi, "/workflows/{key}/ready_job_requirements", [])
     OpenAPI.Clients.set_param(_ctx.path, "key", key)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "scheduler_config_id", scheduler_config_id)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "scheduler_config_id", scheduler_config_id; style="form", is_explode=true)  # type String
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -2158,8 +2158,8 @@ const _returntypes_initialize_jobs_DefaultApi = Dict{Regex,Type}(
 function _oacinternal_initialize_jobs(_api::DefaultApi, key::String; only_uninitialized=nothing, clear_ephemeral_user_data=nothing, body=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_initialize_jobs_DefaultApi, "/workflows/{key}/initialize_jobs", [], body)
     OpenAPI.Clients.set_param(_ctx.path, "key", key)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "only_uninitialized", only_uninitialized)  # type Bool
-    OpenAPI.Clients.set_param(_ctx.query, "clear_ephemeral_user_data", clear_ephemeral_user_data)  # type Bool
+    OpenAPI.Clients.set_param(_ctx.query, "only_uninitialized", only_uninitialized; style="form", is_explode=true)  # type Bool
+    OpenAPI.Clients.set_param(_ctx.query, "clear_ephemeral_user_data", clear_ephemeral_user_data; style="form", is_explode=true)  # type Bool
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
     return _ctx
@@ -2229,10 +2229,10 @@ function _oacinternal_join_collections_by_inbound_edge(_api::DefaultApi, key::St
     OpenAPI.Clients.set_param(_ctx.path, "key", key)  # type String
     OpenAPI.Clients.set_param(_ctx.path, "collection", collection)  # type String
     OpenAPI.Clients.set_param(_ctx.path, "edge", edge)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "collection_key", collection_key)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "collection_name", collection_name)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "skip", skip)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "limit", limit)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "collection_key", collection_key; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "collection_name", collection_name; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "skip", skip; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Float64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
     return _ctx
@@ -2274,10 +2274,10 @@ function _oacinternal_join_collections_by_outbound_edge(_api::DefaultApi, key::S
     OpenAPI.Clients.set_param(_ctx.path, "key", key)  # type String
     OpenAPI.Clients.set_param(_ctx.path, "collection", collection)  # type String
     OpenAPI.Clients.set_param(_ctx.path, "edge", edge)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "collection_key", collection_key)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "collection_name", collection_name)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "skip", skip)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "limit", limit)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "collection_key", collection_key; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "collection_name", collection_name; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "skip", skip; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Float64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
     return _ctx
@@ -2317,12 +2317,12 @@ const _returntypes_list_aws_schedulers_DefaultApi = Dict{Regex,Type}(
 function _oacinternal_list_aws_schedulers(_api::DefaultApi, workflow::String; skip=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, key=nothing, name=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_aws_schedulers_DefaultApi, "/workflows/{workflow}/aws_schedulers", [])
     OpenAPI.Clients.set_param(_ctx.path, "workflow", workflow)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "skip", skip)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "limit", limit)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort)  # type Bool
-    OpenAPI.Clients.set_param(_ctx.query, "_key", key)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "name", name)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "skip", skip; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort; style="form", is_explode=true)  # type Bool
+    OpenAPI.Clients.set_param(_ctx.query, "_key", key; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "name", name; style="form", is_explode=true)  # type String
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -2393,12 +2393,12 @@ const _returntypes_list_compute_node_stats_DefaultApi = Dict{Regex,Type}(
 function _oacinternal_list_compute_node_stats(_api::DefaultApi, workflow::String; skip=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, key=nothing, hostname=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_compute_node_stats_DefaultApi, "/workflows/{workflow}/compute_node_stats", [])
     OpenAPI.Clients.set_param(_ctx.path, "workflow", workflow)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "skip", skip)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "limit", limit)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort)  # type Bool
-    OpenAPI.Clients.set_param(_ctx.query, "_key", key)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "hostname", hostname)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "skip", skip; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort; style="form", is_explode=true)  # type Bool
+    OpenAPI.Clients.set_param(_ctx.query, "_key", key; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "hostname", hostname; style="form", is_explode=true)  # type String
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -2437,13 +2437,13 @@ const _returntypes_list_compute_nodes_DefaultApi = Dict{Regex,Type}(
 function _oacinternal_list_compute_nodes(_api::DefaultApi, workflow::String; skip=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, key=nothing, hostname=nothing, is_active=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_compute_nodes_DefaultApi, "/workflows/{workflow}/compute_nodes", [])
     OpenAPI.Clients.set_param(_ctx.path, "workflow", workflow)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "skip", skip)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "limit", limit)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort)  # type Bool
-    OpenAPI.Clients.set_param(_ctx.query, "_key", key)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "hostname", hostname)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "is_active", is_active)  # type Bool
+    OpenAPI.Clients.set_param(_ctx.query, "skip", skip; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort; style="form", is_explode=true)  # type Bool
+    OpenAPI.Clients.set_param(_ctx.query, "_key", key; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "hostname", hostname; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "is_active", is_active; style="form", is_explode=true)  # type Bool
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -2484,8 +2484,8 @@ function _oacinternal_list_edges(_api::DefaultApi, workflow::String, name::Strin
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_edges_DefaultApi, "/workflows/{workflow}/edges/{name}", [])
     OpenAPI.Clients.set_param(_ctx.path, "workflow", workflow)  # type String
     OpenAPI.Clients.set_param(_ctx.path, "name", name)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "skip", skip)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "limit", limit)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "skip", skip; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Float64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -2521,12 +2521,12 @@ const _returntypes_list_events_DefaultApi = Dict{Regex,Type}(
 function _oacinternal_list_events(_api::DefaultApi, workflow::String; skip=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, key=nothing, category=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_events_DefaultApi, "/workflows/{workflow}/events", [])
     OpenAPI.Clients.set_param(_ctx.path, "workflow", workflow)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "skip", skip)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "limit", limit)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort)  # type Bool
-    OpenAPI.Clients.set_param(_ctx.query, "_key", key)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "category", category)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "skip", skip; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort; style="form", is_explode=true)  # type Bool
+    OpenAPI.Clients.set_param(_ctx.query, "_key", key; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "category", category; style="form", is_explode=true)  # type String
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -2565,13 +2565,13 @@ const _returntypes_list_files_DefaultApi = Dict{Regex,Type}(
 function _oacinternal_list_files(_api::DefaultApi, workflow::String; skip=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, key=nothing, name=nothing, path=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_files_DefaultApi, "/workflows/{workflow}/files", [])
     OpenAPI.Clients.set_param(_ctx.path, "workflow", workflow)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "skip", skip)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "limit", limit)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort)  # type Bool
-    OpenAPI.Clients.set_param(_ctx.query, "_key", key)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "name", name)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "path", path)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "skip", skip; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort; style="form", is_explode=true)  # type Bool
+    OpenAPI.Clients.set_param(_ctx.query, "_key", key; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "name", name; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "path", path; style="form", is_explode=true)  # type String
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -2612,8 +2612,8 @@ function _oacinternal_list_files_produced_by_job(_api::DefaultApi, workflow::Str
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_files_produced_by_job_DefaultApi, "/workflows/{workflow}/files/produced_by_job/{key}", [])
     OpenAPI.Clients.set_param(_ctx.path, "workflow", workflow)  # type String
     OpenAPI.Clients.set_param(_ctx.path, "key", key)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "skip", skip)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "limit", limit)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "skip", skip; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Float64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -2681,13 +2681,13 @@ const _returntypes_list_job_process_stats_DefaultApi = Dict{Regex,Type}(
 function _oacinternal_list_job_process_stats(_api::DefaultApi, workflow::String; skip=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, key=nothing, job_key=nothing, run_id=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_job_process_stats_DefaultApi, "/workflows/{workflow}/job_process_stats", [])
     OpenAPI.Clients.set_param(_ctx.path, "workflow", workflow)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "skip", skip)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "limit", limit)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort)  # type Bool
-    OpenAPI.Clients.set_param(_ctx.query, "_key", key)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "job_key", job_key)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "run_id", run_id)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "skip", skip; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort; style="form", is_explode=true)  # type Bool
+    OpenAPI.Clients.set_param(_ctx.query, "_key", key; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "job_key", job_key; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "run_id", run_id; style="form", is_explode=true)  # type Int64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -2727,8 +2727,8 @@ const _returntypes_list_job_specifications_DefaultApi = Dict{Regex,Type}(
 function _oacinternal_list_job_specifications(_api::DefaultApi, workflow::String; skip=nothing, limit=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_job_specifications_DefaultApi, "/workflows/{workflow}/job_specifications", [])
     OpenAPI.Clients.set_param(_ctx.path, "workflow", workflow)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "skip", skip)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "limit", limit)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "skip", skip; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Float64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -2831,16 +2831,16 @@ const _returntypes_list_jobs_DefaultApi = Dict{Regex,Type}(
 function _oacinternal_list_jobs(_api::DefaultApi, workflow::String; skip=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, key=nothing, name=nothing, command=nothing, status=nothing, cancel_on_blocking_job_failure=nothing, supports_termination=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_jobs_DefaultApi, "/workflows/{workflow}/jobs", [])
     OpenAPI.Clients.set_param(_ctx.path, "workflow", workflow)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "skip", skip)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "limit", limit)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort)  # type Bool
-    OpenAPI.Clients.set_param(_ctx.query, "_key", key)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "name", name)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "command", command)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "status", status)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "cancel_on_blocking_job_failure", cancel_on_blocking_job_failure)  # type Bool
-    OpenAPI.Clients.set_param(_ctx.query, "supports_termination", supports_termination)  # type Bool
+    OpenAPI.Clients.set_param(_ctx.query, "skip", skip; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort; style="form", is_explode=true)  # type Bool
+    OpenAPI.Clients.set_param(_ctx.query, "_key", key; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "name", name; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "command", command; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "status", status; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "cancel_on_blocking_job_failure", cancel_on_blocking_job_failure; style="form", is_explode=true)  # type Bool
+    OpenAPI.Clients.set_param(_ctx.query, "supports_termination", supports_termination; style="form", is_explode=true)  # type Bool
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -2884,8 +2884,8 @@ function _oacinternal_list_jobs_by_needs_file(_api::DefaultApi, workflow::String
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_jobs_by_needs_file_DefaultApi, "/workflows/{workflow}/jobs/find_by_needs_file/{key}", [])
     OpenAPI.Clients.set_param(_ctx.path, "workflow", workflow)  # type String
     OpenAPI.Clients.set_param(_ctx.path, "key", key)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "skip", skip)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "limit", limit)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "skip", skip; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Float64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -2922,8 +2922,8 @@ function _oacinternal_list_jobs_by_status(_api::DefaultApi, workflow::String, st
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_jobs_by_status_DefaultApi, "/workflows/{workflow}/jobs/find_by_status/{status}", [])
     OpenAPI.Clients.set_param(_ctx.path, "workflow", workflow)  # type String
     OpenAPI.Clients.set_param(_ctx.path, "status", status)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "skip", skip)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "limit", limit)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "skip", skip; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Float64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -2959,13 +2959,13 @@ const _returntypes_list_local_schedulers_DefaultApi = Dict{Regex,Type}(
 function _oacinternal_list_local_schedulers(_api::DefaultApi, workflow::String; skip=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, key=nothing, memory=nothing, num_cpus=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_local_schedulers_DefaultApi, "/workflows/{workflow}/local_schedulers", [])
     OpenAPI.Clients.set_param(_ctx.path, "workflow", workflow)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "skip", skip)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "limit", limit)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort)  # type Bool
-    OpenAPI.Clients.set_param(_ctx.query, "_key", key)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "memory", memory)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "num_cpus", num_cpus)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "skip", skip; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort; style="form", is_explode=true)  # type Bool
+    OpenAPI.Clients.set_param(_ctx.query, "_key", key; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "memory", memory; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "num_cpus", num_cpus; style="form", is_explode=true)  # type Int64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -3069,17 +3069,17 @@ const _returntypes_list_resource_requirements_DefaultApi = Dict{Regex,Type}(
 function _oacinternal_list_resource_requirements(_api::DefaultApi, workflow::String; skip=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, key=nothing, name=nothing, memory=nothing, num_cpus=nothing, num_gpus=nothing, num_nodes=nothing, runtime=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_resource_requirements_DefaultApi, "/workflows/{workflow}/resource_requirements", [])
     OpenAPI.Clients.set_param(_ctx.path, "workflow", workflow)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "skip", skip)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "limit", limit)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort)  # type Bool
-    OpenAPI.Clients.set_param(_ctx.query, "_key", key)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "name", name)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "memory", memory)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "num_cpus", num_cpus)  # type Int64
-    OpenAPI.Clients.set_param(_ctx.query, "num_gpus", num_gpus)  # type Int64
-    OpenAPI.Clients.set_param(_ctx.query, "num_nodes", num_nodes)  # type Int64
-    OpenAPI.Clients.set_param(_ctx.query, "runtime", runtime)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "skip", skip; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort; style="form", is_explode=true)  # type Bool
+    OpenAPI.Clients.set_param(_ctx.query, "_key", key; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "name", name; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "memory", memory; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "num_cpus", num_cpus; style="form", is_explode=true)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "num_gpus", num_gpus; style="form", is_explode=true)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "num_nodes", num_nodes; style="form", is_explode=true)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "runtime", runtime; style="form", is_explode=true)  # type String
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -3123,15 +3123,15 @@ const _returntypes_list_results_DefaultApi = Dict{Regex,Type}(
 function _oacinternal_list_results(_api::DefaultApi, workflow::String; skip=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, key=nothing, job_key=nothing, run_id=nothing, return_code=nothing, status=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_results_DefaultApi, "/workflows/{workflow}/results", [])
     OpenAPI.Clients.set_param(_ctx.path, "workflow", workflow)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "skip", skip)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "limit", limit)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort)  # type Bool
-    OpenAPI.Clients.set_param(_ctx.query, "_key", key)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "job_key", job_key)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "run_id", run_id)  # type Int64
-    OpenAPI.Clients.set_param(_ctx.query, "return_code", return_code)  # type Int64
-    OpenAPI.Clients.set_param(_ctx.query, "status", status)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "skip", skip; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort; style="form", is_explode=true)  # type Bool
+    OpenAPI.Clients.set_param(_ctx.query, "_key", key; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "job_key", job_key; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "run_id", run_id; style="form", is_explode=true)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "return_code", return_code; style="form", is_explode=true)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "status", status; style="form", is_explode=true)  # type String
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -3173,14 +3173,14 @@ const _returntypes_list_scheduled_compute_nodes_DefaultApi = Dict{Regex,Type}(
 function _oacinternal_list_scheduled_compute_nodes(_api::DefaultApi, workflow::String; skip=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, key=nothing, scheduler_id=nothing, scheduler_config_id=nothing, status=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_scheduled_compute_nodes_DefaultApi, "/workflows/{workflow}/scheduled_compute_nodes", [])
     OpenAPI.Clients.set_param(_ctx.path, "workflow", workflow)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "skip", skip)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "limit", limit)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort)  # type Bool
-    OpenAPI.Clients.set_param(_ctx.query, "_key", key)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "scheduler_id", scheduler_id)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "scheduler_config_id", scheduler_config_id)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "status", status)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "skip", skip; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort; style="form", is_explode=true)  # type Bool
+    OpenAPI.Clients.set_param(_ctx.query, "_key", key; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "scheduler_id", scheduler_id; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "scheduler_config_id", scheduler_config_id; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "status", status; style="form", is_explode=true)  # type String
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -3221,20 +3221,20 @@ const _returntypes_list_slurm_schedulers_DefaultApi = Dict{Regex,Type}(
 function _oacinternal_list_slurm_schedulers(_api::DefaultApi, workflow::String; skip=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, key=nothing, name=nothing, account=nothing, gres=nothing, mem=nothing, nodes=nothing, partition=nothing, qos=nothing, tmp=nothing, walltime=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_slurm_schedulers_DefaultApi, "/workflows/{workflow}/slurm_schedulers", [])
     OpenAPI.Clients.set_param(_ctx.path, "workflow", workflow)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "skip", skip)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "limit", limit)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort)  # type Bool
-    OpenAPI.Clients.set_param(_ctx.query, "_key", key)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "name", name)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "account", account)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "gres", gres)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "mem", mem)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "nodes", nodes)  # type Int64
-    OpenAPI.Clients.set_param(_ctx.query, "partition", partition)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "qos", qos)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "tmp", tmp)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "walltime", walltime)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "skip", skip; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort; style="form", is_explode=true)  # type Bool
+    OpenAPI.Clients.set_param(_ctx.query, "_key", key; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "name", name; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "account", account; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "gres", gres; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "mem", mem; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "nodes", nodes; style="form", is_explode=true)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "partition", partition; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "qos", qos; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "tmp", tmp; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "walltime", walltime; style="form", is_explode=true)  # type String
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -3281,13 +3281,13 @@ const _returntypes_list_user_data_DefaultApi = Dict{Regex,Type}(
 function _oacinternal_list_user_data(_api::DefaultApi, workflow::String; skip=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, key=nothing, name=nothing, is_ephemeral=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_user_data_DefaultApi, "/workflows/{workflow}/user_data", [])
     OpenAPI.Clients.set_param(_ctx.path, "workflow", workflow)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "skip", skip)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "limit", limit)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort)  # type Bool
-    OpenAPI.Clients.set_param(_ctx.query, "_key", key)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "name", name)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "is_ephemeral", is_ephemeral)  # type Bool
+    OpenAPI.Clients.set_param(_ctx.query, "skip", skip; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort; style="form", is_explode=true)  # type Bool
+    OpenAPI.Clients.set_param(_ctx.query, "_key", key; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "name", name; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "is_ephemeral", is_ephemeral; style="form", is_explode=true)  # type Bool
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -3326,14 +3326,14 @@ const _returntypes_list_workflows_DefaultApi = Dict{Regex,Type}(
 
 function _oacinternal_list_workflows(_api::DefaultApi; skip=nothing, sort_by=nothing, reverse_sort=nothing, limit=nothing, name=nothing, user=nothing, description=nothing, is_archived=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_workflows_DefaultApi, "/workflows", [])
-    OpenAPI.Clients.set_param(_ctx.query, "skip", skip)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort)  # type Bool
-    OpenAPI.Clients.set_param(_ctx.query, "limit", limit)  # type Float64
-    OpenAPI.Clients.set_param(_ctx.query, "name", name)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "user", user)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "description", description)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "is_archived", is_archived)  # type Bool
+    OpenAPI.Clients.set_param(_ctx.query, "skip", skip; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort; style="form", is_explode=true)  # type Bool
+    OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "name", name; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "user", user; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "description", description; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "is_archived", is_archived; style="form", is_explode=true)  # type Bool
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -4068,8 +4068,8 @@ const _returntypes_prepare_jobs_for_submission_DefaultApi = Dict{Regex,Type}(
 function _oacinternal_prepare_jobs_for_submission(_api::DefaultApi, key::String, body::ComputeNodesResources; sort_method=nothing, limit=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_prepare_jobs_for_submission_DefaultApi, "/workflows/{key}/prepare_jobs_for_submission", [], body)
     OpenAPI.Clients.set_param(_ctx.path, "key", key)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "sort_method", sort_method)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "limit", limit)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "sort_method", sort_method; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Float64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
     return _ctx
@@ -4105,7 +4105,7 @@ const _returntypes_prepare_next_jobs_for_submission_DefaultApi = Dict{Regex,Type
 function _oacinternal_prepare_next_jobs_for_submission(_api::DefaultApi, key::String; limit=nothing, body=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_prepare_next_jobs_for_submission_DefaultApi, "/workflows/{key}/prepare_next_jobs_for_submission", [], body)
     OpenAPI.Clients.set_param(_ctx.path, "key", key)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "limit", limit)  # type Float64
+    OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Float64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
     return _ctx
@@ -4731,7 +4731,7 @@ const _returntypes_reset_job_status_DefaultApi = Dict{Regex,Type}(
 function _oacinternal_reset_job_status(_api::DefaultApi, key::String; failed_only=nothing, body=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_reset_job_status_DefaultApi, "/workflows/{key}/reset_job_status", [], body)
     OpenAPI.Clients.set_param(_ctx.path, "key", key)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "failed_only", failed_only)  # type Bool
+    OpenAPI.Clients.set_param(_ctx.query, "failed_only", failed_only; style="form", is_explode=true)  # type Bool
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
     return _ctx
