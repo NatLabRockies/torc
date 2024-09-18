@@ -1,5 +1,4 @@
-# This will become 7.1.0 whenever that is released (to support pydantic v2).
-OPENAPI_CLI_VERSION=latest
+OPENAPI_CLI_VERSION=v7.8.0
 
 set -x
 set -e
@@ -29,7 +28,7 @@ ${CONTAINER_EXEC} run \
 ${CONTAINER_EXEC} run \
     -v $(pwd):/data \
     -v ${JULIA_CLIENT}:/julia_client \
-    docker.io/openapitools/openapi-generator-cli:latest \
+    docker.io/openapitools/openapi-generator-cli:${OPENAPI_CLI_VERSION} \
     generate -g julia-client --input-spec=/data/openapi.yaml -o /julia_client
 
 rm -rf ../torc_package/torc/openapi_client

@@ -82,5 +82,4 @@ This is because of cases where jobs and/or compute nodes timeout or fail. This m
 want if you manually reset specific job statuses with ``torc jobs reset-status``.
 
 You can run ``torc workflows restart --only-uninitialized`` instead. Only jobs with a status of
-``uninitialized`` will get set to ``ready``. This is particularly useful if some jobs are still
-running.
+``uninitialized`` will get set to ``ready``.

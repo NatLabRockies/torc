@@ -181,7 +181,7 @@ router.put('/workflows/:workflow/jobs/:key/start_job/:rev/:run_id/:compute_node_
       job.status = JobStatus.Submitted;
       try {
         const updatedJob = query.manageJobStatusChange(job, workflow, runId);
-        const edge = {_from: computeNode._id, _to: job._id};
+        const edge = {_from: computeNode._id, _to: job._id, data: {run_id: runId}};
         executedCollection.save(edge);
         const event = {
           'timestamp': Date.now(),

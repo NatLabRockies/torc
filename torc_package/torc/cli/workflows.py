@@ -62,6 +62,32 @@ def cancel(ctx, api: DefaultApi, workflow_keys: tuple[str]) -> None:
 
 
 @click.command()
+@click.pass_obj
+@click.pass_context
+def cancel_all(ctx, api: DefaultApi) -> None:
+    """Cancel all active workflows being run by the current user."""
+    setup_cli_logging(ctx, __name__)
+    check_database_url(api)
+    user = get_user_from_context(ctx)
+    keys = [x.key for x in iter_documents(api.list_workflows, user=user)]
+
+    final_keys = []
+    for key in keys:
+        if has_scheduled_compute_nodes(api, key):
+            final_keys.append(key)
+
+    if not final_keys:
+        logger.info("There are no active workflows to cancel.")
+        return
+
+    keys_str = " ".join(final_keys)
+    msg = f"This command will cancel these workflow keys: {keys_str}"
+    confirm_change(ctx, msg)
+    for key in final_keys:
+        cancel_workflow(api, key)
+
+
+@click.command()
 @click.option(
     "-U",
     "--update-rc-with-key",
@@ -310,6 +336,12 @@ def _delete_workflows_with_warning(
         if user != current_user:
             msg = f"Workflow {key} was created by {user=}, not {current_user=}. Continue?"
             confirm_change(ctx, msg)
+
+        if has_scheduled_compute_nodes(api, key):
+            msg = f"Workflow {key} has pending or running compute nodes. Continue?"
+            confirm_change(ctx, msg)
+            cancel_workflow(api, key)
+
         api.remove_workflow(key)
         logger.info("Deleted workflow %s", key)
 
@@ -770,6 +802,20 @@ def cancel_workflow(api: DefaultApi, workflow_key: str) -> None:
     )
 
 
+def has_scheduled_compute_nodes(api: DefaultApi, workflow_key: str) -> bool:
+    """Returns True if compute nodes are scheduled - could be pending or running."""
+    items = api.list_scheduled_compute_nodes(workflow_key).items
+    assert items is not None
+    for job in items:
+        if (
+            job.status != "complete"
+            and job.scheduler_config_id.split("/")[0].split("__")[0] == "slurm_schedulers"
+            and job.scheduler_id is not None
+        ):
+            return True
+    return False
+
+
 def has_running_jobs(api: DefaultApi, workflow_key: str) -> bool:
     """Returns True if jobs are running."""
     submitted = api.list_jobs(workflow_key, status="submitted", limit=1)
@@ -953,6 +999,7 @@ def _update_torc_rc(api: DefaultApi, workflow: WorkflowModel) -> None:
 
 
 workflows.add_command(cancel)
+workflows.add_command(cancel_all)
 workflows.add_command(create)
 workflows.add_command(create_from_commands_file)
 workflows.add_command(create_from_json_file)
