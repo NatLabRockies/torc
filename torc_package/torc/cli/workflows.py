@@ -310,6 +310,12 @@ def _delete_workflows_with_warning(
         if user != current_user:
             msg = f"Workflow {key} was created by {user=}, not {current_user=}. Continue?"
             confirm_change(ctx, msg)
+
+        if has_scheduled_compute_nodes(api, key):
+            msg = f"Workflow {key} has pending or running compute nodes. Continue?"
+            confirm_change(ctx, msg)
+            cancel_workflow(api, key)
+
         api.remove_workflow(key)
         logger.info("Deleted workflow %s", key)
 
@@ -768,6 +774,20 @@ def cancel_workflow(api: DefaultApi, workflow_key: str) -> None:
             "message": f"Canceled workflow {workflow_key}",
         },
     )
+
+
+def has_scheduled_compute_nodes(api: DefaultApi, workflow_key: str) -> bool:
+    """Returns True if compute nodes are scheduled - could be pending or running."""
+    items = api.list_scheduled_compute_nodes(workflow_key).items
+    assert items is not None
+    for job in items:
+        if (
+            job.status != "complete"
+            and job.scheduler_config_id.split("/")[0].split("__")[0] == "slurm_schedulers"
+            and job.scheduler_id is not None
+        ):
+            return True
+    return False
 
 
 def has_running_jobs(api: DefaultApi, workflow_key: str) -> bool:
