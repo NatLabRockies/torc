@@ -7,6 +7,7 @@
    - **Linux**: `torc-<version>-x86_64-unknown-linux-gnu.tar.gz`
    - **macOS (Intel)**: `torc-<version>-x86_64-apple-darwin.tar.gz`
    - **macOS (Apple Silicon)**: `torc-<version>-aarch64-apple-darwin.tar.gz`
+   - **Windows**: `torc-<version>-x86_64-pc-windows-msvc.zip`
 
 2. Extract the archive:
 
@@ -52,9 +53,9 @@ listed below.
 
 ```
 /scratch/dthom/torc/
-├── 0.8.0/
+├── 0.10.0/
 ├── ...
-└── latest -> 0.8.0  (symlink to current version)
+└── latest -> 0.10.0  (symlink to current version)
 ```
 
 > **Recommended**: Use the `latest` directory. Torc maintains backwards compatibility, so you'll

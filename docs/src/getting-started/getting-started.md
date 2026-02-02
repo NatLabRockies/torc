@@ -1,8 +1,5 @@
 # Getting Started
 
-**Torc** is a distributed workflow orchestration system for managing complex computational pipelines
-with job dependencies, resource requirements, and distributed execution.
-
 Torc uses a client-server architecture where a central server manages workflow state and
 coordination, while clients create workflows and job runners execute tasks on compute resources.
 
@@ -27,7 +24,7 @@ All interfaces work with the same server — mix and match as needed.
 ```mermaid
 flowchart LR
     subgraph you["You"]
-        CLI["torc CLI"]
+        UI["torc UI"]
     end
 
     subgraph server["Server"]
@@ -39,19 +36,19 @@ flowchart LR
         W2["Job Runner"]
     end
 
-    CLI -->|"create workflow"| API
-    CLI -->|"start workers"| W1
-    CLI -->|"start workers"| W2
+    UI -->|"create workflow"| API
+    UI -->|"start workers"| W1
+    UI -->|"start workers"| W2
     W1 -->|"claim & report"| API
     W2 -->|"claim & report"| API
 
-    style CLI fill:#4a9eff,color:#fff
+    style UI fill:#4a9eff,color:#fff
     style API fill:#28a745,color:#fff
     style W1 fill:#ffc107,color:#000
     style W2 fill:#ffc107,color:#000
 ```
 
-1. **You** create workflows and start job runners via the CLI
+1. **You** create workflows and start job runners via the UI
 2. **Server** tracks workflow state and job dependencies
 3. **Workers** poll the server, claim ready jobs, execute them, and report results
 

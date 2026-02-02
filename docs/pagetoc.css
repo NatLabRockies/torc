@@ -1,0 +1,72 @@
+/* Page Table of Contents - right sidebar */
+.pagetoc {
+    position: fixed;
+    right: 1rem;
+    top: 60px;
+    width: 220px;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+    padding: 1rem;
+    font-size: 0.95rem;
+    z-index: 10;
+}
+
+.pagetoc-title {
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    color: var(--sidebar-fg);
+    text-transform: uppercase;
+    font-size: 1rem;
+    letter-spacing: 0.05em;
+}
+
+.pagetoc-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.pagetoc-item {
+    margin: 0;
+    padding: 0;
+}
+
+.pagetoc-link {
+    display: block;
+    padding: 0.35rem 0;
+    color: var(--sidebar-non-existant);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    padding-left: 0.75rem;
+    transition: color 0.15s, border-color 0.15s;
+    line-height: 1.5;
+}
+
+.pagetoc-link:hover {
+    color: var(--sidebar-active);
+}
+
+.pagetoc-link.active {
+    color: var(--sidebar-active);
+    border-left-color: var(--sidebar-active);
+}
+
+/* Indent h3 items */
+.pagetoc-item-h3 .pagetoc-link {
+    padding-left: 1.5rem;
+    font-size: 0.9rem;
+}
+
+/* Hide on smaller screens */
+@media (max-width: 1400px) {
+    .pagetoc {
+        display: none;
+    }
+}
+
+/* Add right margin to content when TOC is visible */
+@media (min-width: 1401px) {
+    .content {
+        padding-right: 260px;
+    }
+}

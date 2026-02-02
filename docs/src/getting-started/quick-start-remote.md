@@ -18,7 +18,7 @@ Start a Torc server that's accessible from the remote machines. This typically m
 network interface (not just localhost):
 
 ```console
-torc-server run --database torc.db --host 0.0.0.0 --port 8080
+torc-server run --database torc.db --url 0.0.0.0 --port 8080
 ```
 
 ## Create a Worker File

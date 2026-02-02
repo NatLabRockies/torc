@@ -4,105 +4,54 @@
 from simple workflows needing to parallelize independent jobs to complex workflows with job
 dependencies, mixed resource requirements, and multiple stages.
 
+```mermaid
+flowchart LR
+    subgraph input [" "]
+        A[Prepare Data]
+    end
+
+    subgraph parallel [" "]
+        direction TB
+        B1[Process 1]
+        B2[Process 2]
+        B3[Process 3]
+        B4[Process 4]
+    end
+
+    subgraph output [" "]
+        C[Aggregate Results]
+    end
+
+    A --> B1 & B2 & B3 & B4
+    B1 & B2 & B3 & B4 --> C
+
+    style A fill:#4a9eff,stroke:#2171c7,color:#fff
+    style B1 fill:#28a745,stroke:#1e7e34,color:#fff
+    style B2 fill:#28a745,stroke:#1e7e34,color:#fff
+    style B3 fill:#28a745,stroke:#1e7e34,color:#fff
+    style B4 fill:#28a745,stroke:#1e7e34,color:#fff
+    style C fill:#6f42c1,stroke:#5a32a3,color:#fff
+    style input fill:none,stroke:none
+    style parallel fill:none,stroke:none
+    style output fill:none,stroke:none
+```
+
 ## Key Features
 
 - **Declarative Workflow Definitions** — Define workflows in YAML, JSON, JSON5, or KDL
-- **Automatic Dependency Resolution** — Dependencies inferred from file and data relationships
+- **Job Parameterization** — Create parameter sweeps with simple syntax like `index: "1:100"` to
+  expand one job definition into hundreds
+  ([tutorial](./core/tutorials/simple-params.md))
+- **Automatic Dependency Resolution** — Dependencies inferred from file and data relationships. No
+  explicit `depends_on` declarations needed—Torc builds the dependency graph from your data flow
+  ([tutorial](./core/tutorials/diamond.md))
 - **Distributed Execution** — Run jobs across local machines, HPC clusters, and networked compute
   nodes
 - **Resource Management** — Track CPU and memory usage across all jobs
 - **Automatic Failure Recovery** — Detect OOM/timeout failures and retry with adjusted resources
 - **Fault Tolerance** — Resume workflows after failures without losing progress
 - **AI-assisted configuration and management** — Use AI tools like Claude Code and Copilot to
-  configure workflows and diagnose problems.
-
-### Job Parameterization
-
-Create parameter sweeps with simple syntax:
-
-```yaml
-jobs:
-  - name: job_{index}
-    command: bash work.sh {index}
-    parameters:
-      index: "1:100"
-```
-
-This expands to 100 jobs.
-
-### Implicit Dependencies
-
-Dependencies between jobs are automatically inferred from file relationships. Consider this diamond
-workflow where one job fans out to parallel jobs, which then converge:
-
-```yaml
-name: diamond_workflow
-jobs:
-  - name: preprocess
-    command: "preprocess.sh -i ${files.input.f1} -o ${files.output.f2} -o ${files.output.f3}"
-
-  - name: work1
-    command: "work.sh -i ${files.input.f2} -o ${files.output.f4}"
-
-  - name: work2
-    command: "work.sh -i ${files.input.f3} -o ${files.output.f5}"
-
-  - name: postprocess
-    command: "postprocess.sh -i ${files.input.f4} -i ${files.input.f5} -o ${files.output.f6}"
-
-files:
-  - name: f1
-    path: input.json
-  - name: f2
-    path: intermediate_a.json
-  - name: f3
-    path: intermediate_b.json
-  - name: f4
-    path: result_a.json
-  - name: f5
-    path: result_b.json
-  - name: f6
-    path: final_output.json
-```
-
-Torc analyzes which jobs produce and consume each file, automatically building the dependency graph:
-
-```mermaid
-flowchart TD
-    f1([input.json])
-    preprocess[preprocess]
-    f2([intermediate_a.json])
-    f3([intermediate_b.json])
-    work1[work1]
-    work2[work2]
-    f4([result_a.json])
-    f5([result_b.json])
-    postprocess[postprocess]
-    f6([final_output.json])
-
-    f1 --> preprocess
-    preprocess --> f2 & f3
-    f2 --> work1
-    f3 --> work2
-    work1 --> f4
-    work2 --> f5
-    f4 & f5 --> postprocess
-    postprocess --> f6
-
-    style f1 fill:#d4edda,stroke:#28a745,color:#155724
-    style f2 fill:#d4edda,stroke:#28a745,color:#155724
-    style f3 fill:#d4edda,stroke:#28a745,color:#155724
-    style f4 fill:#d4edda,stroke:#28a745,color:#155724
-    style f5 fill:#d4edda,stroke:#28a745,color:#155724
-    style f6 fill:#d4edda,stroke:#28a745,color:#155724
-    style preprocess fill:#4a9eff,color:#fff
-    style work1 fill:#4a9eff,color:#fff
-    style work2 fill:#4a9eff,color:#fff
-    style postprocess fill:#4a9eff,color:#fff
-```
-
-No explicit `depends_on` declarations needed — Torc infers that `work1` and `work2` depend on
-`preprocess`, and `postprocess` waits for both to complete.
+  configure workflows and diagnose problems
 
 ## Who Should Use Torc?
 

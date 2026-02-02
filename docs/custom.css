@@ -8,3 +8,20 @@ ol.section ol.section > li.chapter-item strong {
 .content main {
     max-width: 1200px;
 }
+
+/* Prevent navigation arrows from overlapping content */
+.nav-chapters {
+    background: var(--bg);
+}
+
+/* Add padding to content so nav arrows don't overlap text */
+.content {
+    padding-left: 90px;
+    padding-right: 90px;
+}
+
+@media (max-width: 1600px) {
+    .content main {
+        max-width: 900px;
+    }
+}
