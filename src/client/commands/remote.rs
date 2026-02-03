@@ -726,8 +726,8 @@ fn check_remote_worker_status(
             if output.trim() == "running" {
                 RemoteWorkerState::Running { pid }
             } else {
-                // PID not running, but check via pgrep in case PID file is stale
-                check_worker_via_pgrep(worker, workflow_id)
+                // PID file exists with valid PID but process has exited - worker completed
+                RemoteWorkerState::NotRunning
             }
         }
         Err(_) => check_worker_via_pgrep(worker, workflow_id),
