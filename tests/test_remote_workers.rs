@@ -230,7 +230,7 @@ fn test_cli_add_workers(start_server: &ServerProcess) {
     let workflow = create_test_workflow(config, "cli_add_workers_test");
     let workflow_id = workflow.id.unwrap();
 
-    // Add workers via CLI
+    // Add workers via CLI (skip SSH check for testing with fake hostnames)
     let args = [
         "remote",
         "add-workers",
@@ -238,6 +238,7 @@ fn test_cli_add_workers(start_server: &ServerProcess) {
         "cli-worker1.example.com",
         "cli-worker2.example.com",
         "user@cli-worker3.example.com:2222",
+        "--skip-ssh-check",
     ];
 
     let output =
@@ -275,11 +276,13 @@ fn test_cli_add_workers_from_file(start_server: &ServerProcess) {
     worker_file.flush().unwrap();
 
     // Add workers via CLI (note: worker_file comes before workflow_id)
+    // Skip SSH check for testing with fake hostnames
     let args = [
         "remote",
         "add-workers-from-file",
         worker_file.path().to_str().unwrap(),
         &workflow_id.to_string(),
+        "--skip-ssh-check",
     ];
 
     let output = run_cli_command(&args, start_server, None)
@@ -405,12 +408,14 @@ fn test_cli_add_workers_with_special_characters(start_server: &ServerProcess) {
     let workflow_id = workflow.id.unwrap();
 
     // Add workers with various special characters in usernames/hostnames
+    // Skip SSH check for testing with fake hostnames
     let args = [
         "remote",
         "add-workers",
         &workflow_id.to_string(),
         "user_name@host-name.example.com",
         "user.name@host.name.example.com",
+        "--skip-ssh-check",
     ];
 
     let output = run_cli_command(&args, start_server, None)

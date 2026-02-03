@@ -10,8 +10,8 @@ use crate::client::apis::default_api;
 use crate::client::commands::{get_env_user_name, select_workflow_interactively};
 use crate::client::remote::{
     RemoteOperationResult, RemoteWorkerState, WorkerEntry, check_all_connectivity,
-    parallel_execute, parse_worker_file, scp_download, ssh_execute, ssh_execute_capture,
-    verify_all_versions,
+    check_ssh_connectivity, parallel_execute, parse_worker_content, parse_worker_file,
+    scp_download, ssh_execute, ssh_execute_capture, verify_all_versions,
 };
 use crate::client::workflow_manager::WorkflowManager;
 use crate::config::TorcConfig;
@@ -56,6 +56,10 @@ EXAMPLES:
         /// Worker addresses (format: [user@]hostname[:port])
         #[arg(required = true, num_args = 1..)]
         workers: Vec<String>,
+
+        /// Skip SSH connectivity check (for testing only)
+        #[arg(long, hide = true)]
+        skip_ssh_check: bool,
     },
 
     /// Add remote workers to a workflow from a file
@@ -71,6 +75,10 @@ EXAMPLES:
         /// Workflow ID (optional - will prompt if not provided)
         #[arg()]
         workflow_id: Option<i64>,
+
+        /// Skip SSH connectivity check (for testing only)
+        #[arg(long, hide = true)]
+        skip_ssh_check: bool,
     },
 
     /// Remove a remote worker from a workflow
@@ -235,16 +243,18 @@ pub fn handle_remote_commands(config: &Configuration, command: &RemoteCommands) 
         RemoteCommands::AddWorkers {
             workflow_id,
             workers,
+            skip_ssh_check,
         } => {
             // AddWorkers requires workflow_id (not optional)
-            handle_add_workers(config, *workflow_id, workers);
+            handle_add_workers(config, *workflow_id, workers, *skip_ssh_check);
         }
         RemoteCommands::AddWorkersFromFile {
             workflow_id,
             worker_file,
+            skip_ssh_check,
         } => {
             let wf_id = resolve_workflow_id(config, *workflow_id);
-            handle_add_workers_from_file(config, wf_id, worker_file);
+            handle_add_workers_from_file(config, wf_id, worker_file, *skip_ssh_check);
         }
         RemoteCommands::RemoveWorker {
             workflow_id,
@@ -389,7 +399,7 @@ fn handle_run(
     num_gpus: Option<i64>,
     skip_version_check: bool,
 ) {
-    // If a workers file is provided, add those workers to the database first
+    // If a workers file is provided, validate SSH connectivity before adding to database
     if let Some(worker_file) = workers_file {
         let workers = match parse_worker_file(worker_file) {
             Ok(w) => w,
@@ -398,8 +408,62 @@ fn handle_run(
                 std::process::exit(1);
             }
         };
-        let worker_strings: Vec<String> = workers.iter().map(|w| w.original.clone()).collect();
-        match default_api::create_remote_workers(config, workflow_id, worker_strings) {
+
+        if workers.is_empty() {
+            eprintln!("No workers found in {}", worker_file.display());
+            std::process::exit(1);
+        }
+
+        // Check SSH connectivity for each worker before adding to database
+        println!(
+            "Checking SSH connectivity for {} worker(s) from {}...",
+            workers.len(),
+            worker_file.display()
+        );
+
+        let results: Vec<Result<(), String>> =
+            parallel_execute(&workers, check_ssh_connectivity, max_parallel_ssh);
+
+        // Collect valid workers (those that passed SSH check)
+        let mut valid_workers: Vec<String> = Vec::new();
+        let mut failed_workers: Vec<(String, String)> = Vec::new();
+
+        for (worker, result) in workers.iter().zip(results) {
+            match result {
+                Ok(()) => {
+                    valid_workers.push(worker.original.clone());
+                }
+                Err(e) => {
+                    failed_workers.push((worker.display_name().to_string(), e));
+                }
+            }
+        }
+
+        // Report failed workers
+        if !failed_workers.is_empty() {
+            eprintln!(
+                "SSH connectivity check failed for {} worker(s):",
+                failed_workers.len()
+            );
+            for (host, error) in &failed_workers {
+                eprintln!("  {}: {}", host, error);
+            }
+        }
+
+        // Exit if no valid workers
+        if valid_workers.is_empty() {
+            eprintln!("Error: No workers passed SSH connectivity check");
+            std::process::exit(1);
+        }
+
+        // Add only valid workers to the database
+        println!(
+            "{}/{} workers passed SSH check, adding to database...",
+            valid_workers.len(),
+            workers.len()
+        );
+
+        match default_api::create_remote_workers(config, workflow_id, valid_workers.clone()) {
             Ok(created) => {
                 info!(
                     "Added {} workers from {}",
@@ -1112,9 +1176,89 @@ fn handle_list_workers(config: &Configuration, workflow_id: i64) {
     }
 }
 
+/// Default max parallel SSH connections for add-workers commands.
+const DEFAULT_MAX_PARALLEL_SSH: usize = 10;
+
 /// Add remote workers to the database.
-fn handle_add_workers(config: &Configuration, workflow_id: i64, workers: &[String]) {
-    match default_api::create_remote_workers(config, workflow_id, workers.to_vec()) {
+fn handle_add_workers(
+    config: &Configuration,
+    workflow_id: i64,
+    workers: &[String],
+    skip_ssh_check: bool,
+) {
+    if workers.is_empty() {
+        eprintln!("No workers specified");
+        std::process::exit(1);
+    }
+
+    // Parse worker strings into WorkerEntry for SSH checking
+    let worker_content = workers.join("\n");
+    let parsed_workers = match parse_worker_content(&worker_content, "command line") {
+        Ok(w) => w,
+        Err(e) => {
+            eprintln!("Error parsing worker addresses: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let valid_workers: Vec<String> = if skip_ssh_check {
+        // Skip SSH check - add all workers directly
+        parsed_workers.iter().map(|w| w.original.clone()).collect()
+    } else {
+        // Check SSH connectivity for each worker before adding to database
+        println!(
+            "Checking SSH connectivity for {} worker(s)...",
+            parsed_workers.len()
+        );
+
+        let results: Vec<Result<(), String>> = parallel_execute(
+            &parsed_workers,
+            check_ssh_connectivity,
+            DEFAULT_MAX_PARALLEL_SSH,
+        );
+
+        // Collect valid workers (those that passed SSH check)
+        let mut valid: Vec<String> = Vec::new();
+        let mut failed_workers: Vec<(String, String)> = Vec::new();
+
+        for (worker, result) in parsed_workers.iter().zip(results) {
+            match result {
+                Ok(()) => {
+                    valid.push(worker.original.clone());
+                }
+                Err(e) => {
+                    failed_workers.push((worker.display_name().to_string(), e));
+                }
+            }
+        }
+
+        // Report failed workers
+        if !failed_workers.is_empty() {
+            eprintln!(
+                "SSH connectivity check failed for {} worker(s):",
+                failed_workers.len()
+            );
+            for (host, error) in &failed_workers {
+                eprintln!("  {}: {}", host, error);
+            }
+        }
+
+        // Exit if no valid workers
+        if valid.is_empty() {
+            eprintln!("Error: No workers passed SSH connectivity check");
+            std::process::exit(1);
+        }
+
+        println!(
+            "{}/{} workers passed SSH check, adding to database...",
+            valid.len(),
+            parsed_workers.len()
+        );
+
+        valid
+    };
+
+    match default_api::create_remote_workers(config, workflow_id, valid_workers) {
         Ok(created) => {
             if created.is_empty() {
                 println!("All workers already exist for workflow {}", workflow_id);
@@ -1137,7 +1281,12 @@ fn handle_add_workers(config: &Configuration, workflow_id: i64, workers: &[Strin
 }
 
 /// Add remote workers from a file to the database.
-fn handle_add_workers_from_file(config: &Configuration, workflow_id: i64, worker_file: &Path) {
+fn handle_add_workers_from_file(
+    config: &Configuration,
+    workflow_id: i64,
+    worker_file: &Path,
+    skip_ssh_check: bool,
+) {
     // Parse worker file
     let workers = match parse_worker_file(worker_file) {
         Ok(w) => w,
@@ -1147,9 +1296,67 @@ fn handle_add_workers_from_file(config: &Configuration, workflow_id: i64, worker
         }
     };
 
-    // Store workers in database
-    let worker_strings: Vec<String> = workers.iter().map(|w| w.original.clone()).collect();
-    match default_api::create_remote_workers(config, workflow_id, worker_strings) {
+    if workers.is_empty() {
+        eprintln!("No workers found in {}", worker_file.display());
+        std::process::exit(1);
+    }
+
+    let valid_workers: Vec<String> = if skip_ssh_check {
+        // Skip SSH check - add all workers directly
+        workers.iter().map(|w| w.original.clone()).collect()
+    } else {
+        // Check SSH connectivity for each worker before adding to database
+        println!(
+            "Checking SSH connectivity for {} worker(s) from {}...",
+            workers.len(),
+            worker_file.display()
+        );
+
+        let results: Vec<Result<(), String>> =
+            parallel_execute(&workers, check_ssh_connectivity, DEFAULT_MAX_PARALLEL_SSH);
+
+        // Collect valid workers (those that passed SSH check)
+        let mut valid: Vec<String> = Vec::new();
+        let mut failed_workers: Vec<(String, String)> = Vec::new();
+
+        for (worker, result) in workers.iter().zip(results) {
+            match result {
+                Ok(()) => {
+                    valid.push(worker.original.clone());
+                }
+                Err(e) => {
+                    failed_workers.push((worker.display_name().to_string(), e));
+                }
+            }
+        }
+
+        // Report failed workers
+        if !failed_workers.is_empty() {
+            eprintln!(
+                "SSH connectivity check failed for {} worker(s):",
+                failed_workers.len()
+            );
+            for (host, error) in &failed_workers {
+                eprintln!("  {}: {}", host, error);
+            }
+        }
+
+        // Exit if no valid workers
+        if valid.is_empty() {
+            eprintln!("Error: No workers passed SSH connectivity check");
+            std::process::exit(1);
+        }
+
+        println!(
+            "{}/{} workers passed SSH check, adding to database...",
+            valid.len(),
+            workers.len()
+        );
+
+        valid
+    };
+
+    match default_api::create_remote_workers(config, workflow_id, valid_workers) {
         Ok(created) => {
             println!(
                 "Added {} worker(s) from {} to workflow {}",
