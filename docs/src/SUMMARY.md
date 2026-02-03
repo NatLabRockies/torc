@@ -49,6 +49,7 @@
   - [Debugging Workflows](./core/monitoring/debugging.md)
   - [Working with Logs](./core/monitoring/working-with-logs.md)
 - [Reference](./core/reference/index.md)
+  - [CLI Cheat Sheet](./core/reference/cli-cheatsheet.md)
   - [CLI Reference](./core/reference/cli.md)
   - [Workflow Specification](./core/reference/workflow-spec.md)
   - [Job Parameterization](./core/reference/parameterization.md)
