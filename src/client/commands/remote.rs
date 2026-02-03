@@ -10,8 +10,8 @@ use crate::client::apis::default_api;
 use crate::client::commands::{get_env_user_name, select_workflow_interactively};
 use crate::client::remote::{
     RemoteOperationResult, RemoteWorkerState, WorkerEntry, check_all_connectivity,
-    parallel_execute, parse_worker_file, scp_download, ssh_execute, ssh_execute_capture,
-    verify_all_versions,
+    check_ssh_connectivity, parallel_execute, parse_worker_content, parse_worker_file,
+    scp_download, ssh_execute, ssh_execute_capture, verify_all_versions,
 };
 use crate::client::workflow_manager::WorkflowManager;
 use crate::config::TorcConfig;
@@ -56,6 +56,10 @@ EXAMPLES:
         /// Worker addresses (format: [user@]hostname[:port])
         #[arg(required = true, num_args = 1..)]
         workers: Vec<String>,
+
+        /// Skip SSH connectivity check (for testing only)
+        #[arg(long, hide = true)]
+        skip_ssh_check: bool,
     },
 
     /// Add remote workers to a workflow from a file
@@ -71,6 +75,10 @@ EXAMPLES:
         /// Workflow ID (optional - will prompt if not provided)
         #[arg()]
         workflow_id: Option<i64>,
+
+        /// Skip SSH connectivity check (for testing only)
+        #[arg(long, hide = true)]
+        skip_ssh_check: bool,
     },
 
     /// Remove a remote worker from a workflow
@@ -235,16 +243,18 @@ pub fn handle_remote_commands(config: &Configuration, command: &RemoteCommands) 
         RemoteCommands::AddWorkers {
             workflow_id,
             workers,
+            skip_ssh_check,
         } => {
             // AddWorkers requires workflow_id (not optional)
-            handle_add_workers(config, *workflow_id, workers);
+            handle_add_workers(config, *workflow_id, workers, *skip_ssh_check);
         }
         RemoteCommands::AddWorkersFromFile {
             workflow_id,
             worker_file,
+            skip_ssh_check,
         } => {
             let wf_id = resolve_workflow_id(config, *workflow_id);
-            handle_add_workers_from_file(config, wf_id, worker_file);
+            handle_add_workers_from_file(config, wf_id, worker_file, *skip_ssh_check);
         }
         RemoteCommands::RemoveWorker {
             workflow_id,
@@ -389,7 +399,7 @@ fn handle_run(
     num_gpus: Option<i64>,
     skip_version_check: bool,
 ) {
-    // If a workers file is provided, add those workers to the database first
+    // If a workers file is provided, validate SSH connectivity before adding to database
     if let Some(worker_file) = workers_file {
         let workers = match parse_worker_file(worker_file) {
             Ok(w) => w,
@@ -398,8 +408,26 @@ fn handle_run(
                 std::process::exit(1);
             }
         };
-        let worker_strings: Vec<String> = workers.iter().map(|w| w.original.clone()).collect();
-        match default_api::create_remote_workers(config, workflow_id, worker_strings) {
+
+        if workers.is_empty() {
+            eprintln!("No workers found in {}", worker_file.display());
+            std::process::exit(1);
+        }
+
+        // Check SSH connectivity for each worker before adding to database
+        let source = worker_file.display().to_string();
+        let valid_workers = match validate_workers_ssh(&workers, max_parallel_ssh, Some(&source)) {
+            Ok(workers) => workers,
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        };
+
+        // Add only valid workers to the database
+        println!("Adding {} worker(s) to database...", valid_workers.len());
+
+        match default_api::create_remote_workers(config, workflow_id, valid_workers) {
             Ok(created) => {
                 info!(
                     "Added {} workers from {}",
@@ -616,8 +644,9 @@ fn start_remote_worker(
 
         if log_check_output.trim() == "started" {
             // Log shows startup, verify process is still running with pgrep
+            // Use word boundary pattern to avoid matching workflow 123 when looking for 12
             let pgrep_cmd = format!(
-                "pgrep -f 'torc.*run.*{}' >/dev/null 2>&1 && echo running || echo stopped",
+                "pgrep -f 'torc .* run {}( |$)' >/dev/null 2>&1 && echo running || echo stopped",
                 workflow_id
             );
             let pgrep_output = ssh_execute_capture(worker, &pgrep_cmd).unwrap_or_default();
@@ -726,8 +755,8 @@ fn check_remote_worker_status(
             if output.trim() == "running" {
                 RemoteWorkerState::Running { pid }
             } else {
-                // PID not running, but check via pgrep in case PID file is stale
-                check_worker_via_pgrep(worker, workflow_id)
+                // PID file exists with valid PID but process has exited - worker completed.
+                RemoteWorkerState::NotRunning
             }
         }
         Err(_) => check_worker_via_pgrep(worker, workflow_id),
@@ -736,8 +765,9 @@ fn check_remote_worker_status(
 
 /// Check if a torc worker is running via pgrep (fallback when PID check fails).
 fn check_worker_via_pgrep(worker: &WorkerEntry, workflow_id: i64) -> RemoteWorkerState {
+    // Use word boundary pattern to avoid matching workflow 123 when looking for 12
     let pgrep_cmd = format!(
-        "pgrep -f 'torc.*run.*{}' 2>/dev/null | head -1",
+        "pgrep -f 'torc .* run {}( |$)' 2>/dev/null | head -1",
         workflow_id
     );
     match ssh_execute_capture(worker, &pgrep_cmd) {
@@ -1112,9 +1142,115 @@ fn handle_list_workers(config: &Configuration, workflow_id: i64) {
     }
 }
 
+/// Default max parallel SSH connections for add-workers commands.
+const DEFAULT_MAX_PARALLEL_SSH: usize = 10;
+
+/// Validate workers by checking SSH connectivity and return only valid workers.
+///
+/// Returns the list of valid worker addresses (as strings) that passed SSH checks.
+/// Prints error messages for workers that failed connectivity checks.
+/// Returns an error if no workers pass the check.
+///
+/// # Arguments
+/// * `workers` - The workers to validate
+/// * `max_parallel_ssh` - Maximum number of parallel SSH connections
+/// * `source` - Optional source description (e.g., file path) for log messages
+fn validate_workers_ssh(
+    workers: &[WorkerEntry],
+    max_parallel_ssh: usize,
+    source: Option<&str>,
+) -> Result<Vec<String>, String> {
+    if let Some(src) = source {
+        println!(
+            "Checking SSH connectivity for {} worker(s) from {}...",
+            workers.len(),
+            src
+        );
+    } else {
+        println!(
+            "Checking SSH connectivity for {} worker(s)...",
+            workers.len()
+        );
+    }
+
+    let results: Vec<Result<(), String>> =
+        parallel_execute(workers, check_ssh_connectivity, max_parallel_ssh);
+
+    let mut valid_workers: Vec<String> = Vec::new();
+    let mut failed_workers: Vec<(String, String)> = Vec::new();
+
+    for (worker, result) in workers.iter().zip(results) {
+        match result {
+            Ok(()) => {
+                valid_workers.push(worker.original.clone());
+            }
+            Err(e) => {
+                failed_workers.push((worker.display_name().to_string(), e));
+            }
+        }
+    }
+
+    // Report failed workers
+    if !failed_workers.is_empty() {
+        eprintln!(
+            "SSH connectivity check failed for {} worker(s):",
+            failed_workers.len()
+        );
+        for (host, error) in &failed_workers {
+            eprintln!("  {}: {}", host, error);
+        }
+    }
+
+    if valid_workers.is_empty() {
+        return Err("No workers passed SSH connectivity check".to_string());
+    }
+
+    println!(
+        "{}/{} workers passed SSH check",
+        valid_workers.len(),
+        workers.len()
+    );
+
+    Ok(valid_workers)
+}
+
 /// Add remote workers to the database.
-fn handle_add_workers(config: &Configuration, workflow_id: i64, workers: &[String]) {
-    match default_api::create_remote_workers(config, workflow_id, workers.to_vec()) {
+fn handle_add_workers(
+    config: &Configuration,
+    workflow_id: i64,
+    workers: &[String],
+    skip_ssh_check: bool,
+) {
+    if workers.is_empty() {
+        eprintln!("No workers specified");
+        std::process::exit(1);
+    }
+
+    // Parse worker strings into WorkerEntry for SSH checking
+    let worker_content = workers.join("\n");
+    let parsed_workers = match parse_worker_content(&worker_content, "command line") {
+        Ok(w) => w,
+        Err(e) => {
+            eprintln!("Error parsing worker addresses: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let valid_workers = if skip_ssh_check {
+        // Skip SSH check - add all workers directly
+        parsed_workers.iter().map(|w| w.original.clone()).collect()
+    } else {
+        // Check SSH connectivity for each worker before adding to database
+        match validate_workers_ssh(&parsed_workers, DEFAULT_MAX_PARALLEL_SSH, None) {
+            Ok(workers) => workers,
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        }
+    };
+
+    match default_api::create_remote_workers(config, workflow_id, valid_workers) {
         Ok(created) => {
             if created.is_empty() {
                 println!("All workers already exist for workflow {}", workflow_id);
@@ -1137,7 +1273,12 @@ fn handle_add_workers(config: &Configuration, workflow_id: i64, workers: &[Strin
 }
 
 /// Add remote workers from a file to the database.
-fn handle_add_workers_from_file(config: &Configuration, workflow_id: i64, worker_file: &Path) {
+fn handle_add_workers_from_file(
+    config: &Configuration,
+    workflow_id: i64,
+    worker_file: &Path,
+    skip_ssh_check: bool,
+) {
     // Parse worker file
     let workers = match parse_worker_file(worker_file) {
         Ok(w) => w,
@@ -1147,9 +1288,27 @@ fn handle_add_workers_from_file(config: &Configuration, workflow_id: i64, worker
         }
     };
 
-    // Store workers in database
-    let worker_strings: Vec<String> = workers.iter().map(|w| w.original.clone()).collect();
-    match default_api::create_remote_workers(config, workflow_id, worker_strings) {
+    if workers.is_empty() {
+        eprintln!("No workers found in {}", worker_file.display());
+        std::process::exit(1);
+    }
+
+    let valid_workers = if skip_ssh_check {
+        // Skip SSH check - add all workers directly
+        workers.iter().map(|w| w.original.clone()).collect()
+    } else {
+        // Check SSH connectivity for each worker before adding to database
+        let source = worker_file.display().to_string();
+        match validate_workers_ssh(&workers, DEFAULT_MAX_PARALLEL_SSH, Some(&source)) {
+            Ok(workers) => workers,
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        }
+    };
+
+    match default_api::create_remote_workers(config, workflow_id, valid_workers) {
         Ok(created) => {
             println!(
                 "Added {} worker(s) from {} to workflow {}",

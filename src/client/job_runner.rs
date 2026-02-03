@@ -438,19 +438,8 @@ impl JobRunner {
             self.check_and_execute_actions();
 
             debug!("Check for new jobs");
-            if self.max_parallel_jobs.is_none() {
-                // Resource-based mode: skip if no CPUs available or memory nearly exhausted
-                if self.resources.num_cpus > 0 && self.resources.memory_gb >= 0.1 {
-                    self.run_ready_jobs_based_on_resources()
-                } else {
-                    debug!(
-                        "Skipping job claim: no capacity (cpus={}, memory_gb={:.2})",
-                        self.resources.num_cpus, self.resources.memory_gb
-                    );
-                }
-            } else {
+            if let Some(max) = self.max_parallel_jobs {
                 // Parallelism-based mode: skip if already at max parallel jobs
-                let max = self.max_parallel_jobs.unwrap();
                 if (self.running_jobs.len() as i64) < max {
                     self.run_ready_jobs_based_on_user_parallelism()
                 } else {
@@ -460,7 +449,17 @@ impl JobRunner {
                         max
                     );
                 }
-            };
+            } else {
+                // Resource-based mode: skip if no CPUs available or memory nearly exhausted
+                if self.resources.num_cpus > 0 && self.resources.memory_gb >= 0.1 {
+                    self.run_ready_jobs_based_on_resources()
+                } else {
+                    debug!(
+                        "Skipping job claim: no capacity (cpus={}, memory_gb={:.2})",
+                        self.resources.num_cpus, self.resources.memory_gb
+                    );
+                }
+            }
 
             thread::sleep(Duration::from_secs_f64(self.job_completion_poll_interval));
 

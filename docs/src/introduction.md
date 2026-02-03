@@ -40,8 +40,7 @@ flowchart LR
 
 - **Declarative Workflow Definitions** — Define workflows in YAML, JSON, JSON5, or KDL
 - **Job Parameterization** — Create parameter sweeps with simple syntax like `index: "1:100"` to
-  expand one job definition into hundreds
-  ([tutorial](./core/tutorials/simple-params.md))
+  expand one job definition into hundreds ([tutorial](./core/tutorials/simple-params.md))
 - **Automatic Dependency Resolution** — Dependencies inferred from file and data relationships. No
   explicit `depends_on` declarations needed—Torc builds the dependency graph from your data flow
   ([tutorial](./core/tutorials/diamond.md))
