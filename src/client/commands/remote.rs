@@ -644,8 +644,9 @@ fn start_remote_worker(
 
         if log_check_output.trim() == "started" {
             // Log shows startup, verify process is still running with pgrep
+            // Use word boundary pattern to avoid matching workflow 123 when looking for 12
             let pgrep_cmd = format!(
-                "pgrep -f 'torc.*run.*{}' >/dev/null 2>&1 && echo running || echo stopped",
+                "pgrep -f 'torc .* run {}( |$)' >/dev/null 2>&1 && echo running || echo stopped",
                 workflow_id
             );
             let pgrep_output = ssh_execute_capture(worker, &pgrep_cmd).unwrap_or_default();
@@ -755,10 +756,6 @@ fn check_remote_worker_status(
                 RemoteWorkerState::Running { pid }
             } else {
                 // PID file exists with valid PID but process has exited - worker completed.
-                // We intentionally do NOT fall back to pgrep here because:
-                // 1. The PID file is authoritative - if the tracked process exited, the worker is done
-                // 2. pgrep can match unrelated processes, especially when workflow IDs are substrings
-                //    of other workflow IDs (e.g., workflow 123 matching a process for workflow 1234)
                 RemoteWorkerState::NotRunning
             }
         }
@@ -768,8 +765,9 @@ fn check_remote_worker_status(
 
 /// Check if a torc worker is running via pgrep (fallback when PID check fails).
 fn check_worker_via_pgrep(worker: &WorkerEntry, workflow_id: i64) -> RemoteWorkerState {
+    // Use word boundary pattern to avoid matching workflow 123 when looking for 12
     let pgrep_cmd = format!(
-        "pgrep -f 'torc.*run.*{}' 2>/dev/null | head -1",
+        "pgrep -f 'torc .* run {}( |$)' 2>/dev/null | head -1",
         workflow_id
     );
     match ssh_execute_capture(worker, &pgrep_cmd) {

@@ -367,8 +367,8 @@ impl WorkflowGraph {
     /// Level 0 contains jobs with no dependencies.
     /// Level N contains jobs whose dependencies are all in levels < N.
     pub fn topological_levels(&mut self) -> Result<&Vec<Vec<String>>, Box<dyn std::error::Error>> {
-        if self.levels.is_some() {
-            return Ok(self.levels.as_ref().unwrap());
+        if let Some(ref levels) = self.levels {
+            return Ok(levels);
         }
 
         let mut levels = Vec::new();
@@ -407,8 +407,8 @@ impl WorkflowGraph {
     ///
     /// Each component can be scheduled independently of others.
     pub fn connected_components(&mut self) -> &Vec<WorkflowComponent> {
-        if self.components.is_some() {
-            return self.components.as_ref().unwrap();
+        if let Some(ref components) = self.components {
+            return components;
         }
 
         let mut components = Vec::new();
