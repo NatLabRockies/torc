@@ -27,8 +27,15 @@ struct ServerConfig {
     #[arg(long)]
     https: bool,
 
-    /// Hostname or IP address to bind the server to
-    #[arg(short = 'H', long, default_value = "0.0.0.0")]
+    /// Hostname or IP address to bind the server to.
+    /// Deprecated aliases: --url, -u (use --host instead)
+    #[arg(
+        short = 'H',
+        long,
+        visible_alias = "url",
+        visible_short_alias = 'u',
+        default_value = "0.0.0.0"
+    )]
     host: String,
 
     /// Defines the port to listen on

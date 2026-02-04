@@ -14,6 +14,7 @@
 
 - [Core Concepts](./core/concepts/index.md)
   - [Architecture Overview](./core/concepts/architecture.md)
+  - [Network Connectivity](./core/concepts/network-connectivity.md)
   - [Workflow Definition](./core/concepts/workflow-definition.md)
   - [Job State Transitions](./core/concepts/job-states.md)
   - [Dependency Resolution](./core/concepts/dependencies.md)

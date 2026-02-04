@@ -413,6 +413,8 @@ If Slurm jobs fail with connection errors (e.g., "Connection refused" or "Name n
 
 ## Next Steps
 
+- [Network Connectivity](../../core/concepts/network-connectivity.md) - Server bind addresses and
+  deployment scenarios
 - [Web Dashboard Guide](../../core/monitoring/dashboard.md) - Complete feature reference
 - [Working with Slurm](../hpc/slurm.md) - Detailed Slurm configuration
 - [Server Deployment](../admin/server-deployment.md) - Production server setup

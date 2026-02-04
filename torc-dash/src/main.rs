@@ -297,12 +297,21 @@ async fn main() -> Result<()> {
     };
 
     // Determine API URL
-    // - Standalone mode: dashboard connects to the managed server via localhost
+    // - Standalone mode: dashboard connects to the managed server
     // - Non-standalone: use the user-provided --api-url
     let final_api_url = if standalone {
-        // In standalone mode, the dashboard connects to the server locally.
-        // The server_host controls external accessibility, but we always connect via localhost.
-        format!("http://localhost:{}/torc-service/v1", actual_server_port)
+        // In standalone mode, determine the connect host based on server_host:
+        // - If binding to all interfaces (0.0.0.0 or ::), connect via localhost
+        // - If binding to a specific IP, connect via that IP
+        let connect_host = if server_host == "0.0.0.0" || server_host == "::" {
+            "localhost".to_string()
+        } else {
+            server_host.clone()
+        };
+        format!(
+            "http://{}:{}/torc-service/v1",
+            connect_host, actual_server_port
+        )
     } else {
         api_url.clone()
     };
@@ -551,17 +560,36 @@ async fn save_workflow_spec(
     }
 }
 
-/// Extract workflow ID from CLI output like "Created workflow 123"
+/// Extract workflow ID from CLI output like "Created workflow 123" or "ID: 123"
 fn extract_workflow_id(stdout: &str) -> Option<String> {
-    // Look for pattern like "Created workflow 123" or "ID: 123"
-    if let Some(caps) = stdout
-        .lines()
-        .find(|line| line.contains("Created workflow"))
-    {
-        // Extract the number after "Created workflow"
-        caps.split_whitespace().last().map(|s| s.trim().to_string())
-    } else {
-        None
+    for line in stdout.lines() {
+        if line.contains("Created workflow") {
+            // Extract the number after "Created workflow"
+            if let Some(id) = line.split_whitespace().last() {
+                return Some(id.trim().to_string());
+            }
+        } else if let Some(pos) = line.find("ID:") {
+            // Extract the ID after "ID:"
+            let after = &line[pos + "ID:".len()..];
+            if let Some(id) = after.split_whitespace().next() {
+                return Some(id.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Validate and sanitize file extension to prevent path traversal attacks.
+/// Returns the sanitized extension or None if invalid.
+fn validate_file_extension(ext: &str) -> Option<&'static str> {
+    // Allowlist of valid extensions - prevents path traversal via malicious extensions
+    match ext {
+        ".json" | "json" => Some(".json"),
+        ".yaml" | "yaml" => Some(".yaml"),
+        ".yml" | "yml" => Some(".yml"),
+        ".kdl" | "kdl" => Some(".kdl"),
+        ".json5" | "json5" => Some(".json5"),
+        _ => None,
     }
 }
 
@@ -662,10 +690,23 @@ async fn cli_create_handler(
 ) -> impl IntoResponse {
     let is_inline = !req.is_file;
     let spec_content = req.spec.clone();
-    let file_extension = req
-        .file_extension
-        .clone()
-        .unwrap_or_else(|| ".json".to_string());
+
+    // Validate file extension to prevent path traversal attacks
+    let raw_extension = req.file_extension.as_deref().unwrap_or(".json");
+    let file_extension = match validate_file_extension(raw_extension) {
+        Some(ext) => ext,
+        None => {
+            return Json(CliResponse {
+                success: false,
+                stdout: String::new(),
+                stderr: format!(
+                    "Invalid file extension '{}'. Allowed: .json, .yaml, .yml, .kdl, .json5",
+                    raw_extension
+                ),
+                exit_code: None,
+            });
+        }
+    };
 
     let result = if req.is_file {
         // Spec is a file path
@@ -700,7 +741,7 @@ async fn cli_create_handler(
     // Save the workflow spec to a file if creation was successful and spec was inline
     if result.success && is_inline {
         let workflow_id = extract_workflow_id(&result.stdout);
-        save_workflow_spec(&spec_content, workflow_id.as_deref(), &file_extension).await;
+        save_workflow_spec(&spec_content, workflow_id.as_deref(), file_extension).await;
     }
 
     Json(result)
@@ -713,10 +754,23 @@ async fn cli_create_slurm_handler(
 ) -> impl IntoResponse {
     let is_inline = !req.is_file;
     let spec_content = req.spec.clone();
-    let file_extension = req
-        .file_extension
-        .clone()
-        .unwrap_or_else(|| ".json".to_string());
+
+    // Validate file extension to prevent path traversal attacks
+    let raw_extension = req.file_extension.as_deref().unwrap_or(".json");
+    let file_extension = match validate_file_extension(raw_extension) {
+        Some(ext) => ext,
+        None => {
+            return Json(CliResponse {
+                success: false,
+                stdout: String::new(),
+                stderr: format!(
+                    "Invalid file extension '{}'. Allowed: .json, .yaml, .yml, .kdl, .json5",
+                    raw_extension
+                ),
+                exit_code: None,
+            });
+        }
+    };
 
     // Build command args
     let mut args = vec!["workflows", "create-slurm", "--account", &req.account];
@@ -754,7 +808,7 @@ async fn cli_create_slurm_handler(
     // Save the workflow spec to a file if creation was successful and spec was inline
     if result.success && is_inline {
         let workflow_id = extract_workflow_id(&result.stdout);
-        save_workflow_spec(&spec_content, workflow_id.as_deref(), &file_extension).await;
+        save_workflow_spec(&spec_content, workflow_id.as_deref(), file_extension).await;
     }
 
     Json(result)

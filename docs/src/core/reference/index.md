@@ -2,6 +2,9 @@
 
 Comprehensive reference documentation.
 
+> **Quick Reference:** The [CLI Cheat Sheet](./cli-cheatsheet.md) provides a one-page overview of
+> all common commands. Keep it handy!
+
 - [CLI Cheat Sheet](./cli-cheatsheet.md) - Command-line interface cheat sheet
 - [CLI Reference](./cli.md) - Command-line interface documentation
 - [Job Parameterization](./parameterization.md) - Parameter syntax and options

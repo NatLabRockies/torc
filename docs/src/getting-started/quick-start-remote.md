@@ -126,6 +126,7 @@ Add `--force` to send SIGKILL instead of SIGTERM.
 
 ## Next Steps
 
+- [CLI Cheat Sheet](../core/reference/cli-cheatsheet.md) - Quick reference for all common commands
 - [Remote Workers Guide](./remote-workers.md) - Detailed configuration and troubleshooting
 - [Creating Workflows](../../core/workflows/creating-workflows.md) - Workflow specification format
 - [Resource Monitoring](../../core/monitoring/resource-monitoring.md) - Track CPU/memory usage per

@@ -111,6 +111,7 @@ workflow examples in YAML, JSON5, and KDL formats.
 
 ## Next Steps
 
+- [CLI Cheat Sheet](../core/reference/cli-cheatsheet.md) - Quick reference for all common commands
 - [Quick Start (HPC)](../specialized/hpc/quick-start-hpc.md) - Run workflows on Slurm clusters
 - [Creating Workflows](../core/workflows/creating-workflows.md) - Detailed workflow creation guide
 - [Terminal UI](../core/monitoring/tui.md) - Interactive workflow monitoring
