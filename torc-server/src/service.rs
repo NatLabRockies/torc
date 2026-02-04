@@ -26,7 +26,7 @@ pub enum ServiceCommand {
 pub struct ServiceConfig {
     pub log_dir: Option<PathBuf>,
     pub database: Option<String>,
-    pub url: String,
+    pub host: String,
     pub port: u16,
     pub threads: u32,
     pub auth_file: Option<String>,
@@ -47,7 +47,7 @@ impl ServiceConfig {
         Self {
             log_dir: Some(PathBuf::from("/var/log/torc")),
             database: Some("/var/lib/torc/torc.db".to_string()),
-            url: "0.0.0.0".to_string(),
+            host: "0.0.0.0".to_string(),
             port: 8080,
             threads: 4,
             auth_file: None,
@@ -68,7 +68,7 @@ impl ServiceConfig {
         Self {
             log_dir: Some(PathBuf::from(format!("{}/.torc/logs", home))),
             database: Some(format!("{}/.torc/torc.db", home)),
-            url: "0.0.0.0".to_string(),
+            host: "0.0.0.0".to_string(),
             port: 8080,
             threads: 4,
             auth_file: None,
@@ -92,7 +92,7 @@ impl ServiceConfig {
             // Use user config's log_dir if provided, otherwise use default
             log_dir: user_config.log_dir.clone().or(defaults.log_dir),
             database: user_config.database.clone().or(defaults.database),
-            url: user_config.url.clone(),
+            host: user_config.host.clone(),
             port: user_config.port,
             threads: user_config.threads,
             auth_file: user_config.auth_file.clone(),
@@ -159,8 +159,8 @@ pub fn install_service(config: &ServiceConfig, user_level: bool) -> Result<()> {
         args.push(database.into());
     }
 
-    args.push("--url".into());
-    args.push(config.url.clone().into());
+    args.push("--host".into());
+    args.push(config.host.clone().into());
 
     args.push("--port".into());
     args.push(config.port.to_string().into());
@@ -220,7 +220,7 @@ pub fn install_service(config: &ServiceConfig, user_level: bool) -> Result<()> {
     if let Some(ref database) = config.database {
         println!("  Database: {}", database);
     }
-    println!("  Listen address: {}:{}", config.url, config.port);
+    println!("  Listen address: {}:{}", config.host, config.port);
     println!("  Worker threads: {}", config.threads);
     println!("  Log level: {}", config.log_level);
     println!();

@@ -247,6 +247,12 @@ EXAMPLES:
 
     # Update job command
     torc jobs update 456 --command 'python new_script.py'
+
+    # Update job runtime (requires existing resource requirements)
+    torc jobs update 456 --runtime PT2H
+
+    # Change resource requirements
+    torc jobs update 456 --resource-requirements-id 10
 ")]
     Update {
         /// ID of the job to update
@@ -258,6 +264,15 @@ EXAMPLES:
         /// Command to execute
         #[arg(short, long)]
         command: Option<String>,
+        /// Runtime for the job (ISO 8601 duration format, e.g., PT30M, PT2H)
+        ///
+        /// This updates the runtime on the job's associated resource requirements.
+        /// The job must already have a resource_requirements_id assigned.
+        #[arg(long)]
+        runtime: Option<String>,
+        /// Resource requirements ID to assign to this job
+        #[arg(long)]
+        resource_requirements_id: Option<i64>,
     },
     /// Delete one or more jobs
     #[command(after_long_help = "\
@@ -530,7 +545,13 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                 std::process::exit(1);
             }
         },
-        JobCommands::Update { id, name, command } => {
+        JobCommands::Update {
+            id,
+            name,
+            command,
+            runtime,
+            resource_requirements_id,
+        } => {
             // First get the existing job
             match default_api::get_job(config, *id) {
                 Ok(mut job) => {
@@ -540,6 +561,48 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                     }
                     if let Some(new_command) = command {
                         job.command = new_command.clone();
+                    }
+                    if let Some(new_rr_id) = resource_requirements_id {
+                        job.resource_requirements_id = Some(*new_rr_id);
+                    }
+
+                    // Handle runtime update (requires updating resource requirements)
+                    if let Some(new_runtime) = runtime {
+                        let rr_id = job.resource_requirements_id.unwrap_or_else(|| {
+                            eprintln!(
+                                "Error: Cannot update runtime - job {} has no resource requirements assigned.",
+                                id
+                            );
+                            eprintln!(
+                                "Hint: First assign resource requirements with --resource-requirements-id"
+                            );
+                            std::process::exit(1);
+                        });
+
+                        // Get and update the resource requirements
+                        match default_api::get_resource_requirements(config, rr_id) {
+                            Ok(mut rr) => {
+                                rr.runtime = new_runtime.clone();
+                                match default_api::update_resource_requirements(config, rr_id, rr) {
+                                    Ok(_) => {
+                                        if format != "json" {
+                                            println!(
+                                                "Updated runtime to {} on resource requirements ID {}",
+                                                new_runtime, rr_id
+                                            );
+                                        }
+                                    }
+                                    Err(e) => {
+                                        print_error("updating resource requirements", &e);
+                                        std::process::exit(1);
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                print_error("getting resource requirements", &e);
+                                std::process::exit(1);
+                            }
+                        }
                     }
 
                     match default_api::update_job(config, *id, job) {
@@ -552,6 +615,13 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                                 println!("  Name: {}", updated_job.name);
                                 println!("  Command: {}", updated_job.command);
                                 println!("  Workflow ID: {}", updated_job.workflow_id);
+                                println!(
+                                    "  Resource Requirements ID: {}",
+                                    updated_job
+                                        .resource_requirements_id
+                                        .map(|id| id.to_string())
+                                        .unwrap_or_else(|| "None".to_string())
+                                );
                                 println!(
                                     "  Blocking job IDs: {}",
                                     updated_job

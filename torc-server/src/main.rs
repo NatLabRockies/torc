@@ -27,9 +27,16 @@ struct ServerConfig {
     #[arg(long)]
     https: bool,
 
-    /// Defines the URL to use
-    #[arg(short, long, default_value = "localhost")]
-    url: String,
+    /// Hostname or IP address to bind the server to.
+    /// Deprecated aliases: --url, -u (use --host instead)
+    #[arg(
+        short = 'H',
+        long,
+        visible_alias = "url",
+        visible_short_alias = 'u',
+        default_value = "0.0.0.0"
+    )]
+    host: String,
 
     /// Defines the port to listen on
     #[arg(short, long, default_value_t = 8080)]
@@ -214,7 +221,7 @@ fn handle_service_action(action: ServiceAction) -> Result<()> {
             let svc_config = service::ServiceConfig {
                 log_dir: config.log_dir,
                 database: config.database,
-                url: config.url,
+                host: config.host,
                 port: config.port,
                 threads: config.threads,
                 auth_file: config.auth_file,
@@ -248,10 +255,10 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
             server_file_config.log_level.clone()
         },
         https: cli_config.https || server_file_config.https,
-        url: if cli_config.url != "localhost" {
-            cli_config.url
+        host: if cli_config.host != "0.0.0.0" {
+            cli_config.host
         } else {
-            server_file_config.url.clone()
+            server_file_config.host.clone()
         },
         port: if cli_config.port != 8080 {
             cli_config.port
@@ -439,7 +446,7 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
             info!("Authentication is OPTIONAL (backward compatible mode)");
         }
 
-        let addr = format!("{}:{}", config.url, config.port);
+        let addr = format!("{}:{}", config.host, config.port);
         info!(
             "Tokio runtime configured with {} worker threads",
             config.threads

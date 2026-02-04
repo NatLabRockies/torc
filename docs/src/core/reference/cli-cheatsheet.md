@@ -1,3 +1,5 @@
+<div class="cheatsheet">
+
 # Torc CLI Cheat Sheet
 
 ## Quick Start
@@ -70,3 +72,5 @@
 | `--url <URL>`       | Server URL (or set `TORC_API_URL`) |
 | `-f json`           | Output as JSON instead of table    |
 | `--log-level debug` | Enable debug logging               |
+
+</div>

@@ -87,6 +87,10 @@ This documentation is organized to help you find what you need quickly:
 - **New to Torc?** Start with [Quick Start (Local)](./getting-started/quick-start-local.md)
 - **Want to understand how it works?** Read the
   [Architecture Overview](./core/concepts/architecture.md)
+- **Deploying on HPC or remote systems?** See
+  [Network Connectivity](./core/concepts/network-connectivity.md) for server configuration
 - **Ready to create workflows?** Jump to
   [Creating Workflows](./core/workflows/creating-workflows.md)
 - **On an HPC cluster?** See [Quick Start (HPC)](./getting-started/quick-start-hpc.md)
+- **Need a quick reference?** The [CLI Cheat Sheet](./core/reference/cli-cheatsheet.md) has all
+  common commands at a glance

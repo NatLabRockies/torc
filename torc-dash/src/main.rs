@@ -100,6 +100,10 @@ struct Cli {
     #[arg(long, default_value_t = 0)]
     server_port: u16,
 
+    /// Host for torc-server to bind to in standalone mode (default: 0.0.0.0 for external access)
+    #[arg(long, default_value = "0.0.0.0")]
+    server_host: String,
+
     /// Database path for torc-server when running in standalone mode
     #[arg(long, env = "DATABASE_URL")]
     database: Option<String>,
@@ -158,6 +162,11 @@ async fn main() -> Result<()> {
     } else {
         dash_config.server_port
     };
+    let server_host = if cli.server_host != "0.0.0.0" {
+        cli.server_host.clone()
+    } else {
+        dash_config.server_host.clone()
+    };
     let database = cli
         .database
         .clone()
@@ -184,23 +193,21 @@ async fn main() -> Result<()> {
 
     // In standalone mode, start the server first to get the actual port
     let managed_server = if standalone {
-        info!(
-            "Standalone mode: starting torc-server on port {} (0 = auto-detect)",
-            server_port
-        );
+        // Warn if --api-url is specified with --standalone (it will be ignored)
+        if api_url != "http://localhost:8080/torc-service/v1" {
+            warn!(
+                "--api-url is ignored in standalone mode. Use --server-host and --server-port to configure the managed server."
+            );
+        }
 
-        // Determine the host for the server to bind to.
-        // If user provided a custom --api-url, the server needs to bind to 0.0.0.0
-        // so it's accessible from the specified IP address.
-        let server_host = if api_url != "http://localhost:8080/torc-service/v1" {
-            "0.0.0.0".to_string()
-        } else {
-            "127.0.0.1".to_string()
-        };
+        info!(
+            "Standalone mode: starting torc-server on {}:{} (port 0 = auto-detect)",
+            server_host, server_port
+        );
 
         let mut args = vec![
             "run".to_string(),
-            "--url".to_string(),
+            "--host".to_string(),
             server_host.clone(),
             "--port".to_string(),
             server_port.to_string(),
@@ -212,8 +219,6 @@ async fn main() -> Result<()> {
             args.push("--database".to_string());
             args.push(db.clone());
         }
-
-        info!("Server will bind to {}:{}", server_host, server_port);
 
         let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
         match Command::new(&torc_server_bin)
@@ -291,24 +296,22 @@ async fn main() -> Result<()> {
         ManagedServer::default()
     };
 
-    // Determine API URL - if standalone mode, use actual_server_port with the correct host
+    // Determine API URL
+    // - Standalone mode: dashboard connects to the managed server
+    // - Non-standalone: use the user-provided --api-url
     let final_api_url = if standalone {
-        // In standalone mode, we need to determine the correct host for the API URL.
-        // If the user provided a custom --api-url, extract the host from it.
-        // Otherwise, use the host the dashboard is binding to (or localhost as fallback).
-        let api_host = if api_url != "http://localhost:8080/torc-service/v1" {
-            // User provided a custom API URL, extract the host
-            url::Url::parse(&api_url)
-                .ok()
-                .and_then(|u| u.host_str().map(|h| h.to_string()))
-                .unwrap_or_else(|| "localhost".to_string())
-        } else if host != "127.0.0.1" {
-            // User specified a non-default host, use it
-            host.clone()
-        } else {
+        // In standalone mode, determine the connect host based on server_host:
+        // - If binding to all interfaces (0.0.0.0 or ::), connect via localhost
+        // - If binding to a specific IP, connect via that IP
+        let connect_host = if server_host == "0.0.0.0" || server_host == "::" {
             "localhost".to_string()
+        } else {
+            server_host.clone()
         };
-        format!("http://{}:{}/torc-service/v1", api_host, actual_server_port)
+        format!(
+            "http://{}:{}/torc-service/v1",
+            connect_host, actual_server_port
+        )
     } else {
         api_url.clone()
     };
@@ -502,6 +505,94 @@ async fn proxy_handler(
 
 // ============== CLI Command Handlers ==============
 
+/// Save a workflow spec to a file in the current directory.
+/// The filename is derived from the workflow name in the spec.
+/// Returns the path to the saved file, or None if saving failed.
+async fn save_workflow_spec(
+    spec_content: &str,
+    workflow_id: Option<&str>,
+    file_extension: &str,
+) -> Option<String> {
+    // Parse the spec as JSON to extract the workflow name
+    // (works for JSON specs; for YAML/KDL we fall back to "workflow")
+    let workflow_name = serde_json::from_str::<serde_json::Value>(spec_content)
+        .ok()
+        .and_then(|spec| spec.get("name").and_then(|v| v.as_str()).map(String::from))
+        .unwrap_or_else(|| "workflow".to_string());
+
+    // Sanitize the workflow name for use as a filename
+    let sanitized_name: String = workflow_name
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+
+    // Build the filename, optionally including the workflow ID for uniqueness
+    let base_filename = if let Some(id) = workflow_id {
+        format!("{}_{}", sanitized_name, id)
+    } else {
+        sanitized_name
+    };
+
+    // Ensure content ends with newline
+    let content = if spec_content.ends_with('\n') {
+        spec_content.to_string()
+    } else {
+        format!("{}\n", spec_content)
+    };
+
+    // Use the provided extension (e.g., ".json", ".yaml", ".kdl")
+    let filename = format!("{}{}", base_filename, file_extension);
+    match tokio::fs::write(&filename, &content).await {
+        Ok(()) => {
+            info!("Saved workflow spec to: {}", filename);
+            Some(filename)
+        }
+        Err(e) => {
+            warn!("Failed to save workflow spec to {}: {}", filename, e);
+            None
+        }
+    }
+}
+
+/// Extract workflow ID from CLI output like "Created workflow 123" or "ID: 123"
+fn extract_workflow_id(stdout: &str) -> Option<String> {
+    for line in stdout.lines() {
+        if line.contains("Created workflow") {
+            // Extract the number after "Created workflow"
+            if let Some(id) = line.split_whitespace().last() {
+                return Some(id.trim().to_string());
+            }
+        } else if let Some(pos) = line.find("ID:") {
+            // Extract the ID after "ID:"
+            let after = &line[pos + "ID:".len()..];
+            if let Some(id) = after.split_whitespace().next() {
+                return Some(id.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Validate and sanitize file extension to prevent path traversal attacks.
+/// Returns the sanitized extension or None if invalid.
+fn validate_file_extension(ext: &str) -> Option<&'static str> {
+    // Allowlist of valid extensions - prevents path traversal via malicious extensions
+    match ext {
+        ".json" | "json" => Some(".json"),
+        ".yaml" | "yaml" => Some(".yaml"),
+        ".yml" | "yml" => Some(".yml"),
+        ".kdl" | "kdl" => Some(".kdl"),
+        ".json5" | "json5" => Some(".json5"),
+        _ => None,
+    }
+}
+
 #[derive(Deserialize)]
 struct CreateRequest {
     /// Path to workflow spec file OR inline spec content
@@ -597,6 +688,26 @@ async fn cli_create_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateRequest>,
 ) -> impl IntoResponse {
+    let is_inline = !req.is_file;
+    let spec_content = req.spec.clone();
+
+    // Validate file extension to prevent path traversal attacks
+    let raw_extension = req.file_extension.as_deref().unwrap_or(".json");
+    let file_extension = match validate_file_extension(raw_extension) {
+        Some(ext) => ext,
+        None => {
+            return Json(CliResponse {
+                success: false,
+                stdout: String::new(),
+                stderr: format!(
+                    "Invalid file extension '{}'. Allowed: .json, .yaml, .yml, .kdl, .json5",
+                    raw_extension
+                ),
+                exit_code: None,
+            });
+        }
+    };
+
     let result = if req.is_file {
         // Spec is a file path
         run_torc_command(
@@ -607,9 +718,8 @@ async fn cli_create_handler(
         .await
     } else {
         // Spec is inline content - write to temp file with correct extension
-        let extension = req.file_extension.as_deref().unwrap_or(".json");
         let unique_id = uuid::Uuid::new_v4();
-        let temp_path = format!("/tmp/torc_spec_{}{}", unique_id, extension);
+        let temp_path = format!("/tmp/torc_spec_{}{}", unique_id, file_extension);
         if let Err(e) = tokio::fs::write(&temp_path, &req.spec).await {
             return Json(CliResponse {
                 success: false,
@@ -628,6 +738,12 @@ async fn cli_create_handler(
         result
     };
 
+    // Save the workflow spec to a file if creation was successful and spec was inline
+    if result.success && is_inline {
+        let workflow_id = extract_workflow_id(&result.stdout);
+        save_workflow_spec(&spec_content, workflow_id.as_deref(), file_extension).await;
+    }
+
     Json(result)
 }
 
@@ -636,6 +752,26 @@ async fn cli_create_slurm_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateSlurmRequest>,
 ) -> impl IntoResponse {
+    let is_inline = !req.is_file;
+    let spec_content = req.spec.clone();
+
+    // Validate file extension to prevent path traversal attacks
+    let raw_extension = req.file_extension.as_deref().unwrap_or(".json");
+    let file_extension = match validate_file_extension(raw_extension) {
+        Some(ext) => ext,
+        None => {
+            return Json(CliResponse {
+                success: false,
+                stdout: String::new(),
+                stderr: format!(
+                    "Invalid file extension '{}'. Allowed: .json, .yaml, .yml, .kdl, .json5",
+                    raw_extension
+                ),
+                exit_code: None,
+            });
+        }
+    };
+
     // Build command args
     let mut args = vec!["workflows", "create-slurm", "--account", &req.account];
 
@@ -653,9 +789,8 @@ async fn cli_create_slurm_handler(
         run_torc_command(&state.torc_bin, &args, &state.api_url).await
     } else {
         // Spec is inline content - write to temp file with correct extension
-        let extension = req.file_extension.as_deref().unwrap_or(".json");
         let unique_id = uuid::Uuid::new_v4();
-        let temp_path = format!("/tmp/torc_spec_{}{}", unique_id, extension);
+        let temp_path = format!("/tmp/torc_spec_{}{}", unique_id, file_extension);
         if let Err(e) = tokio::fs::write(&temp_path, &req.spec).await {
             return Json(CliResponse {
                 success: false,
@@ -669,6 +804,12 @@ async fn cli_create_slurm_handler(
         let _ = tokio::fs::remove_file(&temp_path).await;
         result
     };
+
+    // Save the workflow spec to a file if creation was successful and spec was inline
+    if result.success && is_inline {
+        let workflow_id = extract_workflow_id(&result.stdout);
+        save_workflow_spec(&spec_content, workflow_id.as_deref(), file_extension).await;
+    }
 
     Json(result)
 }

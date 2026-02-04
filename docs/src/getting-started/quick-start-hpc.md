@@ -16,12 +16,37 @@ For local execution (testing, development, or non-HPC environments), see
 
 On the login node, start a Torc server with a local database:
 
+**Note**: This uses a specific hostname routable from compute nodes, which may vary across HPC
+systems. Adjust as necessary or exclude `--host` to use the default.
+
 ```console
-torc-server run --database torc.db --completion-check-interval-secs 5
+torc-server run \
+    --database torc.db \
+    --host kl1.hsn.cm.kestrel.hpc.nrel.gov \
+    --port 0 \
+    --completion-check-interval-secs 5
 ```
 
-> **Note:** For larger deployments, your team may provide a shared Torc server. In that case, skip
-> this step and set `TORC_API_URL` to the shared server address.
+With `port=0` torc will find a random free port. It will print the port number on the console like
+below. You will need this number when connecting from the client.
+
+```
+2026-02-04T14:31:33.396627Z  INFO ThreadId(01) torc_server::server: 263: Starting a server (over http, so no TLS) on port 52619
+```
+
+> **Security Note:** The server starts without authentication and is accessible from any machine
+> that can reach this host. For networks with untrusted users, see
+> [Authentication](../specialized/admin/authentication.md) to secure your server.
+
+## Setup the client
+
+Set the Torc API URL in your environment using the port number from above:
+
+```
+export TORC_API_URL=http://kl1.hsn.cm.kestrel.hpc.nrel.gov:52619/torc-service/v1
+```
+
+**Note:** You can also set a custom port number as long as it does not conflict with others.
 
 ## Check Your HPC Profile
 
@@ -178,6 +203,7 @@ This shows what schedulers and actions Torc will create without submitting anyth
 
 ## Next Steps
 
+- [CLI Cheat Sheet](../core/reference/cli-cheatsheet.md) — Quick reference for all common commands
 - [Slurm Workflows](./slurm-workflows.md) — How Torc manages Slurm
 - [Resource Requirements](../../core/reference/resources.md) — All resource options
 - [HPC Profiles](./hpc-profiles.md) — Managing HPC configurations

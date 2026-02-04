@@ -35,7 +35,7 @@ fn test_server_config_defaults() {
     let config = ServerConfig::default();
     assert_eq!(config.log_level, "info");
     assert!(!config.https);
-    assert_eq!(config.url, "localhost");
+    assert_eq!(config.host, "0.0.0.0");
     assert_eq!(config.port, 8080);
     assert_eq!(config.threads, 1);
     assert!(config.database.is_none());

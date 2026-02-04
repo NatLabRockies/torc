@@ -14,12 +14,15 @@ HPC/Slurm execution, see [Quick Start (HPC)](../getting-started/quick-start-hpc.
 
 ## Start the Server
 
-Start a Torc server that's accessible from the remote machines. This typically means binding to a
-network interface (not just localhost):
+Start a Torc server. By default, it binds to `0.0.0.0` so it's accessible from remote machines:
 
 ```console
-torc-server run --database torc.db --url 0.0.0.0 --port 8080
+torc-server run --database torc.db --port 8080
 ```
+
+> **Security Note:** The server starts without authentication and is accessible from any machine
+> that can reach this host. For networks with untrusted users, see
+> [Authentication](../specialized/admin/authentication.md) to secure your server.
 
 ## Create a Worker File
 
@@ -123,6 +126,7 @@ Add `--force` to send SIGKILL instead of SIGTERM.
 
 ## Next Steps
 
+- [CLI Cheat Sheet](../core/reference/cli-cheatsheet.md) - Quick reference for all common commands
 - [Remote Workers Guide](./remote-workers.md) - Detailed configuration and troubleshooting
 - [Creating Workflows](../../core/workflows/creating-workflows.md) - Workflow specification format
 - [Resource Monitoring](../../core/monitoring/resource-monitoring.md) - Track CPU/memory usage per

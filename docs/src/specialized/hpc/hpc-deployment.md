@@ -27,11 +27,11 @@ can connect.
 
 On NREL's Kestrel system, login nodes use the High-Speed Network (HSN) for internal communication:
 
-| Login Node | External Hostname  | Internal Hostname (for `-u` flag) |
-| ---------- | ------------------ | --------------------------------- |
-| kl1        | `kl1.hpc.nrel.gov` | `kl1.hsn.cm.kestrel.hpc.nrel.gov` |
-| kl2        | `kl2.hpc.nrel.gov` | `kl2.hsn.cm.kestrel.hpc.nrel.gov` |
-| kl3        | `kl3.hpc.nrel.gov` | `kl3.hsn.cm.kestrel.hpc.nrel.gov` |
+| Login Node | External Hostname  | Internal Hostname (for `--host` flag) |
+| ---------- | ------------------ | ------------------------------------- |
+| kl1        | `kl1.hpc.nrel.gov` | `kl1.hsn.cm.kestrel.hpc.nrel.gov`     |
+| kl2        | `kl2.hpc.nrel.gov` | `kl2.hsn.cm.kestrel.hpc.nrel.gov`     |
+| kl3        | `kl3.hpc.nrel.gov` | `kl3.hsn.cm.kestrel.hpc.nrel.gov`     |
 
 **Starting the server:**
 
@@ -39,7 +39,7 @@ On NREL's Kestrel system, login nodes use the High-Speed Network (HSN) for inter
 # On login node kl3, use the internal hostname
 torc-server run \
     --database /scratch/$USER/torc.db \
-    -u kl3.hsn.cm.kestrel.hpc.nrel.gov \
+    --host kl3.hsn.cm.kestrel.hpc.nrel.gov \
     --port 8085
 ```
 
@@ -94,7 +94,7 @@ mkdir -p /scratch/$USER/torc
 # Start server with scratch database
 torc-server run \
     --database /scratch/$USER/torc/workflows.db \
-    -u $(hostname -s).hsn.cm.kestrel.hpc.nrel.gov \
+    --host $(hostname -s).hsn.cm.kestrel.hpc.nrel.gov \
     --port 8085
 ```
 
@@ -120,7 +120,7 @@ Login nodes are shared resources. To avoid conflicts:
 MY_PORT=$((8000 + $(id -u) % 1000))
 torc-server run \
     --database /scratch/$USER/torc.db \
-    -u kl3.hsn.cm.kestrel.hpc.nrel.gov \
+    --host kl3.hsn.cm.kestrel.hpc.nrel.gov \
     --port $MY_PORT
 ```
 
@@ -135,7 +135,7 @@ tmux new -s torc
 # Start the server
 torc-server run \
     --database /scratch/$USER/torc.db \
-    -u kl3.hsn.cm.kestrel.hpc.nrel.gov \
+    --host kl3.hsn.cm.kestrel.hpc.nrel.gov \
     --port 8085
 
 # Detach with Ctrl+b, then d
@@ -151,7 +151,7 @@ Create `~/.config/torc/config.toml`:
 ```toml
 [server]
 # Use internal hostname for compute node access
-url = "kl3.hsn.cm.kestrel.hpc.nrel.gov"
+host = "kl3.hsn.cm.kestrel.hpc.nrel.gov"
 port = 8085
 database = "/scratch/myuser/torc/workflows.db"
 threads = 4
@@ -210,7 +210,7 @@ exit
 
 1. Verify the server is using the internal hostname:
    ```bash
-   torc-server run -u <internal-hostname> --port 8085
+   torc-server run --host <internal-hostname> --port 8085
    ```
 
 2. Check the server is listening on all interfaces:

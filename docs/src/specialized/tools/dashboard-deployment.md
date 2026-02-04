@@ -93,16 +93,17 @@ Navigate to http://localhost:8090
 
 ```bash
 # Custom dashboard port
-torc-dash --standalone --port 8080
+torc-dash --standalone --port 8080 --server-host localhost
 
 # Specify database location
-torc-dash --standalone --database /path/to/my.db
+torc-dash --standalone --database /path/to/my.db --server-host localhost
 
 # Faster job completion detection
-torc-dash --standalone --completion-check-interval-secs 2
+torc-dash --standalone --server-host localhost --completion-check-interval-secs 2
 
 # Specify binary paths (if not in PATH)
 torc-dash --standalone \
+  --server-host localhost \
   --torc-bin /path/to/torc \
   --torc-server-bin /path/to/torc-server
 ```
@@ -164,39 +165,21 @@ flowchart TB
 
 ### Setup
 
-**Step 1: Start torc-server on the login node**
+**Step 1: Start a tmux session** This ensures that your server continues to run if your computer is
+disconnected from the network.
 
 ```bash
-# Start server
-torc-server run \
-  --port 8080 \
-  --database $SCRATCH/torc.db \
+tmux
+```
+
+**Step 2: Start torc-dash on the login node with its own torc server**
+
+```bash
+torc-dash --standalone \
+  --database /scratch/$USER/torc.db \
+  --port 8090 \
+  --server-host kl1.hsn.cm.kestrel.hpc.nrel.gov \
   --completion-check-interval-secs 60
-```
-
-Or as a background process:
-
-```bash
-nohup torc-server run \
-  --port 8080 \
-  --database $SCRATCH/torc.db \
-  > $SCRATCH/torc-server.log 2>&1 &
-```
-
-**Step 2: Start torc-dash on the same login node**
-
-```bash
-# Set API URL to local server
-export TORC_API_URL="http://localhost:8080/torc-service/v1"
-
-# Start dashboard
-torc-dash --port 8090
-```
-
-Or in the background:
-
-```bash
-nohup torc-dash --port 8090 > $SCRATCH/torc-dash.log 2>&1 &
 ```
 
 **Step 3: Access via SSH tunnel**
@@ -223,8 +206,6 @@ Open http://localhost:8090 in your browser.
 **Via CLI:**
 
 ```bash
-export TORC_API_URL="http://localhost:8080/torc-service/v1"
-
 # Create workflow with Slurm actions
 torc workflows create my_slurm_workflow.yaml
 
@@ -290,7 +271,6 @@ flowchart TB
 On the shared server (e.g., a dedicated service node):
 
 ```bash
-# Start server with production settings
 torc-server run \
   --port 8080 \
   --database /shared/storage/torc.db \
@@ -408,6 +388,23 @@ squeue --me
 cat output/slurm_output_*.e
 ```
 
+### Compute nodes can't reach the server
+
+If Slurm jobs fail with connection errors (e.g., "Connection refused" or "Name not resolved"):
+
+1. Verify connectivity from a compute node:
+   ```bash
+   srun --pty curl -s http://$(hostname):8080/torc-service/v1/workflows
+   ```
+
+2. On some HPC systems, the login node's default hostname is not routable from compute nodes. For
+   example, on NREL's Kestrel, login node `kl1` must be accessed as
+   `kl1.hsn.cm.kestrel.hpc.nrel.gov` from compute nodes. Check with your HPC administrators for the
+   correct routable hostname, then use `--host`:
+   ```bash
+   torc-server run --host <routable-hostname> --port 8080 ...
+   ```
+
 ### Dashboard shows "Disconnected"
 
 - Verify API URL in Configuration tab
@@ -416,6 +413,8 @@ cat output/slurm_output_*.e
 
 ## Next Steps
 
+- [Network Connectivity](../../core/concepts/network-connectivity.md) - Server bind addresses and
+  deployment scenarios
 - [Web Dashboard Guide](../../core/monitoring/dashboard.md) - Complete feature reference
 - [Working with Slurm](../hpc/slurm.md) - Detailed Slurm configuration
 - [Server Deployment](../admin/server-deployment.md) - Production server setup

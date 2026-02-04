@@ -202,7 +202,7 @@ torc-server run \
     --json-logs \
     --pid-file /var/run/torc/server.pid \
     --database /var/lib/torc/torc.db \
-    --url 0.0.0.0 \
+    --host 0.0.0.0 \
     --port 8080 \
     --threads 8 \
     --auth-file /etc/torc/htpasswd \
@@ -228,7 +228,7 @@ torc-server service install --user
 torc-server service install --user \
     --log-dir ~/custom/logs \
     --database ~/custom/torc.db \
-    --url 0.0.0.0 \
+    --host 0.0.0.0 \
     --port 8080 \
     --threads 4
 
@@ -264,7 +264,7 @@ sudo torc-server service install
 sudo torc-server service install \
     --log-dir /var/log/torc \
     --database /var/lib/torc/torc.db \
-    --url 0.0.0.0 \
+    --host 0.0.0.0 \
     --port 8080 \
     --threads 8 \
     --auth-file /etc/torc/htpasswd \
@@ -318,7 +318,7 @@ ExecStart=/usr/local/bin/torc-server run \
     --log-dir /var/log/torc \
     --json-logs \
     --database /var/lib/torc/torc.db \
-    --url 0.0.0.0 \
+    --host 0.0.0.0 \
     --port 8080 \
     --threads 8 \
     --auth-file /etc/torc/htpasswd \

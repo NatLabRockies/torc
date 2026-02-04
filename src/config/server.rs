@@ -13,8 +13,9 @@ pub struct ServerConfig {
     /// Whether to use HTTPS
     pub https: bool,
 
-    /// URL/hostname to bind to
-    pub url: String,
+    /// Hostname or IP address to bind to
+    #[serde(alias = "url")]
+    pub host: String,
 
     /// Port to listen on
     pub port: u16,
@@ -54,7 +55,7 @@ impl Default for ServerConfig {
         Self {
             log_level: "info".to_string(),
             https: false,
-            url: "localhost".to_string(),
+            host: "0.0.0.0".to_string(),
             port: 8080,
             threads: 1,
             database: None,
@@ -90,7 +91,7 @@ mod tests {
         let config = ServerConfig::default();
         assert_eq!(config.log_level, "info");
         assert!(!config.https);
-        assert_eq!(config.url, "localhost");
+        assert_eq!(config.host, "0.0.0.0");
         assert_eq!(config.port, 8080);
         assert_eq!(config.threads, 1);
         assert!(config.database.is_none());
