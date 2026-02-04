@@ -358,6 +358,7 @@ impl HpcProfileRegistry {
     /// Create a registry with all built-in profiles
     pub fn with_builtin_profiles() -> Self {
         let mut registry = Self::new();
+        registry.register(super::dane::dane_profile());
         registry.register(super::kestrel::kestrel_profile());
         registry
     }

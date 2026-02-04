@@ -8,6 +8,7 @@
 //! that include partition configurations, resource limits, and auto-detection.
 
 pub mod common;
+pub mod dane;
 pub mod hpc_interface;
 pub mod hpc_manager;
 pub mod kestrel;
