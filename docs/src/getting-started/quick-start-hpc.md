@@ -17,7 +17,7 @@ For local execution (testing, development, or non-HPC environments), see
 On the login node, start a Torc server with a local database:
 
 **Note**: This uses a specific hostname routable from compute nodes, which may vary across HPC
-systems.
+systems. Adjust as necessary or exclude `--host` to use the default.
 
 ```console
 torc-server run --database torc.db --host kl1.hsn.cm.kestrel.hpc.nrel.gov --completion-check-interval-secs 5

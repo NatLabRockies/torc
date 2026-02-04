@@ -26,22 +26,26 @@ ol.section ol.section > li.chapter-item strong {
     }
 }
 
-/* Consistent table column widths for cheatsheet and reference pages */
+/* Table styling */
 table {
-    table-layout: fixed;
     width: 100%;
-}
-
-table th:first-child,
-table td:first-child {
-    width: 55%;
-}
-
-table th:last-child,
-table td:last-child {
-    width: 45%;
 }
 
 table code {
     white-space: nowrap;
+}
+
+/* Fixed-width columns for cheatsheet tables (2-column command/description format) */
+.cheatsheet table {
+    table-layout: fixed;
+}
+
+.cheatsheet table th:first-child,
+.cheatsheet table td:first-child {
+    width: 55%;
+}
+
+.cheatsheet table th:last-child,
+.cheatsheet table td:last-child {
+    width: 45%;
 }
