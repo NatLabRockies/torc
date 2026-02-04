@@ -27,6 +27,9 @@ pub struct DashConfig {
     /// Port for auto-started server (0 = auto-detect)
     pub server_port: u16,
 
+    /// Host for auto-started server to bind to
+    pub server_host: String,
+
     /// Path to the database (for standalone mode)
     pub database: Option<String>,
 
@@ -44,6 +47,7 @@ impl Default for DashConfig {
             torc_server_bin: "torc-server".to_string(),
             standalone: false,
             server_port: 0,
+            server_host: "0.0.0.0".to_string(),
             database: None,
             completion_check_interval_secs: 5,
         }
@@ -67,6 +71,7 @@ mod tests {
         assert_eq!(config.torc_server_bin, "torc-server");
         assert!(!config.standalone);
         assert_eq!(config.server_port, 0);
+        assert_eq!(config.server_host, "0.0.0.0");
         assert!(config.database.is_none());
         assert_eq!(config.completion_check_interval_secs, 5);
     }

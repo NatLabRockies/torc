@@ -93,16 +93,17 @@ Navigate to http://localhost:8090
 
 ```bash
 # Custom dashboard port
-torc-dash --standalone --port 8080
+torc-dash --standalone --port 8080 --server-host localhost
 
 # Specify database location
-torc-dash --standalone --database /path/to/my.db
+torc-dash --standalone --database /path/to/my.db --server-host localhost
 
 # Faster job completion detection
-torc-dash --standalone --completion-check-interval-secs 2
+torc-dash --standalone --server-host localhost --completion-check-interval-secs 2
 
 # Specify binary paths (if not in PATH)
 torc-dash --standalone \
+  --server-host localhost \
   --torc-bin /path/to/torc \
   --torc-server-bin /path/to/torc-server
 ```
@@ -164,34 +165,21 @@ flowchart TB
 
 ### Setup
 
-**Step 1: Start torc-server on the login node**
+**Step 1: Start a tmux session** This ensures that your server continues to run if your computer is
+disconnected from the network.
 
 ```bash
-torc-server run \
+tmux
+```
+
+**Step 2: Start torc-dash on the login node with its own torc server**
+
+```bash
+torc-dash --standalone \
   --database /scratch/$USER/torc.db \
-  --port 8080 \
+  --port 8090 \
+  --server-host kl1.hsn.cm.kestrel.hpc.nrel.gov \
   --completion-check-interval-secs 60
-```
-
-Or as a background process:
-
-```bash
-nohup torc-server run \
-  --port 8080 \
-  --database /scratch/$USER/torc.db \
-  > /scratch/$USER/torc-server.log 2>&1 &
-```
-
-**Step 2: Start torc-dash on the same login node**
-
-```bash
-torc-dash --port 8090
-```
-
-Or in the background:
-
-```bash
-nohup torc-dash --port 8090 > /scratch/$USER/torc-dash.log 2>&1 &
 ```
 
 **Step 3: Access via SSH tunnel**

@@ -20,6 +20,10 @@ Start a Torc server. By default, it binds to `0.0.0.0` so it's accessible from r
 torc-server run --database torc.db --port 8080
 ```
 
+> **Security Note:** The server starts without authentication and is accessible from any machine
+> that can reach this host. For networks with untrusted users, see
+> [Authentication](../specialized/admin/authentication.md) to secure your server.
+
 ## Create a Worker File
 
 Create a file listing the remote machines. Each line contains one machine in the format

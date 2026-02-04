@@ -12,7 +12,7 @@ Start a Torc server with a local database. Setting `--completion-check-interval-
 completions are processed quickly (use this for personal servers, not shared deployments).
 
 ```console
-torc-server run --database torc.db --completion-check-interval-secs 5
+torc-server run --database torc.db --host localhost --completion-check-interval-secs 5
 ```
 
 ## Test the Connection
