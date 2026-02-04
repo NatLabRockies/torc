@@ -167,27 +167,34 @@ flowchart TB
 **Step 1: Start torc-server on the login node**
 
 ```bash
-# Start server
+# Start server (use a hostname routable from compute nodes)
 torc-server run \
+  --database /scratch/$USER/torc.db \
+  --host $(hostname) \
   --port 8080 \
-  --database $SCRATCH/torc.db \
   --completion-check-interval-secs 60
 ```
+
+> **Important**: The hostname must be routable from compute nodes. On some HPC systems (e.g., NREL's
+> Kestrel), the default `$(hostname)` returns a name that compute nodes cannot resolve. Check with
+> your system administrators for the correct hostname. For example, on Kestrel login node `kl1`, use
+> `--host kl1.hsn.cm.kestrel.hpc.nrel.gov` instead of `--host kl1`.
 
 Or as a background process:
 
 ```bash
 nohup torc-server run \
+  --host $(hostname) \
   --port 8080 \
-  --database $SCRATCH/torc.db \
-  > $SCRATCH/torc-server.log 2>&1 &
+  --database /scratch/$USER/torc.db \
+  > /scratch/$USER/torc-server.log 2>&1 &
 ```
 
 **Step 2: Start torc-dash on the same login node**
 
 ```bash
 # Set API URL to local server
-export TORC_API_URL="http://localhost:8080/torc-service/v1"
+export TORC_API_URL="http://kl1.hsn.cm.kestrel.hpc.nrel.gov:8080/torc-service/v1"
 
 # Start dashboard
 torc-dash --port 8090
@@ -223,7 +230,7 @@ Open http://localhost:8090 in your browser.
 **Via CLI:**
 
 ```bash
-export TORC_API_URL="http://localhost:8080/torc-service/v1"
+export TORC_API_URL="http://<hostname>:8080/torc-service/v1"
 
 # Create workflow with Slurm actions
 torc workflows create my_slurm_workflow.yaml
@@ -292,6 +299,7 @@ On the shared server (e.g., a dedicated service node):
 ```bash
 # Start server with production settings
 torc-server run \
+  --host $(hostname) \
   --port 8080 \
   --database /shared/storage/torc.db \
   --completion-check-interval-secs 60
@@ -301,6 +309,7 @@ For production, consider running as a systemd service:
 
 ```bash
 torc-server service install --user \
+  --host $(hostname) \
   --port 8080 \
   --database /shared/storage/torc.db
 ```
@@ -407,6 +416,23 @@ squeue --me
 # Check Slurm job logs
 cat output/slurm_output_*.e
 ```
+
+### Compute nodes can't reach the server
+
+If Slurm jobs fail with connection errors (e.g., "Connection refused" or "Name not resolved"):
+
+1. Verify the hostname is routable from compute nodes:
+   ```bash
+   # Test from a compute node
+   srun --pty curl -s http://<your-hostname>:8080/torc-service/v1/workflows
+   ```
+
+2. Check with your HPC administrators for the correct routable hostname
+
+3. Restart torc-server with the correct `--host` value:
+   ```bash
+   torc-server run --host <routable-hostname> --port 8080 ...
+   ```
 
 ### Dashboard shows "Disconnected"
 

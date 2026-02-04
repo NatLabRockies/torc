@@ -14,11 +14,10 @@ HPC/Slurm execution, see [Quick Start (HPC)](../getting-started/quick-start-hpc.
 
 ## Start the Server
 
-Start a Torc server that's accessible from the remote machines. This typically means binding to a
-network interface (not just localhost):
+Start a Torc server. By default, it binds to `0.0.0.0` so it's accessible from remote machines:
 
 ```console
-torc-server run --database torc.db --url 0.0.0.0 --port 8080
+torc-server run --database torc.db --port 8080
 ```
 
 ## Create a Worker File

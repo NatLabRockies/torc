@@ -1201,3 +1201,164 @@ fn test_retry_job_invalid_status(start_server: &ServerProcess) {
         "retry_job should fail for job in Ready status"
     );
 }
+
+#[rstest]
+fn test_jobs_update_resource_requirements_id(start_server: &ServerProcess) {
+    let config = &start_server.config;
+
+    // Create test workflow and job
+    let workflow = create_test_workflow(config, "test_update_rr_id_workflow");
+    let workflow_id = workflow.id.unwrap();
+
+    // Create job directly without resource requirements
+    let job = models::JobModel::new(
+        workflow_id,
+        "test_update_rr_job".to_string(),
+        "echo 'test'".to_string(),
+    );
+    let created_job = default_api::create_job(config, job).expect("Failed to create job");
+    let job_id = created_job.id.unwrap();
+
+    // Create resource requirements
+    let rr = common::create_test_resource_requirements(
+        config,
+        workflow_id,
+        "test_rr",
+        4,      // num_cpus
+        0,      // num_gpus
+        1,      // num_nodes
+        "8g",   // memory
+        "PT2H", // runtime
+    );
+    let rr_id = rr.id.unwrap();
+
+    // Update job with resource_requirements_id
+    let args = [
+        "jobs",
+        "update",
+        &job_id.to_string(),
+        "--resource-requirements-id",
+        &rr_id.to_string(),
+    ];
+
+    let json_output = run_cli_with_json(&args, start_server, None)
+        .expect("Failed to run jobs update with resource-requirements-id");
+
+    // Verify the update succeeded
+    assert_eq!(json_output.get("id").unwrap(), &json!(job_id));
+    assert_eq!(
+        json_output.get("resource_requirements_id").unwrap(),
+        &json!(rr_id)
+    );
+
+    // Verify via API
+    let job_after = default_api::get_job(config, job_id).expect("Failed to get job");
+    assert_eq!(job_after.resource_requirements_id, Some(rr_id));
+}
+
+#[rstest]
+fn test_jobs_update_runtime(start_server: &ServerProcess) {
+    let config = &start_server.config;
+
+    // Create test workflow and job
+    let workflow = create_test_workflow(config, "test_update_runtime_workflow");
+    let workflow_id = workflow.id.unwrap();
+
+    // Create resource requirements first
+    let rr = common::create_test_resource_requirements(
+        config,
+        workflow_id,
+        "test_runtime_rr",
+        2,      // num_cpus
+        0,      // num_gpus
+        1,      // num_nodes
+        "4g",   // memory
+        "PT1H", // initial runtime
+    );
+    let rr_id = rr.id.unwrap();
+
+    // Create job with resource requirements
+    let mut job = models::JobModel::new(
+        workflow_id,
+        "test_runtime_job".to_string(),
+        "echo 'test'".to_string(),
+    );
+    job.resource_requirements_id = Some(rr_id);
+    let created_job = default_api::create_job(config, job).expect("Failed to create job");
+    let job_id = created_job.id.unwrap();
+
+    // Verify initial runtime
+    let rr_before =
+        default_api::get_resource_requirements(config, rr_id).expect("Failed to get RR");
+    assert_eq!(rr_before.runtime, "PT1H");
+
+    // Update job runtime
+    let args = ["jobs", "update", &job_id.to_string(), "--runtime", "PT4H"];
+
+    let json_output = run_cli_with_json(&args, start_server, None)
+        .expect("Failed to run jobs update with runtime");
+
+    // Verify job update succeeded
+    assert_eq!(json_output.get("id").unwrap(), &json!(job_id));
+
+    // Verify the resource requirements runtime was updated
+    let rr_after =
+        default_api::get_resource_requirements(config, rr_id).expect("Failed to get RR after");
+    assert_eq!(rr_after.runtime, "PT4H");
+}
+
+#[rstest]
+fn test_jobs_update_runtime_and_resource_requirements_id_together(start_server: &ServerProcess) {
+    let config = &start_server.config;
+
+    // Create test workflow
+    let workflow = create_test_workflow(config, "test_update_both_workflow");
+    let workflow_id = workflow.id.unwrap();
+
+    // Create resource requirements
+    let rr = common::create_test_resource_requirements(
+        config,
+        workflow_id,
+        "test_both_rr",
+        2,      // num_cpus
+        0,      // num_gpus
+        1,      // num_nodes
+        "4g",   // memory
+        "PT1H", // initial runtime
+    );
+    let rr_id = rr.id.unwrap();
+
+    // Create job without resource requirements initially
+    let job = models::JobModel::new(
+        workflow_id,
+        "test_both_job".to_string(),
+        "echo 'test'".to_string(),
+    );
+    let created_job = default_api::create_job(config, job).expect("Failed to create job");
+    let job_id = created_job.id.unwrap();
+
+    // Update both resource_requirements_id and runtime in one command
+    let args = [
+        "jobs",
+        "update",
+        &job_id.to_string(),
+        "--resource-requirements-id",
+        &rr_id.to_string(),
+        "--runtime",
+        "PT8H",
+    ];
+
+    let json_output = run_cli_with_json(&args, start_server, None)
+        .expect("Failed to run jobs update with both options");
+
+    // Verify job has resource requirements
+    assert_eq!(
+        json_output.get("resource_requirements_id").unwrap(),
+        &json!(rr_id)
+    );
+
+    // Verify the resource requirements runtime was updated
+    let rr_after =
+        default_api::get_resource_requirements(config, rr_id).expect("Failed to get RR after");
+    assert_eq!(rr_after.runtime, "PT8H");
+}

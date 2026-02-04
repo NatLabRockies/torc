@@ -16,9 +16,15 @@ For local execution (testing, development, or non-HPC environments), see
 
 On the login node, start a Torc server with a local database:
 
+**Note**: This uses a specific hostname routable from compute nodes, which may vary across HPC
+systems.
+
 ```console
-torc-server run --database torc.db --completion-check-interval-secs 5
+torc-server run --database torc.db --host kl1.hsn.cm.kestrel.hpc.nrel.gov --completion-check-interval-secs 5
 ```
+
+If you get a port conflict, specify a different port with `--port X` or `--port 0` to get a random
+port.
 
 > **Note:** For larger deployments, your team may provide a shared Torc server. In that case, skip
 > this step and set `TORC_API_URL` to the shared server address.
