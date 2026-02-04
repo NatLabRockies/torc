@@ -502,6 +502,81 @@ async fn proxy_handler(
 
 // ============== CLI Command Handlers ==============
 
+/// Save a workflow spec to a file in the current directory.
+/// The filename is derived from the workflow name in the spec.
+/// Returns the path to the saved file, or None if saving failed.
+async fn save_workflow_spec(spec_json: &str, workflow_id: Option<&str>) -> Option<String> {
+    // Parse the spec to extract the workflow name
+    let spec: serde_json::Value = match serde_json::from_str(spec_json) {
+        Ok(v) => v,
+        Err(e) => {
+            warn!("Failed to parse workflow spec for saving: {}", e);
+            return None;
+        }
+    };
+
+    let workflow_name = spec
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("workflow");
+
+    // Sanitize the workflow name for use as a filename
+    let sanitized_name: String = workflow_name
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+
+    // Build the filename, optionally including the workflow ID for uniqueness
+    let base_filename = if let Some(id) = workflow_id {
+        format!("{}_{}", sanitized_name, id)
+    } else {
+        sanitized_name
+    };
+
+    // Pretty-print the JSON for readability
+    let pretty_json = match serde_json::to_string_pretty(&spec) {
+        Ok(s) => s,
+        Err(e) => {
+            warn!("Failed to pretty-print workflow spec: {}", e);
+            return None;
+        }
+    };
+
+    // Try to save to the current directory (with trailing newline)
+    let filename = format!("{}.json", base_filename);
+    let content = format!("{}\n", pretty_json);
+    match tokio::fs::write(&filename, &content).await {
+        Ok(()) => {
+            info!("Saved workflow spec to: {}", filename);
+            Some(filename)
+        }
+        Err(e) => {
+            warn!("Failed to save workflow spec to {}: {}", filename, e);
+            None
+        }
+    }
+}
+
+/// Extract workflow ID from CLI output like "Created workflow 123"
+fn extract_workflow_id(stdout: &str) -> Option<String> {
+    // Look for pattern like "Created workflow 123" or "ID: 123"
+    if let Some(caps) = stdout
+        .lines()
+        .find(|line| line.contains("Created workflow"))
+    {
+        // Extract the number after "Created workflow"
+        caps.split_whitespace().last().map(|s| s.trim().to_string())
+    } else {
+        None
+    }
+}
+
 #[derive(Deserialize)]
 struct CreateRequest {
     /// Path to workflow spec file OR inline spec content
@@ -597,6 +672,9 @@ async fn cli_create_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateRequest>,
 ) -> impl IntoResponse {
+    let is_inline = !req.is_file;
+    let spec_content = req.spec.clone();
+
     let result = if req.is_file {
         // Spec is a file path
         run_torc_command(
@@ -628,6 +706,12 @@ async fn cli_create_handler(
         result
     };
 
+    // Save the workflow spec to a file if creation was successful and spec was inline
+    if result.success && is_inline {
+        let workflow_id = extract_workflow_id(&result.stdout);
+        save_workflow_spec(&spec_content, workflow_id.as_deref()).await;
+    }
+
     Json(result)
 }
 
@@ -636,6 +720,9 @@ async fn cli_create_slurm_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateSlurmRequest>,
 ) -> impl IntoResponse {
+    let is_inline = !req.is_file;
+    let spec_content = req.spec.clone();
+
     // Build command args
     let mut args = vec!["workflows", "create-slurm", "--account", &req.account];
 
@@ -669,6 +756,12 @@ async fn cli_create_slurm_handler(
         let _ = tokio::fs::remove_file(&temp_path).await;
         result
     };
+
+    // Save the workflow spec to a file if creation was successful and spec was inline
+    if result.success && is_inline {
+        let workflow_id = extract_workflow_id(&result.stdout);
+        save_workflow_spec(&spec_content, workflow_id.as_deref()).await;
+    }
 
     Json(result)
 }
