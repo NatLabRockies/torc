@@ -365,7 +365,7 @@ EXAMPLES:
         #[arg()]
         workflow_id: Option<i64>,
         /// Job prefix for the Slurm job names
-        #[arg(short, long, default_value = "worker")]
+        #[arg(short, long, default_value = "")]
         job_prefix: String,
         /// Keep submission scripts after job submission
         #[arg(long, default_value = "false")]
@@ -1392,7 +1392,13 @@ pub fn schedule_slurm_nodes(
     std::fs::create_dir_all(output)?;
 
     for job_num in 1..num_hpc_jobs + 1 {
-        let job_name = format!("{}_{}", job_prefix, job_num);
+        let job_name = format!(
+            "{}wf{}_{}_{}",
+            job_prefix,
+            workflow_id,
+            std::process::id(),
+            job_num
+        );
         let script_path = format!("{}/{}.sh", output, job_name);
 
         if let Err(e) = slurm_interface.create_submission_script(
@@ -3449,7 +3455,7 @@ fn handle_regenerate(
                 workflow_id,
                 scheduler_info.id,
                 scheduler_info.num_allocations as i32,
-                "worker",
+                "",
                 output_dir.to_str().unwrap_or("output"),
                 poll_interval,
                 None, // max_parallel_jobs

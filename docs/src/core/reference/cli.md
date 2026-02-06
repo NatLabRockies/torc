@@ -1552,7 +1552,7 @@ Schedule compute nodes using Slurm
 
 ###### **Options:**
 
-- `-j`, `--job-prefix <JOB_PREFIX>` — Job prefix for the Slurm job names. Default: `worker`
+- `-j`, `--job-prefix <JOB_PREFIX>` — Job prefix for the Slurm job names. Default: empty
 - `--keep-submission-scripts` — Keep submission scripts after job submission. Default: `false`
 - `-m`, `--max-parallel-jobs <MAX_PARALLEL_JOBS>` — Maximum number of parallel jobs
 - `-n`, `--num-hpc-jobs <NUM_HPC_JOBS>` — Number of HPC jobs to submit. Default: `1`
