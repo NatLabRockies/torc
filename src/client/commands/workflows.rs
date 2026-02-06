@@ -325,8 +325,7 @@ EXAMPLES:
     /// Update an existing workflow
     #[command(
         hide = true,
-        after_long_help = "\
-EXAMPLES:
+        after_long_help = r#"EXAMPLES:
     # Update workflow name
     torc workflows update 123 --name 'New Name'
 
@@ -337,11 +336,17 @@ EXAMPLES:
     torc workflows update 123 --owner-user newuser
 
     # Update project
-    torc workflows update 123 --project 'my-project'
+    torc workflows update 123 --project my-project
 
-    # Update metadata
-    torc workflows update 123 --metadata '{\"key\":\"value\",\"stage\":\"production\"}'
-"
+    # Update metadata (pass JSON as string; use single quotes in shell)
+    torc workflows update 123 --metadata '{"key":"value","stage":"production"}'
+
+    # Clear project by passing 'null'
+    torc workflows update 123 --project null
+
+    # Clear metadata by passing 'null'
+    torc workflows update 123 --metadata null
+"#
     )]
     Update {
         /// ID of the workflow to update (optional - will prompt if not provided)
@@ -356,10 +361,10 @@ EXAMPLES:
         /// User that owns the workflow
         #[arg(long)]
         owner_user: Option<String>,
-        /// Project name or identifier
+        /// Project name or identifier (pass "null" to clear)
         #[arg(long)]
         project: Option<String>,
-        /// Metadata as JSON string
+        /// Metadata as JSON string (pass "null" to clear)
         #[arg(long)]
         metadata: Option<String>,
     },
@@ -756,6 +761,36 @@ EXAMPLES:
         #[arg(long)]
         dry_run: bool,
     },
+}
+
+/// Parse JSON string fields into objects for better JSON output formatting
+///
+/// Converts JSON string fields (resource_monitor_config, slurm_defaults, metadata)
+/// from string representations into actual JSON objects in the output.
+/// This improves readability in JSON output while keeping them as strings in the database.
+fn parse_json_fields(mut json: serde_json::Value) -> serde_json::Value {
+    // Parse resource_monitor_config if present
+    if let Some(config_str) = json["resource_monitor_config"].as_str()
+        && let Ok(config_obj) = serde_json::from_str::<serde_json::Value>(config_str)
+    {
+        json["resource_monitor_config"] = config_obj;
+    }
+
+    // Parse slurm_defaults if present
+    if let Some(defaults_str) = json["slurm_defaults"].as_str()
+        && let Ok(defaults_obj) = serde_json::from_str::<serde_json::Value>(defaults_str)
+    {
+        json["slurm_defaults"] = defaults_obj;
+    }
+
+    // Parse metadata if present
+    if let Some(metadata_str) = json["metadata"].as_str()
+        && let Ok(metadata_obj) = serde_json::from_str::<serde_json::Value>(metadata_str)
+    {
+        json["metadata"] = metadata_obj;
+    }
+
+    json
 }
 
 fn show_execution_plan_from_spec(file_path: &str, format: &str) {
@@ -2086,30 +2121,8 @@ fn handle_delete(config: &Configuration, ids: &[i64], no_prompts: bool, format: 
         let json_array: Vec<_> = deleted_workflows
             .iter()
             .map(|wf| {
-                let mut json = serde_json::to_value(wf).unwrap();
-                // Parse resource_monitor_config from JSON string to object if present
-                if let Some(config_str) = &wf.resource_monitor_config
-                    && let Ok(config_obj) = serde_json::from_str::<serde_json::Value>(config_str)
-                {
-                    json["resource_monitor_config"] = config_obj;
-                }
-
-                // Parse slurm_defaults from JSON string to object if present
-                if let Some(defaults_str) = &wf.slurm_defaults
-                    && let Ok(defaults_obj) =
-                        serde_json::from_str::<serde_json::Value>(defaults_str)
-                {
-                    json["slurm_defaults"] = defaults_obj;
-                }
-
-                // Parse metadata from JSON string to object if present
-                if let Some(metadata_str) = &wf.metadata
-                    && let Ok(metadata_obj) =
-                        serde_json::from_str::<serde_json::Value>(metadata_str)
-                {
-                    json["metadata"] = metadata_obj;
-                }
-                json
+                let json = serde_json::to_value(wf).unwrap();
+                parse_json_fields(json)
             })
             .collect();
 
@@ -2195,31 +2208,8 @@ fn handle_update(
                 Ok(updated_workflow) => {
                     if format == "json" {
                         // Convert workflow to JSON value, parsing JSON string fields to objects
-                        let mut json = serde_json::to_value(&updated_workflow).unwrap();
-
-                        // Parse resource_monitor_config from JSON string to object if present
-                        if let Some(config_str) = &updated_workflow.resource_monitor_config
-                            && let Ok(config_obj) =
-                                serde_json::from_str::<serde_json::Value>(config_str)
-                        {
-                            json["resource_monitor_config"] = config_obj;
-                        }
-
-                        // Parse slurm_defaults from JSON string to object if present
-                        if let Some(defaults_str) = &updated_workflow.slurm_defaults
-                            && let Ok(defaults_obj) =
-                                serde_json::from_str::<serde_json::Value>(defaults_str)
-                        {
-                            json["slurm_defaults"] = defaults_obj;
-                        }
-
-                        // Parse metadata from JSON string to object if present
-                        if let Some(metadata_str) = &updated_workflow.metadata
-                            && let Ok(metadata_obj) =
-                                serde_json::from_str::<serde_json::Value>(metadata_str)
-                        {
-                            json["metadata"] = metadata_obj;
-                        }
+                        let json = serde_json::to_value(&updated_workflow).unwrap();
+                        let json = parse_json_fields(json);
 
                         match serde_json::to_string_pretty(&json) {
                             Ok(json_str) => println!("{}", json_str),
@@ -2261,30 +2251,8 @@ fn handle_get(config: &Configuration, id: &Option<i64>, user: &str, format: &str
         Ok(workflow) => {
             if format == "json" {
                 // Convert workflow to JSON value, parsing JSON string fields to objects
-                let mut json = serde_json::to_value(&workflow).unwrap();
-
-                // Parse resource_monitor_config from JSON string to object if present
-                if let Some(config_str) = &workflow.resource_monitor_config
-                    && let Ok(config_obj) = serde_json::from_str::<serde_json::Value>(config_str)
-                {
-                    json["resource_monitor_config"] = config_obj;
-                }
-
-                // Parse slurm_defaults from JSON string to object if present
-                if let Some(defaults_str) = &workflow.slurm_defaults
-                    && let Ok(defaults_obj) =
-                        serde_json::from_str::<serde_json::Value>(defaults_str)
-                {
-                    json["slurm_defaults"] = defaults_obj;
-                }
-
-                // Parse metadata from JSON string to object if present
-                if let Some(metadata_str) = &workflow.metadata
-                    && let Ok(metadata_obj) =
-                        serde_json::from_str::<serde_json::Value>(metadata_str)
-                {
-                    json["metadata"] = metadata_obj;
-                }
+                let json = serde_json::to_value(&workflow).unwrap();
+                let json = parse_json_fields(json);
 
                 match serde_json::to_string_pretty(&json) {
                     Ok(json_str) => println!("{}", json_str),
@@ -2383,33 +2351,8 @@ fn handle_list(
                 let workflows_json: Vec<serde_json::Value> = workflows
                     .iter()
                     .map(|workflow| {
-                        let mut json = serde_json::to_value(workflow).unwrap();
-
-                        // Parse resource_monitor_config from JSON string to object if present
-                        if let Some(config_str) = &workflow.resource_monitor_config
-                            && let Ok(config_obj) =
-                                serde_json::from_str::<serde_json::Value>(config_str)
-                        {
-                            json["resource_monitor_config"] = config_obj;
-                        }
-
-                        // Parse slurm_defaults from JSON string to object if present
-                        if let Some(defaults_str) = &workflow.slurm_defaults
-                            && let Ok(defaults_obj) =
-                                serde_json::from_str::<serde_json::Value>(defaults_str)
-                        {
-                            json["slurm_defaults"] = defaults_obj;
-                        }
-
-                        // Parse metadata from JSON string to object if present
-                        if let Some(metadata_str) = &workflow.metadata
-                            && let Ok(metadata_obj) =
-                                serde_json::from_str::<serde_json::Value>(metadata_str)
-                        {
-                            json["metadata"] = metadata_obj;
-                        }
-
-                        json
+                        let json = serde_json::to_value(workflow).unwrap();
+                        parse_json_fields(json)
                     })
                     .collect();
 
@@ -2477,15 +2420,9 @@ fn handle_new(
     match default_api::create_workflow(config, workflow) {
         Ok(created_workflow) => {
             if format == "json" {
-                // Convert workflow to JSON value, parsing resource_monitor_config if present
-                let mut json = serde_json::to_value(&created_workflow).unwrap();
-
-                // Parse resource_monitor_config from JSON string to object if present
-                if let Some(config_str) = &created_workflow.resource_monitor_config
-                    && let Ok(config_obj) = serde_json::from_str::<serde_json::Value>(config_str)
-                {
-                    json["resource_monitor_config"] = config_obj;
-                }
+                // Convert workflow to JSON value, parsing JSON string fields to objects
+                let json = serde_json::to_value(&created_workflow).unwrap();
+                let json = parse_json_fields(json);
 
                 match serde_json::to_string_pretty(&json) {
                     Ok(json_str) => println!("{}", json_str),

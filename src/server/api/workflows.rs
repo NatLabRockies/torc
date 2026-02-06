@@ -1119,7 +1119,13 @@ where
             .map(|val| if val { 1 } else { 0 });
         let use_pending_failed_int = body.use_pending_failed.map(|val| if val { 1 } else { 0 });
 
-        // Update the workflow record using COALESCE to only update non-null fields
+        // Handle project and metadata: support special value "null" to clear fields
+        // If user passes "null", we set the field to NULL
+        // If user doesn't provide the field, we preserve the existing value with COALESCE
+        let project_value = body.project.as_deref();
+        let metadata_value = body.metadata.as_deref();
+
+        // Update the workflow record
         let result = match sqlx::query!(
             r#"
             UPDATE workflow
@@ -1133,8 +1139,8 @@ where
                 compute_node_wait_for_healthy_database_minutes = COALESCE($7, compute_node_wait_for_healthy_database_minutes),
                 jobs_sort_method = COALESCE($8, jobs_sort_method),
                 use_pending_failed = COALESCE($9, use_pending_failed),
-                project = COALESCE($10, project),
-                metadata = COALESCE($11, metadata)
+                project = CASE WHEN $10 IS NOT NULL THEN CASE WHEN $10 = 'null' THEN NULL ELSE $10 END ELSE project END,
+                metadata = CASE WHEN $11 IS NOT NULL THEN CASE WHEN $11 = 'null' THEN NULL ELSE $11 END ELSE metadata END
             WHERE id = $12
             "#,
             body.name,
@@ -1146,8 +1152,8 @@ where
             body.compute_node_wait_for_healthy_database_minutes,
             jobs_sort_method_str,
             use_pending_failed_int,
-            body.project,
-            body.metadata,
+            project_value,
+            metadata_value,
             id
         )
         .execute(self.context.pool.as_ref())
