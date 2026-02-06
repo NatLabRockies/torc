@@ -32,7 +32,9 @@ class WorkflowModel(BaseModel):
     user: StrictStr = Field(description="User that created the workflow")
     description: Optional[StrictStr] = Field(default=None, description="Description of the workflow")
     timestamp: Optional[StrictStr] = Field(default=None, description="Timestamp of workflow creation")
-    compute_node_expiration_buffer_seconds: Optional[StrictInt] = Field(default=60, description="Inform all compute nodes to shut down this number of seconds before the expiration time. This allows torc to send SIGTERM to all job processes and set all statuses to terminated. Increase the time in cases where the job processes handle SIGTERM and need more time to gracefully shut down. Set the value to 0 to maximize the time given to jobs. If not set, take the database's default value of 90 seconds.")
+    project: Optional[StrictStr] = Field(default=None, description="Project name or identifier for grouping workflows")
+    metadata: Optional[StrictStr] = Field(default=None, description="Arbitrary metadata as JSON string")
+    compute_node_expiration_buffer_seconds: Optional[StrictInt] = Field(default=180, description="Inform all compute nodes to shut down this number of seconds before the expiration time. This allows torc to send SIGTERM to all job processes and set all statuses to terminated. Increase the time in cases where the job processes handle SIGTERM and need more time to gracefully shut down. Set the value to 0 to maximize the time given to jobs. If not set, take the database's default value of 90 seconds.")
     compute_node_wait_for_new_jobs_seconds: Optional[StrictInt] = Field(default=90, description="Inform all compute nodes to wait for new jobs for this time period before exiting. Does not apply if the workflow is complete. Default must be >= completion_check_interval_secs + job_completion_poll_interval to avoid exiting before dependent jobs are unblocked.")
     compute_node_ignore_workflow_completion: Optional[StrictBool] = Field(default=False, description="Inform all compute nodes to ignore workflow completions and hold onto allocations indefinitely. Useful for debugging failed jobs and possibly dynamic workflows where jobs get added after starting.")
     compute_node_wait_for_healthy_database_minutes: Optional[StrictInt] = Field(default=20, description="Inform all compute nodes to wait this number of minutes if the database becomes unresponsive.")
@@ -42,7 +44,7 @@ class WorkflowModel(BaseModel):
     slurm_defaults: Optional[StrictStr] = Field(default=None, description="Default Slurm parameters to apply to all schedulers as JSON string")
     use_pending_failed: Optional[StrictBool] = Field(default=False, description="Use PendingFailed status for failed jobs (enables AI-assisted recovery)")
     status_id: Optional[StrictInt] = None
-    __properties: ClassVar[List[str]] = ["id", "name", "user", "description", "timestamp", "compute_node_expiration_buffer_seconds", "compute_node_wait_for_new_jobs_seconds", "compute_node_ignore_workflow_completion", "compute_node_wait_for_healthy_database_minutes", "compute_node_min_time_for_new_jobs_seconds", "jobs_sort_method", "resource_monitor_config", "slurm_defaults", "use_pending_failed", "status_id"]
+    __properties: ClassVar[List[str]] = ["id", "name", "user", "description", "timestamp", "project", "metadata", "compute_node_expiration_buffer_seconds", "compute_node_wait_for_new_jobs_seconds", "compute_node_ignore_workflow_completion", "compute_node_wait_for_healthy_database_minutes", "compute_node_min_time_for_new_jobs_seconds", "jobs_sort_method", "resource_monitor_config", "slurm_defaults", "use_pending_failed", "status_id"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -100,7 +102,9 @@ class WorkflowModel(BaseModel):
             "user": obj.get("user"),
             "description": obj.get("description"),
             "timestamp": obj.get("timestamp"),
-            "compute_node_expiration_buffer_seconds": obj.get("compute_node_expiration_buffer_seconds") if obj.get("compute_node_expiration_buffer_seconds") is not None else 60,
+            "project": obj.get("project"),
+            "metadata": obj.get("metadata"),
+            "compute_node_expiration_buffer_seconds": obj.get("compute_node_expiration_buffer_seconds") if obj.get("compute_node_expiration_buffer_seconds") is not None else 180,
             "compute_node_wait_for_new_jobs_seconds": obj.get("compute_node_wait_for_new_jobs_seconds") if obj.get("compute_node_wait_for_new_jobs_seconds") is not None else 90,
             "compute_node_ignore_workflow_completion": obj.get("compute_node_ignore_workflow_completion") if obj.get("compute_node_ignore_workflow_completion") is not None else False,
             "compute_node_wait_for_healthy_database_minutes": obj.get("compute_node_wait_for_healthy_database_minutes") if obj.get("compute_node_wait_for_healthy_database_minutes") is not None else 20,

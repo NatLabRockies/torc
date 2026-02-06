@@ -685,6 +685,12 @@ pub struct WorkflowSpec {
     /// Use PendingFailed status for failed jobs (enables AI-assisted recovery)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub use_pending_failed: Option<bool>,
+    /// Project name or identifier for grouping workflows
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+    /// Arbitrary metadata as JSON string
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<String>,
 }
 
 impl WorkflowSpec {
@@ -716,6 +722,8 @@ impl WorkflowSpec {
             resource_monitor: None,
             actions: None,
             use_pending_failed: None,
+            project: None,
+            metadata: None,
         }
     }
 
@@ -1696,6 +1704,16 @@ impl WorkflowSpec {
         // Set use_pending_failed if present
         if let Some(value) = spec.use_pending_failed {
             workflow_model.use_pending_failed = Some(value);
+        }
+
+        // Set project if present
+        if let Some(ref value) = spec.project {
+            workflow_model.project = Some(value.clone());
+        }
+
+        // Set metadata if present
+        if let Some(ref value) = spec.metadata {
+            workflow_model.metadata = Some(value.clone());
         }
 
         let created_workflow = default_api::create_workflow(config, workflow_model)
@@ -4540,6 +4558,8 @@ job "train_lr{lr:.4f}_bs{batch_size}" {
             actions: None,
             failure_handlers: None,
             use_pending_failed: None,
+            project: None,
+            metadata: None,
         };
 
         spec.expand_parameters()

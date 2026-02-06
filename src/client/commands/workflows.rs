@@ -80,6 +80,10 @@ struct WorkflowTableRowNoUser {
     name: String,
     #[tabled(rename = "Description")]
     description: String,
+    #[tabled(rename = "Project")]
+    project: String,
+    #[tabled(rename = "Metadata")]
+    metadata: String,
     #[tabled(rename = "Timestamp")]
     timestamp: String,
 }
@@ -94,6 +98,10 @@ struct WorkflowTableRow {
     name: String,
     #[tabled(rename = "Description")]
     description: String,
+    #[tabled(rename = "Project")]
+    project: String,
+    #[tabled(rename = "Metadata")]
+    metadata: String,
     #[tabled(rename = "Timestamp")]
     timestamp: String,
 }
@@ -327,6 +335,12 @@ EXAMPLES:
 
     # Transfer ownership
     torc workflows update 123 --owner-user newuser
+
+    # Update project
+    torc workflows update 123 --project 'my-project'
+
+    # Update metadata
+    torc workflows update 123 --metadata '{\"key\":\"value\",\"stage\":\"production\"}'
 "
     )]
     Update {
@@ -342,6 +356,12 @@ EXAMPLES:
         /// User that owns the workflow
         #[arg(long)]
         owner_user: Option<String>,
+        /// Project name or identifier
+        #[arg(long)]
+        project: Option<String>,
+        /// Metadata as JSON string
+        #[arg(long)]
+        metadata: Option<String>,
     },
     /// Cancel a workflow and all associated Slurm jobs. All state will be preserved and the
     /// workflow can be resumed after it is reinitialized.
@@ -2073,6 +2093,22 @@ fn handle_delete(config: &Configuration, ids: &[i64], no_prompts: bool, format: 
                 {
                     json["resource_monitor_config"] = config_obj;
                 }
+
+                // Parse slurm_defaults from JSON string to object if present
+                if let Some(defaults_str) = &wf.slurm_defaults
+                    && let Ok(defaults_obj) =
+                        serde_json::from_str::<serde_json::Value>(defaults_str)
+                {
+                    json["slurm_defaults"] = defaults_obj;
+                }
+
+                // Parse metadata from JSON string to object if present
+                if let Some(metadata_str) = &wf.metadata
+                    && let Ok(metadata_obj) =
+                        serde_json::from_str::<serde_json::Value>(metadata_str)
+                {
+                    json["metadata"] = metadata_obj;
+                }
                 json
             })
             .collect();
@@ -2115,12 +2151,18 @@ fn handle_delete(config: &Configuration, ids: &[i64], no_prompts: bool, format: 
     }
 }
 
+struct WorkflowUpdateFields {
+    name: Option<String>,
+    description: Option<String>,
+    owner_user: Option<String>,
+    project: Option<String>,
+    metadata: Option<String>,
+}
+
 fn handle_update(
     config: &Configuration,
     id: &Option<i64>,
-    name: &Option<String>,
-    description: &Option<String>,
-    owner_user: &Option<String>,
+    updates: &WorkflowUpdateFields,
     format: &str,
 ) {
     let user_name = get_env_user_name();
@@ -2133,20 +2175,26 @@ fn handle_update(
     match default_api::get_workflow(config, selected_id) {
         Ok(mut workflow) => {
             // Update fields that were provided
-            if let Some(new_name) = name {
+            if let Some(new_name) = &updates.name {
                 workflow.name = new_name.clone();
             }
-            if description.is_some() {
-                workflow.description = description.clone();
+            if updates.description.is_some() {
+                workflow.description = updates.description.clone();
             }
-            if let Some(new_user) = owner_user {
+            if let Some(new_user) = &updates.owner_user {
                 workflow.user = new_user.clone();
+            }
+            if updates.project.is_some() {
+                workflow.project = updates.project.clone();
+            }
+            if updates.metadata.is_some() {
+                workflow.metadata = updates.metadata.clone();
             }
 
             match default_api::update_workflow(config, selected_id, workflow) {
                 Ok(updated_workflow) => {
                     if format == "json" {
-                        // Convert workflow to JSON value, parsing resource_monitor_config if present
+                        // Convert workflow to JSON value, parsing JSON string fields to objects
                         let mut json = serde_json::to_value(&updated_workflow).unwrap();
 
                         // Parse resource_monitor_config from JSON string to object if present
@@ -2155,6 +2203,22 @@ fn handle_update(
                                 serde_json::from_str::<serde_json::Value>(config_str)
                         {
                             json["resource_monitor_config"] = config_obj;
+                        }
+
+                        // Parse slurm_defaults from JSON string to object if present
+                        if let Some(defaults_str) = &updated_workflow.slurm_defaults
+                            && let Ok(defaults_obj) =
+                                serde_json::from_str::<serde_json::Value>(defaults_str)
+                        {
+                            json["slurm_defaults"] = defaults_obj;
+                        }
+
+                        // Parse metadata from JSON string to object if present
+                        if let Some(metadata_str) = &updated_workflow.metadata
+                            && let Ok(metadata_obj) =
+                                serde_json::from_str::<serde_json::Value>(metadata_str)
+                        {
+                            json["metadata"] = metadata_obj;
                         }
 
                         match serde_json::to_string_pretty(&json) {
@@ -2212,6 +2276,14 @@ fn handle_get(config: &Configuration, id: &Option<i64>, user: &str, format: &str
                         serde_json::from_str::<serde_json::Value>(defaults_str)
                 {
                     json["slurm_defaults"] = defaults_obj;
+                }
+
+                // Parse metadata from JSON string to object if present
+                if let Some(metadata_str) = &workflow.metadata
+                    && let Ok(metadata_obj) =
+                        serde_json::from_str::<serde_json::Value>(metadata_str)
+                {
+                    json["metadata"] = metadata_obj;
                 }
 
                 match serde_json::to_string_pretty(&json) {
@@ -2329,6 +2401,14 @@ fn handle_list(
                             json["slurm_defaults"] = defaults_obj;
                         }
 
+                        // Parse metadata from JSON string to object if present
+                        if let Some(metadata_str) = &workflow.metadata
+                            && let Ok(metadata_obj) =
+                                serde_json::from_str::<serde_json::Value>(metadata_str)
+                        {
+                            json["metadata"] = metadata_obj;
+                        }
+
                         json
                     })
                     .collect();
@@ -2355,6 +2435,8 @@ fn handle_list(
                         user: workflow.user.clone(),
                         name: workflow.name.clone(),
                         description: workflow.description.as_deref().unwrap_or("").to_string(),
+                        project: workflow.project.as_deref().unwrap_or("").to_string(),
+                        metadata: workflow.metadata.as_deref().unwrap_or("").to_string(),
                         timestamp: workflow.timestamp.as_deref().unwrap_or("").to_string(),
                     })
                     .collect();
@@ -2367,6 +2449,8 @@ fn handle_list(
                         id: workflow.id.unwrap_or(-1),
                         name: workflow.name.clone(),
                         description: workflow.description.as_deref().unwrap_or("").to_string(),
+                        project: workflow.project.as_deref().unwrap_or("").to_string(),
+                        metadata: workflow.metadata.as_deref().unwrap_or("").to_string(),
                         timestamp: workflow.timestamp.as_deref().unwrap_or("").to_string(),
                     })
                     .collect();
@@ -2979,8 +3063,17 @@ pub fn handle_workflow_commands(config: &Configuration, command: &WorkflowComman
             name,
             description,
             owner_user,
+            project,
+            metadata,
         } => {
-            handle_update(config, id, name, description, owner_user, format);
+            let updates = WorkflowUpdateFields {
+                name: name.clone(),
+                description: description.clone(),
+                owner_user: owner_user.clone(),
+                project: project.clone(),
+                metadata: metadata.clone(),
+            };
+            handle_update(config, id, &updates, format);
         }
         WorkflowCommands::Delete { ids, no_prompts } => {
             handle_delete(config, ids, *no_prompts, format);
