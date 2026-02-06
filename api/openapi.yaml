@@ -5994,7 +5994,7 @@ components:
           type: string
 
         compute_node_expiration_buffer_seconds:
-          default: 60
+          default: 180
           description: "Inform all compute nodes to shut down this number of seconds\
             \ before the expiration time. This allows torc to send SIGTERM to all\
             \ job processes and set all statuses to terminated. Increase the time\
