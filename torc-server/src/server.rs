@@ -2704,8 +2704,30 @@ where
         context: &C,
     ) -> Result<ListWorkflowsResponse, ApiError> {
         let (processed_offset, processed_limit) = process_pagination_params(offset, limit)?;
+
+        // When access control is enforced and no user filter is provided,
+        // restrict results to workflows the authenticated user can access.
+        let accessible_ids = if self.authorization_service.is_enforced() && user.is_none() {
+            let auth: Option<Authorization> = Has::<Option<Authorization>>::get(context).clone();
+            match self
+                .authorization_service
+                .get_accessible_workflow_ids(&auth)
+                .await
+            {
+                Ok(ids) => ids,
+                Err(e) => {
+                    return Err(ApiError(format!(
+                        "Failed to get accessible workflows: {}",
+                        e
+                    )));
+                }
+            }
+        } else {
+            None
+        };
+
         self.workflows_api
-            .list_workflows(
+            .list_workflows_filtered(
                 processed_offset,
                 sort_by,
                 reverse_sort,
@@ -2714,6 +2736,7 @@ where
                 user,
                 description,
                 is_archived,
+                accessible_ids,
                 context,
             )
             .await

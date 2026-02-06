@@ -85,6 +85,20 @@ struct WorkflowTableRowNoUser {
 }
 
 #[derive(Tabled)]
+struct WorkflowTableRow {
+    #[tabled(rename = "ID")]
+    id: i64,
+    #[tabled(rename = "User")]
+    user: String,
+    #[tabled(rename = "Name")]
+    name: String,
+    #[tabled(rename = "Description")]
+    description: String,
+    #[tabled(rename = "Timestamp")]
+    timestamp: String,
+}
+
+#[derive(Tabled)]
 struct WorkflowActionTableRow {
     #[tabled(rename = "ID")]
     id: i64,
@@ -255,6 +269,9 @@ EXAMPLES:
     # Show archived workflows
     torc workflows list --archived-only
     torc workflows list --include-archived
+
+    # Show workflows from all users
+    torc workflows list --all-users
 "
     )]
     List {
@@ -276,6 +293,9 @@ EXAMPLES:
         /// Include both archived and non-archived workflows
         #[arg(long, default_value = "false")]
         include_archived: bool,
+        /// Show workflows from all users (filtered by access when authentication is enabled)
+        #[arg(long, default_value = "false")]
+        all_users: bool,
     },
     /// Get a specific workflow by ID
     #[command(
@@ -2258,14 +2278,19 @@ fn handle_list(
     reverse_sort: bool,
     archived_only: bool,
     include_archived: bool,
+    all_users: bool,
     format: &str,
 ) {
     // Use pagination utility to get all workflows
     let mut params = WorkflowListParams::new()
         .with_offset(offset)
         .with_limit(limit)
-        .with_reverse_sort(reverse_sort)
-        .with_user(user.to_string());
+        .with_reverse_sort(reverse_sort);
+
+    // When --all-users is not set, filter by current user (default behavior)
+    if !all_users {
+        params = params.with_user(user.to_string());
+    }
 
     // Handle archive filtering:
     // - include_archived: show both archived and non-archived (is_archived = None)
@@ -2316,7 +2341,24 @@ fn handle_list(
                     }
                 }
             } else if workflows.is_empty() {
-                println!("No workflows found for user: {}", user);
+                if all_users {
+                    println!("No workflows found.");
+                } else {
+                    println!("No workflows found for user: {}", user);
+                }
+            } else if all_users {
+                println!("All workflows:");
+                let rows: Vec<WorkflowTableRow> = workflows
+                    .iter()
+                    .map(|workflow| WorkflowTableRow {
+                        id: workflow.id.unwrap_or(-1),
+                        user: workflow.user.clone(),
+                        name: workflow.name.clone(),
+                        description: workflow.description.as_deref().unwrap_or("").to_string(),
+                        timestamp: workflow.timestamp.as_deref().unwrap_or("").to_string(),
+                    })
+                    .collect();
+                display_table_with_count(&rows, "workflows");
             } else {
                 println!("Workflows for user {}:", user);
                 let rows: Vec<WorkflowTableRowNoUser> = workflows
@@ -2914,6 +2956,7 @@ pub fn handle_workflow_commands(config: &Configuration, command: &WorkflowComman
             reverse_sort,
             archived_only,
             include_archived,
+            all_users,
         } => {
             handle_list(
                 config,
@@ -2924,6 +2967,7 @@ pub fn handle_workflow_commands(config: &Configuration, command: &WorkflowComman
                 *reverse_sort,
                 *archived_only,
                 *include_archived,
+                *all_users,
                 format,
             );
         }

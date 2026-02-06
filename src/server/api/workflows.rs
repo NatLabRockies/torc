@@ -150,6 +150,310 @@ impl WorkflowsApiImpl {
     pub fn new(context: ApiContext) -> Self {
         Self { context }
     }
+
+    /// List workflows with optional access control filtering.
+    ///
+    /// When `accessible_ids` is `Some(ids)`, only workflows with IDs in the list are returned.
+    /// When `accessible_ids` is `None`, no ID-based filtering is applied.
+    pub async fn list_workflows_filtered<C>(
+        &self,
+        offset: i64,
+        sort_by: Option<String>,
+        reverse_sort: Option<bool>,
+        limit: i64,
+        name: Option<String>,
+        user: Option<String>,
+        description: Option<String>,
+        is_archived: Option<bool>,
+        accessible_ids: Option<Vec<i64>>,
+        context: &C,
+    ) -> Result<ListWorkflowsResponse, ApiError>
+    where
+        C: Has<XSpanIdString> + Send + Sync,
+    {
+        debug!(
+            "list_workflows_filtered({}, {:?}, {:?}, {}, {:?}, {:?}, {:?}, {:?}, accessible_ids={:?}) - X-Span-ID: {:?}",
+            offset,
+            sort_by,
+            reverse_sort,
+            limit,
+            name,
+            user,
+            description,
+            is_archived,
+            accessible_ids.as_ref().map(|ids| ids.len()),
+            context.get().0.clone()
+        );
+
+        // Build base query - join with workflow_status if is_archived filter is needed
+        let base_query = if is_archived.is_some() {
+            "
+            SELECT
+                w.id
+                ,w.name
+                ,w.user
+                ,w.description
+                ,w.timestamp
+                ,w.compute_node_expiration_buffer_seconds
+                ,w.compute_node_wait_for_new_jobs_seconds
+                ,w.compute_node_ignore_workflow_completion
+                ,w.compute_node_wait_for_healthy_database_minutes
+                ,w.compute_node_min_time_for_new_jobs_seconds
+                ,w.jobs_sort_method
+                ,w.resource_monitor_config
+                ,w.slurm_defaults
+                ,w.status_id
+            FROM workflow w
+            INNER JOIN workflow_status ws ON w.status_id = ws.id
+            "
+            .to_string()
+        } else {
+            "
+            SELECT
+                id
+                ,name
+                ,user
+                ,description
+                ,timestamp
+                ,compute_node_expiration_buffer_seconds
+                ,compute_node_wait_for_new_jobs_seconds
+                ,compute_node_ignore_workflow_completion
+                ,compute_node_wait_for_healthy_database_minutes
+                ,compute_node_min_time_for_new_jobs_seconds
+                ,jobs_sort_method
+                ,resource_monitor_config
+                ,slurm_defaults
+                ,status_id
+            FROM workflow
+            "
+            .to_string()
+        };
+
+        // Build WHERE clause conditions
+        let mut where_conditions = Vec::new();
+
+        // Use table prefix when joining with workflow_status
+        let table_prefix = if is_archived.is_some() { "w." } else { "" };
+
+        if name.is_some() {
+            where_conditions.push(format!("{}name = ?", table_prefix));
+        }
+
+        if user.is_some() {
+            where_conditions.push(format!("{}user = ?", table_prefix));
+        }
+
+        if description.is_some() {
+            where_conditions.push(format!("{}description LIKE ?", table_prefix));
+        }
+
+        if let Some(archived) = is_archived {
+            if archived {
+                where_conditions.push("ws.is_archived = 1".to_string());
+            } else {
+                where_conditions.push("(ws.is_archived IS NULL OR ws.is_archived = 0)".to_string());
+            }
+        }
+
+        // Access control filtering: restrict to accessible workflow IDs
+        if let Some(ref ids) = accessible_ids {
+            if ids.is_empty() {
+                // No accessible workflows - return empty result
+                return Ok(ListWorkflowsResponse::SuccessfulResponse(
+                    models::ListWorkflowsResponse {
+                        items: Some(Vec::new()),
+                        offset,
+                        max_limit: MAX_RECORD_TRANSFER_COUNT,
+                        count: 0,
+                        total_count: 0,
+                        has_more: false,
+                    },
+                ));
+            }
+            let placeholders: Vec<String> = ids.iter().map(|_| "?".to_string()).collect();
+            where_conditions.push(format!(
+                "{}id IN ({})",
+                table_prefix,
+                placeholders.join(", ")
+            ));
+        }
+
+        let where_clause = if where_conditions.is_empty() {
+            String::new()
+        } else {
+            where_conditions.join(" AND ")
+        };
+
+        // Build the complete query with pagination and sorting
+        // Use table prefix for default sort column when joining
+        let default_sort_column = if is_archived.is_some() { "w.id" } else { "id" };
+
+        // Add table prefix to sort_by column if joining and column is ambiguous
+        let prefixed_sort_by = if is_archived.is_some() {
+            sort_by.as_ref().map(|col| {
+                // If the column is "id" (ambiguous), prefix it with "w."
+                // For other workflow columns, also add prefix to be consistent
+                if col == "id" || !col.contains('.') {
+                    format!("w.{}", col)
+                } else {
+                    col.clone()
+                }
+            })
+        } else {
+            sort_by.clone()
+        };
+
+        let query = if where_clause.is_empty() {
+            SqlQueryBuilder::new(base_query)
+                .with_pagination_and_sorting(
+                    offset,
+                    limit,
+                    prefixed_sort_by,
+                    reverse_sort,
+                    default_sort_column,
+                )
+                .build()
+        } else {
+            SqlQueryBuilder::new(base_query)
+                .with_where(where_clause.clone())
+                .with_pagination_and_sorting(
+                    offset,
+                    limit,
+                    prefixed_sort_by,
+                    reverse_sort,
+                    default_sort_column,
+                )
+                .build()
+        };
+
+        debug!("Executing query: {}", query);
+
+        // Execute the query
+        let mut sqlx_query = sqlx::query(&query);
+
+        // Bind optional parameters in order
+        if let Some(workflow_name) = &name {
+            sqlx_query = sqlx_query.bind(workflow_name);
+        }
+        if let Some(workflow_user) = &user {
+            sqlx_query = sqlx_query.bind(workflow_user);
+        }
+        if let Some(workflow_description) = &description {
+            sqlx_query = sqlx_query.bind(format!("%{}%", workflow_description));
+        }
+        // Bind accessible IDs
+        if let Some(ref ids) = accessible_ids {
+            for id in ids {
+                sqlx_query = sqlx_query.bind(id);
+            }
+        }
+
+        let records = match sqlx_query.fetch_all(self.context.pool.as_ref()).await {
+            Ok(recs) => recs,
+            Err(e) => {
+                error!("Database error: {}", e);
+                return Err(database_error(e));
+            }
+        };
+
+        let mut items: Vec<models::WorkflowModel> = Vec::new();
+        for record in records {
+            let jobs_sort_method_str: String = record.get("jobs_sort_method");
+            let sort_method = jobs_sort_method_str
+                .parse::<models::ClaimJobsSortMethod>()
+                .ok();
+            items.push(models::WorkflowModel {
+                id: Some(record.get("id")),
+                name: record.get("name"),
+                user: record.get("user"),
+                description: record.get("description"),
+                timestamp: Some(record.get("timestamp")),
+                compute_node_expiration_buffer_seconds: Some(
+                    record.get("compute_node_expiration_buffer_seconds"),
+                ),
+                compute_node_wait_for_new_jobs_seconds: Some(
+                    record.get("compute_node_wait_for_new_jobs_seconds"),
+                ),
+                compute_node_ignore_workflow_completion: Some(
+                    record.get::<i64, _>("compute_node_ignore_workflow_completion") != 0,
+                ),
+                compute_node_wait_for_healthy_database_minutes: Some(
+                    record.get("compute_node_wait_for_healthy_database_minutes"),
+                ),
+                compute_node_min_time_for_new_jobs_seconds: Some(
+                    record.get("compute_node_min_time_for_new_jobs_seconds"),
+                ),
+                jobs_sort_method: sort_method,
+                resource_monitor_config: record.get("resource_monitor_config"),
+                slurm_defaults: record.get("slurm_defaults"),
+                use_pending_failed: record
+                    .try_get::<Option<i64>, _>("use_pending_failed")
+                    .ok()
+                    .flatten()
+                    .map(|v| v != 0),
+                status_id: Some(record.get("status_id")),
+            });
+        }
+
+        // For proper pagination, we should get the total count without LIMIT/OFFSET
+        let count_base_query = if is_archived.is_some() {
+            "SELECT COUNT(*) as total FROM workflow w INNER JOIN workflow_status ws ON w.status_id = ws.id"
+        } else {
+            "SELECT COUNT(*) as total FROM workflow"
+        };
+        let count_query = if where_clause.is_empty() {
+            count_base_query.to_string()
+        } else {
+            format!("{} WHERE {}", count_base_query, where_clause)
+        };
+
+        let mut count_sqlx_query = sqlx::query(&count_query);
+        if let Some(workflow_name) = &name {
+            count_sqlx_query = count_sqlx_query.bind(workflow_name);
+        }
+        if let Some(workflow_user) = &user {
+            count_sqlx_query = count_sqlx_query.bind(workflow_user);
+        }
+        if let Some(workflow_description) = &description {
+            count_sqlx_query = count_sqlx_query.bind(format!("%{}%", workflow_description));
+        }
+        // Bind accessible IDs for count query
+        if let Some(ref ids) = accessible_ids {
+            for id in ids {
+                count_sqlx_query = count_sqlx_query.bind(id);
+            }
+        }
+
+        let total_count = match count_sqlx_query.fetch_one(self.context.pool.as_ref()).await {
+            Ok(row) => row.get::<i64, _>("total"),
+            Err(e) => {
+                error!("Database error getting count: {}", e);
+                return Err(database_error(e));
+            }
+        };
+
+        let current_count = items.len() as i64;
+        let offset_val = offset;
+        let has_more = offset_val + current_count < total_count;
+
+        debug!(
+            "list_workflows_filtered({}/{}) - X-Span-ID: {:?}",
+            current_count,
+            total_count,
+            context.get().0.clone()
+        );
+
+        Ok(ListWorkflowsResponse::SuccessfulResponse(
+            models::ListWorkflowsResponse {
+                items: Some(items),
+                offset: offset_val,
+                max_limit: MAX_RECORD_TRANSFER_COUNT,
+                count: current_count,
+                total_count,
+                has_more,
+            },
+        ))
+    }
 }
 
 #[async_trait]
@@ -217,7 +521,7 @@ where
             .unwrap_or_else(|| "gpus_runtime_memory".to_string());
 
         let compute_node_expiration_buffer_seconds =
-            body.compute_node_expiration_buffer_seconds.unwrap_or(60);
+            body.compute_node_expiration_buffer_seconds.unwrap_or(180);
         // Default must be >= completion_check_interval_secs + job_completion_poll_interval
         // to avoid workers exiting before dependent jobs are unblocked.
         let compute_node_wait_for_new_jobs_seconds =
@@ -748,8 +1052,7 @@ where
         is_archived: Option<bool>,
         context: &C,
     ) -> Result<ListWorkflowsResponse, ApiError> {
-        debug!(
-            "list_workflows({}, {:?}, {:?}, {}, {:?}, {:?}, {:?}, {:?}) - X-Span-ID: {:?}",
+        self.list_workflows_filtered(
             offset,
             sort_by,
             reverse_sort,
@@ -758,246 +1061,10 @@ where
             user,
             description,
             is_archived,
-            context.get().0.clone()
-        );
-
-        // Build base query - join with workflow_status if is_archived filter is needed
-        let base_query = if is_archived.is_some() {
-            "
-            SELECT
-                w.id
-                ,w.name
-                ,w.user
-                ,w.description
-                ,w.timestamp
-                ,w.compute_node_expiration_buffer_seconds
-                ,w.compute_node_wait_for_new_jobs_seconds
-                ,w.compute_node_ignore_workflow_completion
-                ,w.compute_node_wait_for_healthy_database_minutes
-                ,w.compute_node_min_time_for_new_jobs_seconds
-                ,w.jobs_sort_method
-                ,w.resource_monitor_config
-                ,w.slurm_defaults
-                ,w.status_id
-            FROM workflow w
-            INNER JOIN workflow_status ws ON w.status_id = ws.id
-            "
-            .to_string()
-        } else {
-            "
-            SELECT
-                id
-                ,name
-                ,user
-                ,description
-                ,timestamp
-                ,compute_node_expiration_buffer_seconds
-                ,compute_node_wait_for_new_jobs_seconds
-                ,compute_node_ignore_workflow_completion
-                ,compute_node_wait_for_healthy_database_minutes
-                ,compute_node_min_time_for_new_jobs_seconds
-                ,jobs_sort_method
-                ,resource_monitor_config
-                ,slurm_defaults
-                ,status_id
-            FROM workflow
-            "
-            .to_string()
-        };
-
-        // Build WHERE clause conditions
-        let mut where_conditions = Vec::new();
-        let mut bind_values: Vec<Box<dyn sqlx::Encode<'_, sqlx::Sqlite> + Send>> = Vec::new();
-
-        // Use table prefix when joining with workflow_status
-        let table_prefix = if is_archived.is_some() { "w." } else { "" };
-
-        if let Some(workflow_name) = &name {
-            where_conditions.push(format!("{}name = ?", table_prefix));
-            bind_values.push(Box::new(workflow_name.clone()));
-        }
-
-        if let Some(workflow_user) = &user {
-            where_conditions.push(format!("{}user = ?", table_prefix));
-            bind_values.push(Box::new(workflow_user.clone()));
-        }
-
-        if let Some(workflow_description) = &description {
-            where_conditions.push(format!("{}description LIKE ?", table_prefix));
-            bind_values.push(Box::new(format!("%{}%", workflow_description)));
-        }
-
-        if let Some(archived) = is_archived {
-            if archived {
-                where_conditions.push("ws.is_archived = 1".to_string());
-            } else {
-                where_conditions.push("(ws.is_archived IS NULL OR ws.is_archived = 0)".to_string());
-            }
-        }
-
-        let where_clause = if where_conditions.is_empty() {
-            String::new()
-        } else {
-            where_conditions.join(" AND ")
-        };
-
-        // Build the complete query with pagination and sorting
-        // Use table prefix for default sort column when joining
-        let default_sort_column = if is_archived.is_some() { "w.id" } else { "id" };
-
-        // Add table prefix to sort_by column if joining and column is ambiguous
-        let prefixed_sort_by = if is_archived.is_some() {
-            sort_by.as_ref().map(|col| {
-                // If the column is "id" (ambiguous), prefix it with "w."
-                // For other workflow columns, also add prefix to be consistent
-                if col == "id" || !col.contains('.') {
-                    format!("w.{}", col)
-                } else {
-                    col.clone()
-                }
-            })
-        } else {
-            sort_by.clone()
-        };
-
-        let query = if where_clause.is_empty() {
-            SqlQueryBuilder::new(base_query)
-                .with_pagination_and_sorting(
-                    offset,
-                    limit,
-                    prefixed_sort_by,
-                    reverse_sort,
-                    default_sort_column,
-                )
-                .build()
-        } else {
-            SqlQueryBuilder::new(base_query)
-                .with_where(where_clause.clone())
-                .with_pagination_and_sorting(
-                    offset,
-                    limit,
-                    prefixed_sort_by,
-                    reverse_sort,
-                    default_sort_column,
-                )
-                .build()
-        };
-
-        debug!("Executing query: {}", query);
-
-        // Execute the query
-        let mut sqlx_query = sqlx::query(&query);
-
-        // Bind optional parameters in order
-        if let Some(workflow_name) = &name {
-            sqlx_query = sqlx_query.bind(workflow_name);
-        }
-        if let Some(workflow_user) = &user {
-            sqlx_query = sqlx_query.bind(workflow_user);
-        }
-        if let Some(workflow_description) = &description {
-            sqlx_query = sqlx_query.bind(format!("%{}%", workflow_description));
-        }
-
-        let records = match sqlx_query.fetch_all(self.context.pool.as_ref()).await {
-            Ok(recs) => recs,
-            Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
-            }
-        };
-
-        let mut items: Vec<models::WorkflowModel> = Vec::new();
-        for record in records {
-            let jobs_sort_method_str: String = record.get("jobs_sort_method");
-            let sort_method = jobs_sort_method_str
-                .parse::<models::ClaimJobsSortMethod>()
-                .ok();
-            items.push(models::WorkflowModel {
-                id: Some(record.get("id")),
-                name: record.get("name"),
-                user: record.get("user"),
-                description: record.get("description"),
-                timestamp: Some(record.get("timestamp")),
-                compute_node_expiration_buffer_seconds: Some(
-                    record.get("compute_node_expiration_buffer_seconds"),
-                ),
-                compute_node_wait_for_new_jobs_seconds: Some(
-                    record.get("compute_node_wait_for_new_jobs_seconds"),
-                ),
-                compute_node_ignore_workflow_completion: Some(
-                    record.get::<i64, _>("compute_node_ignore_workflow_completion") != 0,
-                ),
-                compute_node_wait_for_healthy_database_minutes: Some(
-                    record.get("compute_node_wait_for_healthy_database_minutes"),
-                ),
-                compute_node_min_time_for_new_jobs_seconds: Some(
-                    record.get("compute_node_min_time_for_new_jobs_seconds"),
-                ),
-                jobs_sort_method: sort_method,
-                resource_monitor_config: record.get("resource_monitor_config"),
-                slurm_defaults: record.get("slurm_defaults"),
-                use_pending_failed: record
-                    .try_get::<Option<i64>, _>("use_pending_failed")
-                    .ok()
-                    .flatten()
-                    .map(|v| v != 0),
-                status_id: Some(record.get("status_id")),
-            });
-        }
-
-        // For proper pagination, we should get the total count without LIMIT/OFFSET
-        let count_base_query = if is_archived.is_some() {
-            "SELECT COUNT(*) as total FROM workflow w INNER JOIN workflow_status ws ON w.status_id = ws.id"
-        } else {
-            "SELECT COUNT(*) as total FROM workflow"
-        };
-        let count_query = if where_clause.is_empty() {
-            count_base_query.to_string()
-        } else {
-            format!("{} WHERE {}", count_base_query, where_clause)
-        };
-
-        let mut count_sqlx_query = sqlx::query(&count_query);
-        if let Some(workflow_name) = &name {
-            count_sqlx_query = count_sqlx_query.bind(workflow_name);
-        }
-        if let Some(workflow_user) = &user {
-            count_sqlx_query = count_sqlx_query.bind(workflow_user);
-        }
-        if let Some(workflow_description) = &description {
-            count_sqlx_query = count_sqlx_query.bind(format!("%{}%", workflow_description));
-        }
-
-        let total_count = match count_sqlx_query.fetch_one(self.context.pool.as_ref()).await {
-            Ok(row) => row.get::<i64, _>("total"),
-            Err(e) => {
-                error!("Database error getting count: {}", e);
-                return Err(database_error(e));
-            }
-        };
-
-        let current_count = items.len() as i64;
-        let offset_val = offset;
-        let has_more = offset_val + current_count < total_count;
-
-        debug!(
-            "list_workflows({}/{}) - X-Span-ID: {:?}",
-            current_count,
-            total_count,
-            context.get().0.clone()
-        );
-
-        Ok(ListWorkflowsResponse::SuccessfulResponse(
-            models::ListWorkflowsResponse {
-                items: Some(items),
-                offset: offset_val,
-                max_limit: MAX_RECORD_TRANSFER_COUNT,
-                count: current_count,
-                total_count,
-                has_more,
-            },
-        ))
+            None, // no access control filtering
+            context,
+        )
+        .await
     }
 
     /// Update a workflow.
