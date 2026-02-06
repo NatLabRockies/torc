@@ -171,7 +171,8 @@ mod unix_main {
 
         let expiration_buffer_seconds = workflow
             .compute_node_expiration_buffer_seconds
-            .unwrap_or(300);
+            .unwrap_or(180)
+            .max(120);
         info!("Expiration buffer seconds: {}", expiration_buffer_seconds);
 
         let job_end_time = match slurm_interface.get_job_end_time() {

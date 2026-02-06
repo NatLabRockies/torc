@@ -365,7 +365,7 @@ EXAMPLES:
         #[arg()]
         workflow_id: Option<i64>,
         /// Job prefix for the Slurm job names
-        #[arg(short, long, default_value = "worker")]
+        #[arg(short, long, default_value = "")]
         job_prefix: String,
         /// Keep submission scripts after job submission
         #[arg(long, default_value = "false")]
@@ -1391,34 +1391,14 @@ pub fn schedule_slurm_nodes(
 
     std::fs::create_dir_all(output)?;
 
-    for _job_num in 1..num_hpc_jobs + 1 {
-        // Create the scheduled compute node record first so we can use its ID in the Slurm job name.
-        // This allows us to correlate the Slurm job with the scheduled compute node record.
-        // We use scheduler_id=0 as a placeholder since we don't have the Slurm job ID yet.
-        let scheduled_compute_node = models::ScheduledComputeNodesModel::new(
+    for job_num in 1..num_hpc_jobs + 1 {
+        let job_name = format!(
+            "{}wf{}_{}_{}",
+            job_prefix,
             workflow_id,
-            0, // Placeholder - will be updated after submission
-            scheduler_config_id,
-            "slurm".to_string(),
-            "pending".to_string(),
+            std::process::id(),
+            job_num
         );
-        let created_scn = match utils::send_with_retries(
-            config,
-            || default_api::create_scheduled_compute_node(config, scheduled_compute_node.clone()),
-            WAIT_FOR_HEALTHY_DATABASE_MINUTES,
-        ) {
-            Ok(scn) => scn,
-            Err(e) => {
-                error!("Failed to create scheduled compute node: {}", e);
-                return Err(format!("Failed to create scheduled compute node: {}", e).into());
-            }
-        };
-        let scn_id = created_scn
-            .id
-            .expect("Created scheduled compute node should have an ID");
-
-        // Use the scheduled compute node ID in the job name for correlation
-        let job_name = format!("{}_{}", job_prefix, scn_id);
         let script_path = format!("{}/{}.sh", output, job_name);
 
         if let Err(e) = slurm_interface.create_submission_script(
@@ -1433,17 +1413,6 @@ pub fn schedule_slurm_nodes(
             start_one_worker_per_node,
         ) {
             error!("Error creating submission script: {}", e);
-            // Clean up the scheduled compute node record since submission failed
-            if let Err(del_err) = utils::send_with_retries(
-                config,
-                || default_api::delete_scheduled_compute_node(config, scn_id, None),
-                WAIT_FOR_HEALTHY_DATABASE_MINUTES,
-            ) {
-                error!(
-                    "Failed to delete scheduled compute node after script creation failure: {}",
-                    del_err
-                );
-            }
             return Err(e.into());
         }
 
@@ -1451,62 +1420,48 @@ pub fn schedule_slurm_nodes(
             Ok((return_code, slurm_job_id, stderr)) => {
                 if return_code != 0 {
                     error!("Error submitting job: {}", stderr);
-                    // Clean up the scheduled compute node record since submission failed
-                    if let Err(del_err) = utils::send_with_retries(
-                        config,
-                        || default_api::delete_scheduled_compute_node(config, scn_id, None),
-                        WAIT_FOR_HEALTHY_DATABASE_MINUTES,
-                    ) {
-                        error!(
-                            "Failed to delete scheduled compute node after submission failure: {}",
-                            del_err
-                        );
-                    }
                     return Err(format!("Job submission failed: {}", stderr).into());
                 }
                 let slurm_job_id_int: i64 = slurm_job_id
                     .parse()
                     .unwrap_or_else(|_| panic!("Failed to parse Slurm job ID {}", slurm_job_id));
-                info!(
-                    "Submitted Slurm job name={} with ID={} (scheduled_compute_node_id={})",
-                    job_name, slurm_job_id_int, scn_id
-                );
 
-                // Update the scheduled compute node with the actual Slurm job ID
-                let mut updated_scn = created_scn.clone();
-                updated_scn.scheduler_id = slurm_job_id_int;
-                if let Err(e) = utils::send_with_retries(
+                // Create the scheduled compute node record only after we have a valid Slurm job ID
+                let scheduled_compute_node = models::ScheduledComputeNodesModel::new(
+                    workflow_id,
+                    slurm_job_id_int,
+                    scheduler_config_id,
+                    "slurm".to_string(),
+                    "pending".to_string(),
+                );
+                let created_scn = match utils::send_with_retries(
                     config,
                     || {
-                        default_api::update_scheduled_compute_node(
+                        default_api::create_scheduled_compute_node(
                             config,
-                            scn_id,
-                            updated_scn.clone(),
+                            scheduled_compute_node.clone(),
                         )
                     },
                     WAIT_FOR_HEALTHY_DATABASE_MINUTES,
                 ) {
-                    error!(
-                        "Failed to update scheduled compute node with Slurm job ID: {}",
-                        e
-                    );
-                }
-
-                // Event is now broadcast via SSE from the server when the scheduled compute node is created
+                    Ok(scn) => scn,
+                    Err(e) => {
+                        error!("Failed to create scheduled compute node: {}", e);
+                        return Err(
+                            format!("Failed to create scheduled compute node: {}", e).into()
+                        );
+                    }
+                };
+                let scn_id = created_scn
+                    .id
+                    .expect("Created scheduled compute node should have an ID");
+                info!(
+                    "Submitted Slurm job name={} with ID={} (scheduled_compute_node_id={})",
+                    job_name, slurm_job_id_int, scn_id
+                );
             }
             Err(e) => {
                 error!("Error submitting job: {}", e);
-                // Clean up the scheduled compute node record since submission failed
-                if let Err(del_err) = utils::send_with_retries(
-                    config,
-                    || default_api::delete_scheduled_compute_node(config, scn_id, None),
-                    WAIT_FOR_HEALTHY_DATABASE_MINUTES,
-                ) {
-                    error!(
-                        "Failed to delete scheduled compute node after submission error: {}",
-                        del_err
-                    );
-                }
                 return Err(e.into());
             }
         }
@@ -3500,7 +3455,7 @@ fn handle_regenerate(
                 workflow_id,
                 scheduler_info.id,
                 scheduler_info.num_allocations as i32,
-                "worker",
+                "",
                 output_dir.to_str().unwrap_or("output"),
                 poll_interval,
                 None, // max_parallel_jobs

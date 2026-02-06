@@ -1521,3 +1521,105 @@ fn test_comprehensive_access_control_workflow_execution(
         "shared_user should see job names"
     );
 }
+
+/// Test that `workflows list --all-users` with access control returns only workflows
+/// the authenticated user can access (owned + group-shared), not all workflows.
+#[rstest]
+fn test_workflows_list_all_users_with_access_control(
+    start_server_with_access_control: &AccessControlServerProcess,
+) {
+    let admin_config = &start_server_with_access_control.config;
+    let password = "password";
+
+    // Create configs for different users
+    let wf_user_config = config_with_auth(admin_config, "wf-user");
+    let wf_user_2_config = config_with_auth(admin_config, "wf-user-2");
+    let wf_user_3_config = config_with_auth(admin_config, "wf-user-3");
+
+    let counter = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+
+    // Create workflow A owned by "wf-user"
+    let wf_a = create_workflow_with_user(
+        &wf_user_config,
+        &format!("all-users-test-wf-a-{}", counter),
+        "wf-user",
+    );
+    let wf_a_id = wf_a.id.unwrap();
+
+    // Create workflow B owned by "wf-user-2"
+    let wf_b = create_workflow_with_user(
+        &wf_user_2_config,
+        &format!("all-users-test-wf-b-{}", counter),
+        "wf-user-2",
+    );
+    let wf_b_id = wf_b.id.unwrap();
+
+    // Create workflow C owned by "wf-user-3" (not shared with wf-user)
+    let wf_c = create_workflow_with_user(
+        &wf_user_3_config,
+        &format!("all-users-test-wf-c-{}", counter),
+        "wf-user-3",
+    );
+    let wf_c_id = wf_c.id.unwrap();
+
+    // Create an access group and add wf-user to it (admin can create groups)
+    let group = models::AccessGroupModel {
+        id: None,
+        name: format!("all-users-test-group-{}", counter),
+        description: Some("Test group for all-users listing".to_string()),
+        created_at: None,
+    };
+    let created_group =
+        default_api::create_access_group(admin_config, group).expect("Failed to create group");
+    let group_id = created_group.id.unwrap();
+
+    // Add wf-user to the group
+    let membership = models::UserGroupMembershipModel {
+        id: None,
+        user_name: "wf-user".to_string(),
+        group_id,
+        role: "member".to_string(),
+        created_at: None,
+    };
+    default_api::add_user_to_group(admin_config, group_id, membership)
+        .expect("Failed to add wf-user to group");
+
+    // Share workflow B with the group (so wf-user can access it)
+    default_api::add_workflow_to_group(admin_config, wf_b_id, group_id)
+        .expect("Failed to share workflow B with group");
+
+    // Verify wf-user can see workflow A (owned) and workflow B (group-shared)
+    // but NOT workflow C (no access)
+    let output = run_cli_command_with_auth(
+        &["--format", "json", "workflows", "list", "--all-users"],
+        start_server_with_access_control,
+        "wf-user",
+        password,
+    )
+    .expect("Failed to run workflows list --all-users as wf-user");
+
+    let json_output: serde_json::Value =
+        serde_json::from_str(&output).expect("Failed to parse JSON output");
+    let workflows_array = json_output.as_array().expect("Expected JSON array");
+
+    let found_ids: Vec<i64> = workflows_array
+        .iter()
+        .filter_map(|w| w.get("id").and_then(|id| id.as_i64()))
+        .collect();
+
+    assert!(
+        found_ids.contains(&wf_a_id),
+        "wf-user should see workflow A (owned), found_ids={:?}",
+        found_ids
+    );
+    assert!(
+        found_ids.contains(&wf_b_id),
+        "wf-user should see workflow B (group-shared), found_ids={:?}",
+        found_ids
+    );
+    assert!(
+        !found_ids.contains(&wf_c_id),
+        "wf-user should NOT see workflow C (no access), found_ids={:?}",
+        found_ids
+    );
+}

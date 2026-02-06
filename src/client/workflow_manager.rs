@@ -266,7 +266,7 @@ impl WorkflowManager {
                         self.workflow_id,
                         scheduler_id,
                         num_allocations,
-                        "worker",
+                        "",
                         "output",
                         self.torc_config.client.slurm.poll_interval,
                         max_parallel_jobs,

@@ -9762,7 +9762,7 @@ impl WorkflowModel {
             user,
             description: None,
             timestamp: None,
-            compute_node_expiration_buffer_seconds: Some(60),
+            compute_node_expiration_buffer_seconds: Some(180),
             compute_node_wait_for_new_jobs_seconds: Some(0),
             compute_node_ignore_workflow_completion: Some(false),
             compute_node_wait_for_healthy_database_minutes: Some(20),

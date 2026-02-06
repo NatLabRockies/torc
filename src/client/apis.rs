@@ -24,7 +24,15 @@ impl<T> fmt::Display for Error<T> {
             Error::Reqwest(e) => ("reqwest", e.to_string()),
             Error::Serde(e) => ("serde", e.to_string()),
             Error::Io(e) => ("IO", e.to_string()),
-            Error::ResponseError(e) => ("response", format!("status code {}", e.status)),
+            Error::ResponseError(e) => {
+                // Include response content to show the actual error message from the server
+                let msg = if e.content.is_empty() {
+                    format!("status code {}", e.status)
+                } else {
+                    format!("status code {}: {}", e.status, e.content)
+                };
+                ("response", msg)
+            }
         };
         write!(f, "error in {}: {}", module, e)
     }

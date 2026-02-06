@@ -7,6 +7,7 @@ use common::{
 use rstest::rstest;
 use serde_json::json;
 use torc::client::default_api;
+use torc::models;
 
 #[rstest]
 fn test_workflows_add_command_json(start_server: &ServerProcess) {
@@ -1379,6 +1380,104 @@ fn test_archive_multiple_workflows(start_server: &ServerProcess) {
             status.is_archived.unwrap_or(false),
             "Workflow {} should be archived",
             workflow_id
+        );
+    }
+}
+
+#[rstest]
+fn test_workflows_list_all_users_no_auth(start_server: &ServerProcess) {
+    let config = &start_server.config;
+
+    // Create workflows for 3 different users
+    let wf_a = default_api::create_workflow(
+        config,
+        models::WorkflowModel::new(
+            "all_users_test_wf_a".to_string(),
+            "all_users_user_a".to_string(),
+        ),
+    )
+    .expect("Failed to create workflow for user_a");
+
+    let wf_b = default_api::create_workflow(
+        config,
+        models::WorkflowModel::new(
+            "all_users_test_wf_b".to_string(),
+            "all_users_user_b".to_string(),
+        ),
+    )
+    .expect("Failed to create workflow for user_b");
+
+    let wf_c = default_api::create_workflow(
+        config,
+        models::WorkflowModel::new(
+            "all_users_test_wf_c".to_string(),
+            "all_users_user_c".to_string(),
+        ),
+    )
+    .expect("Failed to create workflow for user_c");
+
+    // Run `torc workflows list --all-users` with JSON output
+    let args = ["workflows", "list", "--all-users"];
+    let json_output = run_cli_with_json(&args, start_server, Some("all_users_user_a"))
+        .expect("Failed to run workflows list --all-users");
+
+    // Should return an array containing workflows from all users
+    assert!(
+        json_output.is_array(),
+        "Workflows list should return an array"
+    );
+    let workflows_array = json_output.as_array().unwrap();
+
+    // Find our test workflows by ID
+    let wf_a_id = wf_a.id.unwrap();
+    let wf_b_id = wf_b.id.unwrap();
+    let wf_c_id = wf_c.id.unwrap();
+
+    let found_ids: Vec<i64> = workflows_array
+        .iter()
+        .filter_map(|w| w.get("id").and_then(|id| id.as_i64()))
+        .collect();
+
+    assert!(
+        found_ids.contains(&wf_a_id),
+        "Should contain user_a's workflow (id={})",
+        wf_a_id
+    );
+    assert!(
+        found_ids.contains(&wf_b_id),
+        "Should contain user_b's workflow (id={})",
+        wf_b_id
+    );
+    assert!(
+        found_ids.contains(&wf_c_id),
+        "Should contain user_c's workflow (id={})",
+        wf_c_id
+    );
+
+    // Verify each workflow has a user field
+    for wf in workflows_array {
+        assert!(
+            wf.get("user").is_some(),
+            "Each workflow should have a 'user' field"
+        );
+    }
+
+    // Without --all-users, user_a should only see their own workflows
+    let args_no_all = ["workflows", "list"];
+    let json_filtered = run_cli_with_json(&args_no_all, start_server, Some("all_users_user_a"))
+        .expect("Failed to run workflows list without --all-users");
+
+    let filtered_array = json_filtered.as_array().unwrap();
+    let filtered_users: Vec<&str> = filtered_array
+        .iter()
+        .filter_map(|w| w.get("user").and_then(|u| u.as_str()))
+        .collect();
+
+    // All returned workflows should belong to user_a
+    for u in &filtered_users {
+        assert_eq!(
+            *u, "all_users_user_a",
+            "Without --all-users, should only return current user's workflows"
         );
     }
 }
