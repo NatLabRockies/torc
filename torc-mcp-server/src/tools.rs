@@ -270,7 +270,7 @@ pub fn check_resource_utilization(
             ));
             if resource_violations_count > 0 {
                 response.push_str(&format!(
-                    "\n{} job(s) with resource violations are ready for analysis.",
+                    "\n{} resource violations detected (jobs may have multiple violations).",
                     resource_violations_count
                 ));
             }

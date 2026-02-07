@@ -12,6 +12,7 @@ use serde::Serialize;
 use crate::client::apis::configuration::Configuration;
 use crate::client::apis::default_api;
 use crate::client::report_models::ResourceUtilizationReport;
+use crate::memory_utils::memory_string_to_bytes;
 use crate::time_utils::duration_string_to_seconds;
 
 /// Result of applying resource corrections
@@ -103,32 +104,6 @@ struct ResourceAdjustment {
     max_peak_runtime_minutes: Option<f64>,
     /// Whether any job had a runtime violation
     has_runtime_violation: bool,
-}
-
-/// Parse memory string (e.g., "8g", "512m", "1024k", "512b") to bytes
-pub fn parse_memory_bytes(mem: &str) -> Option<u64> {
-    let mem = mem.trim().to_lowercase();
-    let (num_str, multiplier) = if mem.ends_with("gb") {
-        (mem.trim_end_matches("gb"), 1024u64 * 1024 * 1024)
-    } else if mem.ends_with("g") {
-        (mem.trim_end_matches("g"), 1024u64 * 1024 * 1024)
-    } else if mem.ends_with("mb") {
-        (mem.trim_end_matches("mb"), 1024u64 * 1024)
-    } else if mem.ends_with("m") {
-        (mem.trim_end_matches("m"), 1024u64 * 1024)
-    } else if mem.ends_with("kb") {
-        (mem.trim_end_matches("kb"), 1024u64)
-    } else if mem.ends_with("k") {
-        (mem.trim_end_matches("k"), 1024u64)
-    } else if mem.ends_with("b") {
-        (mem.trim_end_matches("b"), 1u64)
-    } else {
-        (mem.as_str(), 1u64)
-    };
-    num_str
-        .parse::<f64>()
-        .ok()
-        .map(|n| (n * multiplier as f64) as u64)
 }
 
 /// Format bytes to memory string (e.g., "12g", "512m")
@@ -364,7 +339,7 @@ pub fn apply_resource_corrections(
             let new_bytes = if let Some(max_peak) = adjustment.max_peak_memory_bytes {
                 // Use the maximum observed peak memory * multiplier
                 (max_peak as f64 * memory_multiplier) as u64
-            } else if let Some(current_bytes) = parse_memory_bytes(&adjustment.current_memory) {
+            } else if let Ok(current_bytes) = memory_string_to_bytes(&adjustment.current_memory) {
                 // Fall back to current specified * multiplier
                 (current_bytes as f64 * memory_multiplier) as u64
             } else {
@@ -574,47 +549,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_memory_bytes_gigabytes() {
-        assert_eq!(parse_memory_bytes("8g"), Some(8 * 1024 * 1024 * 1024));
-        assert_eq!(parse_memory_bytes("8gb"), Some(8 * 1024 * 1024 * 1024));
-        assert_eq!(parse_memory_bytes("8G"), Some(8 * 1024 * 1024 * 1024));
-    }
-
-    #[test]
-    fn test_parse_memory_bytes_megabytes() {
-        assert_eq!(parse_memory_bytes("512m"), Some(512 * 1024 * 1024));
-        assert_eq!(parse_memory_bytes("512mb"), Some(512 * 1024 * 1024));
-    }
-
-    #[test]
-    fn test_parse_memory_bytes_kilobytes() {
-        assert_eq!(parse_memory_bytes("1024k"), Some(1024 * 1024));
-        assert_eq!(parse_memory_bytes("1024kb"), Some(1024 * 1024));
-    }
-
-    #[test]
-    fn test_parse_memory_bytes_bytes() {
-        assert_eq!(parse_memory_bytes("1000"), Some(1000));
-    }
-
-    #[test]
-    fn test_parse_memory_bytes_bytes_suffix() {
-        assert_eq!(parse_memory_bytes("512b"), Some(512));
-        assert_eq!(parse_memory_bytes("512B"), Some(512));
-    }
-
-    #[test]
-    fn test_parse_memory_bytes_with_whitespace() {
-        assert_eq!(parse_memory_bytes("  8g  "), Some(8 * 1024 * 1024 * 1024));
-    }
-
-    #[test]
-    fn test_parse_memory_bytes_invalid() {
-        assert_eq!(parse_memory_bytes("invalid"), None);
-        assert_eq!(parse_memory_bytes("8x"), None);
-    }
-
-    #[test]
     fn test_format_memory_bytes_short_gigabytes() {
         assert_eq!(
             format_memory_bytes_short(8 * 1024 * 1024 * 1024),
@@ -681,7 +615,7 @@ mod tests {
     #[test]
     fn test_parse_format_memory_roundtrip() {
         let original = "12g";
-        let bytes = parse_memory_bytes(original).unwrap();
+        let bytes = memory_string_to_bytes(original).unwrap() as u64;
         let formatted = format_memory_bytes_short(bytes);
         assert_eq!(formatted, original);
     }
