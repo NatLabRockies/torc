@@ -442,8 +442,11 @@ fn test_correct_resources_multiple_violations(start_server: &ServerProcess) {
     let items = results.items.expect("Should have items");
     assert_eq!(items.len(), 3, "Should have 3 results");
 
-    // Verify each violation type
-    let result1 = &items[0];
+    // Verify each violation type - find by job_id instead of assuming order
+    let result1 = items
+        .iter()
+        .find(|r| r.job_id == job1_id)
+        .expect("Should find job1 result");
     assert_eq!(
         result1.return_code, 137,
         "Job 1 should have OOM return code"
@@ -454,7 +457,10 @@ fn test_correct_resources_multiple_violations(start_server: &ServerProcess) {
         "Job 1 should have memory violation"
     );
 
-    let result2 = &items[1];
+    let result2 = items
+        .iter()
+        .find(|r| r.job_id == job2_id)
+        .expect("Should find job2 result");
     assert_eq!(
         result2.return_code, 0,
         "Job 2 should have success return code"
@@ -465,7 +471,10 @@ fn test_correct_resources_multiple_violations(start_server: &ServerProcess) {
         "Job 2 should have CPU violation"
     );
 
-    let result3 = &items[2];
+    let result3 = items
+        .iter()
+        .find(|r| r.job_id == job3_id)
+        .expect("Should find job3 result");
     assert_eq!(
         result3.return_code, 0,
         "Job 3 should have success return code"

@@ -1957,7 +1957,6 @@ Check resource utilization and report jobs that exceeded their specified require
 - `-r`, `--run-id <RUN_ID>` — Run ID to analyze (optional - analyzes latest run if not provided)
 - `-a`, `--all` — Show all jobs (default: only show jobs that exceeded requirements)
 - `--include-failed` — Include failed and terminated jobs in the analysis (for recovery diagnostics)
-- `--correct` — Automatically correct resource requirements for over-utilized jobs
 - `--min-over-utilization <MIN_OVER_UTILIZATION>` — Minimum over-utilization percentage to flag as
   violation (default: 1.0%)
 

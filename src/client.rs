@@ -51,7 +51,7 @@ pub use workflow_spec::{
 
 // Report model types for inter-command data sharing
 pub use report_models::{
-    FailedJobInfo, JobResultRecord, ResourceUtilizationReport, ResourceViolation, ResultsReport,
+    JobResultRecord, ResourceUtilizationReport, ResourceViolation, ResultsReport,
 };
 
 // Version checking utilities

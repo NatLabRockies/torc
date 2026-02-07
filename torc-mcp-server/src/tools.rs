@@ -256,7 +256,7 @@ pub fn check_resource_utilization(
             .get("over_utilization_count")
             .and_then(|v| v.as_i64())
             .unwrap_or(0);
-        let failed_count = json
+        let resource_violations_count = json
             .get("resource_violations")
             .and_then(|v| v.as_array())
             .map(|a| a.len())
@@ -268,11 +268,11 @@ pub fn check_resource_utilization(
                 "\n{} job(s) exceeded resource limits (OOM or timeout).",
                 over_count
             ));
-            if failed_count > 0 && (over_count as usize) > failed_count {
+            if resource_violations_count > 0 && (over_count as usize) > resource_violations_count {
                 response.push_str(&format!(
                     "\nOnly {} have failed so far, but {} more will likely fail without fixes.",
-                    failed_count,
-                    (over_count as usize) - failed_count
+                    resource_violations_count,
+                    (over_count as usize) - resource_violations_count
                 ));
             }
             response

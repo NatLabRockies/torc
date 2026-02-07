@@ -83,9 +83,13 @@ struct ResourceAdjustment {
     has_cpu_violation: bool,
     /// Current CPU count (for CPU violation calculation)
     current_cpus: i64,
+    /// Maximum peak runtime observed across all runtime violation jobs (in minutes)
+    max_peak_runtime_minutes: Option<f64>,
+    /// Whether any job had a runtime violation
+    has_runtime_violation: bool,
 }
 
-/// Parse memory string (e.g., "8g", "512m", "1024k") to bytes
+/// Parse memory string (e.g., "8g", "512m", "1024k", "512b") to bytes
 pub fn parse_memory_bytes(mem: &str) -> Option<u64> {
     let mem = mem.trim().to_lowercase();
     let (num_str, multiplier) = if mem.ends_with("gb") {
@@ -100,6 +104,8 @@ pub fn parse_memory_bytes(mem: &str) -> Option<u64> {
         (mem.trim_end_matches("kb"), 1024u64)
     } else if mem.ends_with("k") {
         (mem.trim_end_matches("k"), 1024u64)
+    } else if mem.ends_with("b") {
+        (mem.trim_end_matches("b"), 1u64)
     } else {
         (mem.as_str(), 1u64)
     };
@@ -193,9 +199,10 @@ pub fn apply_resource_corrections(
         let likely_oom = job_info.likely_oom;
         let likely_timeout = job_info.likely_timeout;
         let likely_cpu_violation = job_info.likely_cpu_violation;
+        let likely_runtime_violation = job_info.likely_runtime_violation;
 
         // Skip if no violations detected
-        if !likely_oom && !likely_timeout && !likely_cpu_violation {
+        if !likely_oom && !likely_timeout && !likely_cpu_violation && !likely_runtime_violation {
             continue;
         }
 
@@ -242,6 +249,8 @@ pub fn apply_resource_corrections(
                 max_peak_cpu_percent: None,
                 has_cpu_violation: false,
                 current_cpus,
+                max_peak_runtime_minutes: None,
+                has_runtime_violation: false,
             }
         });
 
@@ -284,6 +293,18 @@ pub fn apply_resource_corrections(
                 adjustment
                     .max_peak_cpu_percent
                     .map_or(peak_cpu, |current_max| current_max.max(peak_cpu)),
+            );
+        }
+
+        // Track runtime violation
+        if likely_runtime_violation {
+            adjustment.has_runtime_violation = true;
+            adjustment.max_peak_runtime_minutes = Some(
+                adjustment
+                    .max_peak_runtime_minutes
+                    .map_or(job_info.exec_time_minutes, |current_max| {
+                        current_max.max(job_info.exec_time_minutes)
+                    }),
             );
         }
     }
@@ -405,6 +426,46 @@ pub fn apply_resource_corrections(
             runtime_corrections += adjustment.job_ids.len();
         }
 
+        // Apply runtime violation fix
+        if adjustment.has_runtime_violation && !adjustment.has_timeout {
+            // Only apply if not already adjusted for timeout
+            if let (Some(max_peak_runtime), Ok(current_secs)) = (
+                adjustment.max_peak_runtime_minutes,
+                duration_string_to_seconds(&adjustment.current_runtime),
+            ) {
+                let max_peak_secs = max_peak_runtime as i64 * 60;
+                // Only update if the peak runtime exceeds current allocation
+                if max_peak_secs > current_secs {
+                    let new_secs = (max_peak_secs as f64 * runtime_multiplier) as u64;
+                    let new_runtime = format_duration_iso8601(new_secs);
+                    let job_count = adjustment.job_ids.len();
+
+                    if job_count > 1 {
+                        info!(
+                            "{} job(s) with RR {}: Runtime violation detected, peak {}m -> allocating {} ({}x)",
+                            job_count, rr_id, max_peak_runtime, new_runtime, runtime_multiplier
+                        );
+                    } else if let (Some(job_id), Some(job_name)) =
+                        (adjustment.job_ids.first(), adjustment.job_names.first())
+                    {
+                        info!(
+                            "Job {} ({}): Runtime violation detected, peak {}m -> allocating {} ({}x)",
+                            job_id, job_name, max_peak_runtime, new_runtime, runtime_multiplier
+                        );
+                    }
+
+                    // Track for JSON report
+                    original_runtime = Some(adjustment.current_runtime.clone());
+                    new_runtime_str = Some(new_runtime.clone());
+                    runtime_adjusted = true;
+
+                    new_rr.runtime = new_runtime;
+                    updated = true;
+                    runtime_corrections += adjustment.job_ids.len();
+                }
+            }
+        }
+
         // Apply CPU violation fix
         if adjustment.has_cpu_violation
             && let Some(max_peak_cpu) = adjustment.max_peak_cpu_percent
@@ -499,6 +560,12 @@ mod tests {
     #[test]
     fn test_parse_memory_bytes_bytes() {
         assert_eq!(parse_memory_bytes("1000"), Some(1000));
+    }
+
+    #[test]
+    fn test_parse_memory_bytes_bytes_suffix() {
+        assert_eq!(parse_memory_bytes("512b"), Some(512));
+        assert_eq!(parse_memory_bytes("512B"), Some(512));
     }
 
     #[test]

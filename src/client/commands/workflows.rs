@@ -1405,6 +1405,7 @@ fn handle_correct_resources(
                     runtime_utilization: None,
                     likely_cpu_violation,
                     peak_cpu_percent: result.peak_cpu_percent,
+                    likely_runtime_violation,
                 };
                 resource_violations.push(violation_info);
             }
@@ -1436,8 +1437,6 @@ fn handle_correct_resources(
         violations: Vec::new(),
         resource_violations_count: resource_violations.len(),
         resource_violations: resource_violations.clone(),
-        failed_jobs_count: 0,
-        failed_jobs: vec![],
     };
 
     // Step 3: Apply resource corrections

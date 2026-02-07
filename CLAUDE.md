@@ -478,7 +478,6 @@ unified CLI.
 **Reports & Analysis**:
 
 - `torc reports check-resource-utilization <id>` - Check which jobs exceeded resource limits
-- `torc reports check-resource-utilization <id> --correct` - Automatically fix resource violations
 - `torc reports results <id>` - Get detailed job execution results
 - `torc reports summary <id>` - Get workflow completion summary
 

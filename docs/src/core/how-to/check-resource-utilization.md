@@ -66,7 +66,7 @@ Analyzing and correcting resource requirements for workflow 5
 Corrections applied:
   memory_training: 8g → 10g (+25.0%)
   cpu_training: 4 → 5 cores (+25.0%)
-  runtime_training: PT2H → PT2H 30M (+25.0%)
+  runtime_training: PT2H → PT2H30M (+25.0%)
 ```
 
 ### Preview Changes Without Applying

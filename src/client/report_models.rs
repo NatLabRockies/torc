@@ -21,15 +21,6 @@ pub struct ResourceUtilizationReport {
     /// Jobs that exceeded resource allocations (only present when `--include-failed` is used)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub resource_violations: Vec<ResourceViolationInfo>,
-
-    // Backward compatibility - map old field names to new ones
-    #[serde(default, skip_serializing_if = "is_zero", alias = "failed_jobs_count")]
-    #[serde(skip_deserializing)]
-    pub failed_jobs_count: usize,
-
-    #[serde(default, skip_serializing_if = "Vec::is_empty", alias = "failed_jobs")]
-    #[serde(skip_deserializing)]
-    pub failed_jobs: Vec<ResourceViolationInfo>,
 }
 
 fn is_zero(n: &usize) -> bool {
@@ -101,10 +92,11 @@ pub struct ResourceViolationInfo {
     /// Peak CPU percentage used (e.g., 501.4%)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub peak_cpu_percent: Option<f64>,
-}
 
-// Backward compatibility alias
-pub type FailedJobInfo = ResourceViolationInfo;
+    /// Whether this job exceeded its runtime allocation
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub likely_runtime_violation: bool,
+}
 
 fn is_false(b: &bool) -> bool {
     !*b
@@ -203,9 +195,8 @@ mod tests {
                 runtime_utilization: Some("9.2%".to_string()),
                 likely_cpu_violation: false,
                 peak_cpu_percent: None,
+                likely_runtime_violation: false,
             }],
-            failed_jobs_count: 1,
-            failed_jobs: vec![],
         };
 
         let json = serde_json::to_string(&report).unwrap();
@@ -252,7 +243,7 @@ mod tests {
     }
 
     #[test]
-    fn test_failed_job_info_optional_fields() {
+    fn test_resource_violation_info_optional_fields() {
         // Test that optional fields can be omitted
         // Note: return_code and configured_cpus are i64 in the struct
         let json = r#"{
@@ -265,10 +256,11 @@ mod tests {
             "configured_cpus": 2
         }"#;
 
-        let parsed: FailedJobInfo = serde_json::from_str(json).unwrap();
+        let parsed: ResourceViolationInfo = serde_json::from_str(json).unwrap();
         assert_eq!(parsed.job_id, 1);
         assert!(!parsed.likely_oom);
         assert!(!parsed.likely_timeout);
+        assert!(!parsed.likely_runtime_violation);
         assert!(parsed.peak_memory_bytes.is_none());
     }
 }

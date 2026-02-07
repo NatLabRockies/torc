@@ -417,6 +417,7 @@ fn check_resource_utilization(
                 runtime_utilization,
                 likely_cpu_violation: false,
                 peak_cpu_percent: None,
+                likely_runtime_violation: false,
             });
         }
 
@@ -540,8 +541,6 @@ fn check_resource_utilization(
                     .collect(),
                 resource_violations_count: resource_violations_info.len(),
                 resource_violations: resource_violations_info,
-                failed_jobs_count: 0,
-                failed_jobs: vec![],
             };
 
             print_json(&report, "resource utilization");

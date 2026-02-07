@@ -783,8 +783,6 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
                     violations: Vec::new(),
                     resource_violations_count: 0,
                     resource_violations: Vec::new(),
-                    failed_jobs_count: 0,
-                    failed_jobs: Vec::new(),
                 }
             }
         };
