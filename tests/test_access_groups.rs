@@ -1600,7 +1600,10 @@ fn test_workflows_list_all_users_with_access_control(
 
     let json_output: serde_json::Value =
         serde_json::from_str(&output).expect("Failed to parse JSON output");
-    let workflows_array = json_output.as_array().expect("Expected JSON array");
+    let workflows_array = json_output
+        .get("workflows")
+        .and_then(|w| w.as_array())
+        .expect("Expected JSON object with 'workflows' array");
 
     let found_ids: Vec<i64> = workflows_array
         .iter()
