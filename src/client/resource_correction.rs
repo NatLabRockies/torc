@@ -116,13 +116,18 @@ pub fn parse_memory_bytes(mem: &str) -> Option<u64> {
 }
 
 /// Format bytes to memory string (e.g., "12g", "512m")
+/// Uses ceiling division to ensure sufficient memory allocation
 pub fn format_memory_bytes_short(bytes: u64) -> String {
-    if bytes >= 1024 * 1024 * 1024 {
-        format!("{}g", bytes / (1024 * 1024 * 1024))
-    } else if bytes >= 1024 * 1024 {
-        format!("{}m", bytes / (1024 * 1024))
-    } else if bytes >= 1024 {
-        format!("{}k", bytes / 1024)
+    const GB: u64 = 1024 * 1024 * 1024;
+    const MB: u64 = 1024 * 1024;
+    const KB: u64 = 1024;
+
+    if bytes >= GB {
+        format!("{}g", bytes.div_ceil(GB))
+    } else if bytes >= MB {
+        format!("{}m", bytes.div_ceil(MB))
+    } else if bytes >= KB {
+        format!("{}k", bytes.div_ceil(KB))
     } else {
         format!("{}b", bytes)
     }
@@ -467,12 +472,14 @@ pub fn apply_resource_corrections(
         }
 
         // Apply CPU violation fix
+        // Note: CPU corrections use memory_multiplier (capacity multiplier) like memory corrections,
+        // not runtime_multiplier (time multiplier). This ensures consistent safety margins for resources.
         if adjustment.has_cpu_violation
             && let Some(max_peak_cpu) = adjustment.max_peak_cpu_percent
         {
             // peak_cpu_percent is the total percentage for all CPUs
             // e.g., 501.4% with 3 CPUs allocated (300%)
-            // We need: new_cpus = ceil(max_peak_cpu / 100.0) with multiplier
+            // Calculate required CPUs using capacity multiplier for safety margin
             let required_cpus = (max_peak_cpu / 100.0 * memory_multiplier).ceil() as i64;
             let new_cpus = std::cmp::max(required_cpus, 1); // At least 1 CPU
 
@@ -480,14 +487,14 @@ pub fn apply_resource_corrections(
                 let job_count = adjustment.job_ids.len();
                 if job_count > 1 {
                     info!(
-                        "{} job(s) with RR {}: CPU over-utilization detected, peak {}% -> allocating {} CPUs ({}x)",
+                        "{} job(s) with RR {}: CPU over-utilization detected, peak {}% -> allocating {} CPUs ({:.1}x safety margin)",
                         job_count, rr_id, max_peak_cpu, new_cpus, memory_multiplier
                     );
                 } else if let (Some(job_id), Some(job_name)) =
                     (adjustment.job_ids.first(), adjustment.job_names.first())
                 {
                     info!(
-                        "Job {} ({}): CPU over-utilization detected, peak {}% -> allocating {} CPUs ({}x)",
+                        "Job {} ({}): CPU over-utilization detected, peak {}% -> allocating {} CPUs ({:.1}x safety margin)",
                         job_id, job_name, max_peak_cpu, new_cpus, memory_multiplier
                     );
                 }
@@ -599,6 +606,23 @@ mod tests {
     fn test_format_memory_bytes_short_kilobytes() {
         assert_eq!(format_memory_bytes_short(1024 * 1024), "1m".to_string());
         assert_eq!(format_memory_bytes_short(512 * 1024), "512k".to_string());
+    }
+
+    #[test]
+    fn test_format_memory_bytes_short_rounds_up() {
+        // Ensure ceiling division is used, not floor division
+        // 3.5GB should round up to 4g, not down to 3g
+        assert_eq!(
+            format_memory_bytes_short(3_500_000_000),
+            "4g".to_string(),
+            "3.5GB should round up to 4g"
+        );
+        // 1.5MB should round up to 2m
+        assert_eq!(
+            format_memory_bytes_short(1_500_000),
+            "2m".to_string(),
+            "1.5MB should round up to 2m"
+        );
     }
 
     #[test]

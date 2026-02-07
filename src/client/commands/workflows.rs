@@ -1391,7 +1391,12 @@ fn handle_correct_resources(
                     peak_memory_formatted: None,
                     likely_oom,
                     oom_reason: if likely_oom {
-                        Some("sigkill_137".to_string())
+                        // Distinguish between actual OOM failure (137) vs memory violation in successful job
+                        if result.return_code == 137 {
+                            Some("sigkill_137".to_string())
+                        } else {
+                            Some("memory_exceeded".to_string())
+                        }
                     } else {
                         None
                     },

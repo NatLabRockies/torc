@@ -265,14 +265,13 @@ pub fn check_resource_utilization(
         if over_count > 0 {
             response.push_str("\n\n[RECOVERABLE RESOURCE ISSUES DETECTED!");
             response.push_str(&format!(
-                "\n{} job(s) exceeded resource limits (OOM or timeout).",
+                "\n{} job(s) exceeded their resource allocations.",
                 over_count
             ));
-            if resource_violations_count > 0 && (over_count as usize) > resource_violations_count {
+            if resource_violations_count > 0 {
                 response.push_str(&format!(
-                    "\nOnly {} have failed so far, but {} more will likely fail without fixes.",
-                    resource_violations_count,
-                    (over_count as usize) - resource_violations_count
+                    "\n{} job(s) with resource violations are ready for analysis.",
+                    resource_violations_count
                 ));
             }
             response
