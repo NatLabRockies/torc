@@ -60,7 +60,7 @@ use crate::client::commands::workflow_export::{
     EXPORT_VERSION, ExportImportStats, IdMappings, WorkflowExport,
 };
 use crate::client::commands::{
-    get_env_user_name, print_error, select_workflow_interactively,
+    get_env_user_name, output::print_json_wrapped, print_error, select_workflow_interactively,
     table_format::display_table_with_count,
 };
 use crate::client::hpc::hpc_interface::HpcInterface;
@@ -2762,13 +2762,7 @@ fn handle_list(
                     })
                     .collect();
 
-                match serde_json::to_string_pretty(&workflows_json) {
-                    Ok(json) => println!("{}", json),
-                    Err(e) => {
-                        eprintln!("Error serializing workflows to JSON: {}", e);
-                        std::process::exit(1);
-                    }
-                }
+                print_json_wrapped("workflows", &workflows_json, "workflows");
             } else if workflows.is_empty() {
                 if all_users {
                     println!("No workflows found.");
