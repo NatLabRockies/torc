@@ -75,7 +75,7 @@ def main():
 
     # Create 3 worker processes
     processes = []
-    num_workers = 5
+    num_workers = 3
     duration_per_worker = 60
 
     start_time = time.time()
