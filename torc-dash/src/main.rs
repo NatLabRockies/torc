@@ -505,61 +505,6 @@ async fn proxy_handler(
 
 // ============== CLI Command Handlers ==============
 
-/// Save a workflow spec to a file in the current directory.
-/// The filename is derived from the workflow name in the spec.
-/// Returns the path to the saved file, or None if saving failed.
-async fn save_workflow_spec(
-    spec_content: &str,
-    workflow_id: Option<&str>,
-    file_extension: &str,
-) -> Option<String> {
-    // Parse the spec as JSON to extract the workflow name
-    // (works for JSON specs; for YAML/KDL we fall back to "workflow")
-    let workflow_name = serde_json::from_str::<serde_json::Value>(spec_content)
-        .ok()
-        .and_then(|spec| spec.get("name").and_then(|v| v.as_str()).map(String::from))
-        .unwrap_or_else(|| "workflow".to_string());
-
-    // Sanitize the workflow name for use as a filename
-    let sanitized_name: String = workflow_name
-        .chars()
-        .map(|c| {
-            if c.is_alphanumeric() || c == '-' || c == '_' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect();
-
-    // Build the filename, optionally including the workflow ID for uniqueness
-    let base_filename = if let Some(id) = workflow_id {
-        format!("{}_{}", sanitized_name, id)
-    } else {
-        sanitized_name
-    };
-
-    // Ensure content ends with newline
-    let content = if spec_content.ends_with('\n') {
-        spec_content.to_string()
-    } else {
-        format!("{}\n", spec_content)
-    };
-
-    // Use the provided extension (e.g., ".json", ".yaml", ".kdl")
-    let filename = format!("{}{}", base_filename, file_extension);
-    match tokio::fs::write(&filename, &content).await {
-        Ok(()) => {
-            info!("Saved workflow spec to: {}", filename);
-            Some(filename)
-        }
-        Err(e) => {
-            warn!("Failed to save workflow spec to {}: {}", filename, e);
-            None
-        }
-    }
-}
-
 /// Extract workflow ID from CLI output like "Created workflow 123" or "ID: 123"
 fn extract_workflow_id(stdout: &str) -> Option<String> {
     for line in stdout.lines() {
@@ -688,7 +633,6 @@ async fn cli_create_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateRequest>,
 ) -> impl IntoResponse {
-    let is_inline = !req.is_file;
     let spec_content = req.spec.clone();
 
     // Validate file extension to prevent path traversal attacks
@@ -717,32 +661,60 @@ async fn cli_create_handler(
         )
         .await
     } else {
-        // Spec is inline content - write to temp file with correct extension
+        // Spec is inline content - write to current directory with random name
         let unique_id = uuid::Uuid::new_v4();
-        let temp_path = format!("/tmp/torc_spec_{}{}", unique_id, file_extension);
-        if let Err(e) = tokio::fs::write(&temp_path, &req.spec).await {
+        let temp_path = format!("torc_spec_{}{}", unique_id, file_extension);
+        if let Err(e) = tokio::fs::write(&temp_path, &spec_content).await {
             return Json(CliResponse {
                 success: false,
                 stdout: String::new(),
-                stderr: format!("Failed to write temp file: {}", e),
+                stderr: format!("Failed to write spec file: {}", e),
                 exit_code: None,
             });
         }
+
         let result = run_torc_command(
             &state.torc_bin,
             &["workflows", "create", &temp_path],
             &state.api_url,
         )
         .await;
-        let _ = tokio::fs::remove_file(&temp_path).await;
+
+        // Rename file to final name if creation was successful, otherwise delete it
+        if result.success {
+            if let Some(workflow_id) = extract_workflow_id(&result.stdout) {
+                // Parse spec to get workflow name for final filename
+                let workflow_name = serde_json::from_str::<serde_json::Value>(&spec_content)
+                    .ok()
+                    .and_then(|spec| spec.get("name").and_then(|v| v.as_str()).map(String::from))
+                    .unwrap_or_else(|| "workflow".to_string());
+
+                // Sanitize the workflow name for use as a filename
+                let sanitized_name: String = workflow_name
+                    .chars()
+                    .map(|c| {
+                        if c.is_alphanumeric() || c == '-' || c == '_' {
+                            c
+                        } else {
+                            '_'
+                        }
+                    })
+                    .collect();
+
+                let final_path = format!("{}_{}{}", sanitized_name, workflow_id, file_extension);
+                let _ = tokio::fs::rename(&temp_path, &final_path).await;
+                info!("Saved workflow spec to: {}", final_path);
+            } else {
+                // Couldn't extract workflow ID, delete temp file
+                let _ = tokio::fs::remove_file(&temp_path).await;
+            }
+        } else {
+            // Creation failed, delete temp file
+            let _ = tokio::fs::remove_file(&temp_path).await;
+        }
+
         result
     };
-
-    // Save the workflow spec to a file if creation was successful and spec was inline
-    if result.success && is_inline {
-        let workflow_id = extract_workflow_id(&result.stdout);
-        save_workflow_spec(&spec_content, workflow_id.as_deref(), file_extension).await;
-    }
 
     Json(result)
 }
@@ -752,7 +724,6 @@ async fn cli_create_slurm_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateSlurmRequest>,
 ) -> impl IntoResponse {
-    let is_inline = !req.is_file;
     let spec_content = req.spec.clone();
 
     // Validate file extension to prevent path traversal attacks
@@ -772,44 +743,72 @@ async fn cli_create_slurm_handler(
         }
     };
 
-    // Build command args
-    let mut args = vec!["workflows", "create-slurm", "--account", &req.account];
-
-    // Add profile if specified
-    let profile_arg;
-    if let Some(ref profile) = req.profile {
-        profile_arg = profile.clone();
-        args.push("--hpc-profile");
-        args.push(&profile_arg);
-    }
-
     let result = if req.is_file {
-        // Spec is a file path - add it to args
+        // Spec is a file path
+        let mut args = vec!["workflows", "create-slurm", "--account", &req.account];
+        if let Some(ref profile) = req.profile {
+            args.push("--hpc-profile");
+            args.push(profile);
+        }
         args.push(&req.spec);
         run_torc_command(&state.torc_bin, &args, &state.api_url).await
     } else {
-        // Spec is inline content - write to temp file with correct extension
+        // Spec is inline content - write to current directory with random name
         let unique_id = uuid::Uuid::new_v4();
-        let temp_path = format!("/tmp/torc_spec_{}{}", unique_id, file_extension);
-        if let Err(e) = tokio::fs::write(&temp_path, &req.spec).await {
+        let temp_path = format!("torc_spec_{}{}", unique_id, file_extension);
+        if let Err(e) = tokio::fs::write(&temp_path, &spec_content).await {
             return Json(CliResponse {
                 success: false,
                 stdout: String::new(),
-                stderr: format!("Failed to write temp file: {}", e),
+                stderr: format!("Failed to write spec file: {}", e),
                 exit_code: None,
             });
         }
+
+        let mut args = vec!["workflows", "create-slurm", "--account", &req.account];
+        if let Some(ref profile) = req.profile {
+            args.push("--hpc-profile");
+            args.push(profile);
+        }
         args.push(&temp_path);
+
         let result = run_torc_command(&state.torc_bin, &args, &state.api_url).await;
-        let _ = tokio::fs::remove_file(&temp_path).await;
+
+        // Rename file to final name if creation was successful, otherwise delete it
+        if result.success {
+            if let Some(workflow_id) = extract_workflow_id(&result.stdout) {
+                // Parse spec to get workflow name for final filename
+                let workflow_name = serde_json::from_str::<serde_json::Value>(&spec_content)
+                    .ok()
+                    .and_then(|spec| spec.get("name").and_then(|v| v.as_str()).map(String::from))
+                    .unwrap_or_else(|| "workflow".to_string());
+
+                // Sanitize the workflow name for use as a filename
+                let sanitized_name: String = workflow_name
+                    .chars()
+                    .map(|c| {
+                        if c.is_alphanumeric() || c == '-' || c == '_' {
+                            c
+                        } else {
+                            '_'
+                        }
+                    })
+                    .collect();
+
+                let final_path = format!("{}_{}{}", sanitized_name, workflow_id, file_extension);
+                let _ = tokio::fs::rename(&temp_path, &final_path).await;
+                info!("Saved workflow spec to: {}", final_path);
+            } else {
+                // Couldn't extract workflow ID, delete temp file
+                let _ = tokio::fs::remove_file(&temp_path).await;
+            }
+        } else {
+            // Creation failed, delete temp file
+            let _ = tokio::fs::remove_file(&temp_path).await;
+        }
+
         result
     };
-
-    // Save the workflow spec to a file if creation was successful and spec was inline
-    if result.success && is_inline {
-        let workflow_id = extract_workflow_id(&result.stdout);
-        save_workflow_spec(&spec_content, workflow_id.as_deref(), file_extension).await;
-    }
 
     Json(result)
 }
