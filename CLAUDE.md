@@ -316,6 +316,33 @@ performance reasons.
 4. Update client API in `src/client/apis/`
 5. Add CLI command handler if needed in `src/client/commands/`
 
+### Adding a New CLI Subcommand
+
+For a new subcommand (e.g., `torc workflows correct-resources`):
+
+1. **Implement handler function** in `src/client/commands/{module}.rs`
+   - Follow existing pattern from other commands in the same file
+   - Use `#[command(...)]` attributes for clap configuration
+
+2. **Add to enum variant** in the `#[derive(Subcommand)]` enum
+   - Add field struct with `#[arg(...)]` attributes for options/flags
+   - Use `#[command(name = "...")]` to set the subcommand name
+
+3. **Update help template** (if applicable)
+   - For `workflows` commands: Update `WORKFLOWS_HELP_TEMPLATE` constant at top of file
+   - Add entry to the appropriate category with description (format: `command_name   Description`)
+   - Use ANSI color codes for consistency: `\x1b[1;36m` for command, `\x1b[1;32m` for category
+
+4. **Remove `hide = true`** if command should be visible
+   - Default behavior shows command in help unless explicitly hidden
+
+5. **Add well-formatted help text** in `#[command(...)]` attribute
+   - Use `after_long_help = "..."` for detailed examples
+   - Examples are shown when user runs `torc workflows command-name --help`
+
+6. **Wire up in match statement**
+   - Add case in the match block that calls your handler function (usually around line 3400+)
+
 ### Creating a Workflow from Specification
 
 1. Write workflow spec file (JSON/JSON5/YAML) following `WorkflowSpec` format
@@ -448,9 +475,11 @@ unified CLI.
 - `torc submit-slurm --account <account> <spec_file>` - Submit with auto-generated Slurm schedulers
 - `torc tui` - Interactive terminal UI
 
-**Utilities**:
+**Reports & Analysis**:
 
-- `torc reports <subcommand>` - Generate reports
+- `torc reports check-resource-utilization <id>` - Check which jobs exceeded resource limits
+- `torc reports results <id>` - Get detailed job execution results
+- `torc reports summary <id>` - Get workflow completion summary
 
 **Global Options** (available on all commands):
 

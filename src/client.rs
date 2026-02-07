@@ -13,6 +13,7 @@ pub mod apis;
 pub mod async_cli_command;
 pub mod commands;
 pub mod errors;
+pub mod resource_correction;
 
 // Re-export config from the top-level module for backwards compatibility
 #[cfg(feature = "config")]
@@ -50,7 +51,7 @@ pub use workflow_spec::{
 
 // Report model types for inter-command data sharing
 pub use report_models::{
-    FailedJobInfo, JobResultRecord, ResourceUtilizationReport, ResourceViolation, ResultsReport,
+    JobResultRecord, ResourceUtilizationReport, ResourceViolation, ResultsReport,
 };
 
 // Version checking utilities

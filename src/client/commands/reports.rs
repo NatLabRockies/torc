@@ -10,7 +10,8 @@ use crate::client::log_paths::{
     get_slurm_job_runner_log_file, get_slurm_stderr_path, get_slurm_stdout_path,
 };
 use crate::client::report_models::{
-    FailedJobInfo, JobResultRecord, ResourceUtilizationReport, ResourceViolation, ResultsReport,
+    JobResultRecord, ResourceUtilizationReport, ResourceViolation, ResourceViolationInfo,
+    ResultsReport,
 };
 use crate::models;
 use crate::time_utils::duration_string_to_seconds;
@@ -92,6 +93,9 @@ EXAMPLES:
         /// Include failed and terminated jobs in the analysis (for recovery diagnostics)
         #[arg(long)]
         include_failed: bool,
+        /// Minimum over-utilization percentage to flag as violation (default: 1.0%)
+        #[arg(long, default_value = "1.0")]
+        min_over_utilization: f64,
     },
     /// Generate a comprehensive JSON report of job results including all log file paths
     #[command(after_long_help = "\
@@ -135,6 +139,7 @@ pub fn handle_report_commands(config: &Configuration, command: &ReportCommands, 
             run_id,
             all,
             include_failed,
+            min_over_utilization,
         } => {
             check_resource_utilization(
                 config,
@@ -142,6 +147,7 @@ pub fn handle_report_commands(config: &Configuration, command: &ReportCommands, 
                 *run_id,
                 *all,
                 *include_failed,
+                *min_over_utilization,
                 format,
             );
         }
@@ -165,6 +171,7 @@ fn check_resource_utilization(
     run_id: Option<i64>,
     show_all: bool,
     include_failed: bool,
+    min_over_utilization: f64,
     format: &str,
 ) {
     // Get or select workflow ID
@@ -282,7 +289,7 @@ fn check_resource_utilization(
     // Analyze each result
     let mut rows = Vec::new();
     let mut over_util_count = 0;
-    let mut failed_jobs_info: Vec<FailedJobInfo> = Vec::new();
+    let mut resource_violations_info: Vec<ResourceViolationInfo> = Vec::new();
 
     for result in &results {
         let job_id = result.job_id;
@@ -329,6 +336,9 @@ fn check_resource_utilization(
             let mut likely_timeout = false;
             let mut timeout_reason: Option<String> = None;
             let mut runtime_utilization: Option<String> = None;
+            let mut likely_cpu_violation = false;
+            let mut peak_cpu_percent_val: Option<f64> = None;
+            let mut likely_runtime_violation = false;
 
             let peak_memory_bytes = result.peak_memory_bytes;
             let peak_memory_formatted = peak_memory_bytes.map(format_memory_bytes);
@@ -365,6 +375,11 @@ fn check_resource_utilization(
                     likely_timeout = true;
                     timeout_reason = Some("sigxcpu_152".to_string());
                 }
+
+                // Check for runtime violation: job ran longer than allocated time
+                if exec_time_seconds > specified_runtime_seconds {
+                    likely_runtime_violation = true;
+                }
             }
 
             // Check for OOM via return code 137 (128 + SIGKILL)
@@ -392,7 +407,18 @@ fn check_resource_utilization(
                 }
             }
 
-            failed_jobs_info.push(FailedJobInfo {
+            // Check CPU over-utilization
+            if let Some(peak_cpu_percent) = result.peak_cpu_percent {
+                peak_cpu_percent_val = Some(peak_cpu_percent);
+                let num_cpus = resource_req.num_cpus;
+                let specified_cpu_percent = 100.0 * num_cpus as f64; // 100% per CPU
+
+                if peak_cpu_percent > specified_cpu_percent {
+                    likely_cpu_violation = true;
+                }
+            }
+
+            resource_violations_info.push(ResourceViolationInfo {
                 job_id,
                 job_name: job_name.clone(),
                 return_code: result.return_code,
@@ -408,6 +434,9 @@ fn check_resource_utilization(
                 likely_timeout,
                 timeout_reason,
                 runtime_utilization,
+                likely_cpu_violation,
+                peak_cpu_percent: peak_cpu_percent_val,
+                likely_runtime_violation,
             });
         }
 
@@ -415,17 +444,19 @@ fn check_resource_utilization(
         if let Some(peak_memory_bytes) = result.peak_memory_bytes {
             let specified_memory_bytes = parse_memory_string(&resource_req.memory);
             if peak_memory_bytes > specified_memory_bytes {
-                over_util_count += 1;
                 let over_pct =
                     ((peak_memory_bytes as f64 / specified_memory_bytes as f64) - 1.0) * 100.0;
-                rows.push(ResourceUtilizationRow {
-                    job_id,
-                    job_name: job_name.clone(),
-                    resource_type: "Memory".to_string(),
-                    specified: format_memory_bytes(specified_memory_bytes),
-                    peak_used: format_memory_bytes(peak_memory_bytes),
-                    over_utilization: format!("+{:.1}%", over_pct),
-                });
+                if over_pct >= min_over_utilization {
+                    over_util_count += 1;
+                    rows.push(ResourceUtilizationRow {
+                        job_id,
+                        job_name: job_name.clone(),
+                        resource_type: "Memory".to_string(),
+                        specified: format_memory_bytes(specified_memory_bytes),
+                        peak_used: format_memory_bytes(peak_memory_bytes),
+                        over_utilization: format!("+{:.1}%", over_pct),
+                    });
+                }
             } else if show_all {
                 let under_pct =
                     (1.0 - (peak_memory_bytes as f64 / specified_memory_bytes as f64)) * 100.0;
@@ -447,16 +478,18 @@ fn check_resource_utilization(
             let specified_cpu_percent = 100.0 * num_cpus as f64; // 100% per CPU
 
             if peak_cpu_percent > specified_cpu_percent {
-                over_util_count += 1;
                 let over_pct = ((peak_cpu_percent / specified_cpu_percent) - 1.0) * 100.0;
-                rows.push(ResourceUtilizationRow {
-                    job_id,
-                    job_name: job_name.clone(),
-                    resource_type: "CPU".to_string(),
-                    specified: format!("{:.0}% ({} cores)", specified_cpu_percent, num_cpus),
-                    peak_used: format!("{:.1}%", peak_cpu_percent),
-                    over_utilization: format!("+{:.1}%", over_pct),
-                });
+                if over_pct >= min_over_utilization {
+                    over_util_count += 1;
+                    rows.push(ResourceUtilizationRow {
+                        job_id,
+                        job_name: job_name.clone(),
+                        resource_type: "CPU".to_string(),
+                        specified: format!("{:.0}% ({} cores)", specified_cpu_percent, num_cpus),
+                        peak_used: format!("{:.1}%", peak_cpu_percent),
+                        over_utilization: format!("+{:.1}%", over_pct),
+                    });
+                }
             } else if show_all {
                 let under_pct = (1.0 - (peak_cpu_percent / specified_cpu_percent)) * 100.0;
                 rows.push(ResourceUtilizationRow {
@@ -481,16 +514,18 @@ fn check_resource_utilization(
         };
 
         if exec_time_seconds > specified_runtime_seconds {
-            over_util_count += 1;
             let over_pct = ((exec_time_seconds / specified_runtime_seconds) - 1.0) * 100.0;
-            rows.push(ResourceUtilizationRow {
-                job_id,
-                job_name: job_name.clone(),
-                resource_type: "Runtime".to_string(),
-                specified: format_duration(specified_runtime_seconds),
-                peak_used: format_duration(exec_time_seconds),
-                over_utilization: format!("+{:.1}%", over_pct),
-            });
+            if over_pct >= min_over_utilization {
+                over_util_count += 1;
+                rows.push(ResourceUtilizationRow {
+                    job_id,
+                    job_name: job_name.clone(),
+                    resource_type: "Runtime".to_string(),
+                    specified: format_duration(specified_runtime_seconds),
+                    peak_used: format_duration(exec_time_seconds),
+                    over_utilization: format!("+{:.1}%", over_pct),
+                });
+            }
         } else if show_all {
             let under_pct = (1.0 - (exec_time_seconds / specified_runtime_seconds)) * 100.0;
             rows.push(ResourceUtilizationRow {
@@ -523,8 +558,8 @@ fn check_resource_utilization(
                         over_utilization: r.over_utilization.clone(),
                     })
                     .collect(),
-                failed_jobs_count: failed_jobs_info.len(),
-                failed_jobs: failed_jobs_info,
+                resource_violations_count: resource_violations_info.len(),
+                resource_violations: resource_violations_info,
             };
 
             print_json(&report, "resource utilization");
@@ -550,6 +585,12 @@ fn check_resource_utilization(
                     );
                 }
                 display_table_with_count(&rows, "violations");
+
+                // Print command to run correct-resources
+                eprintln!(
+                    "\nTo automatically correct these violations, run:\n  torc workflows correct-resources {}",
+                    wf_id
+                );
 
                 if !show_all {
                     println!(

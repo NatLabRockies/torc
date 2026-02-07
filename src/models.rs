@@ -9748,6 +9748,16 @@ pub struct WorkflowModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub use_pending_failed: Option<bool>,
 
+    /// Project name or identifier for grouping workflows
+    #[serde(rename = "project")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+
+    /// Arbitrary metadata as JSON string
+    #[serde(rename = "metadata")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<String>,
+
     #[serde(rename = "status_id")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status_id: Option<i64>,
@@ -9771,6 +9781,8 @@ impl WorkflowModel {
             resource_monitor_config: None,
             slurm_defaults: None,
             use_pending_failed: Some(false),
+            project: None,
+            metadata: None,
             status_id: None,
         }
     }
@@ -9882,6 +9894,8 @@ impl std::str::FromStr for WorkflowModel {
             pub resource_monitor_config: Vec<String>,
             pub slurm_defaults: Vec<String>,
             pub use_pending_failed: Vec<bool>,
+            pub project: Vec<String>,
+            pub metadata: Vec<String>,
             pub status_id: Vec<i64>,
         }
 
@@ -9955,6 +9969,12 @@ impl std::str::FromStr for WorkflowModel {
                     "use_pending_failed" => intermediate_rep.use_pending_failed.push(
                         <bool as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
                     ),
+                    "project" => intermediate_rep.project.push(
+                        <String as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
+                    ),
+                    "metadata" => intermediate_rep.metadata.push(
+                        <String as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
+                    ),
                     _ => {
                         return std::result::Result::Err(
                             "Unexpected key while parsing WorkflowModel".to_string(),
@@ -10006,6 +10026,8 @@ impl std::str::FromStr for WorkflowModel {
             resource_monitor_config: intermediate_rep.resource_monitor_config.into_iter().next(),
             slurm_defaults: intermediate_rep.slurm_defaults.into_iter().next(),
             use_pending_failed: intermediate_rep.use_pending_failed.into_iter().next(),
+            project: intermediate_rep.project.into_iter().next(),
+            metadata: intermediate_rep.metadata.into_iter().next(),
             status_id: intermediate_rep.status_id.into_iter().next(),
         })
     }

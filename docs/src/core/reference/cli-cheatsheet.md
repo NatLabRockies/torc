@@ -43,6 +43,7 @@
 | `torc watch <id> --recover --auto-schedule`    | Full production recovery mode                 |
 | `torc workflows sync-status <id>`              | Fix orphaned jobs (stuck in "running")        |
 | `torc reports check-resource-utilization <id>` | Check memory/CPU/time usage                   |
+| `torc workflows correct-resources <id>`        | Auto-correct resource requirements            |
 | `torc reports summary <id>`                    | Workflow completion summary                   |
 | `torc reports results <id>`                    | JSON report of job results with log paths     |
 | `torc slurm sacct <wf_id>`                     | Get Slurm accounting data                     |

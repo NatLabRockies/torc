@@ -256,8 +256,8 @@ pub fn check_resource_utilization(
             .get("over_utilization_count")
             .and_then(|v| v.as_i64())
             .unwrap_or(0);
-        let failed_count = json
-            .get("failed_jobs")
+        let resource_violations_count = json
+            .get("resource_violations")
             .and_then(|v| v.as_array())
             .map(|a| a.len())
             .unwrap_or(0);
@@ -265,14 +265,13 @@ pub fn check_resource_utilization(
         if over_count > 0 {
             response.push_str("\n\n[RECOVERABLE RESOURCE ISSUES DETECTED!");
             response.push_str(&format!(
-                "\n{} job(s) exceeded resource limits (OOM or timeout).",
+                "\n{} job(s) exceeded their resource allocations.",
                 over_count
             ));
-            if failed_count > 0 && (over_count as usize) > failed_count {
+            if resource_violations_count > 0 {
                 response.push_str(&format!(
-                    "\nOnly {} have failed so far, but {} more will likely fail without fixes.",
-                    failed_count,
-                    (over_count as usize) - failed_count
+                    "\n{} resource violations detected (jobs may have multiple violations).",
+                    resource_violations_count
                 ));
             }
             response

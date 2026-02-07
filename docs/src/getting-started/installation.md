@@ -73,13 +73,16 @@ Or add to your `~/.bashrc` for persistence:
 echo 'export PATH="/scratch/dthom/torc/latest:$PATH"' >> ~/.bashrc
 ```
 
-**Shared server**: A `torc-server` instance runs on a dedicated VM within the Kestrel environment.
-Contact Daniel Thom for access credentials and the server URL. Once you have access:
+**Shared server**: A `torc-server` instance runs on a dedicated VM within the Kestrel environment at
+`torc.hpc.nrel.gov`. Contact Daniel Thom if you would like to create an access group to store
+private workflows for your team.
 
 ```bash
-export TORC_API_URL="http://<server-address>/torc-service/v1"
-export TORC_PASSWORD="<your-password>"
+export TORC_API_URL="http://torc.hpc.nrel.gov:8080/torc-service/v1"
 ```
+
+**Note:** Be mindful of how much data you store in this database. Delete workflows that you don't
+need any longer. Refer to `torc workflows export --help` for making backups of your workflows.
 
 ## Building from Source
 

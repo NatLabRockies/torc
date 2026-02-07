@@ -5992,6 +5992,12 @@ components:
         timestamp:
           description: Timestamp of workflow creation
           type: string
+        project:
+          description: Project name or identifier for grouping workflows
+          type: string
+        metadata:
+          description: Arbitrary metadata as JSON string
+          type: string
 
         compute_node_expiration_buffer_seconds:
           default: 180

@@ -14,8 +14,8 @@ use crate::client::apis::configuration::Configuration;
 use crate::client::apis::default_api;
 use crate::client::commands::slurm::RegenerateDryRunResult;
 use crate::client::report_models::{ResourceUtilizationReport, ResultsReport};
+use crate::client::resource_correction::{ResourceAdjustmentReport, apply_resource_corrections};
 use crate::models::JobStatus;
-use crate::time_utils::duration_string_to_seconds;
 
 /// Arguments for workflow recovery
 pub struct RecoverArgs {
@@ -49,36 +49,6 @@ pub struct RecoveryResult {
     pub slurm_dry_run: Option<RegenerateDryRunResult>,
 }
 
-/// Detailed report of a resource adjustment for JSON output
-#[derive(Debug, Clone, Serialize)]
-pub struct ResourceAdjustmentReport {
-    /// The resource_requirements_id being adjusted
-    pub resource_requirements_id: i64,
-    /// Job IDs that share this resource requirement
-    pub job_ids: Vec<i64>,
-    /// Job names for reference
-    pub job_names: Vec<String>,
-    /// Whether memory was adjusted
-    pub memory_adjusted: bool,
-    /// Original memory setting
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub original_memory: Option<String>,
-    /// New memory setting
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub new_memory: Option<String>,
-    /// Maximum peak memory observed (bytes)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_peak_memory_bytes: Option<u64>,
-    /// Whether runtime was adjusted
-    pub runtime_adjusted: bool,
-    /// Original runtime setting
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub original_runtime: Option<String>,
-    /// New runtime setting
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub new_runtime: Option<String>,
-}
-
 /// Full recovery report for JSON output
 #[derive(Debug, Clone, Serialize)]
 pub struct RecoveryReport {
@@ -98,56 +68,6 @@ pub struct SlurmLogInfo {
     pub slurm_job_id: Option<String>,
     pub slurm_stdout: Option<String>,
     pub slurm_stderr: Option<String>,
-}
-
-/// Parse memory string (e.g., "8g", "512m", "1024k") to bytes
-pub fn parse_memory_bytes(mem: &str) -> Option<u64> {
-    let mem = mem.trim().to_lowercase();
-    let (num_str, multiplier) = if mem.ends_with("gb") {
-        (mem.trim_end_matches("gb"), 1024u64 * 1024 * 1024)
-    } else if mem.ends_with("g") {
-        (mem.trim_end_matches("g"), 1024u64 * 1024 * 1024)
-    } else if mem.ends_with("mb") {
-        (mem.trim_end_matches("mb"), 1024u64 * 1024)
-    } else if mem.ends_with("m") {
-        (mem.trim_end_matches("m"), 1024u64 * 1024)
-    } else if mem.ends_with("kb") {
-        (mem.trim_end_matches("kb"), 1024u64)
-    } else if mem.ends_with("k") {
-        (mem.trim_end_matches("k"), 1024u64)
-    } else {
-        (mem.as_str(), 1u64)
-    };
-    num_str
-        .parse::<f64>()
-        .ok()
-        .map(|n| (n * multiplier as f64) as u64)
-}
-
-/// Format bytes to memory string (e.g., "12g", "512m")
-pub fn format_memory_bytes_short(bytes: u64) -> String {
-    if bytes >= 1024 * 1024 * 1024 {
-        format!("{}g", bytes / (1024 * 1024 * 1024))
-    } else if bytes >= 1024 * 1024 {
-        format!("{}m", bytes / (1024 * 1024))
-    } else if bytes >= 1024 {
-        format!("{}k", bytes / 1024)
-    } else {
-        format!("{}b", bytes)
-    }
-}
-
-/// Format seconds to ISO8601 duration (e.g., "PT2H30M")
-pub fn format_duration_iso8601(secs: u64) -> String {
-    let hours = secs / 3600;
-    let mins = (secs % 3600) / 60;
-    if hours > 0 && mins > 0 {
-        format!("PT{}H{}M", hours, mins)
-    } else if hours > 0 {
-        format!("PT{}H", hours)
-    } else {
-        format!("PT{}M", mins.max(1))
-    }
 }
 
 /// Recover a Slurm workflow by:
@@ -790,48 +710,23 @@ fn correlate_slurm_logs(
         }
     }
 
-    // Filter to only failed jobs
+    // Filter to only resource violations
     let mut failed_log_map = HashMap::new();
-    for failed_job in &diagnosis.failed_jobs {
-        if let Some(log_info) = log_map.remove(&failed_job.job_id) {
-            failed_log_map.insert(failed_job.job_id, log_info);
+    for violation in &diagnosis.resource_violations {
+        if let Some(log_info) = log_map.remove(&violation.job_id) {
+            failed_log_map.insert(violation.job_id, log_info);
         }
     }
 
     failed_log_map
 }
 
-/// Aggregated resource adjustment data for a single resource_requirements_id.
-/// When multiple jobs share the same resource requirements, we take the maximum
-/// peak memory and runtime to ensure all jobs can succeed on retry.
-#[derive(Debug)]
-struct ResourceAdjustment {
-    /// The resource_requirements_id
-    rr_id: i64,
-    /// Job IDs that share this resource requirement and need retry
-    job_ids: Vec<i64>,
-    /// Job names for logging
-    job_names: Vec<String>,
-    /// Maximum peak memory observed across all OOM jobs (in bytes)
-    max_peak_memory_bytes: Option<u64>,
-    /// Whether any job had OOM without peak data (fall back to multiplier)
-    has_oom_without_peak: bool,
-    /// Whether any job had a timeout
-    has_timeout: bool,
-    /// Current memory setting (for fallback calculation)
-    current_memory: String,
-    /// Current runtime setting
-    current_runtime: String,
-}
-
 /// Apply recovery heuristics and update job resources
 ///
 /// If `dry_run` is true, shows what would be done without making changes.
 ///
-/// When multiple jobs share the same `resource_requirements_id`, this function
-/// finds the maximum peak memory across all OOM jobs in that group and applies
-/// that (with multiplier) to the shared resource requirement. This ensures all
-/// jobs in the group can succeed on retry.
+/// This function combines recovery-specific logic (Slurm logs, retry_unknown handling)
+/// with the shared resource correction algorithm.
 #[allow(clippy::too_many_arguments)]
 pub fn apply_recovery_heuristics(
     config: &Configuration,
@@ -843,12 +738,7 @@ pub fn apply_recovery_heuristics(
     output_dir: &Path,
     dry_run: bool,
 ) -> Result<RecoveryResult, String> {
-    let mut oom_fixed = 0;
-    let mut timeout_fixed = 0;
-    let mut other_failures = 0;
-    let mut jobs_to_retry = Vec::new();
-
-    // Try to get Slurm log info for correlation
+    // Try to get Slurm log info for correlation and logging
     let slurm_log_map = match get_slurm_log_info(workflow_id, output_dir) {
         Ok(slurm_info) => {
             let log_map = correlate_slurm_logs(diagnosis, &slurm_info);
@@ -863,262 +753,60 @@ pub fn apply_recovery_heuristics(
         }
     };
 
-    // Phase 1: Collect and aggregate data by resource_requirements_id
-    // This ensures that when multiple jobs share the same RR, we use the
-    // maximum peak memory across all of them.
-    let mut rr_adjustments: HashMap<i64, ResourceAdjustment> = HashMap::new();
-
-    for job_info in &diagnosis.failed_jobs {
-        let job_id = job_info.job_id;
-        let likely_oom = job_info.likely_oom;
-        let likely_timeout = job_info.likely_timeout;
-
-        // Log Slurm info if available
-        if let Some(slurm_info) = slurm_log_map.get(&job_id)
+    // Log Slurm info for each resource violation if available
+    for violation in &diagnosis.resource_violations {
+        if let Some(slurm_info) = slurm_log_map.get(&violation.job_id)
             && let Some(slurm_job_id) = &slurm_info.slurm_job_id
         {
-            debug!("  Job {} ran in Slurm allocation {}", job_id, slurm_job_id);
+            debug!(
+                "  Job {} ran in Slurm allocation {}",
+                violation.job_id, slurm_job_id
+            );
         }
+    }
 
-        // Handle unknown failures (no OOM or timeout detected)
-        if !likely_oom && !likely_timeout {
+    // Count other failures for recovery report
+    let mut other_failures = 0;
+    let mut unknown_job_ids = Vec::new();
+
+    for violation in &diagnosis.resource_violations {
+        if !violation.likely_oom && !violation.likely_timeout {
             other_failures += 1;
             if retry_unknown {
-                jobs_to_retry.push(job_id);
+                unknown_job_ids.push(violation.job_id);
             }
-            continue;
-        }
-
-        // Get current job to find resource requirements
-        let job = match default_api::get_job(config, job_id) {
-            Ok(j) => j,
-            Err(e) => {
-                warn!("  Warning: couldn't get job {}: {}", job_id, e);
-                continue;
-            }
-        };
-
-        let rr_id = match job.resource_requirements_id {
-            Some(id) => id,
-            None => {
-                warn!("  Warning: job {} has no resource requirements", job_id);
-                other_failures += 1;
-                continue;
-            }
-        };
-
-        // Get or create the adjustment entry for this resource_requirements_id
-        let adjustment = rr_adjustments.entry(rr_id).or_insert_with(|| {
-            // Fetch current resource requirements (only once per rr_id)
-            let (current_memory, current_runtime) =
-                match default_api::get_resource_requirements(config, rr_id) {
-                    Ok(rr) => (rr.memory, rr.runtime),
-                    Err(e) => {
-                        warn!(
-                            "  Warning: couldn't get resource requirements {}: {}",
-                            rr_id, e
-                        );
-                        (String::new(), String::new())
-                    }
-                };
-            ResourceAdjustment {
-                rr_id,
-                job_ids: Vec::new(),
-                job_names: Vec::new(),
-                max_peak_memory_bytes: None,
-                has_oom_without_peak: false,
-                has_timeout: false,
-                current_memory,
-                current_runtime,
-            }
-        });
-
-        // Skip if we couldn't fetch the resource requirements
-        if adjustment.current_memory.is_empty() {
-            continue;
-        }
-
-        adjustment.job_ids.push(job_id);
-        adjustment.job_names.push(job.name.clone());
-
-        // Track OOM data
-        if likely_oom {
-            let peak_bytes = job_info
-                .peak_memory_bytes
-                .filter(|&v| v > 0)
-                .map(|v| v as u64);
-
-            if let Some(peak) = peak_bytes {
-                // Update max if this job used more memory
-                adjustment.max_peak_memory_bytes = Some(
-                    adjustment
-                        .max_peak_memory_bytes
-                        .map_or(peak, |current_max| current_max.max(peak)),
-                );
-            } else {
-                adjustment.has_oom_without_peak = true;
-            }
-        }
-
-        // Track timeout
-        if likely_timeout {
-            adjustment.has_timeout = true;
         }
     }
 
-    // Phase 2: Apply adjustments once per resource_requirements_id
-    let mut adjustment_reports = Vec::new();
+    // Call shared resource correction algorithm
+    let correction_result = apply_resource_corrections(
+        config,
+        workflow_id,
+        diagnosis,
+        memory_multiplier,
+        runtime_multiplier,
+        &[], // include_jobs empty means all jobs
+        dry_run,
+    )?;
 
-    for adjustment in rr_adjustments.values() {
-        let rr_id = adjustment.rr_id;
-        let mut updated = false;
-        let mut memory_adjusted = false;
-        let mut runtime_adjusted = false;
-        let mut original_memory = None;
-        let mut new_memory_str = None;
-        let mut original_runtime = None;
-        let mut new_runtime_str = None;
+    // Extract counts from shared result
+    let oom_fixed = correction_result.memory_corrections;
+    let timeout_fixed = correction_result.runtime_corrections;
 
-        // Fetch current resource requirements for update
-        let rr = match default_api::get_resource_requirements(config, rr_id) {
-            Ok(r) => r,
-            Err(e) => {
-                warn!(
-                    "  Warning: couldn't get resource requirements {}: {}",
-                    rr_id, e
-                );
-                continue;
-            }
-        };
-        let mut new_rr = rr.clone();
-
-        // Apply OOM fix using maximum peak memory across all jobs sharing this RR
-        if adjustment.max_peak_memory_bytes.is_some() || adjustment.has_oom_without_peak {
-            let new_bytes = if let Some(max_peak) = adjustment.max_peak_memory_bytes {
-                // Use the maximum observed peak memory * multiplier
-                (max_peak as f64 * memory_multiplier) as u64
-            } else if let Some(current_bytes) = parse_memory_bytes(&adjustment.current_memory) {
-                // Fall back to current specified * multiplier
-                (current_bytes as f64 * memory_multiplier) as u64
-            } else {
-                warn!(
-                    "  RR {}: OOM detected but couldn't determine new memory",
-                    rr_id
-                );
-                continue;
-            };
-
-            let new_memory = format_memory_bytes_short(new_bytes);
-            let job_count = adjustment.job_ids.len();
-
-            if let Some(max_peak) = adjustment.max_peak_memory_bytes {
-                if job_count > 1 {
-                    info!(
-                        "  {} job(s) with RR {}: OOM detected, max peak usage {} -> allocating {} ({}x)",
-                        job_count,
-                        rr_id,
-                        format_memory_bytes_short(max_peak),
-                        new_memory,
-                        memory_multiplier
-                    );
-                    debug!("    Jobs: {:?}", adjustment.job_names);
-                } else if let (Some(job_id), Some(job_name)) =
-                    (adjustment.job_ids.first(), adjustment.job_names.first())
-                {
-                    info!(
-                        "  Job {} ({}): OOM detected, peak usage {} -> allocating {} ({}x)",
-                        job_id,
-                        job_name,
-                        format_memory_bytes_short(max_peak),
-                        new_memory,
-                        memory_multiplier
-                    );
-                }
-            } else {
-                info!(
-                    "  {} job(s) with RR {}: OOM detected, increasing memory {} -> {} ({}x, no peak data)",
-                    job_count, rr_id, adjustment.current_memory, new_memory, memory_multiplier
-                );
-            }
-
-            // Track for JSON report
-            original_memory = Some(adjustment.current_memory.clone());
-            new_memory_str = Some(new_memory.clone());
-            memory_adjusted = true;
-
-            new_rr.memory = new_memory;
-            updated = true;
-            oom_fixed += adjustment.job_ids.len();
-        }
-
-        // Apply timeout fix
-        if adjustment.has_timeout
-            && let Ok(current_secs) = duration_string_to_seconds(&adjustment.current_runtime)
-        {
-            let new_secs = (current_secs as f64 * runtime_multiplier) as u64;
-            let new_runtime = format_duration_iso8601(new_secs);
-            let job_count = adjustment.job_ids.len();
-
-            if job_count > 1 {
-                info!(
-                    "  {} job(s) with RR {}: Timeout detected, increasing runtime {} -> {}",
-                    job_count, rr_id, adjustment.current_runtime, new_runtime
-                );
-            } else if let (Some(job_id), Some(job_name)) =
-                (adjustment.job_ids.first(), adjustment.job_names.first())
-            {
-                info!(
-                    "  Job {} ({}): Timeout detected, increasing runtime {} -> {}",
-                    job_id, job_name, adjustment.current_runtime, new_runtime
-                );
-            }
-
-            // Track for JSON report
-            original_runtime = Some(adjustment.current_runtime.clone());
-            new_runtime_str = Some(new_runtime.clone());
-            runtime_adjusted = true;
-
-            new_rr.runtime = new_runtime;
-            updated = true;
-            timeout_fixed += adjustment.job_ids.len();
-        }
-
-        // Update resource requirements if changed (only once per rr_id)
-        if updated {
-            if !dry_run
-                && let Err(e) = default_api::update_resource_requirements(config, rr_id, new_rr)
-            {
-                warn!(
-                    "  Warning: failed to update resource requirements {}: {}",
-                    rr_id, e
-                );
-            }
-            // All jobs sharing this RR should be retried
-            jobs_to_retry.extend(&adjustment.job_ids);
-
-            // Create adjustment report for JSON output
-            adjustment_reports.push(ResourceAdjustmentReport {
-                resource_requirements_id: rr_id,
-                job_ids: adjustment.job_ids.clone(),
-                job_names: adjustment.job_names.clone(),
-                memory_adjusted,
-                original_memory,
-                new_memory: new_memory_str,
-                max_peak_memory_bytes: adjustment.max_peak_memory_bytes,
-                runtime_adjusted,
-                original_runtime,
-                new_runtime: new_runtime_str,
-            });
-        }
+    // Combine jobs that need retry: those with corrected resources + unknown failures
+    let mut jobs_to_retry = Vec::new();
+    for adj in &correction_result.adjustments {
+        jobs_to_retry.extend(&adj.job_ids);
     }
+    jobs_to_retry.extend(&unknown_job_ids);
 
     Ok(RecoveryResult {
         oom_fixed,
         timeout_fixed,
-        unknown_retried: 0, // Will be set in recover_workflow if retry_unknown is true
+        unknown_retried: unknown_job_ids.len(),
         other_failures,
         jobs_to_retry,
-        adjustments: adjustment_reports,
+        adjustments: correction_result.adjustments,
         slurm_dry_run: None, // Set in recover_workflow dry_run block
     })
 }
@@ -1309,39 +997,4 @@ fn get_scheduler_dry_run(
     let stdout = String::from_utf8_lossy(&output.stdout);
     serde_json::from_str(&stdout)
         .map_err(|e| format!("Failed to parse slurm regenerate dry-run output: {}", e))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_memory_bytes() {
-        assert_eq!(parse_memory_bytes("1g"), Some(1024 * 1024 * 1024));
-        assert_eq!(parse_memory_bytes("2gb"), Some(2 * 1024 * 1024 * 1024));
-        assert_eq!(parse_memory_bytes("512m"), Some(512 * 1024 * 1024));
-        assert_eq!(parse_memory_bytes("256mb"), Some(256 * 1024 * 1024));
-        assert_eq!(parse_memory_bytes("1024k"), Some(1024 * 1024));
-        assert_eq!(parse_memory_bytes("1024kb"), Some(1024 * 1024));
-        assert_eq!(parse_memory_bytes("1024"), Some(1024));
-    }
-
-    #[test]
-    fn test_format_memory_bytes_short() {
-        assert_eq!(format_memory_bytes_short(1024 * 1024 * 1024), "1g");
-        assert_eq!(format_memory_bytes_short(2 * 1024 * 1024 * 1024), "2g");
-        assert_eq!(format_memory_bytes_short(512 * 1024 * 1024), "512m");
-        assert_eq!(format_memory_bytes_short(1024 * 1024), "1m");
-        assert_eq!(format_memory_bytes_short(1024), "1k");
-    }
-
-    #[test]
-    fn test_format_duration_iso8601() {
-        assert_eq!(format_duration_iso8601(3600), "PT1H");
-        assert_eq!(format_duration_iso8601(7200), "PT2H");
-        assert_eq!(format_duration_iso8601(5400), "PT1H30M");
-        assert_eq!(format_duration_iso8601(1800), "PT30M");
-        assert_eq!(format_duration_iso8601(60), "PT1M");
-        assert_eq!(format_duration_iso8601(30), "PT1M"); // Minimum 1 minute
-    }
 }

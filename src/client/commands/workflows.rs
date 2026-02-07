@@ -60,15 +60,17 @@ use crate::client::commands::workflow_export::{
     EXPORT_VERSION, ExportImportStats, IdMappings, WorkflowExport,
 };
 use crate::client::commands::{
-    get_env_user_name, print_error, select_workflow_interactively,
+    get_env_user_name, output::print_json_wrapped, print_error, select_workflow_interactively,
     table_format::display_table_with_count,
 };
 use crate::client::hpc::hpc_interface::HpcInterface;
 use crate::client::workflow_manager::WorkflowManager;
 use crate::client::workflow_spec::WorkflowSpec;
 use crate::config::TorcConfig;
+use crate::memory_utils::memory_string_to_bytes;
 use crate::models;
 use crate::models::JobStatus;
+use crate::time_utils::duration_string_to_seconds;
 use serde_json;
 use tabled::Tabled;
 
@@ -80,6 +82,10 @@ struct WorkflowTableRowNoUser {
     name: String,
     #[tabled(rename = "Description")]
     description: String,
+    #[tabled(rename = "Project")]
+    project: String,
+    #[tabled(rename = "Metadata")]
+    metadata: String,
     #[tabled(rename = "Timestamp")]
     timestamp: String,
 }
@@ -94,6 +100,10 @@ struct WorkflowTableRow {
     name: String,
     #[tabled(rename = "Description")]
     description: String,
+    #[tabled(rename = "Project")]
+    project: String,
+    #[tabled(rename = "Metadata")]
+    metadata: String,
     #[tabled(rename = "Timestamp")]
     timestamp: String,
 }
@@ -317,8 +327,7 @@ EXAMPLES:
     /// Update an existing workflow
     #[command(
         hide = true,
-        after_long_help = "\
-EXAMPLES:
+        after_long_help = r#"EXAMPLES:
     # Update workflow name
     torc workflows update 123 --name 'New Name'
 
@@ -327,7 +336,13 @@ EXAMPLES:
 
     # Transfer ownership
     torc workflows update 123 --owner-user newuser
-"
+
+    # Update project
+    torc workflows update 123 --project my-project
+
+    # Update metadata (pass JSON as string; use single quotes in shell)
+    torc workflows update 123 --metadata '{"key":"value","stage":"production"}'
+"#
     )]
     Update {
         /// ID of the workflow to update (optional - will prompt if not provided)
@@ -342,6 +357,12 @@ EXAMPLES:
         /// User that owns the workflow
         #[arg(long)]
         owner_user: Option<String>,
+        /// Project name or identifier
+        #[arg(long)]
+        project: Option<String>,
+        /// Metadata as JSON string
+        #[arg(long)]
+        metadata: Option<String>,
     },
     /// Cancel a workflow and all associated Slurm jobs. All state will be preserved and the
     /// workflow can be resumed after it is reinitialized.
@@ -561,6 +582,48 @@ EXAMPLES:
         #[arg(long)]
         no_prompts: bool,
     },
+    /// Correct resource requirements based on actual job usage (proactive optimization)
+    ///
+    /// Analyzes completed jobs and adjusts resource requirements to better match actual usage.
+    /// Unlike `torc recover`, this command does NOT reset or rerun jobs - it only updates
+    /// resource requirements for future runs.
+    #[command(
+        name = "correct-resources",
+        after_long_help = "\
+EXAMPLES:
+    # Preview corrections (dry-run)
+    torc workflows correct-resources 123 --dry-run
+
+    # Apply corrections to all over-utilized jobs
+    torc workflows correct-resources 123
+
+    # Apply corrections only to specific jobs
+    torc workflows correct-resources 123 --job-ids 45,67,89
+
+    # Use custom multipliers
+    torc workflows correct-resources 123 --memory-multiplier 1.5 --runtime-multiplier 1.4
+
+    # Output as JSON for programmatic use
+    torc -f json workflows correct-resources 123 --dry-run
+"
+    )]
+    CorrectResources {
+        /// ID of the workflow to analyze (optional - will prompt if not provided)
+        #[arg()]
+        workflow_id: Option<i64>,
+        /// Memory multiplier for jobs that exceeded memory (default: 1.2)
+        #[arg(long, default_value = "1.2")]
+        memory_multiplier: f64,
+        /// Runtime multiplier for jobs that exceeded runtime (default: 1.2)
+        #[arg(long, default_value = "1.2")]
+        runtime_multiplier: f64,
+        /// Only correct resource requirements for specific jobs (comma-separated IDs)
+        #[arg(long, value_delimiter = ',')]
+        job_ids: Option<Vec<i64>>,
+        /// Show what would be changed without applying (default: false)
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// Show the execution plan for a workflow specification or existing workflow
     #[command(
         hide = true,
@@ -736,6 +799,36 @@ EXAMPLES:
         #[arg(long)]
         dry_run: bool,
     },
+}
+
+/// Parse JSON string fields into objects for better JSON output formatting
+///
+/// Converts JSON string fields (resource_monitor_config, slurm_defaults, metadata)
+/// from string representations into actual JSON objects in the output.
+/// This improves readability in JSON output while keeping them as strings in the database.
+fn parse_json_fields(mut json: serde_json::Value) -> serde_json::Value {
+    // Parse resource_monitor_config if present
+    if let Some(config_str) = json["resource_monitor_config"].as_str()
+        && let Ok(config_obj) = serde_json::from_str::<serde_json::Value>(config_str)
+    {
+        json["resource_monitor_config"] = config_obj;
+    }
+
+    // Parse slurm_defaults if present
+    if let Some(defaults_str) = json["slurm_defaults"].as_str()
+        && let Ok(defaults_obj) = serde_json::from_str::<serde_json::Value>(defaults_str)
+    {
+        json["slurm_defaults"] = defaults_obj;
+    }
+
+    // Parse metadata if present
+    if let Some(metadata_str) = json["metadata"].as_str()
+        && let Ok(metadata_obj) = serde_json::from_str::<serde_json::Value>(metadata_str)
+    {
+        json["metadata"] = metadata_obj;
+    }
+
+    json
 }
 
 fn show_execution_plan_from_spec(file_path: &str, format: &str) {
@@ -1068,6 +1161,378 @@ fn handle_list_actions(
     }
 }
 
+/// Context for looking up jobs and their resource requirements
+///
+/// This struct centralizes job and resource requirement lookups to reduce
+/// repeated nested if-let chains throughout violation detection.
+struct ResourceLookupContext<'a> {
+    jobs: &'a [models::JobModel],
+    resource_requirements: &'a [models::ResourceRequirementsModel],
+}
+
+impl<'a> ResourceLookupContext<'a> {
+    fn new(
+        jobs: &'a [models::JobModel],
+        resource_requirements: &'a [models::ResourceRequirementsModel],
+    ) -> Self {
+        Self {
+            jobs,
+            resource_requirements,
+        }
+    }
+
+    fn find_job(&self, job_id: i64) -> Option<&models::JobModel> {
+        self.jobs.iter().find(|j| j.id == Some(job_id))
+    }
+
+    fn find_resource_requirements(&self, rr_id: i64) -> Option<&models::ResourceRequirementsModel> {
+        self.resource_requirements
+            .iter()
+            .find(|r| r.id == Some(rr_id))
+    }
+}
+
+/// Detect memory violation based on actual peak memory usage
+fn detect_memory_violation(
+    ctx: &ResourceLookupContext,
+    result: &models::ResultModel,
+    job: &models::JobModel,
+) -> bool {
+    if let Some(peak_mem) = result.peak_memory_bytes
+        && let Some(rr_id) = job.resource_requirements_id
+        && let Some(rr) = ctx.find_resource_requirements(rr_id)
+        && let Ok(specified_memory_bytes) = memory_string_to_bytes(&rr.memory)
+    {
+        peak_mem > specified_memory_bytes
+    } else {
+        false
+    }
+}
+
+/// Detect CPU violation based on actual peak CPU percentage
+fn detect_cpu_violation(
+    ctx: &ResourceLookupContext,
+    result: &models::ResultModel,
+    job: &models::JobModel,
+) -> bool {
+    if let Some(peak_cpu) = result.peak_cpu_percent
+        && let Some(rr_id) = job.resource_requirements_id
+        && let Some(rr) = ctx.find_resource_requirements(rr_id)
+    {
+        let configured_cpus = rr.num_cpus as f64;
+        let specified_cpu_percent = configured_cpus * 100.0;
+        peak_cpu > specified_cpu_percent
+    } else {
+        false
+    }
+}
+
+/// Detect runtime violation based on actual execution time
+fn detect_runtime_violation(
+    ctx: &ResourceLookupContext,
+    result: &models::ResultModel,
+    job: &models::JobModel,
+) -> bool {
+    if let Some(rr_id) = job.resource_requirements_id
+        && let Some(rr) = ctx.find_resource_requirements(rr_id)
+        && let Ok(specified_runtime_seconds) = duration_string_to_seconds(&rr.runtime)
+    {
+        let exec_time_seconds = result.exec_time_minutes * 60.0;
+        let specified_runtime_seconds = specified_runtime_seconds as f64;
+        exec_time_seconds > specified_runtime_seconds
+    } else {
+        false
+    }
+}
+
+/// Detect timeout based on return code
+fn detect_timeout(result: &models::ResultModel) -> bool {
+    result.return_code == 152
+}
+
+fn handle_correct_resources(
+    config: &Configuration,
+    workflow_id: &Option<i64>,
+    memory_multiplier: f64,
+    runtime_multiplier: f64,
+    job_ids: &Option<Vec<i64>>,
+    dry_run: bool,
+    format: &str,
+) {
+    use crate::client::report_models::ResourceUtilizationReport;
+    use crate::client::resource_correction::apply_resource_corrections;
+
+    let user_name = get_env_user_name();
+
+    let selected_workflow_id = match workflow_id {
+        Some(id) => *id,
+        None => select_workflow_interactively(config, &user_name).unwrap(),
+    };
+
+    if format != "json" {
+        if dry_run {
+            eprintln!(
+                "Analyzing and correcting resource requirements for workflow {} (dry-run mode)",
+                selected_workflow_id
+            );
+        } else {
+            eprintln!(
+                "Analyzing and correcting resource requirements for workflow {}",
+                selected_workflow_id
+            );
+        }
+    }
+
+    // Step 1: Fetch completed and failed results for diagnosis (uses latest run)
+    let params = ResultListParams::new().with_status(models::JobStatus::Completed);
+    let completed_results = match paginate_results(config, selected_workflow_id, params) {
+        Ok(results) => results,
+        Err(e) => {
+            if format == "json" {
+                let error_response = serde_json::json!({
+                    "status": "error",
+                    "message": format!("Failed to fetch completed results: {}", e),
+                    "workflow_id": selected_workflow_id
+                });
+                println!("{}", serde_json::to_string_pretty(&error_response).unwrap());
+            } else {
+                eprintln!("Error: Failed to fetch completed results: {}", e);
+            }
+            std::process::exit(1);
+        }
+    };
+
+    // Fetch failed results to analyze resource issues (uses latest run)
+    let failed_params = ResultListParams::new().with_status(models::JobStatus::Failed);
+    let failed_results =
+        paginate_results(config, selected_workflow_id, failed_params).unwrap_or_default();
+
+    let mut all_results = completed_results;
+    all_results.extend(failed_results);
+
+    if all_results.is_empty() {
+        if format == "json" {
+            let response = serde_json::json!({
+                "status": "success",
+                "workflow_id": selected_workflow_id,
+                "resource_requirements_updated": 0,
+                "jobs_analyzed": 0,
+                "message": "No completed jobs found"
+            });
+            println!("{}", serde_json::to_string_pretty(&response).unwrap());
+        } else {
+            println!(
+                "No completed jobs found for workflow {}",
+                selected_workflow_id
+            );
+        }
+        return;
+    }
+
+    // Step 2: Get jobs and resource requirements to build failed_jobs list
+    let jobs = match paginate_jobs(config, selected_workflow_id, JobListParams::new()) {
+        Ok(j) => j,
+        Err(e) => {
+            if format == "json" {
+                let error_response = serde_json::json!({
+                    "status": "error",
+                    "message": format!("Failed to fetch jobs: {}", e),
+                    "workflow_id": selected_workflow_id
+                });
+                println!("{}", serde_json::to_string_pretty(&error_response).unwrap());
+            } else {
+                eprintln!("Error: Failed to fetch jobs: {}", e);
+            }
+            std::process::exit(1);
+        }
+    };
+
+    // Fetch resource requirements to check CPU allocations
+    let resource_requirements = paginate_resource_requirements(
+        config,
+        selected_workflow_id,
+        ResourceRequirementsListParams::new(),
+    )
+    .unwrap_or_default();
+
+    // Build resource_violations list with violation detection
+    let ctx = ResourceLookupContext::new(&jobs, &resource_requirements);
+    let mut resource_violations = Vec::new();
+
+    for result in &all_results {
+        if let Some(job) = ctx.find_job(result.job_id) {
+            let likely_oom = detect_memory_violation(&ctx, result, job);
+            let likely_timeout = detect_timeout(result);
+            let likely_cpu_violation = detect_cpu_violation(&ctx, result, job);
+            let likely_runtime_violation = detect_runtime_violation(&ctx, result, job);
+
+            if likely_oom || likely_timeout || likely_cpu_violation || likely_runtime_violation {
+                let peak_memory_bytes = result.peak_memory_bytes;
+                let (configured_cpus, configured_memory, configured_runtime) =
+                    if let Some(rr_id) = job.resource_requirements_id {
+                        if let Some(rr) = ctx.find_resource_requirements(rr_id) {
+                            (rr.num_cpus, rr.memory.clone(), rr.runtime.clone())
+                        } else {
+                            (0, String::new(), String::new())
+                        }
+                    } else {
+                        (0, String::new(), String::new())
+                    };
+
+                let violation_info = crate::client::report_models::ResourceViolationInfo {
+                    job_id: result.job_id,
+                    job_name: job.name.clone(),
+                    return_code: result.return_code,
+                    exec_time_minutes: result.exec_time_minutes,
+                    configured_memory,
+                    configured_runtime,
+                    configured_cpus,
+                    peak_memory_bytes,
+                    peak_memory_formatted: None,
+                    likely_oom,
+                    oom_reason: if likely_oom {
+                        // Distinguish between actual OOM failure (137) vs memory violation in successful job
+                        if result.return_code == 137 {
+                            Some("sigkill_137".to_string())
+                        } else {
+                            Some("memory_exceeded".to_string())
+                        }
+                    } else {
+                        None
+                    },
+                    memory_over_utilization: None,
+                    likely_timeout,
+                    timeout_reason: if likely_timeout {
+                        Some("sigxcpu_152".to_string())
+                    } else {
+                        None
+                    },
+                    runtime_utilization: None,
+                    likely_cpu_violation,
+                    peak_cpu_percent: result.peak_cpu_percent,
+                    likely_runtime_violation,
+                };
+                resource_violations.push(violation_info);
+            }
+        }
+    }
+
+    if resource_violations.is_empty() {
+        if format == "json" {
+            let response = serde_json::json!({
+                "status": "success",
+                "workflow_id": selected_workflow_id,
+                "resource_requirements_updated": 0,
+                "jobs_analyzed": all_results.len(),
+                "message": "No jobs with over-utilization detected"
+            });
+            println!("{}", serde_json::to_string_pretty(&response).unwrap());
+        } else {
+            println!("No jobs with over-utilization (OOM/timeout/CPU) detected");
+        }
+        return;
+    }
+
+    // Create diagnosis report
+    let diagnosis = ResourceUtilizationReport {
+        workflow_id: selected_workflow_id,
+        run_id: None,
+        total_results: all_results.len(),
+        over_utilization_count: resource_violations.len(),
+        violations: Vec::new(),
+        resource_violations_count: resource_violations.len(),
+        resource_violations: resource_violations.clone(),
+    };
+
+    // Step 3: Apply resource corrections
+    let include_job_list = job_ids.as_deref().unwrap_or(&[]);
+
+    match apply_resource_corrections(
+        config,
+        selected_workflow_id,
+        &diagnosis,
+        memory_multiplier,
+        runtime_multiplier,
+        include_job_list,
+        dry_run,
+    ) {
+        Ok(result) => {
+            if format == "json" {
+                let response = serde_json::json!({
+                    "status": "success",
+                    "workflow_id": selected_workflow_id,
+                    "dry_run": dry_run,
+                    "memory_multiplier": memory_multiplier,
+                    "runtime_multiplier": runtime_multiplier,
+                    "resource_requirements_updated": result.resource_requirements_updated,
+                    "jobs_analyzed": result.jobs_analyzed,
+                    "memory_corrections": result.memory_corrections,
+                    "runtime_corrections": result.runtime_corrections,
+                    "adjustments": result.adjustments
+                });
+                println!("{}", serde_json::to_string_pretty(&response).unwrap());
+            } else {
+                // Print summary
+                println!();
+                println!("Resource Correction Summary:");
+                println!("  Workflow: {}", selected_workflow_id);
+                println!("  Jobs analyzed: {}", result.jobs_analyzed);
+                println!(
+                    "  Resource requirements updated: {}",
+                    result.resource_requirements_updated
+                );
+                println!("  Memory corrections: {}", result.memory_corrections);
+                println!("  Runtime corrections: {}", result.runtime_corrections);
+
+                // Print details if any corrections were made
+                if !result.adjustments.is_empty() {
+                    println!();
+                    println!("Adjustment Details:");
+                    for adj in &result.adjustments {
+                        println!(
+                            "  RR {}: {} job(s)",
+                            adj.resource_requirements_id,
+                            adj.job_ids.len()
+                        );
+                        if let (Some(old_mem), Some(new_mem)) =
+                            (&adj.original_memory, &adj.new_memory)
+                        {
+                            println!("    Memory: {} -> {}", old_mem, new_mem);
+                        }
+                        if let (Some(old_rt), Some(new_rt)) =
+                            (&adj.original_runtime, &adj.new_runtime)
+                        {
+                            println!("    Runtime: {} -> {}", old_rt, new_rt);
+                        }
+                    }
+                }
+
+                if dry_run {
+                    println!();
+                    println!("(dry-run mode - changes not applied)");
+                } else {
+                    println!();
+                    println!("Resource requirements updated successfully");
+                }
+            }
+        }
+        Err(e) => {
+            if format == "json" {
+                let error_response = serde_json::json!({
+                    "status": "error",
+                    "message": format!("Failed to apply resource corrections: {}", e),
+                    "workflow_id": selected_workflow_id
+                });
+                println!("{}", serde_json::to_string_pretty(&error_response).unwrap());
+            } else {
+                eprintln!("Error: Failed to apply resource corrections: {}", e);
+            }
+            std::process::exit(1);
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn handle_cancel(config: &Configuration, workflow_id: &Option<i64>, format: &str) {
     let user_name = get_env_user_name();
 
@@ -2066,14 +2531,8 @@ fn handle_delete(config: &Configuration, ids: &[i64], no_prompts: bool, format: 
         let json_array: Vec<_> = deleted_workflows
             .iter()
             .map(|wf| {
-                let mut json = serde_json::to_value(wf).unwrap();
-                // Parse resource_monitor_config from JSON string to object if present
-                if let Some(config_str) = &wf.resource_monitor_config
-                    && let Ok(config_obj) = serde_json::from_str::<serde_json::Value>(config_str)
-                {
-                    json["resource_monitor_config"] = config_obj;
-                }
-                json
+                let json = serde_json::to_value(wf).unwrap();
+                parse_json_fields(json)
             })
             .collect();
 
@@ -2115,12 +2574,18 @@ fn handle_delete(config: &Configuration, ids: &[i64], no_prompts: bool, format: 
     }
 }
 
+struct WorkflowUpdateFields {
+    name: Option<String>,
+    description: Option<String>,
+    owner_user: Option<String>,
+    project: Option<String>,
+    metadata: Option<String>,
+}
+
 fn handle_update(
     config: &Configuration,
     id: &Option<i64>,
-    name: &Option<String>,
-    description: &Option<String>,
-    owner_user: &Option<String>,
+    updates: &WorkflowUpdateFields,
     format: &str,
 ) {
     let user_name = get_env_user_name();
@@ -2133,29 +2598,28 @@ fn handle_update(
     match default_api::get_workflow(config, selected_id) {
         Ok(mut workflow) => {
             // Update fields that were provided
-            if let Some(new_name) = name {
+            if let Some(new_name) = &updates.name {
                 workflow.name = new_name.clone();
             }
-            if description.is_some() {
-                workflow.description = description.clone();
+            if updates.description.is_some() {
+                workflow.description = updates.description.clone();
             }
-            if let Some(new_user) = owner_user {
+            if let Some(new_user) = &updates.owner_user {
                 workflow.user = new_user.clone();
+            }
+            if updates.project.is_some() {
+                workflow.project = updates.project.clone();
+            }
+            if updates.metadata.is_some() {
+                workflow.metadata = updates.metadata.clone();
             }
 
             match default_api::update_workflow(config, selected_id, workflow) {
                 Ok(updated_workflow) => {
                     if format == "json" {
-                        // Convert workflow to JSON value, parsing resource_monitor_config if present
-                        let mut json = serde_json::to_value(&updated_workflow).unwrap();
-
-                        // Parse resource_monitor_config from JSON string to object if present
-                        if let Some(config_str) = &updated_workflow.resource_monitor_config
-                            && let Ok(config_obj) =
-                                serde_json::from_str::<serde_json::Value>(config_str)
-                        {
-                            json["resource_monitor_config"] = config_obj;
-                        }
+                        // Convert workflow to JSON value, parsing JSON string fields to objects
+                        let json = serde_json::to_value(&updated_workflow).unwrap();
+                        let json = parse_json_fields(json);
 
                         match serde_json::to_string_pretty(&json) {
                             Ok(json_str) => println!("{}", json_str),
@@ -2197,22 +2661,8 @@ fn handle_get(config: &Configuration, id: &Option<i64>, user: &str, format: &str
         Ok(workflow) => {
             if format == "json" {
                 // Convert workflow to JSON value, parsing JSON string fields to objects
-                let mut json = serde_json::to_value(&workflow).unwrap();
-
-                // Parse resource_monitor_config from JSON string to object if present
-                if let Some(config_str) = &workflow.resource_monitor_config
-                    && let Ok(config_obj) = serde_json::from_str::<serde_json::Value>(config_str)
-                {
-                    json["resource_monitor_config"] = config_obj;
-                }
-
-                // Parse slurm_defaults from JSON string to object if present
-                if let Some(defaults_str) = &workflow.slurm_defaults
-                    && let Ok(defaults_obj) =
-                        serde_json::from_str::<serde_json::Value>(defaults_str)
-                {
-                    json["slurm_defaults"] = defaults_obj;
-                }
+                let json = serde_json::to_value(&workflow).unwrap();
+                let json = parse_json_fields(json);
 
                 match serde_json::to_string_pretty(&json) {
                     Ok(json_str) => println!("{}", json_str),
@@ -2311,35 +2761,12 @@ fn handle_list(
                 let workflows_json: Vec<serde_json::Value> = workflows
                     .iter()
                     .map(|workflow| {
-                        let mut json = serde_json::to_value(workflow).unwrap();
-
-                        // Parse resource_monitor_config from JSON string to object if present
-                        if let Some(config_str) = &workflow.resource_monitor_config
-                            && let Ok(config_obj) =
-                                serde_json::from_str::<serde_json::Value>(config_str)
-                        {
-                            json["resource_monitor_config"] = config_obj;
-                        }
-
-                        // Parse slurm_defaults from JSON string to object if present
-                        if let Some(defaults_str) = &workflow.slurm_defaults
-                            && let Ok(defaults_obj) =
-                                serde_json::from_str::<serde_json::Value>(defaults_str)
-                        {
-                            json["slurm_defaults"] = defaults_obj;
-                        }
-
-                        json
+                        let json = serde_json::to_value(workflow).unwrap();
+                        parse_json_fields(json)
                     })
                     .collect();
 
-                match serde_json::to_string_pretty(&workflows_json) {
-                    Ok(json) => println!("{}", json),
-                    Err(e) => {
-                        eprintln!("Error serializing workflows to JSON: {}", e);
-                        std::process::exit(1);
-                    }
-                }
+                print_json_wrapped("workflows", &workflows_json, "workflows");
             } else if workflows.is_empty() {
                 if all_users {
                     println!("No workflows found.");
@@ -2355,6 +2782,8 @@ fn handle_list(
                         user: workflow.user.clone(),
                         name: workflow.name.clone(),
                         description: workflow.description.as_deref().unwrap_or("").to_string(),
+                        project: workflow.project.as_deref().unwrap_or("").to_string(),
+                        metadata: workflow.metadata.as_deref().unwrap_or("").to_string(),
                         timestamp: workflow.timestamp.as_deref().unwrap_or("").to_string(),
                     })
                     .collect();
@@ -2367,6 +2796,8 @@ fn handle_list(
                         id: workflow.id.unwrap_or(-1),
                         name: workflow.name.clone(),
                         description: workflow.description.as_deref().unwrap_or("").to_string(),
+                        project: workflow.project.as_deref().unwrap_or("").to_string(),
+                        metadata: workflow.metadata.as_deref().unwrap_or("").to_string(),
                         timestamp: workflow.timestamp.as_deref().unwrap_or("").to_string(),
                     })
                     .collect();
@@ -2393,15 +2824,9 @@ fn handle_new(
     match default_api::create_workflow(config, workflow) {
         Ok(created_workflow) => {
             if format == "json" {
-                // Convert workflow to JSON value, parsing resource_monitor_config if present
-                let mut json = serde_json::to_value(&created_workflow).unwrap();
-
-                // Parse resource_monitor_config from JSON string to object if present
-                if let Some(config_str) = &created_workflow.resource_monitor_config
-                    && let Ok(config_obj) = serde_json::from_str::<serde_json::Value>(config_str)
-                {
-                    json["resource_monitor_config"] = config_obj;
-                }
+                // Convert workflow to JSON value, parsing JSON string fields to objects
+                let json = serde_json::to_value(&created_workflow).unwrap();
+                let json = parse_json_fields(json);
 
                 match serde_json::to_string_pretty(&json) {
                     Ok(json_str) => println!("{}", json_str),
@@ -2979,8 +3404,17 @@ pub fn handle_workflow_commands(config: &Configuration, command: &WorkflowComman
             name,
             description,
             owner_user,
+            project,
+            metadata,
         } => {
-            handle_update(config, id, name, description, owner_user, format);
+            let updates = WorkflowUpdateFields {
+                name: name.clone(),
+                description: description.clone(),
+                owner_user: owner_user.clone(),
+                project: project.clone(),
+                metadata: metadata.clone(),
+            };
+            handle_update(config, id, &updates, format);
         }
         WorkflowCommands::Delete { ids, no_prompts } => {
             handle_delete(config, ids, *no_prompts, format);
@@ -3040,6 +3474,23 @@ pub fn handle_workflow_commands(config: &Configuration, command: &WorkflowComman
                 *reinitialize,
                 *force,
                 *no_prompts,
+                format,
+            );
+        }
+        WorkflowCommands::CorrectResources {
+            workflow_id,
+            memory_multiplier,
+            runtime_multiplier,
+            job_ids,
+            dry_run,
+        } => {
+            handle_correct_resources(
+                config,
+                workflow_id,
+                *memory_multiplier,
+                *runtime_multiplier,
+                job_ids,
+                *dry_run,
                 format,
             );
         }

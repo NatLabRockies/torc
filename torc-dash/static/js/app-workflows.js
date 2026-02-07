@@ -63,6 +63,7 @@ Object.assign(TorcDashboard.prototype, {
         const filtered = this.workflows.filter(w =>
             (w.name || '').toLowerCase().includes(lowerFilter) ||
             (w.user || '').toLowerCase().includes(lowerFilter) ||
+            (w.project || '').toLowerCase().includes(lowerFilter) ||
             String(w.id || '').toLowerCase().includes(lowerFilter) ||
             (w.description || '').toLowerCase().includes(lowerFilter)
         );
@@ -74,7 +75,7 @@ Object.assign(TorcDashboard.prototype, {
         if (!tbody) return;
 
         if (!workflows || workflows.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" class="placeholder-message">No workflows found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" class="placeholder-message">No workflows found</td></tr>';
             this.updateBulkActionBar();
             return;
         }
@@ -94,6 +95,7 @@ Object.assign(TorcDashboard.prototype, {
                 <td>${this.escapeHtml(workflow.name || 'Unnamed')}</td>
                 <td>${this.formatTimestamp(workflow.timestamp)}</td>
                 <td>${this.escapeHtml(workflow.user || '-')}</td>
+                <td>${this.escapeHtml(workflow.project || '-')}</td>
                 <td title="${this.escapeHtml(workflow.description || '')}">${this.escapeHtml(this.truncate(workflow.description || '-', 40))}</td>
                 <td class="actions-column" onclick="event.stopPropagation()">
                     <div class="action-buttons">

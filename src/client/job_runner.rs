@@ -73,7 +73,7 @@ use std::time::{Duration, Instant};
 use crate::client::apis::configuration::Configuration;
 use crate::client::apis::default_api;
 use crate::client::async_cli_command::AsyncCliCommand;
-use crate::client::commands::recover::format_duration_iso8601;
+use crate::client::resource_correction::format_duration_iso8601;
 use crate::client::resource_monitor::{ResourceMonitor, ResourceMonitorConfig};
 use crate::client::utils;
 use crate::config::TorcConfig;

@@ -12,6 +12,8 @@ The top-level container for a complete workflow definition.
 | `name`                                           | string                                                  | _required_   | Name of the workflow                                                      |
 | `user`                                           | string                                                  | current user | User who owns this workflow                                               |
 | `description`                                    | string                                                  | none         | Description of the workflow                                               |
+| `project`                                        | string                                                  | none         | Project name or identifier for grouping workflows                         |
+| `metadata`                                       | string                                                  | none         | Arbitrary metadata as JSON string                                         |
 | `parameters`                                     | map\<string, string\>                                   | none         | Shared parameters that can be used by jobs and files via `use_parameters` |
 | `jobs`                                           | [[JobSpec](#jobspec)]                                   | _required_   | Jobs that make up this workflow                                           |
 | `files`                                          | [[FileSpec](#filespec)]                                 | none         | Files associated with this workflow                                       |
@@ -28,6 +30,44 @@ The top-level container for a complete workflow definition.
 | `compute_node_ignore_workflow_completion`        | boolean                                                 | false        | Compute nodes hold allocations even after workflow completes              |
 | `compute_node_wait_for_healthy_database_minutes` | integer                                                 | none         | Compute nodes wait this many minutes for database recovery                |
 | `jobs_sort_method`                               | [ClaimJobsSortMethod](#claimjobssortmethod)             | `none`       | Method for sorting jobs when claiming them                                |
+
+### Examples with project and metadata
+
+The `project` and `metadata` fields are useful for organizing and categorizing workflows. For more
+detailed guidance on organizing workflows, see
+[Organizing and Managing Workflows](../workflows/organizing-workflows.md).
+
+**YAML example:**
+
+```yaml
+name: "ml_training_workflow"
+project: "customer-churn-prediction"
+metadata: '{"environment":"staging","version":"1.0.0","team":"ml-engineering"}'
+description: "Train and evaluate churn prediction model"
+jobs:
+  - name: "preprocess"
+    command: "python preprocess.py"
+  - name: "train"
+    command: "python train.py"
+    depends_on: ["preprocess"]
+```
+
+**JSON example:**
+
+```json
+{
+  "name": "data_pipeline",
+  "project": "analytics-platform",
+  "metadata": "{\"cost_center\":\"eng-data\",\"priority\":\"high\"}",
+  "description": "Daily data processing pipeline",
+  "jobs": [
+    {
+      "name": "extract",
+      "command": "python extract.py"
+    }
+  ]
+}
+```
 
 ## JobSpec
 

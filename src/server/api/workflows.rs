@@ -202,6 +202,9 @@ impl WorkflowsApiImpl {
                 ,w.jobs_sort_method
                 ,w.resource_monitor_config
                 ,w.slurm_defaults
+                ,w.use_pending_failed
+                ,w.project
+                ,w.metadata
                 ,w.status_id
             FROM workflow w
             INNER JOIN workflow_status ws ON w.status_id = ws.id
@@ -223,6 +226,9 @@ impl WorkflowsApiImpl {
                 ,jobs_sort_method
                 ,resource_monitor_config
                 ,slurm_defaults
+                ,use_pending_failed
+                ,project
+                ,metadata
                 ,status_id
             FROM workflow
             "
@@ -391,6 +397,8 @@ impl WorkflowsApiImpl {
                     .ok()
                     .flatten()
                     .map(|v| v != 0),
+                project: record.get("project"),
+                metadata: record.get("metadata"),
                 status_id: Some(record.get("status_id")),
             });
         }
@@ -556,9 +564,11 @@ where
                 resource_monitor_config,
                 slurm_defaults,
                 use_pending_failed,
+                project,
+                metadata,
                 status_id
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
             RETURNING rowid
             "#,
             body.name,
@@ -574,6 +584,8 @@ where
             body.resource_monitor_config,
             body.slurm_defaults,
             use_pending_failed_int,
+            body.project,
+            body.metadata,
             status_result[0].id,
         )
         .fetch_all(&mut *tx)
@@ -819,6 +831,8 @@ where
                     resource_monitor_config: row.resource_monitor_config,
                     slurm_defaults: row.slurm_defaults,
                     use_pending_failed: row.use_pending_failed.map(|v| v != 0),
+                    project: row.project,
+                    metadata: row.metadata,
                     status_id: Some(row.status_id),
                 },
             )),
@@ -1118,8 +1132,10 @@ where
                 compute_node_ignore_workflow_completion = COALESCE($6, compute_node_ignore_workflow_completion),
                 compute_node_wait_for_healthy_database_minutes = COALESCE($7, compute_node_wait_for_healthy_database_minutes),
                 jobs_sort_method = COALESCE($8, jobs_sort_method),
-                use_pending_failed = COALESCE($9, use_pending_failed)
-            WHERE id = $10
+                use_pending_failed = COALESCE($9, use_pending_failed),
+                project = COALESCE($10, project),
+                metadata = COALESCE($11, metadata)
+            WHERE id = $12
             "#,
             body.name,
             body.description,
@@ -1130,6 +1146,8 @@ where
             body.compute_node_wait_for_healthy_database_minutes,
             jobs_sort_method_str,
             use_pending_failed_int,
+            body.project,
+            body.metadata,
             id
         )
         .execute(self.context.pool.as_ref())

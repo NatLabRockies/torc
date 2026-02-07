@@ -1,15 +1,5 @@
 # CLI Reference
 
-This documentation is automatically generated from the CLI help text.
-
-To regenerate, run:
-
-```bash
-cargo run --bin generate-cli-docs --features "client,tui,plot_resources"
-```
-
-# Command-Line Help for `torc`
-
 This document contains the help content for the `torc` command-line program.
 
 **Command Overview:**
@@ -1967,6 +1957,8 @@ Check resource utilization and report jobs that exceeded their specified require
 - `-r`, `--run-id <RUN_ID>` — Run ID to analyze (optional - analyzes latest run if not provided)
 - `-a`, `--all` — Show all jobs (default: only show jobs that exceeded requirements)
 - `--include-failed` — Include failed and terminated jobs in the analysis (for recovery diagnostics)
+- `--min-over-utilization <MIN_OVER_UTILIZATION>` — Minimum over-utilization percentage to flag as
+  violation (default: 1.0%)
 
 ## `torc reports results`
 
