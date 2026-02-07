@@ -257,7 +257,7 @@ pub fn check_resource_utilization(
             .and_then(|v| v.as_i64())
             .unwrap_or(0);
         let failed_count = json
-            .get("failed_jobs")
+            .get("resource_violations")
             .and_then(|v| v.as_array())
             .map(|a| a.len())
             .unwrap_or(0);

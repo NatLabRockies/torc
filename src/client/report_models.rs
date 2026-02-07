@@ -15,12 +15,21 @@ pub struct ResourceUtilizationReport {
     pub total_results: usize,
     pub over_utilization_count: usize,
     pub violations: Vec<ResourceViolation>,
-    /// Number of failed jobs (only present when `--include-failed` is used)
+    /// Number of jobs with resource violations (only present when `--include-failed` is used)
     #[serde(default, skip_serializing_if = "is_zero")]
-    pub failed_jobs_count: usize,
-    /// Failed job information (only present when `--include-failed` is used)
+    pub resource_violations_count: usize,
+    /// Jobs that exceeded resource allocations (only present when `--include-failed` is used)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub failed_jobs: Vec<FailedJobInfo>,
+    pub resource_violations: Vec<ResourceViolationInfo>,
+
+    // Backward compatibility - map old field names to new ones
+    #[serde(default, skip_serializing_if = "is_zero", alias = "failed_jobs_count")]
+    #[serde(skip_deserializing)]
+    pub failed_jobs_count: usize,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty", alias = "failed_jobs")]
+    #[serde(skip_deserializing)]
+    pub failed_jobs: Vec<ResourceViolationInfo>,
 }
 
 fn is_zero(n: &usize) -> bool {
@@ -38,9 +47,13 @@ pub struct ResourceViolation {
     pub over_utilization: String,
 }
 
-/// Information about a failed job for recovery diagnostics
+/// Information about a job that exceeded resource allocation.
+///
+/// This includes jobs that failed during execution and completed jobs
+/// that exceeded their configured memory, CPU, or runtime limits.
+/// Used for proactive resource optimization and recovery diagnostics.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FailedJobInfo {
+pub struct ResourceViolationInfo {
     pub job_id: i64,
     pub job_name: String,
     pub return_code: i64,
@@ -89,6 +102,9 @@ pub struct FailedJobInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub peak_cpu_percent: Option<f64>,
 }
+
+// Backward compatibility alias
+pub type FailedJobInfo = ResourceViolationInfo;
 
 fn is_false(b: &bool) -> bool {
     !*b
@@ -168,8 +184,8 @@ mod tests {
                 peak_used: "1.5 GB".to_string(),
                 over_utilization: "+50.0%".to_string(),
             }],
-            failed_jobs_count: 1,
-            failed_jobs: vec![FailedJobInfo {
+            resource_violations_count: 1,
+            resource_violations: vec![ResourceViolationInfo {
                 job_id: 2,
                 job_name: "failed_job".to_string(),
                 return_code: 137i64,
@@ -188,14 +204,16 @@ mod tests {
                 likely_cpu_violation: false,
                 peak_cpu_percent: None,
             }],
+            failed_jobs_count: 1,
+            failed_jobs: vec![],
         };
 
         let json = serde_json::to_string(&report).unwrap();
         let parsed: ResourceUtilizationReport = serde_json::from_str(&json).unwrap();
 
         assert_eq!(parsed.workflow_id, 1);
-        assert_eq!(parsed.failed_jobs.len(), 1);
-        assert!(parsed.failed_jobs[0].likely_oom);
+        assert_eq!(parsed.resource_violations.len(), 1);
+        assert!(parsed.resource_violations[0].likely_oom);
     }
 
     #[test]

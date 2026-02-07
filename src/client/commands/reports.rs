@@ -10,7 +10,8 @@ use crate::client::log_paths::{
     get_slurm_job_runner_log_file, get_slurm_stderr_path, get_slurm_stdout_path,
 };
 use crate::client::report_models::{
-    FailedJobInfo, JobResultRecord, ResourceUtilizationReport, ResourceViolation, ResultsReport,
+    JobResultRecord, ResourceUtilizationReport, ResourceViolation, ResourceViolationInfo,
+    ResultsReport,
 };
 use crate::models;
 use crate::time_utils::duration_string_to_seconds;
@@ -78,7 +79,6 @@ EXAMPLES:
     torc reports check-resource-utilization 123
     torc reports check-resource-utilization 123 --all
     torc reports check-resource-utilization 123 --include-failed
-    torc reports check-resource-utilization 123 --correct
 ")]
     CheckResourceUtilization {
         /// Workflow ID to analyze (optional - will prompt if not provided)
@@ -93,9 +93,6 @@ EXAMPLES:
         /// Include failed and terminated jobs in the analysis (for recovery diagnostics)
         #[arg(long)]
         include_failed: bool,
-        /// Automatically correct resource requirements for over-utilized jobs
-        #[arg(long)]
-        correct: bool,
         /// Minimum over-utilization percentage to flag as violation (default: 1.0%)
         #[arg(long, default_value = "1.0")]
         min_over_utilization: f64,
@@ -142,7 +139,6 @@ pub fn handle_report_commands(config: &Configuration, command: &ReportCommands, 
             run_id,
             all,
             include_failed,
-            correct,
             min_over_utilization,
         } => {
             check_resource_utilization(
@@ -151,7 +147,6 @@ pub fn handle_report_commands(config: &Configuration, command: &ReportCommands, 
                 *run_id,
                 *all,
                 *include_failed,
-                *correct,
                 *min_over_utilization,
                 format,
             );
@@ -170,14 +165,12 @@ pub fn handle_report_commands(config: &Configuration, command: &ReportCommands, 
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn check_resource_utilization(
     config: &Configuration,
     workflow_id: Option<i64>,
     run_id: Option<i64>,
     show_all: bool,
     include_failed: bool,
-    correct: bool,
     min_over_utilization: f64,
     format: &str,
 ) {
@@ -296,7 +289,7 @@ fn check_resource_utilization(
     // Analyze each result
     let mut rows = Vec::new();
     let mut over_util_count = 0;
-    let mut failed_jobs_info: Vec<FailedJobInfo> = Vec::new();
+    let mut resource_violations_info: Vec<ResourceViolationInfo> = Vec::new();
 
     for result in &results {
         let job_id = result.job_id;
@@ -334,11 +327,6 @@ fn check_resource_utilization(
         };
 
         let job_name = job.name.clone();
-
-        // Track resource violations separately (will be added to failed_jobs_info for correction)
-        let mut has_memory_violation = false;
-        let mut has_cpu_violation = false;
-        let mut has_runtime_violation = false;
 
         // Track failed jobs separately with their resource info
         if is_failed {
@@ -411,7 +399,7 @@ fn check_resource_utilization(
                 }
             }
 
-            failed_jobs_info.push(FailedJobInfo {
+            resource_violations_info.push(ResourceViolationInfo {
                 job_id,
                 job_name: job_name.clone(),
                 return_code: result.return_code,
@@ -439,7 +427,6 @@ fn check_resource_utilization(
                 let over_pct =
                     ((peak_memory_bytes as f64 / specified_memory_bytes as f64) - 1.0) * 100.0;
                 if over_pct >= min_over_utilization {
-                    has_memory_violation = true;
                     over_util_count += 1;
                     rows.push(ResourceUtilizationRow {
                         job_id,
@@ -473,7 +460,6 @@ fn check_resource_utilization(
             if peak_cpu_percent > specified_cpu_percent {
                 let over_pct = ((peak_cpu_percent / specified_cpu_percent) - 1.0) * 100.0;
                 if over_pct >= min_over_utilization {
-                    has_cpu_violation = true;
                     over_util_count += 1;
                     rows.push(ResourceUtilizationRow {
                         job_id,
@@ -510,7 +496,6 @@ fn check_resource_utilization(
         if exec_time_seconds > specified_runtime_seconds {
             let over_pct = ((exec_time_seconds / specified_runtime_seconds) - 1.0) * 100.0;
             if over_pct >= min_over_utilization {
-                has_runtime_violation = true;
                 over_util_count += 1;
                 rows.push(ResourceUtilizationRow {
                     job_id,
@@ -530,45 +515,6 @@ fn check_resource_utilization(
                 specified: format_duration(specified_runtime_seconds),
                 peak_used: format_duration(exec_time_seconds),
                 over_utilization: format!("-{:.1}%", under_pct),
-            });
-        }
-
-        // If job has resource violations but didn't fail, add to failed_jobs_info for correction
-        if (has_memory_violation || has_cpu_violation || has_runtime_violation) && !is_failed {
-            failed_jobs_info.push(FailedJobInfo {
-                job_id,
-                job_name: job_name.clone(),
-                return_code: result.return_code,
-                exec_time_minutes: result.exec_time_minutes,
-                configured_memory: resource_req.memory.clone(),
-                configured_runtime: resource_req.runtime.clone(),
-                configured_cpus: resource_req.num_cpus,
-                peak_memory_bytes: result.peak_memory_bytes,
-                peak_memory_formatted: result.peak_memory_bytes.map(format_memory_bytes),
-                likely_oom: false,
-                oom_reason: None,
-                memory_over_utilization: if has_memory_violation {
-                    result.peak_memory_bytes.map(|peak| {
-                        let specified_memory_bytes = parse_memory_string(&resource_req.memory);
-                        let over_pct =
-                            ((peak as f64 / specified_memory_bytes as f64) - 1.0) * 100.0;
-                        format!("+{:.1}%", over_pct)
-                    })
-                } else {
-                    None
-                },
-                likely_timeout: false,
-                timeout_reason: None,
-                runtime_utilization: if has_runtime_violation {
-                    Some(format!(
-                        "{:.1}%",
-                        (result.exec_time_minutes * 60.0 / specified_runtime_seconds) * 100.0
-                    ))
-                } else {
-                    None
-                },
-                likely_cpu_violation: has_cpu_violation,
-                peak_cpu_percent: result.peak_cpu_percent,
             });
         }
     }
@@ -592,8 +538,10 @@ fn check_resource_utilization(
                         over_utilization: r.over_utilization.clone(),
                     })
                     .collect(),
-                failed_jobs_count: failed_jobs_info.len(),
-                failed_jobs: failed_jobs_info,
+                resource_violations_count: resource_violations_info.len(),
+                resource_violations: resource_violations_info,
+                failed_jobs_count: 0,
+                failed_jobs: vec![],
             };
 
             print_json(&report, "resource utilization");
@@ -620,59 +568,13 @@ fn check_resource_utilization(
                 }
                 display_table_with_count(&rows, "violations");
 
-                // If --correct is set, automatically correct resources
-                if correct {
-                    eprintln!("\nAutomatically correcting resource requirements...");
-                    use crate::client::resource_correction::apply_resource_corrections;
-                    let diagnosis = ResourceUtilizationReport {
-                        workflow_id: wf_id,
-                        run_id,
-                        total_results: results.len(),
-                        over_utilization_count: over_util_count,
-                        violations: rows
-                            .iter()
-                            .map(|r| ResourceViolation {
-                                job_id: r.job_id,
-                                job_name: r.job_name.clone(),
-                                resource_type: r.resource_type.clone(),
-                                specified: r.specified.clone(),
-                                peak_used: r.peak_used.clone(),
-                                over_utilization: r.over_utilization.clone(),
-                            })
-                            .collect(),
-                        failed_jobs_count: failed_jobs_info.len(),
-                        failed_jobs: failed_jobs_info,
-                    };
+                // Print command to run correct-resources
+                eprintln!(
+                    "\nTo automatically correct these violations, run:\n  torc workflows correct-resources {}",
+                    wf_id
+                );
 
-                    match apply_resource_corrections(
-                        config,
-                        wf_id,
-                        &diagnosis,
-                        1.2,
-                        1.2,
-                        &[],
-                        false,
-                    ) {
-                        Ok(result) => {
-                            eprintln!(
-                                "✓ Updated {} resource requirements",
-                                result.resource_requirements_updated
-                            );
-                        }
-                        Err(e) => {
-                            eprintln!("Error correcting resources: {}", e);
-                            std::process::exit(1);
-                        }
-                    }
-                } else {
-                    // Print command to run correct-resources
-                    eprintln!(
-                        "\nTo automatically correct these violations, run:\n  torc reports check-resource-utilization {} --correct",
-                        wf_id
-                    );
-                }
-
-                if !show_all && !correct {
+                if !show_all {
                     println!(
                         "\nNote: Use --all to see all jobs, including those that stayed within limits"
                     );

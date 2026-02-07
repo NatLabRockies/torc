@@ -38,25 +38,35 @@ torc reports check-resource-utilization <workflow_id> --run-id 2
 
 ## Automatically Correct Requirements
 
-Instead of manually adjusting requirements, use the `--correct` flag to automatically increase
-resource allocations based on actual usage:
+Use the separate `correct-resources` command to automatically adjust resource allocations based on
+actual resource measurements:
 
 ```bash
-torc reports check-resource-utilization <workflow_id> --correct
+torc workflows correct-resources <workflow_id>
 ```
 
-This will:
+This analyzes both completed and failed jobs to detect:
 
-- Detect all resource over-utilization violations (memory, CPU, runtime)
-- Calculate new requirements with a 1.2x multiplier for safety margin
-- Update the workflow's resource requirements immediately
+- **Memory violations** — Jobs using more memory than allocated
+- **CPU violations** — Jobs using more CPU than allocated
+- **Runtime violations** — Jobs running longer than allocated time
+
+The command will:
+
+- Calculate new requirements using actual peak usage data
+- Apply a 1.2x safety multiplier to each resource
+- Update the workflow's resource requirements for future runs
 
 Example:
 
 ```
-⚠ Found 1 resource over-utilization violations:
-Job 15 (train_model): Memory over-utilization detected, peak 10.5 GB → allocating 12.6 GB (1.2x)
-✓ Updated 1 resource requirements
+Analyzing and correcting resource requirements for workflow 5
+✓ Resource requirements updated successfully
+
+Corrections applied:
+  memory_training: 8g → 10g (+25.0%)
+  cpu_training: 4 → 5 cores (+25.0%)
+  runtime_training: PT2H → PT2H 30M (+25.0%)
 ```
 
 ### Preview Changes Without Applying
@@ -64,7 +74,23 @@ Job 15 (train_model): Memory over-utilization detected, peak 10.5 GB → allocat
 Use `--dry-run` to see what changes would be made:
 
 ```bash
-torc reports check-resource-utilization <workflow_id> --correct --dry-run
+torc workflows correct-resources <workflow_id> --dry-run
+```
+
+### Correct Only Specific Jobs
+
+To update only certain jobs (by ID):
+
+```bash
+torc workflows correct-resources <workflow_id> --job-ids 15,16,18
+```
+
+### Custom Correction Multiplier
+
+Adjust the safety margin (default 1.2x):
+
+```bash
+torc workflows correct-resources <workflow_id> --memory-multiplier 1.5 --runtime-multiplier 1.4
 ```
 
 ## Manual Adjustment

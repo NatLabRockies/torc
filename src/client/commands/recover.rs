@@ -710,11 +710,11 @@ fn correlate_slurm_logs(
         }
     }
 
-    // Filter to only failed jobs
+    // Filter to only resource violations
     let mut failed_log_map = HashMap::new();
-    for failed_job in &diagnosis.failed_jobs {
-        if let Some(log_info) = log_map.remove(&failed_job.job_id) {
-            failed_log_map.insert(failed_job.job_id, log_info);
+    for violation in &diagnosis.resource_violations {
+        if let Some(log_info) = log_map.remove(&violation.job_id) {
+            failed_log_map.insert(violation.job_id, log_info);
         }
     }
 
@@ -753,14 +753,14 @@ pub fn apply_recovery_heuristics(
         }
     };
 
-    // Log Slurm info for each job if available
-    for job_info in &diagnosis.failed_jobs {
-        if let Some(slurm_info) = slurm_log_map.get(&job_info.job_id)
+    // Log Slurm info for each resource violation if available
+    for violation in &diagnosis.resource_violations {
+        if let Some(slurm_info) = slurm_log_map.get(&violation.job_id)
             && let Some(slurm_job_id) = &slurm_info.slurm_job_id
         {
             debug!(
                 "  Job {} ran in Slurm allocation {}",
-                job_info.job_id, slurm_job_id
+                violation.job_id, slurm_job_id
             );
         }
     }
@@ -769,11 +769,11 @@ pub fn apply_recovery_heuristics(
     let mut other_failures = 0;
     let mut unknown_job_ids = Vec::new();
 
-    for job_info in &diagnosis.failed_jobs {
-        if !job_info.likely_oom && !job_info.likely_timeout {
+    for violation in &diagnosis.resource_violations {
+        if !violation.likely_oom && !violation.likely_timeout {
             other_failures += 1;
             if retry_unknown {
-                unknown_job_ids.push(job_info.job_id);
+                unknown_job_ids.push(violation.job_id);
             }
         }
     }

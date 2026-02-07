@@ -176,10 +176,10 @@ pub fn apply_resource_corrections(
     let mut rr_adjustments: HashMap<i64, ResourceAdjustment> = HashMap::new();
 
     let jobs_to_analyze = if include_jobs.is_empty() {
-        diagnosis.failed_jobs.clone()
+        diagnosis.resource_violations.clone()
     } else {
         diagnosis
-            .failed_jobs
+            .resource_violations
             .iter()
             .filter(|j| include_jobs.contains(&j.job_id))
             .cloned()

@@ -1,15 +1,5 @@
 # CLI Reference
 
-This documentation is automatically generated from the CLI help text.
-
-To regenerate, run:
-
-```bash
-cargo run --bin generate-cli-docs --features "client,tui,plot_resources"
-```
-
-# Command-Line Help for `torc`
-
 This document contains the help content for the `torc` command-line program.
 
 **Command Overview:**
