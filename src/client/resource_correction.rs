@@ -54,6 +54,22 @@ pub struct ResourceAdjustmentReport {
     /// New runtime setting
     #[serde(skip_serializing_if = "Option::is_none")]
     pub new_runtime: Option<String>,
+    /// Whether CPU was adjusted
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub cpu_adjusted: bool,
+    /// Original CPU count
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_cpus: Option<i64>,
+    /// New CPU count
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub new_cpus: Option<i64>,
+    /// Maximum peak CPU percentage observed
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_peak_cpu_percent: Option<f64>,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 /// Aggregated resource adjustment data for a single resource_requirements_id.
@@ -322,10 +338,13 @@ pub fn apply_resource_corrections(
         let mut updated = false;
         let mut memory_adjusted = false;
         let mut runtime_adjusted = false;
+        let mut cpu_adjusted = false;
         let mut original_memory = None;
         let mut new_memory_str = None;
         let mut original_runtime = None;
         let mut new_runtime_str = None;
+        let mut original_cpus = None;
+        let mut new_cpus_value = None;
 
         // Fetch current resource requirements for update
         let rr = match default_api::get_resource_requirements(config, rr_id) {
@@ -499,6 +518,11 @@ pub fn apply_resource_corrections(
                     );
                 }
 
+                // Track CPU adjustment for reporting
+                cpu_adjusted = true;
+                original_cpus = Some(adjustment.current_cpus);
+                new_cpus_value = Some(new_cpus);
+
                 new_rr.num_cpus = new_cpus;
                 updated = true;
             }
@@ -528,6 +552,10 @@ pub fn apply_resource_corrections(
                 runtime_adjusted,
                 original_runtime,
                 new_runtime: new_runtime_str,
+                cpu_adjusted,
+                original_cpus,
+                new_cpus: new_cpus_value,
+                max_peak_cpu_percent: adjustment.max_peak_cpu_percent,
             });
         }
     }

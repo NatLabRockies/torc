@@ -336,6 +336,9 @@ fn check_resource_utilization(
             let mut likely_timeout = false;
             let mut timeout_reason: Option<String> = None;
             let mut runtime_utilization: Option<String> = None;
+            let mut likely_cpu_violation = false;
+            let mut peak_cpu_percent_val: Option<f64> = None;
+            let mut likely_runtime_violation = false;
 
             let peak_memory_bytes = result.peak_memory_bytes;
             let peak_memory_formatted = peak_memory_bytes.map(format_memory_bytes);
@@ -372,6 +375,11 @@ fn check_resource_utilization(
                     likely_timeout = true;
                     timeout_reason = Some("sigxcpu_152".to_string());
                 }
+
+                // Check for runtime violation: job ran longer than allocated time
+                if exec_time_seconds > specified_runtime_seconds {
+                    likely_runtime_violation = true;
+                }
             }
 
             // Check for OOM via return code 137 (128 + SIGKILL)
@@ -399,6 +407,17 @@ fn check_resource_utilization(
                 }
             }
 
+            // Check CPU over-utilization
+            if let Some(peak_cpu_percent) = result.peak_cpu_percent {
+                peak_cpu_percent_val = Some(peak_cpu_percent);
+                let num_cpus = resource_req.num_cpus;
+                let specified_cpu_percent = 100.0 * num_cpus as f64; // 100% per CPU
+
+                if peak_cpu_percent > specified_cpu_percent {
+                    likely_cpu_violation = true;
+                }
+            }
+
             resource_violations_info.push(ResourceViolationInfo {
                 job_id,
                 job_name: job_name.clone(),
@@ -415,9 +434,9 @@ fn check_resource_utilization(
                 likely_timeout,
                 timeout_reason,
                 runtime_utilization,
-                likely_cpu_violation: false,
-                peak_cpu_percent: None,
-                likely_runtime_violation: false,
+                likely_cpu_violation,
+                peak_cpu_percent: peak_cpu_percent_val,
+                likely_runtime_violation,
             });
         }
 

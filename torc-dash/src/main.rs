@@ -680,7 +680,7 @@ async fn cli_create_handler(
         )
         .await;
 
-        // Rename file to final name if creation was successful, otherwise delete it
+        // Handle file after creation attempt
         if result.success {
             if let Some(workflow_id) = extract_workflow_id(&result.stdout) {
                 // Parse spec to get workflow name for final filename
@@ -702,15 +702,38 @@ async fn cli_create_handler(
                     .collect();
 
                 let final_path = format!("{}_{}{}", sanitized_name, workflow_id, file_extension);
-                let _ = tokio::fs::rename(&temp_path, &final_path).await;
-                info!("Saved workflow spec to: {}", final_path);
+                match tokio::fs::rename(&temp_path, &final_path).await {
+                    Ok(_) => {
+                        info!("Saved workflow spec to: {}", final_path);
+                    }
+                    Err(e) => {
+                        warn!(
+                            "Failed to rename workflow spec from {} to {}: {}. Keeping original file.",
+                            temp_path, final_path, e
+                        );
+                    }
+                }
             } else {
-                // Couldn't extract workflow ID, delete temp file
-                let _ = tokio::fs::remove_file(&temp_path).await;
+                // Couldn't extract workflow ID from output, but creation succeeded.
+                // Preserve the temp file with a fallback name to avoid data loss.
+                let fallback_path = format!("workflow_{}{}", uuid::Uuid::new_v4(), file_extension);
+                if let Err(e) = tokio::fs::rename(&temp_path, &fallback_path).await {
+                    warn!(
+                        "Failed to preserve workflow spec as {}: {}. File remains at {}.",
+                        fallback_path, e, temp_path
+                    );
+                } else {
+                    info!(
+                        "Saved workflow spec to: {} (ID extraction failed but workflow was created)",
+                        fallback_path
+                    );
+                }
             }
         } else {
-            // Creation failed, delete temp file
-            let _ = tokio::fs::remove_file(&temp_path).await;
+            // Creation failed, delete temp file to avoid accumulating failed specs
+            if let Err(e) = tokio::fs::remove_file(&temp_path).await {
+                warn!("Failed to clean up temp file {}: {}", temp_path, e);
+            }
         }
 
         result
@@ -774,7 +797,7 @@ async fn cli_create_slurm_handler(
 
         let result = run_torc_command(&state.torc_bin, &args, &state.api_url).await;
 
-        // Rename file to final name if creation was successful, otherwise delete it
+        // Handle file after creation attempt
         if result.success {
             if let Some(workflow_id) = extract_workflow_id(&result.stdout) {
                 // Parse spec to get workflow name for final filename
@@ -796,15 +819,38 @@ async fn cli_create_slurm_handler(
                     .collect();
 
                 let final_path = format!("{}_{}{}", sanitized_name, workflow_id, file_extension);
-                let _ = tokio::fs::rename(&temp_path, &final_path).await;
-                info!("Saved workflow spec to: {}", final_path);
+                match tokio::fs::rename(&temp_path, &final_path).await {
+                    Ok(_) => {
+                        info!("Saved workflow spec to: {}", final_path);
+                    }
+                    Err(e) => {
+                        warn!(
+                            "Failed to rename workflow spec from {} to {}: {}. Keeping original file.",
+                            temp_path, final_path, e
+                        );
+                    }
+                }
             } else {
-                // Couldn't extract workflow ID, delete temp file
-                let _ = tokio::fs::remove_file(&temp_path).await;
+                // Couldn't extract workflow ID from output, but creation succeeded.
+                // Preserve the temp file with a fallback name to avoid data loss.
+                let fallback_path = format!("workflow_{}{}", uuid::Uuid::new_v4(), file_extension);
+                if let Err(e) = tokio::fs::rename(&temp_path, &fallback_path).await {
+                    warn!(
+                        "Failed to preserve workflow spec as {}: {}. File remains at {}.",
+                        fallback_path, e, temp_path
+                    );
+                } else {
+                    info!(
+                        "Saved workflow spec to: {} (ID extraction failed but workflow was created)",
+                        fallback_path
+                    );
+                }
             }
         } else {
-            // Creation failed, delete temp file
-            let _ = tokio::fs::remove_file(&temp_path).await;
+            // Creation failed, delete temp file to avoid accumulating failed specs
+            if let Err(e) = tokio::fs::remove_file(&temp_path).await {
+                warn!("Failed to clean up temp file {}: {}", temp_path, e);
+            }
         }
 
         result
