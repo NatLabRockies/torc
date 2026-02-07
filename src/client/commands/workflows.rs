@@ -340,12 +340,6 @@ EXAMPLES:
 
     # Update metadata (pass JSON as string; use single quotes in shell)
     torc workflows update 123 --metadata '{"key":"value","stage":"production"}'
-
-    # Clear project by passing 'null'
-    torc workflows update 123 --project null
-
-    # Clear metadata by passing 'null'
-    torc workflows update 123 --metadata null
 "#
     )]
     Update {
@@ -361,10 +355,10 @@ EXAMPLES:
         /// User that owns the workflow
         #[arg(long)]
         owner_user: Option<String>,
-        /// Project name or identifier (pass "null" to clear)
+        /// Project name or identifier
         #[arg(long)]
         project: Option<String>,
-        /// Metadata as JSON string (pass "null" to clear)
+        /// Metadata as JSON string
         #[arg(long)]
         metadata: Option<String>,
     },
@@ -1123,6 +1117,7 @@ fn handle_list_actions(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn handle_cancel(config: &Configuration, workflow_id: &Option<i64>, format: &str) {
     let user_name = get_env_user_name();
 

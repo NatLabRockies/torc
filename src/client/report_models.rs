@@ -80,6 +80,14 @@ pub struct FailedJobInfo {
     /// Runtime utilization percentage (e.g., "95.2%")
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_utilization: Option<String>,
+
+    /// Whether this job exceeded its CPU allocation
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub likely_cpu_violation: bool,
+
+    /// Peak CPU percentage used (e.g., 501.4%)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub peak_cpu_percent: Option<f64>,
 }
 
 fn is_false(b: &bool) -> bool {
@@ -177,6 +185,8 @@ mod tests {
                 likely_timeout: false,
                 timeout_reason: None,
                 runtime_utilization: Some("9.2%".to_string()),
+                likely_cpu_violation: false,
+                peak_cpu_percent: None,
             }],
         };
 

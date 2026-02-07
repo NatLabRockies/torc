@@ -13,6 +13,7 @@ pub mod apis;
 pub mod async_cli_command;
 pub mod commands;
 pub mod errors;
+pub mod resource_correction;
 
 // Re-export config from the top-level module for backwards compatibility
 #[cfg(feature = "config")]

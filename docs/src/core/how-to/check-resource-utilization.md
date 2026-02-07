@@ -36,22 +36,54 @@ For workflows that have been reinitialized multiple times:
 torc reports check-resource-utilization <workflow_id> --run-id 2
 ```
 
-## Adjusting Requirements
+## Automatically Correct Requirements
 
-When jobs exceed their limits, update your workflow specification with a buffer:
+Instead of manually adjusting requirements, use the `--correct` flag to automatically increase
+resource allocations based on actual usage:
+
+```bash
+torc reports check-resource-utilization <workflow_id> --correct
+```
+
+This will:
+
+- Detect all resource over-utilization violations (memory, CPU, runtime)
+- Calculate new requirements with a 1.2x multiplier for safety margin
+- Update the workflow's resource requirements immediately
+
+Example:
+
+```
+⚠ Found 1 resource over-utilization violations:
+Job 15 (train_model): Memory over-utilization detected, peak 10.5 GB → allocating 12.6 GB (1.2x)
+✓ Updated 1 resource requirements
+```
+
+### Preview Changes Without Applying
+
+Use `--dry-run` to see what changes would be made:
+
+```bash
+torc reports check-resource-utilization <workflow_id> --correct --dry-run
+```
+
+## Manual Adjustment
+
+For more control, update your workflow specification with a buffer:
 
 ```yaml
 resource_requirements:
   - name: training
     memory: 12g       # 10.5 GB peak + 15% buffer
     runtime: PT3H     # 2h 45m actual + buffer
+    num_cpus: 7       # Enough for peak CPU usage
 ```
 
 **Guidelines:**
 
 - Memory: Add 10-20% above peak usage
 - Runtime: Add 15-30% above actual duration
-- CPU: Round up to next core count
+- CPU: Round up to accommodate peak percentage (e.g., 501% CPU → 6 cores)
 
 ## See Also
 
