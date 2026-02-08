@@ -129,10 +129,10 @@ jobs:
           # Determine archive name
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
             ARCHIVE_NAME="torc-${{ matrix.target }}.zip"
-            7z a ../../../release/$ARCHIVE_NAME torc.exe torc-server.exe torc-slurm-job-runner.exe torc-dash.exe torc-htpasswd.exe
+            7z a ../../../release/$ARCHIVE_NAME torc.exe torc-server.exe torc-slurm-job-runner.exe torc-dash.exe torc-htpasswd.exe torc-mcp-server.exe
           else
             ARCHIVE_NAME="torc-${{ matrix.target }}.tar.gz"
-            tar czf ../../../release/$ARCHIVE_NAME torc torc-server torc-slurm-job-runner torc-dash torc-htpasswd
+            tar czf ../../../release/$ARCHIVE_NAME torc torc-server torc-slurm-job-runner torc-dash torc-htpasswd torc-mcp-server
           fi
 
           cd ../../../release
