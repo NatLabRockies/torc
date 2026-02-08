@@ -10,6 +10,7 @@
 | `torc run <spec.yaml>`                         | Create workflow from spec and run locally      |
 | `torc submit <spec.yaml>`                      | Create and submit to scheduler (needs actions) |
 | `torc submit-slurm --account ACCT <spec.yaml>` | Auto-generate Slurm schedulers and submit      |
+| `torc reports summary <id>`                    | Workflow completion summary                    |
 | `torc watch <id>`                              | Monitor workflow until completion              |
 | `torc watch <id> --recover`                    | Monitor and auto-recover from failures         |
 | `torc-dash`                                    | Launch web dashboard                           |
@@ -27,44 +28,45 @@
 
 ## Job Management
 
-| Command                              | Description         |
-| ------------------------------------ | ------------------- |
-| `torc jobs list <wf_id>`             | List all jobs       |
-| `torc jobs list -s ready <wf_id>`    | List jobs by status |
-| `torc jobs get <job_id>`             | Get job details     |
-| `torc results list <wf_id>`          | List job results    |
-| `torc results list --failed <wf_id>` | List failed jobs    |
+| Command                           | Description         |
+| --------------------------------- | ------------------- |
+| `torc jobs list <id>`             | List all jobs       |
+| `torc jobs list -s ready <id>`    | List jobs by status |
+| `torc jobs get <job_id>`          | Get job details     |
+| `torc results list <id>`          | List job results    |
+| `torc results list --failed <id>` | List failed jobs    |
 
 ## Recovery & Diagnostics
 
 | Command                                        | Description                                   |
 | ---------------------------------------------- | --------------------------------------------- |
+| `torc reports summary <id>`                    | Workflow completion summary                   |
+| `torc reports check-resource-utilization <id>` | Check memory/CPU/time usage                   |
+| `torc reports results <id>`                    | JSON report of job results with log paths     |
 | `torc recover <id>`                            | One-shot recovery (diagnose + fix + resubmit) |
 | `torc watch <id> --recover --auto-schedule`    | Full production recovery mode                 |
 | `torc workflows sync-status <id>`              | Fix orphaned jobs (stuck in "running")        |
-| `torc reports check-resource-utilization <id>` | Check memory/CPU/time usage                   |
 | `torc workflows correct-resources <id>`        | Auto-correct resource requirements            |
-| `torc reports summary <id>`                    | Workflow completion summary                   |
-| `torc reports results <id>`                    | JSON report of job results with log paths     |
-| `torc slurm sacct <wf_id>`                     | Get Slurm accounting data                     |
+| `torc slurm sacct <id>`                        | Get Slurm accounting data                     |
+| `torc slurm usage <id>`                        | Total compute node and CPU time consumed      |
 
 ## Remote Workers
 
-| Command                                     | Description                              |
-| ------------------------------------------- | ---------------------------------------- |
-| `torc remote add-workers <wf_id> <host>...` | Add remote workers to a workflow         |
-| `torc remote list-workers <wf_id>`          | List remote workers for a workflow       |
-| `torc remote run <wf_id>`                   | Start workers on remote machines via SSH |
-| `torc remote status <wf_id>`                | Check status of remote workers           |
-| `torc remote stop <wf_id>`                  | Stop workers on remote machines          |
-| `torc remote collect-logs <wf_id>`          | Collect logs from remote workers         |
+| Command                                  | Description                              |
+| ---------------------------------------- | ---------------------------------------- |
+| `torc remote add-workers <id> <host>...` | Add remote workers to a workflow         |
+| `torc remote list-workers <id>`          | List remote workers for a workflow       |
+| `torc remote run <id>`                   | Start workers on remote machines via SSH |
+| `torc remote status <id>`                | Check status of remote workers           |
+| `torc remote stop <id>`                  | Stop workers on remote machines          |
+| `torc remote collect-logs <id>`          | Collect logs from remote workers         |
 
 ## Events & Logs
 
-| Command                       | Description                 |
-| ----------------------------- | --------------------------- |
-| `torc events monitor <wf_id>` | Monitor events in real-time |
-| `torc logs analyze <wf_id>`   | Analyze logs for errors     |
+| Command                    | Description                 |
+| -------------------------- | --------------------------- |
+| `torc events monitor <id>` | Monitor events in real-time |
+| `torc logs analyze <id>`   | Analyze logs for errors     |
 
 ## Global Options
 

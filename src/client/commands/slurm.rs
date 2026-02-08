@@ -25,6 +25,7 @@ const SLURM_HELP_TEMPLATE: &str = "\
 \x1b[1;32mDiagnostics:\x1b[0m
   \x1b[1;36mparse-logs\x1b[0m       Parse Slurm logs for error messages
   \x1b[1;36msacct\x1b[0m            Show Slurm accounting info for allocations
+  \x1b[1;36musage\x1b[0m            Total compute node and CPU time consumed
 {after-help}";
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -421,6 +422,20 @@ EXAMPLES:
         /// Save full JSON output to files in addition to displaying summary
         #[arg(long, default_value = "false")]
         save_json: bool,
+    },
+    /// Total compute node and CPU time consumed by Slurm allocations
+    #[command(
+        hide = true,
+        after_long_help = "\
+EXAMPLES:
+    torc slurm usage 123
+    torc -f json slurm usage 123
+"
+    )]
+    Usage {
+        /// Workflow ID
+        #[arg()]
+        workflow_id: Option<i64>,
     },
     /// Generate Slurm schedulers for a workflow based on job resource requirements
     #[command(
@@ -1208,6 +1223,16 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
                 })
             });
             run_sacct_for_workflow(config, wf_id, output_dir, *save_json, format);
+        }
+        SlurmCommands::Usage { workflow_id } => {
+            let user_name = get_env_user_name();
+            let wf_id = workflow_id.unwrap_or_else(|| {
+                select_workflow_interactively(config, &user_name).unwrap_or_else(|e| {
+                    eprintln!("Error selecting workflow: {}", e);
+                    std::process::exit(1);
+                })
+            });
+            run_usage_for_workflow(config, wf_id, format);
         }
         SlurmCommands::Generate {
             workflow_file,
@@ -2269,12 +2294,25 @@ fn extract_state_from_job(job: &serde_json::Value) -> String {
     "-".to_string()
 }
 
-/// Parse sacct JSON output and extract summary rows
+/// Per-allocation statistics extracted from sacct JSON.
+struct SacctAllocationStats {
+    /// Maximum elapsed time across all entries (the allocation walltime)
+    max_elapsed_secs: i64,
+    /// Number of nodes in the allocation
+    num_nodes: i64,
+    /// Sum of cpu_time across all entries
+    total_cpu_time_secs: i64,
+}
+
+/// Parse sacct JSON output and extract summary rows plus allocation-level stats.
 fn parse_sacct_json_to_rows(
     sacct_json: &serde_json::Value,
     slurm_job_id: &str,
-) -> Vec<SacctSummaryRow> {
+) -> (Vec<SacctSummaryRow>, SacctAllocationStats) {
     let mut rows = Vec::new();
+    let mut max_elapsed_secs: i64 = 0;
+    let mut max_num_nodes: i64 = 0;
+    let mut max_cpu_time_secs: i64 = 0;
 
     if let Some(jobs) = sacct_json.get("jobs").and_then(|j| j.as_array()) {
         for job in jobs {
@@ -2304,10 +2342,11 @@ fn parse_sacct_json_to_rows(
                 .unwrap_or("-".to_string());
 
             // Get elapsed time - could be in different formats
-            let elapsed = job
+            let elapsed_secs = job
                 .get("time")
                 .and_then(|t| t.get("elapsed"))
-                .and_then(|e| e.as_i64())
+                .and_then(|e| e.as_i64());
+            let elapsed = elapsed_secs
                 .map(format_duration_seconds)
                 .or_else(|| {
                     job.get("elapsed")
@@ -2315,6 +2354,9 @@ fn parse_sacct_json_to_rows(
                         .map(|s| s.to_string())
                 })
                 .unwrap_or("-".to_string());
+            if let Some(secs) = elapsed_secs {
+                max_elapsed_secs = max_elapsed_secs.max(secs);
+            }
 
             // Get max RSS - handle different formats
             let max_rss = job
@@ -2346,15 +2388,34 @@ fn parse_sacct_json_to_rows(
                 .unwrap_or("-".to_string());
 
             // Get CPU time
-            let cpu_time = job
+            let cpu_time_secs = job
                 .get("time")
                 .and_then(|t| t.get("total"))
                 .and_then(|t| t.get("seconds"))
-                .and_then(|s| s.as_i64())
+                .and_then(|s| s.as_i64());
+            let cpu_time = cpu_time_secs
                 .map(format_duration_seconds)
                 .unwrap_or("-".to_string());
+            if let Some(secs) = cpu_time_secs {
+                max_cpu_time_secs = max_cpu_time_secs.max(secs);
+            }
 
-            // Get nodes
+            // Get number of nodes (integer count)
+            let num_nodes = job
+                .get("allocation_nodes")
+                .and_then(|n| n.as_i64())
+                .or_else(|| {
+                    // Fall back to counting comma-separated node names
+                    job.get("nodes")
+                        .and_then(|n| n.as_str())
+                        .filter(|s| *s != "-" && !s.is_empty())
+                        .map(|s| s.split(',').count() as i64)
+                });
+            if let Some(n) = num_nodes {
+                max_num_nodes = max_num_nodes.max(n);
+            }
+
+            // Get nodes (display string)
             let nodes = job
                 .get("nodes")
                 .and_then(|n| n.as_str())
@@ -2374,7 +2435,14 @@ fn parse_sacct_json_to_rows(
         }
     }
 
-    rows
+    (
+        rows,
+        SacctAllocationStats {
+            max_elapsed_secs,
+            num_nodes: max_num_nodes.max(1),
+            total_cpu_time_secs: max_cpu_time_secs,
+        },
+    )
 }
 
 /// Format duration in seconds to human-readable format
@@ -2457,6 +2525,8 @@ pub fn run_sacct_for_workflow(
 
     let mut all_summary_rows: Vec<SacctSummaryRow> = Vec::new();
     let mut errors: Vec<String> = Vec::new();
+    let mut total_node_secs: i64 = 0;
+    let mut total_cpu_time_secs: i64 = 0;
 
     for node in &nodes {
         let slurm_job_id = node.scheduler_id.to_string();
@@ -2476,9 +2546,12 @@ pub fn run_sacct_for_workflow(
                     // Parse the JSON output
                     match serde_json::from_str::<serde_json::Value>(&stdout) {
                         Ok(sacct_json) => {
-                            // Extract summary rows
-                            let rows = parse_sacct_json_to_rows(&sacct_json, &slurm_job_id);
+                            // Extract summary rows and allocation stats
+                            let (rows, stats) =
+                                parse_sacct_json_to_rows(&sacct_json, &slurm_job_id);
                             all_summary_rows.extend(rows);
+                            total_node_secs += stats.max_elapsed_secs * stats.num_nodes;
+                            total_cpu_time_secs += stats.total_cpu_time_secs;
 
                             // Optionally save full JSON to file
                             if save_json {
@@ -2520,11 +2593,18 @@ pub fn run_sacct_for_workflow(
         }
     }
 
+    let total_node_time = format_duration_seconds(total_node_secs);
+    let total_cpu_time = format_duration_seconds(total_cpu_time_secs);
+
     // Output results
     if format == "json" {
         let output = serde_json::json!({
             "workflow_id": workflow_id,
             "total_slurm_jobs": nodes.len(),
+            "total_node_time": total_node_time,
+            "total_node_time_seconds": total_node_secs,
+            "total_cpu_time": total_cpu_time,
+            "total_cpu_time_seconds": total_cpu_time_secs,
             "summary": all_summary_rows,
             "errors": errors,
         });
@@ -2542,6 +2622,9 @@ pub fn run_sacct_for_workflow(
             display_table_with_count(&all_summary_rows, "job steps");
         }
 
+        println!("\nTotal node time: {}", total_node_time);
+        println!("Total CPU time:  {}", total_cpu_time);
+
         if !errors.is_empty() {
             println!("\nErrors:");
             for err in &errors {
@@ -2551,6 +2634,124 @@ pub fn run_sacct_for_workflow(
 
         if save_json {
             println!("\nFull JSON saved to: {}", output_dir.display());
+        }
+    }
+}
+
+/// Compute total node time and CPU time consumed by Slurm allocations for a workflow
+fn run_usage_for_workflow(config: &Configuration, workflow_id: i64, format: &str) {
+    // Get scheduled compute nodes for the workflow
+    let all_nodes = match paginate_scheduled_compute_nodes(
+        config,
+        workflow_id,
+        ScheduledComputeNodeListParams::new(),
+    ) {
+        Ok(nodes) => nodes,
+        Err(e) => {
+            print_error("listing scheduled compute nodes", &e);
+            std::process::exit(1);
+        }
+    };
+
+    // Filter for Slurm scheduler type only
+    let nodes: Vec<_> = all_nodes
+        .into_iter()
+        .filter(|n| n.scheduler_type.to_lowercase() == "slurm")
+        .collect();
+
+    if nodes.is_empty() {
+        if format == "json" {
+            print_json(
+                &serde_json::json!({
+                    "workflow_id": workflow_id,
+                    "total_slurm_jobs": 0,
+                    "total_nodes": 0,
+                    "total_node_time": "0s",
+                    "total_node_time_seconds": 0,
+                    "total_cpu_time": "0s",
+                    "total_cpu_time_seconds": 0,
+                }),
+                "Slurm usage",
+            );
+        } else {
+            println!(
+                "No Slurm scheduled compute nodes found for workflow {}",
+                workflow_id
+            );
+        }
+        return;
+    }
+
+    let mut total_nodes: i64 = 0;
+    let mut total_node_secs: i64 = 0;
+    let mut total_cpu_time_secs: i64 = 0;
+    let mut errors: Vec<String> = Vec::new();
+
+    for node in &nodes {
+        let slurm_job_id = node.scheduler_id.to_string();
+
+        let sacct_result = Command::new("sacct")
+            .args(["-j", &slurm_job_id, "--json"])
+            .output();
+
+        match sacct_result {
+            Ok(output) => {
+                if output.status.success() {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    match serde_json::from_str::<serde_json::Value>(&stdout) {
+                        Ok(sacct_json) => {
+                            let (_rows, stats) =
+                                parse_sacct_json_to_rows(&sacct_json, &slurm_job_id);
+                            total_nodes += stats.num_nodes;
+                            total_node_secs += stats.max_elapsed_secs * stats.num_nodes;
+                            total_cpu_time_secs += stats.total_cpu_time_secs;
+                        }
+                        Err(e) => {
+                            errors
+                                .push(format!("Job {}: Invalid JSON output: {}", slurm_job_id, e));
+                        }
+                    }
+                } else {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    errors.push(format!("Job {}: sacct failed: {}", slurm_job_id, stderr));
+                }
+            }
+            Err(e) => {
+                errors.push(format!(
+                    "Job {}: Failed to execute sacct: {}",
+                    slurm_job_id, e
+                ));
+            }
+        }
+    }
+
+    let total_node_time = format_duration_seconds(total_node_secs);
+    let total_cpu_time = format_duration_seconds(total_cpu_time_secs);
+
+    if format == "json" {
+        let output = serde_json::json!({
+            "workflow_id": workflow_id,
+            "total_slurm_jobs": nodes.len(),
+            "total_nodes": total_nodes,
+            "total_node_time": total_node_time,
+            "total_node_time_seconds": total_node_secs,
+            "total_cpu_time": total_cpu_time,
+            "total_cpu_time_seconds": total_cpu_time_secs,
+            "errors": errors,
+        });
+        print_json(&output, "Slurm usage");
+    } else {
+        println!("Workflow {}", workflow_id);
+        println!("Slurm allocations: {}", nodes.len());
+        println!("Total nodes:     {}", total_nodes);
+        println!("Total node time: {}", total_node_time);
+        println!("Total CPU time:  {}", total_cpu_time);
+
+        if !errors.is_empty() {
+            println!("\nErrors:");
+            for err in &errors {
+                println!("  {}", err);
+            }
         }
     }
 }
