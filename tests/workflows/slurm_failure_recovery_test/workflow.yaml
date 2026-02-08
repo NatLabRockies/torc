@@ -14,10 +14,13 @@
 #
 # Test procedure:
 # 1. Set the Slurm account to your account name.
-# 2. Submit the workflow: torc submit workflow.yaml
-# 3. Monitor with: torc watch --auto-schedule <workflow_id>
+# 2. From the repository root, submit the workflow: torc submit tests/workflows/slurm_failure_recovery_test/workflow.yaml
+# 3. Monitor with: torc watch <workflow_id> --auto-schedule
 # 4. Expect: work_3 fails first, is retried, and succeeds on second attempt
 # 5. Then postprocess runs after all work jobs complete
+#
+# Note: This test validates the fix for the case when SLURM_MEM_PER_NODE is not set.
+# The scheduler does not specify --mem, so the code will use the system memory fallback.
 #
 
 name: slurm_failure_recovery_test
@@ -123,7 +126,6 @@ slurm_schedulers:
     account: PLACEHOLDER_ACCOUNT
     partition: debug
     walltime: "01:00:00"
-    mem: 16g
     num_nodes: 1
 
 actions:

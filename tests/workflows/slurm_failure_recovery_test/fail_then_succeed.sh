@@ -14,7 +14,6 @@
 
 # Get the attempt number from environment or default to 1
 ATTEMPT=${TORC_ATTEMPT_ID:-1}
-WORK_DIR="${TORC_OUTPUT_DIR:-.}"
 
 echo "Work job 3: Starting (attempt $ATTEMPT)"
 

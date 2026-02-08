@@ -399,21 +399,36 @@ impl HpcInterface for SlurmInterface {
 
     fn get_memory_gb(&self) -> f64 {
         // Prefer SLURM_MEM_PER_NODE if available, as it reflects the allocated memory.
-        if let Some(mem_mb) = env::var("SLURM_MEM_PER_NODE")
-            .ok()
-            .and_then(|v| v.parse::<f64>().ok())
-        {
-            return mem_mb / 1024.0;
+        match env::var("SLURM_MEM_PER_NODE") {
+            Ok(mem_str) => {
+                match mem_str.parse::<f64>() {
+                    Ok(mem_mb) => {
+                        return mem_mb / 1024.0;
+                    }
+                    Err(_) => {
+                        // Warn if the env var is set but unparseable
+                        eprintln!(
+                            "Warning: SLURM_MEM_PER_NODE='{}' is not a valid number. \
+                             Falling back to system memory.",
+                            mem_str
+                        );
+                    }
+                }
+            }
+            Err(_) => {
+                // SLURM_MEM_PER_NODE not set; this is normal when user doesn't specify --mem
+            }
         }
 
-        // Fall back to system total memory if SLURM_MEM_PER_NODE is unavailable
+        // Fall back to system total memory if SLURM_MEM_PER_NODE is unavailable or invalid
         // Note: This may not be correct for shared nodes, as it returns the total
         // memory on the node rather than the allocation. However, this is the best
         // we can do when SLURM_MEM_PER_NODE is not set (the user did not set --mem).
         // Use new_with_specifics to only refresh memory, avoiding user enumeration
         // which can crash on HPC systems with large LDAP user databases
         let sys = System::new_with_specifics(RefreshKind::new().with_memory());
-        sys.total_memory() as f64 / (1024.0 * 1024.0 * 1024.0)
+        // sysinfo::System::total_memory() returns KiB; convert KiB → GiB with / (1024^2)
+        sys.total_memory() as f64 / (1024.0 * 1024.0)
     }
 
     fn get_node_id(&self) -> String {

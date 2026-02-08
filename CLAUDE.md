@@ -468,6 +468,12 @@ unified CLI.
 - `torc jobs get <job_id>` - Get job details
 - `torc jobs update <job_id>` - Update job status
 
+**Reports**:
+
+- `torc reports summary <workflow_id>` - Workflow execution summary and job statistics
+- `torc reports results <workflow_id>` - Job execution results with resource metrics
+- `torc reports check-resource-utilization <workflow_id>` - Check for resource violations
+
 **Execution**:
 
 - `torc run <workflow_spec_or_id>` - Run workflow locally (top-level command)
