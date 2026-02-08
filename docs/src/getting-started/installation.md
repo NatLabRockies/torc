@@ -84,6 +84,22 @@ export TORC_API_URL="http://torc.hpc.nrel.gov:8080/torc-service/v1"
 **Note:** Be mindful of how much data you store in this database. Delete workflows that you don't
 need any longer. Refer to `torc workflows export --help` for making backups of your workflows.
 
+## Install from crates.io
+
+```bash
+# Install the torc CLI (default)
+cargo install torc
+
+# Install all binaries (server, dashboard, MCP server, Slurm runner)
+cargo install torc --features "server-bin,mcp-server,dash,slurm-runner"
+
+# Install specific components
+cargo install torc --features server-bin      # torc-server + torc-htpasswd
+cargo install torc --features mcp-server      # torc-mcp-server
+cargo install torc --features dash            # torc-dash
+cargo install torc --features slurm-runner    # torc-slurm-job-runner
+```
+
 ## Building from Source
 
 ### Prerequisites

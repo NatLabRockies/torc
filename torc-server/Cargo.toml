@@ -6,6 +6,7 @@ license.workspace = true
 edition.workspace = true
 repository.workspace = true
 description = "Torc workflow management server"
+publish = false
 
 [[bin]]
 name = "torc-server"

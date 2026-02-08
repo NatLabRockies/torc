@@ -37,6 +37,10 @@ pub mod tui_runner;
 #[cfg(feature = "plot_resources")]
 pub mod plot_resources_cmd;
 
+// MCP server modules (behind feature flag)
+#[cfg(feature = "mcp-server")]
+pub mod mcp_server;
+
 // CLI types module - requires all features for the unified CLI
 #[cfg(all(feature = "client", feature = "tui", feature = "plot_resources"))]
 pub mod cli;

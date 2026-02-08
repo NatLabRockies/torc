@@ -43,7 +43,7 @@ libc = "0.2"
 file-rotate = "0.7"
 clap = { version = "4.5", features = ["derive", "env", "color"] }
 clap_complete = "4.5"
-tokio = { version = "1.47", features = ["rt-multi-thread", "macros", "net", "signal"] }
+tokio = { version = "1.47", features = ["rt-multi-thread", "macros", "net", "signal", "process", "io-util"] }
 url = "2.5"
 validator = { version = "0.16", features = ["derive"] }
 mime = "0.3"
@@ -82,7 +82,7 @@ jsonwebtoken = "9.3.0"
 sha2 = "0.10"
 
 # Client-specific
-reqwest = { version = "0.12", default-features = false, features = ["json", "blocking", "multipart", "native-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "blocking", "multipart", "native-tls", "stream"] }
 sysinfo = "0.29"
 hostname = "0.4.1"
 json5 = "0.4"
@@ -110,6 +110,12 @@ openssl = "0.10"
 rmcp = { version = "0.1", features = ["server", "macros", "transport-io"] }
 schemars = "1.0"
 
+# Dashboard-specific
+uuid = { version = "1.11", features = ["v4"] }
+
+# TLS
+tokio-openssl = "0.6"
+
 [package]
 name = "torc"
 version.workspace = true
@@ -128,6 +134,31 @@ required-features = ["client", "tui", "plot_resources"]
 name = "generate-cli-docs"
 path = "src/bin/generate-cli-docs.rs"
 required-features = ["client", "tui", "plot_resources", "cli-docs"]
+
+[[bin]]
+name = "torc-server"
+path = "src/bin/torc-server.rs"
+required-features = ["server-bin"]
+
+[[bin]]
+name = "torc-htpasswd"
+path = "src/bin/torc-htpasswd.rs"
+required-features = ["server-bin"]
+
+[[bin]]
+name = "torc-mcp-server"
+path = "src/bin/torc-mcp-server.rs"
+required-features = ["mcp-server"]
+
+[[bin]]
+name = "torc-dash"
+path = "src/bin/torc-dash.rs"
+required-features = ["dash"]
+
+[[bin]]
+name = "torc-slurm-job-runner"
+path = "src/bin/torc-slurm-job-runner.rs"
+required-features = ["slurm-runner"]
 
 [features]
 default = ["client", "tui", "plot_resources"]
@@ -194,6 +225,49 @@ plot_resources = [
     "dep:rusqlite",
     "dep:anyhow",
 ]
+server-bin = [
+    "server",
+    "config",
+    "dep:clap",
+    "dep:tracing-subscriber",
+    "dep:tracing-appender",
+    "dep:tracing-timing",
+    "dep:hdrhistogram",
+    "dep:service-manager",
+    "dep:file-rotate",
+    "dep:rpassword",
+    "dep:openssl",
+    "dep:tokio-openssl",
+    "dep:daemonize",
+]
+mcp-server = [
+    "client",
+    "dep:rmcp",
+    "dep:schemars",
+    "dep:tempfile",
+    "dep:tracing-subscriber",
+    "dep:tokio",
+    "dep:anyhow",
+    "dep:tracing",
+]
+dash = [
+    "client",
+    "config",
+    "dep:axum",
+    "dep:tower",
+    "dep:tower-http",
+    "dep:mime_guess",
+    "dep:uuid",
+    "dep:tracing-subscriber",
+    "dep:rust-embed",
+    "dep:async-stream",
+    "dep:tokio",
+    "dep:anyhow",
+    "dep:tracing",
+]
+slurm-runner = [
+    "client",
+]
 cli-docs = ["dep:clap-markdown"]
 conversion = ["frunk", "frunk_derives", "frunk_core", "frunk-enum-core", "frunk-enum-derive"]
 
@@ -203,7 +277,6 @@ hyper-tls = { workspace = true, optional = true }
 
 [target.'cfg(not(any(target_os = "macos", target_os = "windows", target_os = "ios")))'.dependencies]
 hyper-openssl = { workspace = true, optional = true }
-openssl = { workspace = true, optional = true }
 
 [dependencies]
 # Shared dependencies (always available)
@@ -267,6 +340,28 @@ petgraph = { workspace = true, optional = true }
 # Plot-resources dependencies (optional)
 plotly = { workspace = true, optional = true }
 
+# Server binary dependencies (optional)
+tracing-subscriber = { workspace = true, optional = true }
+tracing-appender = { workspace = true, optional = true }
+tracing-timing = { workspace = true, optional = true }
+hdrhistogram = { workspace = true, optional = true }
+service-manager = { workspace = true, optional = true }
+file-rotate = { workspace = true, optional = true }
+openssl = { workspace = true, optional = true }
+tokio-openssl = { workspace = true, optional = true }
+
+# MCP server dependencies (optional)
+rmcp = { workspace = true, optional = true }
+schemars = { workspace = true, optional = true }
+tempfile = { version = "3", optional = true }
+
+# Dashboard dependencies (optional)
+axum = { workspace = true, optional = true }
+tower = { workspace = true, optional = true }
+tower-http = { workspace = true, optional = true }
+mime_guess = { workspace = true, optional = true }
+uuid = { workspace = true, optional = true }
+
 # Configuration management
 config = { workspace = true, optional = true }
 dirs = { workspace = true, optional = true }
@@ -286,6 +381,9 @@ openssl = "0.10"
 # Windows testing support - vendored OpenSSL for CI
 [target.'cfg(windows)'.dev-dependencies]
 openssl-sys = { version = "0.9", features = ["vendored"] }
+
+[target.'cfg(unix)'.dependencies]
+daemonize = { version = "0.5", optional = true }
 
 # Musl static builds - vendored OpenSSL (compiles from source)
 [target.'cfg(target_env = "musl")'.dependencies]

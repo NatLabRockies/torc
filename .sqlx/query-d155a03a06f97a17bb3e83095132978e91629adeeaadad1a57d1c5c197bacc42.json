@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        SELECT DISTINCT workflow_id\n        FROM job\n        WHERE status IN (?, ?, ?, ?)\n          AND unblocking_processed = 0\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "workflow_id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d155a03a06f97a17bb3e83095132978e91629adeeaadad1a57d1c5c197bacc42"
+}

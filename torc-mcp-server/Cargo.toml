@@ -6,6 +6,7 @@ license.workspace = true
 edition.workspace = true
 repository.workspace = true
 description = "MCP server for Torc workflow management"
+publish = false
 
 [[bin]]
 name = "torc-mcp-server"

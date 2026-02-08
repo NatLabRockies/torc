@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT OR REPLACE INTO workflow_result (workflow_id, job_id, result_id)\n            VALUES (?, ?, ?)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "5e3d94ca1b5b68eace8019d816fb22977ac4a7071b61cfb813abdd1d27ae6749"
+}

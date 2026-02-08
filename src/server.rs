@@ -15,6 +15,14 @@ pub mod header;
 pub mod htpasswd;
 pub mod routing;
 
+// These modules are only needed for the server binary, not the server library
+#[cfg(feature = "server-bin")]
+pub mod http_server;
+#[cfg(feature = "server-bin")]
+pub mod logging;
+#[cfg(feature = "server-bin")]
+pub mod service;
+
 // Re-exports from api_types (OpenAPI-generated)
 pub use api_types::*;
 

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR IGNORE INTO job_depends_on (job_id, depends_on_job_id, workflow_id)\n            SELECT\n                i.job_id AS job_id\n                ,o.job_id AS depends_on_job_id\n                ,j.workflow_id AS workflow_id\n            FROM job_input_user_data i\n            JOIN job_output_user_data o ON i.user_data_id = o.user_data_id\n            JOIN job j ON i.job_id = j.id\n            WHERE j.workflow_id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "ac0263b317068b2431d7bb0a923be18bc5f89b8894d83bf0fba39c98ec852658"
+}

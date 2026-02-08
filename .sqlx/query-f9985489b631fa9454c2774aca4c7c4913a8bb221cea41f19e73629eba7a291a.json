@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            DELETE FROM workflow_result\n            WHERE workflow_id = $1\n              AND job_id IN (\n                SELECT id FROM job\n                WHERE workflow_id = $1\n                  AND status NOT IN ($2, $3, $4, $5)\n              )\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "f9985489b631fa9454c2774aca4c7c4913a8bb221cea41f19e73629eba7a291a"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE job SET status = ?, unblocking_processed = 0 WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "7e43d4a9d643a88c115257b2322787c50bbe005116b12e5241e53b97c5ea7ff9"
+}

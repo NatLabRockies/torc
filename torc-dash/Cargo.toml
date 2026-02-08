@@ -6,6 +6,7 @@ license.workspace = true
 edition.workspace = true
 repository.workspace = true
 description = "Torc workflow dashboard - web UI with CLI integration"
+publish = false
 
 [[bin]]
 name = "torc-dash"

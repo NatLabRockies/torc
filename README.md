@@ -37,10 +37,17 @@ Please post comments or new ideas for Torc in the
 
 ### Installation
 
-Download precompiled binaries from the [releases page](https://github.com/NREL/torc/releases) or
-build from source:
+Download precompiled binaries from the [releases page](https://github.com/NREL/torc/releases),
+install from crates.io, or build from source:
 
 ```bash
+# Install from crates.io (CLI only)
+cargo install torc
+
+# Install all binaries (CLI, server, dashboard, MCP server, Slurm runner)
+cargo install torc --features "server-bin,mcp-server,dash,slurm-runner"
+
+# Or build from source
 cargo build --workspace --release
 ```
 

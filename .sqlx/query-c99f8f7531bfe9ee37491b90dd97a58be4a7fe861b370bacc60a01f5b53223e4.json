@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT return_code FROM result WHERE job_id = ? AND run_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "return_code",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c99f8f7531bfe9ee37491b90dd97a58be4a7fe861b370bacc60a01f5b53223e4"
+}

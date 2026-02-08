@@ -6,6 +6,7 @@ license.workspace = true
 edition.workspace = true
 repository.workspace = true
 description = "Torc Slurm job runner for HPC environments"
+publish = false
 
 [dependencies]
 torc.workspace = true

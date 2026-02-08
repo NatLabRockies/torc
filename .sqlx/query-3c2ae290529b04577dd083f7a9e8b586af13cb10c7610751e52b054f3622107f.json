@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE job\n            SET status = ?\n            WHERE workflow_id = ?\n            AND id IN (\n                SELECT DISTINCT jbb.job_id\n                FROM job_depends_on jbb\n                JOIN job j ON jbb.job_id = j.id\n                WHERE jbb.depends_on_job_id = ?\n                AND jbb.workflow_id = ?\n                AND j.status IN (?, ?)\n            )\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "3c2ae290529b04577dd083f7a9e8b586af13cb10c7610751e52b054f3622107f"
+}

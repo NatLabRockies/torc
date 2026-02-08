@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE job\n            SET status = ?\n            WHERE workflow_id = ?\n              AND status = ?\n              AND id IN (\n                  SELECT jbb.job_id\n                  FROM job_depends_on jbb\n                  WHERE jbb.depends_on_job_id = ?\n                    AND jbb.workflow_id = ?\n                    AND NOT EXISTS (\n                        SELECT 1\n                        FROM job_depends_on jbb2\n                        JOIN job j2 ON jbb2.depends_on_job_id = j2.id\n                        WHERE jbb2.job_id = jbb.job_id\n                          AND jbb2.depends_on_job_id != ?\n                          AND j2.status NOT IN (?, ?, ?, ?)\n                    )\n              )\n            RETURNING id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 10
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "fa73199d502cf466f7fb95dc476c3b8cf884b2774d67e4b5d457a2bbcea9cf97"
+}

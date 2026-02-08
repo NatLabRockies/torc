@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE job_internal SET active_compute_node_id = ? WHERE job_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "1697e7a0f144d40af5b40794935c711beeec76368560d6f52c684e7b3959afd0"
+}

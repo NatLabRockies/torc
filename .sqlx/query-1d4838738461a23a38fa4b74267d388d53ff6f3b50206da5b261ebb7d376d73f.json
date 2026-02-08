@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                UPDATE job\n                SET status = ?\n                WHERE workflow_id = ?\n                  AND status = ?\n                  AND cancel_on_blocking_job_failure = 1\n                  AND id IN (\n                      SELECT jbb.job_id\n                      FROM job_depends_on jbb\n                      WHERE jbb.depends_on_job_id = ?\n                        AND jbb.workflow_id = ?\n                        AND NOT EXISTS (\n                            SELECT 1\n                            FROM job_depends_on jbb2\n                            JOIN job j2 ON jbb2.depends_on_job_id = j2.id\n                            WHERE jbb2.job_id = jbb.job_id\n                              AND jbb2.depends_on_job_id != ?\n                              AND j2.status NOT IN (?, ?, ?, ?)\n                        )\n                  )\n                  AND EXISTS (\n                      SELECT 1\n                      FROM job_depends_on jbb_fail\n                      JOIN job j_fail ON jbb_fail.depends_on_job_id = j_fail.id\n                      JOIN result r_fail ON j_fail.id = r_fail.job_id\n                      JOIN workflow_status ws ON j_fail.workflow_id = ws.id AND r_fail.run_id = ws.run_id\n                      WHERE jbb_fail.job_id = job.id\n                        AND jbb_fail.workflow_id = ?\n                        AND j_fail.status IN (?, ?, ?)\n                        AND r_fail.return_code != 0\n                  )\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 14
+    },
+    "nullable": []
+  },
+  "hash": "1d4838738461a23a38fa4b74267d388d53ff6f3b50206da5b261ebb7d376d73f"
+}
