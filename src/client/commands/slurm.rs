@@ -2400,27 +2400,18 @@ fn parse_sacct_json_to_rows(
                 max_cpu_time_secs = max_cpu_time_secs.max(secs);
             }
 
-            // Get number of nodes (integer count)
-            let num_nodes = job
-                .get("allocation_nodes")
-                .and_then(|n| n.as_i64())
-                .or_else(|| {
-                    // Fall back to counting comma-separated node names
-                    job.get("nodes")
-                        .and_then(|n| n.as_str())
-                        .filter(|s| *s != "-" && !s.is_empty())
-                        .map(|s| s.split(',').count() as i64)
-                });
-            if let Some(n) = num_nodes {
-                max_num_nodes = max_num_nodes.max(n);
-            }
-
-            // Get nodes (display string)
+            // Get nodes string and count
             let nodes = job
                 .get("nodes")
                 .and_then(|n| n.as_str())
                 .unwrap_or("-")
                 .to_string();
+            let num_nodes = if nodes != "-" && !nodes.is_empty() {
+                nodes.split(',').count() as i64
+            } else {
+                0
+            };
+            max_num_nodes = max_num_nodes.max(num_nodes);
 
             rows.push(SacctSummaryRow {
                 slurm_job_id: slurm_job_id.to_string(),
