@@ -126,7 +126,7 @@ slurm_schedulers:
     account: PLACEHOLDER_ACCOUNT
     partition: debug
     walltime: "01:00:00"
-    num_nodes: 1
+    nodes: 1
 
 actions:
   - trigger_type: "on_workflow_start"

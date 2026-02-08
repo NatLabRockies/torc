@@ -407,8 +407,8 @@ impl HpcInterface for SlurmInterface {
                     }
                     Err(_) => {
                         // Warn if the env var is set but unparseable
-                        eprintln!(
-                            "Warning: SLURM_MEM_PER_NODE='{}' is not a valid number. \
+                        error!(
+                            "SLURM_MEM_PER_NODE='{}' is not a valid number. \
                              Falling back to system memory.",
                             mem_str
                         );
