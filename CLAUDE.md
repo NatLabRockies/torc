@@ -475,12 +475,6 @@ unified CLI.
 - `torc submit-slurm --account <account> <spec_file>` - Submit with auto-generated Slurm schedulers
 - `torc tui` - Interactive terminal UI
 
-**Reports & Analysis**:
-
-- `torc reports check-resource-utilization <id>` - Check which jobs exceeded resource limits
-- `torc reports results <id>` - Get detailed job execution results
-- `torc reports summary <id>` - Get workflow completion summary
-
 **Global Options** (available on all commands):
 
 - `--url <URL>` - Torc server URL (can also use `TORC_API_URL` env var)

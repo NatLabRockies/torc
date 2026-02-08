@@ -398,20 +398,22 @@ impl HpcInterface for SlurmInterface {
     }
 
     fn get_memory_gb(&self) -> f64 {
-        // Special handling for Kestrel cluster
-        if env::var("SLURM_CLUSTER_NAME").unwrap_or_default() == "kestrel" {
-            // Note: This may not be correct for shared nodes
-            // Use new_with_specifics to only refresh memory, avoiding user enumeration
-            // which can crash on HPC systems with large LDAP user databases
-            let sys = System::new_with_specifics(RefreshKind::new().with_memory());
-            return sys.total_memory() as f64 / (1024.0 * 1024.0 * 1024.0);
+        // Prefer SLURM_MEM_PER_NODE if available, as it reflects the allocated memory.
+        if let Some(mem_mb) = env::var("SLURM_MEM_PER_NODE")
+            .ok()
+            .and_then(|v| v.parse::<f64>().ok())
+        {
+            return mem_mb / 1024.0;
         }
 
-        let mem_per_node = env::var("SLURM_MEM_PER_NODE").expect("SLURM_MEM_PER_NODE not set");
-        let mem_mb: f64 = mem_per_node
-            .parse()
-            .expect("Failed to parse SLURM_MEM_PER_NODE");
-        mem_mb / 1024.0
+        // Fall back to system total memory if SLURM_MEM_PER_NODE is unavailable
+        // Note: This may not be correct for shared nodes, as it returns the total
+        // memory on the node rather than the allocation. However, this is the best
+        // we can do when SLURM_MEM_PER_NODE is not set (the user did not set --mem).
+        // Use new_with_specifics to only refresh memory, avoiding user enumeration
+        // which can crash on HPC systems with large LDAP user databases
+        let sys = System::new_with_specifics(RefreshKind::new().with_memory());
+        sys.total_memory() as f64 / (1024.0 * 1024.0 * 1024.0)
     }
 
     fn get_node_id(&self) -> String {
