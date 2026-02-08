@@ -1,0 +1,136 @@
+# Slurm Failure Recovery Test Workflow
+#
+# This workflow tests automatic job retry with failure handlers on Slurm.
+#
+# Setup:
+# - 1 preprocess job (setup stage)
+# - 5 work jobs running in parallel (work stage)
+#   - 4 jobs succeed normally
+#   - 1 job (work_3) fails on first attempt with exit code 42
+# - 1 postprocess job that waits for all work jobs to complete
+#
+# The failure handler is configured to retry jobs that fail with exit code 42
+# up to 2 times. On retry, the job runs again and succeeds.
+#
+# Test procedure:
+# 1. Set the Slurm account to your account name.
+# 2. From the repository root, submit the workflow: torc submit tests/workflows/slurm_failure_recovery_test/workflow.yaml
+# 3. Monitor with: torc watch <workflow_id> --auto-schedule
+# 4. Expect: work_3 fails first, is retried, and succeeds on second attempt
+# 5. Then postprocess runs after all work jobs complete
+#
+# Note: This test validates the fix for the case when SLURM_MEM_PER_NODE is not set.
+# The scheduler does not specify --mem, so the code will use the system memory fallback.
+#
+
+name: slurm_failure_recovery_test
+description: Test workflow for Slurm job retry with failure handlers
+project: testing
+metadata: '{"test_type": "failure_recovery", "stages": 3}'
+
+failure_handlers:
+  - name: retry_on_exit_42
+    rules:
+      # Retry jobs failing with exit code 42 up to 2 times
+      - exit_codes: [42]
+        max_retries: 2
+
+resource_requirements:
+  - name: preprocess_resources
+    num_cpus: 1
+    memory: 512m
+    runtime: PT5M
+
+  - name: work_resources
+    num_cpus: 2
+    memory: 1g
+    runtime: PT10M
+
+  - name: postprocess_resources
+    num_cpus: 1
+    memory: 512m
+    runtime: PT5M
+
+jobs:
+  - name: preprocess
+    command: |
+      echo "Preprocess: Starting workflow setup"
+      echo "Creating working directory at $TORC_OUTPUT_DIR"
+      mkdir -p "$TORC_OUTPUT_DIR"
+      echo "Preprocess: Setup complete"
+    resource_requirements: preprocess_resources
+
+  - name: work_1
+    command: |
+      echo "Work job 1: Starting"
+      sleep 1
+      echo "Work job 1: Completed successfully"
+    resource_requirements: work_resources
+    depends_on:
+      - preprocess
+    failure_handler: retry_on_exit_42
+
+  - name: work_2
+    command: |
+      echo "Work job 2: Starting"
+      sleep 1
+      echo "Work job 2: Completed successfully"
+    resource_requirements: work_resources
+    depends_on:
+      - preprocess
+    failure_handler: retry_on_exit_42
+
+  - name: work_3
+    command: bash tests/workflows/slurm_failure_recovery_test/fail_then_succeed.sh
+    resource_requirements: work_resources
+    depends_on:
+      - preprocess
+    failure_handler: retry_on_exit_42
+
+  - name: work_4
+    command: |
+      echo "Work job 4: Starting"
+      sleep 1
+      echo "Work job 4: Completed successfully"
+    resource_requirements: work_resources
+    depends_on:
+      - preprocess
+    failure_handler: retry_on_exit_42
+
+  - name: work_5
+    command: |
+      echo "Work job 5: Starting"
+      sleep 1
+      echo "Work job 5: Completed successfully"
+    resource_requirements: work_resources
+    depends_on:
+      - preprocess
+    failure_handler: retry_on_exit_42
+
+  - name: postprocess
+    command: |
+      echo "Postprocess: All work jobs have completed"
+      echo "Running final aggregation..."
+      sleep 1
+      echo "Postprocess: Completed successfully"
+    resource_requirements: postprocess_resources
+    depends_on:
+      - work_1
+      - work_2
+      - work_3
+      - work_4
+      - work_5
+
+slurm_schedulers:
+  - name: job_scheduler
+    account: PLACEHOLDER_ACCOUNT
+    partition: debug
+    walltime: "01:00:00"
+    num_nodes: 1
+
+actions:
+  - trigger_type: "on_workflow_start"
+    action_type: "schedule_nodes"
+    scheduler: "job_scheduler"
+    scheduler_type: "slurm"
+    num_allocations: 1

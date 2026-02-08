@@ -468,18 +468,18 @@ unified CLI.
 - `torc jobs get <job_id>` - Get job details
 - `torc jobs update <job_id>` - Update job status
 
+**Reports**:
+
+- `torc reports summary <workflow_id>` - Workflow execution summary and job statistics
+- `torc reports results <workflow_id>` - Job execution results with resource metrics
+- `torc reports check-resource-utilization <workflow_id>` - Check for resource violations
+
 **Execution**:
 
 - `torc run <workflow_spec_or_id>` - Run workflow locally (top-level command)
 - `torc submit <workflow_spec_or_id>` - Submit workflow to scheduler (top-level command)
 - `torc submit-slurm --account <account> <spec_file>` - Submit with auto-generated Slurm schedulers
 - `torc tui` - Interactive terminal UI
-
-**Reports & Analysis**:
-
-- `torc reports check-resource-utilization <id>` - Check which jobs exceeded resource limits
-- `torc reports results <id>` - Get detailed job execution results
-- `torc reports summary <id>` - Get workflow completion summary
 
 **Global Options** (available on all commands):
 
