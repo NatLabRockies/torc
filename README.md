@@ -48,7 +48,7 @@ cargo install torc
 cargo install torc --features "server-bin,mcp-server,dash,slurm-runner"
 
 # Or build from source
-cargo build --workspace --release
+cargo build --all-features --release
 ```
 
 **macOS users**: The precompiled binaries are not signed with an Apple Developer certificate. macOS

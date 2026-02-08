@@ -53,9 +53,9 @@ listed below.
 
 ```
 /scratch/dthom/torc/
-├── 0.10.0/
+├── 0.12.3/
 ├── ...
-└── latest -> 0.10.0  (symlink to current version)
+└── latest -> 0.12.3  (symlink to current version)
 ```
 
 > **Recommended**: Use the `latest` directory. Torc maintains backwards compatibility, so you'll
@@ -84,7 +84,7 @@ export TORC_API_URL="http://torc.hpc.nrel.gov:8080/torc-service/v1"
 **Note:** Be mindful of how much data you store in this database. Delete workflows that you don't
 need any longer. Refer to `torc workflows export --help` for making backups of your workflows.
 
-## Install from crates.io
+## Install from crates.io (requires cargo to build)
 
 ```bash
 # Install the torc CLI (default)
@@ -92,12 +92,6 @@ cargo install torc
 
 # Install all binaries (server, dashboard, MCP server, Slurm runner)
 cargo install torc --features "server-bin,mcp-server,dash,slurm-runner"
-
-# Install specific components
-cargo install torc --features server-bin      # torc-server + torc-htpasswd
-cargo install torc --features mcp-server      # torc-mcp-server
-cargo install torc --features dash            # torc-dash
-cargo install torc --features slurm-runner    # torc-slurm-job-runner
 ```
 
 ## Building from Source
