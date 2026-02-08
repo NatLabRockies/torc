@@ -13,7 +13,7 @@ cd torc
 
 2. **Install Rust and dependencies:**
 
-Make sure you have Rust 1.70 or later installed:
+Make sure you have Rust 1.85 or later installed:
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh

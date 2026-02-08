@@ -523,18 +523,18 @@ perfect for resource-constrained HPC environments.
 
 ## Comparison with torc-dash
 
-| Feature           | TUI (`torc tui`)     | Web (`torc-dash`) |
-| ----------------- | -------------------- | ----------------- |
-| Environment       | Terminal/SSH         | Web browser       |
-| Startup           | Instant              | ~2 seconds        |
-| Dependencies      | None (single binary) | Python + packages |
-| Workflow actions  | ✅                   | ✅                |
-| Job actions       | ✅                   | ✅                |
-| Log viewing       | ✅                   | ✅                |
-| DAG visualization | Text-based           | Interactive graph |
-| Resource plots    | Planned              | ✅                |
-| Event monitoring  | Planned              | ✅                |
-| File preview      | Via logs             | ✅                |
+| Feature           | TUI (`torc tui`)     | Web (`torc-dash`)    |
+| ----------------- | -------------------- | -------------------- |
+| Environment       | Terminal/SSH         | Web browser          |
+| Startup           | Instant              | ~2 seconds           |
+| Dependencies      | None (single binary) | None (single binary) |
+| Workflow actions  | ✅                   | ✅                   |
+| Job actions       | ✅                   | ✅                   |
+| Log viewing       | ✅                   | ✅                   |
+| DAG visualization | Text-based           | Interactive graph    |
+| Resource plots    | Planned              | ✅                   |
+| Event monitoring  | Planned              | ✅                   |
+| File preview      | Via logs             | ✅                   |
 
 Choose the **TUI** for: SSH sessions, HPC environments, quick operations, low-bandwidth connections.
 

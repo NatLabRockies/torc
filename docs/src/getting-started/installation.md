@@ -98,7 +98,7 @@ cargo install torc --features "server-bin,mcp-server,dash,slurm-runner"
 
 ### Prerequisites
 
-- Rust 1.70 or later
+- Rust 1.85 or later (required for the 2024 edition)
 - SQLite 3.35 or later (usually included with Rust via sqlx)
 
 ### Clone the Repository

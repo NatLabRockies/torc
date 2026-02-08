@@ -366,6 +366,7 @@ Workflow management commands
 - `export` — Export a workflow to a portable JSON file
 - `import` — Import a workflow from an exported JSON file
 - `sync-status` — Synchronize job statuses with Slurm (detect and fail orphaned jobs)
+- `correct-resources` — Correct resource requirements based on actual job usage
 
 ## `torc workflows create`
 
@@ -748,6 +749,48 @@ torc workflows sync-status 123
 
 # Get JSON output for scripting
 torc -f json workflows sync-status 123
+```
+
+## `torc workflows correct-resources`
+
+Correct resource requirements based on actual job usage (proactive optimization)
+
+Analyzes completed jobs and adjusts resource requirements to better match actual usage. Unlike
+`torc recover`, this command does NOT reset or rerun jobs — it only updates resource requirements
+for future runs.
+
+**Usage:** `torc workflows correct-resources [OPTIONS] [WORKFLOW_ID]`
+
+###### **Arguments:**
+
+- `<WORKFLOW_ID>` — ID of the workflow to analyze (optional - will prompt if not provided)
+
+###### **Options:**
+
+- `--memory-multiplier <MEMORY_MULTIPLIER>` — Memory multiplier for jobs that exceeded memory.
+  Default: `1.2`
+- `--runtime-multiplier <RUNTIME_MULTIPLIER>` — Runtime multiplier for jobs that exceeded runtime.
+  Default: `1.2`
+- `--job-ids <JOB_IDS>` — Only correct resource requirements for specific jobs (comma-separated IDs)
+- `--dry-run` — Show what would be changed without applying
+
+###### **Examples:**
+
+```bash
+# Preview corrections (dry-run)
+torc workflows correct-resources 123 --dry-run
+
+# Apply corrections to all over-utilized jobs
+torc workflows correct-resources 123
+
+# Apply corrections only to specific jobs
+torc workflows correct-resources 123 --job-ids 45,67,89
+
+# Use custom multipliers
+torc workflows correct-resources 123 --memory-multiplier 1.5 --runtime-multiplier 1.4
+
+# Output as JSON for programmatic use
+torc -f json workflows correct-resources 123 --dry-run
 ```
 
 ## `torc compute-nodes`

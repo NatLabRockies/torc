@@ -28,7 +28,7 @@ cargo run --bin generate-cli-docs --features "client,tui,plot_resources"
         markdown
     );
 
-    let output_path = Path::new("docs/src/reference/cli.md");
+    let output_path = Path::new("docs/src/core/reference/cli.md");
 
     // Ensure parent directory exists
     if let Some(parent) = output_path.parent() {

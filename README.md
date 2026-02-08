@@ -127,7 +127,7 @@ Torc provides a unified CLI with the following commands:
 - **Workflow Management**: `torc workflows <subcommand>`
 - **Job Management**: `torc jobs <subcommand>`
 - **File Management**: `torc files <subcommand>`
-- **Local Execution**: `torc job-runner <workflow_id>`
+- **Local Execution**: `torc run <workflow_spec_or_id>`
 - **Interactive TUI**: `torc tui`
 - **Resource Visualization**: `torc plot-resources <db_path>`
 - **Reports**: `torc reports <subcommand>`
@@ -172,7 +172,7 @@ Here are the features of Torc that we think differentiate it from other tools:
 - Debugging errors
 
   We run large numbers of simulations on untested input data. Many of them fail. Torc provides
-  automatic resource monitoring, log colletion, and detailed error reporting through raw text,
+  automatic resource monitoring, log collection, and detailed error reporting through raw text,
   tables, and formatted JSON. Torc makes it easy for users to rerun failed jobs after applying
   fixes.
 

@@ -9,7 +9,7 @@ version = "0.12.3"
 authors = ["Daniel Thom", "Joseph McKinsey"]
 license = "BSD-3-Clause"
 edition = "2024"
-repository = "https://github.com/NatLabRockies/torc"
+repository = "https://github.com/NREL/torc"
 description = "Workflow management system"
 
 [workspace.dependencies]

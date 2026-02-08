@@ -34,9 +34,10 @@ const WORKFLOWS_HELP_TEMPLATE: &str = "\
   \x1b[1;36mlist-actions\x1b[0m     List workflow actions
 
 \x1b[1;32mWorkflow Maintenance:\x1b[0m
-  \x1b[1;36mupdate\x1b[0m           Update workflow properties
-  \x1b[1;36mdelete\x1b[0m           Delete one or more workflows
-  \x1b[1;36marchive\x1b[0m          Archive or unarchive workflows
+  \x1b[1;36mupdate\x1b[0m              Update workflow properties
+  \x1b[1;36mdelete\x1b[0m              Delete one or more workflows
+  \x1b[1;36marchive\x1b[0m             Archive or unarchive workflows
+  \x1b[1;36mcorrect-resources\x1b[0m   Correct resource requirements based on usage
 
 \x1b[1;32mImport & Export:\x1b[0m
   \x1b[1;36mexport\x1b[0m           Export a workflow to JSON

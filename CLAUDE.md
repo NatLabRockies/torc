@@ -56,7 +56,8 @@ For detailed style guidelines, see `docs/src/style-guide.md`.
 
 ```
 torc/
-├── src/                 # Main torc library and unified CLI
+├── src/                 # Main torc library (single crate, feature-gated)
+│   ├── bin/             # Binary entry points (torc-server, torc-dash, etc.)
 │   ├── client/          # Client modules
 │   │   ├── commands/    # CLI command handlers
 │   │   ├── apis/        # Generated API client
@@ -66,6 +67,7 @@ torc/
 │   │   └── async_cli_command.rs # Non-blocking job execution
 │   ├── server/          # Server implementation modules
 │   │   └── api/         # Modular API implementations
+│   ├── mcp_server/      # MCP server modules (tools, server)
 │   ├── tui/             # Interactive terminal UI modules
 │   ├── run_jobs_cmd.rs  # Job runner command module
 │   ├── tui_runner.rs    # TUI runner command module
@@ -73,8 +75,10 @@ torc/
 │   ├── main.rs          # Unified CLI entry point
 │   ├── lib.rs           # Library root
 │   └── models.rs        # Shared data models
-├── torc-server/         # Server migrations
+├── torc-server/         # Server database migrations
+│   └── migrations/      # SQLx migration files
 ├── torc-dash/           # Dashboard static assets
+│   └── static/          # Web UI files
 ├── python_client/       # Python CLI client and library
 │   ├── src/torc/        # Python package
 │   └── pyproject.toml   # Python project configuration
