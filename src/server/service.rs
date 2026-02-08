@@ -80,7 +80,10 @@ impl ServiceConfig {
     }
 
     /// Merge user-provided configuration with defaults
-    /// User-provided values take precedence, but we fill in sensible defaults
+    /// User-provided values take precedence, but we fill in sensible defaults.
+    /// Non-Option fields are compared against known clap defaults to determine
+    /// if the user explicitly provided a value or if the clap default should be
+    /// replaced with the service-appropriate default.
     fn merge_with_defaults(user_config: &ServiceConfig, user_level: bool) -> Self {
         let defaults = if user_level {
             Self::default_user()
@@ -89,18 +92,35 @@ impl ServiceConfig {
         };
 
         Self {
-            // Use user config's log_dir if provided, otherwise use default
+            // Option fields: use user config if provided, otherwise use service default
             log_dir: user_config.log_dir.clone().or(defaults.log_dir),
             database: user_config.database.clone().or(defaults.database),
-            host: user_config.host.clone(),
-            port: user_config.port,
-            threads: user_config.threads,
             auth_file: user_config.auth_file.clone(),
-            require_auth: user_config.require_auth,
-            log_level: user_config.log_level.clone(),
-            json_logs: user_config.json_logs,
-            // Use user-provided interval if set, otherwise None (will use default at install time)
             completion_check_interval_secs: user_config.completion_check_interval_secs,
+            // Non-Option fields: fall back to service defaults when clap defaults are detected
+            host: if user_config.host != "0.0.0.0" {
+                user_config.host.clone()
+            } else {
+                defaults.host
+            },
+            port: if user_config.port != 8080 {
+                user_config.port
+            } else {
+                defaults.port
+            },
+            threads: if user_config.threads != 1 {
+                user_config.threads
+            } else {
+                defaults.threads
+            },
+            log_level: if user_config.log_level != "info" {
+                user_config.log_level.clone()
+            } else {
+                defaults.log_level
+            },
+            // Boolean fields: true if either user or defaults enable it
+            require_auth: user_config.require_auth || defaults.require_auth,
+            json_logs: user_config.json_logs || defaults.json_logs,
         }
     }
 }

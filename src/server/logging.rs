@@ -11,6 +11,7 @@ use file_rotate::{ContentLimit, FileRotate, compression::Compression, suffix::Ap
 use std::io::Write;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 /// Size-based rotating file writer for logging
@@ -78,7 +79,11 @@ impl Clone for RotatingWriter {
 /// // Console + JSON file logs for structured logging
 /// init_logging(Some(Path::new("/var/log/torc")), "info", true)?;
 /// ```
-pub fn init_logging(log_dir: Option<&Path>, log_level: &str, json_format: bool) -> Result<()> {
+pub fn init_logging(
+    log_dir: Option<&Path>,
+    log_level: &str,
+    json_format: bool,
+) -> Result<Option<WorkerGuard>> {
     // Create environment filter from log level
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         // If RUST_LOG is not set, use the provided log_level
@@ -93,11 +98,7 @@ pub fn init_logging(log_dir: Option<&Path>, log_level: &str, json_format: bool) 
         let file_writer = RotatingWriter::new(dir)?;
 
         // Use non-blocking writer to avoid blocking the server on log writes
-        let (non_blocking, _guard) = tracing_appender::non_blocking(file_writer);
-
-        // Store the guard in a static to prevent it from being dropped
-        // This is necessary to keep the non-blocking writer alive
-        std::mem::forget(_guard);
+        let (non_blocking, guard) = tracing_appender::non_blocking(file_writer);
 
         if json_format {
             // JSON format for file, human-readable for console
@@ -105,7 +106,7 @@ pub fn init_logging(log_dir: Option<&Path>, log_level: &str, json_format: bool) 
                 .with(env_filter)
                 .with(
                     fmt::layer()
-                        .with_writer(std::io::stdout)
+                        .with_writer(std::io::stderr)
                         .with_target(true)
                         .with_thread_ids(true)
                         .with_line_number(true),
@@ -125,7 +126,7 @@ pub fn init_logging(log_dir: Option<&Path>, log_level: &str, json_format: bool) 
                 .with(env_filter)
                 .with(
                     fmt::layer()
-                        .with_writer(std::io::stdout)
+                        .with_writer(std::io::stderr)
                         .with_target(true)
                         .with_thread_ids(true)
                         .with_line_number(true),
@@ -149,13 +150,16 @@ pub fn init_logging(log_dir: Option<&Path>, log_level: &str, json_format: bool) 
             max_files = 5,
             "Logging initialized with file output and size-based rotation"
         );
+
+        // Return the guard so the caller keeps it alive for proper log flushing
+        Ok(Some(guard))
     } else {
         // Console-only logging
         tracing_subscriber::registry()
             .with(env_filter)
             .with(
                 fmt::layer()
-                    .with_writer(std::io::stdout)
+                    .with_writer(std::io::stderr)
                     .with_target(true)
                     .with_thread_ids(true)
                     .with_line_number(true),
@@ -166,9 +170,9 @@ pub fn init_logging(log_dir: Option<&Path>, log_level: &str, json_format: bool) 
             log_level = %log_level,
             "Logging initialized (console only)"
         );
-    }
 
-    Ok(())
+        Ok(None)
+    }
 }
 
 /// Create a rotating file writer for use with tracing timing instrumentation

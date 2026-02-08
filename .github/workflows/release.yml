@@ -113,12 +113,12 @@ jobs:
       - name: Build binaries (with cross)
         if: matrix.use_cross
         run: |
-          cross build --release --target ${{ matrix.target }} --workspace
+          cross build --release --target ${{ matrix.target }} --workspace --all-features
 
       - name: Build binaries (native)
         if: "!matrix.use_cross"
         run: |
-          cargo build --workspace --release --target ${{ matrix.target }}
+          cargo build --workspace --all-features --release --target ${{ matrix.target }}
 
       - name: Create release archive
         shell: bash

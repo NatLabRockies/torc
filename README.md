@@ -66,7 +66,7 @@ The unified `torc` CLI provides all workflow management, execution, and monitori
 ### Basic Usage
 
 ```bash
-# 1. Start the Torc server (standalone binary)
+# 1. Start the Torc server
 torc-server run
 # Or with options:
 torc-server run --url localhost --port 8080 --threads 8 --database path/to/db.sqlite
@@ -137,9 +137,9 @@ Torc provides a unified CLI with the following commands:
 - `--url <URL>` - Specify Torc server URL (or use `TORC_API_URL` env var)
 - `-f, --format <FORMAT>` - Output format: `table` or `json`
 
-Standalone binaries are also available for deployment scenarios:
+Additional binaries are available via feature flags (see installation docs):
 
-- `torc-server` - REST API server (**always run as standalone**, not in unified CLI)
+- `torc-server` - REST API server (run separately from the unified CLI)
 
 ## Why develop another workflow management tool?
 

@@ -85,7 +85,7 @@ jobs:
           DATABASE_URL: sqlite:db/sqlite/dev.db
 
       - name: Build test binaries (only necessary packages)
-        run: cargo build --all-features -p torc -p torc-server
+        run: cargo build --all-features -p torc
         env:
           RUST_BACKTRACE: 1
           CARGO_INCREMENTAL: 0

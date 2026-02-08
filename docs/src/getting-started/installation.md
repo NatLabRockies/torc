@@ -130,27 +130,30 @@ sqlx database setup --source torc-server/migrations
 **Build everything (server, client, dashboard, job runners):**
 
 ```bash
-# Development build
-cargo build --workspace
+# Development build (all features)
+cargo build --all-features
 
 # Release build (optimized, recommended)
-cargo build --workspace --release
+cargo build --all-features --release
 ```
 
-**Build individual components:**
+**Build individual components using feature flags:**
 
 ```bash
-# Server
-cargo build --release -p torc-server
+# Client CLI (default features)
+cargo build --release
 
-# Client CLI
-cargo build --release -p torc
+# Server + htpasswd utility
+cargo build --release --features server-bin
 
 # Web Dashboard
-cargo build --release -p torc-dash
+cargo build --release --features dash
+
+# MCP Server
+cargo build --release --features mcp-server
 
 # Slurm job runner
-cargo build --release -p torc-slurm-job-runner
+cargo build --release --features slurm-runner
 ```
 
 Binaries will be in `target/release/`.
@@ -220,7 +223,7 @@ RUST_LOG=debug cargo test -- --nocapture
 
 ```bash
 # Development mode
-cargo run -p torc-server -- run
+cargo run --features server-bin --bin torc-server -- run
 
 # Production mode (release build)
 ./target/release/torc-server run

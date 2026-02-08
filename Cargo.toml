@@ -1,10 +1,6 @@
 [workspace]
 members = [
     ".",
-    "torc-server",
-    "torc-slurm-job-runner",
-    "torc-dash",
-    "torc-mcp-server",
 ]
 resolver = "2"
 

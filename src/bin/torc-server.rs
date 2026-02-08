@@ -308,6 +308,8 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
         .unwrap_or(false);
 
     // Initialize logging with file rotation support
+    // Hold the log guard for the lifetime of the server to ensure proper log flushing
+    let _log_guard;
     if timing_enabled {
         // When timing is enabled, we need to set up tracing manually to include the timing layer
         // Set up tracing with timing layer
@@ -321,12 +323,13 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
         if let Some(ref log_dir) = config.log_dir {
             // File logging with timing (size-based rotation: 10 MiB, 5 files)
             let file_writer = logging::create_rotating_writer(log_dir)?;
-            let (non_blocking, _guard) = tracing_appender::non_blocking(file_writer);
-            std::mem::forget(_guard); // Keep guard alive
+            let (non_blocking, guard) = tracing_appender::non_blocking(file_writer);
+            _log_guard = Some(guard);
 
             tracing_subscriber::registry()
                 .with(
                     tracing_subscriber::fmt::layer()
+                        .with_writer(std::io::stderr)
                         .with_target(true)
                         .with_level(true)
                         .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE),
@@ -343,10 +346,12 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
                 .with(timing_layer)
                 .init();
         } else {
+            _log_guard = None;
             // Console only with timing
             tracing_subscriber::registry()
                 .with(
                     tracing_subscriber::fmt::layer()
+                        .with_writer(std::io::stderr)
                         .with_target(true)
                         .with_level(true)
                         .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE),
@@ -367,7 +372,7 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
         );
     } else {
         // Use the new logging module for standard (non-timing) logging
-        logging::init_logging(
+        _log_guard = logging::init_logging(
             config.log_dir.as_deref(),
             &config.log_level,
             config.json_logs,
