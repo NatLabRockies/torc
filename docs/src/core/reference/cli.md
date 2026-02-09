@@ -759,6 +759,10 @@ Analyzes completed jobs and adjusts resource requirements to better match actual
 `torc recover`, this command does NOT reset or rerun jobs — it only updates resource requirements
 for future runs.
 
+The command both **upscales** resources for jobs that exceeded their limits and **downsizes**
+resources that are significantly over-allocated. Downsizing only considers successfully completed
+jobs (return code 0) and requires all jobs sharing a resource requirement to have peak usage data.
+
 **Usage:** `torc workflows correct-resources [OPTIONS] [WORKFLOW_ID]`
 
 ###### **Arguments:**
@@ -769,10 +773,14 @@ for future runs.
 
 - `--memory-multiplier <MEMORY_MULTIPLIER>` — Memory multiplier for jobs that exceeded memory.
   Default: `1.2`
+- `--cpu-multiplier <CPU_MULTIPLIER>` — CPU multiplier for jobs that exceeded CPU allocation.
+  Default: `1.2`
 - `--runtime-multiplier <RUNTIME_MULTIPLIER>` — Runtime multiplier for jobs that exceeded runtime.
   Default: `1.2`
-- `--job-ids <JOB_IDS>` — Only correct resource requirements for specific jobs (comma-separated IDs)
+- `--job-ids <JOB_IDS>` — Only correct resource requirements for specific jobs (comma-separated
+  IDs). Filters both upscaling and downsizing.
 - `--dry-run` — Show what would be changed without applying
+- `--no-downsize` — Disable downsizing of over-allocated resources (downsizing is on by default)
 
 ###### **Examples:**
 
@@ -780,14 +788,17 @@ for future runs.
 # Preview corrections (dry-run)
 torc workflows correct-resources 123 --dry-run
 
-# Apply corrections to all over-utilized jobs
+# Apply corrections (upscale + downsize)
 torc workflows correct-resources 123
+
+# Only upscale, don't reduce over-allocated resources
+torc workflows correct-resources 123 --no-downsize
 
 # Apply corrections only to specific jobs
 torc workflows correct-resources 123 --job-ids 45,67,89
 
 # Use custom multipliers
-torc workflows correct-resources 123 --memory-multiplier 1.5 --runtime-multiplier 1.4
+torc workflows correct-resources 123 --memory-multiplier 1.5 --cpu-multiplier 1.3
 
 # Output as JSON for programmatic use
 torc -f json workflows correct-resources 123 --dry-run

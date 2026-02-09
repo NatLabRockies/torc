@@ -65,13 +65,17 @@ use crate::client::commands::{
     table_format::display_table_with_count,
 };
 use crate::client::hpc::hpc_interface::HpcInterface;
+use crate::client::report_models::ResourceUtilizationReport;
+use crate::client::resource_correction::{
+    ResourceCorrectionContext, ResourceCorrectionOptions, ResourceLookupContext,
+    apply_resource_corrections, detect_cpu_violation, detect_memory_violation,
+    detect_runtime_violation, detect_timeout,
+};
 use crate::client::workflow_manager::WorkflowManager;
 use crate::client::workflow_spec::WorkflowSpec;
 use crate::config::TorcConfig;
-use crate::memory_utils::memory_string_to_bytes;
 use crate::models;
 use crate::models::JobStatus;
-use crate::time_utils::duration_string_to_seconds;
 use serde_json;
 use tabled::Tabled;
 
@@ -590,6 +594,7 @@ EXAMPLES:
     /// resource requirements for future runs.
     #[command(
         name = "correct-resources",
+        hide = true,
         after_long_help = "\
 EXAMPLES:
     # Preview corrections (dry-run)
@@ -602,7 +607,7 @@ EXAMPLES:
     torc workflows correct-resources 123 --job-ids 45,67,89
 
     # Use custom multipliers
-    torc workflows correct-resources 123 --memory-multiplier 1.5 --runtime-multiplier 1.4
+    torc workflows correct-resources 123 --memory-multiplier 1.5 --cpu-multiplier 1.3 --runtime-multiplier 1.4
 
     # Output as JSON for programmatic use
     torc -f json workflows correct-resources 123 --dry-run
@@ -615,6 +620,9 @@ EXAMPLES:
         /// Memory multiplier for jobs that exceeded memory (default: 1.2)
         #[arg(long, default_value = "1.2")]
         memory_multiplier: f64,
+        /// CPU multiplier for jobs that exceeded CPU allocation (default: 1.2)
+        #[arg(long, default_value = "1.2")]
+        cpu_multiplier: f64,
         /// Runtime multiplier for jobs that exceeded runtime (default: 1.2)
         #[arg(long, default_value = "1.2")]
         runtime_multiplier: f64,
@@ -624,6 +632,9 @@ EXAMPLES:
         /// Show what would be changed without applying (default: false)
         #[arg(long)]
         dry_run: bool,
+        /// Disable downsizing of over-allocated resources (downsizing is on by default)
+        #[arg(long)]
+        no_downsize: bool,
     },
     /// Show the execution plan for a workflow specification or existing workflow
     #[command(
@@ -1163,108 +1174,19 @@ fn handle_list_actions(
 }
 
 /// Context for looking up jobs and their resource requirements
-///
-/// This struct centralizes job and resource requirement lookups to reduce
-/// repeated nested if-let chains throughout violation detection.
-struct ResourceLookupContext<'a> {
-    jobs: &'a [models::JobModel],
-    resource_requirements: &'a [models::ResourceRequirementsModel],
-}
-
-impl<'a> ResourceLookupContext<'a> {
-    fn new(
-        jobs: &'a [models::JobModel],
-        resource_requirements: &'a [models::ResourceRequirementsModel],
-    ) -> Self {
-        Self {
-            jobs,
-            resource_requirements,
-        }
-    }
-
-    fn find_job(&self, job_id: i64) -> Option<&models::JobModel> {
-        self.jobs.iter().find(|j| j.id == Some(job_id))
-    }
-
-    fn find_resource_requirements(&self, rr_id: i64) -> Option<&models::ResourceRequirementsModel> {
-        self.resource_requirements
-            .iter()
-            .find(|r| r.id == Some(rr_id))
-    }
-}
-
-/// Detect memory violation based on actual peak memory usage
-fn detect_memory_violation(
-    ctx: &ResourceLookupContext,
-    result: &models::ResultModel,
-    job: &models::JobModel,
-) -> bool {
-    if let Some(peak_mem) = result.peak_memory_bytes
-        && let Some(rr_id) = job.resource_requirements_id
-        && let Some(rr) = ctx.find_resource_requirements(rr_id)
-        && let Ok(specified_memory_bytes) = memory_string_to_bytes(&rr.memory)
-    {
-        peak_mem > specified_memory_bytes
-    } else {
-        false
-    }
-}
-
-/// Detect CPU violation based on actual peak CPU percentage
-fn detect_cpu_violation(
-    ctx: &ResourceLookupContext,
-    result: &models::ResultModel,
-    job: &models::JobModel,
-) -> bool {
-    if let Some(peak_cpu) = result.peak_cpu_percent
-        && let Some(rr_id) = job.resource_requirements_id
-        && let Some(rr) = ctx.find_resource_requirements(rr_id)
-    {
-        let configured_cpus = rr.num_cpus as f64;
-        let specified_cpu_percent = configured_cpus * 100.0;
-        peak_cpu > specified_cpu_percent
-    } else {
-        false
-    }
-}
-
-/// Detect runtime violation based on actual execution time
-fn detect_runtime_violation(
-    ctx: &ResourceLookupContext,
-    result: &models::ResultModel,
-    job: &models::JobModel,
-) -> bool {
-    if let Some(rr_id) = job.resource_requirements_id
-        && let Some(rr) = ctx.find_resource_requirements(rr_id)
-        && let Ok(specified_runtime_seconds) = duration_string_to_seconds(&rr.runtime)
-    {
-        let exec_time_seconds = result.exec_time_minutes * 60.0;
-        let specified_runtime_seconds = specified_runtime_seconds as f64;
-        exec_time_seconds > specified_runtime_seconds
-    } else {
-        false
-    }
-}
-
-/// Detect timeout based on return code
-fn detect_timeout(result: &models::ResultModel) -> bool {
-    result.return_code == 152
-}
-
+#[allow(clippy::too_many_arguments)]
 fn handle_correct_resources(
     config: &Configuration,
     workflow_id: &Option<i64>,
     memory_multiplier: f64,
+    cpu_multiplier: f64,
     runtime_multiplier: f64,
     job_ids: &Option<Vec<i64>>,
     dry_run: bool,
+    no_downsize: bool,
     format: &str,
 ) {
-    use crate::client::report_models::ResourceUtilizationReport;
-    use crate::client::resource_correction::apply_resource_corrections;
-
     let user_name = get_env_user_name();
-
     let selected_workflow_id = match workflow_id {
         Some(id) => *id,
         None => select_workflow_interactively(config, &user_name).unwrap(),
@@ -1362,12 +1284,16 @@ fn handle_correct_resources(
 
     for result in &all_results {
         if let Some(job) = ctx.find_job(result.job_id) {
-            let likely_oom = detect_memory_violation(&ctx, result, job);
+            let memory_violation = detect_memory_violation(&ctx, result, job);
             let likely_timeout = detect_timeout(result);
             let likely_cpu_violation = detect_cpu_violation(&ctx, result, job);
             let likely_runtime_violation = detect_runtime_violation(&ctx, result, job);
 
-            if likely_oom || likely_timeout || likely_cpu_violation || likely_runtime_violation {
+            if memory_violation
+                || likely_timeout
+                || likely_cpu_violation
+                || likely_runtime_violation
+            {
                 let peak_memory_bytes = result.peak_memory_bytes;
                 let (configured_cpus, configured_memory, configured_runtime) =
                     if let Some(rr_id) = job.resource_requirements_id {
@@ -1390,8 +1316,8 @@ fn handle_correct_resources(
                     configured_cpus,
                     peak_memory_bytes,
                     peak_memory_formatted: None,
-                    likely_oom,
-                    oom_reason: if likely_oom {
+                    memory_violation,
+                    oom_reason: if memory_violation {
                         // Distinguish between actual OOM failure (137) vs memory violation in successful job
                         if result.return_code == 137 {
                             Some("sigkill_137".to_string())
@@ -1418,18 +1344,19 @@ fn handle_correct_resources(
         }
     }
 
-    if resource_violations.is_empty() {
+    // Step 3: Early return if no violations and downsizing is disabled
+    if resource_violations.is_empty() && no_downsize {
         if format == "json" {
             let response = serde_json::json!({
                 "status": "success",
                 "workflow_id": selected_workflow_id,
                 "resource_requirements_updated": 0,
-                "jobs_analyzed": all_results.len(),
-                "message": "No jobs with over-utilization detected"
+                "jobs_analyzed": 0,
+                "message": "No resource corrections needed"
             });
             println!("{}", serde_json::to_string_pretty(&response).unwrap());
         } else {
-            println!("No jobs with over-utilization (OOM/timeout/CPU) detected");
+            println!("No resource corrections needed");
         }
         return;
     }
@@ -1445,55 +1372,95 @@ fn handle_correct_resources(
         resource_violations: resource_violations.clone(),
     };
 
-    // Step 3: Apply resource corrections
-    let include_job_list = job_ids.as_deref().unwrap_or(&[]);
-
-    match apply_resource_corrections(
+    // Step 4: Apply resource corrections (upscaling + downsizing)
+    let correction_ctx = ResourceCorrectionContext {
         config,
-        selected_workflow_id,
-        &diagnosis,
+        workflow_id: selected_workflow_id,
+        diagnosis: &diagnosis,
+        all_results: &all_results,
+        all_jobs: &jobs,
+        all_resource_requirements: &resource_requirements,
+    };
+    let correction_opts = ResourceCorrectionOptions {
         memory_multiplier,
+        cpu_multiplier,
         runtime_multiplier,
-        include_job_list,
+        include_jobs: job_ids.as_deref().unwrap_or(&[]).to_vec(),
         dry_run,
-    ) {
+        no_downsize,
+    };
+
+    match apply_resource_corrections(&correction_ctx, &correction_opts) {
         Ok(result) => {
             if format == "json" {
                 let response = serde_json::json!({
                     "status": "success",
                     "workflow_id": selected_workflow_id,
                     "dry_run": dry_run,
+                    "no_downsize": no_downsize,
                     "memory_multiplier": memory_multiplier,
+                    "cpu_multiplier": cpu_multiplier,
                     "runtime_multiplier": runtime_multiplier,
                     "resource_requirements_updated": result.resource_requirements_updated,
                     "jobs_analyzed": result.jobs_analyzed,
                     "memory_corrections": result.memory_corrections,
                     "runtime_corrections": result.runtime_corrections,
+                    "cpu_corrections": result.cpu_corrections,
+                    "downsize_memory_corrections": result.downsize_memory_corrections,
+                    "downsize_runtime_corrections": result.downsize_runtime_corrections,
+                    "downsize_cpu_corrections": result.downsize_cpu_corrections,
                     "adjustments": result.adjustments
                 });
                 println!("{}", serde_json::to_string_pretty(&response).unwrap());
             } else {
-                // Print summary
                 println!();
                 println!("Resource Correction Summary:");
                 println!("  Workflow: {}", selected_workflow_id);
-                println!("  Jobs analyzed: {}", result.jobs_analyzed);
+                println!("  Jobs with violations: {}", result.jobs_analyzed);
                 println!(
                     "  Resource requirements updated: {}",
                     result.resource_requirements_updated
                 );
-                println!("  Memory corrections: {}", result.memory_corrections);
-                println!("  Runtime corrections: {}", result.runtime_corrections);
+                if result.memory_corrections > 0
+                    || result.runtime_corrections > 0
+                    || result.cpu_corrections > 0
+                {
+                    println!("  Upscale:");
+                    println!("    Memory corrections: {}", result.memory_corrections);
+                    println!("    Runtime corrections: {}", result.runtime_corrections);
+                    println!("    CPU corrections: {}", result.cpu_corrections);
+                }
+                if result.downsize_memory_corrections > 0
+                    || result.downsize_runtime_corrections > 0
+                    || result.downsize_cpu_corrections > 0
+                {
+                    println!("  Downscale:");
+                    println!(
+                        "    Memory reductions: {}",
+                        result.downsize_memory_corrections
+                    );
+                    println!(
+                        "    Runtime reductions: {}",
+                        result.downsize_runtime_corrections
+                    );
+                    println!("    CPU reductions: {}", result.downsize_cpu_corrections);
+                }
 
                 // Print details if any corrections were made
                 if !result.adjustments.is_empty() {
                     println!();
                     println!("Adjustment Details:");
                     for adj in &result.adjustments {
+                        let direction_label = if adj.direction == "downscale" {
+                            " (downscale)"
+                        } else {
+                            ""
+                        };
                         println!(
-                            "  RR {}: {} job(s)",
+                            "  RR {}: {} job(s){}",
                             adj.resource_requirements_id,
-                            adj.job_ids.len()
+                            adj.job_ids.len(),
+                            direction_label,
                         );
                         if let (Some(old_mem), Some(new_mem)) =
                             (&adj.original_memory, &adj.new_memory)
@@ -1504,6 +1471,10 @@ fn handle_correct_resources(
                             (&adj.original_runtime, &adj.new_runtime)
                         {
                             println!("    Runtime: {} -> {}", old_rt, new_rt);
+                        }
+                        if let (Some(old_cpus), Some(new_cpus)) = (adj.original_cpus, adj.new_cpus)
+                        {
+                            println!("    CPUs: {} -> {}", old_cpus, new_cpus);
                         }
                     }
                 }
@@ -3481,17 +3452,21 @@ pub fn handle_workflow_commands(config: &Configuration, command: &WorkflowComman
         WorkflowCommands::CorrectResources {
             workflow_id,
             memory_multiplier,
+            cpu_multiplier,
             runtime_multiplier,
             job_ids,
             dry_run,
+            no_downsize,
         } => {
             handle_correct_resources(
                 config,
                 workflow_id,
                 *memory_multiplier,
+                *cpu_multiplier,
                 *runtime_multiplier,
                 job_ids,
                 *dry_run,
+                *no_downsize,
                 format,
             );
         }

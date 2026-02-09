@@ -38,17 +38,17 @@
 
 ## Recovery & Diagnostics
 
-| Command                                        | Description                                   |
-| ---------------------------------------------- | --------------------------------------------- |
-| `torc reports summary <id>`                    | Workflow completion summary                   |
-| `torc reports check-resource-utilization <id>` | Check memory/CPU/time usage                   |
-| `torc reports results <id>`                    | JSON report of job results with log paths     |
-| `torc recover <id>`                            | One-shot recovery (diagnose + fix + resubmit) |
-| `torc watch <id> --recover --auto-schedule`    | Full production recovery mode                 |
-| `torc workflows sync-status <id>`              | Fix orphaned jobs (stuck in "running")        |
-| `torc workflows correct-resources <id>`        | Auto-correct resource requirements            |
-| `torc slurm sacct <id>`                        | Get Slurm accounting data                     |
-| `torc slurm usage <id>`                        | Total compute node and CPU time consumed      |
+| Command                                        | Description                                    |
+| ---------------------------------------------- | ---------------------------------------------- |
+| `torc reports summary <id>`                    | Workflow completion summary                    |
+| `torc reports check-resource-utilization <id>` | Check memory/CPU/time usage                    |
+| `torc reports results <id>`                    | JSON report of job results with log paths      |
+| `torc recover <id>`                            | One-shot recovery (diagnose + fix + resubmit)  |
+| `torc watch <id> --recover --auto-schedule`    | Full production recovery mode                  |
+| `torc workflows sync-status <id>`              | Fix orphaned jobs (stuck in "running")         |
+| `torc workflows correct-resources <id>`        | Upscale violated + downsize over-allocated RRs |
+| `torc slurm sacct <id>`                        | Get Slurm accounting data                      |
+| `torc slurm usage <id>`                        | Total compute node and CPU time consumed       |
 
 ## Remote Workers
 

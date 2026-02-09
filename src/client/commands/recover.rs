@@ -14,7 +14,10 @@ use crate::client::apis::configuration::Configuration;
 use crate::client::apis::default_api;
 use crate::client::commands::slurm::RegenerateDryRunResult;
 use crate::client::report_models::{ResourceUtilizationReport, ResultsReport};
-use crate::client::resource_correction::{ResourceAdjustmentReport, apply_resource_corrections};
+use crate::client::resource_correction::{
+    ResourceAdjustmentReport, ResourceCorrectionContext, ResourceCorrectionOptions,
+    apply_resource_corrections,
+};
 use crate::models::JobStatus;
 
 /// Arguments for workflow recovery
@@ -770,7 +773,7 @@ pub fn apply_recovery_heuristics(
     let mut unknown_job_ids = Vec::new();
 
     for violation in &diagnosis.resource_violations {
-        if !violation.likely_oom && !violation.likely_timeout {
+        if !violation.memory_violation && !violation.likely_timeout {
             other_failures += 1;
             if retry_unknown {
                 unknown_job_ids.push(violation.job_id);
@@ -778,16 +781,24 @@ pub fn apply_recovery_heuristics(
         }
     }
 
-    // Call shared resource correction algorithm
-    let correction_result = apply_resource_corrections(
+    // Call shared resource correction algorithm (recovery never downsizes)
+    let correction_ctx = ResourceCorrectionContext {
         config,
         workflow_id,
         diagnosis,
+        all_results: &[],
+        all_jobs: &[],
+        all_resource_requirements: &[],
+    };
+    let correction_opts = ResourceCorrectionOptions {
         memory_multiplier,
+        cpu_multiplier: memory_multiplier, // recovery uses memory_multiplier for CPU
         runtime_multiplier,
-        &[], // include_jobs empty means all jobs
+        include_jobs: vec![],
         dry_run,
-    )?;
+        no_downsize: true,
+    };
+    let correction_result = apply_resource_corrections(&correction_ctx, &correction_opts)?;
 
     // Extract counts from shared result
     let oom_fixed = correction_result.memory_corrections;

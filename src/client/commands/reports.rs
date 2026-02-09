@@ -428,7 +428,7 @@ fn check_resource_utilization(
                 configured_cpus: resource_req.num_cpus,
                 peak_memory_bytes,
                 peak_memory_formatted,
-                likely_oom,
+                memory_violation: likely_oom,
                 oom_reason,
                 memory_over_utilization,
                 likely_timeout,

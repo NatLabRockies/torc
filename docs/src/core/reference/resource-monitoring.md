@@ -109,6 +109,92 @@ When using `--format json`:
 | `peak_used`        | Actual peak usage observed              |
 | `over_utilization` | Percentage over/under specification     |
 
+## correct-resources JSON Output
+
+When using `torc -f json workflows correct-resources`:
+
+```json
+{
+  "status": "success",
+  "workflow_id": 123,
+  "dry_run": false,
+  "no_downsize": false,
+  "memory_multiplier": 1.2,
+  "cpu_multiplier": 1.2,
+  "runtime_multiplier": 1.2,
+  "resource_requirements_updated": 2,
+  "jobs_analyzed": 5,
+  "memory_corrections": 1,
+  "runtime_corrections": 1,
+  "cpu_corrections": 1,
+  "downsize_memory_corrections": 2,
+  "downsize_runtime_corrections": 2,
+  "downsize_cpu_corrections": 0,
+  "adjustments": [
+    {
+      "resource_requirements_id": 10,
+      "direction": "upscale",
+      "job_ids": [15],
+      "job_names": ["train_model"],
+      "memory_adjusted": true,
+      "original_memory": "8g",
+      "new_memory": "13g",
+      "max_peak_memory_bytes": 10500000000
+    },
+    {
+      "resource_requirements_id": 11,
+      "direction": "downscale",
+      "job_ids": [20, 21],
+      "job_names": ["preprocess_a", "preprocess_b"],
+      "memory_adjusted": true,
+      "original_memory": "32g",
+      "new_memory": "3g",
+      "max_peak_memory_bytes": 2147483648,
+      "runtime_adjusted": true,
+      "original_runtime": "PT4H",
+      "new_runtime": "PT12M"
+    }
+  ]
+}
+```
+
+### Top-Level Fields
+
+| Field                           | Description                                          |
+| ------------------------------- | ---------------------------------------------------- |
+| `memory_multiplier`             | Memory safety multiplier used                        |
+| `cpu_multiplier`                | CPU safety multiplier used                           |
+| `runtime_multiplier`            | Runtime safety multiplier used                       |
+| `resource_requirements_updated` | Number of resource requirements changed              |
+| `jobs_analyzed`                 | Number of jobs with violations analyzed              |
+| `memory_corrections`            | Jobs affected by memory upscaling                    |
+| `runtime_corrections`           | Jobs affected by runtime upscaling                   |
+| `cpu_corrections`               | Jobs affected by CPU upscaling                       |
+| `downsize_memory_corrections`   | Jobs affected by memory downsizing                   |
+| `downsize_runtime_corrections`  | Jobs affected by runtime downsizing                  |
+| `downsize_cpu_corrections`      | Jobs affected by CPU downsizing                      |
+| `adjustments`                   | Array of per-resource-requirement adjustment details |
+
+### Adjustment Object
+
+| Field                      | Description                                        |
+| -------------------------- | -------------------------------------------------- |
+| `resource_requirements_id` | ID of the resource requirement being adjusted      |
+| `direction`                | `"upscale"` or `"downscale"`                       |
+| `job_ids`                  | Job IDs sharing this resource requirement          |
+| `job_names`                | Human-readable job names                           |
+| `memory_adjusted`          | Whether memory was changed                         |
+| `original_memory`          | Previous memory setting (if adjusted)              |
+| `new_memory`               | New memory setting (if adjusted)                   |
+| `max_peak_memory_bytes`    | Maximum peak memory observed across jobs           |
+| `runtime_adjusted`         | Whether runtime was changed                        |
+| `original_runtime`         | Previous runtime setting (if adjusted)             |
+| `new_runtime`              | New runtime setting (if adjusted)                  |
+| `cpu_adjusted`             | Whether CPU count was changed (omitted when false) |
+| `original_cpus`            | Previous CPU count (if adjusted)                   |
+| `new_cpus`                 | New CPU count (if adjusted)                        |
+| `max_peak_cpu_percent`     | Maximum peak CPU percentage observed across jobs   |
+
 ## plot-resources Output Files
 
 | File                                 | Description                                      |

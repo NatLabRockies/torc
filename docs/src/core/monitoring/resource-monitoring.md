@@ -65,7 +65,30 @@ Job ID | Job Name         | Resource | Specified | Peak Used | Over-Utilization
 
 ## Adjust Resource Requirements
 
-After identifying violations, update your workflow specification:
+### Automatic Correction
+
+Use `correct-resources` to automatically fix both over-utilized and under-utilized resources:
+
+```bash
+# Preview what would change
+torc workflows correct-resources <workflow_id> --dry-run
+
+# Apply corrections (upscale violations + downsize over-allocations)
+torc workflows correct-resources <workflow_id>
+
+# Only upscale, don't reduce over-allocated resources
+torc workflows correct-resources <workflow_id> --no-downsize
+```
+
+The command upscales resources that exceeded their limits and downsizes resources that are
+significantly over-allocated. Downsizing only uses successfully completed jobs and requires all jobs
+sharing a resource requirement to have peak usage data. See the
+[how-to guide](../how-to/check-resource-utilization.md#automatically-correct-requirements) for
+details.
+
+### Manual Adjustment
+
+For more control, update your workflow specification directly:
 
 ```yaml
 # Before: job used 10.5 GB but was allocated 8 GB

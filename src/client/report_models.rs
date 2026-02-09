@@ -61,9 +61,9 @@ pub struct ResourceViolationInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub peak_memory_formatted: Option<String>,
 
-    /// Whether this job likely failed due to OOM
+    /// Whether this job violated memory limits
     #[serde(default, skip_serializing_if = "is_false")]
-    pub likely_oom: bool,
+    pub memory_violation: bool,
 
     /// Reason for OOM detection (e.g., "memory_exceeded", "sigkill_137")
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -187,7 +187,7 @@ mod tests {
                 configured_cpus: 4i64,
                 peak_memory_bytes: Some(3_000_000_000),
                 peak_memory_formatted: Some("2.8 GB".to_string()),
-                likely_oom: true,
+                memory_violation: true,
                 oom_reason: Some("sigkill_137".to_string()),
                 memory_over_utilization: Some("+40.0%".to_string()),
                 likely_timeout: false,
@@ -204,7 +204,7 @@ mod tests {
 
         assert_eq!(parsed.workflow_id, 1);
         assert_eq!(parsed.resource_violations.len(), 1);
-        assert!(parsed.resource_violations[0].likely_oom);
+        assert!(parsed.resource_violations[0].memory_violation);
     }
 
     #[test]
@@ -258,7 +258,7 @@ mod tests {
 
         let parsed: ResourceViolationInfo = serde_json::from_str(json).unwrap();
         assert_eq!(parsed.job_id, 1);
-        assert!(!parsed.likely_oom);
+        assert!(!parsed.memory_violation);
         assert!(!parsed.likely_timeout);
         assert!(!parsed.likely_runtime_violation);
         assert!(parsed.peak_memory_bytes.is_none());

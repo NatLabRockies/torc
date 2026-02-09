@@ -45,28 +45,51 @@ actual resource measurements:
 torc workflows correct-resources <workflow_id>
 ```
 
-This analyzes both completed and failed jobs to detect:
+This command performs two types of corrections:
+
+### Upscaling (over-utilized resources)
+
+Analyzes completed and failed jobs to detect:
 
 - **Memory violations** — Jobs using more memory than allocated
 - **CPU violations** — Jobs using more CPU than allocated
 - **Runtime violations** — Jobs running longer than allocated time
 
+### Downsizing (under-utilized resources)
+
+Analyzes successfully completed jobs (return code 0) to detect resources that are significantly
+over-allocated. A resource is downsized only when:
+
+- **All** jobs sharing that resource requirement completed successfully
+- **All** jobs have peak usage data for that resource type
+- The savings exceed minimum thresholds (1 GB for memory, 5 percentage points for CPU, 30 minutes
+  for runtime)
+- **No** job sharing that resource requirement had a violation
+
+Failed jobs are excluded from downsizing analysis because they may terminate early with
+under-reported peak usage.
+
 The command will:
 
 - Calculate new requirements using actual peak usage data
-- Apply a 1.2x safety multiplier to each resource
+- Apply a 1.2x safety multiplier to each resource (configurable)
 - Update the workflow's resource requirements for future runs
 
 Example:
 
 ```
-Analyzing and correcting resource requirements for workflow 5
-✓ Resource requirements updated successfully
-
-Corrections applied:
-  memory_training: 8g → 10g (+25.0%)
-  cpu_training: 4 → 5 cores (+25.0%)
-  runtime_training: PT2H → PT2H30M (+25.0%)
+Resource Correction Summary:
+  Workflow: 5
+  Jobs analyzed: 3
+  Resource requirements updated: 2
+  Upscale:
+    Memory corrections: 1
+    Runtime corrections: 1
+    CPU corrections: 1
+  Downscale:
+    Memory reductions: 2
+    Runtime reductions: 2
+    CPU reductions: 0
 ```
 
 ### Preview Changes Without Applying
@@ -79,18 +102,29 @@ torc workflows correct-resources <workflow_id> --dry-run
 
 ### Correct Only Specific Jobs
 
-To update only certain jobs (by ID):
+To update only certain jobs (by ID). This filters both upscaling and downsizing:
 
 ```bash
 torc workflows correct-resources <workflow_id> --job-ids 15,16,18
 ```
 
-### Custom Correction Multiplier
+### Disable Downsizing
 
-Adjust the safety margin (default 1.2x):
+To only upscale over-utilized resources without reducing over-allocated ones:
 
 ```bash
-torc workflows correct-resources <workflow_id> --memory-multiplier 1.5 --runtime-multiplier 1.4
+torc workflows correct-resources <workflow_id> --no-downsize
+```
+
+### Custom Correction Multipliers
+
+Adjust the safety margins independently (all default to 1.2x):
+
+```bash
+torc workflows correct-resources <workflow_id> \
+  --memory-multiplier 1.5 \
+  --cpu-multiplier 1.3 \
+  --runtime-multiplier 1.4
 ```
 
 ## Manual Adjustment

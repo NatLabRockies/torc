@@ -4,7 +4,7 @@
 //! and automatically adjusting resource requirements based on actual job usage.
 //! It's used by both `torc recover` (reactive) and `torc workflows correct-resources` (proactive).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use log::{debug, info, warn};
 use serde::Serialize;
@@ -13,7 +13,31 @@ use crate::client::apis::configuration::Configuration;
 use crate::client::apis::default_api;
 use crate::client::report_models::ResourceUtilizationReport;
 use crate::memory_utils::memory_string_to_bytes;
+use crate::models;
 use crate::time_utils::duration_string_to_seconds;
+
+/// Input context for resource correction — bundles all data needed for analysis.
+pub struct ResourceCorrectionContext<'a> {
+    pub config: &'a Configuration,
+    pub workflow_id: i64,
+    pub diagnosis: &'a ResourceUtilizationReport,
+    /// All completed + failed results for the workflow (used for downsize candidate building)
+    pub all_results: &'a [models::ResultModel],
+    /// All jobs for the workflow (used for RR ID lookups)
+    pub all_jobs: &'a [models::JobModel],
+    /// All resource requirements for the workflow (used for current allocation lookups)
+    pub all_resource_requirements: &'a [models::ResourceRequirementsModel],
+}
+
+/// Options controlling resource correction behavior.
+pub struct ResourceCorrectionOptions {
+    pub memory_multiplier: f64,
+    pub cpu_multiplier: f64,
+    pub runtime_multiplier: f64,
+    pub include_jobs: Vec<i64>,
+    pub dry_run: bool,
+    pub no_downsize: bool,
+}
 
 /// Result of applying resource corrections
 #[derive(Debug, Clone, Serialize)]
@@ -22,9 +46,130 @@ pub struct ResourceCorrectionResult {
     pub jobs_analyzed: usize,
     pub memory_corrections: usize,
     pub runtime_corrections: usize,
+    pub cpu_corrections: usize,
+    pub downsize_memory_corrections: usize,
+    pub downsize_runtime_corrections: usize,
+    pub downsize_cpu_corrections: usize,
     /// Detailed adjustment reports for JSON output
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub adjustments: Vec<ResourceAdjustmentReport>,
+}
+
+/// Centralizes job and resource requirement lookups to reduce repeated
+/// nested if-let chains throughout violation detection.
+pub(crate) struct ResourceLookupContext<'a> {
+    jobs: &'a [models::JobModel],
+    resource_requirements: &'a [models::ResourceRequirementsModel],
+}
+
+impl<'a> ResourceLookupContext<'a> {
+    pub(crate) fn new(
+        jobs: &'a [models::JobModel],
+        resource_requirements: &'a [models::ResourceRequirementsModel],
+    ) -> Self {
+        Self {
+            jobs,
+            resource_requirements,
+        }
+    }
+
+    pub(crate) fn find_job(&self, job_id: i64) -> Option<&models::JobModel> {
+        self.jobs.iter().find(|j| j.id == Some(job_id))
+    }
+
+    pub(crate) fn find_resource_requirements(
+        &self,
+        rr_id: i64,
+    ) -> Option<&models::ResourceRequirementsModel> {
+        self.resource_requirements
+            .iter()
+            .find(|r| r.id == Some(rr_id))
+    }
+}
+
+/// Detect memory violation based on actual peak memory usage
+pub(crate) fn detect_memory_violation(
+    ctx: &ResourceLookupContext,
+    result: &models::ResultModel,
+    job: &models::JobModel,
+) -> bool {
+    if let Some(peak_mem) = result.peak_memory_bytes
+        && let Some(rr_id) = job.resource_requirements_id
+        && let Some(rr) = ctx.find_resource_requirements(rr_id)
+        && let Ok(specified_memory_bytes) = memory_string_to_bytes(&rr.memory)
+    {
+        peak_mem > specified_memory_bytes
+    } else {
+        false
+    }
+}
+
+/// Detect CPU violation based on actual peak CPU percentage
+pub(crate) fn detect_cpu_violation(
+    ctx: &ResourceLookupContext,
+    result: &models::ResultModel,
+    job: &models::JobModel,
+) -> bool {
+    if let Some(peak_cpu) = result.peak_cpu_percent
+        && let Some(rr_id) = job.resource_requirements_id
+        && let Some(rr) = ctx.find_resource_requirements(rr_id)
+    {
+        let configured_cpus = rr.num_cpus as f64;
+        let specified_cpu_percent = configured_cpus * 100.0;
+        peak_cpu > specified_cpu_percent
+    } else {
+        false
+    }
+}
+
+/// Detect runtime violation based on actual execution time
+pub(crate) fn detect_runtime_violation(
+    ctx: &ResourceLookupContext,
+    result: &models::ResultModel,
+    job: &models::JobModel,
+) -> bool {
+    if let Some(rr_id) = job.resource_requirements_id
+        && let Some(rr) = ctx.find_resource_requirements(rr_id)
+        && let Ok(specified_runtime_seconds) = duration_string_to_seconds(&rr.runtime)
+    {
+        let exec_time_seconds = result.exec_time_minutes * 60.0;
+        let specified_runtime_seconds = specified_runtime_seconds as f64;
+        exec_time_seconds > specified_runtime_seconds
+    } else {
+        false
+    }
+}
+
+/// Detect timeout based on return code
+pub(crate) fn detect_timeout(result: &models::ResultModel) -> bool {
+    result.return_code == 152
+}
+
+/// Candidate for resource downsizing (all jobs used less than allocated).
+///
+/// Only resource_requirement_ids where NO job had a violation are eligible.
+/// Each resource type is tracked independently: downsizing memory doesn't
+/// require all jobs to also have CPU data.
+///
+/// Note: There is no `all_have_runtime_data` field because `exec_time_minutes`
+/// is a required (non-optional) field on `ResultModel`. Every completed result
+/// always has runtime data, so the completeness check is unnecessary for runtime.
+#[derive(Debug, Clone)]
+struct DownsizeCandidate {
+    rr_id: i64,
+    job_count: usize,
+    job_ids: Vec<i64>,
+    job_names: Vec<String>,
+    /// Maximum peak memory across all jobs sharing this RR (bytes)
+    max_peak_memory_bytes: Option<u64>,
+    /// Maximum peak CPU percentage across all jobs sharing this RR
+    max_peak_cpu_percent: Option<f64>,
+    /// Maximum peak runtime across all jobs sharing this RR (minutes)
+    max_peak_runtime_minutes: Option<f64>,
+    /// True only if ALL jobs for this RR have peak_memory_bytes data
+    all_have_memory_data: bool,
+    /// True only if ALL jobs for this RR have peak_cpu_percent data
+    all_have_cpu_data: bool,
 }
 
 /// Detailed report of a resource adjustment for JSON output
@@ -32,6 +177,8 @@ pub struct ResourceCorrectionResult {
 pub struct ResourceAdjustmentReport {
     /// The resource_requirements_id being adjusted
     pub resource_requirements_id: i64,
+    /// Direction of adjustment: "upscale" or "downscale"
+    pub direction: String,
     /// Job IDs that share this resource requirement
     pub job_ids: Vec<i64>,
     /// Job names for reference
@@ -84,10 +231,10 @@ struct ResourceAdjustment {
     job_ids: Vec<i64>,
     /// Job names for logging
     job_names: Vec<String>,
-    /// Maximum peak memory observed across all OOM jobs (in bytes)
+    /// Maximum peak memory observed across all memory-violation jobs (in bytes)
     max_peak_memory_bytes: Option<u64>,
-    /// Whether any job had OOM without peak data (fall back to multiplier)
-    has_oom_without_peak: bool,
+    /// Whether any job had a memory violation without peak data (fall back to multiplier)
+    has_memory_violation_without_peak: bool,
     /// Whether any job had a timeout
     has_timeout: bool,
     /// Current memory setting (for fallback calculation)
@@ -137,53 +284,161 @@ pub fn format_duration_iso8601(secs: u64) -> String {
     }
 }
 
-/// Apply resource corrections based on utilization analysis
+/// Build downsize candidates from all results.
 ///
-/// This function analyzes job resource utilization data and adjusts resource
-/// requirements (memory and runtime) to better match actual job needs.
-///
-/// When multiple jobs share the same `resource_requirements_id`, this function
-/// finds the maximum peak memory across all jobs in that group and applies
-/// that (with multiplier) to the shared resource requirement. This ensures all
-/// jobs in the group can succeed.
-///
-/// # Arguments
-///
-/// * `config` - API configuration
-/// * `workflow_id` - The workflow to correct resources for
-/// * `diagnosis` - Resource utilization analysis (from `check-resource-utilization`)
-/// * `memory_multiplier` - Factor to multiply peak memory by (e.g., 1.2 for 20% buffer)
-/// * `runtime_multiplier` - Factor to multiply runtime by (e.g., 1.2 for 20% buffer)
-/// * `include_jobs` - If non-empty, only correct these specific job IDs
-/// * `dry_run` - If true, show what would be done without applying changes
-///
-/// # Returns
-///
-/// Result containing the correction result with counts and detailed adjustments
-pub fn apply_resource_corrections(
-    config: &Configuration,
-    _workflow_id: i64,
-    diagnosis: &ResourceUtilizationReport,
-    memory_multiplier: f64,
-    runtime_multiplier: f64,
-    include_jobs: &[i64],
-    dry_run: bool,
-) -> Result<ResourceCorrectionResult, String> {
-    let mut memory_corrections = 0;
-    let mut runtime_corrections = 0;
+/// A resource_requirement_id is eligible for downsizing only if:
+/// - ALL jobs sharing it completed successfully (have results with return_code 0)
+/// - NO job sharing it had a resource violation
+/// - It wasn't already upscaled in this correction pass
+fn build_downsize_candidates(
+    ctx: &ResourceCorrectionContext,
+    opts: &ResourceCorrectionOptions,
+    violated_rr_ids: &HashSet<i64>,
+) -> HashMap<i64, DownsizeCandidate> {
+    let lookup = ResourceLookupContext::new(ctx.all_jobs, ctx.all_resource_requirements);
 
-    // Phase 1: Collect and aggregate data by resource_requirements_id
-    // This ensures that when multiple jobs share the same RR, we use the
-    // maximum peak memory across all of them.
+    // Count total jobs per RR ID — used to verify all jobs have completed results
+    // before allowing downsizing (partial results could under-report peak usage).
+    let mut jobs_per_rr: HashMap<i64, usize> = HashMap::new();
+    for job in ctx.all_jobs {
+        if let Some(rr_id) = job.resource_requirements_id {
+            *jobs_per_rr.entry(rr_id).or_insert(0) += 1;
+        }
+    }
+
+    // Collect RR IDs that have any failed job — the entire RR is ineligible
+    // for downsizing because a failed job may have terminated early with
+    // under-reported peak usage.
+    let mut failed_rr_ids: HashSet<i64> = HashSet::new();
+    for result in ctx.all_results {
+        if result.return_code != 0
+            && let Some(job) = lookup.find_job(result.job_id)
+            && let Some(rr_id) = job.resource_requirements_id
+        {
+            failed_rr_ids.insert(rr_id);
+        }
+    }
+
+    let mut candidates: HashMap<i64, DownsizeCandidate> = HashMap::new();
+
+    for result in ctx.all_results {
+        // When job filters are provided (e.g. via --job-ids), restrict
+        // downsize candidate aggregation to the selected jobs only.
+        if !opts.include_jobs.is_empty() && !opts.include_jobs.contains(&result.job_id) {
+            continue;
+        }
+
+        // Skip non-successful results
+        if result.return_code != 0 {
+            continue;
+        }
+
+        if let Some(job) = lookup.find_job(result.job_id)
+            && let Some(rr_id) = job.resource_requirements_id
+        {
+            // Skip RR IDs that had any violation or any failed job
+            if violated_rr_ids.contains(&rr_id) || failed_rr_ids.contains(&rr_id) {
+                continue;
+            }
+
+            let candidate = candidates
+                .entry(rr_id)
+                .or_insert_with(|| DownsizeCandidate {
+                    rr_id,
+                    job_count: 0,
+                    job_ids: Vec::new(),
+                    job_names: Vec::new(),
+                    max_peak_memory_bytes: None,
+                    max_peak_cpu_percent: None,
+                    max_peak_runtime_minutes: None,
+                    all_have_memory_data: true,
+                    all_have_cpu_data: true,
+                });
+
+            candidate.job_count += 1;
+            candidate.job_ids.push(result.job_id);
+            candidate.job_names.push(job.name.clone());
+
+            // Track peak memory (bounds check: clamp negative i64 to 0 before u64 cast)
+            if let Some(peak_mem) = result.peak_memory_bytes {
+                let peak = peak_mem.max(0) as u64;
+                candidate.max_peak_memory_bytes = Some(
+                    candidate
+                        .max_peak_memory_bytes
+                        .map_or(peak, |cur| cur.max(peak)),
+                );
+            } else {
+                candidate.all_have_memory_data = false;
+            }
+
+            // Track peak CPU
+            if let Some(peak_cpu) = result.peak_cpu_percent {
+                candidate.max_peak_cpu_percent = Some(
+                    candidate
+                        .max_peak_cpu_percent
+                        .map_or(peak_cpu, |cur| cur.max(peak_cpu)),
+                );
+            } else {
+                candidate.all_have_cpu_data = false;
+            }
+
+            // Track peak runtime (exec_time_minutes is always present on ResultModel,
+            // so there is no all_have_runtime_data guard needed)
+            candidate.max_peak_runtime_minutes = Some(
+                candidate
+                    .max_peak_runtime_minutes
+                    .map_or(result.exec_time_minutes, |cur| {
+                        cur.max(result.exec_time_minutes)
+                    }),
+            );
+        }
+    }
+
+    // Remove candidates where not all jobs for the RR have completed results.
+    // Downsizing based on partial data is unsafe — remaining jobs may use more resources.
+    candidates.retain(|rr_id, candidate| {
+        let expected = jobs_per_rr.get(rr_id).copied().unwrap_or(0);
+        if candidate.job_count < expected {
+            debug!(
+                "RR {}: skipping downsize — only {}/{} jobs have results",
+                rr_id, candidate.job_count, expected
+            );
+            false
+        } else {
+            true
+        }
+    });
+
+    candidates
+}
+
+/// Outcome of applying a resource adjustment (upscale or downscale) to a single RR.
+struct AdjustmentOutcome {
+    report: ResourceAdjustmentReport,
+    memory_corrections: usize,
+    runtime_corrections: usize,
+    cpu_corrections: usize,
+}
+
+/// Phase 1: Collect and aggregate violation data by `resource_requirements_id`.
+///
+/// When multiple jobs share the same RR, we track the maximum peak usage
+/// across all of them so the correction covers the worst case.
+///
+/// Returns `(rr_adjustments, jobs_analyzed)`.
+fn aggregate_violations(
+    ctx: &ResourceCorrectionContext,
+    opts: &ResourceCorrectionOptions,
+) -> (HashMap<i64, ResourceAdjustment>, usize) {
     let mut rr_adjustments: HashMap<i64, ResourceAdjustment> = HashMap::new();
 
-    let jobs_to_analyze = if include_jobs.is_empty() {
-        diagnosis.resource_violations.clone()
+    let jobs_to_analyze = if opts.include_jobs.is_empty() {
+        ctx.diagnosis.resource_violations.clone()
     } else {
-        diagnosis
+        ctx.diagnosis
             .resource_violations
             .iter()
-            .filter(|j| include_jobs.contains(&j.job_id))
+            .filter(|j| opts.include_jobs.contains(&j.job_id))
             .cloned()
             .collect()
     };
@@ -192,18 +447,22 @@ pub fn apply_resource_corrections(
 
     for job_info in &jobs_to_analyze {
         let job_id = job_info.job_id;
-        let likely_oom = job_info.likely_oom;
+        let memory_violation = job_info.memory_violation;
         let likely_timeout = job_info.likely_timeout;
         let likely_cpu_violation = job_info.likely_cpu_violation;
         let likely_runtime_violation = job_info.likely_runtime_violation;
 
         // Skip if no violations detected
-        if !likely_oom && !likely_timeout && !likely_cpu_violation && !likely_runtime_violation {
+        if !memory_violation
+            && !likely_timeout
+            && !likely_cpu_violation
+            && !likely_runtime_violation
+        {
             continue;
         }
 
         // Get current job to find resource requirements
-        let job = match default_api::get_job(config, job_id) {
+        let job = match default_api::get_job(ctx.config, job_id) {
             Ok(j) => j,
             Err(e) => {
                 warn!("Warning: couldn't get job {}: {}", job_id, e);
@@ -223,7 +482,7 @@ pub fn apply_resource_corrections(
         let adjustment = rr_adjustments.entry(rr_id).or_insert_with(|| {
             // Fetch current resource requirements (only once per rr_id)
             let (current_memory, current_runtime, current_cpus) =
-                match default_api::get_resource_requirements(config, rr_id) {
+                match default_api::get_resource_requirements(ctx.config, rr_id) {
                     Ok(rr) => (rr.memory, rr.runtime, rr.num_cpus),
                     Err(e) => {
                         warn!(
@@ -238,7 +497,7 @@ pub fn apply_resource_corrections(
                 job_ids: Vec::new(),
                 job_names: Vec::new(),
                 max_peak_memory_bytes: None,
-                has_oom_without_peak: false,
+                has_memory_violation_without_peak: false,
                 has_timeout: false,
                 current_memory,
                 current_runtime,
@@ -258,12 +517,12 @@ pub fn apply_resource_corrections(
         adjustment.job_ids.push(job_id);
         adjustment.job_names.push(job.name.clone());
 
-        // Track OOM data
-        if likely_oom {
+        // Track memory violation data
+        if memory_violation {
             let peak_bytes = job_info
                 .peak_memory_bytes
                 .filter(|&v| v > 0)
-                .map(|v| v as u64);
+                .map(|v| v.max(0) as u64);
 
             if let Some(peak) = peak_bytes {
                 // Update max if this job used more memory
@@ -273,7 +532,7 @@ pub fn apply_resource_corrections(
                         .map_or(peak, |current_max| current_max.max(peak)),
                 );
             } else {
-                adjustment.has_oom_without_peak = true;
+                adjustment.has_memory_violation_without_peak = true;
             }
         }
 
@@ -305,233 +564,481 @@ pub fn apply_resource_corrections(
         }
     }
 
-    // Phase 2: Apply adjustments once per resource_requirements_id
-    let mut adjustment_reports = Vec::new();
+    (rr_adjustments, jobs_analyzed)
+}
 
-    for adjustment in rr_adjustments.values() {
-        let rr_id = adjustment.rr_id;
-        let mut updated = false;
-        let mut memory_adjusted = false;
-        let mut runtime_adjusted = false;
-        let mut cpu_adjusted = false;
-        let mut original_memory = None;
-        let mut new_memory_str = None;
-        let mut original_runtime = None;
-        let mut new_runtime_str = None;
-        let mut original_cpus = None;
-        let mut new_cpus_value = None;
+/// Phase 2 (per-RR): apply upscale corrections for a single `ResourceAdjustment`.
+///
+/// Returns `None` when no changes are needed for this RR.
+fn apply_upscale_for_adjustment(
+    config: &Configuration,
+    opts: &ResourceCorrectionOptions,
+    adjustment: &ResourceAdjustment,
+) -> Option<AdjustmentOutcome> {
+    let rr_id = adjustment.rr_id;
+    let mut memory_corrections = 0;
+    let mut runtime_corrections = 0;
+    let mut cpu_corrections = 0;
+    let mut updated = false;
+    let mut memory_adjusted = false;
+    let mut runtime_adjusted = false;
+    let mut cpu_adjusted = false;
+    let mut original_memory = None;
+    let mut new_memory_str = None;
+    let mut original_runtime = None;
+    let mut new_runtime_str = None;
+    let mut original_cpus = None;
+    let mut new_cpus_value = None;
 
-        // Fetch current resource requirements for update
-        let rr = match default_api::get_resource_requirements(config, rr_id) {
-            Ok(r) => r,
-            Err(e) => {
-                warn!(
-                    "Warning: couldn't get resource requirements {}: {}",
-                    rr_id, e
-                );
-                continue;
-            }
+    // Fetch current resource requirements for update
+    let rr = match default_api::get_resource_requirements(config, rr_id) {
+        Ok(r) => r,
+        Err(e) => {
+            warn!(
+                "Warning: couldn't get resource requirements {}: {}",
+                rr_id, e
+            );
+            return None;
+        }
+    };
+    let mut new_rr = rr.clone();
+
+    // Apply memory fix using maximum peak memory across all jobs sharing this RR
+    if adjustment.max_peak_memory_bytes.is_some() || adjustment.has_memory_violation_without_peak {
+        let new_bytes = if let Some(max_peak) = adjustment.max_peak_memory_bytes {
+            // Use the maximum observed peak memory * multiplier (ceil to preserve margin)
+            (max_peak as f64 * opts.memory_multiplier).ceil() as u64
+        } else if let Ok(current_bytes) = memory_string_to_bytes(&adjustment.current_memory) {
+            // Fall back to current specified * multiplier
+            (current_bytes as f64 * opts.memory_multiplier).ceil() as u64
+        } else {
+            warn!(
+                "RR {}: memory violation detected but couldn't determine new memory",
+                rr_id
+            );
+            return None;
         };
-        let mut new_rr = rr.clone();
 
-        // Apply OOM fix using maximum peak memory across all jobs sharing this RR
-        if adjustment.max_peak_memory_bytes.is_some() || adjustment.has_oom_without_peak {
-            let new_bytes = if let Some(max_peak) = adjustment.max_peak_memory_bytes {
-                // Use the maximum observed peak memory * multiplier
-                (max_peak as f64 * memory_multiplier) as u64
-            } else if let Ok(current_bytes) = memory_string_to_bytes(&adjustment.current_memory) {
-                // Fall back to current specified * multiplier
-                (current_bytes as f64 * memory_multiplier) as u64
-            } else {
-                warn!(
-                    "RR {}: OOM detected but couldn't determine new memory",
-                    rr_id
+        let new_memory = format_memory_bytes_short(new_bytes);
+        let job_count = adjustment.job_ids.len();
+
+        if let Some(max_peak) = adjustment.max_peak_memory_bytes {
+            if job_count > 1 {
+                info!(
+                    "{} job(s) with RR {}: memory violation, max peak usage {} -> allocating {} ({}x)",
+                    job_count,
+                    rr_id,
+                    format_memory_bytes_short(max_peak),
+                    new_memory,
+                    opts.memory_multiplier
                 );
-                continue;
-            };
+                debug!("  Jobs: {:?}", adjustment.job_names);
+            } else if let (Some(job_id), Some(job_name)) =
+                (adjustment.job_ids.first(), adjustment.job_names.first())
+            {
+                info!(
+                    "Job {} ({}): memory violation, peak usage {} -> allocating {} ({}x)",
+                    job_id,
+                    job_name,
+                    format_memory_bytes_short(max_peak),
+                    new_memory,
+                    opts.memory_multiplier
+                );
+            }
+        } else {
+            info!(
+                "{} job(s) with RR {}: memory violation, increasing memory {} -> {} ({}x, no peak data)",
+                job_count, rr_id, adjustment.current_memory, new_memory, opts.memory_multiplier
+            );
+        }
 
-            let new_memory = format_memory_bytes_short(new_bytes);
-            let job_count = adjustment.job_ids.len();
+        // Track for JSON report
+        original_memory = Some(adjustment.current_memory.clone());
+        new_memory_str = Some(new_memory.clone());
+        memory_adjusted = true;
 
-            if let Some(max_peak) = adjustment.max_peak_memory_bytes {
+        new_rr.memory = new_memory;
+        updated = true;
+        memory_corrections += adjustment.job_ids.len();
+    }
+
+    // Apply timeout fix
+    if adjustment.has_timeout
+        && let Ok(current_secs) = duration_string_to_seconds(&adjustment.current_runtime)
+    {
+        let new_secs = (current_secs as f64 * opts.runtime_multiplier).ceil() as u64;
+        let new_runtime = format_duration_iso8601(new_secs);
+        let job_count = adjustment.job_ids.len();
+
+        if job_count > 1 {
+            info!(
+                "{} job(s) with RR {}: Timeout detected, increasing runtime {} -> {}",
+                job_count, rr_id, adjustment.current_runtime, new_runtime
+            );
+        } else if let (Some(job_id), Some(job_name)) =
+            (adjustment.job_ids.first(), adjustment.job_names.first())
+        {
+            info!(
+                "Job {} ({}): Timeout detected, increasing runtime {} -> {}",
+                job_id, job_name, adjustment.current_runtime, new_runtime
+            );
+        }
+
+        // Track for JSON report
+        original_runtime = Some(adjustment.current_runtime.clone());
+        new_runtime_str = Some(new_runtime.clone());
+        runtime_adjusted = true;
+
+        new_rr.runtime = new_runtime;
+        updated = true;
+        runtime_corrections += adjustment.job_ids.len();
+    }
+
+    // Apply runtime violation fix
+    if adjustment.has_runtime_violation && !adjustment.has_timeout {
+        // Only apply if not already adjusted for timeout
+        if let (Some(max_peak_runtime), Ok(current_secs)) = (
+            adjustment.max_peak_runtime_minutes,
+            duration_string_to_seconds(&adjustment.current_runtime),
+        ) {
+            let max_peak_secs = max_peak_runtime as i64 * 60;
+            // Only update if the peak runtime exceeds current allocation
+            if max_peak_secs > current_secs {
+                let new_secs = (max_peak_secs as f64 * opts.runtime_multiplier).ceil() as u64;
+                let new_runtime = format_duration_iso8601(new_secs);
+                let job_count = adjustment.job_ids.len();
+
                 if job_count > 1 {
                     info!(
-                        "{} job(s) with RR {}: OOM detected, max peak usage {} -> allocating {} ({}x)",
-                        job_count,
-                        rr_id,
-                        format_memory_bytes_short(max_peak),
-                        new_memory,
-                        memory_multiplier
+                        "{} job(s) with RR {}: Runtime violation detected, peak {}m -> allocating {} ({}x)",
+                        job_count, rr_id, max_peak_runtime, new_runtime, opts.runtime_multiplier
                     );
-                    debug!("  Jobs: {:?}", adjustment.job_names);
                 } else if let (Some(job_id), Some(job_name)) =
                     (adjustment.job_ids.first(), adjustment.job_names.first())
                 {
                     info!(
-                        "Job {} ({}): OOM detected, peak usage {} -> allocating {} ({}x)",
-                        job_id,
-                        job_name,
-                        format_memory_bytes_short(max_peak),
-                        new_memory,
-                        memory_multiplier
+                        "Job {} ({}): Runtime violation detected, peak {}m -> allocating {} ({}x)",
+                        job_id, job_name, max_peak_runtime, new_runtime, opts.runtime_multiplier
                     );
                 }
-            } else {
-                info!(
-                    "{} job(s) with RR {}: OOM detected, increasing memory {} -> {} ({}x, no peak data)",
-                    job_count, rr_id, adjustment.current_memory, new_memory, memory_multiplier
-                );
+
+                // Track for JSON report
+                original_runtime = Some(adjustment.current_runtime.clone());
+                new_runtime_str = Some(new_runtime.clone());
+                runtime_adjusted = true;
+
+                new_rr.runtime = new_runtime;
+                updated = true;
+                runtime_corrections += adjustment.job_ids.len();
             }
-
-            // Track for JSON report
-            original_memory = Some(adjustment.current_memory.clone());
-            new_memory_str = Some(new_memory.clone());
-            memory_adjusted = true;
-
-            new_rr.memory = new_memory;
-            updated = true;
-            memory_corrections += adjustment.job_ids.len();
         }
+    }
 
-        // Apply timeout fix
-        if adjustment.has_timeout
-            && let Ok(current_secs) = duration_string_to_seconds(&adjustment.current_runtime)
-        {
-            let new_secs = (current_secs as f64 * runtime_multiplier) as u64;
-            let new_runtime = format_duration_iso8601(new_secs);
+    // Apply CPU violation fix
+    if adjustment.has_cpu_violation
+        && let Some(max_peak_cpu) = adjustment.max_peak_cpu_percent
+    {
+        // peak_cpu_percent is the total percentage for all CPUs
+        // e.g., 501.4% with 3 CPUs allocated (300%)
+        let required_cpus = (max_peak_cpu / 100.0 * opts.cpu_multiplier).ceil() as i64;
+        let new_cpus = std::cmp::max(required_cpus, 1); // At least 1 CPU
+
+        if new_cpus > adjustment.current_cpus {
             let job_count = adjustment.job_ids.len();
-
             if job_count > 1 {
                 info!(
-                    "{} job(s) with RR {}: Timeout detected, increasing runtime {} -> {}",
-                    job_count, rr_id, adjustment.current_runtime, new_runtime
+                    "{} job(s) with RR {}: CPU over-utilization detected, peak {}% -> allocating {} CPUs ({:.1}x safety margin)",
+                    job_count, rr_id, max_peak_cpu, new_cpus, opts.cpu_multiplier
                 );
             } else if let (Some(job_id), Some(job_name)) =
                 (adjustment.job_ids.first(), adjustment.job_names.first())
             {
                 info!(
-                    "Job {} ({}): Timeout detected, increasing runtime {} -> {}",
-                    job_id, job_name, adjustment.current_runtime, new_runtime
+                    "Job {} ({}): CPU over-utilization detected, peak {}% -> allocating {} CPUs ({:.1}x safety margin)",
+                    job_id, job_name, max_peak_cpu, new_cpus, opts.cpu_multiplier
                 );
             }
 
-            // Track for JSON report
-            original_runtime = Some(adjustment.current_runtime.clone());
+            // Track CPU adjustment for reporting
+            cpu_adjusted = true;
+            original_cpus = Some(adjustment.current_cpus);
+            new_cpus_value = Some(new_cpus);
+
+            new_rr.num_cpus = new_cpus;
+            updated = true;
+            cpu_corrections += adjustment.job_ids.len();
+        }
+    }
+
+    if !updated {
+        return None;
+    }
+
+    // Update resource requirements if changed (only once per rr_id)
+    if !opts.dry_run
+        && let Err(e) = default_api::update_resource_requirements(config, rr_id, new_rr)
+    {
+        warn!(
+            "Warning: failed to update resource requirements {}: {}",
+            rr_id, e
+        );
+    }
+
+    Some(AdjustmentOutcome {
+        report: ResourceAdjustmentReport {
+            resource_requirements_id: rr_id,
+            direction: "upscale".to_string(),
+            job_ids: adjustment.job_ids.clone(),
+            job_names: adjustment.job_names.clone(),
+            memory_adjusted,
+            original_memory,
+            new_memory: new_memory_str,
+            max_peak_memory_bytes: adjustment.max_peak_memory_bytes,
+            runtime_adjusted,
+            original_runtime,
+            new_runtime: new_runtime_str,
+            cpu_adjusted,
+            original_cpus,
+            new_cpus: new_cpus_value,
+            max_peak_cpu_percent: adjustment.max_peak_cpu_percent,
+        },
+        memory_corrections,
+        runtime_corrections,
+        cpu_corrections,
+    })
+}
+
+/// Phase 3 (per-candidate): apply downscale corrections for a single `DownsizeCandidate`.
+///
+/// Returns `None` when no changes are needed for this candidate.
+fn apply_downscale_for_candidate(
+    config: &Configuration,
+    opts: &ResourceCorrectionOptions,
+    candidate: &DownsizeCandidate,
+) -> Option<AdjustmentOutcome> {
+    // Downsizing thresholds — minimum savings required to justify a downsize
+    const MEMORY_THRESHOLD_BYTES: u64 = 1024 * 1024 * 1024; // 1 GB
+    const CPU_THRESHOLD_PERCENT: f64 = 5.0; // 5 percentage points
+    const RUNTIME_THRESHOLD_SECS: i64 = 30 * 60; // 30 minutes
+
+    let rr_id = candidate.rr_id;
+    let rr = match default_api::get_resource_requirements(config, rr_id) {
+        Ok(r) => r,
+        Err(e) => {
+            warn!(
+                "Warning: couldn't get resource requirements {}: {}",
+                rr_id, e
+            );
+            return None;
+        }
+    };
+    let mut new_rr = rr.clone();
+    let mut memory_corrections = 0;
+    let mut runtime_corrections = 0;
+    let mut cpu_corrections = 0;
+    let mut updated = false;
+    let mut memory_adjusted = false;
+    let mut runtime_adjusted = false;
+    let mut cpu_adjusted = false;
+    let mut original_memory = None;
+    let mut new_memory_str = None;
+    let mut original_runtime = None;
+    let mut new_runtime_str = None;
+    let mut original_cpus = None;
+    let mut new_cpus_value = None;
+
+    // Downsize memory if ALL jobs have data and savings exceed threshold
+    if candidate.all_have_memory_data
+        && let Some(max_peak) = candidate.max_peak_memory_bytes
+        && let Ok(current_bytes) = memory_string_to_bytes(&rr.memory)
+    {
+        let current_bytes = current_bytes as u64;
+        let new_bytes = std::cmp::max(
+            (max_peak as f64 * opts.memory_multiplier).ceil() as u64,
+            1024 * 1024,
+        ); // minimum 1 MB
+        if current_bytes > new_bytes && current_bytes - new_bytes > MEMORY_THRESHOLD_BYTES {
+            let new_memory = format_memory_bytes_short(new_bytes);
+            info!(
+                "RR {}: Downsizing memory {} -> {} (peak {} across {} job(s), {:.1}x margin)",
+                rr_id,
+                rr.memory,
+                new_memory,
+                format_memory_bytes_short(max_peak),
+                candidate.job_count,
+                opts.memory_multiplier,
+            );
+            original_memory = Some(rr.memory.clone());
+            new_memory_str = Some(new_memory.clone());
+            memory_adjusted = true;
+            new_rr.memory = new_memory;
+            updated = true;
+            memory_corrections += candidate.job_count;
+        }
+    }
+
+    // Downsize CPU if ALL jobs have data and savings exceed threshold
+    if candidate.all_have_cpu_data
+        && let Some(max_peak_cpu) = candidate.max_peak_cpu_percent
+    {
+        let current_cpu_percent = rr.num_cpus as f64 * 100.0;
+        let new_cpus = std::cmp::max(
+            (max_peak_cpu / 100.0 * opts.cpu_multiplier).ceil() as i64,
+            1,
+        );
+        if current_cpu_percent - max_peak_cpu > CPU_THRESHOLD_PERCENT && new_cpus < rr.num_cpus {
+            info!(
+                "RR {}: Downsizing CPUs {} -> {} (peak {:.1}% across {} job(s), {:.1}x margin)",
+                rr_id,
+                rr.num_cpus,
+                new_cpus,
+                max_peak_cpu,
+                candidate.job_count,
+                opts.cpu_multiplier,
+            );
+            cpu_adjusted = true;
+            original_cpus = Some(rr.num_cpus);
+            new_cpus_value = Some(new_cpus);
+            new_rr.num_cpus = new_cpus;
+            updated = true;
+            cpu_corrections += candidate.job_count;
+        }
+    }
+
+    // Downsize runtime if savings exceed threshold
+    // (no all_have_runtime_data check needed — exec_time_minutes is always present)
+    if let Some(max_peak_minutes) = candidate.max_peak_runtime_minutes
+        && let Ok(current_secs) = duration_string_to_seconds(&rr.runtime)
+    {
+        let new_secs = std::cmp::max(
+            (max_peak_minutes * 60.0 * opts.runtime_multiplier).ceil() as i64,
+            60, // min 1 minute
+        );
+        if current_secs > new_secs && current_secs - new_secs > RUNTIME_THRESHOLD_SECS {
+            let new_runtime = format_duration_iso8601(new_secs as u64);
+            info!(
+                "RR {}: Downsizing runtime {} -> {} (peak {:.1}m across {} job(s), {:.1}x margin)",
+                rr_id,
+                rr.runtime,
+                new_runtime,
+                max_peak_minutes,
+                candidate.job_count,
+                opts.runtime_multiplier,
+            );
+            original_runtime = Some(rr.runtime.clone());
             new_runtime_str = Some(new_runtime.clone());
             runtime_adjusted = true;
-
             new_rr.runtime = new_runtime;
             updated = true;
-            runtime_corrections += adjustment.job_ids.len();
+            runtime_corrections += candidate.job_count;
         }
+    }
 
-        // Apply runtime violation fix
-        if adjustment.has_runtime_violation && !adjustment.has_timeout {
-            // Only apply if not already adjusted for timeout
-            if let (Some(max_peak_runtime), Ok(current_secs)) = (
-                adjustment.max_peak_runtime_minutes,
-                duration_string_to_seconds(&adjustment.current_runtime),
-            ) {
-                let max_peak_secs = max_peak_runtime as i64 * 60;
-                // Only update if the peak runtime exceeds current allocation
-                if max_peak_secs > current_secs {
-                    let new_secs = (max_peak_secs as f64 * runtime_multiplier) as u64;
-                    let new_runtime = format_duration_iso8601(new_secs);
-                    let job_count = adjustment.job_ids.len();
+    if !updated {
+        return None;
+    }
 
-                    if job_count > 1 {
-                        info!(
-                            "{} job(s) with RR {}: Runtime violation detected, peak {}m -> allocating {} ({}x)",
-                            job_count, rr_id, max_peak_runtime, new_runtime, runtime_multiplier
-                        );
-                    } else if let (Some(job_id), Some(job_name)) =
-                        (adjustment.job_ids.first(), adjustment.job_names.first())
-                    {
-                        info!(
-                            "Job {} ({}): Runtime violation detected, peak {}m -> allocating {} ({}x)",
-                            job_id, job_name, max_peak_runtime, new_runtime, runtime_multiplier
-                        );
-                    }
+    if !opts.dry_run
+        && let Err(e) = default_api::update_resource_requirements(config, rr_id, new_rr)
+    {
+        warn!(
+            "Warning: failed to update resource requirements {}: {}",
+            rr_id, e
+        );
+    }
 
-                    // Track for JSON report
-                    original_runtime = Some(adjustment.current_runtime.clone());
-                    new_runtime_str = Some(new_runtime.clone());
-                    runtime_adjusted = true;
+    Some(AdjustmentOutcome {
+        report: ResourceAdjustmentReport {
+            resource_requirements_id: rr_id,
+            direction: "downscale".to_string(),
+            job_ids: candidate.job_ids.clone(),
+            job_names: candidate.job_names.clone(),
+            memory_adjusted,
+            original_memory,
+            new_memory: new_memory_str,
+            max_peak_memory_bytes: candidate.max_peak_memory_bytes,
+            runtime_adjusted,
+            original_runtime,
+            new_runtime: new_runtime_str,
+            cpu_adjusted,
+            original_cpus,
+            new_cpus: new_cpus_value,
+            max_peak_cpu_percent: candidate.max_peak_cpu_percent,
+        },
+        memory_corrections,
+        runtime_corrections,
+        cpu_corrections,
+    })
+}
 
-                    new_rr.runtime = new_runtime;
-                    updated = true;
-                    runtime_corrections += adjustment.job_ids.len();
-                }
-            }
+/// Apply resource corrections based on utilization analysis.
+///
+/// This function analyzes job resource utilization data and adjusts resource
+/// requirements (memory, CPU, and runtime) to better match actual job needs.
+///
+/// When multiple jobs share the same `resource_requirements_id`, this function
+/// finds the maximum peak usage across all jobs in that group and applies
+/// that (with multiplier) to the shared resource requirement. This ensures all
+/// jobs in the group can succeed.
+///
+/// The function performs both **upscaling** (increasing resources for jobs that
+/// exceeded their limits) and **downsizing** (reducing over-allocated resources
+/// for jobs that used significantly less than allocated).
+pub fn apply_resource_corrections(
+    ctx: &ResourceCorrectionContext,
+    opts: &ResourceCorrectionOptions,
+) -> Result<ResourceCorrectionResult, String> {
+    // Phase 1: aggregate violations by resource_requirements_id
+    let (rr_adjustments, jobs_analyzed) = aggregate_violations(ctx, opts);
+
+    // Phase 2: apply upscale corrections
+    let mut adjustment_reports = Vec::new();
+    let mut memory_corrections = 0;
+    let mut runtime_corrections = 0;
+    let mut cpu_corrections = 0;
+
+    for adjustment in rr_adjustments.values() {
+        if let Some(outcome) = apply_upscale_for_adjustment(ctx.config, opts, adjustment) {
+            memory_corrections += outcome.memory_corrections;
+            runtime_corrections += outcome.runtime_corrections;
+            cpu_corrections += outcome.cpu_corrections;
+            adjustment_reports.push(outcome.report);
         }
+    }
 
-        // Apply CPU violation fix
-        // Note: CPU corrections use memory_multiplier (capacity multiplier) like memory corrections,
-        // not runtime_multiplier (time multiplier). This ensures consistent safety margins for resources.
-        if adjustment.has_cpu_violation
-            && let Some(max_peak_cpu) = adjustment.max_peak_cpu_percent
-        {
-            // peak_cpu_percent is the total percentage for all CPUs
-            // e.g., 501.4% with 3 CPUs allocated (300%)
-            // Calculate required CPUs using capacity multiplier for safety margin
-            let required_cpus = (max_peak_cpu / 100.0 * memory_multiplier).ceil() as i64;
-            let new_cpus = std::cmp::max(required_cpus, 1); // At least 1 CPU
+    // Phase 3: apply downscale corrections for under-utilized RRs
+    let mut downsize_memory_corrections = 0;
+    let mut downsize_runtime_corrections = 0;
+    let mut downsize_cpu_corrections = 0;
 
-            if new_cpus > adjustment.current_cpus {
-                let job_count = adjustment.job_ids.len();
-                if job_count > 1 {
-                    info!(
-                        "{} job(s) with RR {}: CPU over-utilization detected, peak {}% -> allocating {} CPUs ({:.1}x safety margin)",
-                        job_count, rr_id, max_peak_cpu, new_cpus, memory_multiplier
-                    );
-                } else if let (Some(job_id), Some(job_name)) =
-                    (adjustment.job_ids.first(), adjustment.job_names.first())
-                {
-                    info!(
-                        "Job {} ({}): CPU over-utilization detected, peak {}% -> allocating {} CPUs ({:.1}x safety margin)",
-                        job_id, job_name, max_peak_cpu, new_cpus, memory_multiplier
-                    );
-                }
+    if !opts.no_downsize {
+        let violated_rr_ids: HashSet<i64> = {
+            let lookup = ResourceLookupContext::new(ctx.all_jobs, ctx.all_resource_requirements);
+            ctx.diagnosis
+                .resource_violations
+                .iter()
+                .filter_map(|v| {
+                    lookup
+                        .find_job(v.job_id)
+                        .and_then(|j| j.resource_requirements_id)
+                })
+                .collect()
+        };
 
-                // Track CPU adjustment for reporting
-                cpu_adjusted = true;
-                original_cpus = Some(adjustment.current_cpus);
-                new_cpus_value = Some(new_cpus);
+        let downsize_candidates = build_downsize_candidates(ctx, opts, &violated_rr_ids);
 
-                new_rr.num_cpus = new_cpus;
-                updated = true;
-            }
-        }
-
-        // Update resource requirements if changed (only once per rr_id)
-        #[allow(clippy::collapsible_if)]
-        if updated {
-            if !dry_run {
-                if let Err(e) = default_api::update_resource_requirements(config, rr_id, new_rr) {
-                    warn!(
-                        "Warning: failed to update resource requirements {}: {}",
-                        rr_id, e
-                    );
-                }
+        for candidate in downsize_candidates.values() {
+            // Skip RR IDs that were already upscaled
+            if rr_adjustments.contains_key(&candidate.rr_id) {
+                continue;
             }
 
-            // Create adjustment report for JSON output
-            adjustment_reports.push(ResourceAdjustmentReport {
-                resource_requirements_id: rr_id,
-                job_ids: adjustment.job_ids.clone(),
-                job_names: adjustment.job_names.clone(),
-                memory_adjusted,
-                original_memory,
-                new_memory: new_memory_str,
-                max_peak_memory_bytes: adjustment.max_peak_memory_bytes,
-                runtime_adjusted,
-                original_runtime,
-                new_runtime: new_runtime_str,
-                cpu_adjusted,
-                original_cpus,
-                new_cpus: new_cpus_value,
-                max_peak_cpu_percent: adjustment.max_peak_cpu_percent,
-            });
+            if let Some(outcome) = apply_downscale_for_candidate(ctx.config, opts, candidate) {
+                downsize_memory_corrections += outcome.memory_corrections;
+                downsize_runtime_corrections += outcome.runtime_corrections;
+                downsize_cpu_corrections += outcome.cpu_corrections;
+                adjustment_reports.push(outcome.report);
+            }
         }
     }
 
@@ -540,6 +1047,10 @@ pub fn apply_resource_corrections(
         jobs_analyzed,
         memory_corrections,
         runtime_corrections,
+        cpu_corrections,
+        downsize_memory_corrections,
+        downsize_runtime_corrections,
+        downsize_cpu_corrections,
         adjustments: adjustment_reports,
     })
 }

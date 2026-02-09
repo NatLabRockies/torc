@@ -5,6 +5,10 @@ use common::{
 };
 use rstest::rstest;
 use torc::client::default_api;
+use torc::client::report_models::ResourceUtilizationReport;
+use torc::client::resource_correction::{
+    ResourceCorrectionContext, ResourceCorrectionOptions, apply_resource_corrections,
+};
 use torc::client::workflow_manager::WorkflowManager;
 use torc::config::TorcConfig;
 use torc::models::{self, JobStatus};
@@ -787,4 +791,780 @@ fn test_correct_resources_memory_violation_successful_job(start_server: &ServerP
         Some(3_200_000_000),
         "Should have peak memory recorded"
     );
+}
+
+/// Helper: create an empty diagnosis (no violations) for downsizing-only tests
+fn empty_diagnosis(workflow_id: i64, total_results: usize) -> ResourceUtilizationReport {
+    ResourceUtilizationReport {
+        workflow_id,
+        run_id: None,
+        total_results,
+        over_utilization_count: 0,
+        violations: Vec::new(),
+        resource_violations_count: 0,
+        resource_violations: Vec::new(),
+    }
+}
+
+/// Helper: fetch all results for a workflow
+fn fetch_results(
+    config: &torc::client::Configuration,
+    workflow_id: i64,
+) -> Vec<models::ResultModel> {
+    default_api::list_results(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list results")
+    .items
+    .unwrap_or_default()
+}
+
+/// Helper: fetch all jobs for a workflow
+fn fetch_jobs(config: &torc::client::Configuration, workflow_id: i64) -> Vec<models::JobModel> {
+    default_api::list_jobs(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list jobs")
+    .items
+    .unwrap_or_default()
+}
+
+/// Helper: fetch all resource requirements for a workflow
+fn fetch_resource_requirements(
+    config: &torc::client::Configuration,
+    workflow_id: i64,
+) -> Vec<models::ResourceRequirementsModel> {
+    default_api::list_resource_requirements(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list resource requirements")
+    .items
+    .unwrap_or_default()
+}
+
+/// Helper: create a job and assign it an RR. Returns the job_id.
+/// The job is NOT yet claimed/run/completed — use `claim_and_complete_jobs` for that.
+fn create_job_with_rr(
+    config: &torc::client::Configuration,
+    workflow_id: i64,
+    job_name: &str,
+    rr_id: i64,
+) -> i64 {
+    let mut job = create_test_job(config, workflow_id, job_name);
+    job.resource_requirements_id = Some(rr_id);
+    let job_id = job.id.unwrap();
+    default_api::update_job(config, job_id, job).expect("Failed to update job");
+    job_id
+}
+
+/// Helper: claim all ready jobs, set them running, and complete each with given metrics.
+/// `job_metrics` is a list of (job_id, return_code, exec_time, status, peak_mem, peak_cpu).
+#[allow(clippy::type_complexity)]
+fn claim_and_complete_jobs(
+    config: &torc::client::Configuration,
+    workflow_id: i64,
+    run_id: i64,
+    compute_node_id: i64,
+    job_metrics: &[(i64, i64, f64, JobStatus, Option<i64>, Option<f64>)],
+) {
+    let resources = models::ComputeNodesResources::new(128, 1024.0, 0, 1);
+    let claim_result = default_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        &resources,
+        100,
+        None,
+        None,
+    )
+    .expect("Failed to claim jobs");
+    let claimed = claim_result.jobs.expect("Should return jobs");
+
+    for (job_id, return_code, exec_time, status, peak_mem, peak_cpu) in job_metrics {
+        // Verify this job was claimed
+        assert!(
+            claimed.iter().any(|j| j.id == Some(*job_id)),
+            "Job {} should have been claimed",
+            job_id
+        );
+
+        default_api::manage_status_change(config, *job_id, JobStatus::Running, run_id, None)
+            .expect("Failed to set job running");
+
+        let mut result = models::ResultModel::new(
+            *job_id,
+            workflow_id,
+            run_id,
+            1,
+            compute_node_id,
+            *return_code,
+            *exec_time,
+            chrono::Utc::now().to_rfc3339(),
+            *status,
+        );
+        result.peak_memory_bytes = *peak_mem;
+        result.peak_cpu_percent = *peak_cpu;
+
+        default_api::complete_job(config, *job_id, result.status, run_id, result)
+            .expect("Failed to complete job");
+    }
+}
+
+/// Test that memory is downsized when all jobs use significantly less than allocated.
+/// Allocated: 8GB, peak usage: 2GB → new = ceil(2GB * 1.2) = 3GB, savings = 5GB > 1GB threshold.
+#[rstest]
+fn test_downsize_memory(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, run_id) = create_and_initialize_workflow(config, "test_downsize_memory");
+
+    let compute_node = create_test_compute_node(config, workflow_id);
+    let compute_node_id = compute_node.id.unwrap();
+
+    // Create RR with 8GB memory
+    let mut rr = models::ResourceRequirementsModel::new(workflow_id, "big_mem".to_string());
+    rr.memory = "8g".to_string();
+    rr.runtime = "PT1H".to_string();
+    rr.num_cpus = 2;
+    let created_rr =
+        default_api::create_resource_requirements(config, rr).expect("Failed to create RR");
+    let rr_id = created_rr.id.unwrap();
+
+    // Create 2 jobs with this RR
+    let job_a_id = create_job_with_rr(config, workflow_id, "job_a", rr_id);
+    let job_b_id = create_job_with_rr(config, workflow_id, "job_b", rr_id);
+
+    // Reinitialize and complete jobs through lifecycle
+    default_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to reinitialize");
+
+    claim_and_complete_jobs(
+        config,
+        workflow_id,
+        run_id,
+        compute_node_id,
+        &[
+            (
+                job_a_id,
+                0,
+                10.0,
+                JobStatus::Completed,
+                Some(2 * 1024 * 1024 * 1024),
+                Some(150.0),
+            ),
+            (
+                job_b_id,
+                0,
+                10.0,
+                JobStatus::Completed,
+                Some(2 * 1024 * 1024 * 1024),
+                Some(150.0),
+            ),
+        ],
+    );
+
+    // Build context from real data
+    let all_results = fetch_results(config, workflow_id);
+    let all_jobs = fetch_jobs(config, workflow_id);
+    let all_rrs = fetch_resource_requirements(config, workflow_id);
+    let diagnosis = empty_diagnosis(workflow_id, all_results.len());
+
+    let ctx = ResourceCorrectionContext {
+        config,
+        workflow_id,
+        diagnosis: &diagnosis,
+        all_results: &all_results,
+        all_jobs: &all_jobs,
+        all_resource_requirements: &all_rrs,
+    };
+    let opts = ResourceCorrectionOptions {
+        memory_multiplier: 1.2,
+        cpu_multiplier: 1.2,
+        runtime_multiplier: 1.2,
+        include_jobs: vec![],
+        dry_run: false,
+        no_downsize: false,
+    };
+
+    let result = apply_resource_corrections(&ctx, &opts).expect("Failed to apply corrections");
+
+    assert_eq!(result.downsize_memory_corrections, 2);
+    assert!(result.resource_requirements_updated > 0);
+
+    // Verify RR was updated: 2GB * 1.2 = 2.4GB → ceil to 3g
+    let rr_after = default_api::get_resource_requirements(config, rr_id)
+        .expect("Failed to get RR after downsize");
+    assert_eq!(rr_after.memory, "3g", "Memory should be downsized to 3g");
+}
+
+/// Test that CPU is downsized when all jobs use far fewer CPUs than allocated.
+/// Allocated: 8 CPUs (800%), peak usage: 150% → new = ceil(1.5 * 1.2) = 2.
+/// Savings = 800% - 150% = 650% > 5% threshold.
+#[rstest]
+fn test_downsize_cpu(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, run_id) = create_and_initialize_workflow(config, "test_downsize_cpu");
+
+    let compute_node = create_test_compute_node(config, workflow_id);
+    let compute_node_id = compute_node.id.unwrap();
+
+    let mut rr = models::ResourceRequirementsModel::new(workflow_id, "big_cpu".to_string());
+    rr.memory = "2g".to_string();
+    rr.runtime = "PT1H".to_string();
+    rr.num_cpus = 8;
+    let created_rr =
+        default_api::create_resource_requirements(config, rr).expect("Failed to create RR");
+    let rr_id = created_rr.id.unwrap();
+
+    let job_id = create_job_with_rr(config, workflow_id, "low_cpu_job", rr_id);
+
+    default_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to reinitialize");
+
+    claim_and_complete_jobs(
+        config,
+        workflow_id,
+        run_id,
+        compute_node_id,
+        &[(
+            job_id,
+            0,
+            10.0,
+            JobStatus::Completed,
+            Some(1024 * 1024 * 1024),
+            Some(150.0),
+        )],
+    );
+
+    let all_results = fetch_results(config, workflow_id);
+    let all_jobs = fetch_jobs(config, workflow_id);
+    let all_rrs = fetch_resource_requirements(config, workflow_id);
+    let diagnosis = empty_diagnosis(workflow_id, all_results.len());
+
+    let ctx = ResourceCorrectionContext {
+        config,
+        workflow_id,
+        diagnosis: &diagnosis,
+        all_results: &all_results,
+        all_jobs: &all_jobs,
+        all_resource_requirements: &all_rrs,
+    };
+    let opts = ResourceCorrectionOptions {
+        memory_multiplier: 1.2,
+        cpu_multiplier: 1.2,
+        runtime_multiplier: 1.2,
+        include_jobs: vec![],
+        dry_run: false,
+        no_downsize: false,
+    };
+
+    let result = apply_resource_corrections(&ctx, &opts).expect("Failed to apply corrections");
+
+    assert_eq!(result.downsize_cpu_corrections, 1);
+
+    let rr_after = default_api::get_resource_requirements(config, rr_id)
+        .expect("Failed to get RR after downsize");
+    // ceil(150% / 100% * 1.2) = ceil(1.8) = 2
+    assert_eq!(rr_after.num_cpus, 2, "CPUs should be downsized to 2");
+}
+
+/// Test that runtime is downsized when all jobs run much faster than allocated.
+/// Allocated: PT2H (120 min), peak usage: 10 min → new = ceil(10 * 1.2) = 12 min.
+/// Savings = 120 min - 12 min = 108 min > 30 min threshold.
+#[rstest]
+fn test_downsize_runtime(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, run_id) = create_and_initialize_workflow(config, "test_downsize_runtime");
+
+    let compute_node = create_test_compute_node(config, workflow_id);
+    let compute_node_id = compute_node.id.unwrap();
+
+    let mut rr = models::ResourceRequirementsModel::new(workflow_id, "long_rt".to_string());
+    rr.memory = "2g".to_string();
+    rr.runtime = "PT2H".to_string(); // 120 minutes
+    rr.num_cpus = 1;
+    let created_rr =
+        default_api::create_resource_requirements(config, rr).expect("Failed to create RR");
+    let rr_id = created_rr.id.unwrap();
+
+    // Create 3 jobs
+    let job1_id = create_job_with_rr(config, workflow_id, "fast1", rr_id);
+    let job2_id = create_job_with_rr(config, workflow_id, "fast2", rr_id);
+    let job3_id = create_job_with_rr(config, workflow_id, "fast3", rr_id);
+
+    default_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to reinitialize");
+
+    claim_and_complete_jobs(
+        config,
+        workflow_id,
+        run_id,
+        compute_node_id,
+        &[
+            (
+                job1_id,
+                0,
+                10.0,
+                JobStatus::Completed,
+                Some(1024 * 1024 * 1024),
+                Some(80.0),
+            ),
+            (
+                job2_id,
+                0,
+                10.0,
+                JobStatus::Completed,
+                Some(1024 * 1024 * 1024),
+                Some(80.0),
+            ),
+            (
+                job3_id,
+                0,
+                10.0,
+                JobStatus::Completed,
+                Some(1024 * 1024 * 1024),
+                Some(80.0),
+            ),
+        ],
+    );
+
+    let all_results = fetch_results(config, workflow_id);
+    let all_jobs = fetch_jobs(config, workflow_id);
+    let all_rrs = fetch_resource_requirements(config, workflow_id);
+    let diagnosis = empty_diagnosis(workflow_id, all_results.len());
+
+    let ctx = ResourceCorrectionContext {
+        config,
+        workflow_id,
+        diagnosis: &diagnosis,
+        all_results: &all_results,
+        all_jobs: &all_jobs,
+        all_resource_requirements: &all_rrs,
+    };
+    let opts = ResourceCorrectionOptions {
+        memory_multiplier: 1.2,
+        cpu_multiplier: 1.2,
+        runtime_multiplier: 1.2,
+        include_jobs: vec![],
+        dry_run: false,
+        no_downsize: false,
+    };
+
+    let result = apply_resource_corrections(&ctx, &opts).expect("Failed to apply corrections");
+
+    assert_eq!(result.downsize_runtime_corrections, 3);
+
+    let rr_after = default_api::get_resource_requirements(config, rr_id)
+        .expect("Failed to get RR after downsize");
+    // 10 min * 60s * 1.2 = 720s = 12 minutes → PT12M
+    assert_eq!(
+        rr_after.runtime, "PT12M",
+        "Runtime should be downsized to PT12M"
+    );
+}
+
+/// Test that no downsize occurs when savings are below the thresholds.
+/// Memory: 3g (3 GiB) allocated, 2.5GB peak * 1.2x = 3GB new → savings ~0.2 GiB < 1 GiB threshold.
+/// CPU: 2 (200%), peak 198% → difference 2% < 5% threshold.
+/// Runtime: PT40M (40 min), peak 15 min → savings 25 min < 30 min threshold.
+#[rstest]
+fn test_no_downsize_below_threshold(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, run_id) =
+        create_and_initialize_workflow(config, "test_no_downsize_threshold");
+
+    let compute_node = create_test_compute_node(config, workflow_id);
+    let compute_node_id = compute_node.id.unwrap();
+
+    let mut rr = models::ResourceRequirementsModel::new(workflow_id, "tight".to_string());
+    rr.memory = "3g".to_string();
+    rr.runtime = "PT40M".to_string(); // 40 minutes
+    rr.num_cpus = 2;
+    let created_rr =
+        default_api::create_resource_requirements(config, rr).expect("Failed to create RR");
+    let rr_id = created_rr.id.unwrap();
+
+    let job_id = create_job_with_rr(config, workflow_id, "tight_job", rr_id);
+
+    default_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to reinitialize");
+
+    claim_and_complete_jobs(
+        config,
+        workflow_id,
+        run_id,
+        compute_node_id,
+        &[(
+            job_id,
+            0,
+            15.0,
+            JobStatus::Completed,
+            Some(2_500_000_000),
+            Some(198.0),
+        )],
+    );
+
+    let all_results = fetch_results(config, workflow_id);
+    let all_jobs = fetch_jobs(config, workflow_id);
+    let all_rrs = fetch_resource_requirements(config, workflow_id);
+    let diagnosis = empty_diagnosis(workflow_id, all_results.len());
+
+    let ctx = ResourceCorrectionContext {
+        config,
+        workflow_id,
+        diagnosis: &diagnosis,
+        all_results: &all_results,
+        all_jobs: &all_jobs,
+        all_resource_requirements: &all_rrs,
+    };
+    let opts = ResourceCorrectionOptions {
+        memory_multiplier: 1.2,
+        cpu_multiplier: 1.2,
+        runtime_multiplier: 1.2,
+        include_jobs: vec![],
+        dry_run: false,
+        no_downsize: false,
+    };
+
+    let result = apply_resource_corrections(&ctx, &opts).expect("Failed to apply corrections");
+
+    // Nothing should have changed
+    assert_eq!(result.downsize_memory_corrections, 0);
+    assert_eq!(result.downsize_cpu_corrections, 0);
+    assert_eq!(result.downsize_runtime_corrections, 0);
+    assert_eq!(result.resource_requirements_updated, 0);
+
+    // Verify RR is unchanged
+    let rr_after = default_api::get_resource_requirements(config, rr_id).expect("Failed to get RR");
+    assert_eq!(rr_after.memory, "3g");
+    assert_eq!(rr_after.num_cpus, 2);
+    assert_eq!(rr_after.runtime, "PT40M");
+}
+
+/// Test that --no-downsize flag prevents all downsizing
+#[rstest]
+fn test_no_downsize_flag(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, run_id) = create_and_initialize_workflow(config, "test_no_downsize_flag");
+
+    let compute_node = create_test_compute_node(config, workflow_id);
+    let compute_node_id = compute_node.id.unwrap();
+
+    let mut rr = models::ResourceRequirementsModel::new(workflow_id, "wasteful".to_string());
+    rr.memory = "32g".to_string();
+    rr.runtime = "PT8H".to_string();
+    rr.num_cpus = 16;
+    let created_rr =
+        default_api::create_resource_requirements(config, rr).expect("Failed to create RR");
+    let rr_id = created_rr.id.unwrap();
+
+    let job_id = create_job_with_rr(config, workflow_id, "tiny_job", rr_id);
+
+    default_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to reinitialize");
+
+    claim_and_complete_jobs(
+        config,
+        workflow_id,
+        run_id,
+        compute_node_id,
+        &[(
+            job_id,
+            0,
+            1.0,
+            JobStatus::Completed,
+            Some(512 * 1024 * 1024),
+            Some(50.0),
+        )],
+    );
+
+    let all_results = fetch_results(config, workflow_id);
+    let all_jobs = fetch_jobs(config, workflow_id);
+    let all_rrs = fetch_resource_requirements(config, workflow_id);
+    let diagnosis = empty_diagnosis(workflow_id, all_results.len());
+
+    let ctx = ResourceCorrectionContext {
+        config,
+        workflow_id,
+        diagnosis: &diagnosis,
+        all_results: &all_results,
+        all_jobs: &all_jobs,
+        all_resource_requirements: &all_rrs,
+    };
+    let opts = ResourceCorrectionOptions {
+        memory_multiplier: 1.2,
+        cpu_multiplier: 1.2,
+        runtime_multiplier: 1.2,
+        include_jobs: vec![],
+        dry_run: false,
+        no_downsize: true, // no_downsize = true
+    };
+
+    let result = apply_resource_corrections(&ctx, &opts).expect("Failed to apply corrections");
+
+    assert_eq!(result.downsize_memory_corrections, 0);
+    assert_eq!(result.downsize_cpu_corrections, 0);
+    assert_eq!(result.downsize_runtime_corrections, 0);
+    assert_eq!(result.resource_requirements_updated, 0);
+
+    // Verify RR is unchanged
+    let rr_after = default_api::get_resource_requirements(config, rr_id).expect("Failed to get RR");
+    assert_eq!(rr_after.memory, "32g");
+    assert_eq!(rr_after.num_cpus, 16);
+    assert_eq!(rr_after.runtime, "PT8H");
+}
+
+/// Test that downsizing skips resources when not all jobs have peak data.
+/// If one job is missing peak_memory_bytes, memory should NOT be downsized
+/// (we can't be sure it actually used less than allocated).
+#[rstest]
+fn test_no_downsize_missing_peak_data(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, run_id) = create_and_initialize_workflow(config, "test_no_downsize_missing");
+
+    let compute_node = create_test_compute_node(config, workflow_id);
+    let compute_node_id = compute_node.id.unwrap();
+
+    let mut rr = models::ResourceRequirementsModel::new(workflow_id, "partial".to_string());
+    rr.memory = "16g".to_string();
+    rr.runtime = "PT2H".to_string();
+    rr.num_cpus = 8;
+    let created_rr =
+        default_api::create_resource_requirements(config, rr).expect("Failed to create RR");
+    let rr_id = created_rr.id.unwrap();
+
+    // Job 1: has full peak data
+    let job1_id = create_job_with_rr(config, workflow_id, "has_data", rr_id);
+    // Job 2: missing memory and CPU data (None)
+    let job2_id = create_job_with_rr(config, workflow_id, "no_data", rr_id);
+
+    default_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to reinitialize");
+
+    claim_and_complete_jobs(
+        config,
+        workflow_id,
+        run_id,
+        compute_node_id,
+        &[
+            (
+                job1_id,
+                0,
+                5.0,
+                JobStatus::Completed,
+                Some(1024 * 1024 * 1024),
+                Some(100.0),
+            ),
+            (job2_id, 0, 5.0, JobStatus::Completed, None, None),
+        ],
+    );
+
+    let all_results = fetch_results(config, workflow_id);
+    let all_jobs = fetch_jobs(config, workflow_id);
+    let all_rrs = fetch_resource_requirements(config, workflow_id);
+    let diagnosis = empty_diagnosis(workflow_id, all_results.len());
+
+    let ctx = ResourceCorrectionContext {
+        config,
+        workflow_id,
+        diagnosis: &diagnosis,
+        all_results: &all_results,
+        all_jobs: &all_jobs,
+        all_resource_requirements: &all_rrs,
+    };
+    let opts = ResourceCorrectionOptions {
+        memory_multiplier: 1.2,
+        cpu_multiplier: 1.2,
+        runtime_multiplier: 1.2,
+        include_jobs: vec![],
+        dry_run: false,
+        no_downsize: false,
+    };
+
+    let result = apply_resource_corrections(&ctx, &opts).expect("Failed to apply corrections");
+
+    // Memory and CPU should NOT be downsized (missing data)
+    assert_eq!(result.downsize_memory_corrections, 0);
+    assert_eq!(result.downsize_cpu_corrections, 0);
+    // Runtime CAN still be downsized (120 min - 6 min = 114 min > 30 min threshold)
+    assert_eq!(result.downsize_runtime_corrections, 2);
+
+    let rr_after = default_api::get_resource_requirements(config, rr_id).expect("Failed to get RR");
+    assert_eq!(rr_after.memory, "16g", "Memory unchanged — missing data");
+    assert_eq!(rr_after.num_cpus, 8, "CPUs unchanged — missing data");
+    // Runtime: 5 min * 60 * 1.2 = 360s = 6 min → PT6M
+    assert_eq!(rr_after.runtime, "PT6M", "Runtime downsized to PT6M");
+}
+
+/// Test that downsizing in dry-run mode does NOT modify the resource requirements
+#[rstest]
+fn test_downsize_dry_run(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, run_id) = create_and_initialize_workflow(config, "test_downsize_dry_run");
+
+    let compute_node = create_test_compute_node(config, workflow_id);
+    let compute_node_id = compute_node.id.unwrap();
+
+    let mut rr = models::ResourceRequirementsModel::new(workflow_id, "big".to_string());
+    rr.memory = "16g".to_string();
+    rr.runtime = "PT4H".to_string();
+    rr.num_cpus = 8;
+    let created_rr =
+        default_api::create_resource_requirements(config, rr).expect("Failed to create RR");
+    let rr_id = created_rr.id.unwrap();
+
+    let job_id = create_job_with_rr(config, workflow_id, "small_job", rr_id);
+
+    default_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to reinitialize");
+
+    claim_and_complete_jobs(
+        config,
+        workflow_id,
+        run_id,
+        compute_node_id,
+        &[(
+            job_id,
+            0,
+            5.0,
+            JobStatus::Completed,
+            Some(1024 * 1024 * 1024),
+            Some(100.0),
+        )],
+    );
+
+    let all_results = fetch_results(config, workflow_id);
+    let all_jobs = fetch_jobs(config, workflow_id);
+    let all_rrs = fetch_resource_requirements(config, workflow_id);
+    let diagnosis = empty_diagnosis(workflow_id, all_results.len());
+
+    let ctx = ResourceCorrectionContext {
+        config,
+        workflow_id,
+        diagnosis: &diagnosis,
+        all_results: &all_results,
+        all_jobs: &all_jobs,
+        all_resource_requirements: &all_rrs,
+    };
+    let opts = ResourceCorrectionOptions {
+        memory_multiplier: 1.2,
+        cpu_multiplier: 1.2,
+        runtime_multiplier: 1.2,
+        include_jobs: vec![],
+        dry_run: true, // dry-run — don't apply
+        no_downsize: false,
+    };
+
+    let result = apply_resource_corrections(&ctx, &opts).expect("Failed to apply corrections");
+
+    // Corrections should be reported
+    assert!(result.downsize_memory_corrections > 0);
+    assert!(result.downsize_cpu_corrections > 0);
+    assert!(result.downsize_runtime_corrections > 0);
+
+    // But RR should be UNCHANGED
+    let rr_after = default_api::get_resource_requirements(config, rr_id).expect("Failed to get RR");
+    assert_eq!(rr_after.memory, "16g", "Memory unchanged in dry-run");
+    assert_eq!(rr_after.num_cpus, 8, "CPUs unchanged in dry-run");
+    assert_eq!(rr_after.runtime, "PT4H", "Runtime unchanged in dry-run");
+}
+
+/// Test that adjustment reports include the correct direction field
+#[rstest]
+fn test_downsize_adjustment_report_direction(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, run_id) = create_and_initialize_workflow(config, "test_downsize_direction");
+
+    let compute_node = create_test_compute_node(config, workflow_id);
+    let compute_node_id = compute_node.id.unwrap();
+
+    let mut rr = models::ResourceRequirementsModel::new(workflow_id, "report".to_string());
+    rr.memory = "16g".to_string();
+    rr.runtime = "PT4H".to_string();
+    rr.num_cpus = 8;
+    let created_rr =
+        default_api::create_resource_requirements(config, rr).expect("Failed to create RR");
+    let rr_id = created_rr.id.unwrap();
+
+    let job_id = create_job_with_rr(config, workflow_id, "tiny", rr_id);
+
+    default_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to reinitialize");
+
+    claim_and_complete_jobs(
+        config,
+        workflow_id,
+        run_id,
+        compute_node_id,
+        &[(
+            job_id,
+            0,
+            5.0,
+            JobStatus::Completed,
+            Some(1024 * 1024 * 1024),
+            Some(100.0),
+        )],
+    );
+
+    let all_results = fetch_results(config, workflow_id);
+    let all_jobs = fetch_jobs(config, workflow_id);
+    let all_rrs = fetch_resource_requirements(config, workflow_id);
+    let diagnosis = empty_diagnosis(workflow_id, all_results.len());
+
+    let ctx = ResourceCorrectionContext {
+        config,
+        workflow_id,
+        diagnosis: &diagnosis,
+        all_results: &all_results,
+        all_jobs: &all_jobs,
+        all_resource_requirements: &all_rrs,
+    };
+    let opts = ResourceCorrectionOptions {
+        memory_multiplier: 1.2,
+        cpu_multiplier: 1.2,
+        runtime_multiplier: 1.2,
+        include_jobs: vec![],
+        dry_run: true, // dry-run
+        no_downsize: false,
+    };
+
+    let result = apply_resource_corrections(&ctx, &opts).expect("Failed to apply corrections");
+
+    assert!(!result.adjustments.is_empty(), "Should have adjustments");
+    let adj = &result.adjustments[0];
+    assert_eq!(adj.direction, "downscale", "Direction should be downscale");
+    assert!(adj.memory_adjusted);
+    assert!(adj.cpu_adjusted);
+    assert!(adj.runtime_adjusted);
 }
