@@ -8,8 +8,12 @@ use std::process::Command;
 use crate::client::apis::configuration::Configuration;
 use crate::client::apis::default_api;
 use crate::client::commands::pagination::jobs::{JobListParams, paginate_jobs};
+use crate::client::commands::pagination::resource_requirements::{
+    ResourceRequirementsListParams, paginate_resource_requirements,
+};
 use crate::client::commands::pagination::results::{ResultListParams, paginate_results};
 use crate::client::log_paths;
+use crate::client::resource_correction::format_memory_bytes_short;
 use crate::models::{JobStatus, ResourceRequirementsModel};
 
 /// Helper to create an internal error
@@ -1538,6 +1542,458 @@ pub fn classify_and_resolve_failures(
         } else {
             "Classifications applied."
         },
+    });
+
+    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
+        serde_json::to_string_pretty(&response).unwrap_or_default(),
+    )]))
+}
+
+/// Compute summary statistics for a slice of f64 values.
+fn compute_stats(values: &[f64]) -> serde_json::Value {
+    if values.is_empty() {
+        return serde_json::json!(null);
+    }
+    let mut sorted = values.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let min = sorted[0];
+    let max = sorted[sorted.len() - 1];
+    let sum: f64 = sorted.iter().sum();
+    let mean = sum / sorted.len() as f64;
+    let median = if sorted.len() % 2 == 0 {
+        (sorted[sorted.len() / 2 - 1] + sorted[sorted.len() / 2]) / 2.0
+    } else {
+        sorted[sorted.len() / 2]
+    };
+    serde_json::json!({
+        "min": min,
+        "max": max,
+        "mean": (mean * 100.0).round() / 100.0,
+        "median": (median * 100.0).round() / 100.0,
+    })
+}
+
+/// Compute summary statistics for memory values (bytes), including formatted strings.
+fn compute_memory_stats(values: &[i64]) -> serde_json::Value {
+    if values.is_empty() {
+        return serde_json::json!(null);
+    }
+    let mut sorted = values.to_vec();
+    sorted.sort();
+    let min = sorted[0];
+    let max = sorted[sorted.len() - 1];
+    let sum: i64 = sorted.iter().sum();
+    let mean = sum as f64 / sorted.len() as f64;
+    let median = if sorted.len() % 2 == 0 {
+        (sorted[sorted.len() / 2 - 1] + sorted[sorted.len() / 2]) / 2
+    } else {
+        sorted[sorted.len() / 2]
+    };
+    serde_json::json!({
+        "min": min,
+        "max": max,
+        "mean": mean.round() as i64,
+        "median": median,
+        "min_formatted": format_memory_bytes_short(min as u64),
+        "max_formatted": format_memory_bytes_short(max as u64),
+    })
+}
+
+/// Analyze resource usage for a workflow, grouped by resource requirements.
+///
+/// Returns structured JSON with per-RR summary statistics and per-job detail,
+/// optimized for AI cluster analysis.
+pub fn analyze_resource_usage(
+    config: &Configuration,
+    workflow_id: i64,
+    completed_only: bool,
+) -> Result<CallToolResult, McpError> {
+    // Fetch all jobs, resource requirements, and results
+    let jobs = paginate_jobs(config, workflow_id, JobListParams::new())
+        .map_err(|e| internal_error(format!("Failed to list jobs: {}", e)))?;
+
+    let resource_requirements =
+        paginate_resource_requirements(config, workflow_id, ResourceRequirementsListParams::new())
+            .map_err(|e| internal_error(format!("Failed to list resource requirements: {}", e)))?;
+
+    let results = paginate_results(config, workflow_id, ResultListParams::new())
+        .map_err(|e| internal_error(format!("Failed to list results: {}", e)))?;
+
+    // Build a map of job_id -> latest ResultModel (highest run_id, then attempt_id)
+    let mut latest_results: std::collections::HashMap<i64, &crate::models::ResultModel> =
+        std::collections::HashMap::new();
+    for result in &results {
+        // Filter by return_code=0 if completed_only
+        if completed_only && result.return_code != 0 {
+            continue;
+        }
+        let entry = latest_results.entry(result.job_id).or_insert(result);
+        if result.run_id > entry.run_id
+            || (result.run_id == entry.run_id
+                && result.attempt_id.unwrap_or(1) > entry.attempt_id.unwrap_or(1))
+        {
+            *entry = result;
+        }
+    }
+
+    // Build RR lookup
+    let rr_map: std::collections::HashMap<i64, &ResourceRequirementsModel> = resource_requirements
+        .iter()
+        .filter_map(|rr| rr.id.map(|id| (id, rr)))
+        .collect();
+
+    // Group jobs by resource_requirements_id
+    let mut groups: std::collections::HashMap<Option<i64>, Vec<&crate::models::JobModel>> =
+        std::collections::HashMap::new();
+    for job in &jobs {
+        groups
+            .entry(job.resource_requirements_id)
+            .or_default()
+            .push(job);
+    }
+
+    let mut resource_groups: Vec<serde_json::Value> = Vec::new();
+    let mut jobs_without_results: Vec<serde_json::Value> = Vec::new();
+    let total_jobs = jobs.len();
+    let mut total_jobs_with_results = 0;
+
+    // Process each RR group
+    for (rr_id, group_jobs) in &groups {
+        let rr = rr_id.and_then(|id| rr_map.get(&id));
+
+        let mut job_details: Vec<serde_json::Value> = Vec::new();
+        let mut peak_memory_values: Vec<i64> = Vec::new();
+        let mut peak_cpu_values: Vec<f64> = Vec::new();
+        let mut exec_time_values: Vec<f64> = Vec::new();
+        let mut jobs_with_results_count = 0;
+
+        for job in group_jobs {
+            let job_id = match job.id {
+                Some(id) => id,
+                None => continue,
+            };
+
+            if let Some(result) = latest_results.get(&job_id) {
+                jobs_with_results_count += 1;
+                total_jobs_with_results += 1;
+
+                if let Some(peak_mem) = result.peak_memory_bytes {
+                    peak_memory_values.push(peak_mem);
+                }
+                if let Some(peak_cpu) = result.peak_cpu_percent {
+                    peak_cpu_values.push(peak_cpu);
+                }
+                exec_time_values.push(result.exec_time_minutes);
+
+                job_details.push(serde_json::json!({
+                    "job_id": job_id,
+                    "name": job.name,
+                    "peak_memory_bytes": result.peak_memory_bytes,
+                    "peak_memory_formatted": result.peak_memory_bytes
+                        .map(|b| format_memory_bytes_short(b as u64)),
+                    "peak_cpu_percent": result.peak_cpu_percent,
+                    "exec_time_minutes": (result.exec_time_minutes * 100.0).round() / 100.0,
+                    "return_code": result.return_code,
+                }));
+            } else {
+                jobs_without_results.push(serde_json::json!({
+                    "job_id": job_id,
+                    "name": job.name,
+                }));
+            }
+        }
+
+        let config_json = rr.map(|r| {
+            serde_json::json!({
+                "memory": r.memory,
+                "num_cpus": r.num_cpus,
+                "runtime": r.runtime,
+                "num_gpus": r.num_gpus,
+                "num_nodes": r.num_nodes,
+            })
+        });
+
+        let summary = serde_json::json!({
+            "peak_memory_bytes": compute_memory_stats(&peak_memory_values),
+            "peak_cpu_percent": compute_stats(&peak_cpu_values),
+            "exec_time_minutes": compute_stats(&exec_time_values),
+        });
+
+        resource_groups.push(serde_json::json!({
+            "resource_requirements_id": rr_id,
+            "name": rr.map(|r| r.name.as_str()),
+            "config": config_json,
+            "job_count": group_jobs.len(),
+            "jobs_with_results": jobs_with_results_count,
+            "summary": summary,
+            "jobs": job_details,
+        }));
+    }
+
+    // Sort resource groups by RR id for stable output
+    resource_groups.sort_by_key(|g| {
+        g.get("resource_requirements_id")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(i64::MAX)
+    });
+
+    let response = serde_json::json!({
+        "workflow_id": workflow_id,
+        "total_jobs": total_jobs,
+        "total_jobs_with_results": total_jobs_with_results,
+        "resource_groups": resource_groups,
+        "jobs_without_results": jobs_without_results,
+    });
+
+    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
+        serde_json::to_string_pretty(&response).unwrap_or_default(),
+    )]))
+}
+
+/// A resource group definition for regrouping jobs.
+#[derive(Debug, Clone)]
+pub struct ResourceGroup {
+    pub memory: String,
+    pub num_cpus: i64,
+    pub runtime: String,
+    pub num_gpus: Option<i64>,
+    pub num_nodes: Option<i64>,
+    pub name: Option<String>,
+    pub job_ids: Vec<i64>,
+}
+
+/// Regroup jobs into new resource requirement groups.
+///
+/// Creates new RR records and reassigns jobs to them. Supports dry_run for previewing.
+pub fn regroup_job_resources(
+    config: &Configuration,
+    workflow_id: i64,
+    groups: Vec<ResourceGroup>,
+    dry_run: bool,
+) -> Result<CallToolResult, McpError> {
+    // Fetch all jobs and resource requirements
+    let jobs = paginate_jobs(config, workflow_id, JobListParams::new())
+        .map_err(|e| internal_error(format!("Failed to list jobs: {}", e)))?;
+
+    let resource_requirements =
+        paginate_resource_requirements(config, workflow_id, ResourceRequirementsListParams::new())
+            .map_err(|e| internal_error(format!("Failed to list resource requirements: {}", e)))?;
+
+    // Build lookup maps
+    let job_map: std::collections::HashMap<i64, &crate::models::JobModel> =
+        jobs.iter().filter_map(|j| j.id.map(|id| (id, j))).collect();
+
+    let rr_map: std::collections::HashMap<i64, &ResourceRequirementsModel> = resource_requirements
+        .iter()
+        .filter_map(|rr| rr.id.map(|id| (id, rr)))
+        .collect();
+
+    // === Validation ===
+    let mut errors: Vec<String> = Vec::new();
+    let mut all_job_ids: Vec<i64> = Vec::new();
+
+    for (i, group) in groups.iter().enumerate() {
+        if group.job_ids.is_empty() {
+            errors.push(format!("Group {} has no job_ids", i));
+        }
+        for &job_id in &group.job_ids {
+            if !job_map.contains_key(&job_id) {
+                errors.push(format!(
+                    "Job {} in group {} does not belong to workflow {}",
+                    job_id, i, workflow_id
+                ));
+            }
+            if all_job_ids.contains(&job_id) {
+                errors.push(format!("Job {} appears in multiple groups", job_id));
+            }
+            all_job_ids.push(job_id);
+        }
+    }
+
+    if !errors.is_empty() {
+        let response = serde_json::json!({
+            "success": false,
+            "errors": errors,
+        });
+        return Ok(CallToolResult::success(vec![rmcp::model::Content::text(
+            serde_json::to_string_pretty(&response).unwrap_or_default(),
+        )]));
+    }
+
+    // === Build preview ===
+    let mut group_previews: Vec<serde_json::Value> = Vec::new();
+
+    for (i, group) in groups.iter().enumerate() {
+        let group_name = group.name.clone().unwrap_or_else(|| format!("group_{}", i));
+
+        let mut job_previews: Vec<serde_json::Value> = Vec::new();
+        for &job_id in &group.job_ids {
+            let job = job_map[&job_id];
+            let current_rr = job.resource_requirements_id.and_then(|id| rr_map.get(&id));
+
+            // Resolve defaults from current RR
+            let resolved_num_gpus = group
+                .num_gpus
+                .or_else(|| current_rr.map(|rr| rr.num_gpus))
+                .unwrap_or(0);
+            let resolved_num_nodes = group
+                .num_nodes
+                .or_else(|| current_rr.map(|rr| rr.num_nodes))
+                .unwrap_or(1);
+
+            job_previews.push(serde_json::json!({
+                "job_id": job_id,
+                "name": job.name,
+                "current_rr": current_rr.map(|rr| serde_json::json!({
+                    "id": rr.id,
+                    "name": rr.name,
+                    "memory": rr.memory,
+                    "num_cpus": rr.num_cpus,
+                    "runtime": rr.runtime,
+                    "num_gpus": rr.num_gpus,
+                    "num_nodes": rr.num_nodes,
+                })),
+                "new_rr": {
+                    "memory": &group.memory,
+                    "num_cpus": group.num_cpus,
+                    "runtime": &group.runtime,
+                    "num_gpus": resolved_num_gpus,
+                    "num_nodes": resolved_num_nodes,
+                },
+            }));
+        }
+
+        group_previews.push(serde_json::json!({
+            "group_index": i,
+            "name": group_name,
+            "new_config": {
+                "memory": &group.memory,
+                "num_cpus": group.num_cpus,
+                "runtime": &group.runtime,
+                "num_gpus": group.num_gpus,
+                "num_nodes": group.num_nodes,
+            },
+            "job_count": group.job_ids.len(),
+            "jobs": job_previews,
+        }));
+    }
+
+    if dry_run {
+        let response = serde_json::json!({
+            "workflow_id": workflow_id,
+            "dry_run": true,
+            "groups": group_previews,
+            "total_jobs_affected": all_job_ids.len(),
+            "next_steps": "Review the proposed regrouping. If it looks correct, call again with dry_run=false to apply.",
+        });
+        return Ok(CallToolResult::success(vec![rmcp::model::Content::text(
+            serde_json::to_string_pretty(&response).unwrap_or_default(),
+        )]));
+    }
+
+    // === Apply ===
+    let mut applied_groups: Vec<serde_json::Value> = Vec::new();
+    let mut total_jobs_updated = 0;
+    let mut apply_errors: Vec<String> = Vec::new();
+
+    for (i, group) in groups.iter().enumerate() {
+        let group_name = group.name.clone().unwrap_or_else(|| format!("group_{}", i));
+
+        // Resolve defaults using the first job's current RR
+        let first_job = job_map[&group.job_ids[0]];
+        let current_rr = first_job
+            .resource_requirements_id
+            .and_then(|id| rr_map.get(&id));
+
+        let resolved_num_gpus = group
+            .num_gpus
+            .or_else(|| current_rr.map(|rr| rr.num_gpus))
+            .unwrap_or(0);
+        let resolved_num_nodes = group
+            .num_nodes
+            .or_else(|| current_rr.map(|rr| rr.num_nodes))
+            .unwrap_or(1);
+
+        // Create the new resource requirements record
+        let new_rr = ResourceRequirementsModel {
+            id: None,
+            workflow_id,
+            name: group_name.clone(),
+            num_cpus: group.num_cpus,
+            num_gpus: resolved_num_gpus,
+            num_nodes: resolved_num_nodes,
+            memory: group.memory.clone(),
+            runtime: group.runtime.clone(),
+        };
+
+        let created_rr = match default_api::create_resource_requirements(config, new_rr) {
+            Ok(rr) => rr,
+            Err(e) => {
+                apply_errors.push(format!(
+                    "Failed to create RR for group '{}': {}",
+                    group_name, e
+                ));
+                continue;
+            }
+        };
+
+        let new_rr_id = match created_rr.id {
+            Some(id) => id,
+            None => {
+                apply_errors.push(format!(
+                    "Created RR for group '{}' but got no ID back",
+                    group_name
+                ));
+                continue;
+            }
+        };
+
+        // Reassign each job to the new RR
+        let mut jobs_updated: Vec<i64> = Vec::new();
+        for &job_id in &group.job_ids {
+            let job = job_map[&job_id];
+            let mut updated_job = job.clone();
+            updated_job.resource_requirements_id = Some(new_rr_id);
+
+            match default_api::update_job(config, job_id, updated_job) {
+                Ok(_) => {
+                    jobs_updated.push(job_id);
+                    total_jobs_updated += 1;
+                }
+                Err(e) => {
+                    apply_errors.push(format!(
+                        "Failed to update job {} in group '{}': {}",
+                        job_id, group_name, e
+                    ));
+                }
+            }
+        }
+
+        applied_groups.push(serde_json::json!({
+            "group_index": i,
+            "name": group_name,
+            "resource_requirements_id": new_rr_id,
+            "config": {
+                "memory": created_rr.memory,
+                "num_cpus": created_rr.num_cpus,
+                "runtime": created_rr.runtime,
+                "num_gpus": created_rr.num_gpus,
+                "num_nodes": created_rr.num_nodes,
+            },
+            "jobs_updated": jobs_updated,
+            "jobs_failed": group.job_ids.iter()
+                .filter(|id| !jobs_updated.contains(id))
+                .collect::<Vec<_>>(),
+        }));
+    }
+
+    let response = serde_json::json!({
+        "workflow_id": workflow_id,
+        "dry_run": false,
+        "success": apply_errors.is_empty(),
+        "groups": applied_groups,
+        "total_jobs_updated": total_jobs_updated,
+        "errors": apply_errors,
     });
 
     Ok(CallToolResult::success(vec![rmcp::model::Content::text(

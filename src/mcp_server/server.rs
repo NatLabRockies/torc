@@ -260,6 +260,49 @@ pub struct ClassifyAndResolveFailuresParams {
     pub dry_run: bool,
 }
 
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AnalyzeResourceUsageParams {
+    #[schemars(description = "The workflow ID")]
+    pub workflow_id: i64,
+    #[schemars(
+        description = "If true, only include jobs with return_code=0 (successful). \
+        If false (default), include all jobs with results."
+    )]
+    pub completed_only: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
+pub struct ResourceGroupParam {
+    #[schemars(description = "Memory requirement, e.g., '10g', '512m'")]
+    pub memory: String,
+    #[schemars(description = "Number of CPUs")]
+    pub num_cpus: i64,
+    #[schemars(description = "Runtime in ISO8601 duration format, e.g., 'PT2H', 'PT30M'")]
+    pub runtime: String,
+    #[schemars(description = "Number of GPUs (defaults to the job's current RR value, or 0)")]
+    pub num_gpus: Option<i64>,
+    #[schemars(description = "Number of nodes (defaults to the job's current RR value, or 1)")]
+    pub num_nodes: Option<i64>,
+    #[schemars(description = "Name for this resource group (auto-generated if not provided)")]
+    pub name: Option<String>,
+    #[schemars(description = "Job IDs to assign to this resource group")]
+    pub job_ids: Vec<i64>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct RegroupJobResourcesParams {
+    #[schemars(description = "The workflow ID")]
+    pub workflow_id: i64,
+    #[schemars(description = "List of new resource groups with job assignments. \
+        Each group defines resource requirements and which jobs belong to it.")]
+    pub groups: Vec<ResourceGroupParam>,
+    #[schemars(
+        description = "If true, shows what would be done without making any changes. \
+        ALWAYS use dry_run=true first to preview the regrouping, then confirm with user before running with dry_run=false."
+    )]
+    pub dry_run: bool,
+}
+
 // Tool implementations using #[tool(tool_box)]
 // Tools are ordered by workflow lifecycle: create → plan → inspect → monitor → analyze → fix
 
@@ -761,6 +804,85 @@ For each job, specify:
         .await
         .map_err(|e| McpError::internal_error(format!("Task join error: {}", e), None))?
     }
+
+    /// Analyze resource usage for a workflow.
+    #[tool(
+        description = r#"Analyze actual resource usage for all jobs in a workflow, grouped by resource requirement.
+
+Returns per-job peak memory, CPU%, and execution time alongside configured limits.
+Use this to identify natural resource clusters for regrouping with regroup_job_resources.
+
+OUTPUT includes for each resource group:
+- Current config (memory, CPUs, runtime, GPUs, nodes)
+- Summary stats: min/max/mean/median for peak_memory_bytes, peak_cpu_percent, exec_time_minutes
+- Per-job detail with actual measurements
+
+WORKFLOW:
+1. Call analyze_resource_usage to see actual usage patterns
+2. Identify natural clusters (e.g., jobs using 2GB vs 20GB in same RR)
+3. Use regroup_job_resources with dry_run=true to preview new groupings
+4. If approved, apply with dry_run=false"#
+    )]
+    async fn analyze_resource_usage(
+        &self,
+        #[tool(aggr)] params: AnalyzeResourceUsageParams,
+    ) -> Result<CallToolResult, McpError> {
+        let config = self.config.clone();
+        let workflow_id = params.workflow_id;
+        let completed_only = params.completed_only.unwrap_or(false);
+        tokio::task::spawn_blocking(move || {
+            tools::analyze_resource_usage(&config, workflow_id, completed_only)
+        })
+        .await
+        .map_err(|e| McpError::internal_error(format!("Task join error: {}", e), None))?
+    }
+
+    /// Regroup jobs into new resource requirement groups.
+    #[tool(
+        description = r#"Create new resource requirement groups and reassign jobs to them.
+
+Use this after analyze_resource_usage reveals that jobs within a single RR have
+very different actual resource needs. This tool creates new RR records and
+reassigns specified jobs, enabling more efficient resource allocation.
+
+IMPORTANT WORKFLOW:
+1. ALWAYS call with dry_run=true FIRST to preview the regrouping
+2. Show the user the before/after for each job
+3. Ask user: 'Would you like me to proceed with this regrouping?'
+4. Only if confirmed, call again with dry_run=false to apply
+
+NOTES:
+- Jobs NOT listed in any group keep their current RR (partial regrouping is OK)
+- Each job can only appear in one group
+- num_gpus/num_nodes default to the job's current RR values if not specified
+- New RR records are created; existing RRs are not modified or deleted"#
+    )]
+    async fn regroup_job_resources(
+        &self,
+        #[tool(aggr)] params: RegroupJobResourcesParams,
+    ) -> Result<CallToolResult, McpError> {
+        let config = self.config.clone();
+        let workflow_id = params.workflow_id;
+        let dry_run = params.dry_run;
+        let groups: Vec<tools::ResourceGroup> = params
+            .groups
+            .into_iter()
+            .map(|g| tools::ResourceGroup {
+                memory: g.memory,
+                num_cpus: g.num_cpus,
+                runtime: g.runtime,
+                num_gpus: g.num_gpus,
+                num_nodes: g.num_nodes,
+                name: g.name,
+                job_ids: g.job_ids,
+            })
+            .collect();
+        tokio::task::spawn_blocking(move || {
+            tools::regroup_job_resources(&config, workflow_id, groups, dry_run)
+        })
+        .await
+        .map_err(|e| McpError::internal_error(format!("Task join error: {}", e), None))?
+    }
 }
 
 #[tool(tool_box)]
@@ -784,7 +906,9 @@ impl ServerHandler for TorcMcpServer {
                     Example: input_file_regexes: [\"^work_out_\\\\d+$\"] matches work_out_0, work_out_1, etc.\n\n\
                  Tools: get_execution_plan (preview execution), get_workflow_status (check progress), \
                  list_failed_jobs, get_job_logs, analyze_workflow_logs (scan all logs for errors), \
-                 check_resource_utilization, update_job_resources."
+                 check_resource_utilization, update_job_resources, \
+                 analyze_resource_usage (per-job resource data for cluster analysis), \
+                 regroup_job_resources (reassign jobs to new resource groups)."
                     .to_string(),
             ),
         }

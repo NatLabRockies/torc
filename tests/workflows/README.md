@@ -48,6 +48,27 @@ torc-dash --standalone
 
 ---
 
+### resource_regroup_test/
+
+Tests the `analyze_resource_usage` and `regroup_job_resources` MCP tools.
+
+**Scenario:**
+
+- 6 data-processing jobs in 2 RR groups with varying actual memory usage
+- Job names and commands are opaque — the AI must analyze results to discover usage patterns
+- AI identifies natural clusters and proposes better resource groupings
+
+**Usage:**
+
+```bash
+torc run tests/workflows/resource_regroup_test/workflow.yaml
+# Then use MCP tools: analyze_resource_usage → regroup_job_resources
+```
+
+See `resource_regroup_test/README.md` for detailed instructions.
+
+---
+
 ## Watcher Test Workflows
 
 The following directories contain complete test scenarios for `torc watch` functionality.

@@ -12,19 +12,21 @@ API.
 
 The AI assistant has access to these Torc operations:
 
-| Tool                         | Description                                            |
-| ---------------------------- | ------------------------------------------------------ |
-| `get_workflow_status`        | Get workflow info with job counts by status            |
-| `get_job_details`            | Get detailed job info including resource requirements  |
-| `get_job_logs`               | Read stdout/stderr from job log files                  |
-| `list_failed_jobs`           | List all failed jobs in a workflow                     |
-| `list_jobs_by_status`        | Filter jobs by status                                  |
-| `check_resource_utilization` | Analyze resource usage and detect OOM/timeout issues   |
-| `update_job_resources`       | Modify job resource requirements                       |
-| `restart_jobs`               | Reset and restart failed jobs                          |
-| `resubmit_workflow`          | Regenerate Slurm schedulers and submit new allocations |
-| `cancel_jobs`                | Cancel specific jobs                                   |
-| `create_workflow_from_spec`  | Create a workflow from JSON specification              |
+| Tool                         | Description                                              |
+| ---------------------------- | -------------------------------------------------------- |
+| `get_workflow_status`        | Get workflow info with job counts by status              |
+| `get_job_details`            | Get detailed job info including resource requirements    |
+| `get_job_logs`               | Read stdout/stderr from job log files                    |
+| `list_failed_jobs`           | List all failed jobs in a workflow                       |
+| `list_jobs_by_status`        | Filter jobs by status                                    |
+| `check_resource_utilization` | Analyze resource usage and detect OOM/timeout issues     |
+| `update_job_resources`       | Modify job resource requirements                         |
+| `analyze_resource_usage`     | Per-job resource data grouped by RR for cluster analysis |
+| `regroup_job_resources`      | Create new RR groups and reassign jobs (dry_run support) |
+| `restart_jobs`               | Reset and restart failed jobs                            |
+| `resubmit_workflow`          | Regenerate Slurm schedulers and submit new allocations   |
+| `cancel_jobs`                | Cancel specific jobs                                     |
+| `create_workflow_from_spec`  | Create a workflow from JSON specification                |
 
 ## Environment Variables
 

@@ -701,7 +701,7 @@ fn apply_upscale_for_adjustment(
             adjustment.max_peak_runtime_minutes,
             duration_string_to_seconds(&adjustment.current_runtime),
         ) {
-            let max_peak_secs = max_peak_runtime as i64 * 60;
+            let max_peak_secs = (max_peak_runtime * 60.0).ceil() as i64;
             // Only update if the peak runtime exceeds current allocation
             if max_peak_secs > current_secs {
                 let new_secs = (max_peak_secs as f64 * opts.runtime_multiplier).ceil() as u64;

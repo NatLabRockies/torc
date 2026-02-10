@@ -1,0 +1,53 @@
+# Resource Regrouping Test Workflow
+#
+# 6 data-processing jobs split across 2 resource groups.
+# After running, use the MCP tools to analyze actual resource usage
+# and propose better groupings.
+#
+# Usage:
+#   torc run tests/workflows/resource_regroup_test/workflow.yaml
+#
+# Then ask the AI:
+#   "Analyze resource usage for workflow <id> and suggest better groupings."
+
+name: resource_regroup_test
+description: Data processing pipeline with 6 chunks
+
+resource_requirements:
+  - name: standard
+    num_cpus: 1
+    memory: 2g
+    runtime: PT5M
+    num_gpus: 0
+    num_nodes: 1
+  - name: high_mem
+    num_cpus: 1
+    memory: 2g
+    runtime: PT5M
+    num_gpus: 0
+    num_nodes: 1
+
+jobs:
+  - name: process_chunk_0
+    command: bash tests/workflows/resource_regroup_test/process_data.sh 0
+    resource_requirements: standard
+
+  - name: process_chunk_1
+    command: bash tests/workflows/resource_regroup_test/process_data.sh 1
+    resource_requirements: standard
+
+  - name: process_chunk_2
+    command: bash tests/workflows/resource_regroup_test/process_data.sh 2
+    resource_requirements: standard
+
+  - name: process_chunk_3
+    command: bash tests/workflows/resource_regroup_test/process_data.sh 3
+    resource_requirements: high_mem
+
+  - name: process_chunk_4
+    command: bash tests/workflows/resource_regroup_test/process_data.sh 4
+    resource_requirements: high_mem
+
+  - name: process_chunk_5
+    command: bash tests/workflows/resource_regroup_test/process_data.sh 5
+    resource_requirements: high_mem

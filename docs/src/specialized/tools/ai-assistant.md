@@ -17,13 +17,14 @@ This tutorial shows how to use AI assistants to manage Torc workflows using natu
 
 With Torc's AI integration, you can manage workflows using natural language:
 
-| Task             | Example                                            |
-| ---------------- | -------------------------------------------------- |
-| Create workflows | _"Create a workflow with 10 parallel jobs"_        |
-| Check status     | _"What's the status of workflow 42?"_              |
-| Debug failures   | _"Why did a job in workflow 5 fail?"_              |
-| Fix problems     | _"Restart the failed jobs with doubled memory"_    |
-| Investigate      | _"Check if any jobs exceeded their memory limits"_ |
+| Task               | Example                                                 |
+| ------------------ | ------------------------------------------------------- |
+| Create workflows   | _"Create a workflow with 10 parallel jobs"_             |
+| Check status       | _"What's the status of workflow 42?"_                   |
+| Debug failures     | _"Why did a job in workflow 5 fail?"_                   |
+| Fix problems       | _"Restart the failed jobs with doubled memory"_         |
+| Investigate        | _"Check if any jobs exceeded their memory limits"_      |
+| Optimize resources | _"Analyze usage and suggest better resource groupings"_ |
 
 ---
 
@@ -158,6 +159,105 @@ Suppose that jobs fail because they use too much CPU or memory.
   | Runtime | 15 minutes |
 
   The job is now configured with enough CPU capacity for future runs.
+```
+
+---
+
+## Example: Regrouping resources based on actual usage
+
+When jobs are initially assigned to broad resource groups, actual usage may reveal that a finer
+grouping would be more efficient. The AI can analyze per-job resource measurements and propose new
+groups.
+
+In this example, 6 data-processing jobs are split across 2 resource groups (`standard` and
+`high_mem`), but actual memory usage falls into 3 distinct clusters.
+
+```
+> Analyze resource usage for workflow 42 and suggest better groupings.
+
+⏺ torc - analyze_resource_usage (MCP)(workflow_id: 42)
+  ⎿  {
+       "workflow_id": 42,
+       "total_jobs": 6,
+       "total_jobs_with_results": 6,
+       "resource_groups": [ ...
+     … +80 lines (ctrl+o to expand)
+
+⏺ Resource Usage Analysis for Workflow 42
+
+  Current grouping: 2 groups (standard, high_mem), both configured with 2g memory.
+
+  Actual peak memory by job:
+
+  | Job              | Current RR | Peak Memory |
+  |------------------|------------|-------------|
+  | process_chunk_0  | standard   | 210 MB      |
+  | process_chunk_1  | standard   | 525 MB      |
+  | process_chunk_2  | standard   | 210 MB      |
+  | process_chunk_3  | high_mem   | 1050 MB     |
+  | process_chunk_4  | high_mem   | 1049 MB     |
+  | process_chunk_5  | high_mem   | 524 MB      |
+
+  I can see 3 natural clusters:
+  - ~200 MB: process_chunk_0, process_chunk_2
+  - ~500 MB: process_chunk_1, process_chunk_5
+  - ~1000 MB: process_chunk_3, process_chunk_4
+
+  The current 2-group split doesn't match these clusters — chunk_1 (500 MB) is
+  in the "standard" group alongside 200 MB jobs, and chunk_5 (500 MB) is in
+  "high_mem" alongside 1000 MB jobs.
+
+  Would you like me to propose a 3-group regrouping with appropriate memory
+  allocations?
+
+> yes
+
+⏺ torc - regroup_job_resources (MCP)(
+    workflow_id: 42,
+    dry_run: true,
+    groups: [
+      { name: "small", memory: "300m", num_cpus: 1, runtime: "PT5M",
+        job_ids: [301, 303] },
+      { name: "medium", memory: "700m", num_cpus: 1, runtime: "PT5M",
+        job_ids: [302, 306] },
+      { name: "large", memory: "1300m", num_cpus: 1, runtime: "PT5M",
+        job_ids: [304, 305] }
+    ])
+  ⎿  {
+       "workflow_id": 42,
+       "dry_run": true,
+       "groups": [ ...
+     … +40 lines (ctrl+o to expand)
+
+⏺ Regrouping Preview (Dry Run)
+
+  | Group  | Memory | Jobs                             |
+  |--------|--------|----------------------------------|
+  | small  | 300m   | process_chunk_0, process_chunk_2 |
+  | medium | 700m   | process_chunk_1, process_chunk_5 |
+  | large  | 1300m  | process_chunk_3, process_chunk_4 |
+
+  Each group has ~30% headroom above peak usage.
+  New RR records will be created; existing RRs are not modified.
+
+  Would you like me to apply this regrouping?
+
+> yes
+
+⏺ torc - regroup_job_resources (MCP)(workflow_id: 42, dry_run: false, groups: [...])
+  ⎿  {
+       "success": true,
+       "total_jobs_updated": 6,
+     … +20 lines (ctrl+o to expand)
+
+⏺ Regrouping Complete ✓
+
+  Created 3 new resource requirement groups and reassigned all 6 jobs:
+  - small (300m): 2 jobs
+  - medium (700m): 2 jobs
+  - large (1300m): 2 jobs
+
+  On the next run, each job will request only the memory it actually needs.
 ```
 
 ---
