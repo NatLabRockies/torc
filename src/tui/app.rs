@@ -256,6 +256,10 @@ pub struct App {
     // Version info
     pub version_mismatch: Option<crate::client::version_check::VersionCheckResult>,
 
+    // User filtering
+    pub current_user: String,
+    pub show_all_users: bool,
+
     // SSE event streaming
     pub sse_receiver: Option<mpsc::Receiver<SseEvent>>,
     pub sse_thread: Option<JoinHandle<()>>,
@@ -321,6 +325,8 @@ impl App {
             server_process: None,
             standalone_database: database,
             version_mismatch: None,
+            current_user,
+            show_all_users: false,
             sse_receiver: None,
             sse_thread: None,
             sse_workflow_id: None,
@@ -745,9 +751,29 @@ impl App {
     }
 
     pub fn get_current_user_display(&self) -> String {
-        self.user_filter
-            .clone()
-            .unwrap_or_else(|| "Unknown".to_string())
+        if self.show_all_users {
+            "All Users".to_string()
+        } else {
+            self.user_filter
+                .clone()
+                .unwrap_or_else(|| "Unknown".to_string())
+        }
+    }
+
+    pub fn toggle_show_all_users(&mut self) -> Result<()> {
+        self.show_all_users = !self.show_all_users;
+        if self.show_all_users {
+            self.user_filter = None;
+            self.set_status(StatusMessage::info("Showing all users"));
+        } else {
+            self.user_filter = Some(self.current_user.clone());
+            self.set_status(StatusMessage::info(&format!(
+                "Showing workflows for {}",
+                self.current_user
+            )));
+        }
+        self.refresh_workflows()?;
+        Ok(())
     }
 
     pub fn build_dag_from_jobs(&mut self) {

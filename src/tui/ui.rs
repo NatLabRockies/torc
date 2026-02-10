@@ -301,11 +301,16 @@ fn draw_server_url(f: &mut Frame, area: Rect, app: &App) {
 
     // Add user display
     let user_display = app.get_current_user_display();
+    let user_color = if app.show_all_users {
+        Color::Yellow
+    } else {
+        Color::Cyan
+    };
     spans.extend(vec![
         Span::styled(" │ ", Style::default().fg(Color::DarkGray)),
-        Span::styled("◎ ", Style::default().fg(Color::Cyan)),
+        Span::styled("◎ ", Style::default().fg(user_color)),
         Span::styled("User: ", Style::default().fg(Color::White)),
-        Span::styled(user_display, Style::default().fg(Color::Cyan)),
+        Span::styled(user_display, Style::default().fg(user_color)),
     ]);
 
     let text = vec![Line::from(spans)];

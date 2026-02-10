@@ -35,6 +35,9 @@ class TorcDashboard {
         this.uploadedSpecContent = null;
         this.uploadedSpecExtension = null;
 
+        // Show all users toggle
+        this.showAllUsers = false;
+
         // Events tab state
         this.events = [];
         this.eventPollInterval = null;

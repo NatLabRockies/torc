@@ -15,6 +15,20 @@ Object.assign(TorcDashboard.prototype, {
             this.showModal('create-workflow-modal');
         });
 
+        // Show all users toggle
+        const showAllUsersCheckbox = document.getElementById('show-all-users');
+        if (showAllUsersCheckbox) {
+            // Restore from localStorage
+            this.showAllUsers = localStorage.getItem('torc-show-all-users') === 'true';
+            showAllUsersCheckbox.checked = this.showAllUsers;
+
+            showAllUsersCheckbox.addEventListener('change', (e) => {
+                this.showAllUsers = e.target.checked;
+                localStorage.setItem('torc-show-all-users', this.showAllUsers);
+                this.loadWorkflows();
+            });
+        }
+
         // Workflow filter
         document.getElementById('workflow-filter')?.addEventListener('input', (e) => {
             this.filterWorkflows(e.target.value);
@@ -37,7 +51,7 @@ Object.assign(TorcDashboard.prototype, {
 
     async loadWorkflows() {
         try {
-            const workflows = await api.listWorkflows(0, 100, this.currentUser);
+            const workflows = await api.listWorkflows(0, 100, this.showAllUsers ? null : this.currentUser);
             this.workflows = workflows || [];
             // Sort by id descending (newer workflows first)
             this.workflows.sort((a, b) => {

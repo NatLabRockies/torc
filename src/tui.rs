@@ -488,6 +488,9 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, mut app: Ap
                     KeyCode::Char('u') => {
                         app.start_server_url_input();
                     }
+                    KeyCode::Char('a') => {
+                        app.toggle_show_all_users()?;
+                    }
                     KeyCode::Char('A') => {
                         app.toggle_auto_refresh();
                     }
