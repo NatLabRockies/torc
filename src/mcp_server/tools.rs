@@ -1560,7 +1560,7 @@ fn compute_stats(values: &[f64]) -> serde_json::Value {
     let max = sorted[sorted.len() - 1];
     let sum: f64 = sorted.iter().sum();
     let mean = sum / sorted.len() as f64;
-    let median = if sorted.len() % 2 == 0 {
+    let median = if sorted.len().is_multiple_of(2) {
         (sorted[sorted.len() / 2 - 1] + sorted[sorted.len() / 2]) / 2.0
     } else {
         sorted[sorted.len() / 2]
@@ -1584,7 +1584,7 @@ fn compute_memory_stats(values: &[i64]) -> serde_json::Value {
     let max = sorted[sorted.len() - 1];
     let sum: i64 = sorted.iter().sum();
     let mean = sum as f64 / sorted.len() as f64;
-    let median = if sorted.len() % 2 == 0 {
+    let median = if sorted.len().is_multiple_of(2) {
         (sorted[sorted.len() / 2 - 1] + sorted[sorted.len() / 2]) / 2
     } else {
         sorted[sorted.len() / 2]
