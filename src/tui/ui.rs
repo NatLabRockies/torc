@@ -198,7 +198,9 @@ fn draw_help(f: &mut Frame, area: Rect, app: &App) {
             Span::styled("d", Style::default().fg(Color::Yellow)),
             Span::raw(": delete | "),
             Span::styled("r", Style::default().fg(Color::Yellow)),
-            Span::raw(": refresh"),
+            Span::raw(": refresh | "),
+            Span::styled("a", Style::default().fg(Color::Yellow)),
+            Span::raw(": all users"),
         ])]
     };
 
@@ -311,6 +313,9 @@ fn draw_server_url(f: &mut Frame, area: Rect, app: &App) {
         Span::styled("◎ ", Style::default().fg(user_color)),
         Span::styled("User: ", Style::default().fg(Color::White)),
         Span::styled(user_display, Style::default().fg(user_color)),
+        Span::styled(" ", Style::default()),
+        Span::styled("a", Style::default().fg(Color::Yellow)),
+        Span::styled(": toggle", Style::default().fg(Color::DarkGray)),
     ]);
 
     let text = vec![Line::from(spans)];

@@ -269,7 +269,7 @@ impl HelpPopup {
     pub fn render(f: &mut Frame, area: Rect, context: &str) {
         // Calculate popup size
         let popup_width = 70.min(area.width.saturating_sub(4));
-        let popup_height = 30.min(area.height.saturating_sub(2));
+        let popup_height = 44.min(area.height.saturating_sub(2));
 
         let popup_x = (area.width.saturating_sub(popup_width)) / 2;
         let popup_y = (area.height.saturating_sub(popup_height)) / 2;
