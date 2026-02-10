@@ -1790,7 +1790,7 @@ pub fn regroup_job_resources(
 
     // === Validation ===
     let mut errors: Vec<String> = Vec::new();
-    let mut all_job_ids: Vec<i64> = Vec::new();
+    let mut all_job_ids: std::collections::HashSet<i64> = std::collections::HashSet::new();
 
     for (i, group) in groups.iter().enumerate() {
         if group.job_ids.is_empty() {
@@ -1803,10 +1803,9 @@ pub fn regroup_job_resources(
                     job_id, i, workflow_id
                 ));
             }
-            if all_job_ids.contains(&job_id) {
+            if !all_job_ids.insert(job_id) {
                 errors.push(format!("Job {} appears in multiple groups", job_id));
             }
-            all_job_ids.push(job_id);
         }
     }
 
