@@ -21,7 +21,7 @@ use torc::client::apis::configuration::{Configuration, TlsConfig};
 /// Check if a command is available on PATH.
 fn command_available(cmd: &str) -> bool {
     Command::new(cmd)
-        .arg("version")
+        .arg("--version")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
@@ -217,6 +217,15 @@ struct TestHttpsServer {
 }
 
 /// Track Python server PIDs for cleanup at process exit.
+///
+/// Safety: The `atexit` handler only accesses the `HTTPS_PIDS` static Mutex and
+/// calls `libc::kill`. Both are safe to use from a C atexit handler because:
+/// - The Mutex is a static with a const initializer (no Rust runtime needed)
+/// - `libc::kill` is a direct syscall wrapper
+/// - We use `lock()` (not `try_lock()`) and handle the poisoned case via `if let Ok`
+///
+/// This pattern matches `tests/common.rs` and is needed because the `OnceLock` server
+/// is never dropped (shared across all tests for the process lifetime).
 static HTTPS_PIDS: Mutex<Vec<u32>> = Mutex::new(Vec::new());
 static HTTPS_CLEANUP: std::sync::Once = std::sync::Once::new();
 

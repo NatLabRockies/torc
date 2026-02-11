@@ -26,6 +26,9 @@ impl TlsConfig {
     ///
     /// This allows callers (like the SSE client) to customize the builder further
     /// before calling `.build()`.
+    ///
+    /// When both `insecure` and `ca_cert_path` are set, `insecure` takes precedence
+    /// and certificate verification is disabled regardless of the CA certificate.
     pub fn configure_blocking_builder(
         &self,
         mut builder: reqwest::blocking::ClientBuilder,
@@ -90,6 +93,9 @@ impl Configuration {
     }
 
     /// Create a new Configuration with the given TLS settings.
+    ///
+    /// # Panics
+    /// Panics if the HTTP client cannot be built (e.g., system TLS backend failure).
     pub fn with_tls(tls: TlsConfig) -> Configuration {
         let client = tls
             .build_blocking_client()

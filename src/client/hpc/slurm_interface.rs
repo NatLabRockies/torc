@@ -252,12 +252,15 @@ impl HpcInterface for SlurmInterface {
         script.push('\n');
         script.push_str(&format!("TORC_URL=\"{}\"\n", server_url));
 
-        // Propagate TLS settings to compute nodes if set in the current environment
+        // Propagate TLS settings to compute nodes if set in the current environment.
+        // Values are single-quoted to prevent shell interpretation of special characters.
         if let Ok(val) = std::env::var("TORC_TLS_CA_CERT") {
-            script.push_str(&format!("export TORC_TLS_CA_CERT=\"{}\"\n", val));
+            let escaped = val.replace('\'', "'\\''");
+            script.push_str(&format!("export TORC_TLS_CA_CERT='{}'\n", escaped));
         }
         if let Ok(val) = std::env::var("TORC_TLS_INSECURE") {
-            script.push_str(&format!("export TORC_TLS_INSECURE=\"{}\"\n", val));
+            let escaped = val.replace('\'', "'\\''");
+            script.push_str(&format!("export TORC_TLS_INSECURE='{}'\n", escaped));
         }
         script.push('\n');
 
