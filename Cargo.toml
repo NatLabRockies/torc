@@ -127,11 +127,6 @@ path = "src/main.rs"
 required-features = ["client", "tui", "plot_resources"]
 
 [[bin]]
-name = "generate-cli-docs"
-path = "src/bin/generate-cli-docs.rs"
-required-features = ["client", "tui", "plot_resources", "cli-docs"]
-
-[[bin]]
 name = "torc-server"
 path = "src/bin/torc-server.rs"
 required-features = ["server-bin"]
@@ -264,6 +259,7 @@ dash = [
 slurm-runner = [
     "client",
 ]
+dist = ["client", "tui", "plot_resources", "server-bin", "mcp-server", "dash", "slurm-runner"]
 cli-docs = ["dep:clap-markdown"]
 conversion = ["frunk", "frunk_derives", "frunk_core", "frunk-enum-core", "frunk-enum-derive"]
 
