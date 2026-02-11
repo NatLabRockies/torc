@@ -101,9 +101,14 @@ impl Configuration {
             .build_blocking_client()
             .expect("Failed to build HTTP client with TLS config");
         Configuration {
+            base_path: "http://localhost/torc-service/v1".to_owned(),
+            user_agent: Some("OpenAPI-Generator/v0.7.0/rust".to_owned()),
             client,
+            basic_auth: None,
+            oauth_access_token: None,
+            bearer_access_token: None,
+            api_key: None,
             tls,
-            ..Default::default()
         }
     }
 }

@@ -141,3 +141,29 @@ torc watch <workflow_id> --recover --max-retries 3
 ```
 
 See `timeout_auto_recovery_test/README.md` for detailed instructions.
+
+---
+
+### tls_test/
+
+Tests client-side TLS features (`--tls-ca-cert` and `--tls-insecure`) using a Python HTTPS reverse
+proxy in front of a plain HTTP torc-server.
+
+**Scenario:**
+
+- Generates a CA + server certificate with macOS-compatible extensions
+- Starts an HTTPS reverse proxy (Python) on port 8443 → torc-server on port 8080
+- Runs 6 tests: insecure mode, CA cert, rejection of untrusted certs, env vars
+
+**Usage:**
+
+```bash
+# Terminal 1: start torc-server
+torc-server run
+
+# Terminal 2: run the test
+cd tests/workflows/tls_test
+bash run_test.sh
+```
+
+See `tls_test/README.md` for detailed instructions.

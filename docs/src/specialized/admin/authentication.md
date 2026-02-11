@@ -231,7 +231,7 @@ torc-server run \
   --database /var/lib/torc/production.db
 
 # 4. Clients must authenticate
-torc --url --prompt-password https://torc.hpc.nrel.gov:8080/torc-service/v1 workflows list
+torc --url https://torc.hpc.nrel.gov:8080/torc-service/v1 --prompt-password workflows list
 Password: ****
 ```
 
