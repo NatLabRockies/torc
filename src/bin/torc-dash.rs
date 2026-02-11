@@ -111,6 +111,14 @@ struct Cli {
     /// Completion check interval (seconds) for torc-server in standalone mode
     #[arg(long, default_value_t = 5)]
     completion_check_interval_secs: u32,
+
+    /// Path to a PEM-encoded CA certificate to trust for TLS connections
+    #[arg(long, env = "TORC_TLS_CA_CERT")]
+    tls_ca_cert: Option<String>,
+
+    /// Skip TLS certificate verification (for testing only)
+    #[arg(long, env = "TORC_TLS_INSECURE")]
+    tls_insecure: bool,
 }
 
 #[tokio::main]
@@ -317,9 +325,18 @@ async fn main() -> Result<()> {
     };
     info!("API URL: {}", final_api_url);
 
+    // Build HTTP client with TLS settings
+    let tls = torc::client::apis::configuration::TlsConfig {
+        ca_cert_path: cli.tls_ca_cert.as_ref().map(std::path::PathBuf::from),
+        insecure: cli.tls_insecure,
+    };
+    let http_client = tls
+        .build_async_client()
+        .expect("Failed to build HTTP client with TLS config");
+
     let state = Arc::new(AppState {
         api_url: final_api_url,
-        client: reqwest::Client::new(),
+        client: http_client,
         torc_bin,
         torc_server_bin: torc_server_bin.clone(),
         managed_server: Mutex::new(managed_server),

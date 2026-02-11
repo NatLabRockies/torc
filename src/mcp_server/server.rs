@@ -8,7 +8,7 @@ use rmcp::{
 use serde::Deserialize;
 use std::path::PathBuf;
 
-use crate::client::apis::configuration::Configuration;
+use crate::client::apis::configuration::{Configuration, TlsConfig};
 
 use super::tools;
 
@@ -22,7 +22,12 @@ pub struct TorcMcpServer {
 impl TorcMcpServer {
     /// Create a new TorcMcpServer with the given API URL and output directory.
     pub fn new(api_url: String, output_dir: PathBuf) -> Self {
-        let mut config = Configuration::new();
+        Self::new_with_tls(api_url, output_dir, TlsConfig::default())
+    }
+
+    /// Create a new TorcMcpServer with TLS configuration.
+    pub fn new_with_tls(api_url: String, output_dir: PathBuf, tls: TlsConfig) -> Self {
+        let mut config = Configuration::with_tls(tls);
         config.base_path = api_url;
 
         Self { config, output_dir }
@@ -35,7 +40,24 @@ impl TorcMcpServer {
         username: Option<String>,
         password: Option<String>,
     ) -> Self {
-        let mut config = Configuration::new();
+        Self::with_auth_and_tls(
+            api_url,
+            output_dir,
+            username,
+            password,
+            TlsConfig::default(),
+        )
+    }
+
+    /// Create a new TorcMcpServer with authentication and TLS configuration.
+    pub fn with_auth_and_tls(
+        api_url: String,
+        output_dir: PathBuf,
+        username: Option<String>,
+        password: Option<String>,
+        tls: TlsConfig,
+    ) -> Self {
+        let mut config = Configuration::with_tls(tls);
         config.base_path = api_url;
 
         if let (Some(user), Some(pass)) = (username, password) {

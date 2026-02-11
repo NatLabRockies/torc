@@ -250,7 +250,16 @@ impl HpcInterface for SlurmInterface {
         }
 
         script.push('\n');
-        script.push_str(&format!("TORC_URL=\"{}\"\n\n", server_url));
+        script.push_str(&format!("TORC_URL=\"{}\"\n", server_url));
+
+        // Propagate TLS settings to compute nodes if set in the current environment
+        if let Ok(val) = std::env::var("TORC_TLS_CA_CERT") {
+            script.push_str(&format!("export TORC_TLS_CA_CERT=\"{}\"\n", val));
+        }
+        if let Ok(val) = std::env::var("TORC_TLS_INSECURE") {
+            script.push_str(&format!("export TORC_TLS_INSECURE=\"{}\"\n", val));
+        }
+        script.push('\n');
 
         // Build the torc-slurm-job-runner command
         let mut command = format!(

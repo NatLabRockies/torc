@@ -47,6 +47,14 @@ struct Args {
     /// Password for API authentication (uses USER env var as username)
     #[arg(long, env = "TORC_PASSWORD")]
     password: Option<String>,
+
+    /// Path to a PEM-encoded CA certificate to trust for TLS connections
+    #[arg(long, env = "TORC_TLS_CA_CERT")]
+    tls_ca_cert: Option<String>,
+
+    /// Skip TLS certificate verification (for testing only)
+    #[arg(long, env = "TORC_TLS_INSECURE")]
+    tls_insecure: bool,
 }
 
 fn main() -> Result<()> {
@@ -66,6 +74,12 @@ fn main() -> Result<()> {
     tracing::info!("API URL: {}", args.api_url);
     tracing::info!("Output directory: {}", args.output_dir.display());
 
+    // Build TLS configuration
+    let tls = torc::client::apis::configuration::TlsConfig {
+        ca_cert_path: args.tls_ca_cert.as_ref().map(std::path::PathBuf::from),
+        insecure: args.tls_insecure,
+    };
+
     // Create the server BEFORE entering the async runtime.
     // This is important because TorcMcpServer::new() creates a reqwest::blocking::Client
     // which spawns its own tokio runtime. Creating it inside block_on would cause
@@ -74,9 +88,15 @@ fn main() -> Result<()> {
         let username = std::env::var("USER")
             .or_else(|_| std::env::var("USERNAME"))
             .unwrap_or_else(|_| "unknown".to_string());
-        TorcMcpServer::with_auth(args.api_url, args.output_dir, Some(username), args.password)
+        TorcMcpServer::with_auth_and_tls(
+            args.api_url,
+            args.output_dir,
+            Some(username),
+            args.password,
+            tls,
+        )
     } else {
-        TorcMcpServer::new(args.api_url, args.output_dir)
+        TorcMcpServer::new_with_tls(args.api_url, args.output_dir, tls)
     };
 
     // Build runtime and run the async portion

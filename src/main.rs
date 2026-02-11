@@ -1,7 +1,7 @@
 use clap::{CommandFactory, Parser};
 
 use torc::cli::{Cli, Commands};
-use torc::client::apis::configuration::Configuration;
+use torc::client::apis::configuration::{Configuration, TlsConfig};
 use torc::client::apis::default_api;
 use torc::client::commands::access_groups::handle_access_group_commands;
 use torc::client::commands::compute_nodes::handle_compute_node_commands;
@@ -94,8 +94,19 @@ fn main() {
         .clone()
         .unwrap_or_else(|| file_config.client.api_url.clone());
 
-    // Create configuration for API commands
-    let mut config = Configuration::new();
+    // Resolve TLS settings with priority: CLI arg > config file > defaults
+    let tls_ca_cert = cli
+        .tls_ca_cert
+        .clone()
+        .or_else(|| file_config.client.tls.ca_cert.clone());
+    let tls_insecure = cli.tls_insecure || file_config.client.tls.insecure;
+    let tls = TlsConfig {
+        ca_cert_path: tls_ca_cert.as_ref().map(std::path::PathBuf::from),
+        insecure: tls_insecure,
+    };
+
+    // Create configuration for API commands with TLS settings
+    let mut config = Configuration::with_tls(tls);
     config.base_path = url.clone();
 
     // Handle authentication: use USER env var as username, password from CLI/env or prompt
@@ -211,6 +222,8 @@ fn main() {
                 cpu_affinity_cpus_per_job: None,
                 log_level: log_level.clone(),
                 password,
+                tls_ca_cert: tls_ca_cert.clone(),
+                tls_insecure,
             };
 
             run_jobs_cmd::run(&args);

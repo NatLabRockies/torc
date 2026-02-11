@@ -28,6 +28,9 @@ pub struct ClientConfig {
 
     /// Watch command configuration
     pub watch: ClientWatchConfig,
+
+    /// TLS configuration
+    pub tls: ClientTlsConfig,
 }
 
 impl Default for ClientConfig {
@@ -40,8 +43,20 @@ impl Default for ClientConfig {
             slurm: ClientSlurmConfig::default(),
             hpc: ClientHpcConfig::default(),
             watch: ClientWatchConfig::default(),
+            tls: ClientTlsConfig::default(),
         }
     }
+}
+
+/// TLS configuration for client connections
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ClientTlsConfig {
+    /// Path to a PEM-encoded CA certificate to trust
+    pub ca_cert: Option<String>,
+
+    /// Skip certificate verification (for testing only)
+    pub insecure: bool,
 }
 
 /// Configuration for the `torc run` command

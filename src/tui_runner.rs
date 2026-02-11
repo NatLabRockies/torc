@@ -15,6 +15,14 @@ pub struct Args {
     /// Database path for standalone mode
     #[arg(long)]
     pub database: Option<String>,
+
+    /// Path to a PEM-encoded CA certificate to trust for TLS connections
+    #[arg(long, env = "TORC_TLS_CA_CERT")]
+    pub tls_ca_cert: Option<String>,
+
+    /// Skip TLS certificate verification (for testing only)
+    #[arg(long, env = "TORC_TLS_INSECURE")]
+    pub tls_insecure: bool,
 }
 
 pub fn run(args: &Args) -> Result<()> {
@@ -22,7 +30,13 @@ pub fn run(args: &Args) -> Result<()> {
     // The TUI code will be in the optional 'tui' module
     #[cfg(feature = "tui")]
     {
-        crate::tui::run(args.standalone, args.port, args.database.clone())
+        crate::tui::run(
+            args.standalone,
+            args.port,
+            args.database.clone(),
+            args.tls_ca_cert.clone(),
+            args.tls_insecure,
+        )
     }
 
     #[cfg(not(feature = "tui"))]

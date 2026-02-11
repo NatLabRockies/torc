@@ -10,6 +10,60 @@
 
 #![allow(dead_code)]
 
+use std::path::PathBuf;
+
+/// TLS configuration for client connections.
+#[derive(Debug, Clone, Default)]
+pub struct TlsConfig {
+    /// Path to a PEM-encoded CA certificate to trust.
+    pub ca_cert_path: Option<PathBuf>,
+    /// Skip certificate verification (for testing only).
+    pub insecure: bool,
+}
+
+impl TlsConfig {
+    /// Apply TLS settings to a blocking client builder and return it.
+    ///
+    /// This allows callers (like the SSE client) to customize the builder further
+    /// before calling `.build()`.
+    pub fn configure_blocking_builder(
+        &self,
+        mut builder: reqwest::blocking::ClientBuilder,
+    ) -> reqwest::blocking::ClientBuilder {
+        if self.insecure {
+            builder = builder.danger_accept_invalid_certs(true);
+        }
+        if let Some(ref ca_path) = self.ca_cert_path
+            && let Ok(pem) = std::fs::read(ca_path)
+            && let Ok(cert) = reqwest::Certificate::from_pem(&pem)
+        {
+            builder = builder.add_root_certificate(cert);
+        }
+        builder
+    }
+
+    /// Build a blocking client with TLS settings applied.
+    pub fn build_blocking_client(&self) -> Result<reqwest::blocking::Client, reqwest::Error> {
+        self.configure_blocking_builder(reqwest::blocking::Client::builder())
+            .build()
+    }
+
+    /// Build an async client with TLS settings applied.
+    pub fn build_async_client(&self) -> Result<reqwest::Client, reqwest::Error> {
+        let mut builder = reqwest::Client::builder();
+        if self.insecure {
+            builder = builder.danger_accept_invalid_certs(true);
+        }
+        if let Some(ref ca_path) = self.ca_cert_path
+            && let Ok(pem) = std::fs::read(ca_path)
+            && let Ok(cert) = reqwest::Certificate::from_pem(&pem)
+        {
+            builder = builder.add_root_certificate(cert);
+        }
+        builder.build()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Configuration {
     pub base_path: String,
@@ -19,6 +73,7 @@ pub struct Configuration {
     pub oauth_access_token: Option<String>,
     pub bearer_access_token: Option<String>,
     pub api_key: Option<ApiKey>,
+    pub tls: TlsConfig,
 }
 
 pub type BasicAuth = (String, Option<String>);
@@ -33,6 +88,18 @@ impl Configuration {
     pub fn new() -> Configuration {
         Configuration::default()
     }
+
+    /// Create a new Configuration with the given TLS settings.
+    pub fn with_tls(tls: TlsConfig) -> Configuration {
+        let client = tls
+            .build_blocking_client()
+            .expect("Failed to build HTTP client with TLS config");
+        Configuration {
+            client,
+            tls,
+            ..Default::default()
+        }
+    }
 }
 
 impl Default for Configuration {
@@ -45,6 +112,60 @@ impl Default for Configuration {
             oauth_access_token: None,
             bearer_access_token: None,
             api_key: None,
+            tls: TlsConfig::default(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tls_config_default() {
+        let tls = TlsConfig::default();
+        assert!(tls.ca_cert_path.is_none());
+        assert!(!tls.insecure);
+    }
+
+    #[test]
+    fn test_tls_config_insecure_builds_client() {
+        let tls = TlsConfig {
+            ca_cert_path: None,
+            insecure: true,
+        };
+        let client = tls.build_blocking_client();
+        assert!(client.is_ok());
+    }
+
+    #[test]
+    fn test_tls_config_nonexistent_cert_builds_client() {
+        // A non-existent CA cert path should not prevent building the client
+        let tls = TlsConfig {
+            ca_cert_path: Some(PathBuf::from("/nonexistent/ca.pem")),
+            insecure: false,
+        };
+        let client = tls.build_blocking_client();
+        assert!(client.is_ok());
+    }
+
+    #[test]
+    fn test_configuration_with_tls() {
+        let tls = TlsConfig {
+            ca_cert_path: None,
+            insecure: true,
+        };
+        let config = Configuration::with_tls(tls);
+        assert!(config.tls.insecure);
+    }
+
+    #[test]
+    fn test_tls_config_async_client() {
+        let tls = TlsConfig {
+            ca_cert_path: None,
+            insecure: true,
+        };
+        let client = tls.build_async_client();
+        assert!(client.is_ok());
     }
 }

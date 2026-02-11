@@ -89,6 +89,7 @@
   - [Server Deployment](./specialized/admin/server-deployment.md)
   - [Configuration Files](./specialized/admin/configuration-files.md)
   - [Authentication](./specialized/admin/authentication.md)
+  - [TLS/HTTPS Configuration](./specialized/admin/tls-configuration.md)
   - [Access Groups](./specialized/admin/access-groups.md)
   - [Team-Based Access Control Tutorial](./specialized/admin/access-groups-tutorial.md)
   - [Security Reference](./specialized/admin/security.md)

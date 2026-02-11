@@ -206,6 +206,13 @@ output_dir = "output"
 # memory_gb = 32.0
 # num_gpus = 1
 
+[client.tls]
+# Path to a PEM-encoded CA certificate to trust
+# ca_cert = "/path/to/ca.pem"
+
+# Skip certificate verification (for testing only)
+insecure = false
+
 [client.slurm]
 # Poll interval in seconds for Slurm job runners
 poll_interval = 30

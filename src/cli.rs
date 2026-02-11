@@ -100,6 +100,12 @@ pub struct Cli {
     /// Skip checking server version compatibility
     #[arg(long)]
     pub skip_version_check: bool,
+    /// Path to a PEM-encoded CA certificate to trust for TLS connections
+    #[arg(long, env = "TORC_TLS_CA_CERT")]
+    pub tls_ca_cert: Option<String>,
+    /// Skip TLS certificate verification (for testing only)
+    #[arg(long, env = "TORC_TLS_INSECURE")]
+    pub tls_insecure: bool,
     #[command(subcommand)]
     pub command: Commands,
 }

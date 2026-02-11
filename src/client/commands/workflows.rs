@@ -2207,6 +2207,12 @@ fn handle_run(
         cpu_affinity_cpus_per_job: None,
         log_level: "info".to_string(),
         password,
+        tls_ca_cert: config
+            .tls
+            .ca_cert_path
+            .as_ref()
+            .map(|p| p.to_string_lossy().to_string()),
+        tls_insecure: config.tls.insecure,
     };
 
     crate::run_jobs_cmd::run(&args);

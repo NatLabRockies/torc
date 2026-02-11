@@ -51,14 +51,27 @@ Settings for `torc run` command.
 | `memory_gb`         | float | (none)   | Available memory (GB) for resource-based scheduling |
 | `num_gpus`          | int   | (none)   | Available GPUs for resource-based scheduling        |
 
+### `[client.tls]` Section
+
+Settings for client-side TLS when connecting to an HTTPS server.
+
+| Option     | Type   | Default | Description                                  |
+| ---------- | ------ | ------- | -------------------------------------------- |
+| `ca_cert`  | string | (none)  | Path to PEM-encoded CA certificate to trust  |
+| `insecure` | bool   | `false` | Skip certificate verification (testing only) |
+
 ### Example
 
 ```toml
 [client]
-api_url = "http://localhost:8080/torc-service/v1"
+api_url = "https://torc.hpc.nrel.gov:8080/torc-service/v1"
 format = "table"
 log_level = "info"
 username = "myuser"
+
+[client.tls]
+ca_cert = "/etc/pki/tls/certs/corporate-ca.pem"
+# insecure = false
 
 [client.run]
 poll_interval = 5.0
@@ -242,6 +255,8 @@ Environment variables use double underscore (`__`) to separate nested keys.
 | `TORC_CLIENT__RUN__NUM_CPUS`          | `client.run.num_cpus`          |
 | `TORC_CLIENT__RUN__MEMORY_GB`         | `client.run.memory_gb`         |
 | `TORC_CLIENT__RUN__NUM_GPUS`          | `client.run.num_gpus`          |
+| `TORC_CLIENT__TLS__CA_CERT`           | `client.tls.ca_cert`           |
+| `TORC_CLIENT__TLS__INSECURE`          | `client.tls.insecure`          |
 
 ### Server Variables
 
@@ -276,6 +291,8 @@ These environment variables are still supported directly by clap:
 | ------------------------------------- | --------- | --------------------------------------- |
 | `TORC_API_URL`                        | Client    | Server API URL (CLI only)               |
 | `TORC_PASSWORD`                       | Client    | Authentication password (CLI only)      |
+| `TORC_TLS_CA_CERT`                    | Client    | PEM-encoded CA certificate path         |
+| `TORC_TLS_INSECURE`                   | Client    | Skip certificate verification           |
 | `TORC_AUTH_FILE`                      | Server    | htpasswd file path                      |
 | `TORC_LOG_DIR`                        | Server    | Log directory                           |
 | `TORC_COMPLETION_CHECK_INTERVAL_SECS` | Server    | Completion check interval               |
@@ -289,10 +306,14 @@ These environment variables are still supported directly by clap:
 # ~/.config/torc/config.toml
 
 [client]
-api_url = "http://localhost:8080/torc-service/v1"
+api_url = "https://torc.hpc.nrel.gov:8080/torc-service/v1"
 format = "table"
 log_level = "info"
 username = "developer"
+
+[client.tls]
+ca_cert = "/etc/pki/tls/certs/corporate-ca.pem"
+# insecure = false
 
 [client.run]
 poll_interval = 5.0

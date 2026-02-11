@@ -141,9 +141,14 @@ authentication is enabled:
 # Start server with HTTPS
 torc-server run --https --auth-file /path/to/htpasswd --require-auth
 
-# Client connects via HTTPS
-torc --url https://torc.example.com/torc-service/v1 --username alice workflows list
-````
+# Client connects via HTTPS (with custom CA certificate if needed)
+torc --url https://torc.hpc.nrel.gov:8080/torc-service/v1 \
+     --tls-ca-cert /path/to/ca.pem \
+     --username alice workflows list
+```
+
+For detailed TLS/HTTPS setup including custom CA certificates, self-signed certificates, and Slurm
+integration, see [TLS/HTTPS Configuration](./tls-configuration.md).
 
 ### 2. Secure Credential Storage
 
@@ -226,7 +231,7 @@ torc-server run \
   --database /var/lib/torc/production.db
 
 # 4. Clients must authenticate
-torc --url --prompt-password https://torc.example.com/torc-service/v1 workflows list
+torc --url --prompt-password https://torc.hpc.nrel.gov:8080/torc-service/v1 workflows list
 Password: ****
 ```
 
@@ -238,7 +243,7 @@ Password: ****
 
 # Use in pipeline
 export TORC_PASSWORD="${TORC_PASSWORD}"
-export TORC_API_URL=https://torc.example.com/torc-service/v1
+export TORC_API_URL=https://torc.hpc.nrel.gov:8080/torc-service/v1
 
 # Run workflow
 torc workflows create pipeline.yaml
@@ -419,3 +424,4 @@ When running multiple Torc servers behind a load balancer:
 - Share the same htpasswd file across all servers (via NFS, S3, etc.)
 - Or use a configuration management tool to sync htpasswd files
 - Monitor for htpasswd file changes and reload if needed
+````

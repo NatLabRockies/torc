@@ -16,7 +16,7 @@ description: Data processing pipeline with 6 chunks
 resource_requirements:
   - name: standard
     num_cpus: 1
-    memory: 2g
+    memory: 1g
     runtime: PT5M
     num_gpus: 0
     num_nodes: 1

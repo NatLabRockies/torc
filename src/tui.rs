@@ -20,16 +20,23 @@ use app::App;
 use components::StatusMessage;
 
 /// Check if the Torc server is reachable by calling the ping endpoint
-fn check_server_connection(base_url: &str) -> bool {
-    let config = crate::client::apis::configuration::Configuration {
-        base_path: base_url.to_string(),
-        ..Default::default()
-    };
+fn check_server_connection(
+    base_url: &str,
+    tls: &crate::client::apis::configuration::TlsConfig,
+) -> bool {
+    let mut config = crate::client::apis::configuration::Configuration::with_tls(tls.clone());
+    config.base_path = base_url.to_string();
 
     default_api::ping(&config).is_ok()
 }
 
-pub fn run(standalone: bool, port: u16, database: Option<String>) -> Result<()> {
+pub fn run(
+    standalone: bool,
+    port: u16,
+    database: Option<String>,
+    tls_ca_cert: Option<String>,
+    tls_insecure: bool,
+) -> Result<()> {
     env_logger::init();
 
     // Setup terminal first
@@ -40,14 +47,14 @@ pub fn run(standalone: bool, port: u16, database: Option<String>) -> Result<()> 
     let mut terminal = Terminal::new(backend)?;
 
     // Create app - this will work even if server is not running
-    let mut app = App::new_with_options(standalone, port, database)?;
+    let mut app = App::new_with_options(standalone, port, database, tls_ca_cert, tls_insecure)?;
 
     // In standalone mode, auto-start the server
     if standalone {
         app.start_server_standalone();
         // Give server a moment to start, then try to connect
         std::thread::sleep(std::time::Duration::from_millis(500));
-        if check_server_connection(&app.server_url) {
+        if check_server_connection(&app.server_url, &app.tls) {
             app.set_status(StatusMessage::success("Server started in standalone mode"));
             let _ = app.refresh_workflows();
             // Check server version
@@ -59,7 +66,7 @@ pub fn run(standalone: bool, port: u16, database: Option<String>) -> Result<()> 
         }
     } else {
         // Check if server is running and show appropriate message
-        if check_server_connection(&app.server_url) {
+        if check_server_connection(&app.server_url, &app.tls) {
             // Connected - check version
             app.check_server_version();
         } else {

@@ -61,8 +61,13 @@ API Handler (receives authorization context)
 # Server
 torc-server run --https --auth-file /etc/torc/htpasswd
 
-# Client
-torc --url https://torc.example.com/torc-service/v1 workflows list
+# Client with custom CA certificate (e.g., corporate PKI)
+torc --url https://torc.hpc.nrel.gov:8080/torc-service/v1 \
+     --tls-ca-cert /etc/pki/tls/certs/corporate-ca.pem \
+     workflows list
+
+# Client with publicly trusted certificate (no extra config needed)
+torc --url https://torc.hpc.nrel.gov:8080/torc-service/v1 workflows list
 ```
 
 **TLS Version:** Torc uses the system's OpenSSL/native-tls library. Ensure:
@@ -70,6 +75,8 @@ torc --url https://torc.example.com/torc-service/v1 workflows list
 - TLS 1.2 minimum (TLS 1.3 preferred)
 - Strong cipher suites enabled
 - Valid certificates from trusted CA
+
+For detailed client-side TLS setup, see [TLS/HTTPS Configuration](./tls-configuration.md).
 
 ### Network Security
 
@@ -435,6 +442,7 @@ torc-server run \
 - [ ] HTTPS enabled in production
 - [ ] Strong TLS configuration (TLS 1.2+, strong ciphers)
 - [ ] Valid certificate from trusted CA
+- [ ] Client `--tls-ca-cert` configured if using internal CA
 - [ ] Required authentication enabled (`--require-auth`)
 - [ ] Htpasswd file permissions: `chmod 600`
 - [ ] Htpasswd file owned by server process user
@@ -449,6 +457,8 @@ torc-server run \
 ### Client Usage
 
 - [ ] HTTPS URLs used when auth enabled
+- [ ] `--tls-ca-cert` or `TORC_TLS_CA_CERT` set if using internal CA
+- [ ] `--tls-insecure` is **not** used in production
 - [ ] Credentials stored in environment variables (not command-line)
 - [ ] Passwords not logged
 - [ ] Passwords not committed to version control

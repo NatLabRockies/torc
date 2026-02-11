@@ -86,9 +86,12 @@ impl SseConnection {
             url.push_str(&format!("?level={}", lvl));
         }
 
-        // Use blocking client for simplicity
-        let client = reqwest::blocking::Client::builder()
-            .timeout(None) // No timeout for SSE connection
+        // Use blocking client with TLS settings from configuration
+        let client = config
+            .tls
+            .configure_blocking_builder(
+                reqwest::blocking::Client::builder().timeout(None), // No timeout for SSE
+            )
             .build()?;
 
         // Build request and apply authentication from Configuration

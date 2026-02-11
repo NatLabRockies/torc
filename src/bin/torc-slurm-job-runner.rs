@@ -19,7 +19,7 @@ mod unix_main {
     use std::path::PathBuf;
     use std::sync::atomic::Ordering;
     use std::thread;
-    use torc::client::apis::configuration::Configuration;
+    use torc::client::apis::configuration::{Configuration, TlsConfig};
     use torc::client::apis::default_api;
     use torc::client::commands::slurm::{create_compute_node, create_node_resources};
     use torc::client::hpc::hpc_interface::HpcInterface;
@@ -70,6 +70,14 @@ mod unix_main {
         /// Wait this number of minutes if the database is offline
         #[arg(long, default_value = "20")]
         wait_for_healthy_database_minutes: u64,
+
+        /// Path to a PEM-encoded CA certificate to trust for TLS connections
+        #[arg(long, env = "TORC_TLS_CA_CERT")]
+        tls_ca_cert: Option<String>,
+
+        /// Skip TLS certificate verification (for testing only)
+        #[arg(long, env = "TORC_TLS_INSECURE")]
+        tls_insecure: bool,
     }
 
     pub fn main() {
@@ -138,8 +146,12 @@ mod unix_main {
         );
         utils::capture_env_vars(std::path::Path::new(&slurm_env_path), "SLURM");
 
-        // Set up configuration
-        let mut config = Configuration::new();
+        // Set up configuration with TLS
+        let tls = TlsConfig {
+            ca_cert_path: args.tls_ca_cert.as_ref().map(std::path::PathBuf::from),
+            insecure: args.tls_insecure,
+        };
+        let mut config = Configuration::with_tls(tls);
         config.base_path = args.url;
 
         // First, ping the server to ensure we can connect

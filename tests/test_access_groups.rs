@@ -901,6 +901,7 @@ fn config_with_auth(base_config: &Configuration, username: &str) -> Configuratio
         oauth_access_token: None,
         bearer_access_token: None,
         api_key: None,
+        tls: Default::default(),
     }
 }
 

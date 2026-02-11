@@ -1,4 +1,4 @@
-use crate::client::apis::configuration::Configuration;
+use crate::client::apis::configuration::{Configuration, TlsConfig};
 use crate::client::apis::default_api;
 use crate::client::commands::get_env_user_name;
 use crate::client::commands::select_workflow_interactively;
@@ -88,6 +88,12 @@ pub struct Args {
     /// Password for authentication (can also use TORC_PASSWORD env var)
     #[arg(long, env = "TORC_PASSWORD", hide_env_values = true)]
     pub password: Option<String>,
+    /// Path to a PEM-encoded CA certificate to trust for TLS connections
+    #[arg(long, env = "TORC_TLS_CA_CERT")]
+    pub tls_ca_cert: Option<String>,
+    /// Skip TLS certificate verification (for testing only)
+    #[arg(long, env = "TORC_TLS_INSECURE")]
+    pub tls_insecure: bool,
 }
 
 pub fn run(args: &Args) {
@@ -95,7 +101,11 @@ pub fn run(args: &Args) {
         .expect("Failed to get hostname")
         .into_string()
         .expect("Hostname is not valid UTF-8");
-    let mut config = Configuration::new();
+    let tls = TlsConfig {
+        ca_cert_path: args.tls_ca_cert.as_ref().map(std::path::PathBuf::from),
+        insecure: args.tls_insecure,
+    };
+    let mut config = Configuration::with_tls(tls);
     config.base_path = args.url.clone();
 
     // Set up authentication if password is provided
