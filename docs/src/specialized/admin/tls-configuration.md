@@ -1,157 +1,97 @@
 # TLS/HTTPS Configuration
 
-This guide explains how to configure Torc clients to connect to HTTPS servers, including custom CA
-certificates and self-signed certificate support.
+When the Torc server uses HTTPS — either directly or behind a reverse proxy with an internal CA —
+clients need to know which CA certificate to trust. This page shows how to configure that.
 
-## Overview
+## Quick Setup
 
-When the Torc server runs behind a TLS-terminating reverse proxy (e.g., OpenShift ingress, nginx,
-HAProxy) or with `--https` enabled directly, all clients must be configured to use HTTPS. Torc
-provides two client-side TLS options:
+Most HPC users only need to do this once.
 
-- **`--tls-ca-cert`** - Path to a PEM-encoded CA certificate to trust
-- **`--tls-insecure`** - Skip certificate verification (testing only)
+### Step 1: Get the CA Certificate
 
-These options apply to all Torc client components: the CLI, TUI, job runners, the MCP server, and
-the web dashboard.
+Ask your system administrator for the PEM-encoded CA certificate file used by the Torc server. It
+typically lives on a shared filesystem, e.g., `/shared/certs/corporate-ca.pem`.
 
-## When You Need This
-
-| Scenario                                       | Configuration Needed                      |
-| ---------------------------------------------- | ----------------------------------------- |
-| Server behind corporate proxy with internal CA | `--tls-ca-cert /path/to/ca.pem`           |
-| Self-signed certificates in development        | `--tls-insecure`                          |
-| Server with publicly trusted certificate       | Just use `https://` URL (no extra config) |
-| Server on plain HTTP (localhost, internal)     | No TLS config needed                      |
-
-## Configuration Methods
-
-TLS settings can be configured through CLI flags, environment variables, or the configuration file.
-They follow the standard priority order: CLI flags > environment variables > config file > defaults.
-
-### CLI Flags
+### Step 2: Generate a Config File
 
 ```bash
-# Connect using a custom CA certificate
-torc --url https://torc.hpc.nrel.gov:8080/torc-service/v1 \
-     --tls-ca-cert /etc/pki/tls/certs/corporate-ca.pem \
-     workflows list
-
-# Skip certificate verification (development/testing only)
-torc --url https://localhost:8443/torc-service/v1 \
-     --tls-insecure \
-     workflows list
-
-# Both flags work with any command
-torc --tls-ca-cert /path/to/ca.pem workflows create workflow.yaml
-torc --tls-ca-cert /path/to/ca.pem tui
+torc config init --user
 ```
 
-### Environment Variables
+This creates `~/.config/torc/config.toml` with all available settings and defaults.
 
-```bash
-# Set once, used by all torc commands in the session
-export TORC_TLS_CA_CERT=/etc/pki/tls/certs/corporate-ca.pem
-export TORC_API_URL=https://torc.hpc.nrel.gov:8080/torc-service/v1
+### Step 3: Edit the Config File
 
-# Now all commands use the CA certificate automatically
-torc workflows list
-torc workflows create workflow.yaml
-torc tui
-```
-
-For testing with self-signed certificates:
-
-```bash
-export TORC_TLS_INSECURE=true
-export TORC_API_URL=https://localhost:8443/torc-service/v1
-torc workflows list
-```
-
-### Configuration File
-
-Add TLS settings to your Torc configuration file (`~/.config/torc/config.toml` or `./torc.toml`):
+Open `~/.config/torc/config.toml` and set the server URL and CA certificate path:
 
 ```toml
 [client]
 api_url = "https://torc.hpc.nrel.gov:8080/torc-service/v1"
 
 [client.tls]
-# Path to PEM-encoded CA certificate
-ca_cert = "/etc/pki/tls/certs/corporate-ca.pem"
-
-# Skip certificate verification (default: false)
-# insecure = true
+ca_cert = "/shared/certs/corporate-ca.pem"
 ```
 
-Generate a default config file with TLS section included:
+### Step 4: Verify
 
 ```bash
-torc config init --user
+torc workflows list
 ```
 
-## Deployment Patterns
+If the connection succeeds, you're done. All Torc components — CLI, TUI, job runners, MCP server,
+and dashboard — use these settings automatically.
 
-### Pattern 1: OpenShift / Kubernetes with Ingress TLS
+## Slurm / HPC
 
-The most common production pattern. The server runs HTTP inside a container, and the platform
-handles TLS termination at the ingress.
+When you submit a workflow with `torc submit-slurm`, TLS settings from your config file (or CLI
+flags) are automatically propagated as CLI flags on the `torc-slurm-job-runner` command that runs on
+compute nodes. No extra environment variable setup is needed.
 
-```
-[Torc Client] ──HTTPS──> [OpenShift Ingress] ──HTTP──> [Torc Server Pod]
-                 ^
-            Custom CA cert
-         (corporate PKI)
-```
-
-**Setup:**
+The only requirement is that the CA certificate file must be on a **shared filesystem** accessible
+from all compute nodes.
 
 ```bash
-# Your IT department provides a CA certificate
-# Configure all clients to trust it
-export TORC_TLS_CA_CERT=/etc/pki/tls/certs/corporate-ca.pem
+# Your config file handles TLS — just submit as normal
+torc submit-slurm --account myproject workflow.yaml
+```
+
+## Advanced Configuration
+
+### CLI Flags
+
+You can override config file settings on any command:
+
+```bash
+torc --url https://torc.hpc.nrel.gov:8080/torc-service/v1 \
+     --tls-ca-cert /path/to/ca.pem \
+     workflows list
+```
+
+### Environment Variables
+
+```bash
 export TORC_API_URL=https://torc.hpc.nrel.gov:8080/torc-service/v1
+export TORC_TLS_CA_CERT=/path/to/ca.pem
 
 torc workflows list
 ```
 
-### Pattern 2: Direct HTTPS with Custom Certificate
+### Priority Order
 
-The server runs with `--https` using a certificate signed by an internal CA.
+Settings are resolved from highest to lowest priority:
 
-```
-[Torc Client] ──HTTPS──> [Torc Server]
-                 ^
-            Custom CA cert
-```
+1. CLI flags (`--tls-ca-cert`, `--tls-insecure`)
+2. Environment variables (`TORC_TLS_CA_CERT`, `TORC_TLS_INSECURE`)
+3. Project config (`./torc.toml`)
+4. User config (`~/.config/torc/config.toml`)
+5. System config (`/etc/torc/config.toml`)
+6. Built-in defaults
 
-**Setup:**
+### Insecure Mode (Development Only)
 
-```bash
-# Server side
-torc-server run --https --auth-file /etc/torc/htpasswd --require-auth
-
-# Client side
-torc --url https://torc.hpc.nrel.gov:8080/torc-service/v1 \
-     --tls-ca-cert /path/to/internal-ca.pem \
-     workflows list
-```
-
-### Pattern 3: Load Balancer with TLS Termination
-
-```
-[Torc Client] ──HTTPS──> [Load Balancer] ──HTTP──> [Torc Server]
-                 ^
-         Public or internal CA
-```
-
-If the load balancer uses a publicly trusted certificate, no `--tls-ca-cert` is needed. If it uses
-an internal CA, configure the CA certificate as shown above.
-
-### Pattern 4: Development with Self-Signed Certificates
+For local development with self-signed certificates, you can skip verification:
 
 ```bash
-# For local development only
 torc --url https://localhost:8443/torc-service/v1 \
      --tls-insecure \
      workflows list
@@ -159,54 +99,6 @@ torc --url https://localhost:8443/torc-service/v1 \
 
 > **Warning:** Never use `--tls-insecure` in production. It disables all certificate verification,
 > making connections vulnerable to man-in-the-middle attacks.
-
-## HPC / Slurm Integration
-
-When running workflows on Slurm clusters, TLS settings are automatically propagated to compute nodes
-through environment variables. Torc's Slurm submission scripts export `TORC_TLS_CA_CERT` and
-`TORC_TLS_INSECURE` so that job runners on compute nodes inherit the same TLS configuration.
-
-**Setup:**
-
-```bash
-# Set TLS environment variables before submitting
-export TORC_TLS_CA_CERT=/shared/certs/corporate-ca.pem
-export TORC_API_URL=https://torc.hpc.nrel.gov:8080/torc-service/v1
-
-# Submit workflow - compute nodes will inherit TLS settings
-torc submit-slurm --account myproject workflow.yaml
-```
-
-**Requirements:**
-
-- The CA certificate file must be accessible from all compute nodes (e.g., on a shared filesystem)
-- Environment variables are exported in the generated Slurm submission scripts automatically
-
-## Component-Specific Configuration
-
-### MCP Server
-
-```bash
-torc-mcp-server \
-  --url https://torc.hpc.nrel.gov:8080/torc-service/v1 \
-  --tls-ca-cert /path/to/ca.pem
-```
-
-### Web Dashboard
-
-```bash
-torc-dash \
-  --api-url https://torc.hpc.nrel.gov:8080/torc-service/v1 \
-  --tls-ca-cert /path/to/ca.pem
-```
-
-### Terminal UI (TUI)
-
-The TUI inherits TLS settings from the CLI flags:
-
-```bash
-torc --tls-ca-cert /path/to/ca.pem tui
-```
 
 ### Programmatic Access (Rust)
 
@@ -219,85 +111,56 @@ let tls = TlsConfig {
     insecure: false,
 };
 let mut config = Configuration::with_tls(tls);
-config.base_path = "https://torc.hpc.nrel.gov:8080/torc-service/v1".to_string();
+config.base_path =
+    "https://torc.hpc.nrel.gov:8080/torc-service/v1".to_string();
 ```
 
 ## Troubleshooting
 
-### Certificate Errors
+### "certificate verify failed" or "unable to get local issuer certificate"
 
-**Error:** `certificate verify failed` or `unable to get local issuer certificate`
-
-The client cannot verify the server's certificate chain. This typically means the server uses a
-certificate signed by a CA that the client does not trust.
-
-**Solution:** Provide the CA certificate:
+The client cannot verify the server's certificate chain. Provide the CA certificate:
 
 ```bash
 torc --tls-ca-cert /path/to/ca.pem workflows list
 ```
 
-### Finding the CA Certificate
-
-Ask your IT department for the CA certificate file, or extract it from the system trust store:
+If you don't have the CA certificate, ask your system administrator. Common locations:
 
 ```bash
-# On RHEL/CentOS/Fedora
+# RHEL / CentOS / Fedora
 ls /etc/pki/tls/certs/
 
-# On Ubuntu/Debian
+# Ubuntu / Debian
 ls /etc/ssl/certs/
-
-# On macOS, export from Keychain Access or use:
-security find-certificate -a -p /System/Library/Keychains/SystemRootCertificates.keychain \
-  > /tmp/system-ca.pem
-```
-
-### Self-Signed Certificate in Development
-
-If you are testing with a self-signed certificate and cannot provide the CA:
-
-```bash
-# Quick workaround for development only
-torc --tls-insecure workflows list
 ```
 
 ### Connection Refused with HTTPS URL
 
-Ensure the server is actually listening on HTTPS. If the server runs plain HTTP behind a reverse
-proxy, verify the proxy is configured and the URL is correct.
+Verify the server is actually listening on HTTPS. If the server runs HTTP behind a reverse proxy,
+check that the proxy is configured and the URL is correct.
 
-### TLS Settings Not Applied in Slurm Jobs
+### TLS Not Working on Compute Nodes
 
-Verify that:
-
-1. The environment variables were set **before** submitting the workflow
-2. The CA certificate file path is accessible from compute nodes
-3. Check the generated submission script for the exported variables:
-
-```bash
-# The submission script should contain lines like:
-export TORC_TLS_CA_CERT="/shared/certs/corporate-ca.pem"
-```
+1. Confirm the CA certificate path is on a shared filesystem visible to compute nodes
+2. Check that your config file or CLI flags are set before submitting the workflow
 
 ## Reference
 
-### CLI Flags
-
-| Flag                   | Environment Variable | Config File           | Description                     |
+| CLI Flag               | Environment Variable | Config Key            | Description                     |
 | ---------------------- | -------------------- | --------------------- | ------------------------------- |
 | `--tls-ca-cert <PATH>` | `TORC_TLS_CA_CERT`   | `client.tls.ca_cert`  | PEM-encoded CA certificate path |
 | `--tls-insecure`       | `TORC_TLS_INSECURE`  | `client.tls.insecure` | Skip certificate verification   |
+| `--url <URL>`          | `TORC_API_URL`       | `client.api_url`      | Torc server URL                 |
 
 ### Certificate Requirements
 
 - **Format:** PEM-encoded (Base64 ASCII, begins with `-----BEGIN CERTIFICATE-----`)
 - **Type:** CA certificate (not the server's leaf certificate)
-- **TLS versions:** Uses system OpenSSL/native-tls (TLS 1.2 minimum recommended)
 
 ## See Also
 
-- [Authentication](./authentication.md) - Setting up user authentication
-- [Security Reference](./security.md) - Security best practices and threat model
-- [Server Deployment](./server-deployment.md) - Deploying the Torc server
-- [Configuration Reference](../../core/reference/configuration.md) - All configuration options
+- [Authentication](./authentication.md) — Setting up user authentication
+- [Security Reference](./security.md) — Security best practices and threat model
+- [Server Deployment](./server-deployment.md) — Deploying the Torc server
+- [Configuration Reference](../../core/reference/configuration.md) — All configuration options

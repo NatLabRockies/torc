@@ -213,6 +213,8 @@ impl HpcInterface for SlurmInterface {
         filename: &Path,
         config: &HashMap<String, String>,
         start_one_worker_per_node: bool,
+        tls_ca_cert: Option<&str>,
+        tls_insecure: bool,
     ) -> Result<()> {
         let mut script = format!(
             "#!/bin/bash\n\
@@ -252,16 +254,6 @@ impl HpcInterface for SlurmInterface {
         script.push('\n');
         script.push_str(&format!("TORC_URL=\"{}\"\n", server_url));
 
-        // Propagate TLS settings to compute nodes if set in the current environment.
-        // Values are single-quoted to prevent shell interpretation of special characters.
-        if let Ok(val) = std::env::var("TORC_TLS_CA_CERT") {
-            let escaped = val.replace('\'', "'\\''");
-            script.push_str(&format!("export TORC_TLS_CA_CERT='{}'\n", escaped));
-        }
-        if let Ok(val) = std::env::var("TORC_TLS_INSECURE") {
-            let escaped = val.replace('\'', "'\\''");
-            script.push_str(&format!("export TORC_TLS_INSECURE='{}'\n", escaped));
-        }
         script.push('\n');
 
         // Build the torc-slurm-job-runner command
@@ -272,6 +264,16 @@ impl HpcInterface for SlurmInterface {
 
         if let Some(max_jobs) = max_parallel_jobs {
             command.push_str(&format!(" --max-parallel-jobs {}", max_jobs));
+        }
+
+        // Propagate TLS settings as CLI flags.
+        // Values are single-quoted to prevent shell interpretation of special characters.
+        if let Some(ca_cert) = tls_ca_cert {
+            let escaped = ca_cert.replace('\'', "'\\''");
+            command.push_str(&format!(" --tls-ca-cert '{}'", escaped));
+        }
+        if tls_insecure {
+            command.push_str(" --tls-insecure");
         }
 
         // Add the command with optional srun prefix

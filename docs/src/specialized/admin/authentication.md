@@ -125,10 +125,11 @@ torc jobs list my-workflow-id
 
 ### Mixed Approach
 
-````bash
+```bash
 # Username from env, password prompted
 torc workflows list
 Password: ****
+```
 
 ## Security Best Practices
 
@@ -424,4 +425,3 @@ When running multiple Torc servers behind a load balancer:
 - Share the same htpasswd file across all servers (via NFS, S3, etc.)
 - Or use a configuration management tool to sync htpasswd files
 - Monitor for htpasswd file changes and reload if needed
-````

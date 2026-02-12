@@ -347,6 +347,8 @@ fn test_create_submission_script() {
         &script_path,
         &config,
         false,
+        None,
+        false,
     );
 
     assert!(
@@ -423,6 +425,8 @@ fn test_create_submission_script_with_extra() {
         &script_path,
         &config,
         false,
+        None,
+        false,
     );
 
     assert!(
@@ -467,6 +471,8 @@ fn test_create_submission_script_with_srun() {
         &script_path,
         &config,
         true, // start_one_worker_per_node
+        None,
+        false,
     );
 
     assert!(

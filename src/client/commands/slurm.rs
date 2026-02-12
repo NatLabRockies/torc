@@ -1426,6 +1426,9 @@ pub fn schedule_slurm_nodes(
         );
         let script_path = format!("{}/{}.sh", output, job_name);
 
+        let tls_ca_cert = config.tls.ca_cert_path.as_ref().and_then(|p| p.to_str());
+        let tls_insecure = config.tls.insecure;
+
         if let Err(e) = slurm_interface.create_submission_script(
             &job_name,
             &config.base_path,
@@ -1436,6 +1439,8 @@ pub fn schedule_slurm_nodes(
             Path::new(&script_path),
             &config_map,
             start_one_worker_per_node,
+            tls_ca_cert,
+            tls_insecure,
         ) {
             error!("Error creating submission script: {}", e);
             return Err(e.into());
