@@ -36,6 +36,12 @@ pub struct AuthorizationService {
 }
 
 impl AuthorizationService {
+    /// If true, authorization checks are enforced
+    /// If false, all access is allowed (for backward compatibility)
+    pub fn enforce_access_control(&self) -> bool {
+        self.enforce_access_control
+    }
+
     /// Create a new authorization service
     pub fn new(pool: Arc<SqlitePool>, enforce_access_control: bool) -> Self {
         Self {
@@ -201,6 +207,20 @@ impl AuthorizationService {
     ) -> AccessCheckResult {
         if !self.enforce_access_control {
             return AccessCheckResult::Allowed;
+        }
+
+        // Validate table name to prevent SQL injection via identifier interpolation.
+        // Only allow ASCII alphanumeric characters and underscores, which are safe
+        // for use as SQL identifiers and disallow any metacharacters.
+        if !table_name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+        {
+            warn!(
+                "Invalid table name provided to check_resource_access: {}",
+                table_name
+            );
+            return AccessCheckResult::Denied("Invalid resource type".to_string());
         }
 
         // Get the workflow ID for this resource

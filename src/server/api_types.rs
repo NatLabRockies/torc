@@ -1101,6 +1101,8 @@ pub enum ProcessChangedJobInputsResponse {
     SuccessfulResponse(models::ProcessChangedJobInputsResponse),
     /// Forbidden - user does not have access
     ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }
@@ -1515,6 +1517,8 @@ pub enum ListWorkflowGroupsResponse {
 pub enum CheckWorkflowAccessResponse {
     /// Successful response
     SuccessfulResponse(models::AccessCheckResponse),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response

@@ -2161,18 +2161,6 @@ where
             .check_resource_access(&auth, resource_id, table_name)
             .await
     }
-
-    /// Helper to extract authorization from context and check workflow status access
-    async fn check_workflow_status_access_for_context(
-        &self,
-        status_id: i64,
-        context: &C,
-    ) -> AccessCheckResult {
-        let auth: Option<Authorization> = Has::<Option<Authorization>>::get(context).clone();
-        self.authorization_service
-            .check_workflow_status_access(&auth, status_id)
-            .await
-    }
 }
 
 #[async_trait]
@@ -4183,7 +4171,7 @@ where
                 ));
             }
             AccessCheckResult::NotFound(reason) => {
-                return Ok(ClaimNextJobsResponse::DefaultErrorResponse(
+                return Ok(ClaimNextJobsResponse::NotFoundErrorResponse(
                     models::ErrorResponse::new(serde_json::json!({
                         "error": "NotFound",
                         "message": reason
@@ -4452,7 +4440,7 @@ where
                 ));
             }
             AccessCheckResult::NotFound(reason) => {
-                return Ok(ProcessChangedJobInputsResponse::DefaultErrorResponse(
+                return Ok(ProcessChangedJobInputsResponse::NotFoundErrorResponse(
                     models::ErrorResponse::new(serde_json::json!({
                         "error": "NotFound",
                         "message": reason
@@ -5364,7 +5352,7 @@ where
         match self.check_job_access_for_context(id, context).await {
             AccessCheckResult::Allowed => {}
             AccessCheckResult::Denied(reason) => {
-                return Ok(RetryJobResponse::DefaultErrorResponse(
+                return Ok(RetryJobResponse::ForbiddenErrorResponse(
                     models::ErrorResponse::new(serde_json::json!({
                         "error": "Forbidden",
                         "message": reason
@@ -6131,8 +6119,37 @@ where
         user_name: String,
         _context: &C,
     ) -> Result<CheckWorkflowAccessResponse, ApiError> {
-        // Note: this endpoint is for informational purposes and can be called by anyone
-        // but we only check for the specific user requested.
+        let auth: Option<Authorization> = Has::<Option<Authorization>>::get(_context).clone();
+
+        // If access control is enabled, we need to check if the caller is authorized to perform this check
+        if self.authorization_service.enforce_access_control() {
+            match auth {
+                None => {
+                    return Ok(CheckWorkflowAccessResponse::ForbiddenErrorResponse(
+                        forbidden_error!("Authentication required"),
+                    ));
+                }
+                Some(ref a) => {
+                    if a.subject != user_name {
+                        // Caller is checking someone else, check if they are an admin
+                        if !self
+                            .authorization_service
+                            .check_admin_access(&auth)
+                            .await
+                            .is_allowed()
+                        {
+                            return Ok(CheckWorkflowAccessResponse::ForbiddenErrorResponse(
+                                forbidden_error!(format!(
+                                    "Only admins can check access for other users (requester: {}, requested: {})",
+                                    a.subject, user_name
+                                )),
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+
         let result = self
             .authorization_service
             .check_workflow_access(
