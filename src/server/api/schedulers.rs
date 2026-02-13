@@ -990,6 +990,9 @@ where
         // First get the existing local scheduler to ensure it exists
         match self.get_local_scheduler(id, context).await? {
             GetLocalSchedulerResponse::SuccessfulResponse(local_scheduler) => local_scheduler,
+            GetLocalSchedulerResponse::ForbiddenErrorResponse(err) => {
+                return Ok(UpdateLocalSchedulerResponse::ForbiddenErrorResponse(err));
+            }
             GetLocalSchedulerResponse::NotFoundErrorResponse(err) => {
                 return Ok(UpdateLocalSchedulerResponse::NotFoundErrorResponse(err));
             }
@@ -1064,6 +1067,11 @@ where
         // First get the existing scheduled compute node to ensure it exists
         match self.get_scheduled_compute_node(id, context).await? {
             GetScheduledComputeNodeResponse::HTTP(scheduled_compute_node) => scheduled_compute_node,
+            GetScheduledComputeNodeResponse::ForbiddenErrorResponse(err) => {
+                return Ok(UpdateScheduledComputeNodeResponse::ForbiddenErrorResponse(
+                    err,
+                ));
+            }
             GetScheduledComputeNodeResponse::NotFoundErrorResponse(err) => {
                 return Ok(UpdateScheduledComputeNodeResponse::NotFoundErrorResponse(
                     err,
@@ -1149,6 +1157,9 @@ where
         // First get the existing Slurm scheduler to ensure it exists
         match self.get_slurm_scheduler(id, context).await? {
             GetSlurmSchedulerResponse::SuccessfulResponse(slurm_scheduler) => slurm_scheduler,
+            GetSlurmSchedulerResponse::ForbiddenErrorResponse(err) => {
+                return Ok(UpdateSlurmSchedulerResponse::ForbiddenErrorResponse(err));
+            }
             GetSlurmSchedulerResponse::NotFoundErrorResponse(err) => {
                 return Ok(UpdateSlurmSchedulerResponse::NotFoundErrorResponse(err));
             }
@@ -1244,6 +1255,9 @@ where
         // First get the local scheduler to ensure it exists and extract the LocalSchedulerModel
         let local_scheduler = match self.get_local_scheduler(id, context).await? {
             GetLocalSchedulerResponse::SuccessfulResponse(local_scheduler) => local_scheduler,
+            GetLocalSchedulerResponse::ForbiddenErrorResponse(err) => {
+                return Ok(DeleteLocalSchedulerResponse::ForbiddenErrorResponse(err));
+            }
             GetLocalSchedulerResponse::NotFoundErrorResponse(err) => {
                 return Ok(DeleteLocalSchedulerResponse::NotFoundErrorResponse(err));
             }
@@ -1298,6 +1312,11 @@ where
         // First get the scheduled compute node to ensure it exists and extract the ScheduledComputeNodesModel
         let scheduled_compute_node = match self.get_scheduled_compute_node(id, context).await? {
             GetScheduledComputeNodeResponse::HTTP(scheduled_compute_node) => scheduled_compute_node,
+            GetScheduledComputeNodeResponse::ForbiddenErrorResponse(err) => {
+                return Ok(DeleteScheduledComputeNodeResponse::ForbiddenErrorResponse(
+                    err,
+                ));
+            }
             GetScheduledComputeNodeResponse::NotFoundErrorResponse(err) => {
                 return Ok(DeleteScheduledComputeNodeResponse::NotFoundErrorResponse(
                     err,
@@ -1352,6 +1371,9 @@ where
         // First get the Slurm scheduler to ensure it exists and extract the SlurmSchedulerModel
         let slurm_scheduler = match self.get_slurm_scheduler(id, context).await? {
             GetSlurmSchedulerResponse::SuccessfulResponse(slurm_scheduler) => slurm_scheduler,
+            GetSlurmSchedulerResponse::ForbiddenErrorResponse(err) => {
+                return Ok(DeleteSlurmSchedulerResponse::ForbiddenErrorResponse(err));
+            }
             GetSlurmSchedulerResponse::NotFoundErrorResponse(err) => {
                 return Ok(DeleteSlurmSchedulerResponse::NotFoundErrorResponse(err));
             }

@@ -11083,4 +11083,8 @@ pub struct AccessCheckResponse {
     /// The workflow ID that was checked
     #[serde(rename = "workflow_id")]
     pub workflow_id: i64,
+
+    /// Reason for access denial
+    #[serde(rename = "reason", skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }

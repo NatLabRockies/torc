@@ -882,6 +882,7 @@ impl AccessGroupsApiImpl {
                     has_access,
                     user_name: user_name.to_string(),
                     workflow_id,
+                    reason: None,
                 },
             )),
             Err(e) => Err(e),

@@ -503,6 +503,11 @@ where
         // First check if the record exists
         match self.get_resource_requirements(id, context).await? {
             GetResourceRequirementsResponse::SuccessfulResponse(_) => {}
+            GetResourceRequirementsResponse::ForbiddenErrorResponse(err) => {
+                return Ok(UpdateResourceRequirementsResponse::ForbiddenErrorResponse(
+                    err,
+                ));
+            }
             GetResourceRequirementsResponse::NotFoundErrorResponse(err) => {
                 return Ok(UpdateResourceRequirementsResponse::NotFoundErrorResponse(
                     err,
@@ -575,6 +580,11 @@ where
         let resource_requirements = match self.get_resource_requirements(id, context).await? {
             GetResourceRequirementsResponse::SuccessfulResponse(resource_requirements) => {
                 resource_requirements
+            }
+            GetResourceRequirementsResponse::ForbiddenErrorResponse(err) => {
+                return Ok(DeleteResourceRequirementsResponse::ForbiddenErrorResponse(
+                    err,
+                ));
             }
             GetResourceRequirementsResponse::NotFoundErrorResponse(err) => {
                 return Ok(DeleteResourceRequirementsResponse::NotFoundErrorResponse(

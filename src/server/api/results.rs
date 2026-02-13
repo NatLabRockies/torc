@@ -475,6 +475,9 @@ where
         // First get the existing result to ensure it exists
         match self.get_result(id, context).await? {
             GetResultResponse::SuccessfulResponse(result) => result,
+            GetResultResponse::ForbiddenErrorResponse(err) => {
+                return Ok(UpdateResultResponse::ForbiddenErrorResponse(err));
+            }
             GetResultResponse::NotFoundErrorResponse(err) => {
                 return Ok(UpdateResultResponse::NotFoundErrorResponse(err));
             }
@@ -551,6 +554,9 @@ where
         // First get the result to ensure it exists and extract the ResultModel
         let result = match self.get_result(id, context).await? {
             GetResultResponse::SuccessfulResponse(result) => result,
+            GetResultResponse::ForbiddenErrorResponse(err) => {
+                return Ok(DeleteResultResponse::ForbiddenErrorResponse(err));
+            }
             GetResultResponse::NotFoundErrorResponse(err) => {
                 return Ok(DeleteResultResponse::NotFoundErrorResponse(err));
             }

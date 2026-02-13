@@ -520,6 +520,9 @@ where
         // First check if the user data exists
         match self.get_user_data(id, context).await? {
             GetUserDataResponse::SuccessfulResponse(_) => {}
+            GetUserDataResponse::ForbiddenErrorResponse(err) => {
+                return Ok(UpdateUserDataResponse::ForbiddenErrorResponse(err));
+            }
             GetUserDataResponse::NotFoundErrorResponse(err) => {
                 return Ok(UpdateUserDataResponse::NotFoundErrorResponse(err));
             }
@@ -603,6 +606,9 @@ where
         // First check if the user data exists by trying to fetch it
         let existing_user_data = match self.get_user_data(id, context).await? {
             GetUserDataResponse::SuccessfulResponse(user_data) => user_data,
+            GetUserDataResponse::ForbiddenErrorResponse(err) => {
+                return Ok(DeleteUserDataResponse::ForbiddenErrorResponse(err));
+            }
             GetUserDataResponse::NotFoundErrorResponse(e) => {
                 return Ok(DeleteUserDataResponse::NotFoundErrorResponse(e));
             }

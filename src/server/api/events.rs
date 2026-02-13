@@ -329,6 +329,9 @@ where
         // First get the existing event to ensure it exists
         match self.get_event(id, context).await? {
             GetEventResponse::SuccessfulResponse(_) => {}
+            GetEventResponse::ForbiddenErrorResponse(err) => {
+                return Ok(UpdateEventResponse::ForbiddenErrorResponse(err));
+            }
             GetEventResponse::NotFoundErrorResponse(err) => {
                 return Ok(UpdateEventResponse::NotFoundErrorResponse(err));
             }
@@ -393,6 +396,9 @@ where
         // First get the event to ensure it exists and extract the EventModel
         let event = match self.get_event(id, context).await? {
             GetEventResponse::SuccessfulResponse(event) => event,
+            GetEventResponse::ForbiddenErrorResponse(err) => {
+                return Ok(DeleteEventResponse::ForbiddenErrorResponse(err));
+            }
             GetEventResponse::NotFoundErrorResponse(err) => {
                 return Ok(DeleteEventResponse::NotFoundErrorResponse(err));
             }

@@ -674,6 +674,18 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
+                                    CreateComputeNodeResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
                                     CreateComputeNodeResponse::NotFoundErrorResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(404)
                                             .expect("Unable to turn 404 into a StatusCode");
@@ -783,6 +795,18 @@ where
                                     CreateEventResponse::SuccessfulResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(200)
                                             .expect("Unable to turn 200 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    CreateEventResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
                                         response.headers_mut().insert(
                                                         CONTENT_TYPE,
                                                         HeaderValue::from_str("application/json")
@@ -910,6 +934,18 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
+                                    CreateFileResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
                                     CreateFileResponse::NotFoundErrorResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(404)
                                             .expect("Unable to turn 404 into a StatusCode");
@@ -1028,6 +1064,18 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
+                                    CreateJobResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
                                     CreateJobResponse::NotFoundErrorResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(404)
                                             .expect("Unable to turn 404 into a StatusCode");
@@ -1137,6 +1185,18 @@ where
                                     CreateJobsResponse::SuccessfulResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(200)
                                             .expect("Unable to turn 200 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    CreateJobsResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
                                         response.headers_mut().insert(
                                                         CONTENT_TYPE,
                                                         HeaderValue::from_str("application/json")
@@ -1279,6 +1339,30 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
+                                    CreateLocalSchedulerResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    CreateLocalSchedulerResponse::NotFoundErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(404)
+                                            .expect("Unable to turn 404 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
                                     CreateLocalSchedulerResponse::DefaultErrorResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(500)
                                             .expect("Unable to turn 500 into a StatusCode");
@@ -1382,6 +1466,18 @@ where
                                     ) => {
                                         *response.status_mut() = StatusCode::from_u16(200)
                                             .expect("Unable to turn 200 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    CreateResourceRequirementsResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
                                         response.headers_mut().insert(
                                                         CONTENT_TYPE,
                                                         HeaderValue::from_str("application/json")
@@ -1527,6 +1623,18 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
+                                    CreateResultResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
                                     CreateResultResponse::NotFoundErrorResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(404)
                                             .expect("Unable to turn 404 into a StatusCode");
@@ -1651,6 +1759,34 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
+                                    CreateScheduledComputeNodeResponse::ForbiddenErrorResponse(
+                                        body,
+                                    ) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    CreateScheduledComputeNodeResponse::NotFoundErrorResponse(
+                                        body,
+                                    ) => {
+                                        *response.status_mut() = StatusCode::from_u16(404)
+                                            .expect("Unable to turn 404 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
                                     CreateScheduledComputeNodeResponse::DefaultErrorResponse(
                                         body,
                                     ) => {
@@ -1753,6 +1889,18 @@ where
                                     CreateSlurmSchedulerResponse::SuccessfulResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(200)
                                             .expect("Unable to turn 200 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    CreateSlurmSchedulerResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
                                         response.headers_mut().insert(
                                                         CONTENT_TYPE,
                                                         HeaderValue::from_str("application/json")
@@ -1930,6 +2078,18 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
+                                    CreateUserDataResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
                                     CreateUserDataResponse::NotFoundErrorResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(404)
                                             .expect("Unable to turn 404 into a StatusCode");
@@ -2039,6 +2199,30 @@ where
                                     CreateWorkflowResponse::SuccessfulResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(200)
                                             .expect("Unable to turn 200 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    CreateWorkflowResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    CreateWorkflowResponse::NotFoundErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(404)
+                                            .expect("Unable to turn 404 into a StatusCode");
                                         response.headers_mut().insert(
                                                         CONTENT_TYPE,
                                                         HeaderValue::from_str("application/json")
@@ -2168,6 +2352,18 @@ where
                                     DeleteComputeNodesResponse::SuccessfulResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(200)
                                             .expect("Unable to turn 200 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    DeleteComputeNodesResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
                                         response.headers_mut().insert(
                                                         CONTENT_TYPE,
                                                         HeaderValue::from_str("application/json")
@@ -2318,6 +2514,18 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
+                                    DeleteEventsResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
                                     DeleteEventsResponse::NotFoundErrorResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(404)
                                             .expect("Unable to turn 404 into a StatusCode");
@@ -2450,6 +2658,18 @@ where
                                     DeleteFilesResponse::SuccessfulResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(200)
                                             .expect("Unable to turn 200 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    DeleteFilesResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
                                         response.headers_mut().insert(
                                                         CONTENT_TYPE,
                                                         HeaderValue::from_str("application/json")
@@ -2600,6 +2820,18 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
+                                    DeleteJobsResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
                                     DeleteJobsResponse::NotFoundErrorResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(404)
                                             .expect("Unable to turn 404 into a StatusCode");
@@ -2732,6 +2964,18 @@ where
                                     DeleteLocalSchedulersResponse::SuccessfulResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(200)
                                             .expect("Unable to turn 200 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    DeleteLocalSchedulersResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
                                         response.headers_mut().insert(
                                                         CONTENT_TYPE,
                                                         HeaderValue::from_str("application/json")
@@ -2888,6 +3132,18 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
+                                    DeleteAllResourceRequirementsResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
                                     DeleteAllResourceRequirementsResponse::NotFoundErrorResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(404)
                                             .expect("Unable to turn 404 into a StatusCode");
@@ -3022,6 +3278,18 @@ where
                                     DeleteResultsResponse::SuccessfulResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(200)
                                             .expect("Unable to turn 200 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    DeleteResultsResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
                                         response.headers_mut().insert(
                                                         CONTENT_TYPE,
                                                         HeaderValue::from_str("application/json")
@@ -3178,6 +3446,20 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
+                                    DeleteScheduledComputeNodesResponse::ForbiddenErrorResponse(
+                                        body,
+                                    ) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
                                     DeleteScheduledComputeNodesResponse::NotFoundErrorResponse(
                                         body,
                                     ) => {
@@ -3323,6 +3605,18 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
+                                    DeleteSlurmSchedulersResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
                                     DeleteSlurmSchedulersResponse::NotFoundErrorResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(404)
                                             .expect("Unable to turn 404 into a StatusCode");
@@ -3455,6 +3749,18 @@ where
                                     DeleteAllUserDataResponse::SuccessfulResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(200)
                                             .expect("Unable to turn 200 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    DeleteAllUserDataResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
                                         response.headers_mut().insert(
                                                         CONTENT_TYPE,
                                                         HeaderValue::from_str("application/json")
@@ -3775,9 +4081,33 @@ where
                                     *response.status_mut() = StatusCode::from_u16(200)
                                         .expect("Unable to turn 200 into a StatusCode");
                                     response.headers_mut().insert(
-                                                        CONTENT_TYPE,
-                                                        HeaderValue::from_str("application/json")
-                                                            .expect("Unable to create Content-Type header for application/json"));
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    // JSON Body
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                ListComputeNodesResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    // JSON Body
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                ListComputeNodesResponse::NotFoundErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(404)
+                                        .expect("Unable to turn 404 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
                                     // JSON Body
                                     let body = serde_json::to_string(&body)
                                         .expect("impossible to fail to serialize");
@@ -3985,9 +4315,33 @@ where
                                     *response.status_mut() = StatusCode::from_u16(200)
                                         .expect("Unable to turn 200 into a StatusCode");
                                     response.headers_mut().insert(
-                                                        CONTENT_TYPE,
-                                                        HeaderValue::from_str("application/json")
-                                                            .expect("Unable to create Content-Type header for application/json"));
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    // JSON Body
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                ListEventsResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    // JSON Body
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                ListEventsResponse::NotFoundErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(404)
+                                        .expect("Unable to turn 404 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
                                     // JSON Body
                                     let body = serde_json::to_string(&body)
                                         .expect("impossible to fail to serialize");
@@ -4233,9 +4587,33 @@ where
                                     *response.status_mut() = StatusCode::from_u16(200)
                                         .expect("Unable to turn 200 into a StatusCode");
                                     response.headers_mut().insert(
-                                                        CONTENT_TYPE,
-                                                        HeaderValue::from_str("application/json")
-                                                            .expect("Unable to create Content-Type header for application/json"));
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    // JSON Body
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                ListFilesResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    // JSON Body
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                ListFilesResponse::NotFoundErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(404)
+                                        .expect("Unable to turn 404 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
                                     // JSON Body
                                     let body = serde_json::to_string(&body)
                                         .expect("impossible to fail to serialize");
@@ -6521,9 +6899,33 @@ where
                                     *response.status_mut() = StatusCode::from_u16(200)
                                         .expect("Unable to turn 200 into a StatusCode");
                                     response.headers_mut().insert(
-                                                        CONTENT_TYPE,
-                                                        HeaderValue::from_str("application/json")
-                                                            .expect("Unable to create Content-Type header for application/json"));
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    // JSON Body
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                ListWorkflowsResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    // JSON Body
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                ListWorkflowsResponse::NotFoundErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(404)
+                                        .expect("Unable to turn 404 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
                                     // JSON Body
                                     let body = serde_json::to_string(&body)
                                         .expect("impossible to fail to serialize");
@@ -6807,6 +7209,18 @@ where
                                         .expect("impossible to fail to serialize");
                                     *response.body_mut() = Body::from(body);
                                 }
+                                GetComputeNodeResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    // JSON Body
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
                                 GetComputeNodeResponse::NotFoundErrorResponse(body) => {
                                     *response.status_mut() = StatusCode::from_u16(404)
                                         .expect("Unable to turn 404 into a StatusCode");
@@ -6899,6 +7313,18 @@ where
                                         .expect("impossible to fail to serialize");
                                     *response.body_mut() = Body::from(body);
                                 }
+                                GetEventResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    // JSON Body
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
                                 GetEventResponse::NotFoundErrorResponse(body) => {
                                     *response.status_mut() = StatusCode::from_u16(404)
                                         .expect("Unable to turn 404 into a StatusCode");
@@ -6986,6 +7412,18 @@ where
                                                         CONTENT_TYPE,
                                                         HeaderValue::from_str("application/json")
                                                             .expect("Unable to create Content-Type header for application/json"));
+                                    // JSON Body
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                GetFileResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
                                     // JSON Body
                                     let body = serde_json::to_string(&body)
                                         .expect("impossible to fail to serialize");
@@ -7185,6 +7623,18 @@ where
                                         .expect("impossible to fail to serialize");
                                     *response.body_mut() = Body::from(body);
                                 }
+                                GetLocalSchedulerResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    // JSON Body
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
                                 GetLocalSchedulerResponse::NotFoundErrorResponse(body) => {
                                     *response.status_mut() = StatusCode::from_u16(404)
                                         .expect("Unable to turn 404 into a StatusCode");
@@ -7304,6 +7754,18 @@ where
                                         .expect("impossible to fail to serialize");
                                     *response.body_mut() = Body::from(body);
                                 }
+                                GetReadyJobRequirementsResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    // JSON Body
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
                                 GetReadyJobRequirementsResponse::NotFoundErrorResponse(body) => {
                                     *response.status_mut() = StatusCode::from_u16(404)
                                         .expect("Unable to turn 404 into a StatusCode");
@@ -7390,6 +7852,18 @@ where
                                                         CONTENT_TYPE,
                                                         HeaderValue::from_str("application/json")
                                                             .expect("Unable to create Content-Type header for application/json"));
+                                    // JSON Body
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                GetResourceRequirementsResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
                                     // JSON Body
                                     let body = serde_json::to_string(&body)
                                         .expect("impossible to fail to serialize");
@@ -7487,6 +7961,18 @@ where
                                         .expect("impossible to fail to serialize");
                                     *response.body_mut() = Body::from(body);
                                 }
+                                GetResultResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    // JSON Body
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
                                 GetResultResponse::NotFoundErrorResponse(body) => {
                                     *response.status_mut() = StatusCode::from_u16(404)
                                         .expect("Unable to turn 404 into a StatusCode");
@@ -7572,9 +8058,21 @@ where
                                     *response.status_mut() = StatusCode::from_u16(200)
                                         .expect("Unable to turn 200 into a StatusCode");
                                     response.headers_mut().insert(
-                                                        CONTENT_TYPE,
-                                                        HeaderValue::from_str("application/json")
-                                                            .expect("Unable to create Content-Type header for application/json"));
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    // JSON Body
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                GetScheduledComputeNodeResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
                                     // JSON Body
                                     let body = serde_json::to_string(&body)
                                         .expect("impossible to fail to serialize");
@@ -7663,9 +8161,21 @@ where
                                     *response.status_mut() = StatusCode::from_u16(200)
                                         .expect("Unable to turn 200 into a StatusCode");
                                     response.headers_mut().insert(
-                                                        CONTENT_TYPE,
-                                                        HeaderValue::from_str("application/json")
-                                                            .expect("Unable to create Content-Type header for application/json"));
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    // JSON Body
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                GetSlurmSchedulerResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
                                     // JSON Body
                                     let body = serde_json::to_string(&body)
                                         .expect("impossible to fail to serialize");
@@ -7754,9 +8264,21 @@ where
                                     *response.status_mut() = StatusCode::from_u16(200)
                                         .expect("Unable to turn 200 into a StatusCode");
                                     response.headers_mut().insert(
-                                                        CONTENT_TYPE,
-                                                        HeaderValue::from_str("application/json")
-                                                            .expect("Unable to create Content-Type header for application/json"));
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    // JSON Body
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                GetUserDataResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
                                     // JSON Body
                                     let body = serde_json::to_string(&body)
                                         .expect("impossible to fail to serialize");
@@ -8252,6 +8774,30 @@ where
                                         .expect("impossible to fail to serialize");
                                     *response.body_mut() = Body::from(body);
                                 }
+                                IsWorkflowCompleteResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    // JSON Body
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                IsWorkflowCompleteResponse::NotFoundErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(404)
+                                        .expect("Unable to turn 404 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    // JSON Body
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
                                 IsWorkflowCompleteResponse::DefaultErrorResponse(body) => {
                                     *response.status_mut() = StatusCode::from_u16(500)
                                         .expect("Unable to turn 500 into a StatusCode");
@@ -8331,6 +8877,30 @@ where
                                         .expect("impossible to fail to serialize");
                                     *response.body_mut() = Body::from(body);
                                 }
+                                IsWorkflowUninitializedResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    // JSON Body
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                IsWorkflowUninitializedResponse::NotFoundErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(404)
+                                        .expect("Unable to turn 404 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    // JSON Body
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
                                 IsWorkflowUninitializedResponse::DefaultErrorResponse(body) => {
                                     *response.status_mut() = StatusCode::from_u16(500)
                                         .expect("Unable to turn 500 into a StatusCode");
@@ -8401,6 +8971,30 @@ where
                                 ListJobIdsResponse::SuccessfulResponse(body) => {
                                     *response.status_mut() = StatusCode::from_u16(200)
                                         .expect("Unable to turn 200 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    // JSON Body
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                ListJobIdsResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    // JSON Body
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                ListJobIdsResponse::NotFoundErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(404)
+                                        .expect("Unable to turn 404 into a StatusCode");
                                     response.headers_mut().insert(
                                                         CONTENT_TYPE,
                                                         HeaderValue::from_str("application/json")
@@ -8961,6 +9555,17 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
+                                    CreateWorkflowActionResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                            CONTENT_TYPE,
+                                                            HeaderValue::from_str("application/json")
+                                                                .expect("Unable to create Content-Type header for application/json"));
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
                                     CreateWorkflowActionResponse::NotFoundErrorResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(404)
                                             .expect("Unable to turn 404 into a StatusCode");
@@ -9063,9 +9668,20 @@ where
                                     *response.status_mut() = StatusCode::from_u16(200)
                                         .expect("Unable to turn 200 into a StatusCode");
                                     response.headers_mut().insert(
-                                                    CONTENT_TYPE,
-                                                    HeaderValue::from_str("application/json")
-                                                        .expect("Unable to create Content-Type header for application/json"));
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                GetWorkflowActionsResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
                                     let body = serde_json::to_string(&body)
                                         .expect("impossible to fail to serialize");
                                     *response.body_mut() = Body::from(body);
@@ -9164,9 +9780,20 @@ where
                                     *response.status_mut() = StatusCode::from_u16(200)
                                         .expect("Unable to turn 200 into a StatusCode");
                                     response.headers_mut().insert(
-                                                    CONTENT_TYPE,
-                                                    HeaderValue::from_str("application/json")
-                                                        .expect("Unable to create Content-Type header for application/json"));
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                GetPendingActionsResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
                                     let body = serde_json::to_string(&body)
                                         .expect("impossible to fail to serialize");
                                     *response.body_mut() = Body::from(body);
@@ -9290,6 +9917,17 @@ where
                                     ClaimActionResponse::SuccessfulResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(200)
                                             .expect("Unable to turn 200 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                            CONTENT_TYPE,
+                                                            HeaderValue::from_str("application/json")
+                                                                .expect("Unable to create Content-Type header for application/json"));
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    ClaimActionResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
                                         response.headers_mut().insert(
                                                             CONTENT_TYPE,
                                                             HeaderValue::from_str("application/json")
@@ -9425,6 +10063,17 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
+                                    CreateRemoteWorkersResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                            CONTENT_TYPE,
+                                                            HeaderValue::from_str("application/json")
+                                                                .expect("Unable to create Content-Type header for application/json"));
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
                                     CreateRemoteWorkersResponse::NotFoundErrorResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(404)
                                             .expect("Unable to turn 404 into a StatusCode");
@@ -9516,9 +10165,20 @@ where
                                     *response.status_mut() = StatusCode::from_u16(200)
                                         .expect("Unable to turn 200 into a StatusCode");
                                     response.headers_mut().insert(
-                                                    CONTENT_TYPE,
-                                                    HeaderValue::from_str("application/json")
-                                                        .expect("Unable to create Content-Type header for application/json"));
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                ListRemoteWorkersResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
                                     let body = serde_json::to_string(&body)
                                         .expect("impossible to fail to serialize");
                                     *response.body_mut() = Body::from(body);
@@ -9623,9 +10283,20 @@ where
                                     *response.status_mut() = StatusCode::from_u16(200)
                                         .expect("Unable to turn 200 into a StatusCode");
                                     response.headers_mut().insert(
-                                                    CONTENT_TYPE,
-                                                    HeaderValue::from_str("application/json")
-                                                        .expect("Unable to create Content-Type header for application/json"));
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                DeleteRemoteWorkerResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
                                     let body = serde_json::to_string(&body)
                                         .expect("impossible to fail to serialize");
                                     *response.body_mut() = Body::from(body);
@@ -9717,6 +10388,30 @@ where
                                         .expect("impossible to fail to serialize");
                                     *response.body_mut() = Body::from(body);
                                 }
+                                ListMissingUserDataResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    // JSON Body
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                ListMissingUserDataResponse::NotFoundErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(404)
+                                        .expect("Unable to turn 404 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    // JSON Body
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
                                 ListMissingUserDataResponse::DefaultErrorResponse(body) => {
                                     *response.status_mut() = StatusCode::from_u16(500)
                                         .expect("Unable to turn 500 into a StatusCode");
@@ -9791,6 +10486,30 @@ where
                                 ListRequiredExistingFilesResponse::SuccessfulResponse(body) => {
                                     *response.status_mut() = StatusCode::from_u16(200)
                                         .expect("Unable to turn 200 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    // JSON Body
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                ListRequiredExistingFilesResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    // JSON Body
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                ListRequiredExistingFilesResponse::NotFoundErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(404)
+                                        .expect("Unable to turn 404 into a StatusCode");
                                     response.headers_mut().insert(
                                                         CONTENT_TYPE,
                                                         HeaderValue::from_str("application/json")
@@ -9915,6 +10634,18 @@ where
                                     UpdateComputeNodeResponse::SuccessfulResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(200)
                                             .expect("Unable to turn 200 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    UpdateComputeNodeResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
                                         response.headers_mut().insert(
                                                         CONTENT_TYPE,
                                                         HeaderValue::from_str("application/json")
@@ -10067,6 +10798,18 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
+                                    UpdateEventResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
                                     UpdateEventResponse::NotFoundErrorResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(404)
                                             .expect("Unable to turn 404 into a StatusCode");
@@ -10200,6 +10943,18 @@ where
                                     UpdateFileResponse::SuccessfulResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(200)
                                             .expect("Unable to turn 200 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    UpdateFileResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
                                         response.headers_mut().insert(
                                                         CONTENT_TYPE,
                                                         HeaderValue::from_str("application/json")
@@ -10351,9 +11106,9 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
-                                    UpdateJobResponse::NotFoundErrorResponse(body) => {
-                                        *response.status_mut() = StatusCode::from_u16(404)
-                                            .expect("Unable to turn 404 into a StatusCode");
+                                    UpdateJobResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
                                         response.headers_mut().insert(
                                                         CONTENT_TYPE,
                                                         HeaderValue::from_str("application/json")
@@ -10363,13 +11118,14 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
-                                    UpdateJobResponse::ForbiddenErrorResponse(body) => {
-                                        *response.status_mut() = StatusCode::from_u16(403)
-                                            .expect("Unable to turn 403 into a StatusCode");
+                                    UpdateJobResponse::NotFoundErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(404)
+                                            .expect("Unable to turn 404 into a StatusCode");
                                         response.headers_mut().insert(
                                                         CONTENT_TYPE,
                                                         HeaderValue::from_str("application/json")
                                                             .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
                                         let body = serde_json::to_string(&body)
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
@@ -10510,6 +11266,18 @@ where
                                     UpdateLocalSchedulerResponse::SuccessfulResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(200)
                                             .expect("Unable to turn 200 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    UpdateLocalSchedulerResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
                                         response.headers_mut().insert(
                                                         CONTENT_TYPE,
                                                         HeaderValue::from_str("application/json")
@@ -10666,6 +11434,20 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
+                                    UpdateResourceRequirementsResponse::ForbiddenErrorResponse(
+                                        body,
+                                    ) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
                                     UpdateResourceRequirementsResponse::NotFoundErrorResponse(
                                         body,
                                     ) => {
@@ -10804,6 +11586,18 @@ where
                                     UpdateResultResponse::SuccessfulResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(200)
                                             .expect("Unable to turn 200 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    UpdateResultResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
                                         response.headers_mut().insert(
                                                         CONTENT_TYPE,
                                                         HeaderValue::from_str("application/json")
@@ -10959,9 +11753,19 @@ where
                                                     *response.body_mut() = Body::from(body);
 
                                                 },
-                                                UpdateScheduledComputeNodeResponse::NotFoundErrorResponse
-                                                    (body)
-                                                => {
+                                                                                                UpdateScheduledComputeNodeResponse::ForbiddenErrorResponse(body) => {
+                                                                                                    *response.status_mut() = StatusCode::from_u16(403)
+                                                                                                        .expect("Unable to turn 403 into a StatusCode");
+                                                                                                    response.headers_mut().insert(
+                                                                                                                    CONTENT_TYPE,
+                                                                                                                    HeaderValue::from_str("application/json")
+                                                                                                                        .expect("Unable to create Content-Type header for application/json"));
+                                                                                                    // JSON Body
+                                                                                                    let body = serde_json::to_string(&body)
+                                                                                                        .expect("impossible to fail to serialize");
+                                                                                                    *response.body_mut() = Body::from(body);
+                                                                                                }
+                                                                                                UpdateScheduledComputeNodeResponse::NotFoundErrorResponse(body) => {
                                                     *response.status_mut() = StatusCode::from_u16(404).expect("Unable to turn 404 into a StatusCode");
                                                     response.headers_mut().insert(
                                                         CONTENT_TYPE,
@@ -11106,6 +11910,18 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
+                                    UpdateSlurmSchedulerResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
                                     UpdateSlurmSchedulerResponse::NotFoundErrorResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(404)
                                             .expect("Unable to turn 404 into a StatusCode");
@@ -11240,6 +12056,18 @@ where
                                     UpdateUserDataResponse::SuccessfulResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(200)
                                             .expect("Unable to turn 200 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    UpdateUserDataResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
                                         response.headers_mut().insert(
                                                         CONTENT_TYPE,
                                                         HeaderValue::from_str("application/json")
@@ -11773,6 +12601,18 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
+                                    ClaimJobsBasedOnResources::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
                                     ClaimJobsBasedOnResources::NotFoundErrorResponse(
                                         body,
                                     ) => {
@@ -11947,6 +12787,30 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
+                                    ClaimNextJobsResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    ClaimNextJobsResponse::NotFoundErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(404)
+                                            .expect("Unable to turn 404 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
                                     ClaimNextJobsResponse::DefaultErrorResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(500)
                                             .expect("Unable to turn 500 into a StatusCode");
@@ -12099,6 +12963,20 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
+                                    ProcessChangedJobInputsResponse::ForbiddenErrorResponse(
+                                        body,
+                                    ) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
                                     ProcessChangedJobInputsResponse::DefaultErrorResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(500)
                                             .expect("Unable to turn 500 into a StatusCode");
@@ -12211,6 +13089,18 @@ where
                                     DeleteComputeNodeResponse::SuccessfulResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(200)
                                             .expect("Unable to turn 200 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    DeleteComputeNodeResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
                                         response.headers_mut().insert(
                                                         CONTENT_TYPE,
                                                         HeaderValue::from_str("application/json")
@@ -12353,6 +13243,18 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
+                                    DeleteEventResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
                                     DeleteEventResponse::NotFoundErrorResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(404)
                                             .expect("Unable to turn 404 into a StatusCode");
@@ -12476,6 +13378,18 @@ where
                                     DeleteFileResponse::SuccessfulResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(200)
                                             .expect("Unable to turn 200 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    DeleteFileResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
                                         response.headers_mut().insert(
                                                         CONTENT_TYPE,
                                                         HeaderValue::from_str("application/json")
@@ -12762,6 +13676,18 @@ where
                                                     *response.body_mut() = Body::from(body);
 
                                                 },
+                                                DeleteLocalSchedulerResponse::ForbiddenErrorResponse(body) => {
+                                                    *response.status_mut() = StatusCode::from_u16(403)
+                                                        .expect("Unable to turn 403 into a StatusCode");
+                                                    response.headers_mut().insert(
+                                                                    CONTENT_TYPE,
+                                                                    HeaderValue::from_str("application/json")
+                                                                        .expect("Unable to create Content-Type header for application/json"));
+                                                    // JSON Body
+                                                    let body = serde_json::to_string(&body)
+                                                        .expect("impossible to fail to serialize");
+                                                    *response.body_mut() = Body::from(body);
+                                                }
                                                 DeleteLocalSchedulerResponse::NotFoundErrorResponse(body) => {
                                                     *response.status_mut() = StatusCode::from_u16(404).expect("Unable to turn 404 into a StatusCode");
                                                     response.headers_mut().insert(
@@ -12887,6 +13813,20 @@ where
                                     ) => {
                                         *response.status_mut() = StatusCode::from_u16(200)
                                             .expect("Unable to turn 200 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    DeleteResourceRequirementsResponse::ForbiddenErrorResponse(
+                                        body,
+                                    ) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
                                         response.headers_mut().insert(
                                                         CONTENT_TYPE,
                                                         HeaderValue::from_str("application/json")
@@ -13033,6 +13973,18 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
+                                    DeleteResultResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
                                     DeleteResultResponse::NotFoundErrorResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(404)
                                             .expect("Unable to turn 404 into a StatusCode");
@@ -13159,6 +14111,20 @@ where
                                     ) => {
                                         *response.status_mut() = StatusCode::from_u16(200)
                                             .expect("Unable to turn 200 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    DeleteScheduledComputeNodeResponse::ForbiddenErrorResponse(
+                                        body,
+                                    ) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
                                         response.headers_mut().insert(
                                                         CONTENT_TYPE,
                                                         HeaderValue::from_str("application/json")
@@ -13305,6 +14271,18 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
+                                    DeleteSlurmSchedulerResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
                                     DeleteSlurmSchedulerResponse::NotFoundErrorResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(404)
                                             .expect("Unable to turn 404 into a StatusCode");
@@ -13429,6 +14407,18 @@ where
                                     DeleteUserDataResponse::SuccessfulResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(200)
                                             .expect("Unable to turn 200 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    DeleteUserDataResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
                                         response.headers_mut().insert(
                                                         CONTENT_TYPE,
                                                         HeaderValue::from_str("application/json")
@@ -13739,6 +14729,18 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
+                                    ResetJobStatusResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
                                     ResetJobStatusResponse::NotFoundErrorResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(404)
                                             .expect("Unable to turn 404 into a StatusCode");
@@ -13895,6 +14897,18 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
+                                    ResetWorkflowStatusResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
                                     ResetWorkflowStatusResponse::NotFoundErrorResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(404)
                                             .expect("Unable to turn 404 into a StatusCode");
@@ -14014,6 +15028,18 @@ where
                                                         CONTENT_TYPE,
                                                         HeaderValue::from_str("application/json")
                                                             .expect("Unable to create Content-Type header for application/json"));
+                                    // JSON Body
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                GetDotGraphResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
                                     // JSON Body
                                     let body = serde_json::to_string(&body)
                                         .expect("impossible to fail to serialize");
@@ -14172,6 +15198,18 @@ where
                                     ManageStatusChangeResponse::SuccessfulResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(200)
                                             .expect("Unable to turn 200 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    ManageStatusChangeResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
                                         response.headers_mut().insert(
                                                         CONTENT_TYPE,
                                                         HeaderValue::from_str("application/json")
@@ -14353,6 +15391,18 @@ where
                                     StartJobResponse::SuccessfulResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(200)
                                             .expect("Unable to turn 200 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    StartJobResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
                                         response.headers_mut().insert(
                                                         CONTENT_TYPE,
                                                         HeaderValue::from_str("application/json")
@@ -14553,6 +15603,18 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
+                                    CompleteJobResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
                                     CompleteJobResponse::NotFoundErrorResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(404)
                                             .expect("Unable to turn 404 into a StatusCode");
@@ -14700,6 +15762,18 @@ where
                                 RetryJobResponse::SuccessfulResponse(body) => {
                                     *response.status_mut() = StatusCode::from_u16(200)
                                         .expect("Unable to turn 200 into a StatusCode");
+                                    response.headers_mut().insert(
+                                    CONTENT_TYPE,
+                                    HeaderValue::from_str("application/json")
+                                        .expect("Unable to create Content-Type header for application/json"),
+                                );
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                RetryJobResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
                                     response.headers_mut().insert(
                                     CONTENT_TYPE,
                                     HeaderValue::from_str("application/json")
@@ -14965,6 +16039,14 @@ where
                                     CreateAccessGroupResponse::ForbiddenErrorResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(403)
                                             .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str("application/json").expect("Unable to create Content-Type header for application/json"));
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    CreateAccessGroupResponse::NotFoundErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(404)
+                                            .expect("Unable to turn 404 into a StatusCode");
                                         response.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str("application/json").expect("Unable to create Content-Type header for application/json"));
                                         let body = serde_json::to_string(&body)
                                             .expect("impossible to fail to serialize");
@@ -15886,7 +16968,21 @@ where
                                 ListWorkflowGroupsResponse::SuccessfulResponse(body) => {
                                     *response.status_mut() = StatusCode::from_u16(200)
                                         .expect("Unable to turn 200 into a StatusCode");
-                                    response.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str("application/json").expect("Unable to create Content-Type header for application/json"));
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                ListWorkflowGroupsResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
                                     let body = serde_json::to_string(&body)
                                         .expect("impossible to fail to serialize");
                                     *response.body_mut() = Body::from(body);
@@ -16175,7 +17271,21 @@ where
                                     CreateFailureHandlerResponse::SuccessfulResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(200)
                                             .expect("Unable to turn 200 into a StatusCode");
-                                        response.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str("application/json").expect("Unable to create Content-Type header for application/json"));
+                                        response.headers_mut().insert(
+                                                                                            CONTENT_TYPE,
+                                                                                            HeaderValue::from_str("application/json")
+                                                                                                .expect("Unable to create Content-Type header for application/json"));
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    CreateFailureHandlerResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                                                            CONTENT_TYPE,
+                                                                                            HeaderValue::from_str("application/json")
+                                                                                                .expect("Unable to create Content-Type header for application/json"));
                                         let body = serde_json::to_string(&body)
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
@@ -16253,7 +17363,21 @@ where
                                 GetFailureHandlerResponse::SuccessfulResponse(body) => {
                                     *response.status_mut() = StatusCode::from_u16(200)
                                         .expect("Unable to turn 200 into a StatusCode");
-                                    response.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str("application/json").expect("Unable to create Content-Type header for application/json"));
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                GetFailureHandlerResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
                                     let body = serde_json::to_string(&body)
                                         .expect("impossible to fail to serialize");
                                     *response.body_mut() = Body::from(body);
@@ -16338,7 +17462,21 @@ where
                                     DeleteFailureHandlerResponse::SuccessfulResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(200)
                                             .expect("Unable to turn 200 into a StatusCode");
-                                        response.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str("application/json").expect("Unable to create Content-Type header for application/json"));
+                                        response.headers_mut().insert(
+                                                                                            CONTENT_TYPE,
+                                                                                            HeaderValue::from_str("application/json")
+                                                                                                .expect("Unable to create Content-Type header for application/json"));
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    DeleteFailureHandlerResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                                                            CONTENT_TYPE,
+                                                                                            HeaderValue::from_str("application/json")
+                                                                                                .expect("Unable to create Content-Type header for application/json"));
                                         let body = serde_json::to_string(&body)
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
@@ -16458,7 +17596,32 @@ where
                                 ListFailureHandlersResponse::SuccessfulResponse(body) => {
                                     *response.status_mut() = StatusCode::from_u16(200)
                                         .expect("Unable to turn 200 into a StatusCode");
-                                    response.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str("application/json").expect("Unable to create Content-Type header for application/json"));
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                ListFailureHandlersResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                ListFailureHandlersResponse::NotFoundErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(404)
+                                        .expect("Unable to turn 404 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
                                     let body = serde_json::to_string(&body)
                                         .expect("impossible to fail to serialize");
                                     *response.body_mut() = Body::from(body);

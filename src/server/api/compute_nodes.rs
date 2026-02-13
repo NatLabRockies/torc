@@ -453,6 +453,9 @@ where
         // First get the existing compute node to ensure it exists
         match self.get_compute_node(id, context).await? {
             GetComputeNodeResponse::SuccessfulResponse(compute_node) => compute_node,
+            GetComputeNodeResponse::ForbiddenErrorResponse(err) => {
+                return Ok(UpdateComputeNodeResponse::ForbiddenErrorResponse(err));
+            }
             GetComputeNodeResponse::NotFoundErrorResponse(err) => {
                 return Ok(UpdateComputeNodeResponse::NotFoundErrorResponse(err));
             }
@@ -554,6 +557,9 @@ where
         // First get the compute node to ensure it exists and extract the ComputeNodeModel
         let compute_node = match self.get_compute_node(id, context).await? {
             GetComputeNodeResponse::SuccessfulResponse(compute_node) => compute_node,
+            GetComputeNodeResponse::ForbiddenErrorResponse(err) => {
+                return Ok(DeleteComputeNodeResponse::ForbiddenErrorResponse(err));
+            }
             GetComputeNodeResponse::NotFoundErrorResponse(err) => {
                 return Ok(DeleteComputeNodeResponse::NotFoundErrorResponse(err));
             }

@@ -72,7 +72,7 @@ impl AuthorizationService {
             return AccessCheckResult::Allowed;
         }
 
-        let user_name = match Self::get_username(auth) {
+        let username = match Self::get_username(auth) {
             Some(name) => name,
             None => {
                 // Anonymous users have no access when access control is enforced
@@ -84,7 +84,7 @@ impl AuthorizationService {
 
         debug!(
             "Checking workflow access for user '{}' on workflow {}",
-            user_name, workflow_id
+            username, workflow_id
         );
 
         // Check if workflow exists and get owner
@@ -109,9 +109,9 @@ impl AuthorizationService {
 
         // Check if user is the owner
         if let Some(owner) = workflow_owner
-            && owner == user_name
+            && owner == username
         {
-            debug!("User '{}' is owner of workflow {}", user_name, workflow_id);
+            debug!("User '{}' is owner of workflow {}", username, workflow_id);
             return AccessCheckResult::Allowed;
         }
 
@@ -127,7 +127,7 @@ impl AuthorizationService {
             "#,
         )
         .bind(workflow_id)
-        .bind(user_name)
+        .bind(username)
         .fetch_one(self.pool.as_ref())
         .await
         {
@@ -141,17 +141,17 @@ impl AuthorizationService {
         if has_group_access {
             debug!(
                 "User '{}' has group access to workflow {}",
-                user_name, workflow_id
+                username, workflow_id
             );
             AccessCheckResult::Allowed
         } else {
             debug!(
                 "User '{}' denied access to workflow {}",
-                user_name, workflow_id
+                username, workflow_id
             );
             AccessCheckResult::Denied(format!(
                 "User '{}' does not have access to workflow {}",
-                user_name, workflow_id
+                username, workflow_id
             ))
         }
     }
@@ -192,6 +192,63 @@ impl AuthorizationService {
         }
     }
 
+    /// Check if a user can access a resource that has a workflow_id column
+    pub async fn check_resource_access(
+        &self,
+        auth: &Option<Authorization>,
+        resource_id: i64,
+        table_name: &str,
+    ) -> AccessCheckResult {
+        if !self.enforce_access_control {
+            return AccessCheckResult::Allowed;
+        }
+
+        // Get the workflow ID for this resource
+        let sql = format!("SELECT workflow_id FROM {} WHERE id = $1", table_name);
+        let workflow_id: Option<i64> = match sqlx::query(&sql)
+            .bind(resource_id)
+            .fetch_optional(self.pool.as_ref())
+            .await
+        {
+            Ok(Some(row)) => Some(row.get("workflow_id")),
+            Ok(None) => {
+                return AccessCheckResult::NotFound(format!(
+                    "Resource not found in {} with ID: {}",
+                    table_name, resource_id
+                ));
+            }
+            Err(e) => {
+                warn!(
+                    "Database error getting workflow for {} ID {}: {}",
+                    table_name, resource_id, e
+                );
+                return AccessCheckResult::Denied(format!("Database error: {}", e));
+            }
+        };
+
+        match workflow_id {
+            Some(wf_id) => self.check_workflow_access(auth, wf_id).await,
+            None => AccessCheckResult::NotFound(format!(
+                "Resource not found in {} with ID: {}",
+                table_name, resource_id
+            )),
+        }
+    }
+
+    /// Check if a user can access a workflow status
+    pub async fn check_workflow_status_access(
+        &self,
+        auth: &Option<Authorization>,
+        status_id: i64,
+    ) -> AccessCheckResult {
+        if !self.enforce_access_control {
+            return AccessCheckResult::Allowed;
+        }
+
+        // workflow_status ID is the same as workflow ID
+        self.check_workflow_access(auth, status_id).await
+    }
+
     /// Get all workflow IDs that a user can access
     /// This is useful for filtering list queries
     pub async fn get_accessible_workflow_ids(
@@ -203,7 +260,7 @@ impl AuthorizationService {
             return Ok(None);
         }
 
-        let user_name = match Self::get_username(auth) {
+        let username = match Self::get_username(auth) {
             Some(name) => name,
             None => {
                 // Anonymous users have no access
@@ -224,7 +281,7 @@ impl AuthorizationService {
             WHERE ugm.user_name = $1
             "#,
         )
-        .bind(user_name)
+        .bind(username)
         .fetch_all(self.pool.as_ref())
         .await
         {
@@ -274,7 +331,7 @@ impl AuthorizationService {
             return AccessCheckResult::Allowed;
         }
 
-        let user_name = match Self::get_username(auth) {
+        let username = match Self::get_username(auth) {
             Some(name) => name,
             None => {
                 return AccessCheckResult::Denied(
@@ -293,7 +350,7 @@ impl AuthorizationService {
             ) as is_admin
             "#,
         )
-        .bind(user_name)
+        .bind(username)
         .fetch_one(self.pool.as_ref())
         .await
         {
@@ -305,14 +362,11 @@ impl AuthorizationService {
         };
 
         if is_admin {
-            debug!("User '{}' is a system administrator", user_name);
+            debug!("User '{}' is a system administrator", username);
             AccessCheckResult::Allowed
         } else {
-            debug!("User '{}' is not a system administrator", user_name);
-            AccessCheckResult::Denied(format!(
-                "User '{}' is not a system administrator",
-                user_name
-            ))
+            debug!("User '{}' is not a system administrator", username);
+            AccessCheckResult::Denied(format!("User '{}' is not a system administrator", username))
         }
     }
 
@@ -332,7 +386,7 @@ impl AuthorizationService {
             return AccessCheckResult::Allowed;
         }
 
-        let user_name = match Self::get_username(auth) {
+        let username = match Self::get_username(auth) {
             Some(name) => name,
             None => {
                 return AccessCheckResult::Denied(
@@ -383,7 +437,7 @@ impl AuthorizationService {
             ) as is_admin
             "#,
         )
-        .bind(user_name)
+        .bind(username)
         .bind(group_id)
         .fetch_one(self.pool.as_ref())
         .await
@@ -396,13 +450,13 @@ impl AuthorizationService {
         };
 
         if is_group_admin {
-            debug!("User '{}' is an admin of group {}", user_name, group_id);
+            debug!("User '{}' is an admin of group {}", username, group_id);
             AccessCheckResult::Allowed
         } else {
-            debug!("User '{}' is not an admin of group {}", user_name, group_id);
+            debug!("User '{}' is not an admin of group {}", username, group_id);
             AccessCheckResult::Denied(format!(
                 "User '{}' is not an admin of group {}",
-                user_name, group_id
+                username, group_id
             ))
         }
     }
@@ -422,7 +476,7 @@ impl AuthorizationService {
             return AccessCheckResult::Allowed;
         }
 
-        let user_name = match Self::get_username(auth) {
+        let username = match Self::get_username(auth) {
             Some(name) => name,
             None => {
                 return AccessCheckResult::Denied(
@@ -452,11 +506,11 @@ impl AuthorizationService {
             };
 
         if let Some(owner) = workflow_owner
-            && owner == user_name
+            && owner == username
         {
             debug!(
                 "User '{}' is owner of workflow {}, allowed to manage group access",
-                user_name, workflow_id
+                username, workflow_id
             );
             return AccessCheckResult::Allowed;
         }

@@ -448,6 +448,9 @@ where
         // First check if the file exists
         match self.get_file(id, context).await? {
             GetFileResponse::SuccessfulResponse(_) => {}
+            GetFileResponse::ForbiddenErrorResponse(err) => {
+                return Ok(UpdateFileResponse::ForbiddenErrorResponse(err));
+            }
             GetFileResponse::NotFoundErrorResponse(err) => {
                 return Ok(UpdateFileResponse::NotFoundErrorResponse(err));
             }
@@ -517,6 +520,9 @@ where
         // First get the file to ensure it exists and extract the FileModel
         let file = match self.get_file(id, context).await? {
             GetFileResponse::SuccessfulResponse(file) => file,
+            GetFileResponse::ForbiddenErrorResponse(err) => {
+                return Ok(DeleteFileResponse::ForbiddenErrorResponse(err));
+            }
             GetFileResponse::NotFoundErrorResponse(err) => {
                 return Ok(DeleteFileResponse::NotFoundErrorResponse(err));
             }

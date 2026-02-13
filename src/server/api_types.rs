@@ -38,6 +38,8 @@ pub const API_VERSION: &str = "0.8.0";
 pub enum CreateComputeNodeResponse {
     /// Successful response
     SuccessfulResponse(models::ComputeNodeModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -49,6 +51,8 @@ pub enum CreateComputeNodeResponse {
 pub enum CreateEventResponse {
     /// Successful response
     SuccessfulResponse(models::EventModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -60,6 +64,8 @@ pub enum CreateEventResponse {
 pub enum CreateFileResponse {
     /// Successful response
     SuccessfulResponse(models::FileModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -71,6 +77,8 @@ pub enum CreateFileResponse {
 pub enum CreateJobResponse {
     /// Successful response
     SuccessfulResponse(models::JobModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -82,6 +90,8 @@ pub enum CreateJobResponse {
 pub enum CreateJobsResponse {
     /// Successful response
     SuccessfulResponse(models::CreateJobsResponse),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Workflow not found
     NotFoundErrorResponse(models::ErrorResponse),
     /// Unprocessable content (e.g., jobs have different workflow_ids)
@@ -95,6 +105,10 @@ pub enum CreateJobsResponse {
 pub enum CreateLocalSchedulerResponse {
     /// Successful response
     SuccessfulResponse(models::LocalSchedulerModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }
@@ -104,6 +118,8 @@ pub enum CreateLocalSchedulerResponse {
 pub enum CreateFailureHandlerResponse {
     /// Successful response
     SuccessfulResponse(models::FailureHandlerModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -115,6 +131,8 @@ pub enum CreateFailureHandlerResponse {
 pub enum GetFailureHandlerResponse {
     /// Successful response
     SuccessfulResponse(models::FailureHandlerModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -126,6 +144,10 @@ pub enum GetFailureHandlerResponse {
 pub enum ListFailureHandlersResponse {
     /// Successful response
     SuccessfulResponse(models::ListFailureHandlersResponse),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }
@@ -135,6 +157,8 @@ pub enum ListFailureHandlersResponse {
 pub enum DeleteFailureHandlerResponse {
     /// Successful response
     SuccessfulResponse(serde_json::Value),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -146,6 +170,8 @@ pub enum DeleteFailureHandlerResponse {
 pub enum RetryJobResponse {
     /// Successful response
     SuccessfulResponse(models::JobModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Unprocessable content error response
@@ -159,6 +185,8 @@ pub enum RetryJobResponse {
 pub enum CreateResourceRequirementsResponse {
     /// Successful response
     SuccessfulResponse(models::ResourceRequirementsModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Unprocessable content error response
@@ -172,6 +200,8 @@ pub enum CreateResourceRequirementsResponse {
 pub enum CreateResultResponse {
     /// Successful response
     SuccessfulResponse(models::ResultModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -183,6 +213,10 @@ pub enum CreateResultResponse {
 pub enum CreateScheduledComputeNodeResponse {
     /// Successful response
     SuccessfulResponse(models::ScheduledComputeNodesModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }
@@ -192,6 +226,8 @@ pub enum CreateScheduledComputeNodeResponse {
 pub enum CreateSlurmSchedulerResponse {
     /// Response from posting an instance of Slurm compute node configuration.
     SuccessfulResponse(models::SlurmSchedulerModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -203,6 +239,8 @@ pub enum CreateSlurmSchedulerResponse {
 pub enum CreateUserDataResponse {
     /// Successful response
     SuccessfulResponse(models::UserDataModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -214,6 +252,10 @@ pub enum CreateUserDataResponse {
 pub enum CreateWorkflowResponse {
     /// Successful response
     SuccessfulResponse(models::WorkflowModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }
@@ -223,6 +265,8 @@ pub enum CreateWorkflowResponse {
 pub enum CreateWorkflowActionResponse {
     /// Successful response
     SuccessfulResponse(models::WorkflowActionModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Unprocessable content error response
@@ -236,6 +280,8 @@ pub enum CreateWorkflowActionResponse {
 pub enum GetWorkflowActionsResponse {
     /// Successful response
     SuccessfulResponse(Vec<models::WorkflowActionModel>),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -247,6 +293,8 @@ pub enum GetWorkflowActionsResponse {
 pub enum GetPendingActionsResponse {
     /// Successful response
     SuccessfulResponse(Vec<models::WorkflowActionModel>),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -258,6 +306,8 @@ pub enum GetPendingActionsResponse {
 pub enum ClaimActionResponse {
     /// Successful response - action was claimed
     SuccessfulResponse(serde_json::Value),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Conflict - action already claimed
@@ -271,6 +321,8 @@ pub enum ClaimActionResponse {
 pub enum DeleteComputeNodesResponse {
     /// Successful response
     SuccessfulResponse(serde_json::Value),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -282,6 +334,8 @@ pub enum DeleteComputeNodesResponse {
 pub enum DeleteEventsResponse {
     /// Successful response
     SuccessfulResponse(serde_json::Value),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -293,6 +347,8 @@ pub enum DeleteEventsResponse {
 pub enum DeleteFilesResponse {
     /// Successful response
     SuccessfulResponse(serde_json::Value),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -304,6 +360,8 @@ pub enum DeleteFilesResponse {
 pub enum DeleteJobsResponse {
     /// Successful response
     SuccessfulResponse(serde_json::Value),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -315,6 +373,8 @@ pub enum DeleteJobsResponse {
 pub enum DeleteLocalSchedulersResponse {
     /// Successful response
     SuccessfulResponse(serde_json::Value),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -326,6 +386,8 @@ pub enum DeleteLocalSchedulersResponse {
 pub enum DeleteAllResourceRequirementsResponse {
     /// Successful response
     SuccessfulResponse(serde_json::Value),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -337,6 +399,8 @@ pub enum DeleteAllResourceRequirementsResponse {
 pub enum DeleteResultsResponse {
     /// Successful response
     SuccessfulResponse(serde_json::Value),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -348,6 +412,8 @@ pub enum DeleteResultsResponse {
 pub enum DeleteScheduledComputeNodesResponse {
     /// Successful response
     SuccessfulResponse(serde_json::Value),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -359,6 +425,8 @@ pub enum DeleteScheduledComputeNodesResponse {
 pub enum DeleteSlurmSchedulersResponse {
     /// message
     Message(serde_json::Value),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -370,6 +438,8 @@ pub enum DeleteSlurmSchedulersResponse {
 pub enum DeleteAllUserDataResponse {
     /// Successful response
     SuccessfulResponse(serde_json::Value),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -392,6 +462,10 @@ pub enum GetVersionResponse {
 pub enum ListComputeNodesResponse {
     /// Successful response
     SuccessfulResponse(models::ListComputeNodesResponse),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }
@@ -401,6 +475,10 @@ pub enum ListComputeNodesResponse {
 pub enum ListEventsResponse {
     /// Successful response
     SuccessfulResponse(models::ListEventsResponse),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }
@@ -410,6 +488,10 @@ pub enum ListEventsResponse {
 pub enum ListFilesResponse {
     /// Successful response
     SuccessfulResponse(models::ListFilesResponse),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }
@@ -549,6 +631,10 @@ pub enum ListUserDataResponse {
 pub enum ListWorkflowsResponse {
     /// Successful response
     SuccessfulResponse(models::ListWorkflowsResponse),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }
@@ -580,6 +666,8 @@ pub enum CancelWorkflowResponse {
 pub enum GetComputeNodeResponse {
     /// Successful response
     SuccessfulResponse(models::ComputeNodeModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -591,6 +679,8 @@ pub enum GetComputeNodeResponse {
 pub enum GetEventResponse {
     /// Successful response
     SuccessfulResponse(models::EventModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -602,6 +692,8 @@ pub enum GetEventResponse {
 pub enum GetFileResponse {
     /// Successful response
     SuccessfulResponse(models::FileModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -626,6 +718,8 @@ pub enum GetJobResponse {
 pub enum GetLocalSchedulerResponse {
     /// Successful response
     SuccessfulResponse(models::LocalSchedulerModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -637,6 +731,8 @@ pub enum GetLocalSchedulerResponse {
 pub enum GetReadyJobRequirementsResponse {
     /// Successful response
     SuccessfulResponse(models::GetReadyJobRequirementsResponse),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -648,6 +744,8 @@ pub enum GetReadyJobRequirementsResponse {
 pub enum GetResourceRequirementsResponse {
     /// Successful response
     SuccessfulResponse(models::ResourceRequirementsModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -659,6 +757,8 @@ pub enum GetResourceRequirementsResponse {
 pub enum GetResultResponse {
     /// Successful response
     SuccessfulResponse(models::ResultModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -670,6 +770,8 @@ pub enum GetResultResponse {
 pub enum GetScheduledComputeNodeResponse {
     /// HTTP 200 OK.
     HTTP(models::ScheduledComputeNodesModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -681,6 +783,8 @@ pub enum GetScheduledComputeNodeResponse {
 pub enum GetSlurmSchedulerResponse {
     /// Successful response
     SuccessfulResponse(models::SlurmSchedulerModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -692,6 +796,8 @@ pub enum GetSlurmSchedulerResponse {
 pub enum GetUserDataResponse {
     /// Successful response
     SuccessfulResponse(models::UserDataModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -742,6 +848,10 @@ pub enum InitializeJobsResponse {
 pub enum IsWorkflowCompleteResponse {
     /// Successful response
     SuccessfulResponse(models::IsCompleteResponse),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }
@@ -751,6 +861,10 @@ pub enum IsWorkflowCompleteResponse {
 pub enum IsWorkflowUninitializedResponse {
     /// Successful response
     SuccessfulResponse(serde_json::Value),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }
@@ -760,6 +874,10 @@ pub enum IsWorkflowUninitializedResponse {
 pub enum ListJobIdsResponse {
     /// Successful response
     SuccessfulResponse(models::ListJobIdsResponse),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }
@@ -769,6 +887,10 @@ pub enum ListJobIdsResponse {
 pub enum ListMissingUserDataResponse {
     /// Successful response
     SuccessfulResponse(models::ListMissingUserDataResponse),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }
@@ -778,6 +900,10 @@ pub enum ListMissingUserDataResponse {
 pub enum ListRequiredExistingFilesResponse {
     /// Successful response
     SuccessfulResponse(models::ListRequiredExistingFilesResponse),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }
@@ -787,6 +913,8 @@ pub enum ListRequiredExistingFilesResponse {
 pub enum UpdateComputeNodeResponse {
     /// Successful response
     SuccessfulResponse(models::ComputeNodeModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -798,6 +926,8 @@ pub enum UpdateComputeNodeResponse {
 pub enum UpdateEventResponse {
     /// Successful response
     SuccessfulResponse(models::EventModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -809,6 +939,8 @@ pub enum UpdateEventResponse {
 pub enum UpdateFileResponse {
     /// Successful response
     SuccessfulResponse(models::FileModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -835,6 +967,8 @@ pub enum UpdateJobResponse {
 pub enum UpdateLocalSchedulerResponse {
     /// Successful response
     SuccessfulResponse(models::LocalSchedulerModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -846,6 +980,8 @@ pub enum UpdateLocalSchedulerResponse {
 pub enum UpdateResourceRequirementsResponse {
     /// Successful response
     SuccessfulResponse(models::ResourceRequirementsModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -857,6 +993,8 @@ pub enum UpdateResourceRequirementsResponse {
 pub enum UpdateResultResponse {
     /// Successful response
     SuccessfulResponse(models::ResultModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -868,6 +1006,8 @@ pub enum UpdateResultResponse {
 pub enum UpdateScheduledComputeNodeResponse {
     /// scheduled compute node updated in the table.
     ScheduledComputeNodeUpdatedInTheTable(models::ScheduledComputeNodesModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -879,6 +1019,8 @@ pub enum UpdateScheduledComputeNodeResponse {
 pub enum UpdateSlurmSchedulerResponse {
     /// Successful response
     SuccessfulResponse(models::SlurmSchedulerModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -890,6 +1032,8 @@ pub enum UpdateSlurmSchedulerResponse {
 pub enum UpdateUserDataResponse {
     /// Successful response
     SuccessfulResponse(models::UserDataModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -927,6 +1071,8 @@ pub enum UpdateWorkflowStatusResponse {
 pub enum ClaimJobsBasedOnResources {
     /// Successful response
     SuccessfulResponse(models::ClaimJobsBasedOnResources),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Unprocessable content error response
@@ -940,6 +1086,10 @@ pub enum ClaimJobsBasedOnResources {
 pub enum ClaimNextJobsResponse {
     /// Successful response
     SuccessfulResponse(models::ClaimNextJobsResponse),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }
@@ -949,6 +1099,8 @@ pub enum ClaimNextJobsResponse {
 pub enum ProcessChangedJobInputsResponse {
     /// Successful response
     SuccessfulResponse(models::ProcessChangedJobInputsResponse),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }
@@ -958,6 +1110,8 @@ pub enum ProcessChangedJobInputsResponse {
 pub enum DeleteComputeNodeResponse {
     /// Successful response
     SuccessfulResponse(models::ComputeNodeModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -969,6 +1123,8 @@ pub enum DeleteComputeNodeResponse {
 pub enum DeleteEventResponse {
     /// Successful response
     SuccessfulResponse(models::EventModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -980,6 +1136,8 @@ pub enum DeleteEventResponse {
 pub enum DeleteFileResponse {
     /// Successful response
     SuccessfulResponse(models::FileModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -1004,6 +1162,8 @@ pub enum DeleteJobResponse {
 pub enum DeleteLocalSchedulerResponse {
     /// local compute node configuration stored in the table.
     LocalComputeNodeConfigurationStoredInTheTable(models::LocalSchedulerModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -1015,6 +1175,8 @@ pub enum DeleteLocalSchedulerResponse {
 pub enum DeleteResourceRequirementsResponse {
     /// Successful response
     SuccessfulResponse(models::ResourceRequirementsModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -1026,6 +1188,8 @@ pub enum DeleteResourceRequirementsResponse {
 pub enum DeleteResultResponse {
     /// Successful response
     SuccessfulResponse(models::ResultModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -1037,6 +1201,8 @@ pub enum DeleteResultResponse {
 pub enum DeleteScheduledComputeNodeResponse {
     /// Successful response
     SuccessfulResponse(models::ScheduledComputeNodesModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -1048,6 +1214,8 @@ pub enum DeleteScheduledComputeNodeResponse {
 pub enum CreateRemoteWorkersResponse {
     /// Successful response
     SuccessfulResponse(Vec<models::RemoteWorkerModel>),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response (workflow not found)
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -1059,6 +1227,8 @@ pub enum CreateRemoteWorkersResponse {
 pub enum ListRemoteWorkersResponse {
     /// Successful response
     SuccessfulResponse(Vec<models::RemoteWorkerModel>),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response (workflow not found)
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -1070,6 +1240,8 @@ pub enum ListRemoteWorkersResponse {
 pub enum DeleteRemoteWorkerResponse {
     /// Successful response
     SuccessfulResponse(models::RemoteWorkerModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response (workflow or worker not found)
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -1081,6 +1253,8 @@ pub enum DeleteRemoteWorkerResponse {
 pub enum DeleteSlurmSchedulerResponse {
     /// Successful response
     SuccessfulResponse(models::SlurmSchedulerModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -1092,6 +1266,8 @@ pub enum DeleteSlurmSchedulerResponse {
 pub enum DeleteUserDataResponse {
     /// Successful response
     SuccessfulResponse(models::UserDataModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -1116,6 +1292,8 @@ pub enum DeleteWorkflowResponse {
 pub enum ResetJobStatusResponse {
     /// Successful response
     SuccessfulResponse(models::ResetJobStatusResponse),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -1127,6 +1305,8 @@ pub enum ResetJobStatusResponse {
 pub enum ResetWorkflowStatusResponse {
     /// Successful response
     SuccessfulResponse(serde_json::Value),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Unprocessable content error response
@@ -1140,6 +1320,8 @@ pub enum ResetWorkflowStatusResponse {
 pub enum GetDotGraphResponse {
     /// Successful response
     SuccessfulResponse(models::GetDotGraphResponse),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -1151,6 +1333,8 @@ pub enum GetDotGraphResponse {
 pub enum ManageStatusChangeResponse {
     /// Successful response
     SuccessfulResponse(models::JobModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Unprocessable content error response
@@ -1164,6 +1348,8 @@ pub enum ManageStatusChangeResponse {
 pub enum StartJobResponse {
     /// Successful response
     SuccessfulResponse(models::JobModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Unprocessable content error response
@@ -1177,6 +1363,8 @@ pub enum StartJobResponse {
 pub enum CompleteJobResponse {
     /// Successful response
     SuccessfulResponse(models::JobModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Unprocessable content error response
@@ -1192,6 +1380,8 @@ pub enum CreateAccessGroupResponse {
     SuccessfulResponse(models::AccessGroupModel),
     /// Forbidden error response
     ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
     /// Conflict error response - group already exists
     ConflictErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -1312,6 +1502,8 @@ pub enum RemoveWorkflowFromGroupResponse {
 pub enum ListWorkflowGroupsResponse {
     /// Successful response
     SuccessfulResponse(models::ListAccessGroupsResponse),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response - workflow not found
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
