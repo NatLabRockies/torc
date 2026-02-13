@@ -18,6 +18,8 @@ pub enum AccessCheckResult {
     Denied(String),
     /// Resource was not found
     NotFound(String),
+    /// An internal error occurred during the check
+    InternalError(String),
 }
 
 impl AccessCheckResult {
@@ -73,7 +75,29 @@ impl AuthorizationService {
         auth: &Option<Authorization>,
         workflow_id: i64,
     ) -> AccessCheckResult {
-        // If access control is not enforced, allow everything
+        // 1. Check if workflow exists and get owner (always do this to ensure 404s are accurate)
+        let workflow_owner: String = match sqlx::query("SELECT user FROM workflow WHERE id = $1")
+            .bind(workflow_id)
+            .fetch_optional(self.pool.as_ref())
+            .await
+        {
+            Ok(Some(row)) => row.get("user"),
+            Ok(None) => {
+                return AccessCheckResult::NotFound(format!(
+                    "Workflow not found with ID: {}",
+                    workflow_id
+                ));
+            }
+            Err(e) => {
+                warn!(
+                    "Database error checking workflow {} existence: {}",
+                    workflow_id, e
+                );
+                return AccessCheckResult::InternalError("Database error".to_string());
+            }
+        };
+
+        // 2. If access control is not enforced, allow everything else
         if !self.enforce_access_control {
             return AccessCheckResult::Allowed;
         }
@@ -93,35 +117,13 @@ impl AuthorizationService {
             username, workflow_id
         );
 
-        // Check if workflow exists and get owner
-        let workflow_owner: Option<String> =
-            match sqlx::query("SELECT user FROM workflow WHERE id = $1")
-                .bind(workflow_id)
-                .fetch_optional(self.pool.as_ref())
-                .await
-            {
-                Ok(Some(row)) => Some(row.get("user")),
-                Ok(None) => {
-                    return AccessCheckResult::NotFound(format!(
-                        "Workflow not found with ID: {}",
-                        workflow_id
-                    ));
-                }
-                Err(e) => {
-                    warn!("Database error checking workflow owner: {}", e);
-                    return AccessCheckResult::Denied(format!("Database error: {}", e));
-                }
-            };
-
-        // Check if user is the owner
-        if let Some(owner) = workflow_owner
-            && owner == username
-        {
+        // 3. Check if user is the owner
+        if workflow_owner == username {
             debug!("User '{}' is owner of workflow {}", username, workflow_id);
             return AccessCheckResult::Allowed;
         }
 
-        // Check if user has group-based access
+        // 4. Check if user has group-based access
         let has_group_access: bool = match sqlx::query(
             r#"
             SELECT EXISTS(
@@ -140,7 +142,7 @@ impl AuthorizationService {
             Ok(row) => row.get::<i32, _>("has_access") == 1,
             Err(e) => {
                 warn!("Database error checking group access: {}", e);
-                return AccessCheckResult::Denied(format!("Database error: {}", e));
+                return AccessCheckResult::InternalError("Database error".to_string());
             }
         };
 
@@ -242,7 +244,7 @@ impl AuthorizationService {
                     "Database error getting workflow for {} ID {}: {}",
                     table_name, resource_id, e
                 );
-                return AccessCheckResult::Denied("Database error".to_string());
+                return AccessCheckResult::InternalError("Database error".to_string());
             }
         };
 
@@ -377,7 +379,7 @@ impl AuthorizationService {
             Ok(row) => row.get::<i32, _>("is_admin") == 1,
             Err(e) => {
                 warn!("Database error checking admin status: {}", e);
-                return AccessCheckResult::Denied(format!("Database error: {}", e));
+                return AccessCheckResult::InternalError("Database error".to_string());
             }
         };
 
@@ -521,7 +523,7 @@ impl AuthorizationService {
                 }
                 Err(e) => {
                     warn!("Database error checking workflow owner: {}", e);
-                    return AccessCheckResult::Denied(format!("Database error: {}", e));
+                    return AccessCheckResult::InternalError("Database error".to_string());
                 }
             };
 

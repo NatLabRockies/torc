@@ -97,6 +97,9 @@ macro_rules! authorize_workflow {
                     reason
                 )));
             }
+            AccessCheckResult::InternalError(reason) => {
+                return Err(ApiError(reason));
+            }
         }
     };
 }
@@ -118,6 +121,9 @@ macro_rules! authorize_resource {
                     reason
                 )));
             }
+            AccessCheckResult::InternalError(reason) => {
+                return Err(ApiError(reason));
+            }
         }
     };
 }
@@ -135,6 +141,9 @@ macro_rules! authorize_job {
                 return Ok($response_enum::NotFoundErrorResponse(not_found_error!(
                     reason
                 )));
+            }
+            AccessCheckResult::InternalError(reason) => {
+                return Err(ApiError(reason));
             }
         }
     };
@@ -3766,29 +3775,7 @@ where
         body: models::ComputeNodeModel,
         context: &C,
     ) -> Result<UpdateComputeNodeResponse, ApiError> {
-        // Check access control
-        match self
-            .check_resource_access_for_context(id, "compute_node", context)
-            .await
-        {
-            AccessCheckResult::Allowed => {}
-            AccessCheckResult::Denied(reason) => {
-                return Ok(UpdateComputeNodeResponse::ForbiddenErrorResponse(
-                    models::ErrorResponse::new(serde_json::json!({
-                        "error": "Forbidden",
-                        "message": reason
-                    })),
-                ));
-            }
-            AccessCheckResult::NotFound(reason) => {
-                return Ok(UpdateComputeNodeResponse::NotFoundErrorResponse(
-                    models::ErrorResponse::new(serde_json::json!({
-                        "error": "NotFound",
-                        "message": reason
-                    })),
-                ));
-            }
-        }
+        authorize_resource!(self, id, "compute_node", context, UpdateComputeNodeResponse);
 
         let result = self
             .compute_nodes_api
@@ -3824,29 +3811,7 @@ where
         body: serde_json::Value,
         context: &C,
     ) -> Result<UpdateEventResponse, ApiError> {
-        // Check access control
-        match self
-            .check_resource_access_for_context(id, "event", context)
-            .await
-        {
-            AccessCheckResult::Allowed => {}
-            AccessCheckResult::Denied(reason) => {
-                return Ok(UpdateEventResponse::ForbiddenErrorResponse(
-                    models::ErrorResponse::new(serde_json::json!({
-                        "error": "Forbidden",
-                        "message": reason
-                    })),
-                ));
-            }
-            AccessCheckResult::NotFound(reason) => {
-                return Ok(UpdateEventResponse::NotFoundErrorResponse(
-                    models::ErrorResponse::new(serde_json::json!({
-                        "error": "NotFound",
-                        "message": reason
-                    })),
-                ));
-            }
-        }
+        authorize_resource!(self, id, "event", context, UpdateEventResponse);
 
         self.events_api.update_event(id, body, context).await
     }
@@ -4084,6 +4049,9 @@ where
                     })),
                 ));
             }
+            AccessCheckResult::InternalError(reason) => {
+                return Err(ApiError(reason));
+            }
         }
 
         let status = match self.get_workflow_status(id, context).await {
@@ -4155,6 +4123,9 @@ where
                         "message": reason
                     })),
                 ));
+            }
+            AccessCheckResult::InternalError(reason) => {
+                return Err(ApiError(reason));
             }
         }
 
@@ -4626,6 +4597,9 @@ where
                     })),
                 ));
             }
+            AccessCheckResult::InternalError(reason) => {
+                return Err(ApiError(reason));
+            }
         }
 
         let failed_only_value = failed_only.unwrap_or(false);
@@ -4697,6 +4671,9 @@ where
                         "message": reason
                     })),
                 ));
+            }
+            AccessCheckResult::InternalError(reason) => {
+                return Err(ApiError(reason));
             }
         }
 
@@ -4810,6 +4787,9 @@ where
                         "message": reason
                     })),
                 ));
+            }
+            AccessCheckResult::InternalError(reason) => {
+                return Err(ApiError(reason));
             }
         }
 
@@ -4936,6 +4916,9 @@ where
                         "message": reason
                     })),
                 ));
+            }
+            AccessCheckResult::InternalError(reason) => {
+                return Err(ApiError(reason));
             }
         }
 
@@ -5067,6 +5050,9 @@ where
                         "message": reason
                     })),
                 ));
+            }
+            AccessCheckResult::InternalError(reason) => {
+                return Err(ApiError(reason));
             }
         }
 
@@ -5810,6 +5796,9 @@ where
                     not_found_error!(reason),
                 ));
             }
+            AccessCheckResult::InternalError(reason) => {
+                return Err(ApiError(reason));
+            }
         }
 
         self.access_groups_api
@@ -5855,6 +5844,9 @@ where
                 return Ok(DeleteAccessGroupResponse::NotFoundErrorResponse(
                     not_found_error!(reason),
                 ));
+            }
+            AccessCheckResult::InternalError(reason) => {
+                return Err(ApiError(reason));
             }
         }
 
@@ -5903,6 +5895,9 @@ where
                     not_found_error!(reason),
                 ));
             }
+            AccessCheckResult::InternalError(reason) => {
+                return Err(ApiError(reason));
+            }
         }
 
         self.access_groups_api
@@ -5934,6 +5929,9 @@ where
                 return Ok(RemoveUserFromGroupResponse::NotFoundErrorResponse(
                     not_found_error!(reason),
                 ));
+            }
+            AccessCheckResult::InternalError(reason) => {
+                return Err(ApiError(reason));
             }
         }
 
@@ -5992,6 +5990,9 @@ where
                     not_found_error!(reason),
                 ));
             }
+            AccessCheckResult::InternalError(reason) => {
+                return Err(ApiError(reason));
+            }
         }
 
         self.access_groups_api
@@ -6023,6 +6024,9 @@ where
                     not_found_error!(reason),
                 ));
             }
+            AccessCheckResult::InternalError(reason) => {
+                return Err(ApiError(reason));
+            }
         }
 
         self.access_groups_api
@@ -6049,9 +6053,9 @@ where
         &self,
         workflow_id: i64,
         user_name: String,
-        _context: &C,
+        context: &C,
     ) -> Result<CheckWorkflowAccessResponse, ApiError> {
-        let auth: Option<Authorization> = Has::<Option<Authorization>>::get(_context).clone();
+        let auth: Option<Authorization> = Has::<Option<Authorization>>::get(context).clone();
 
         // If access control is enabled, we need to check if the caller is authorized to perform this check
         if self.authorization_service.enforce_access_control() {
@@ -6111,14 +6115,10 @@ where
                     reason: Some(reason),
                 }),
             ),
-            AccessCheckResult::NotFound(reason) => {
-                Ok(CheckWorkflowAccessResponse::NotFoundErrorResponse(
-                    models::ErrorResponse::new(serde_json::json!({
-                        "error": "NotFound",
-                        "message": reason
-                    })),
-                ))
-            }
+            AccessCheckResult::NotFound(reason) => Ok(
+                CheckWorkflowAccessResponse::NotFoundErrorResponse(not_found_error!(reason)),
+            ),
+            AccessCheckResult::InternalError(reason) => Err(ApiError(reason)),
         }
     }
 
