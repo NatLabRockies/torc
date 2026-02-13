@@ -242,7 +242,7 @@ impl AuthorizationService {
                     "Database error getting workflow for {} ID {}: {}",
                     table_name, resource_id, e
                 );
-                return AccessCheckResult::Denied(format!("Database error: {}", e));
+                return AccessCheckResult::Denied("Database error".to_string());
             }
         };
 

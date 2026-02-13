@@ -3278,7 +3278,7 @@ where
         authorize_resource!(
             self,
             id,
-            "local_scheduler_config",
+            "local_scheduler",
             context,
             GetLocalSchedulerResponse
         );
@@ -3331,7 +3331,7 @@ where
     async fn get_result(&self, id: i64, context: &C) -> Result<GetResultResponse, ApiError> {
         // Check access control
         // Result is linked to workflow via workflow_result
-        authorize_resource!(self, id, "workflow_result", context, GetResultResponse);
+        authorize_resource!(self, id, "result", context, GetResultResponse);
 
         self.results_api.get_result(id, context).await
     }
@@ -3363,7 +3363,7 @@ where
         authorize_resource!(
             self,
             id,
-            "slurm_scheduler_config",
+            "slurm_scheduler",
             context,
             GetSlurmSchedulerResponse
         );
@@ -3858,29 +3858,7 @@ where
         body: models::FileModel,
         context: &C,
     ) -> Result<UpdateFileResponse, ApiError> {
-        // Check access control
-        match self
-            .check_resource_access_for_context(id, "file", context)
-            .await
-        {
-            AccessCheckResult::Allowed => {}
-            AccessCheckResult::Denied(reason) => {
-                return Ok(UpdateFileResponse::ForbiddenErrorResponse(
-                    models::ErrorResponse::new(serde_json::json!({
-                        "error": "Forbidden",
-                        "message": reason
-                    })),
-                ));
-            }
-            AccessCheckResult::NotFound(reason) => {
-                return Ok(UpdateFileResponse::NotFoundErrorResponse(
-                    models::ErrorResponse::new(serde_json::json!({
-                        "error": "NotFound",
-                        "message": reason
-                    })),
-                ));
-            }
-        }
+        authorize_resource!(self, id, "file", context, UpdateFileResponse);
 
         self.files_api.update_file(id, body, context).await
     }
@@ -3907,7 +3885,7 @@ where
         authorize_resource!(
             self,
             id,
-            "local_scheduler_config",
+            "local_scheduler",
             context,
             UpdateLocalSchedulerResponse
         );
@@ -3977,7 +3955,7 @@ where
         body: models::ResultModel,
         context: &C,
     ) -> Result<UpdateResultResponse, ApiError> {
-        authorize_resource!(self, id, "workflow_result", context, UpdateResultResponse);
+        authorize_resource!(self, id, "result", context, UpdateResultResponse);
 
         self.results_api.update_result(id, body, context).await
     }
@@ -4012,7 +3990,7 @@ where
         authorize_resource!(
             self,
             id,
-            "slurm_scheduler_config",
+            "slurm_scheduler",
             context,
             UpdateSlurmSchedulerResponse
         );
@@ -4428,26 +4406,7 @@ where
         body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<ProcessChangedJobInputsResponse, ApiError> {
-        // Check access control
-        match self.check_workflow_access_for_context(id, context).await {
-            AccessCheckResult::Allowed => {}
-            AccessCheckResult::Denied(reason) => {
-                return Ok(ProcessChangedJobInputsResponse::ForbiddenErrorResponse(
-                    models::ErrorResponse::new(serde_json::json!({
-                        "error": "Forbidden",
-                        "message": reason
-                    })),
-                ));
-            }
-            AccessCheckResult::NotFound(reason) => {
-                return Ok(ProcessChangedJobInputsResponse::NotFoundErrorResponse(
-                    models::ErrorResponse::new(serde_json::json!({
-                        "error": "NotFound",
-                        "message": reason
-                    })),
-                ));
-            }
-        }
+        authorize_workflow!(self, id, context, ProcessChangedJobInputsResponse);
 
         let dry_run_value = dry_run.unwrap_or(false);
         self.jobs_api
@@ -4516,7 +4475,7 @@ where
         authorize_resource!(
             self,
             id,
-            "local_scheduler_config",
+            "local_scheduler",
             context,
             DeleteLocalSchedulerResponse
         );
@@ -4553,7 +4512,7 @@ where
         body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteResultResponse, ApiError> {
-        authorize_resource!(self, id, "workflow_result", context, DeleteResultResponse);
+        authorize_resource!(self, id, "result", context, DeleteResultResponse);
 
         self.results_api.delete_result(id, body, context).await
     }
@@ -4588,7 +4547,7 @@ where
         authorize_resource!(
             self,
             id,
-            "slurm_scheduler_config",
+            "slurm_scheduler",
             context,
             DeleteSlurmSchedulerResponse
         );
@@ -5340,34 +5299,7 @@ where
         max_retries: i32,
         context: &C,
     ) -> Result<RetryJobResponse, ApiError> {
-        debug!(
-            "retry_job({}, {}, {}) - X-Span-ID: {:?}",
-            id,
-            run_id,
-            max_retries,
-            Has::<XSpanIdString>::get(context).0.clone()
-        );
-
-        // Check access control (via workflow)
-        match self.check_job_access_for_context(id, context).await {
-            AccessCheckResult::Allowed => {}
-            AccessCheckResult::Denied(reason) => {
-                return Ok(RetryJobResponse::ForbiddenErrorResponse(
-                    models::ErrorResponse::new(serde_json::json!({
-                        "error": "Forbidden",
-                        "message": reason
-                    })),
-                ));
-            }
-            AccessCheckResult::NotFound(reason) => {
-                return Ok(RetryJobResponse::NotFoundErrorResponse(
-                    models::ErrorResponse::new(serde_json::json!({
-                        "error": "NotFound",
-                        "message": reason
-                    })),
-                ));
-            }
-        }
+        authorize_job!(self, id, context, RetryJobResponse);
 
         let result = self
             .jobs_api
