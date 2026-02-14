@@ -198,6 +198,23 @@ impl AuthorizationService {
         self.check_workflow_access(auth, workflow_id).await
     }
 
+    /// Known tables that have a workflow_id column and can be used with
+    /// check_resource_access. This whitelist prevents SQL injection even if
+    /// the character validation is bypassed.
+    const VALID_RESOURCE_TABLES: &'static [&'static str] = &[
+        "compute_node",
+        "event",
+        "failure_handler",
+        "file",
+        "job",
+        "local_scheduler",
+        "resource_requirements",
+        "result",
+        "scheduled_compute_node",
+        "slurm_scheduler",
+        "user_data",
+    ];
+
     /// Check if a user can access a resource that has a workflow_id column
     pub async fn check_resource_access(
         &self,
@@ -205,13 +222,8 @@ impl AuthorizationService {
         resource_id: i64,
         table_name: &str,
     ) -> AccessCheckResult {
-        // Validate table name to prevent SQL injection via identifier interpolation.
-        // Only allow ASCII alphanumeric characters and underscores, which are safe
-        // for use as SQL identifiers and disallow any metacharacters.
-        if !table_name
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_')
-        {
+        // Validate table name against whitelist of known resource tables
+        if !Self::VALID_RESOURCE_TABLES.contains(&table_name) {
             warn!(
                 "Invalid table name provided to check_resource_access: {}",
                 table_name
@@ -587,5 +599,37 @@ mod tests {
         assert!(AccessCheckResult::Allowed.is_allowed());
         assert!(!AccessCheckResult::Denied("test".to_string()).is_allowed());
         assert!(!AccessCheckResult::NotFound("test".to_string()).is_allowed());
+    }
+
+    #[test]
+    fn test_valid_resource_tables() {
+        // All tables used in authorize_resource! macro calls must be in the whitelist
+        let expected_tables = [
+            "compute_node",
+            "event",
+            "failure_handler",
+            "file",
+            "job",
+            "local_scheduler",
+            "resource_requirements",
+            "result",
+            "scheduled_compute_node",
+            "slurm_scheduler",
+            "user_data",
+        ];
+        for table in &expected_tables {
+            assert!(
+                AuthorizationService::VALID_RESOURCE_TABLES.contains(table),
+                "Table '{}' should be in VALID_RESOURCE_TABLES",
+                table
+            );
+        }
+    }
+
+    #[test]
+    fn test_invalid_table_not_in_whitelist() {
+        assert!(!AuthorizationService::VALID_RESOURCE_TABLES.contains(&"workflow"));
+        assert!(!AuthorizationService::VALID_RESOURCE_TABLES.contains(&"nonexistent"));
+        assert!(!AuthorizationService::VALID_RESOURCE_TABLES.contains(&"'; DROP TABLE--"));
     }
 }
