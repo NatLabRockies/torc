@@ -24,9 +24,9 @@ pub enum FailureHandlerCommands {
         /// List failure handlers for this workflow (optional - will prompt if not provided)
         #[arg()]
         workflow_id: Option<i64>,
-        /// Maximum number of failure handlers to return
-        #[arg(short, long, default_value = "10000")]
-        limit: i64,
+        /// Maximum number of failure handlers to return (default: all)
+        #[arg(short, long)]
+        limit: Option<i64>,
         /// Offset for pagination (0-based)
         #[arg(long, default_value = "0")]
         offset: i64,
@@ -60,7 +60,7 @@ pub fn handle_failure_handler_commands(
                 config,
                 selected_workflow_id,
                 Some(*offset),
-                Some(*limit),
+                *limit,
             ) {
                 Ok(response) => {
                     let handlers = response.items.unwrap_or_default();

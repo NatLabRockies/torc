@@ -209,9 +209,9 @@ EXAMPLES:
         /// Filter by upstream job ID (jobs that depend on this job)
         #[arg(long)]
         upstream_job_id: Option<i64>,
-        /// Maximum number of jobs to return
-        #[arg(short, long, default_value = "10000")]
-        limit: i64,
+        /// Maximum number of jobs to return (default: all)
+        #[arg(short, long)]
+        limit: Option<i64>,
         /// Offset for pagination (0-based)
         #[arg(long, default_value = "0")]
         offset: i64,
@@ -467,10 +467,13 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
 
             let mut params = JobListParams::new()
                 .with_offset(*offset)
-                .with_limit(*limit)
                 .with_sort_by(sort_by.clone().unwrap_or_default())
                 .with_reverse_sort(*reverse_sort)
                 .with_include_relationships(*include_relationships);
+
+            if let Some(limit_val) = limit {
+                params = params.with_limit(*limit_val);
+            }
 
             if let Some(job_status) = job_status {
                 params = params.with_status(job_status);
@@ -1218,7 +1221,7 @@ pub fn get_existing_job_names(
 ) -> Result<HashSet<String>, Box<dyn std::error::Error>> {
     let mut names = HashSet::new();
     let mut offset = 0;
-    const PAGE_SIZE: i64 = 1000;
+    const PAGE_SIZE: i64 = 10_000;
 
     loop {
         let response = default_api::list_jobs(

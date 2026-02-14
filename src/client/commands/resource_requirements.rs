@@ -57,9 +57,9 @@ pub enum ResourceRequirementsCommands {
         /// List resource requirements for this workflow (optional - will prompt if not provided)
         #[arg()]
         workflow_id: Option<i64>,
-        /// Maximum number of resource requirements to return
-        #[arg(short, long, default_value = "10000")]
-        limit: i64,
+        /// Maximum number of resource requirements to return (default: all)
+        #[arg(short, long)]
+        limit: Option<i64>,
         /// Offset for pagination (0-based)
         #[arg(long, default_value = "0")]
         offset: i64,
@@ -174,11 +174,14 @@ pub fn handle_resource_requirements_commands(
             };
 
             // Use pagination utility to get all resource requirements
-            let params = pagination::ResourceRequirementsListParams::new()
+            let mut params = pagination::ResourceRequirementsListParams::new()
                 .with_offset(*offset)
-                .with_limit(*limit)
                 .with_sort_by(sort_by.clone().unwrap_or_default())
                 .with_reverse_sort(*reverse_sort);
+
+            if let Some(limit_val) = limit {
+                params = params.with_limit(*limit_val);
+            }
 
             match pagination::paginate_resource_requirements(
                 config,

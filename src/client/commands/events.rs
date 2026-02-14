@@ -100,9 +100,9 @@ EXAMPLES:
         /// Filter events by type or category
         #[arg(short = 't', long = "type", alias = "category")]
         event_type: Option<String>,
-        /// Maximum number of events to return
-        #[arg(short, long, default_value = "10000")]
-        limit: i64,
+        /// Maximum number of events to return (default: all)
+        #[arg(short, long)]
+        limit: Option<i64>,
         /// Offset for pagination (0-based)
         #[arg(short, long, default_value = "0")]
         offset: i64,
@@ -207,9 +207,11 @@ pub fn handle_event_commands(config: &Configuration, command: &EventCommands, fo
                 None => select_workflow_interactively(config, &user_name).unwrap(),
             };
 
-            let mut params = EventListParams::new()
-                .with_offset(*offset)
-                .with_limit(*limit);
+            let mut params = EventListParams::new().with_offset(*offset);
+
+            if let Some(limit_val) = limit {
+                params = params.with_limit(*limit_val);
+            }
 
             if let Some(event_type_str) = event_type {
                 params = params.with_category(event_type_str.clone());

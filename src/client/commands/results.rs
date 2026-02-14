@@ -121,9 +121,9 @@ pub enum ResultCommands {
         /// Filter by job status (uninitialized, blocked, canceled, terminated, done, ready, scheduled, running, pending, disabled)
         #[arg(short, long)]
         status: Option<String>,
-        /// Maximum number of results to return
-        #[arg(short, long, default_value = "10000")]
-        limit: i64,
+        /// Maximum number of results to return (default: all)
+        #[arg(short, long)]
+        limit: Option<i64>,
         /// Offset for pagination (0-based)
         #[arg(long, default_value = "0")]
         offset: i64,
@@ -177,9 +177,11 @@ pub fn handle_result_commands(config: &Configuration, command: &ResultCommands, 
             };
 
             // Use pagination utility to get all results
-            let mut params = pagination::ResultListParams::new()
-                .with_offset(*offset)
-                .with_limit(*limit);
+            let mut params = pagination::ResultListParams::new().with_offset(*offset);
+
+            if let Some(limit_val) = limit {
+                params = params.with_limit(*limit_val);
+            }
 
             if let Some(job_id_val) = job_id {
                 params = params.with_job_id(*job_id_val);

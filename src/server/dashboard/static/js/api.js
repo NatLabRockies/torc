@@ -113,7 +113,7 @@ class TorcAPI {
 
     // ==================== Jobs ====================
 
-    async listJobs(workflowId, offset = 0, limit = 1000) {
+    async listJobs(workflowId, offset = 0, limit = 10000) {
         const response = await this.request(`/workflows/${workflowId}/jobs?offset=${offset}&limit=${limit}`);
         return this.extractItems(response);
     }
@@ -141,7 +141,7 @@ class TorcAPI {
 
     // ==================== Files ====================
 
-    async listFiles(workflowId, offset = 0, limit = 1000) {
+    async listFiles(workflowId, offset = 0, limit = 10000) {
         const response = await this.request(`/workflows/${workflowId}/files?offset=${offset}&limit=${limit}`);
         return this.extractItems(response);
     }
@@ -157,7 +157,7 @@ class TorcAPI {
 
     // ==================== User Data ====================
 
-    async listUserData(workflowId, offset = 0, limit = 1000) {
+    async listUserData(workflowId, offset = 0, limit = 10000) {
         const response = await this.request(`/workflows/${workflowId}/user_data?offset=${offset}&limit=${limit}`);
         return this.extractItems(response);
     }
@@ -173,7 +173,7 @@ class TorcAPI {
 
     // ==================== Results ====================
 
-    async listResults(workflowId, offset = 0, limit = 1000) {
+    async listResults(workflowId, offset = 0, limit = 10000) {
         const response = await this.request(`/workflows/${workflowId}/results?offset=${offset}&limit=${limit}`);
         return this.extractItems(response);
     }

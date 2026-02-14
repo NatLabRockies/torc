@@ -325,9 +325,9 @@ EXAMPLES:
         /// Workflow ID
         #[arg()]
         workflow_id: Option<i64>,
-        /// Maximum number of configs to return
-        #[arg(short, long, default_value = "10000")]
-        limit: i64,
+        /// Maximum number of configs to return (default: all)
+        #[arg(short, long)]
+        limit: Option<i64>,
         /// Offset for pagination (0-based)
         #[arg(long, default_value = "0")]
         offset: i64,
@@ -1012,13 +1012,12 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
                 })
             });
 
-            match paginate_slurm_schedulers(
-                config,
-                wf_id,
-                SlurmSchedulersListParams::new()
-                    .with_offset(*offset)
-                    .with_limit(*limit),
-            ) {
+            let mut params = SlurmSchedulersListParams::new().with_offset(*offset);
+            if let Some(limit_val) = limit {
+                params = params.with_limit(*limit_val);
+            }
+
+            match paginate_slurm_schedulers(config, wf_id, params) {
                 Ok(schedulers) => {
                     if print_wrapped_if_json(
                         format,

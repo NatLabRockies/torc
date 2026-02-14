@@ -290,9 +290,9 @@ EXAMPLES:
 "
     )]
     List {
-        /// Maximum number of workflows to return
-        #[arg(short, long, default_value = "10000")]
-        limit: i64,
+        /// Maximum number of workflows to return (default: all)
+        #[arg(short, long)]
+        limit: Option<i64>,
         /// Offset for pagination (0-based)
         #[arg(long, default_value = "0")]
         offset: i64,
@@ -2700,7 +2700,7 @@ fn handle_get(config: &Configuration, id: &Option<i64>, user: &str, format: &str
 fn handle_list(
     config: &Configuration,
     user: &str,
-    limit: i64,
+    limit: Option<i64>,
     offset: i64,
     sort_by: &Option<String>,
     reverse_sort: bool,
@@ -2712,8 +2712,11 @@ fn handle_list(
     // Use pagination utility to get all workflows
     let mut params = WorkflowListParams::new()
         .with_offset(offset)
-        .with_limit(limit)
         .with_reverse_sort(reverse_sort);
+
+    if let Some(limit_val) = limit {
+        params = params.with_limit(limit_val);
+    }
 
     // When --all-users is not set, filter by current user (default behavior)
     if !all_users {

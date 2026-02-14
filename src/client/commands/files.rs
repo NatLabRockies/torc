@@ -85,9 +85,9 @@ EXAMPLES:
         /// Filter by job ID that produced the files
         #[arg(long)]
         produced_by_job_id: Option<i64>,
-        /// Maximum number of files to return
-        #[arg(short, long, default_value = "10000")]
-        limit: i64,
+        /// Maximum number of files to return (default: all)
+        #[arg(short, long)]
+        limit: Option<i64>,
         /// Offset for pagination (0-based)
         #[arg(long, default_value = "0")]
         offset: i64,
@@ -200,9 +200,12 @@ pub fn handle_file_commands(config: &Configuration, command: &FileCommands, form
 
             let mut params = FileListParams::new()
                 .with_offset(*offset)
-                .with_limit(*limit)
                 .with_sort_by(sort_by.clone().unwrap_or_default())
                 .with_reverse_sort(*reverse_sort);
+
+            if let Some(limit_val) = limit {
+                params = params.with_limit(*limit_val);
+            }
 
             if let Some(job_id) = produced_by_job_id {
                 params = params.with_produced_by_job_id(*job_id);

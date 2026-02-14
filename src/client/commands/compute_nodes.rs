@@ -71,9 +71,9 @@ pub enum ComputeNodeCommands {
         /// List compute nodes for this workflow (optional - will prompt if not provided)
         #[arg()]
         workflow_id: Option<i64>,
-        /// Maximum number of compute nodes to return
-        #[arg(short, long, default_value = "10000")]
-        limit: i64,
+        /// Maximum number of compute nodes to return (default: all)
+        #[arg(short, long)]
+        limit: Option<i64>,
         /// Offset for pagination (0-based)
         #[arg(short, long, default_value = "0")]
         offset: i64,
@@ -147,9 +147,11 @@ pub fn handle_compute_node_commands(
                 },
             };
 
-            let mut params = ComputeNodeListParams::new()
-                .with_offset(*offset)
-                .with_limit(*limit);
+            let mut params = ComputeNodeListParams::new().with_offset(*offset);
+
+            if let Some(limit_val) = limit {
+                params = params.with_limit(*limit_val);
+            }
 
             if let Some(sort) = sort_by {
                 params = params.with_sort_by(sort.clone());
