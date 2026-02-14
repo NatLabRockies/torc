@@ -63,7 +63,7 @@ fn test_analyze_workflow_logs_word_boundaries() {
     // Should NOT match (substrings)
     writeln!(file, "This is some groomed output").unwrap(); // groom contains oom
     writeln!(file, "The timeout_value is 10").unwrap(); // timeout_value is not \btimeout\b
-    writeln!(file, "microsecond is small").unwrap(); // contains seg (not really, but just for example)
+    writeln!(file, "segmented is small").unwrap(); // contains 'seg' as a substring but should not match segmentation fault
 
     // Should match
     writeln!(file, "Out of memory: killed process 123").unwrap();
