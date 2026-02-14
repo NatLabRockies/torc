@@ -1,7 +1,7 @@
 //! Remote workers API endpoints
 
 use async_trait::async_trait;
-use log::{debug, error, info};
+use log::{debug, info};
 use sqlx::Row;
 use swagger::{ApiError, Has, XSpanIdString};
 
@@ -10,7 +10,7 @@ use crate::server::api_types::{
     CreateRemoteWorkersResponse, DeleteRemoteWorkerResponse, ListRemoteWorkersResponse,
 };
 
-use super::{ApiContext, database_error};
+use super::{ApiContext, database_error_with_msg};
 
 /// Trait defining remote worker API operations
 #[async_trait]
@@ -85,8 +85,10 @@ where
                 ));
             }
             Err(e) => {
-                error!("Database error checking workflow: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to check workflow existence",
+                ));
             }
         };
 
@@ -109,8 +111,7 @@ where
                         .push(models::RemoteWorkerModel::new(worker.clone(), workflow_id));
                 }
                 Err(e) => {
-                    error!("Database error inserting remote worker: {}", e);
-                    return Err(database_error(e));
+                    return Err(database_error_with_msg(e, "Failed to create remote worker"));
                 }
             }
         }
@@ -154,8 +155,10 @@ where
                 ));
             }
             Err(e) => {
-                error!("Database error checking workflow: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to check workflow existence",
+                ));
             }
         };
 
@@ -169,8 +172,7 @@ where
         {
             Ok(records) => records,
             Err(e) => {
-                error!("Database error fetching remote workers: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to fetch remote workers"));
             }
         };
 
@@ -221,8 +223,10 @@ where
                 ));
             }
             Err(e) => {
-                error!("Database error checking workflow: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to check workflow existence",
+                ));
             }
         };
 
@@ -252,10 +256,7 @@ where
                     models::RemoteWorkerModel::new(worker, workflow_id),
                 ))
             }
-            Err(e) => {
-                error!("Database error deleting remote worker: {}", e);
-                Err(database_error(e))
-            }
+            Err(e) => Err(database_error_with_msg(e, "Failed to delete remote worker")),
         }
     }
 }

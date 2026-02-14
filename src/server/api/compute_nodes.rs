@@ -3,7 +3,7 @@
 #![allow(clippy::too_many_arguments)]
 
 use async_trait::async_trait;
-use log::{debug, error, info};
+use log::{debug, info};
 use sqlx::Row;
 use swagger::{ApiError, Has, XSpanIdString};
 
@@ -14,7 +14,7 @@ use crate::server::api_types::{
 
 use crate::models;
 
-use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error};
+use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg};
 
 /// Trait defining compute node-related API operations
 #[async_trait]
@@ -77,6 +77,23 @@ pub trait ComputeNodesApi<C> {
 pub struct ComputeNodesApiImpl {
     pub context: ApiContext,
 }
+
+const COMPUTE_NODE_COLUMNS: &[&str] = &[
+    "id",
+    "workflow_id",
+    "hostname",
+    "pid",
+    "start_time",
+    "duration_seconds",
+    "is_active",
+    "num_cpus",
+    "memory_gb",
+    "num_gpus",
+    "num_nodes",
+    "time_limit",
+    "scheduler_config_id",
+    "compute_node_type",
+];
 
 impl ComputeNodesApiImpl {
     pub fn new(context: ApiContext) -> Self {
@@ -150,7 +167,7 @@ where
             }
             Err(e) => {
                 debug!("Database error inserting compute node: {}", e);
-                Err(database_error(e))
+                return Err(database_error_with_msg(e, "Failed to create compute node"));
             }
         }
     }
@@ -178,8 +195,7 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to delete compute nodes"));
             }
         };
 
@@ -231,8 +247,7 @@ where
                 ));
             }
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to fetch compute node"));
             }
         };
 
@@ -332,9 +347,21 @@ where
         }
         let where_clause = where_conditions.join(" AND ");
 
+        // Validate sort_by against whitelist
+        let validated_sort_by = if let Some(ref col) = sort_by {
+            if COMPUTE_NODE_COLUMNS.contains(&col.as_str()) {
+                Some(col.clone())
+            } else {
+                debug!("Invalid sort column requested: {}", col);
+                None // Fall back to default
+            }
+        } else {
+            None
+        };
+
         let query = SqlQueryBuilder::new(base_query)
             .with_where(where_clause.clone())
-            .with_pagination_and_sorting(offset, limit, sort_by, reverse_sort, "id")
+            .with_pagination_and_sorting(offset, limit, validated_sort_by, reverse_sort, "id")
             .build();
 
         debug!("Executing query: {}", query);
@@ -355,8 +382,7 @@ where
         let records = match sqlx_query.fetch_all(self.context.pool.as_ref()).await {
             Ok(recs) => recs,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to list compute nodes"));
             }
         };
 
@@ -407,8 +433,7 @@ where
         let total_count = match count_sqlx_query.fetch_one(self.context.pool.as_ref()).await {
             Ok(row) => row.get::<i64, _>("total"),
             Err(e) => {
-                error!("Database error getting count: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to list compute nodes"));
             }
         };
 
@@ -514,8 +539,7 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to update compute node"));
             }
         };
 
@@ -587,8 +611,7 @@ where
                 }
             }
             Err(e) => {
-                error!("Database error: {}", e);
-                Err(database_error(e))
+                return Err(database_error_with_msg(e, "Failed to delete compute node"));
             }
         }
     }

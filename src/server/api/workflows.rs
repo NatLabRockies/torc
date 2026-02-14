@@ -18,7 +18,7 @@ use crate::server::api_types::{
 
 use crate::models;
 
-use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error};
+use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg};
 
 /// Trait defining workflow-related API operations
 #[async_trait]
@@ -146,6 +146,33 @@ pub struct WorkflowsApiImpl {
     pub context: ApiContext,
 }
 
+const WORKFLOW_COLUMNS: &[&str] = &[
+    "id",
+    "name",
+    "user",
+    "description",
+    "timestamp",
+    "compute_node_expiration_buffer_seconds",
+    "compute_node_wait_for_new_jobs_seconds",
+    "compute_node_ignore_workflow_completion",
+    "compute_node_wait_for_healthy_database_minutes",
+    "compute_node_min_time_for_new_jobs_seconds",
+    "jobs_sort_method",
+    "resource_monitor_config",
+    "slurm_defaults",
+    "use_pending_failed",
+    "project",
+    "metadata",
+    "status_id",
+];
+
+const WORKFLOW_STATUS_COLUMNS: &[&str] = &[
+    "run_id",
+    "is_archived",
+    "is_canceled",
+    "has_detected_need_to_run_completion_script",
+];
+
 impl WorkflowsApiImpl {
     pub fn new(context: ApiContext) -> Self {
         Self { context }
@@ -184,6 +211,27 @@ impl WorkflowsApiImpl {
             accessible_ids.as_ref().map(|ids| ids.len()),
             context.get().0.clone()
         );
+
+        // Validate sort_by against whitelist
+        let validated_sort_by = if let Some(ref col) = sort_by {
+            if WORKFLOW_COLUMNS.contains(&col.as_str()) {
+                // If we are joining with workflow_status (is_archived is some),
+                // prefix workflow columns with "w." to avoid ambiguity
+                if is_archived.is_some() {
+                    Some(format!("w.{}", col))
+                } else {
+                    Some(col.clone())
+                }
+            } else if is_archived.is_some() && WORKFLOW_STATUS_COLUMNS.contains(&col.as_str()) {
+                // Workflow status columns are only allowed when joining
+                Some(format!("ws.{}", col))
+            } else {
+                debug!("Invalid sort column requested: {}", col);
+                None // Fall back to default
+            }
+        } else {
+            None
+        };
 
         // Build base query - join with workflow_status if is_archived filter is needed
         let base_query = if is_archived.is_some() {
@@ -294,27 +342,12 @@ impl WorkflowsApiImpl {
         // Use table prefix for default sort column when joining
         let default_sort_column = if is_archived.is_some() { "w.id" } else { "id" };
 
-        // Add table prefix to sort_by column if joining and column is ambiguous
-        let prefixed_sort_by = if is_archived.is_some() {
-            sort_by.as_ref().map(|col| {
-                // If the column is "id" (ambiguous), prefix it with "w."
-                // For other workflow columns, also add prefix to be consistent
-                if col == "id" || !col.contains('.') {
-                    format!("w.{}", col)
-                } else {
-                    col.clone()
-                }
-            })
-        } else {
-            sort_by.clone()
-        };
-
         let query = if where_clause.is_empty() {
             SqlQueryBuilder::new(base_query)
                 .with_pagination_and_sorting(
                     offset,
                     limit,
-                    prefixed_sort_by,
+                    validated_sort_by,
                     reverse_sort,
                     default_sort_column,
                 )
@@ -325,7 +358,7 @@ impl WorkflowsApiImpl {
                 .with_pagination_and_sorting(
                     offset,
                     limit,
-                    prefixed_sort_by,
+                    validated_sort_by,
                     reverse_sort,
                     default_sort_column,
                 )
@@ -357,8 +390,7 @@ impl WorkflowsApiImpl {
         let records = match sqlx_query.fetch_all(self.context.pool.as_ref()).await {
             Ok(recs) => recs,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to list workflows"));
             }
         };
 
@@ -435,8 +467,7 @@ impl WorkflowsApiImpl {
         let total_count = match count_sqlx_query.fetch_one(self.context.pool.as_ref()).await {
             Ok(row) => row.get::<i64, _>("total"),
             Err(e) => {
-                error!("Database error getting count: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to list workflows"));
             }
         };
 
@@ -475,7 +506,7 @@ where
             .bind(id)
             .fetch_optional(self.context.pool.as_ref())
             .await
-            .map_err(database_error)?;
+            .map_err(|e| database_error_with_msg(e, "Failed to check if workflow exists"))?;
 
         Ok(workflow_exists.is_some())
     }
@@ -499,7 +530,7 @@ where
         let mut tx = match self.context.pool.begin().await {
             Ok(tx) => tx,
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to begin transaction"));
             }
         };
 
@@ -518,7 +549,10 @@ where
             Ok(status_result) => status_result,
             Err(e) => {
                 let _ = tx.rollback().await;
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to create workflow status",
+                ));
             }
         };
 
@@ -594,13 +628,16 @@ where
             Ok(workflow_result) => workflow_result,
             Err(e) => {
                 let _ = tx.rollback().await;
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to create workflow record",
+                ));
             }
         };
 
         // Commit the transaction
         if let Err(e) = tx.commit().await {
-            return Err(database_error(e));
+            return Err(database_error_with_msg(e, "Failed to commit transaction"));
         }
 
         debug!("Workflow inserted with id: {:?}", workflow_result[0].id);
@@ -645,7 +682,7 @@ where
         let mut tx = match self.context.pool.begin().await {
             Ok(tx) => tx,
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to begin transaction"));
             }
         };
 
@@ -687,7 +724,10 @@ where
             Ok(result) => result,
             Err(e) => {
                 let _ = tx.rollback().await;
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to update workflow status",
+                ));
             }
         };
 
@@ -728,8 +768,10 @@ where
             }
             Err(e) => {
                 let _ = tx.rollback().await;
-                error!("Failed to create workflow_canceled event: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to create workflow cancellation event",
+                ));
             }
         }
 
@@ -765,13 +807,16 @@ where
             }
             Err(e) => {
                 let _ = tx.rollback().await;
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to cancel associated jobs",
+                ));
             }
         }
 
         // Commit the transaction
         if let Err(e) = tx.commit().await {
-            return Err(database_error(e));
+            return Err(database_error_with_msg(e, "Failed to commit transaction"));
         }
 
         let response_json = serde_json::json!({
@@ -842,7 +887,7 @@ where
                 }));
                 Ok(GetWorkflowResponse::NotFoundErrorResponse(error_response))
             }
-            Err(e) => Err(database_error(e)),
+            Err(e) => Err(database_error_with_msg(e, "Failed to get workflow")),
         }
     }
 
@@ -895,7 +940,7 @@ where
                 return Ok(GetWorkflowStatusResponse::NotFoundErrorResponse(error_response));
             }
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to get workflow status"));
             }
         };
 
@@ -980,8 +1025,10 @@ where
         {
             Ok(result) => result.is_some(),
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to check workflow completion",
+                ));
             }
         };
 
@@ -1034,8 +1081,10 @@ where
         {
             Ok(result) => result.is_some(),
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to check if workflow is uninitialized",
+                ));
             }
         };
 
@@ -1155,7 +1204,7 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to update workflow"));
             }
         };
 
@@ -1254,8 +1303,10 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                error!("Failed to update workflow status for ID: {}: {:?}", id, e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to update workflow status",
+                ));
             }
         };
 
@@ -1342,8 +1393,7 @@ where
                 }
             }
             Err(e) => {
-                error!("Database error when deleting workflow {}: {}", id, e);
-                Err(ApiError(format!("Database error: {}", e)))
+                return Err(database_error_with_msg(e, "Failed to delete workflow"));
             }
         }
     }
@@ -1411,7 +1461,10 @@ where
         {
             Ok(result) => result.is_some(),
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to check for active jobs",
+                ));
             }
         };
 
@@ -1441,7 +1494,7 @@ where
         {
             Ok(result) => result.is_some(),
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to check for active compute nodes"));
             }
         };
 
@@ -1465,7 +1518,7 @@ where
         let mut tx = match self.context.pool.begin().await {
             Ok(tx) => tx,
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to begin transaction"));
             }
         };
 
@@ -1498,14 +1551,16 @@ where
             }
             Err(e) => {
                 let _ = tx.rollback().await;
-                debug!("Failed to reset workflow status for ID: {}: {:?}", id, e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to reset workflow status",
+                ));
             }
         }
 
         // Commit the transaction
         if let Err(e) = tx.commit().await {
-            return Err(database_error(e));
+            return Err(database_error_with_msg(e, "Failed to commit transaction"));
         }
 
         // Return success response with the reset values
@@ -1565,7 +1620,10 @@ where
         {
             Ok(deps) => deps,
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to list job dependencies",
+                ));
             }
         };
 
@@ -1579,7 +1637,10 @@ where
         {
             Ok(count) => count,
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to count job dependencies",
+                ));
             }
         };
 
@@ -1657,7 +1718,10 @@ where
         {
             Ok(rels) => rels,
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to list job file relationships",
+                ));
             }
         };
 
@@ -1681,7 +1745,10 @@ where
         {
             Ok(count) => count,
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to count job file relationships",
+                ));
             }
         };
 
@@ -1757,7 +1824,10 @@ where
         {
             Ok(rels) => rels,
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to list job user data relationships",
+                ));
             }
         };
 
@@ -1781,7 +1851,10 @@ where
         {
             Ok(count) => count,
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to count job user data relationships",
+                ));
             }
         };
 

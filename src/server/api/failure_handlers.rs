@@ -3,7 +3,7 @@
 #![allow(clippy::too_many_arguments)]
 
 use async_trait::async_trait;
-use log::{debug, error, info};
+use log::{debug, info};
 use swagger::{ApiError, Has, XSpanIdString};
 
 use crate::server::api_types::{
@@ -13,7 +13,7 @@ use crate::server::api_types::{
 
 use crate::models;
 
-use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, database_error};
+use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, database_error_with_msg};
 
 /// Trait defining failure handler-related API operations
 #[async_trait]
@@ -94,8 +94,10 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(ApiError("Database error".to_string()));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to create failure handler record",
+                ));
             }
         };
         body.id = Some(result.id);
@@ -139,8 +141,10 @@ where
                 ));
             }
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to fetch failure handler",
+                ));
             }
         };
 
@@ -191,8 +195,10 @@ where
         {
             Ok(records) => records,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to list failure handlers",
+                ));
             }
         };
 
@@ -218,8 +224,10 @@ where
         {
             Ok(row) => row.total,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to count failure handlers",
+                ));
             }
         };
 
@@ -256,8 +264,10 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to delete failure handler",
+                ));
             }
         };
 

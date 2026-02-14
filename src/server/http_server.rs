@@ -18,7 +18,7 @@ use crate::server::api::SchedulersApi;
 use crate::server::api::UserDataApi;
 use crate::server::api::WorkflowActionsApi;
 use crate::server::api::WorkflowsApi;
-use crate::server::api::database_error;
+use crate::server::api::database_error_with_msg;
 use crate::server::api_types::*;
 use crate::server::auth::MakeHtpasswdAuthenticator;
 use crate::server::authorization::{AccessCheckResult, AuthorizationService};

@@ -17,7 +17,7 @@ use crate::memory_utils::memory_string_to_bytes;
 use crate::models;
 use crate::time_utils::duration_string_to_seconds;
 
-use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error};
+use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg};
 
 /// Trait defining resource requirements-related API operations
 #[async_trait]
@@ -84,6 +84,17 @@ pub trait ResourceRequirementsApi<C> {
 pub struct ResourceRequirementsApiImpl {
     pub context: ApiContext,
 }
+
+const RESOURCE_REQUIREMENTS_COLUMNS: &[&str] = &[
+    "id",
+    "workflow_id",
+    "name",
+    "num_cpus",
+    "num_gpus",
+    "num_nodes",
+    "memory",
+    "runtime",
+];
 
 impl ResourceRequirementsApiImpl {
     pub fn new(context: ApiContext) -> Self {
@@ -172,8 +183,10 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(ApiError("Database error".to_string()));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to create resource requirements record",
+                ));
             }
         };
         body.id = Some(result.id);
@@ -203,8 +216,10 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to delete all resource requirements",
+                ));
             }
         };
 
@@ -255,7 +270,10 @@ where
                 ));
             }
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to fetch resource requirements",
+                ));
             }
         };
 
@@ -346,10 +364,22 @@ where
 
         let where_clause = where_conditions.join(" AND ");
 
+        // Validate sort_by against whitelist
+        let validated_sort_by = if let Some(ref col) = sort_by {
+            if RESOURCE_REQUIREMENTS_COLUMNS.contains(&col.as_str()) {
+                Some(col.clone())
+            } else {
+                debug!("Invalid sort column requested: {}", col);
+                None // Fall back to default
+            }
+        } else {
+            None
+        };
+
         // Build the complete query with pagination and sorting
         let query = SqlQueryBuilder::new(base_query)
             .with_where(where_clause.clone())
-            .with_pagination_and_sorting(offset, limit, sort_by, reverse_sort, "id")
+            .with_pagination_and_sorting(offset, limit, validated_sort_by, reverse_sort, "id")
             .build();
 
         debug!("Executing query: {}", query);
@@ -392,8 +422,10 @@ where
         let records = match sqlx_query.fetch_all(self.context.pool.as_ref()).await {
             Ok(recs) => recs,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to list resource requirements",
+                ));
             }
         };
 
@@ -451,8 +483,10 @@ where
         let total_count = match count_sqlx_query.fetch_one(self.context.pool.as_ref()).await {
             Ok(row) => row.get::<i64, _>("total"),
             Err(e) => {
-                error!("Database error getting count: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to list resource requirements",
+                ));
             }
         };
 
@@ -558,7 +592,10 @@ where
                     updated_body,
                 ))
             }
-            Err(e) => Err(database_error(e)),
+            Err(e) => Err(database_error_with_msg(
+                e,
+                "Failed to update resource requirements",
+            )),
         }
     }
 
@@ -617,7 +654,10 @@ where
             }
             Err(e) => {
                 error!("Database error: {}", e);
-                Err(database_error(e))
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to delete resource requirements",
+                ));
             }
         }
     }

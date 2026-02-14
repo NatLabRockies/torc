@@ -14,7 +14,7 @@ use crate::server::api_types::{
 
 use crate::models;
 
-use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, database_error};
+use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, database_error_with_msg};
 
 /// Trait defining user data-related API operations
 #[async_trait]
@@ -84,6 +84,8 @@ pub struct UserDataApiImpl {
     pub context: ApiContext,
 }
 
+const USER_DATA_COLUMNS: &[&str] = &["id", "workflow_id", "name", "is_ephemeral", "data"];
+
 impl UserDataApiImpl {
     pub fn new(context: ApiContext) -> Self {
         Self { context }
@@ -145,7 +147,10 @@ where
         {
             Ok(row) => row,
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to create user data record",
+                ));
             }
         };
 
@@ -172,7 +177,10 @@ where
                     );
                 }
                 Err(e) => {
-                    return Err(database_error(e));
+                    return Err(database_error_with_msg(
+                        e,
+                        "Failed to create user data association",
+                    ));
                 }
             }
         }
@@ -197,7 +205,10 @@ where
                     );
                 }
                 Err(e) => {
-                    return Err(database_error(e));
+                    return Err(database_error_with_msg(
+                        e,
+                        "Failed to create user data association",
+                    ));
                 }
             }
         }
@@ -234,7 +245,7 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to delete user data"));
             }
         };
 
@@ -276,7 +287,7 @@ where
                 return Ok(GetUserDataResponse::NotFoundErrorResponse(error_response));
             }
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to fetch user data"));
             }
         };
 
@@ -399,10 +410,22 @@ where
 
         let where_clause = where_conditions.join(" AND ");
 
+        // Validate sort_by against whitelist
+        let validated_sort_by = if let Some(ref col) = sort_by {
+            if USER_DATA_COLUMNS.contains(&col.as_str()) {
+                Some(format!("ud.{}", col))
+            } else {
+                debug!("Invalid sort column requested: {}", col);
+                None // Fall back to default
+            }
+        } else {
+            None
+        };
+
         // Build the complete query with pagination and sorting
         let query = super::SqlQueryBuilder::new(base_query)
             .with_where(where_clause.clone())
-            .with_pagination_and_sorting(offset, limit, sort_by, reverse_sort, "ud.id")
+            .with_pagination_and_sorting(offset, limit, validated_sort_by, reverse_sort, "ud.id")
             .build();
 
         debug!("Executing query: {}", query);
@@ -429,7 +452,7 @@ where
         let records = match sqlx_query.fetch_all(self.context.pool.as_ref()).await {
             Ok(recs) => recs,
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to list user data"));
             }
         };
 
@@ -475,7 +498,7 @@ where
         let total_count = match count_sqlx_query.fetch_one(self.context.pool.as_ref()).await {
             Ok(row) => row.get::<i64, _>("total"),
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to list user data"));
             }
         };
 
@@ -564,7 +587,7 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to update user data"));
             }
         };
 
@@ -634,7 +657,7 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to delete user data"));
             }
         };
 
@@ -678,7 +701,12 @@ impl UserDataApiImpl {
         .await
         {
             Ok(rows) => rows,
-            Err(e) => return Err(database_error(e)),
+            Err(e) => {
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to list missing user data",
+                ));
+            }
         };
 
         Ok(rows.into_iter().map(|row| row.user_data_id).collect())
@@ -708,7 +736,12 @@ impl UserDataApiImpl {
         .await
         {
             Ok(rows) => rows,
-            Err(e) => return Err(database_error(e)),
+            Err(e) => {
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to list missing user data",
+                ));
+            }
         };
 
         Ok(rows.into_iter().map(|row| row.user_data_id).collect())
