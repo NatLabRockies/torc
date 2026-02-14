@@ -1584,6 +1584,12 @@ pub fn start_server_with_access_control() -> AccessControlServerProcess {
         "unauthorized_job_user",
         "removable_user",
         "outsider",
+        // Resource access test users
+        "res_owner",
+        "resource_intruder",
+        "nf_user",
+        "file_owner",
+        "grp_res_owner",
     ];
 
     let htpasswd_file = create_htpasswd_file(&test_users);

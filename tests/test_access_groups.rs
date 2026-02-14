@@ -1643,3 +1643,142 @@ fn test_workflows_list_all_users_with_access_control(
         found_ids
     );
 }
+
+// ============================================================================
+// Resource-level access control tests (check_resource_access paths)
+// ============================================================================
+
+/// Test that authorize_resource! returns 403 for unauthorized access to a file.
+#[rstest]
+fn test_resource_access_denied_for_unauthorized_user(
+    start_server_with_access_control: &AccessControlServerProcess,
+) {
+    let config = &start_server_with_access_control.config;
+
+    // Create a workflow owned by "res_owner"
+    let owner_config = config_with_auth(config, "res_owner");
+    let workflow =
+        create_workflow_with_user(&owner_config, "resource-access-test-workflow", "res_owner");
+    let workflow_id = workflow.id.unwrap();
+
+    // Create a file in that workflow
+    let file = models::FileModel::new(
+        workflow_id,
+        "test-file".to_string(),
+        "/tmp/test-file.txt".to_string(),
+    );
+    let created_file =
+        default_api::create_file(&owner_config, file).expect("Failed to create file");
+    let file_id = created_file.id.unwrap();
+
+    // An unauthorized user should get 403 when accessing the file
+    let unauthorized_config = config_with_auth(config, "resource_intruder");
+    let result = default_api::get_file(&unauthorized_config, file_id);
+    assert!(
+        is_access_denied_error(&result),
+        "Expected 403 for unauthorized file access, got: {:?}",
+        result
+    );
+}
+
+/// Test that authorize_resource! returns 404 for nonexistent resource IDs.
+#[rstest]
+fn test_resource_access_not_found_for_nonexistent_resource(
+    start_server_with_access_control: &AccessControlServerProcess,
+) {
+    let config = &start_server_with_access_control.config;
+
+    let user_config = config_with_auth(config, "nf_user");
+
+    // Try to get a file with an ID that doesn't exist
+    let result = default_api::get_file(&user_config, 999999);
+    assert!(
+        result.is_err(),
+        "Expected error for nonexistent file, got: {:?}",
+        result
+    );
+    // Should be 404 not 403
+    if let Err(torc::client::apis::Error::ResponseError(content)) = &result {
+        assert_eq!(
+            content.status.as_u16(),
+            404,
+            "Expected 404 for nonexistent file, got {}",
+            content.status
+        );
+    }
+}
+
+/// Test that authorize_resource! returns Allowed for the resource owner.
+#[rstest]
+fn test_resource_access_allowed_for_owner(
+    start_server_with_access_control: &AccessControlServerProcess,
+) {
+    let config = &start_server_with_access_control.config;
+
+    // Create a workflow owned by "file_owner"
+    let owner_config = config_with_auth(config, "file_owner");
+    let workflow =
+        create_workflow_with_user(&owner_config, "resource-owner-test-workflow", "file_owner");
+    let workflow_id = workflow.id.unwrap();
+
+    // Create a file in that workflow
+    let file = models::FileModel::new(
+        workflow_id,
+        "owner-file".to_string(),
+        "/tmp/owner-file.txt".to_string(),
+    );
+    let created_file =
+        default_api::create_file(&owner_config, file).expect("Failed to create file");
+    let file_id = created_file.id.unwrap();
+
+    // Owner should be able to access their own file
+    let result = default_api::get_file(&owner_config, file_id);
+    assert!(
+        result.is_ok(),
+        "Owner should be able to access their own file: {:?}",
+        result.err()
+    );
+}
+
+/// Test that authorize_resource! allows access via group membership.
+#[rstest]
+fn test_resource_access_allowed_via_group(
+    start_server_with_access_control: &AccessControlServerProcess,
+) {
+    let config = &start_server_with_access_control.config;
+
+    // Set up teams (alice is in ML team)
+    let (ml_team_id, _) = setup_two_teams(config);
+
+    // Create a workflow owned by "grp_res_owner"
+    let owner_config = config_with_auth(config, "grp_res_owner");
+    let workflow = create_workflow_with_user(
+        &owner_config,
+        "group-resource-test-workflow",
+        "grp_res_owner",
+    );
+    let workflow_id = workflow.id.unwrap();
+
+    // Share the workflow with the ML team
+    default_api::add_workflow_to_group(config, workflow_id, ml_team_id)
+        .expect("Failed to share workflow");
+
+    // Create a file in that workflow
+    let file = models::FileModel::new(
+        workflow_id,
+        "group-shared-file".to_string(),
+        "/tmp/group-shared-file.txt".to_string(),
+    );
+    let created_file =
+        default_api::create_file(&owner_config, file).expect("Failed to create file");
+    let file_id = created_file.id.unwrap();
+
+    // alice (ML team member) should be able to access the file
+    let alice_config = config_with_auth(config, "alice");
+    let result = default_api::get_file(&alice_config, file_id);
+    assert!(
+        result.is_ok(),
+        "Group member should be able to access shared file: {:?}",
+        result.err()
+    );
+}

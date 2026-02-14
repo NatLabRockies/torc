@@ -846,6 +846,22 @@ fn test_jobs_update_restriction_cannot_change_status(start_server: &ServerProces
         result.is_err(),
         "Should not be able to change job status via update_job API"
     );
+
+    // Verify the error message indicates status immutability
+    let err_str = format!("{:?}", result.unwrap_err());
+    assert!(
+        err_str.contains("immutable") || err_str.contains("Cannot update job status"),
+        "Error should mention status immutability, got: {}",
+        err_str
+    );
+
+    // Verify the job status hasn't changed
+    let job_after = default_api::get_job(config, job_id).expect("Failed to get job after update");
+    assert_eq!(
+        job_after.status.unwrap(),
+        JobStatus::Uninitialized,
+        "Job status should remain Uninitialized after rejected update"
+    );
 }
 
 #[rstest]

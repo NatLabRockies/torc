@@ -2641,10 +2641,12 @@ where
         // Overwrite user with authenticated username if authentication is enabled
         let auth: Option<Authorization> = Has::<Option<Authorization>>::get(context).clone();
         if let Some(username) = AuthorizationService::get_username(&auth) {
-            info!(
-                "Overwriting workflow owner with authenticated user: {}",
-                username
-            );
+            if body.user != username {
+                info!(
+                    "Workflow user field '{}' overwritten with authenticated user '{}'",
+                    body.user, username
+                );
+            }
             body.user = username.to_string();
         }
 
@@ -4874,15 +4876,15 @@ where
             GetJobResponse::SuccessfulResponse(job) => job,
             GetJobResponse::ForbiddenErrorResponse(err) => {
                 error!("Access denied for job {}: {:?}", id, err);
-                return Err(ApiError("Access denied for job".to_string()));
+                return Ok(StartJobResponse::ForbiddenErrorResponse(err));
             }
             GetJobResponse::NotFoundErrorResponse(err) => {
                 error!("Job not found {}: {:?}", id, err);
-                return Err(ApiError("Job not found".to_string()));
+                return Ok(StartJobResponse::NotFoundErrorResponse(err));
             }
             GetJobResponse::DefaultErrorResponse(err) => {
                 error!("Failed to get job {}: {:?}", id, err);
-                return Err(ApiError("Failed to get job".to_string()));
+                return Ok(StartJobResponse::DefaultErrorResponse(err));
             }
         };
         match job.status {
@@ -4994,7 +4996,7 @@ where
             )));
         }
 
-        // 1. Ensure the job exists.
+        // Fetch the job and check for access/existence errors.
         let mut job = match self.jobs_api.get_job(id, context).await? {
             GetJobResponse::SuccessfulResponse(job) => job,
             GetJobResponse::ForbiddenErrorResponse(err) => {
