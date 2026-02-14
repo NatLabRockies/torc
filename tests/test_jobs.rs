@@ -820,7 +820,7 @@ fn test_jobs_update_restriction_status_must_be_uninitialized(start_server: &Serv
 }
 
 #[rstest]
-fn test_jobs_update_can_change_status(start_server: &ServerProcess) {
+fn test_jobs_update_restriction_cannot_change_status(start_server: &ServerProcess) {
     let config = &start_server.config;
 
     // Create test workflow and job
@@ -837,19 +837,14 @@ fn test_jobs_update_can_change_status(start_server: &ServerProcess) {
         "Job should start in Uninitialized status"
     );
 
-    // Update status to "ready" via API - should succeed
+    // Attempt to update status to "ready" via API - should fail
     let mut job_to_update = current_job.clone();
     job_to_update.status = Some(JobStatus::Ready);
 
-    default_api::update_job(config, job_id, job_to_update)
-        .expect("Should succeed when changing job status via API");
-
-    // Verify the status was updated
-    let final_job = default_api::get_job(config, job_id).expect("Failed to get job");
-    assert_eq!(
-        final_job.status.unwrap(),
-        JobStatus::Ready,
-        "Job status should be updated to Ready"
+    let result = default_api::update_job(config, job_id, job_to_update);
+    assert!(
+        result.is_err(),
+        "Should not be able to change job status via update_job API"
     );
 }
 

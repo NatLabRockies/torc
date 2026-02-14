@@ -627,8 +627,9 @@ fn test_enforcement_non_member_cannot_access_workflow(
 ) {
     let config = &start_server_with_access_control.config;
 
-    // Create a workflow owned by "owner_user"
-    let workflow = create_workflow_with_user(config, "restricted-workflow", "owner_user");
+    // Create a workflow owned by "owner_user" (authenticate as owner_user)
+    let owner_config = config_with_auth(config, "owner_user");
+    let workflow = create_workflow_with_user(&owner_config, "restricted-workflow", "owner_user");
     let workflow_id = workflow.id.unwrap();
 
     // A user with no access should be denied
@@ -807,18 +808,19 @@ fn test_enforcement_workflow_shared_with_multiple_groups(
     // Set up teams
     let (ml_team_id, data_team_id) = setup_two_teams(config);
 
-    // Create a workflow
-    let workflow = create_workflow_with_user(config, "multi-group-workflow", "creator");
+    // Create a workflow owned by "creator" (authenticate as creator)
+    let creator_config = config_with_auth(config, "creator");
+    let workflow = create_workflow_with_user(&creator_config, "multi-group-workflow", "creator");
     let workflow_id = workflow.id.unwrap();
 
     // Share with BOTH teams
-    default_api::add_workflow_to_group(config, workflow_id, ml_team_id)
+    default_api::add_workflow_to_group(&creator_config, workflow_id, ml_team_id)
         .expect("Failed to share with ML team");
-    default_api::add_workflow_to_group(config, workflow_id, data_team_id)
+    default_api::add_workflow_to_group(&creator_config, workflow_id, data_team_id)
         .expect("Failed to share with Data team");
 
     // All team members should have access
-    for user in ["alice", "bob", "carol", "dave", "shared_user"] {
+    for user in ["creator", "alice", "bob", "carol", "dave", "shared_user"] {
         let access = default_api::check_workflow_access(config, workflow_id, user)
             .expect("Failed to check access");
         assert!(
@@ -865,8 +867,9 @@ fn test_enforcement_remove_user_from_group_revokes_access(
     default_api::add_user_to_group(config, group_id, membership)
         .expect("Failed to add user to group");
 
-    // Create and share a workflow
-    let workflow = create_workflow_with_user(config, "user-removal-workflow", "wf_owner");
+    // Create and share a workflow owned by "wf_owner" (authenticate as wf_owner)
+    let wf_owner_config = config_with_auth(config, "wf_owner");
+    let workflow = create_workflow_with_user(&wf_owner_config, "user-removal-workflow", "wf_owner");
     let workflow_id = workflow.id.unwrap();
 
     default_api::add_workflow_to_group(config, workflow_id, group_id)
@@ -940,8 +943,9 @@ fn test_get_workflow_returns_error_for_unauthorized_user(
 ) {
     let config = &start_server_with_access_control.config;
 
-    // Create a workflow owned by "owner"
-    let workflow = create_workflow_with_user(config, "api-test-workflow", "owner");
+    // Create a workflow owned by "owner" (authenticate as owner)
+    let owner_config = config_with_auth(config, "owner");
+    let workflow = create_workflow_with_user(&owner_config, "api-test-workflow", "owner");
     let workflow_id = workflow.id.unwrap();
 
     // Create a config with different user credentials
@@ -963,12 +967,14 @@ fn test_get_job_returns_error_for_unauthorized_user(
 ) {
     let config = &start_server_with_access_control.config;
 
-    // Create a workflow owned by "owner"
-    let workflow = create_workflow_with_user(config, "job-access-test-workflow", "job_owner");
+    // Create a workflow owned by "job_owner" (authenticate as job_owner)
+    let owner_config = config_with_auth(config, "job_owner");
+    let workflow =
+        create_workflow_with_user(&owner_config, "job-access-test-workflow", "job_owner");
     let workflow_id = workflow.id.unwrap();
 
     // Create a job in that workflow
-    let job = create_job_for_workflow(config, workflow_id, "test-job");
+    let job = create_job_for_workflow(&owner_config, workflow_id, "test-job");
     let job_id = job.id.unwrap();
 
     // Create a config with different user credentials
@@ -993,16 +999,17 @@ fn test_authorized_user_can_access_shared_workflow_via_api(
     // Set up teams
     let (ml_team_id, _) = setup_two_teams(config);
 
-    // Create a workflow
-    let workflow = create_workflow_with_user(config, "shared-api-workflow", "api_owner");
+    // Create a workflow owned by "api_owner" (authenticate as api_owner)
+    let owner_config = config_with_auth(config, "api_owner");
+    let workflow = create_workflow_with_user(&owner_config, "shared-api-workflow", "api_owner");
     let workflow_id = workflow.id.unwrap();
 
     // Share with ML team
-    default_api::add_workflow_to_group(config, workflow_id, ml_team_id)
+    default_api::add_workflow_to_group(&owner_config, workflow_id, ml_team_id)
         .expect("Failed to share workflow");
 
     // Create a job
-    let job = create_job_for_workflow(config, workflow_id, "shared-test-job");
+    let job = create_job_for_workflow(&owner_config, workflow_id, "shared-test-job");
     let job_id = job.id.unwrap();
 
     // Alice (ML team member) should be able to access the workflow
@@ -1064,7 +1071,7 @@ fn test_multi_team_user_can_access_both_workflows_via_api(
     let ml_config = config_with_auth(config, "ml_api_owner");
     let ml_workflow = create_workflow_with_user(&ml_config, "ml-api-workflow", "ml_api_owner");
     let ml_workflow_id = ml_workflow.id.unwrap();
-    default_api::add_workflow_to_group(config, ml_workflow_id, ml_team_id)
+    default_api::add_workflow_to_group(&ml_config, ml_workflow_id, ml_team_id)
         .expect("Failed to share ML workflow");
 
     // Create Data workflow and share with Data team (authenticate as data_api_owner)
@@ -1072,7 +1079,7 @@ fn test_multi_team_user_can_access_both_workflows_via_api(
     let data_workflow =
         create_workflow_with_user(&data_config, "data-api-workflow", "data_api_owner");
     let data_workflow_id = data_workflow.id.unwrap();
-    default_api::add_workflow_to_group(config, data_workflow_id, data_team_id)
+    default_api::add_workflow_to_group(&data_config, data_workflow_id, data_team_id)
         .expect("Failed to share Data workflow");
 
     // shared_user should be able to access both

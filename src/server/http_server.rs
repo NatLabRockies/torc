@@ -4999,15 +4999,15 @@ where
             GetJobResponse::SuccessfulResponse(job) => job,
             GetJobResponse::ForbiddenErrorResponse(err) => {
                 error!("Access denied for job {}: {:?}", id, err);
-                return Err(ApiError("Access denied for job".to_string()));
+                return Ok(CompleteJobResponse::ForbiddenErrorResponse(err));
             }
             GetJobResponse::NotFoundErrorResponse(err) => {
                 error!("Job not found {}: {:?}", id, err);
-                return Err(ApiError("Job not found".to_string()));
+                return Ok(CompleteJobResponse::NotFoundErrorResponse(err));
             }
             GetJobResponse::DefaultErrorResponse(err) => {
                 error!("Failed to get job {}: {:?}", id, err);
-                return Err(ApiError("Failed to get job".to_string()));
+                return Ok(CompleteJobResponse::DefaultErrorResponse(err));
             }
         };
 
@@ -5021,6 +5021,30 @@ where
             );
             let error_response = models::ErrorResponse::new(serde_json::json!({
                 "message": format!("Job {} is already complete with status {:?}", id, current_status)
+            }));
+            return Ok(CompleteJobResponse::UnprocessableContentErrorResponse(
+                error_response,
+            ));
+        }
+
+        // Validate ResultModel matches this job
+        if result.job_id != id {
+            let error_response = models::ErrorResponse::new(serde_json::json!({
+                "message": format!(
+                    "ResultModel job_id {} does not match target job_id {}",
+                    result.job_id, id
+                )
+            }));
+            return Ok(CompleteJobResponse::UnprocessableContentErrorResponse(
+                error_response,
+            ));
+        }
+        if result.workflow_id != job.workflow_id {
+            let error_response = models::ErrorResponse::new(serde_json::json!({
+                "message": format!(
+                    "ResultModel workflow_id {} does not match job's workflow_id {}",
+                    result.workflow_id, job.workflow_id
+                )
             }));
             return Ok(CompleteJobResponse::UnprocessableContentErrorResponse(
                 error_response,
@@ -5065,15 +5089,15 @@ where
             }
             CreateResultResponse::ForbiddenErrorResponse(err) => {
                 error!("Forbidden to add result for job {}: {:?}", id, err);
-                return Err(ApiError("Forbidden".to_string()));
+                return Ok(CompleteJobResponse::ForbiddenErrorResponse(err));
             }
             CreateResultResponse::NotFoundErrorResponse(err) => {
                 error!("Failed to add result for job {}: {:?}", id, err);
-                return Err(ApiError("Failed to add result".to_string()));
+                return Ok(CompleteJobResponse::NotFoundErrorResponse(err));
             }
             CreateResultResponse::DefaultErrorResponse(err) => {
                 error!("Failed to add result for job {}: {:?}", id, err);
-                return Err(ApiError("Failed to add result".to_string()));
+                return Ok(CompleteJobResponse::DefaultErrorResponse(err));
             }
         };
 

@@ -690,7 +690,7 @@ fn test_regenerate_with_default_resource_requirements(start_server: &ServerProce
 }
 
 /// Test regenerate with non-existent workflow ID
-/// The command should fail with an error (404) for non-existent workflows
+/// The command should fail with a 404 error for non-existent workflows
 #[rstest]
 fn test_regenerate_nonexistent_workflow(start_server: &ServerProcess) {
     let args = [
@@ -704,11 +704,20 @@ fn test_regenerate_nonexistent_workflow(start_server: &ServerProcess) {
     ];
 
     let result = run_cli_with_json(&args, start_server, None);
-    assert!(
-        result.is_err(),
-        "Expected error for non-existent workflow, but got: {:?}",
-        result
-    );
+    match result {
+        Ok(json) => panic!(
+            "Expected error for non-existent workflow, but command succeeded: {:?}",
+            json
+        ),
+        Err(err) => {
+            let err_str = err.to_string();
+            assert!(
+                err_str.contains("404") || err_str.contains("not found"),
+                "Expected 404/not-found error, got: {}",
+                err_str
+            );
+        }
+    }
 }
 
 /// Test regenerate with blocked jobs (should include them in pending count)
