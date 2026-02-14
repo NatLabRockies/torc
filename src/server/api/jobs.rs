@@ -2,6 +2,8 @@
 
 #![allow(clippy::too_many_arguments)]
 
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 use chrono::Utc;
 use log::{debug, error, info};
@@ -785,6 +787,275 @@ impl JobsApiImpl {
             }
             Err(e) => Err(database_error_with_msg(e, "Failed to store job input hash")),
         }
+    }
+
+    /// Compute and store input hashes for all jobs in a workflow using bulk queries.
+    ///
+    /// This is much more efficient than calling `compute_job_input_hash` per job because it
+    /// fetches all relationship data in a small number of bulk queries instead of 7+ queries
+    /// per job. For a workflow with 100K jobs, this reduces ~700K sequential queries to ~7.
+    pub async fn compute_and_store_all_input_hashes(
+        &self,
+        workflow_id: i64,
+    ) -> Result<(), ApiError> {
+        let pool = self.context.pool.as_ref();
+
+        // Query 1: All jobs in the workflow
+        let job_rows = sqlx::query(
+            r#"
+            SELECT id, command, invocation_script
+            FROM job
+            WHERE workflow_id = ?
+            ORDER BY id
+            "#,
+        )
+        .bind(workflow_id)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| database_error_with_msg(e, "Failed to fetch jobs for bulk hash"))?;
+
+        if job_rows.is_empty() {
+            return Ok(());
+        }
+
+        let job_count = job_rows.len();
+        debug!(
+            "Computing bulk input hashes for {} jobs in workflow {}",
+            job_count, workflow_id
+        );
+
+        // Query 2: All depends_on relationships
+        let depends_on_rows = sqlx::query!(
+            r#"
+            SELECT job_id, depends_on_job_id
+            FROM job_depends_on
+            WHERE workflow_id = $1
+            ORDER BY job_id, depends_on_job_id
+            "#,
+            workflow_id
+        )
+        .fetch_all(pool)
+        .await
+        .map_err(|e| database_error_with_msg(e, "Failed to fetch depends_on for bulk hash"))?;
+
+        // Query 3: All input file relationships
+        let input_file_rows = sqlx::query!(
+            r#"
+            SELECT jif.job_id, jif.file_id
+            FROM job_input_file jif
+            JOIN job j ON j.id = jif.job_id
+            WHERE j.workflow_id = $1
+            ORDER BY jif.job_id, jif.file_id
+            "#,
+            workflow_id
+        )
+        .fetch_all(pool)
+        .await
+        .map_err(|e| database_error_with_msg(e, "Failed to fetch input files for bulk hash"))?;
+
+        // Query 4: All output file relationships
+        let output_file_rows = sqlx::query!(
+            r#"
+            SELECT jof.job_id, jof.file_id
+            FROM job_output_file jof
+            JOIN job j ON j.id = jof.job_id
+            WHERE j.workflow_id = $1
+            ORDER BY jof.job_id, jof.file_id
+            "#,
+            workflow_id
+        )
+        .fetch_all(pool)
+        .await
+        .map_err(|e| database_error_with_msg(e, "Failed to fetch output files for bulk hash"))?;
+
+        // Query 5: All input user_data relationships
+        let input_ud_rows = sqlx::query!(
+            r#"
+            SELECT jiud.job_id, jiud.user_data_id
+            FROM job_input_user_data jiud
+            JOIN job j ON j.id = jiud.job_id
+            WHERE j.workflow_id = $1
+            ORDER BY jiud.job_id, jiud.user_data_id
+            "#,
+            workflow_id
+        )
+        .fetch_all(pool)
+        .await
+        .map_err(|e| database_error_with_msg(e, "Failed to fetch input user_data for bulk hash"))?;
+
+        // Query 6: All output user_data relationships
+        let output_ud_rows = sqlx::query!(
+            r#"
+            SELECT joud.job_id, joud.user_data_id
+            FROM job_output_user_data joud
+            JOIN job j ON j.id = joud.job_id
+            WHERE j.workflow_id = $1
+            ORDER BY joud.job_id, joud.user_data_id
+            "#,
+            workflow_id
+        )
+        .fetch_all(pool)
+        .await
+        .map_err(|e| {
+            database_error_with_msg(e, "Failed to fetch output user_data for bulk hash")
+        })?;
+
+        // Build lookup maps: job_id -> Vec<related_id> (already sorted by ORDER BY)
+        let mut depends_on_map: HashMap<i64, Vec<i64>> = HashMap::new();
+        for row in &depends_on_rows {
+            depends_on_map
+                .entry(row.job_id)
+                .or_default()
+                .push(row.depends_on_job_id);
+        }
+
+        let mut input_file_map: HashMap<i64, Vec<i64>> = HashMap::new();
+        for row in &input_file_rows {
+            input_file_map
+                .entry(row.job_id)
+                .or_default()
+                .push(row.file_id);
+        }
+
+        let mut output_file_map: HashMap<i64, Vec<i64>> = HashMap::new();
+        for row in &output_file_rows {
+            output_file_map
+                .entry(row.job_id)
+                .or_default()
+                .push(row.file_id);
+        }
+
+        let mut input_ud_map: HashMap<i64, Vec<i64>> = HashMap::new();
+        for row in &input_ud_rows {
+            input_ud_map
+                .entry(row.job_id)
+                .or_default()
+                .push(row.user_data_id);
+        }
+
+        let mut output_ud_map: HashMap<i64, Vec<i64>> = HashMap::new();
+        for row in &output_ud_rows {
+            output_ud_map
+                .entry(row.job_id)
+                .or_default()
+                .push(row.user_data_id);
+        }
+
+        // Query 7: User data contents for all distinct input user_data IDs
+        let mut user_data_contents: HashMap<i64, Option<String>> = HashMap::new();
+        let all_input_ud_ids: Vec<i64> = input_ud_map
+            .values()
+            .flatten()
+            .copied()
+            .collect::<std::collections::HashSet<i64>>()
+            .into_iter()
+            .collect();
+
+        if !all_input_ud_ids.is_empty() {
+            // Fetch in batches to avoid SQLite variable limit
+            for chunk in all_input_ud_ids.chunks(500) {
+                let placeholders: Vec<&str> = chunk.iter().map(|_| "?").collect();
+                let sql = format!(
+                    "SELECT id, data FROM user_data WHERE id IN ({})",
+                    placeholders.join(",")
+                );
+                let mut query = sqlx::query(&sql);
+                for id in chunk {
+                    query = query.bind(id);
+                }
+                let rows = query.fetch_all(pool).await.map_err(|e| {
+                    database_error_with_msg(e, "Failed to fetch user_data contents for bulk hash")
+                })?;
+                for row in rows {
+                    let id: i64 = row.get("id");
+                    let data: Option<String> = row.get("data");
+                    user_data_contents.insert(id, data);
+                }
+            }
+        }
+
+        // Compute hashes in memory and batch store them
+        let mut tx = pool
+            .begin()
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to begin hash storage transaction"))?;
+
+        for job_row in &job_rows {
+            let job_id: i64 = job_row.get("id");
+            let command: Option<String> = job_row.get("command");
+            let invocation_script: Option<String> = job_row.get("invocation_script");
+
+            // Build the same JSON structure as compute_job_input_hash
+            let depends_on: Option<&Vec<i64>> = depends_on_map.get(&job_id);
+            let input_files: Option<&Vec<i64>> = input_file_map.get(&job_id);
+            let output_files: Option<&Vec<i64>> = output_file_map.get(&job_id);
+            let input_uds: Option<&Vec<i64>> = input_ud_map.get(&job_id);
+            let output_uds: Option<&Vec<i64>> = output_ud_map.get(&job_id);
+
+            // Build input_user_data_contents matching the per-job method
+            let input_user_data_contents: Vec<serde_json::Value> = input_uds
+                .map(|ids| {
+                    ids.iter()
+                        .filter_map(|ud_id| {
+                            user_data_contents.get(ud_id).map(|data| {
+                                serde_json::json!({
+                                    "id": ud_id,
+                                    "data": data
+                                })
+                            })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            let hash_input = serde_json::json!({
+                "command": command,
+                "invocation_script": invocation_script,
+                "depends_on_job_ids": depends_on,
+                "input_file_ids": input_files,
+                "output_file_ids": output_files,
+                "input_user_data_ids": input_uds,
+                "output_user_data_ids": output_uds,
+                "input_user_data_contents": input_user_data_contents,
+            });
+
+            let json_string = serde_json::to_string(&hash_input).map_err(|e| {
+                ApiError(format!(
+                    "JSON serialization error for job {}: {}",
+                    job_id, e
+                ))
+            })?;
+
+            let mut hasher = Sha256::new();
+            hasher.update(json_string.as_bytes());
+            let hash_hex = format!("{:x}", hasher.finalize());
+
+            sqlx::query!(
+                r#"
+                INSERT INTO job_internal (job_id, input_hash)
+                VALUES ($1, $2)
+                ON CONFLICT(job_id) DO UPDATE SET input_hash = excluded.input_hash
+                "#,
+                job_id,
+                hash_hex
+            )
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| {
+                database_error_with_msg(e, format!("Failed to store input hash for job {}", job_id))
+            })?;
+        }
+
+        tx.commit()
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to commit hash storage transaction"))?;
+
+        debug!(
+            "Completed bulk hash computation and storage for {} jobs in workflow {}",
+            job_count, workflow_id
+        );
+
+        Ok(())
     }
 
     /// Get stored job input hash from job_internal table

@@ -3785,70 +3785,8 @@ where
         // This tracks the baseline hash for this run to detect future input changes
         // IMPORTANT: This must happen AFTER the transaction commits so that the hash
         // computation sees the committed job_depends_on relationships
-        let job_ids = match sqlx::query!(
-            r#"
-            SELECT id
-            FROM job
-            WHERE workflow_id = $1
-            ORDER BY id
-            "#,
-            id
-        )
-        .fetch_all(self.pool.as_ref())
-        .await
-        {
-            Ok(rows) => rows,
-            Err(e) => {
-                error!("Failed to query job IDs for hash computation: {}", e);
-                return Err(ApiError("Database error".to_string()));
-            }
-        };
-
-        let job_count = job_ids.len();
-        debug!(
-            "Computing and storing input hashes for {} jobs in workflow {}",
-            job_count, id
-        );
-
-        for row in job_ids {
-            let job_id = row.id;
-
-            // Compute hash (reads from pool with committed data)
-            match self.jobs_api.compute_job_input_hash(job_id).await {
-                Ok(hash) => {
-                    // Store hash (using pool, not transaction)
-                    match sqlx::query!(
-                        r#"
-                        INSERT INTO job_internal (job_id, input_hash)
-                        VALUES ($1, $2)
-                        ON CONFLICT(job_id) DO UPDATE SET input_hash = excluded.input_hash
-                        "#,
-                        job_id,
-                        hash
-                    )
-                    .execute(self.pool.as_ref())
-                    .await
-                    {
-                        Ok(_) => {
-                            debug!("Stored input hash for job {}", job_id);
-                        }
-                        Err(e) => {
-                            error!("Failed to store input hash for job {}: {}", job_id, e);
-                            return Err(ApiError("Database error".to_string()));
-                        }
-                    }
-                }
-                Err(e) => {
-                    error!("Failed to compute input hash for job {}: {}", job_id, e);
-                    return Err(e);
-                }
-            }
-        }
-
-        debug!(
-            "Completed computing and storing input hashes for {} jobs in workflow {}",
-            job_count, id
-        );
+        // Uses bulk queries (7 total) instead of per-job queries (7+ per job) for efficiency
+        self.jobs_api.compute_and_store_all_input_hashes(id).await?;
 
         debug!(
             "Successfully initialized jobs for workflow {} with transaction",
