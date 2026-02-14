@@ -479,39 +479,46 @@ fn get_error_patterns() -> Vec<ErrorPattern> {
         },
         // General system errors
         ErrorPattern {
+            name: "Slurm Error",
+            pattern: Regex::new(r"(?i)\b(slurmstepd|CANCELLED|TIMEOUT|OUT_OF_MEMORY)\b").unwrap(),
+            severity: ErrorSeverity::Error,
+        },
+        ErrorPattern {
             name: "OOM Killed",
-            pattern: Regex::new(r"(?i)(out of memory|oom|killed|cannot allocate memory)").unwrap(),
+            pattern: Regex::new(r"(?i)\b(out of memory|oom|killed|cannot allocate memory)\b")
+                .unwrap(),
             severity: ErrorSeverity::Error,
         },
         ErrorPattern {
             name: "Timeout",
-            pattern: Regex::new(r"(?i)(timeout|time limit|timed out|walltime)").unwrap(),
+            pattern: Regex::new(r"(?i)\b(timeout|time limit|timed out|walltime)\b").unwrap(),
             severity: ErrorSeverity::Error,
         },
         ErrorPattern {
             name: "Segmentation Fault",
-            pattern: Regex::new(r"(?i)(segmentation fault|segfault|sigsegv)").unwrap(),
+            pattern: Regex::new(r"(?i)\b(segmentation fault|segfault|sigsegv)\b").unwrap(),
             severity: ErrorSeverity::Error,
         },
         ErrorPattern {
             name: "Permission Denied",
-            pattern: Regex::new(r"(?i)(permission denied|access denied|EACCES)").unwrap(),
+            pattern: Regex::new(r"(?i)\b(permission denied|access denied|EACCES)\b").unwrap(),
             severity: ErrorSeverity::Error,
         },
         ErrorPattern {
             name: "File Not Found",
-            pattern: Regex::new(r"(?i)(no such file|file not found|ENOENT)").unwrap(),
+            pattern: Regex::new(r"(?i)\b(no such file|file not found|ENOENT)\b").unwrap(),
             severity: ErrorSeverity::Error,
         },
         ErrorPattern {
             name: "Disk Full",
-            pattern: Regex::new(r"(?i)(no space left|disk full|quota exceeded|ENOSPC)").unwrap(),
+            pattern: Regex::new(r"(?i)\b(no space left|disk full|quota exceeded|ENOSPC)\b")
+                .unwrap(),
             severity: ErrorSeverity::Error,
         },
         ErrorPattern {
             name: "Connection Error",
             pattern: Regex::new(
-                r"(?i)(connection refused|connection reset|network unreachable|ECONNREFUSED)",
+                r"(?i)\b(connection refused|connection reset|network unreachable|ECONNREFUSED)\b",
             )
             .unwrap(),
             severity: ErrorSeverity::Error,
@@ -531,12 +538,6 @@ fn get_error_patterns() -> Vec<ErrorPattern> {
             pattern: Regex::new(r"(?i)\b(error|failed|failure|exception)\b").unwrap(),
             severity: ErrorSeverity::Warning,
         },
-        ErrorPattern {
-            name: "Slurm Error",
-            pattern: Regex::new(r"(?i)(slurmstepd|slurm_|CANCELLED|TIMEOUT|OUT_OF_MEMORY)")
-                .unwrap(),
-            severity: ErrorSeverity::Error,
-        },
     ]
 }
 
@@ -548,8 +549,17 @@ fn scan_content_for_errors(
     errors: &mut Vec<DetectedError>,
 ) {
     for (line_number, line) in content.lines().enumerate() {
+        // Skip INFO lines for certain patterns to avoid false positives
+        let is_info = line.contains(" INFO ") || line.contains("[INFO]");
+
         for pattern in patterns {
             if pattern.pattern.is_match(line) {
+                // Skip Slurm Error and Generic Error in INFO lines as they are prone to false positives
+                // (e.g., module names like 'torc_slurm_job_runner' or informational messages)
+                if is_info && (pattern.name == "Slurm Error" || pattern.name == "Generic Error") {
+                    continue;
+                }
+
                 errors.push(DetectedError {
                     file: filename.to_string(),
                     line_number: line_number + 1,
@@ -644,7 +654,10 @@ fn print_parse_results(
                 .or_default() += 1;
         }
     }
-    for (pattern, count) in pattern_counts.iter() {
+    let mut sorted_patterns: Vec<_> = pattern_counts.into_iter().collect();
+    sorted_patterns.sort_by(|a, b| b.1.cmp(&a.1)); // Sort by count descending
+
+    for (pattern, count) in sorted_patterns {
         println!("  {}: {} occurrence(s)", pattern, count);
     }
 }
