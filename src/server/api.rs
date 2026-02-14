@@ -26,9 +26,10 @@ impl ApiContext {
 }
 
 /// Common error handling utilities
-pub fn database_error(e: impl std::fmt::Display) -> ApiError {
-    error!("Database error: {}", e);
-    ApiError("Database error".to_string())
+pub fn database_error_with_msg(e: impl std::fmt::Display, msg: impl Into<String>) -> ApiError {
+    let msg_str = msg.into();
+    error!("Database error ({}): {}", msg_str, e);
+    ApiError(msg_str)
 }
 
 pub fn json_parse_error(e: impl std::fmt::Display) -> ApiError {

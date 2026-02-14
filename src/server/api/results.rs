@@ -14,7 +14,7 @@ use crate::server::api_types::{
 
 use crate::models;
 
-use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error};
+use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg};
 
 /// Trait defining result-related API operations
 #[async_trait]
@@ -76,6 +76,23 @@ pub trait ResultsApi<C> {
 pub struct ResultsApiImpl {
     pub context: ApiContext,
 }
+
+const RESULT_COLUMNS: &[&str] = &[
+    "id",
+    "job_id",
+    "workflow_id",
+    "run_id",
+    "attempt_id",
+    "compute_node_id",
+    "return_code",
+    "exec_time_minutes",
+    "completion_time",
+    "status",
+    "peak_memory_bytes",
+    "avg_memory_bytes",
+    "peak_cpu_percent",
+    "avg_cpu_percent",
+];
 
 impl ResultsApiImpl {
     pub fn new(context: ApiContext) -> Self {
@@ -142,8 +159,7 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(ApiError("Database error".to_string()));
+                return Err(database_error_with_msg(e, "Failed to create result record"));
             }
         };
         body.id = Some(result.id);
@@ -170,8 +186,7 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to delete results"));
             }
         };
 
@@ -219,8 +234,7 @@ where
                 return Ok(GetResultResponse::NotFoundErrorResponse(error_response));
             }
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to fetch result"));
             }
         };
 
@@ -331,10 +345,27 @@ where
 
         let where_clause = where_conditions.join(" AND ");
 
+        // Validate sort_by against whitelist
+        let validated_sort_by = if let Some(ref col) = sort_by {
+            if RESULT_COLUMNS.contains(&col.as_str()) {
+                // If we have a join (show_all_results is false), prefix with "r." if it's a result column
+                if !show_all_results {
+                    Some(format!("r.{}", col))
+                } else {
+                    Some(col.clone())
+                }
+            } else {
+                debug!("Invalid sort column requested: {}", col);
+                None // Fall back to default
+            }
+        } else {
+            None
+        };
+
         // Build the complete query with pagination and sorting
         let query = SqlQueryBuilder::new(base_query)
             .with_where(where_clause.clone())
-            .with_pagination_and_sorting(offset, limit, sort_by, reverse_sort, "id")
+            .with_pagination_and_sorting(offset, limit, validated_sort_by, reverse_sort, "id")
             .build();
 
         debug!("Executing query: {}", query);
@@ -365,8 +396,7 @@ where
         let records = match sqlx_query.fetch_all(self.context.pool.as_ref()).await {
             Ok(recs) => recs,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to list results"));
             }
         };
 
@@ -429,8 +459,7 @@ where
         let total_count = match count_sqlx_query.fetch_one(self.context.pool.as_ref()).await {
             Ok(row) => row.get::<i64, _>("total"),
             Err(e) => {
-                error!("Database error getting count: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to list results"));
             }
         };
 
@@ -515,8 +544,7 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to update result"));
             }
         };
 
@@ -582,10 +610,7 @@ where
                     Ok(DeleteResultResponse::SuccessfulResponse(result))
                 }
             }
-            Err(e) => {
-                error!("Database error: {}", e);
-                Err(database_error(e))
-            }
+            Err(e) => Err(database_error_with_msg(e, "Failed to delete result")),
         }
     }
 }

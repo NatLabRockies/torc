@@ -2,12 +2,12 @@
 
 #![allow(clippy::too_many_arguments)]
 
-use log::{debug, error, info};
+use log::{debug, info};
 use serde_json::json;
 use sqlx::Row;
 use swagger::{ApiError, Has, XSpanIdString};
 
-use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error};
+use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg};
 use crate::models;
 use crate::server::api_types::{
     AddUserToGroupResponse, AddWorkflowToGroupResponse, CheckWorkflowAccessResponse,
@@ -41,8 +41,7 @@ impl AccessGroupsApiImpl {
             {
                 Ok(rows) => rows,
                 Err(e) => {
-                    error!("Failed to get user group IDs: {}", e);
-                    return Err(database_error(e));
+                    return Err(database_error_with_msg(e, "Failed to get user groups"));
                 }
             };
 
@@ -66,7 +65,10 @@ impl AccessGroupsApiImpl {
         {
             Ok(row) => row.get::<i32, _>("is_owner") == 1,
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to check workflow access",
+                ));
             }
         };
 
@@ -92,7 +94,10 @@ impl AccessGroupsApiImpl {
         {
             Ok(row) => row.get::<i32, _>("has_access") == 1,
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to check workflow access",
+                ));
             }
         };
 
@@ -139,7 +144,7 @@ impl AccessGroupsApiImpl {
                         })),
                     ));
                 }
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to create access group"));
             }
         };
 
@@ -188,7 +193,7 @@ impl AccessGroupsApiImpl {
                 ));
             }
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to fetch access group"));
             }
         };
 
@@ -238,7 +243,7 @@ impl AccessGroupsApiImpl {
         {
             Ok(rows) => rows,
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to list access groups"));
             }
         };
 
@@ -259,7 +264,7 @@ impl AccessGroupsApiImpl {
         {
             Ok(row) => row.get("total"),
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to count access groups"));
             }
         };
 
@@ -311,7 +316,7 @@ impl AccessGroupsApiImpl {
                 info!("Deleted access group with id: {}", id);
                 Ok(DeleteAccessGroupResponse::SuccessfulResponse(group))
             }
-            Err(e) => Err(database_error(e)),
+            Err(e) => Err(database_error_with_msg(e, "Failed to delete access group")),
         }
     }
 
@@ -369,7 +374,7 @@ impl AccessGroupsApiImpl {
                         })),
                     ));
                 }
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to add user to group"));
             }
         };
 
@@ -429,7 +434,10 @@ impl AccessGroupsApiImpl {
                 ));
             }
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to fetch group membership",
+                ));
             }
         };
 
@@ -442,7 +450,10 @@ impl AccessGroupsApiImpl {
         .await
         {
             Ok(_) => Ok(RemoveUserFromGroupResponse::SuccessfulResponse(membership)),
-            Err(e) => Err(database_error(e)),
+            Err(e) => Err(database_error_with_msg(
+                e,
+                "Failed to remove user from group",
+            )),
         }
     }
 
@@ -494,7 +505,7 @@ impl AccessGroupsApiImpl {
         {
             Ok(rows) => rows,
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to list group members"));
             }
         };
 
@@ -519,7 +530,7 @@ impl AccessGroupsApiImpl {
         {
             Ok(row) => row.get("total"),
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to count group members"));
             }
         };
 
@@ -571,7 +582,7 @@ impl AccessGroupsApiImpl {
         {
             Ok(rows) => rows,
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to list user groups"));
             }
         };
 
@@ -599,7 +610,7 @@ impl AccessGroupsApiImpl {
         {
             Ok(row) => row.get("total"),
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to count user groups"));
             }
         };
 
@@ -649,7 +660,10 @@ impl AccessGroupsApiImpl {
             {
                 Ok(row) => row.get::<i32, _>("exists_flag") == 1,
                 Err(e) => {
-                    return Err(database_error(e));
+                    return Err(database_error_with_msg(
+                        e,
+                        "Failed to check if workflow exists",
+                    ));
                 }
             };
 
@@ -686,7 +700,10 @@ impl AccessGroupsApiImpl {
                         })),
                     ));
                 }
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to associate workflow with group",
+                ));
             }
         };
 
@@ -742,7 +759,10 @@ impl AccessGroupsApiImpl {
                 ));
             }
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to fetch workflow-group association",
+                ));
             }
         };
 
@@ -757,7 +777,10 @@ impl AccessGroupsApiImpl {
             Ok(_) => Ok(RemoveWorkflowFromGroupResponse::SuccessfulResponse(
                 association,
             )),
-            Err(e) => Err(database_error(e)),
+            Err(e) => Err(database_error_with_msg(
+                e,
+                "Failed to remove workflow from group",
+            )),
         }
     }
 
@@ -786,7 +809,10 @@ impl AccessGroupsApiImpl {
             {
                 Ok(row) => row.get::<i32, _>("exists_flag") == 1,
                 Err(e) => {
-                    return Err(database_error(e));
+                    return Err(database_error_with_msg(
+                        e,
+                        "Failed to check if workflow exists",
+                    ));
                 }
             };
 
@@ -819,10 +845,9 @@ impl AccessGroupsApiImpl {
         {
             Ok(rows) => rows,
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to list workflow groups"));
             }
         };
-
         let items: Vec<models::AccessGroupModel> = records
             .into_iter()
             .map(|row| models::AccessGroupModel {
@@ -843,7 +868,10 @@ impl AccessGroupsApiImpl {
         {
             Ok(row) => row.get("total"),
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to count workflow groups",
+                ));
             }
         };
 

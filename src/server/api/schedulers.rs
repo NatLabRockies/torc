@@ -19,7 +19,7 @@ use crate::server::api_types::{
 
 use crate::models;
 
-use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error};
+use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg};
 
 /// Trait defining scheduler-related API operations
 #[async_trait]
@@ -184,6 +184,33 @@ pub struct SchedulersApiImpl {
     pub context: ApiContext,
 }
 
+const LOCAL_SCHEDULER_COLUMNS: &[&str] = &["id", "workflow_id", "memory", "num_cpus"];
+
+const SCHEDULED_COMPUTE_NODE_COLUMNS: &[&str] = &[
+    "id",
+    "workflow_id",
+    "scheduler_id",
+    "scheduler_config_id",
+    "scheduler_type",
+    "status",
+];
+
+const SLURM_SCHEDULER_COLUMNS: &[&str] = &[
+    "id",
+    "workflow_id",
+    "name",
+    "account",
+    "gres",
+    "mem",
+    "nodes",
+    "ntasks_per_node",
+    "partition",
+    "qos",
+    "tmp",
+    "walltime",
+    "extra",
+];
+
 impl SchedulersApiImpl {
     pub fn new(context: ApiContext) -> Self {
         Self { context }
@@ -227,8 +254,10 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to create scheduler record",
+                ));
             }
         };
         body.id = Some(result.id);
@@ -271,8 +300,10 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to create scheduler record",
+                ));
             }
         };
         body.id = Some(result.id);
@@ -360,8 +391,10 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to delete local schedulers",
+                ));
             }
         };
 
@@ -402,8 +435,10 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to delete scheduled compute nodes",
+                ));
             }
         };
 
@@ -444,8 +479,10 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to delete slurm schedulers",
+                ));
             }
         };
 
@@ -494,8 +531,7 @@ where
                 ));
             }
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Database operation failed"));
             }
         };
 
@@ -545,8 +581,7 @@ where
                 ));
             }
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Database operation failed"));
             }
         };
 
@@ -598,8 +633,7 @@ where
                 ));
             }
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Database operation failed"));
             }
         };
 
@@ -655,10 +689,22 @@ where
         // Build WHERE clause
         let where_clause = "workflow_id = ?".to_string();
 
+        // Validate sort_by against whitelist
+        let validated_sort_by = if let Some(ref col) = sort_by {
+            if LOCAL_SCHEDULER_COLUMNS.contains(&col.as_str()) {
+                Some(col.clone())
+            } else {
+                debug!("Invalid sort column requested: {}", col);
+                None // Fall back to default
+            }
+        } else {
+            None
+        };
+
         // Build the complete query with pagination and sorting
         let query = SqlQueryBuilder::new(base_query)
             .with_where(where_clause.clone())
-            .with_pagination_and_sorting(offset, limit, sort_by, reverse_sort, "id")
+            .with_pagination_and_sorting(offset, limit, validated_sort_by, reverse_sort, "id")
             .build();
 
         debug!("Executing query: {}", query);
@@ -671,8 +717,7 @@ where
         {
             Ok(recs) => recs,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Database operation failed"));
             }
         };
 
@@ -701,7 +746,7 @@ where
             Ok(row) => row.get::<i64, _>("total"),
             Err(e) => {
                 error!("Database error getting count: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Database operation failed"));
             }
         };
 
@@ -772,10 +817,22 @@ where
 
         let where_clause = where_conditions.join(" AND ");
 
+        // Validate sort_by against whitelist
+        let validated_sort_by = if let Some(ref col) = sort_by {
+            if SCHEDULED_COMPUTE_NODE_COLUMNS.contains(&col.as_str()) {
+                Some(col.clone())
+            } else {
+                debug!("Invalid sort column requested: {}", col);
+                None // Fall back to default
+            }
+        } else {
+            None
+        };
+
         // Build the complete query with pagination and sorting
         let query = SqlQueryBuilder::new(base_query)
             .with_where(where_clause.clone())
-            .with_pagination_and_sorting(offset, limit, sort_by, reverse_sort, "id")
+            .with_pagination_and_sorting(offset, limit, validated_sort_by, reverse_sort, "id")
             .build();
 
         debug!("Executing query: {}", query);
@@ -796,8 +853,7 @@ where
         let records = match sqlx_query.fetch_all(self.context.pool.as_ref()).await {
             Ok(recs) => recs,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Database operation failed"));
             }
         };
 
@@ -836,7 +892,7 @@ where
             Ok(row) => row.get::<i64, _>("total"),
             Err(e) => {
                 error!("Database error getting count: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Database operation failed"));
             }
         };
 
@@ -891,10 +947,22 @@ where
         // Build WHERE clause
         let where_clause = "workflow_id = ?".to_string();
 
+        // Validate sort_by against whitelist
+        let validated_sort_by = if let Some(ref col) = sort_by {
+            if SLURM_SCHEDULER_COLUMNS.contains(&col.as_str()) {
+                Some(col.clone())
+            } else {
+                debug!("Invalid sort column requested: {}", col);
+                None // Fall back to default
+            }
+        } else {
+            None
+        };
+
         // Build the complete query with pagination and sorting
         let query = SqlQueryBuilder::new(base_query)
             .with_where(where_clause.clone())
-            .with_pagination_and_sorting(offset, limit, sort_by, reverse_sort, "id")
+            .with_pagination_and_sorting(offset, limit, validated_sort_by, reverse_sort, "id")
             .build();
 
         debug!("Executing query: {}", query);
@@ -907,8 +975,7 @@ where
         {
             Ok(recs) => recs,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Database operation failed"));
             }
         };
 
@@ -945,7 +1012,7 @@ where
             Ok(row) => row.get::<i64, _>("total"),
             Err(e) => {
                 error!("Database error getting count: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Database operation failed"));
             }
         };
 
@@ -1020,8 +1087,7 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Database operation failed"));
             }
         };
 
@@ -1105,8 +1171,7 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Database operation failed"));
             }
         };
 
@@ -1205,8 +1270,7 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Database operation failed"));
             }
         };
 
@@ -1288,10 +1352,7 @@ where
                     )
                 }
             }
-            Err(e) => {
-                error!("Database error: {}", e);
-                Err(database_error(e))
-            }
+            Err(e) => Err(database_error_with_msg(e, "Failed to delete scheduler")),
         }
     }
 
@@ -1347,10 +1408,7 @@ where
                     ))
                 }
             }
-            Err(e) => {
-                error!("Database error: {}", e);
-                Err(database_error(e))
-            }
+            Err(e) => Err(database_error_with_msg(e, "Failed to delete scheduler")),
         }
     }
 
@@ -1402,10 +1460,7 @@ where
                     ))
                 }
             }
-            Err(e) => {
-                error!("Database error: {}", e);
-                Err(database_error(e))
-            }
+            Err(e) => Err(database_error_with_msg(e, "Failed to delete scheduler")),
         }
     }
 }

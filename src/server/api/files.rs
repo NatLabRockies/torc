@@ -3,7 +3,7 @@
 #![allow(clippy::too_many_arguments)]
 
 use async_trait::async_trait;
-use log::{debug, error, info};
+use log::{debug, info};
 use sqlx::Row;
 use swagger::{ApiError, Has, XSpanIdString};
 
@@ -14,7 +14,7 @@ use crate::server::api_types::{
 
 use crate::models;
 
-use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error};
+use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg};
 
 /// Trait defining file-related API operations
 #[async_trait]
@@ -82,6 +82,8 @@ pub struct FilesApiImpl {
     pub context: ApiContext,
 }
 
+const FILE_COLUMNS: &[&str] = &["id", "workflow_id", "name", "path", "st_mtime"];
+
 impl FilesApiImpl {
     pub fn new(context: ApiContext) -> Self {
         Self { context }
@@ -127,7 +129,7 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to create file record"));
             }
         };
 
@@ -156,8 +158,7 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to delete files"));
             }
         };
 
@@ -195,7 +196,7 @@ where
                 return Ok(GetFileResponse::NotFoundErrorResponse(error_response));
             }
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to fetch file"));
             }
         };
 
@@ -289,12 +290,35 @@ where
 
         let where_clause = where_conditions.join(" AND ");
 
+        // Validate sort_by against whitelist
+        let validated_sort_by = if let Some(ref col) = sort_by {
+            if FILE_COLUMNS.contains(&col.as_str()) {
+                // If we have a join (needs_join is true), prefix with "f." if it's a file column
+                if needs_join {
+                    Some(format!("f.{}", col))
+                } else {
+                    Some(col.clone())
+                }
+            } else {
+                debug!("Invalid sort column requested: {}", col);
+                None // Fall back to default
+            }
+        } else {
+            None
+        };
+
         // Build the complete query with pagination and sorting
         // Use f.id for sorting when we have JOIN, otherwise just id
         let sort_column = if needs_join { "f.id" } else { "id" };
         let query = SqlQueryBuilder::new(base_query)
             .with_where(where_clause.clone())
-            .with_pagination_and_sorting(offset, limit, sort_by, reverse_sort, sort_column)
+            .with_pagination_and_sorting(
+                offset,
+                limit,
+                validated_sort_by,
+                reverse_sort,
+                sort_column,
+            )
             .build();
 
         debug!("Executing query: {}", query);
@@ -315,8 +339,7 @@ where
         let records = match sqlx_query.fetch_all(self.context.pool.as_ref()).await {
             Ok(recs) => recs,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to list files"));
             }
         };
 
@@ -363,8 +386,7 @@ where
         let total_count = match count_sqlx_query.fetch_one(self.context.pool.as_ref()).await {
             Ok(row) => row.get::<i64, _>("total"),
             Err(e) => {
-                error!("Database error getting count: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to list files"));
             }
         };
 
@@ -482,7 +504,7 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to update file"));
             }
         };
 
@@ -537,12 +559,15 @@ where
         {
             Ok(res) => {
                 if res.rows_affected() > 1 {
-                    Err(ApiError(format!(
-                        "Database error: Unexpected number of rows affected: {}",
-                        res.rows_affected()
-                    )))
+                    return Err(database_error_with_msg(
+                        "Unexpected number of rows affected",
+                        "Failed to delete file",
+                    ));
                 } else if res.rows_affected() == 0 {
-                    Err(ApiError("Database error: No rows affected".to_string()))
+                    return Err(database_error_with_msg(
+                        "No rows affected",
+                        "Failed to delete file",
+                    ));
                 } else {
                     info!(
                         "Deleted file {} (path: {:?}) from workflow {}",
@@ -552,8 +577,7 @@ where
                 }
             }
             Err(e) => {
-                error!("Database error: {}", e);
-                Err(database_error(e))
+                return Err(database_error_with_msg(e, "Failed to delete file"));
             }
         }
     }
@@ -580,7 +604,7 @@ impl FilesApiImpl {
         .await
         {
             Ok(rows) => rows,
-            Err(e) => return Err(database_error(e)),
+            Err(e) => return Err(database_error_with_msg(e, "Failed to list required files")),
         };
 
         Ok(rows.into_iter().map(|row| row.file_id).collect())
@@ -606,7 +630,7 @@ impl FilesApiImpl {
         .await
         {
             Ok(rows) => rows,
-            Err(e) => return Err(database_error(e)),
+            Err(e) => return Err(database_error_with_msg(e, "Failed to list required files")),
         };
 
         Ok(rows.into_iter().map(|row| row.file_id).collect())

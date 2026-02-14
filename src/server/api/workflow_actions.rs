@@ -13,7 +13,7 @@ use crate::server::api_types::{
 use crate::models;
 use crate::models::JobStatus;
 
-use super::{ApiContext, database_error};
+use super::{ApiContext, database_error_with_msg};
 
 /// Validate action_config based on action_type
 fn validate_action_config(
@@ -513,7 +513,10 @@ where
                 return Ok(ClaimActionResponse::NotFoundErrorResponse(error_response));
             }
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to check workflow action",
+                ));
             }
         };
 
@@ -606,8 +609,10 @@ impl WorkflowActionsApiImpl {
         {
             Ok(actions) => actions,
             Err(e) => {
-                error!("Failed to fetch untriggered actions: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to fetch untriggered actions",
+                ));
             }
         };
 
@@ -746,8 +751,7 @@ impl WorkflowActionsApiImpl {
                         continue;
                     }
                     Err(e) => {
-                        error!("Failed to fetch job status: {}", e);
-                        return Err(database_error(e));
+                        return Err(database_error_with_msg(e, "Failed to fetch job status"));
                     }
                 };
 
@@ -807,11 +811,10 @@ impl WorkflowActionsApiImpl {
                 }
             }
             Err(e) => {
-                error!(
-                    "Failed to delete recovery actions for workflow {}: {}",
-                    workflow_id, e
-                );
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to delete recovery actions",
+                ));
             }
         }
 
@@ -830,11 +833,7 @@ impl WorkflowActionsApiImpl {
                 );
             }
             Err(e) => {
-                error!(
-                    "Failed to reset executed flags for workflow {}: {}",
-                    workflow_id, e
-                );
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to reset executed flags"));
             }
         }
 
@@ -848,11 +847,10 @@ impl WorkflowActionsApiImpl {
         {
             Ok(actions) => actions,
             Err(e) => {
-                error!(
-                    "Failed to fetch actions for workflow {}: {}",
-                    workflow_id, e
-                );
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to fetch workflow actions",
+                ));
             }
         };
 

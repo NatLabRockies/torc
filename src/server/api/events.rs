@@ -4,7 +4,7 @@
 
 use async_trait::async_trait;
 use chrono::Utc;
-use log::{debug, error, info};
+use log::{debug, info};
 use sqlx::Row;
 use swagger::{ApiError, Has, XSpanIdString};
 
@@ -16,7 +16,8 @@ use crate::server::api_types::{
 use crate::models;
 
 use super::{
-    ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error, json_parse_error,
+    ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg,
+    json_parse_error,
 };
 
 /// Trait defining event-related API operations
@@ -76,6 +77,8 @@ pub struct EventsApiImpl {
     pub context: ApiContext,
 }
 
+const EVENT_COLUMNS: &[&str] = &["id", "workflow_id", "timestamp", "data"];
+
 impl EventsApiImpl {
     pub fn new(context: ApiContext) -> Self {
         Self { context }
@@ -123,7 +126,7 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to create event"));
             }
         };
 
@@ -159,7 +162,7 @@ where
                 return Ok(GetEventResponse::NotFoundErrorResponse(error_response));
             }
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to fetch event"));
             }
         };
 
@@ -222,10 +225,22 @@ where
 
         let where_clause = where_conditions.join(" AND ");
 
+        // Validate sort_by against whitelist
+        let validated_sort_by = if let Some(ref col) = sort_by {
+            if EVENT_COLUMNS.contains(&col.as_str()) {
+                Some(col.clone())
+            } else {
+                debug!("Invalid sort column requested: {}", col);
+                None // Fall back to default
+            }
+        } else {
+            None
+        };
+
         // Build the complete query with pagination and sorting
         let query = SqlQueryBuilder::new(base_query)
             .with_where(where_clause.clone())
-            .with_pagination_and_sorting(offset, limit, sort_by, reverse_sort, "id")
+            .with_pagination_and_sorting(offset, limit, validated_sort_by, reverse_sort, "id")
             .build();
 
         debug!("Executing query: {}", query);
@@ -244,8 +259,7 @@ where
         let records = match sqlx_query.fetch_all(self.context.pool.as_ref()).await {
             Ok(recs) => recs,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to list events"));
             }
         };
 
@@ -283,8 +297,7 @@ where
         let total_count = match count_sqlx_query.fetch_one(self.context.pool.as_ref()).await {
             Ok(row) => row.get::<i64, _>("total"),
             Err(e) => {
-                error!("Database error getting count: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to list events"));
             }
         };
 
@@ -357,8 +370,7 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to update event"));
             }
         };
 
@@ -424,7 +436,7 @@ where
                     Ok(DeleteEventResponse::SuccessfulResponse(event))
                 }
             }
-            Err(e) => Err(ApiError(format!("Database error: {}", e))),
+            Err(e) => Err(database_error_with_msg(e, "Failed to delete event")),
         }
     }
 

@@ -19,7 +19,7 @@ use crate::server::api_types::{
 
 use crate::models::{self as models, JobStatus};
 
-use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error};
+use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg};
 
 /// Trait defining job-related API operations
 #[async_trait]
@@ -155,6 +155,21 @@ pub struct JobsApiImpl {
     pub context: ApiContext,
 }
 
+const JOB_COLUMNS: &[&str] = &[
+    "id",
+    "workflow_id",
+    "name",
+    "command",
+    "cancel_on_blocking_job_failure",
+    "supports_termination",
+    "resource_requirements_id",
+    "invocation_script",
+    "status",
+    "scheduler_id",
+    "failure_handler_id",
+    "attempt_id",
+];
+
 impl JobsApiImpl {
     pub fn new(context: ApiContext) -> Self {
         Self { context }
@@ -185,7 +200,10 @@ impl JobsApiImpl {
             .await
         {
             Ok(_) => Ok(()),
-            Err(e) => Err(database_error(e)),
+            Err(e) => Err(database_error_with_msg(
+                e,
+                "Failed to create job association",
+            )),
         }
     }
 
@@ -212,7 +230,10 @@ impl JobsApiImpl {
             .await
         {
             Ok(_) => Ok(()),
-            Err(e) => Err(database_error(e)),
+            Err(e) => Err(database_error_with_msg(
+                e,
+                "Failed to create job association",
+            )),
         }
     }
 
@@ -240,7 +261,10 @@ impl JobsApiImpl {
         .await
         {
             Ok(_) => Ok(()),
-            Err(e) => Err(database_error(e)),
+            Err(e) => Err(database_error_with_msg(
+                e,
+                "Failed to create job association",
+            )),
         }
     }
 
@@ -266,7 +290,7 @@ impl JobsApiImpl {
                 return Err(ApiError(format!("Job not found with ID: {}", id)));
             }
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to fetch job record"));
             }
         };
 
@@ -291,7 +315,7 @@ impl JobsApiImpl {
         .await
         {
             Ok(records) => records,
-            Err(e) => return Err(database_error(e)),
+            Err(e) => return Err(database_error_with_msg(e, "Failed to fetch job relationships")),
         };
         let depends_on_job_ids = if depends_on_records.is_empty() {
             None
@@ -313,7 +337,12 @@ impl JobsApiImpl {
         .await
         {
             Ok(records) => records,
-            Err(e) => return Err(database_error(e)),
+            Err(e) => {
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to fetch job relationships",
+                ));
+            }
         };
         let input_file_ids = if input_file_records.is_empty() {
             None
@@ -330,7 +359,12 @@ impl JobsApiImpl {
         .await
         {
             Ok(records) => records,
-            Err(e) => return Err(database_error(e)),
+            Err(e) => {
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to fetch job relationships",
+                ));
+            }
         };
         let output_file_ids = if output_file_records.is_empty() {
             None
@@ -347,7 +381,12 @@ impl JobsApiImpl {
         .await
         {
             Ok(records) => records,
-            Err(e) => return Err(database_error(e)),
+            Err(e) => {
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to fetch job relationships",
+                ));
+            }
         };
         let input_user_data_ids = if input_user_data_records.is_empty() {
             None
@@ -369,7 +408,12 @@ impl JobsApiImpl {
         .await
         {
             Ok(records) => records,
-            Err(e) => return Err(database_error(e)),
+            Err(e) => {
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to fetch job relationships",
+                ));
+            }
         };
         let output_user_data_ids = if output_user_data_records.is_empty() {
             None
@@ -437,7 +481,7 @@ impl JobsApiImpl {
         {
             Ok(jobs) => jobs,
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to fetch failed jobs"));
             }
         };
 
@@ -676,8 +720,10 @@ impl JobsApiImpl {
                         debug!("User data {} not found for job {}", ud_id, job_id);
                     }
                     Err(e) => {
-                        error!("Failed to fetch user_data {}: {}", ud_id, e);
-                        return Err(database_error(e));
+                        return Err(database_error_with_msg(
+                            e,
+                            "Failed to fetch user data for hash",
+                        ));
                     }
                 }
             }
@@ -737,10 +783,7 @@ impl JobsApiImpl {
                 );
                 Ok(())
             }
-            Err(e) => {
-                error!("Failed to store input hash for job {}: {}", job_id, e);
-                Err(database_error(e))
-            }
+            Err(e) => Err(database_error_with_msg(e, "Failed to store job input hash")),
         }
     }
 
@@ -770,10 +813,7 @@ impl JobsApiImpl {
                 debug!("No stored hash found for job {}", job_id);
                 Ok(None)
             }
-            Err(e) => {
-                error!("Failed to retrieve stored hash for job {}: {}", job_id, e);
-                Err(database_error(e))
-            }
+            Err(e) => Err(database_error_with_msg(e, "Failed to retrieve stored hash")),
         }
     }
 }
@@ -810,7 +850,7 @@ where
         let mut tx = match self.context.pool.begin().await {
             Ok(tx) => tx,
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to begin transaction"));
             }
         };
 
@@ -849,7 +889,7 @@ where
             Ok(job_result) => job_result,
             Err(e) => {
                 let _ = tx.rollback().await;
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to create job record"));
             }
         };
 
@@ -949,7 +989,7 @@ where
 
         // Commit the transaction
         if let Err(e) = tx.commit().await {
-            return Err(database_error(e));
+            return Err(database_error_with_msg(e, "Failed to commit transaction"));
         }
 
         debug!("Created job with id: {:?}", job_result[0].id);
@@ -993,7 +1033,7 @@ where
         // Use a transaction for all operations to ensure consistency
         let mut transaction = match self.context.pool.begin().await {
             Ok(tx) => tx,
-            Err(e) => return Err(database_error(e)),
+            Err(e) => return Err(database_error_with_msg(e, "Failed to begin transaction")),
         };
 
         // Process each job
@@ -1041,7 +1081,10 @@ where
                 Ok(result) => result,
                 Err(e) => {
                     let _ = transaction.rollback().await;
-                    return Err(database_error(e));
+                    return Err(database_error_with_msg(
+                        e,
+                        "Failed to create job record in bulk",
+                    ));
                 }
             };
 
@@ -1064,7 +1107,10 @@ where
                     .await
                     {
                         let _ = transaction.rollback().await;
-                        return Err(database_error(e));
+                        return Err(database_error_with_msg(
+                            e,
+                            "Failed to create job association in bulk",
+                        ));
                     }
                 }
             }
@@ -1085,7 +1131,10 @@ where
                     .await
                     {
                         let _ = transaction.rollback().await;
-                        return Err(database_error(e));
+                        return Err(database_error_with_msg(
+                            e,
+                            "Failed to create job association in bulk",
+                        ));
                     }
                 }
             }
@@ -1106,7 +1155,10 @@ where
                     .await
                     {
                         let _ = transaction.rollback().await;
-                        return Err(database_error(e));
+                        return Err(database_error_with_msg(
+                            e,
+                            "Failed to create job association in bulk",
+                        ));
                     }
                 }
             }
@@ -1126,7 +1178,10 @@ where
                     .await
                     {
                         let _ = transaction.rollback().await;
-                        return Err(database_error(e));
+                        return Err(database_error_with_msg(
+                            e,
+                            "Failed to create job association in bulk",
+                        ));
                     }
                 }
             }
@@ -1146,7 +1201,10 @@ where
                     .await
                     {
                         let _ = transaction.rollback().await;
-                        return Err(database_error(e));
+                        return Err(database_error_with_msg(
+                            e,
+                            "Failed to create job association in bulk",
+                        ));
                     }
                 }
             }
@@ -1156,7 +1214,7 @@ where
 
         // Commit the transaction
         if let Err(e) = transaction.commit().await {
-            return Err(database_error(e));
+            return Err(database_error_with_msg(e, "Failed to commit transaction"));
         }
 
         let workflow_id = added_jobs.first().map(|j| j.workflow_id).unwrap_or(0);
@@ -1192,8 +1250,7 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to delete jobs"));
             }
         };
 
@@ -1264,8 +1321,7 @@ where
         {
             Ok(recs) => recs,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to list job IDs"));
             }
         };
 
@@ -1345,10 +1401,22 @@ where
 
         let where_clause = where_conditions.join(" AND ");
 
+        // Validate sort_by against whitelist
+        let validated_sort_by = if let Some(ref col) = sort_by {
+            if JOB_COLUMNS.contains(&col.as_str()) {
+                Some(col.clone())
+            } else {
+                debug!("Invalid sort column requested: {}", col);
+                None // Fall back to default
+            }
+        } else {
+            None
+        };
+
         // Build the complete query with pagination and sorting
         let query = SqlQueryBuilder::new(base_query)
             .with_where(where_clause.clone())
-            .with_pagination_and_sorting(offset, limit, sort_by, reverse_sort, "id")
+            .with_pagination_and_sorting(offset, limit, validated_sort_by, reverse_sort, "id")
             .build();
 
         debug!("Executing query: {}", query);
@@ -1376,8 +1444,7 @@ where
         let records = match sqlx_query.fetch_all(self.context.pool.as_ref()).await {
             Ok(recs) => recs,
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to list jobs"));
             }
         };
 
@@ -1458,8 +1525,7 @@ where
         let total_count = match count_sqlx_query.fetch_one(self.context.pool.as_ref()).await {
             Ok(row) => row.get::<i64, _>("total"),
             Err(e) => {
-                error!("Database error getting count: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to list jobs"));
             }
         };
 
@@ -1755,7 +1821,7 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to update job"));
             }
         };
 
@@ -1771,7 +1837,7 @@ where
             // Start a transaction for relationship updates
             let mut tx = match self.context.pool.begin().await {
                 Ok(tx) => tx,
-                Err(e) => return Err(database_error(e)),
+                Err(e) => return Err(database_error_with_msg(e, "Failed to begin transaction")),
             };
 
             // Delete existing depends_on relationships for this job
@@ -1780,7 +1846,10 @@ where
                 .await
             {
                 let _ = tx.rollback().await;
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to delete old job dependencies",
+                ));
             }
 
             // Add new depends_on relationships if provided
@@ -1796,14 +1865,14 @@ where
                     .await
                     {
                         let _ = tx.rollback().await;
-                        return Err(database_error(e));
+                        return Err(database_error_with_msg(e, "Failed to update job dependencies"));
                     }
                 }
             }
 
             // Commit the transaction
             if let Err(e) = tx.commit().await {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to commit transaction"));
             }
         }
 
@@ -1848,7 +1917,7 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to update job status"));
             }
         };
 
@@ -1916,8 +1985,10 @@ where
         {
             Ok(jobs) => jobs,
             Err(e) => {
-                error!("Failed to fetch jobs for workflow {}: {}", id, e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to list jobs for hash check",
+                ));
             }
         };
 
@@ -1972,8 +2043,7 @@ where
             let mut tx = match self.context.pool.begin().await {
                 Ok(tx) => tx,
                 Err(e) => {
-                    error!("Failed to begin transaction: {}", e);
-                    return Err(database_error(e));
+                    return Err(database_error_with_msg(e, "Failed to begin transaction"));
                 }
             };
 
@@ -1997,20 +2067,18 @@ where
                         );
                     }
                     Err(e) => {
-                        error!(
-                            "Failed to update status for job {} ({}): {}",
-                            job_id, job_name, e
-                        );
                         let _ = tx.rollback().await;
-                        return Err(database_error(e));
+                        return Err(database_error_with_msg(
+                            e,
+                            "Failed to update job status during reinitialization",
+                        ));
                     }
                 }
             }
 
             // Commit the transaction
             if let Err(e) = tx.commit().await {
-                error!("Failed to commit transaction: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to commit transaction"));
             }
 
             debug!(
@@ -2076,18 +2144,15 @@ where
         {
             Ok(res) => {
                 if res.rows_affected() > 1 {
-                    error!(
-                        "Unexpected number of rows affected when deleting job {}: {}",
-                        id,
-                        res.rows_affected()
-                    );
-                    Err(ApiError(format!(
-                        "Database error: Unexpected number of rows affected: {}",
-                        res.rows_affected()
-                    )))
+                    return Err(database_error_with_msg(
+                        "Unexpected number of rows affected",
+                        "Failed to delete job",
+                    ));
                 } else if res.rows_affected() == 0 {
-                    error!("No rows affected when deleting job {}", id);
-                    Err(ApiError("Database error: No rows affected".to_string()))
+                    return Err(database_error_with_msg(
+                        "No rows affected",
+                        "Failed to delete job",
+                    ));
                 } else {
                     info!(
                         "Job deleted workflow_id={} job_id={} job_name={}",
@@ -2097,8 +2162,7 @@ where
                 }
             }
             Err(e) => {
-                error!("Database error when deleting job {}: {}", id, e);
-                Err(ApiError(format!("Database error: {}", e)))
+                return Err(database_error_with_msg(e, "Failed to delete job"));
             }
         }
     }
@@ -2140,7 +2204,7 @@ where
         {
             Ok(result) => result,
             Err(e) => {
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to reset job status"));
             }
         };
 
@@ -2196,8 +2260,7 @@ where
         let mut tx = match self.context.pool.begin().await {
             Ok(tx) => tx,
             Err(e) => {
-                error!("Failed to begin transaction: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to begin transaction"));
             }
         };
 
@@ -2233,8 +2296,7 @@ where
                 return Ok(RetryJobResponse::NotFoundErrorResponse(error_response));
             }
             Err(e) => {
-                error!("Database error: {}", e);
-                return Err(database_error(e));
+                return Err(database_error_with_msg(e, "Failed to get job record for retry"));
             }
         };
 
@@ -2325,8 +2387,10 @@ where
         .execute(&mut *tx)
         .await
         {
-            error!("Failed to update job status: {}", e);
-            return Err(database_error(e));
+            return Err(database_error_with_msg(
+                e,
+                "Failed to update job status for retry",
+            ));
         }
 
         // Create an event for the retry (within the transaction)
@@ -2359,8 +2423,7 @@ where
 
         // Commit the transaction
         if let Err(e) = tx.commit().await {
-            error!("Failed to commit transaction: {}", e);
-            return Err(database_error(e));
+            return Err(database_error_with_msg(e, "Failed to commit transaction"));
         }
 
         info!(
