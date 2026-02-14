@@ -731,10 +731,14 @@ impl JobsApiImpl {
             }
         }
 
+        // Normalize invocation_script: treat Some("") the same as None to ensure
+        // consistent hashing between per-job and bulk hash computation methods.
+        let invocation_script = job.invocation_script.filter(|s| !s.is_empty());
+
         // Build JSON object with all input fields in deterministic order
         let hash_input = serde_json::json!({
             "command": job.command,
-            "invocation_script": job.invocation_script,
+            "invocation_script": invocation_script,
             "depends_on_job_ids": job.depends_on_job_ids,
             "input_file_ids": job.input_file_ids,
             "output_file_ids": job.output_file_ids,
@@ -983,7 +987,10 @@ impl JobsApiImpl {
         for job_row in &job_rows {
             let job_id: i64 = job_row.get("id");
             let command: Option<String> = job_row.get("command");
-            let invocation_script: Option<String> = job_row.get("invocation_script");
+            // Normalize invocation_script: treat Some("") the same as None to ensure
+            // consistent hashing between per-job and bulk hash computation methods.
+            let invocation_script: Option<String> =
+                job_row.get::<Option<String>, _>("invocation_script").filter(|s| !s.is_empty());
 
             // Build the same JSON structure as compute_job_input_hash
             let depends_on: Option<&Vec<i64>> = depends_on_map.get(&job_id);
