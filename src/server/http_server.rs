@@ -661,32 +661,22 @@ where
     // Combine: workflow has failures if either this batch or prior batches had failures
     let workflow_has_failures = batch_has_failures || workflow_has_prior_failures;
 
-    // Track all jobs that become ready for action triggering
-    let mut all_ready_job_ids = Vec::new();
-
-    // Process unblocking for each completed job
-    for job in &completed_jobs {
-        match Server::<EmptyContext>::unblock_jobs_waiting_for_tx(
-            &mut tx,
-            workflow_id,
-            job.id,
-            job.return_code,
-            workflow_has_failures,
-        )
-        .await
-        {
-            Ok(ready_job_ids) => {
-                all_ready_job_ids.extend(ready_job_ids);
-            }
-            Err(e) => {
-                debug!(
-                    "Error unblocking jobs for completed job {} in workflow {}: {}",
-                    job.id, workflow_id, e
-                );
-                return Err(e);
-            }
+    let all_ready_job_ids = match Server::<EmptyContext>::batch_unblock_jobs_tx(
+        &mut tx,
+        workflow_id,
+        workflow_has_failures,
+    )
+    .await
+    {
+        Ok(ready_job_ids) => ready_job_ids,
+        Err(e) => {
+            debug!(
+                "Error batch-unblocking jobs for workflow {}: {}",
+                workflow_id, e
+            );
+            return Err(e);
         }
-    }
+    };
 
     // Mark all as processed
     let job_ids: Vec<i64> = completed_jobs.iter().map(|j| j.id).collect();
@@ -1449,6 +1439,150 @@ impl<C> Server<C> {
         }
 
         Ok(())
+    }
+
+    /// Batch unblock: replaces the per-job loop with set-based SQL queries.
+    ///
+    /// Instead of calling `unblock_jobs_waiting_for_tx` once per completed job (O(n) queries),
+    /// this function asks the database directly: "which blocked jobs have ALL dependencies
+    /// satisfied?" in O(1) queries for the success case, or O(depth) for cascading cancellations.
+    ///
+    /// # Arguments
+    /// * `tx` - The database transaction to use
+    /// * `workflow_id` - The workflow ID containing the jobs
+    /// * `workflow_has_failures` - Whether any job in this workflow has failed
+    ///
+    /// # Returns
+    /// * `Ok(Vec<i64>)` - IDs of jobs that became ready
+    /// * `Err(ApiError)` if there's a database error
+    async fn batch_unblock_jobs_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        workflow_id: i64,
+        workflow_has_failures: bool,
+    ) -> Result<Vec<i64>, ApiError> {
+        let completed_status = models::JobStatus::Completed.to_int();
+        let failed_status = models::JobStatus::Failed.to_int();
+        let canceled_status = models::JobStatus::Canceled.to_int();
+        let terminated_status = models::JobStatus::Terminated.to_int();
+        let ready_status = models::JobStatus::Ready.to_int();
+        let blocked_status = models::JobStatus::Blocked.to_int();
+
+        // If workflow has failures, handle cancellations first (may cascade).
+        if workflow_has_failures {
+            let mut iterations = 0;
+            loop {
+                // Cancel blocked jobs whose deps are all resolved AND at least one dep
+                // is failed/canceled/terminated with a non-zero return code.
+                // Loop because cancellations can cascade: a canceled job may unblock
+                // another job that also needs canceling.
+                let canceled = match sqlx::query(
+                    r#"
+                    UPDATE job
+                    SET status = ?
+                    WHERE workflow_id = ?
+                      AND status = ?
+                      AND cancel_on_blocking_job_failure = 1
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM job_depends_on jbb
+                          JOIN job j ON jbb.depends_on_job_id = j.id
+                          WHERE jbb.job_id = job.id
+                            AND j.status NOT IN (?, ?, ?, ?)
+                      )
+                      AND EXISTS (
+                          SELECT 1
+                          FROM job_depends_on jbb
+                          JOIN job j ON jbb.depends_on_job_id = j.id
+                          JOIN result r ON j.id = r.job_id
+                          JOIN workflow_status ws ON j.workflow_id = ws.id
+                            AND r.run_id = ws.run_id
+                          WHERE jbb.job_id = job.id
+                            AND j.status IN (?, ?, ?)
+                            AND r.return_code != 0
+                      )
+                    "#,
+                )
+                .bind(canceled_status)
+                .bind(workflow_id)
+                .bind(blocked_status)
+                .bind(completed_status)
+                .bind(failed_status)
+                .bind(canceled_status)
+                .bind(terminated_status)
+                .bind(failed_status)
+                .bind(canceled_status)
+                .bind(terminated_status)
+                .execute(&mut **tx)
+                .await
+                {
+                    Ok(result) => result.rows_affected(),
+                    Err(e) => {
+                        debug!("batch_unblock_jobs_tx: cancellation query failed: {}", e);
+                        return Err(ApiError(format!("Database error: {}", e)));
+                    }
+                };
+
+                if canceled == 0 {
+                    break;
+                }
+
+                debug!(
+                    "batch_unblock_jobs_tx: canceled {} jobs in iteration {} for workflow_id={}",
+                    canceled, iterations, workflow_id
+                );
+
+                iterations += 1;
+                if iterations >= 100 {
+                    debug!(
+                        "batch_unblock_jobs_tx: hit 100-iteration cap for cascading cancellations in workflow_id={}",
+                        workflow_id
+                    );
+                    break;
+                }
+            }
+        }
+
+        // Mark all blocked jobs whose dependencies are ALL satisfied as ready.
+        let updated_jobs = match sqlx::query(
+            r#"
+            UPDATE job
+            SET status = ?
+            WHERE workflow_id = ?
+              AND status = ?
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM job_depends_on jbb
+                  JOIN job j ON jbb.depends_on_job_id = j.id
+                  WHERE jbb.job_id = job.id
+                    AND j.status NOT IN (?, ?, ?, ?)
+              )
+            RETURNING id
+            "#,
+        )
+        .bind(ready_status)
+        .bind(workflow_id)
+        .bind(blocked_status)
+        .bind(completed_status)
+        .bind(failed_status)
+        .bind(canceled_status)
+        .bind(terminated_status)
+        .fetch_all(&mut **tx)
+        .await
+        {
+            Ok(rows) => rows,
+            Err(e) => {
+                debug!("batch_unblock_jobs_tx: ready query failed: {}", e);
+                return Err(ApiError(format!("Database error: {}", e)));
+            }
+        };
+
+        let ready_job_ids: Vec<i64> = updated_jobs.iter().map(|r| r.get("id")).collect();
+        debug!(
+            "batch_unblock_jobs_tx: {} jobs became ready for workflow_id={}",
+            ready_job_ids.len(),
+            workflow_id
+        );
+        Ok(ready_job_ids)
     }
 
     /// Fast path for unblocking jobs after a successful completion (return_code = 0).
