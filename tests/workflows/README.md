@@ -144,6 +144,32 @@ See `timeout_auto_recovery_test/README.md` for detailed instructions.
 
 ---
 
+### scale_test/
+
+Stress test for database scaling with **100,000 jobs** arranged in 4 rounds of 25,000 jobs each,
+separated by barrier jobs. All jobs are no-ops (`echo`), so the bottleneck is purely database
+throughput.
+
+**Purpose:** Verify that the server can handle 100K jobs efficiently — creation, dependency
+resolution, job claiming, and completion processing under heavy concurrent access.
+
+**Usage:**
+
+```bash
+# Quick start (single process, 16 parallel jobs)
+torc run tests/workflows/scale_test/workflow.yaml --num-parallel-processes 16
+
+# Or with multiple independent runners for maximum contention
+torc workflows create tests/workflows/scale_test/workflow.yaml
+for i in $(seq 1 16); do
+  torc workflows run <workflow_id> &
+done
+```
+
+See `scale_test/README.md` for detailed instructions including multi-node setup.
+
+---
+
 ### tls_test/
 
 Tests client-side TLS features (`--tls-ca-cert` and `--tls-insecure`) using a Python HTTPS reverse

@@ -1,0 +1,92 @@
+name: "Database Scale Test (100K Jobs)"
+description: |
+  Stress test for database scaling with 100,000 jobs arranged in 4 rounds
+  of 25,000 jobs each, separated by barrier jobs.
+
+  Uses the barrier pattern to keep dependency count at O(n) instead of O(n^2):
+  - 4 rounds x 25,000 jobs = 100,000 work jobs
+  - 3 inter-stage barriers + 1 final barrier = 4 barrier jobs
+  - Total: 100,004 jobs
+  - Total dependencies: ~100,003 (25,000 into each barrier + 25,000 out)
+
+  All jobs are no-ops (echo commands) so the bottleneck is purely database
+  throughput: creating jobs, resolving dependencies, claiming jobs, and
+  processing completions.
+
+  Run with multiple job runners for maximum throughput:
+    torc run tests/workflows/scale_test/workflow.yaml --num-parallel-processes 16
+
+  See README.md for detailed instructions.
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # ROUND 1: 25,000 parallel jobs
+  # ═══════════════════════════════════════════════════════════════════════════
+  - name: "r1_{i:05d}"
+    command: "echo r1_{i}"
+    resource_requirements: "minimal"
+    parameters:
+      i: "0:24999"
+
+  - name: "barrier_r1"
+    command: "echo 'Round 1 complete: 25000 jobs finished' && date"
+    resource_requirements: "minimal"
+    depends_on_regexes: ["^r1_\\d+$"]
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # ROUND 2: 25,000 parallel jobs
+  # ═══════════════════════════════════════════════════════════════════════════
+  - name: "r2_{i:05d}"
+    command: "echo r2_{i}"
+    resource_requirements: "minimal"
+    depends_on: ["barrier_r1"]
+    parameters:
+      i: "0:24999"
+
+  - name: "barrier_r2"
+    command: "echo 'Round 2 complete: 25000 jobs finished' && date"
+    resource_requirements: "minimal"
+    depends_on_regexes: ["^r2_\\d+$"]
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # ROUND 3: 25,000 parallel jobs
+  # ═══════════════════════════════════════════════════════════════════════════
+  - name: "r3_{i:05d}"
+    command: "echo r3_{i}"
+    resource_requirements: "minimal"
+    depends_on: ["barrier_r2"]
+    parameters:
+      i: "0:24999"
+
+  - name: "barrier_r3"
+    command: "echo 'Round 3 complete: 25000 jobs finished' && date"
+    resource_requirements: "minimal"
+    depends_on_regexes: ["^r3_\\d+$"]
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # ROUND 4: 25,000 parallel jobs
+  # ═══════════════════════════════════════════════════════════════════════════
+  - name: "r4_{i:05d}"
+    command: "echo r4_{i}"
+    resource_requirements: "minimal"
+    depends_on: ["barrier_r3"]
+    parameters:
+      i: "0:24999"
+
+  - name: "barrier_r4"
+    command: |
+      echo "════════════════════════════════════════════════════════════"
+      echo "Scale Test Complete"
+      echo "Finished at: $(date)"
+      echo "Total jobs executed: 100,000 (4 rounds x 25,000 jobs)"
+      echo "════════════════════════════════════════════════════════════"
+    resource_requirements: "minimal"
+    depends_on_regexes: ["^r4_\\d+$"]
+
+resource_requirements:
+  - name: "minimal"
+    num_cpus: 1
+    num_gpus: 0
+    num_nodes: 1
+    memory: "10m"
+    runtime: "PT1M"
