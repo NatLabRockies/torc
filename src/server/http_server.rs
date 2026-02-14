@@ -149,6 +149,75 @@ macro_rules! authorize_job {
     };
 }
 
+macro_rules! authorize_group_admin {
+    ($self:ident, $group_id:expr, $context:expr, $response_enum:ident) => {
+        match $self
+            .check_group_admin_access_for_context($group_id, $context)
+            .await
+        {
+            AccessCheckResult::Allowed => {}
+            AccessCheckResult::Denied(reason) => {
+                return Ok($response_enum::ForbiddenErrorResponse(forbidden_error!(
+                    reason
+                )));
+            }
+            AccessCheckResult::NotFound(reason) => {
+                return Ok($response_enum::NotFoundErrorResponse(not_found_error!(
+                    reason
+                )));
+            }
+            AccessCheckResult::InternalError(reason) => {
+                return Err(ApiError(reason));
+            }
+        }
+    };
+}
+
+macro_rules! authorize_admin {
+    ($self:ident, $context:expr, $response_enum:ident) => {
+        match $self.check_admin_access_for_context($context).await {
+            AccessCheckResult::Allowed => {}
+            AccessCheckResult::Denied(reason) => {
+                return Ok($response_enum::ForbiddenErrorResponse(forbidden_error!(
+                    reason
+                )));
+            }
+            AccessCheckResult::NotFound(reason) => {
+                return Ok($response_enum::NotFoundErrorResponse(not_found_error!(
+                    reason
+                )));
+            }
+            AccessCheckResult::InternalError(reason) => {
+                return Err(ApiError(reason));
+            }
+        }
+    };
+}
+
+macro_rules! authorize_workflow_group {
+    ($self:ident, $workflow_id:expr, $group_id:expr, $context:expr, $response_enum:ident) => {
+        match $self
+            .check_workflow_group_access_for_context($workflow_id, $group_id, $context)
+            .await
+        {
+            AccessCheckResult::Allowed => {}
+            AccessCheckResult::Denied(reason) => {
+                return Ok($response_enum::ForbiddenErrorResponse(forbidden_error!(
+                    reason
+                )));
+            }
+            AccessCheckResult::NotFound(reason) => {
+                return Ok($response_enum::NotFoundErrorResponse(not_found_error!(
+                    reason
+                )));
+            }
+            AccessCheckResult::InternalError(reason) => {
+                return Err(ApiError(reason));
+            }
+        }
+    };
+}
+
 /// Process optional offset and limit parameters and return concrete values.
 /// Returns (offset, limit) where:
 /// - offset defaults to 0 if not provided
@@ -2158,6 +2227,37 @@ where
             .await
     }
 
+    /// Helper to extract authorization from context and check admin access
+    async fn check_admin_access_for_context(&self, context: &C) -> AccessCheckResult {
+        let auth: Option<Authorization> = Has::<Option<Authorization>>::get(context).clone();
+        self.authorization_service.check_admin_access(&auth).await
+    }
+
+    /// Helper to extract authorization from context and check group admin access
+    async fn check_group_admin_access_for_context(
+        &self,
+        group_id: i64,
+        context: &C,
+    ) -> AccessCheckResult {
+        let auth: Option<Authorization> = Has::<Option<Authorization>>::get(context).clone();
+        self.authorization_service
+            .check_group_admin_access(&auth, group_id)
+            .await
+    }
+
+    /// Helper to extract authorization from context and check workflow group access
+    async fn check_workflow_group_access_for_context(
+        &self,
+        workflow_id: i64,
+        group_id: i64,
+        context: &C,
+    ) -> AccessCheckResult {
+        let auth: Option<Authorization> = Has::<Option<Authorization>>::get(context).clone();
+        self.authorization_service
+            .check_workflow_group_access(&auth, workflow_id, group_id)
+            .await
+    }
+
     /// Helper to extract authorization from context and check resource access
     async fn check_resource_access_for_context(
         &self,
@@ -4030,29 +4130,7 @@ where
             Has::<XSpanIdString>::get(context).0.clone()
         );
 
-        // Check access control
-        match self.check_workflow_access_for_context(id, context).await {
-            AccessCheckResult::Allowed => {}
-            AccessCheckResult::Denied(reason) => {
-                return Ok(ClaimJobsBasedOnResources::ForbiddenErrorResponse(
-                    models::ErrorResponse::new(serde_json::json!({
-                        "error": "Forbidden",
-                        "message": reason
-                    })),
-                ));
-            }
-            AccessCheckResult::NotFound(reason) => {
-                return Ok(ClaimJobsBasedOnResources::NotFoundErrorResponse(
-                    models::ErrorResponse::new(serde_json::json!({
-                        "error": "NotFound",
-                        "message": reason
-                    })),
-                ));
-            }
-            AccessCheckResult::InternalError(reason) => {
-                return Err(ApiError(reason));
-            }
-        }
+        authorize_workflow!(self, id, context, ClaimJobsBasedOnResources);
 
         let status = match self.get_workflow_status(id, context).await {
             Ok(GetWorkflowStatusResponse::SuccessfulResponse(status)) => status,
@@ -4105,29 +4183,7 @@ where
             Has::<XSpanIdString>::get(context).0.clone()
         );
 
-        // Check access control
-        match self.check_workflow_access_for_context(id, context).await {
-            AccessCheckResult::Allowed => {}
-            AccessCheckResult::Denied(reason) => {
-                return Ok(ClaimNextJobsResponse::ForbiddenErrorResponse(
-                    models::ErrorResponse::new(serde_json::json!({
-                        "error": "Forbidden",
-                        "message": reason
-                    })),
-                ));
-            }
-            AccessCheckResult::NotFound(reason) => {
-                return Ok(ClaimNextJobsResponse::NotFoundErrorResponse(
-                    models::ErrorResponse::new(serde_json::json!({
-                        "error": "NotFound",
-                        "message": reason
-                    })),
-                ));
-            }
-            AccessCheckResult::InternalError(reason) => {
-                return Err(ApiError(reason));
-            }
-        }
+        authorize_workflow!(self, id, context, ClaimNextJobsResponse);
 
         let workflow_id = id;
         let job_limit = limit.unwrap_or(10);
@@ -4180,26 +4236,6 @@ where
             "claim_next_jobs: workflow_id={}, limit={}",
             workflow_id, job_limit
         );
-
-        // First check if the workflow exists
-        let workflow_exists = sqlx::query("SELECT id FROM workflow WHERE id = $1")
-            .bind(workflow_id)
-            .fetch_optional(&mut *conn)
-            .await
-            .map_err(|e| {
-                error!("Database error checking workflow existence: {}", e);
-                ApiError("Database error".to_string())
-            })?;
-
-        if workflow_exists.is_none() {
-            // Rollback the transaction since we're returning early
-            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("Workflow not found with ID: {}", workflow_id)
-            }));
-            return Ok(ClaimNextJobsResponse::DefaultErrorResponse(error_response));
-        }
 
         // Query the job table directly for ready jobs using the indexed status column
         let ready_status = models::JobStatus::Ready.to_int();
@@ -4578,29 +4614,7 @@ where
             Has::<XSpanIdString>::get(context).0.clone()
         );
 
-        // Check access control
-        match self.check_workflow_access_for_context(id, context).await {
-            AccessCheckResult::Allowed => {}
-            AccessCheckResult::Denied(reason) => {
-                return Ok(ResetJobStatusResponse::ForbiddenErrorResponse(
-                    models::ErrorResponse::new(serde_json::json!({
-                        "error": "Forbidden",
-                        "message": reason
-                    })),
-                ));
-            }
-            AccessCheckResult::NotFound(reason) => {
-                return Ok(ResetJobStatusResponse::NotFoundErrorResponse(
-                    models::ErrorResponse::new(serde_json::json!({
-                        "error": "NotFound",
-                        "message": reason
-                    })),
-                ));
-            }
-            AccessCheckResult::InternalError(reason) => {
-                return Err(ApiError(reason));
-            }
-        }
+        authorize_workflow!(self, id, context, ResetJobStatusResponse);
 
         let failed_only_value = failed_only.unwrap_or(false);
         let result = self
@@ -4653,29 +4667,7 @@ where
             Has::<XSpanIdString>::get(context).0.clone()
         );
 
-        // Check access control
-        match self.check_workflow_access_for_context(id, context).await {
-            AccessCheckResult::Allowed => {}
-            AccessCheckResult::Denied(reason) => {
-                return Ok(ResetWorkflowStatusResponse::ForbiddenErrorResponse(
-                    models::ErrorResponse::new(serde_json::json!({
-                        "error": "Forbidden",
-                        "message": reason
-                    })),
-                ));
-            }
-            AccessCheckResult::NotFound(reason) => {
-                return Ok(ResetWorkflowStatusResponse::NotFoundErrorResponse(
-                    models::ErrorResponse::new(serde_json::json!({
-                        "error": "NotFound",
-                        "message": reason
-                    })),
-                ));
-            }
-            AccessCheckResult::InternalError(reason) => {
-                return Err(ApiError(reason));
-            }
-        }
+        authorize_workflow!(self, id, context, ResetWorkflowStatusResponse);
 
         // Clear in-memory failure tracking for this workflow
         if let Ok(mut set) = self.workflows_with_failures.write() {
@@ -4769,29 +4761,7 @@ where
             );
         }
 
-        // Check access control (via workflow)
-        match self.check_job_access_for_context(id, context).await {
-            AccessCheckResult::Allowed => {}
-            AccessCheckResult::Denied(reason) => {
-                return Ok(ManageStatusChangeResponse::ForbiddenErrorResponse(
-                    models::ErrorResponse::new(serde_json::json!({
-                        "error": "Forbidden",
-                        "message": reason
-                    })),
-                ));
-            }
-            AccessCheckResult::NotFound(reason) => {
-                return Ok(ManageStatusChangeResponse::NotFoundErrorResponse(
-                    models::ErrorResponse::new(serde_json::json!({
-                        "error": "NotFound",
-                        "message": reason
-                    })),
-                ));
-            }
-            AccessCheckResult::InternalError(reason) => {
-                return Err(ApiError(reason));
-            }
-        }
+        authorize_job!(self, id, context, ManageStatusChangeResponse);
 
         // 1. Call get_job. If the job doesn't exist, return a 404.
         let mut job = match self.jobs_api.get_job(id, context).await? {
@@ -4898,29 +4868,7 @@ where
             Has::<XSpanIdString>::get(context).0.clone()
         );
 
-        // Check access control (via workflow)
-        match self.check_job_access_for_context(id, context).await {
-            AccessCheckResult::Allowed => {}
-            AccessCheckResult::Denied(reason) => {
-                return Ok(StartJobResponse::ForbiddenErrorResponse(
-                    models::ErrorResponse::new(serde_json::json!({
-                        "error": "Forbidden",
-                        "message": reason
-                    })),
-                ));
-            }
-            AccessCheckResult::NotFound(reason) => {
-                return Ok(StartJobResponse::NotFoundErrorResponse(
-                    models::ErrorResponse::new(serde_json::json!({
-                        "error": "NotFound",
-                        "message": reason
-                    })),
-                ));
-            }
-            AccessCheckResult::InternalError(reason) => {
-                return Err(ApiError(reason));
-            }
-        }
+        authorize_job!(self, id, context, StartJobResponse);
 
         let mut job = match self.jobs_api.get_job(id, context).await? {
             GetJobResponse::SuccessfulResponse(job) => job,
@@ -5032,29 +4980,7 @@ where
             Has::<XSpanIdString>::get(context).0.clone()
         );
 
-        // Check access control (via workflow)
-        match self.check_job_access_for_context(id, context).await {
-            AccessCheckResult::Allowed => {}
-            AccessCheckResult::Denied(reason) => {
-                return Ok(CompleteJobResponse::ForbiddenErrorResponse(
-                    models::ErrorResponse::new(serde_json::json!({
-                        "error": "Forbidden",
-                        "message": reason
-                    })),
-                ));
-            }
-            AccessCheckResult::NotFound(reason) => {
-                return Ok(CompleteJobResponse::NotFoundErrorResponse(
-                    models::ErrorResponse::new(serde_json::json!({
-                        "error": "NotFound",
-                        "message": reason
-                    })),
-                ));
-            }
-            AccessCheckResult::InternalError(reason) => {
-                return Err(ApiError(reason));
-            }
-        }
+        authorize_job!(self, id, context, CompleteJobResponse);
 
         // 1. Verify job status is terminal (finished executing)
         if !status.is_terminal() {
@@ -5783,23 +5709,7 @@ where
         context: &C,
     ) -> Result<CreateAccessGroupResponse, ApiError> {
         // Only system administrators can create access groups
-        let auth: Option<Authorization> = Has::<Option<Authorization>>::get(context).clone();
-        match self.authorization_service.check_admin_access(&auth).await {
-            AccessCheckResult::Allowed => {}
-            AccessCheckResult::Denied(reason) => {
-                return Ok(CreateAccessGroupResponse::ForbiddenErrorResponse(
-                    forbidden_error!(reason),
-                ));
-            }
-            AccessCheckResult::NotFound(reason) => {
-                return Ok(CreateAccessGroupResponse::NotFoundErrorResponse(
-                    not_found_error!(reason),
-                ));
-            }
-            AccessCheckResult::InternalError(reason) => {
-                return Err(ApiError(reason));
-            }
-        }
+        authorize_admin!(self, context, CreateAccessGroupResponse);
 
         self.access_groups_api
             .create_access_group(body, context)
@@ -5832,23 +5742,7 @@ where
         context: &C,
     ) -> Result<DeleteAccessGroupResponse, ApiError> {
         // Only system administrators can delete access groups
-        let auth: Option<Authorization> = Has::<Option<Authorization>>::get(context).clone();
-        match self.authorization_service.check_admin_access(&auth).await {
-            AccessCheckResult::Allowed => {}
-            AccessCheckResult::Denied(reason) => {
-                return Ok(DeleteAccessGroupResponse::ForbiddenErrorResponse(
-                    forbidden_error!(reason),
-                ));
-            }
-            AccessCheckResult::NotFound(reason) => {
-                return Ok(DeleteAccessGroupResponse::NotFoundErrorResponse(
-                    not_found_error!(reason),
-                ));
-            }
-            AccessCheckResult::InternalError(reason) => {
-                return Err(ApiError(reason));
-            }
-        }
+        authorize_admin!(self, context, DeleteAccessGroupResponse);
 
         // Cannot delete system groups (like the admin group)
         match self.authorization_service.is_system_group(id).await {
@@ -5878,27 +5772,7 @@ where
     ) -> Result<AddUserToGroupResponse, ApiError> {
         // Group admins or system admins can add users to groups
         // Note: check_group_admin_access already blocks modifications to the admin group
-        let auth: Option<Authorization> = Has::<Option<Authorization>>::get(context).clone();
-        match self
-            .authorization_service
-            .check_group_admin_access(&auth, group_id)
-            .await
-        {
-            AccessCheckResult::Allowed => {}
-            AccessCheckResult::Denied(reason) => {
-                return Ok(AddUserToGroupResponse::ForbiddenErrorResponse(
-                    forbidden_error!(reason),
-                ));
-            }
-            AccessCheckResult::NotFound(reason) => {
-                return Ok(AddUserToGroupResponse::NotFoundErrorResponse(
-                    not_found_error!(reason),
-                ));
-            }
-            AccessCheckResult::InternalError(reason) => {
-                return Err(ApiError(reason));
-            }
-        }
+        authorize_group_admin!(self, group_id, context, AddUserToGroupResponse);
 
         self.access_groups_api
             .add_user_to_group(group_id, body, context)
@@ -5913,27 +5787,7 @@ where
     ) -> Result<RemoveUserFromGroupResponse, ApiError> {
         // Group admins or system admins can remove users from groups
         // Note: check_group_admin_access already blocks modifications to the admin group
-        let auth: Option<Authorization> = Has::<Option<Authorization>>::get(context).clone();
-        match self
-            .authorization_service
-            .check_group_admin_access(&auth, group_id)
-            .await
-        {
-            AccessCheckResult::Allowed => {}
-            AccessCheckResult::Denied(reason) => {
-                return Ok(RemoveUserFromGroupResponse::ForbiddenErrorResponse(
-                    forbidden_error!(reason),
-                ));
-            }
-            AccessCheckResult::NotFound(reason) => {
-                return Ok(RemoveUserFromGroupResponse::NotFoundErrorResponse(
-                    not_found_error!(reason),
-                ));
-            }
-            AccessCheckResult::InternalError(reason) => {
-                return Err(ApiError(reason));
-            }
-        }
+        authorize_group_admin!(self, group_id, context, RemoveUserFromGroupResponse);
 
         self.access_groups_api
             .remove_user_from_group(group_id, &user_name, context)
@@ -5973,27 +5827,13 @@ where
         context: &C,
     ) -> Result<AddWorkflowToGroupResponse, ApiError> {
         // Workflow owner or group admin can add workflows to groups
-        let auth: Option<Authorization> = Has::<Option<Authorization>>::get(context).clone();
-        match self
-            .authorization_service
-            .check_workflow_group_access(&auth, workflow_id, group_id)
-            .await
-        {
-            AccessCheckResult::Allowed => {}
-            AccessCheckResult::Denied(reason) => {
-                return Ok(AddWorkflowToGroupResponse::ForbiddenErrorResponse(
-                    forbidden_error!(reason),
-                ));
-            }
-            AccessCheckResult::NotFound(reason) => {
-                return Ok(AddWorkflowToGroupResponse::NotFoundErrorResponse(
-                    not_found_error!(reason),
-                ));
-            }
-            AccessCheckResult::InternalError(reason) => {
-                return Err(ApiError(reason));
-            }
-        }
+        authorize_workflow_group!(
+            self,
+            workflow_id,
+            group_id,
+            context,
+            AddWorkflowToGroupResponse
+        );
 
         self.access_groups_api
             .add_workflow_to_group(workflow_id, group_id, context)
@@ -6007,27 +5847,13 @@ where
         context: &C,
     ) -> Result<RemoveWorkflowFromGroupResponse, ApiError> {
         // Workflow owner or group admin can remove workflows from groups
-        let auth: Option<Authorization> = Has::<Option<Authorization>>::get(context).clone();
-        match self
-            .authorization_service
-            .check_workflow_group_access(&auth, workflow_id, group_id)
-            .await
-        {
-            AccessCheckResult::Allowed => {}
-            AccessCheckResult::Denied(reason) => {
-                return Ok(RemoveWorkflowFromGroupResponse::ForbiddenErrorResponse(
-                    forbidden_error!(reason),
-                ));
-            }
-            AccessCheckResult::NotFound(reason) => {
-                return Ok(RemoveWorkflowFromGroupResponse::NotFoundErrorResponse(
-                    not_found_error!(reason),
-                ));
-            }
-            AccessCheckResult::InternalError(reason) => {
-                return Err(ApiError(reason));
-            }
-        }
+        authorize_workflow_group!(
+            self,
+            workflow_id,
+            group_id,
+            context,
+            RemoveWorkflowFromGroupResponse
+        );
 
         self.access_groups_api
             .remove_workflow_from_group(workflow_id, group_id, context)
@@ -6086,40 +5912,9 @@ where
             }
         }
 
-        let result = self
-            .authorization_service
-            .check_workflow_access(
-                &Some(Authorization {
-                    subject: user_name.clone(),
-                    scopes: swagger::auth::Scopes::All,
-                    issuer: None,
-                }),
-                workflow_id,
-            )
-            .await;
-
-        match result {
-            AccessCheckResult::Allowed => Ok(CheckWorkflowAccessResponse::SuccessfulResponse(
-                models::AccessCheckResponse {
-                    workflow_id,
-                    user_name,
-                    has_access: true,
-                    reason: None,
-                },
-            )),
-            AccessCheckResult::Denied(reason) => Ok(
-                CheckWorkflowAccessResponse::SuccessfulResponse(models::AccessCheckResponse {
-                    workflow_id,
-                    user_name,
-                    has_access: false,
-                    reason: Some(reason),
-                }),
-            ),
-            AccessCheckResult::NotFound(reason) => Ok(
-                CheckWorkflowAccessResponse::NotFoundErrorResponse(not_found_error!(reason)),
-            ),
-            AccessCheckResult::InternalError(reason) => Err(ApiError(reason)),
-        }
+        self.access_groups_api
+            .check_workflow_access(workflow_id, &user_name, context)
+            .await
     }
 
     /// Subscribe to the event broadcast channel for SSE streaming.

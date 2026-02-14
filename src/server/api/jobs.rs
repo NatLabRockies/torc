@@ -1616,20 +1616,6 @@ where
             ));
         }
 
-        // Restriction 2: Updating job status is not allowed, except to Disabled
-        if let Some(new_status) = &body.status
-            && let Some(ref existing_status) = existing_job.status
-            && *new_status != *existing_status
-            && *new_status != models::JobStatus::Disabled
-        {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": "Cannot update job status - this field is immutable after job creation (except to Disabled)"
-            }));
-            return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
-                error_response,
-            ));
-        }
-
         // Check if depends_on_job_ids is being modified
         let mut depends_on_job_ids_modified = false;
         if let Some(depends_on_ids) = &body.depends_on_job_ids {

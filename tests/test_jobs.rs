@@ -820,16 +820,16 @@ fn test_jobs_update_restriction_status_must_be_uninitialized(start_server: &Serv
 }
 
 #[rstest]
-fn test_jobs_update_restriction_cannot_change_status(start_server: &ServerProcess) {
+fn test_jobs_update_can_change_status(start_server: &ServerProcess) {
     let config = &start_server.config;
 
     // Create test workflow and job
-    let workflow = create_test_workflow(config, "test_status_change_restriction_workflow");
+    let workflow = create_test_workflow(config, "test_status_change_workflow");
     let workflow_id = workflow.id.unwrap();
-    let job = create_test_job(config, workflow_id, "test_no_status_change");
+    let job = create_test_job(config, workflow_id, "test_status_change");
     let job_id = job.id.unwrap();
 
-    // Job should be in Uninitialized status (can be updated)
+    // Job should be in Uninitialized status
     let current_job = default_api::get_job(config, job_id).expect("Failed to get job");
     assert_eq!(
         current_job.status.unwrap(),
@@ -837,30 +837,19 @@ fn test_jobs_update_restriction_cannot_change_status(start_server: &ServerProces
         "Job should start in Uninitialized status"
     );
 
-    // Try to update status to "ready" via API - should fail
+    // Update status to "ready" via API - should succeed
     let mut job_to_update = current_job.clone();
     job_to_update.status = Some(JobStatus::Ready);
 
-    let result = default_api::update_job(config, job_id, job_to_update);
-    assert!(
-        result.is_err(),
-        "Should fail when attempting to change job status field via API"
-    );
+    default_api::update_job(config, job_id, job_to_update)
+        .expect("Should succeed when changing job status via API");
 
-    // Verify error message mentions status is immutable
-    let error_msg = format!("{:?}", result.unwrap_err());
-    assert!(
-        error_msg.contains("immutable") || error_msg.contains("Cannot update job status"),
-        "Error message should indicate status field is immutable, got: {}",
-        error_msg
-    );
-
-    // Verify the status hasn't changed
+    // Verify the status was updated
     let final_job = default_api::get_job(config, job_id).expect("Failed to get job");
     assert_eq!(
         final_job.status.unwrap(),
-        JobStatus::Uninitialized,
-        "Job status should remain unchanged"
+        JobStatus::Ready,
+        "Job status should be updated to Ready"
     );
 }
 

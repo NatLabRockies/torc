@@ -932,7 +932,6 @@ fn test_user_data_empty_null_data(start_server: &ServerProcess) {
 }
 
 #[rstest]
-#[ignore = "Test is broken"]
 fn test_api_list_missing_user_data(start_server: &ServerProcess) {
     let config = &start_server.config;
 
@@ -945,7 +944,13 @@ fn test_api_list_missing_user_data(start_server: &ServerProcess) {
         .expect("Failed to create user_data1");
     let user_data1_id = user_data1.id.unwrap();
 
-    let missing_input_id = 100i64;
+    // Create a placeholder user_data with NULL data for the missing input
+    let missing_input_user_data =
+        models::UserDataModel::new(workflow_id, "missing_input".to_string());
+    let missing_input_user_data =
+        default_api::create_user_data(config, missing_input_user_data, None, None)
+            .expect("Failed to create missing input placeholder");
+    let missing_input_id = missing_input_user_data.id.unwrap();
 
     let mut job1 = models::JobModel::new(
         workflow_id,
@@ -975,7 +980,13 @@ fn test_api_list_missing_user_data(start_server: &ServerProcess) {
         response.user_data
     );
 
-    let missing_output_id = 200i64;
+    // Create a placeholder user_data with NULL data for the missing output
+    let missing_output_user_data =
+        models::UserDataModel::new(workflow_id, "missing_output".to_string());
+    let missing_output_user_data =
+        default_api::create_user_data(config, missing_output_user_data, None, None)
+            .expect("Failed to create missing output placeholder");
+    let missing_output_id = missing_output_user_data.id.unwrap();
 
     let mut job2 = models::JobModel::new(
         workflow_id,
@@ -1038,8 +1049,20 @@ fn test_api_list_missing_user_data(start_server: &ServerProcess) {
         missing_output_id
     );
 
-    let missing_output_id_2 = 300i64;
-    let missing_output_id_3 = 400i64;
+    // Create placeholder user_data with NULL data for the missing outputs
+    let missing_output_user_data_2 =
+        models::UserDataModel::new(workflow_id, "missing_output_2".to_string());
+    let missing_output_user_data_2 =
+        default_api::create_user_data(config, missing_output_user_data_2, None, None)
+            .expect("Failed to create missing output placeholder 2");
+    let missing_output_id_2 = missing_output_user_data_2.id.unwrap();
+
+    let missing_output_user_data_3 =
+        models::UserDataModel::new(workflow_id, "missing_output_3".to_string());
+    let missing_output_user_data_3 =
+        default_api::create_user_data(config, missing_output_user_data_3, None, None)
+            .expect("Failed to create missing output placeholder 3");
+    let missing_output_id_3 = missing_output_user_data_3.id.unwrap();
 
     let mut job3 = models::JobModel::new(
         workflow_id,
@@ -1087,7 +1110,12 @@ fn test_api_list_missing_user_data(start_server: &ServerProcess) {
         missing_output_id_3
     );
 
-    let missing_input_id_2 = 500i64;
+    let missing_input_user_data_2 =
+        models::UserDataModel::new(workflow_id, "missing_input_2".to_string());
+    let missing_input_user_data_2 =
+        default_api::create_user_data(config, missing_input_user_data_2, None, None)
+            .expect("Failed to create missing input placeholder 2");
+    let missing_input_id_2 = missing_input_user_data_2.id.unwrap();
 
     let mut job4 = models::JobModel::new(
         workflow_id,

@@ -170,34 +170,32 @@ impl AuthorizationService {
         auth: &Option<Authorization>,
         job_id: i64,
     ) -> AccessCheckResult {
+        // 1. Get the workflow ID for this job (always do this to ensure 404s are accurate)
+        let workflow_id: i64 = match sqlx::query("SELECT workflow_id FROM job WHERE id = $1")
+            .bind(job_id)
+            .fetch_optional(self.pool.as_ref())
+            .await
+        {
+            Ok(Some(row)) => row.get("workflow_id"),
+            Ok(None) => {
+                return AccessCheckResult::NotFound(format!("Job not found with ID: {}", job_id));
+            }
+            Err(e) => {
+                warn!(
+                    "Database error getting job workflow for job {}: {}",
+                    job_id, e
+                );
+                return AccessCheckResult::InternalError("Database error".to_string());
+            }
+        };
+
+        // 2. If access control is not enforced, allow everything else
         if !self.enforce_access_control {
             return AccessCheckResult::Allowed;
         }
 
-        // Get the workflow ID for this job
-        let workflow_id: Option<i64> =
-            match sqlx::query("SELECT workflow_id FROM job WHERE id = $1")
-                .bind(job_id)
-                .fetch_optional(self.pool.as_ref())
-                .await
-            {
-                Ok(Some(row)) => Some(row.get("workflow_id")),
-                Ok(None) => {
-                    return AccessCheckResult::NotFound(format!(
-                        "Job not found with ID: {}",
-                        job_id
-                    ));
-                }
-                Err(e) => {
-                    warn!("Database error getting job workflow: {}", e);
-                    return AccessCheckResult::Denied(format!("Database error: {}", e));
-                }
-            };
-
-        match workflow_id {
-            Some(wf_id) => self.check_workflow_access(auth, wf_id).await,
-            None => AccessCheckResult::NotFound(format!("Job not found with ID: {}", job_id)),
-        }
+        // 3. Delegate to workflow access check
+        self.check_workflow_access(auth, workflow_id).await
     }
 
     /// Check if a user can access a resource that has a workflow_id column
@@ -207,10 +205,6 @@ impl AuthorizationService {
         resource_id: i64,
         table_name: &str,
     ) -> AccessCheckResult {
-        if !self.enforce_access_control {
-            return AccessCheckResult::Allowed;
-        }
-
         // Validate table name to prevent SQL injection via identifier interpolation.
         // Only allow ASCII alphanumeric characters and underscores, which are safe
         // for use as SQL identifiers and disallow any metacharacters.
@@ -225,14 +219,14 @@ impl AuthorizationService {
             return AccessCheckResult::Denied("Invalid resource type".to_string());
         }
 
-        // Get the workflow ID for this resource
+        // 1. Get the workflow ID for this resource (always do this to ensure 404s are accurate)
         let sql = format!("SELECT workflow_id FROM {} WHERE id = $1", table_name);
-        let workflow_id: Option<i64> = match sqlx::query(&sql)
+        let workflow_id: i64 = match sqlx::query(&sql)
             .bind(resource_id)
             .fetch_optional(self.pool.as_ref())
             .await
         {
-            Ok(Some(row)) => Some(row.get("workflow_id")),
+            Ok(Some(row)) => row.get("workflow_id"),
             Ok(None) => {
                 return AccessCheckResult::NotFound(format!(
                     "Resource not found in {} with ID: {}",
@@ -248,13 +242,13 @@ impl AuthorizationService {
             }
         };
 
-        match workflow_id {
-            Some(wf_id) => self.check_workflow_access(auth, wf_id).await,
-            None => AccessCheckResult::NotFound(format!(
-                "Resource not found in {} with ID: {}",
-                table_name, resource_id
-            )),
+        // 2. If access control is not enforced, allow everything else
+        if !self.enforce_access_control {
+            return AccessCheckResult::Allowed;
         }
+
+        // 3. Delegate to workflow access check
+        self.check_workflow_access(auth, workflow_id).await
     }
 
     /// Check if a user can access a workflow status
@@ -432,8 +426,8 @@ impl AuthorizationService {
                     ));
                 }
                 Err(e) => {
-                    warn!("Database error checking group: {}", e);
-                    return AccessCheckResult::Denied(format!("Database error: {}", e));
+                    warn!("Database error checking group {}: {}", group_id, e);
+                    return AccessCheckResult::InternalError("Database error".to_string());
                 }
             };
 
@@ -466,8 +460,11 @@ impl AuthorizationService {
         {
             Ok(row) => row.get::<i32, _>("is_admin") == 1,
             Err(e) => {
-                warn!("Database error checking group admin status: {}", e);
-                return AccessCheckResult::Denied(format!("Database error: {}", e));
+                warn!(
+                    "Database error checking group {} admin status for user '{}': {}",
+                    group_id, username, e
+                );
+                return AccessCheckResult::InternalError("Database error".to_string());
             }
         };
 
