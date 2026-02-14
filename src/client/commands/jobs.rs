@@ -1177,7 +1177,7 @@ pub fn create_jobs_from_file(
     }
 
     // Create jobs in batches using bulk API
-    const BATCH_SIZE: usize = 1000;
+    const BATCH_SIZE: usize = 10000;
     let mut total_created = 0;
 
     for batch in jobs.chunks(BATCH_SIZE) {

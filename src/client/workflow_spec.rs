@@ -2163,7 +2163,7 @@ impl WorkflowSpec {
         Ok(levels)
     }
 
-    /// Create JobModels with proper ID mapping using bulk API in batches of 1000
+    /// Create JobModels with proper ID mapping using bulk API in batches of 10000
     /// Jobs are created in dependency order with depends_on_job_ids set during initial creation
     #[allow(clippy::type_complexity, clippy::too_many_arguments)]
     fn create_jobs(
@@ -2239,7 +2239,7 @@ impl WorkflowSpec {
         let levels = Self::topological_sort_jobs(&spec.jobs, &dependencies)?;
 
         // Step 4: Create jobs level by level
-        const BATCH_SIZE: usize = 1000;
+        const BATCH_SIZE: usize = 10000;
 
         for level in levels {
             // Create job models for this level with depends_on_job_ids resolved
@@ -2377,7 +2377,7 @@ impl WorkflowSpec {
                 job_spec_mapping.push(job_spec);
             }
 
-            // Create this level's jobs in batches of 1000
+            // Create this level's jobs in batches of 10000
             for (batch_index, batch) in job_models.chunks(BATCH_SIZE).enumerate() {
                 let jobs_model = models::JobsModel::new(batch.to_vec());
 
