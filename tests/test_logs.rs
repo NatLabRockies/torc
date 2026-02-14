@@ -50,5 +50,36 @@ fn test_analyze_workflow_logs_info_skipping() {
 
     assert_eq!(result.error_count, 0); // [ERROR] matches Generic Error which is a Warning
     assert_eq!(result.warning_count, 1);
+    assert_eq!(result.errors.len(), 1);
     assert_eq!(result.errors[0].pattern_name, "Generic Error");
+}
+
+#[test]
+fn test_analyze_workflow_logs_word_boundaries() {
+    let dir = tempdir().unwrap();
+    let log_path = dir.path().join("wf137_boundaries.log");
+
+    let mut file = File::create(&log_path).unwrap();
+    // Should NOT match (substrings)
+    writeln!(file, "This is some groomed output").unwrap(); // groom contains oom
+    writeln!(file, "The timeout_value is 10").unwrap(); // timeout_value is not \btimeout\b
+    writeln!(file, "microsecond is small").unwrap(); // contains seg (not really, but just for example)
+
+    // Should match
+    writeln!(file, "Out of memory: killed process 123").unwrap();
+    writeln!(file, "Job timed out after 10m").unwrap();
+    writeln!(file, "Segmentation fault (core dumped)").unwrap();
+
+    let result = analyze_workflow_logs(dir.path(), 137).unwrap();
+
+    assert_eq!(result.error_count, 3);
+
+    let patterns: Vec<String> = result
+        .errors
+        .iter()
+        .map(|e| e.pattern_name.clone())
+        .collect();
+    assert!(patterns.contains(&"OOM Killed".to_string()));
+    assert!(patterns.contains(&"Timeout".to_string()));
+    assert!(patterns.contains(&"Segmentation Fault".to_string()));
 }

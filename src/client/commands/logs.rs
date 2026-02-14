@@ -8,6 +8,7 @@ use crate::client::commands::{get_env_user_name, print_error, select_workflow_in
 use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
+use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -15,6 +16,10 @@ use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use tar::{Archive, Builder};
+
+lazy_static! {
+    static ref INFO_REGEX: Regex = Regex::new(r"(?i)\bINFO\b").unwrap();
+}
 
 /// Log subcommands
 #[derive(clap::Subcommand)]
@@ -550,7 +555,7 @@ fn scan_content_for_errors(
 ) {
     for (line_number, line) in content.lines().enumerate() {
         // Skip INFO lines for certain patterns to avoid false positives
-        let is_info = line.contains(" INFO ") || line.contains("[INFO]");
+        let is_info = INFO_REGEX.is_match(line);
 
         for pattern in patterns {
             if pattern.pattern.is_match(line) {

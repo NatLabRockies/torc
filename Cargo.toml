@@ -193,6 +193,7 @@ client = [
     "dep:tabled",
     "dep:anyhow",
     "dep:regex",
+    "dep:lazy_static",
     "dep:rusqlite",
     "dep:rpassword",
     "dep:signal-hook",
