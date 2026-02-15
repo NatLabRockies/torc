@@ -1396,7 +1396,6 @@ impl<C> Server<C> {
                     }
                 }
                 Err(e) => {
-                    error!("Database error updating job status: {}", e);
                     return Err(database_error_with_msg(e, "Failed to update job status"));
                 }
             }
@@ -1428,7 +1427,6 @@ impl<C> Server<C> {
                     }
                 }
                 Err(e) => {
-                    error!("Database error updating job status: {}", e);
                     return Err(database_error_with_msg(e, "Failed to update job status"));
                 }
             }
