@@ -294,7 +294,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/default_error_response"
+                $ref: "#/components/schemas/not_found_error_response"
           description: Group not found
         "500":
           content:

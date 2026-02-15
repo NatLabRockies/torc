@@ -647,10 +647,15 @@ where
                 }
             }
 
-            // Consume the body incrementally with a size limit.
+            // Consume the body incrementally with a size limit for methods that carry a body.
             // This catches chunked transfers that bypass the Content-Length check above.
-            let body = {
-                let max = max_request_body_bytes() as usize;
+            // We skip this for GET/DELETE/HEAD to avoid waiting for a body that won't be used,
+            // which would otherwise enable slow-body resource exhaustion.
+            let body = if method == hyper::Method::POST
+                || method == hyper::Method::PUT
+                || method == hyper::Method::PATCH
+            {
+                let max = max_request_body_bytes().min(usize::MAX as u64) as usize;
                 let mut buf = Vec::new();
                 let mut stream = body;
                 while let Some(chunk_result) = stream.next().await {
@@ -674,6 +679,8 @@ where
                     }
                 }
                 Body::from(buf)
+            } else {
+                body
             };
 
             let path = paths::GLOBAL_REGEX_SET.matches(uri.path());

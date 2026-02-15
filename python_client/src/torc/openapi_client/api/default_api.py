@@ -22114,7 +22114,7 @@ class DefaultApi:
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListUserGroupMembershipsResponse",
             '403': "ForbiddenErrorResponse",
-            '404': "DefaultErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -22192,7 +22192,7 @@ class DefaultApi:
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListUserGroupMembershipsResponse",
             '403': "ForbiddenErrorResponse",
-            '404': "DefaultErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -22270,7 +22270,7 @@ class DefaultApi:
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListUserGroupMembershipsResponse",
             '403': "ForbiddenErrorResponse",
-            '404': "DefaultErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(

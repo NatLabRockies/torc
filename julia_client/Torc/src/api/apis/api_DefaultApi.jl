@@ -2663,7 +2663,7 @@ end
 const _returntypes_list_group_members_DefaultApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ListUserGroupMembershipsResponse,
     Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
-    Regex("^" * replace("404", "x"=>".") * "\$") => DefaultErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => NotFoundErrorResponse,
     Regex("^" * replace("500", "x"=>".") * "\$") => DefaultErrorResponse,
 )
 
