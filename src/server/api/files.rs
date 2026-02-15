@@ -318,6 +318,7 @@ where
                 validated_sort_by,
                 reverse_sort,
                 sort_column,
+                FILE_COLUMNS,
             )
             .build();
 

@@ -1,5 +1,7 @@
 //! SQL query builder utility for pagination and sorting
 
+use log::warn;
+
 /// Utility for building SQL queries with pagination and sorting
 pub struct SqlQueryBuilder {
     base_query: String,
@@ -32,9 +34,28 @@ impl SqlQueryBuilder {
         sort_by: Option<String>,
         reverse_sort: Option<bool>,
         default_sort_column: &str,
+        allowed_columns: &[&str],
     ) -> Self {
         let sort_column = sort_by
             .filter(|s| !s.is_empty())
+            .filter(|col| {
+                // Defense-in-depth: validate sort column against the allowed list.
+                // Strip a single table-alias prefix (e.g., "r.id" -> "id") so callers
+                // that add table prefixes still pass validation.
+                let bare = col
+                    .split_once('.')
+                    .map(|(_, name)| name)
+                    .unwrap_or(col.as_str());
+                let valid = allowed_columns.contains(&bare);
+                if !valid {
+                    warn!(
+                        "SqlQueryBuilder: rejected sort column '{}' (not in allowed list), \
+                         falling back to default '{}'",
+                        col, default_sort_column
+                    );
+                }
+                valid
+            })
             .unwrap_or_else(|| default_sort_column.to_string());
         let sort_direction = if reverse_sort.unwrap_or(false) {
             "DESC"

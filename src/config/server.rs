@@ -13,6 +13,12 @@ pub struct ServerConfig {
     /// Whether to use HTTPS
     pub https: bool,
 
+    /// Path to TLS certificate file (PEM format)
+    pub tls_cert: Option<String>,
+
+    /// Path to TLS private key file (PEM format)
+    pub tls_key: Option<String>,
+
     /// Hostname or IP address to bind to
     #[serde(alias = "url")]
     pub host: String,
@@ -55,6 +61,8 @@ impl Default for ServerConfig {
         Self {
             log_level: "info".to_string(),
             https: false,
+            tls_cert: None,
+            tls_key: None,
             host: "0.0.0.0".to_string(),
             port: 8080,
             threads: 1,
@@ -91,6 +99,8 @@ mod tests {
         let config = ServerConfig::default();
         assert_eq!(config.log_level, "info");
         assert!(!config.https);
+        assert!(config.tls_cert.is_none());
+        assert!(config.tls_key.is_none());
         assert_eq!(config.host, "0.0.0.0");
         assert_eq!(config.port, 8080);
         assert_eq!(config.threads, 1);

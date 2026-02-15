@@ -27,6 +27,14 @@ struct ServerConfig {
     #[arg(long)]
     https: bool,
 
+    /// Path to TLS certificate chain file (PEM format). Required when --https is set.
+    #[arg(long, env = "TORC_TLS_CERT")]
+    tls_cert: Option<String>,
+
+    /// Path to TLS private key file (PEM format). Required when --https is set.
+    #[arg(long, env = "TORC_TLS_KEY")]
+    tls_key: Option<String>,
+
     /// Hostname or IP address to bind the server to.
     /// Deprecated aliases: --url, -u (use --host instead)
     #[arg(
@@ -255,6 +263,12 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
             server_file_config.log_level.clone()
         },
         https: cli_config.https || server_file_config.https,
+        tls_cert: cli_config
+            .tls_cert
+            .or_else(|| server_file_config.tls_cert.clone()),
+        tls_key: cli_config
+            .tls_key
+            .or_else(|| server_file_config.tls_key.clone()),
         host: if cli_config.host != "0.0.0.0" {
             cli_config.host
         } else {
@@ -488,6 +502,8 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
             config.enforce_access_control,
             completion_check_interval_secs,
             admin_users,
+            config.tls_cert,
+            config.tls_key,
         )
         .await;
         Ok(())

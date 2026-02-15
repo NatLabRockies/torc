@@ -1,7 +1,7 @@
 #![allow(clippy::explicit_auto_deref, clippy::manual_unwrap_or_default)]
 
 use futures::{future, future::BoxFuture};
-use hyper::header::{CONTENT_TYPE, HeaderName, HeaderValue};
+use hyper::header::{CONTENT_LENGTH, CONTENT_TYPE, HeaderName, HeaderValue};
 use hyper::{Body, Request, Response, StatusCode};
 use log::warn;
 #[allow(unused_imports)]
@@ -16,6 +16,35 @@ use url::form_urlencoded;
 use crate::models;
 #[allow(unused_imports)]
 use crate::server::auth::AuthenticationApi;
+
+/// Default maximum allowed request body size (20 MiB).
+/// The largest realistic request is a batch of 10,000 jobs (~5 MiB).
+/// Override at runtime with TORC_MAX_REQUEST_BODY_MB (value in MiB).
+const DEFAULT_MAX_REQUEST_BODY_BYTES: u64 = 20 * 1024 * 1024;
+
+fn max_request_body_bytes() -> u64 {
+    static CACHED: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    *CACHED.get_or_init(|| {
+        std::env::var("TORC_MAX_REQUEST_BODY_MB")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .map(|mb| mb * 1024 * 1024)
+            .unwrap_or(DEFAULT_MAX_REQUEST_BODY_BYTES)
+    })
+}
+
+/// Add standard security headers to all HTTP responses.
+fn add_security_headers(response: &mut Response<Body>) {
+    let headers = response.headers_mut();
+    headers.insert(
+        HeaderName::from_static("x-content-type-options"),
+        HeaderValue::from_static("nosniff"),
+    );
+    headers.insert(
+        HeaderName::from_static("x-frame-options"),
+        HeaderValue::from_static("DENY"),
+    );
+}
 
 pub use crate::server::context;
 
@@ -596,7 +625,19 @@ where
         {
             let (request, context) = req;
             let (parts, body) = request.into_parts();
-            let (method, uri, _headers) = (parts.method, parts.uri, parts.headers);
+            let (method, uri, headers) = (parts.method, parts.uri, parts.headers);
+
+            // Reject requests with Content-Length exceeding the maximum allowed body size
+            if let Some(cl) = headers.get(CONTENT_LENGTH)
+                && let Ok(len) = cl.to_str().unwrap_or("0").parse::<u64>()
+                && len > max_request_body_bytes()
+            {
+                return Ok(Response::builder()
+                    .status(StatusCode::PAYLOAD_TOO_LARGE)
+                    .body(Body::from("Request body too large"))
+                    .expect("Unable to create Payload Too Large response"));
+            }
+
             let path = paths::GLOBAL_REGEX_SET.matches(uri.path());
 
             match method {
@@ -15895,8 +15936,12 @@ where
                         None => models::EventSeverity::Info, // Default
                     };
 
-                    // Check authorization by attempting to get the workflow
-                    // This verifies the workflow exists and the user has access
+                    // Authorization: SSE streams are protected by the same access control
+                    // as all other workflow endpoints. The get_workflow() call below
+                    // verifies both workflow existence and user access (ownership +
+                    // group membership). When require_auth=false and
+                    // enforce_access_control=false, anonymous access is permitted,
+                    // consistent with the rest of the API.
                     match api_impl.get_workflow(param_workflow_id, &context).await {
                         Ok(crate::server::api_types::GetWorkflowResponse::SuccessfulResponse(
                             _,
@@ -17775,7 +17820,12 @@ where
                 }
             }
         }
-        Box::pin(run(self.api_impl.clone(), req))
+        let api_impl = self.api_impl.clone();
+        Box::pin(async move {
+            let mut response = run(api_impl, req).await?;
+            add_security_headers(&mut response);
+            Ok(response)
+        })
     }
 }
 

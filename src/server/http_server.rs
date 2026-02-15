@@ -320,6 +320,8 @@ pub async fn create(
     enforce_access_control: bool,
     completion_check_interval_secs: f64,
     admin_users: Vec<String>,
+    #[allow(unused_variables)] tls_cert: Option<String>,
+    #[allow(unused_variables)] tls_key: Option<String>,
 ) -> u16 {
     // Resolve hostname to socket address (supports both hostnames and IP addresses)
     let addr = tokio::net::lookup_host(addr)
@@ -379,13 +381,22 @@ pub async fn create(
 
         #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "ios")))]
         {
+            let key_path = tls_key.as_deref().expect(
+                "--tls-key is required when --https is enabled. \
+                 Provide the path to your TLS private key file (PEM format).",
+            );
+            let cert_path = tls_cert.as_deref().expect(
+                "--tls-cert is required when --https is enabled. \
+                 Provide the path to your TLS certificate chain file (PEM format).",
+            );
+
             let mut ssl = SslAcceptor::mozilla_intermediate_v5(SslMethod::tls())
                 .expect("Failed to create SSL Acceptor");
 
             // Server authentication
-            ssl.set_private_key_file("examples/server-key.pem", SslFiletype::PEM)
+            ssl.set_private_key_file(key_path, SslFiletype::PEM)
                 .expect("Failed to set private key");
-            ssl.set_certificate_chain_file("examples/server-chain.pem")
+            ssl.set_certificate_chain_file(cert_path)
                 .expect("Failed to set certificate chain");
             ssl.check_private_key()
                 .expect("Failed to check private key");
@@ -599,7 +610,7 @@ where
                 "Failed to begin transaction for workflow {}: {}",
                 workflow_id, e
             );
-            return Err(ApiError(format!("Database error: {}", e)));
+            return Err(database_error_with_msg(e, "Failed to begin transaction"));
         }
     };
 
@@ -629,7 +640,7 @@ where
                 "Database error fetching completed jobs for workflow {}: {}",
                 workflow_id, e
             );
-            return Err(ApiError(format!("Database error: {}", e)));
+            return Err(database_error_with_msg(e, "Failed to fetch completed jobs"));
         }
     };
 
@@ -699,7 +710,7 @@ where
             "Database error marking jobs as processed for workflow {}: {}",
             workflow_id, e
         );
-        return Err(ApiError(format!("Database error: {}", e)));
+        return Err(database_error_with_msg(e, "Failed to mark jobs processed"));
     }
 
     // Commit the transaction
@@ -708,7 +719,7 @@ where
             "Failed to commit transaction for workflow {}: {}",
             workflow_id, e
         );
-        return Err(ApiError(format!("Database error: {}", e)));
+        return Err(database_error_with_msg(e, "Failed to commit transaction"));
     }
 
     info!(
@@ -1288,7 +1299,7 @@ impl<C> Server<C> {
                 Ok(Some(row)) => row,
                 Ok(None) => {
                     error!("Job not found with ID: {}", job_id);
-                    return Err(ApiError(format!("Job not found with ID: {}", job_id)));
+                    return Err(ApiError("Job not found".to_string()));
                 }
                 Err(e) => {
                     error!("Database error looking up job: {}", e);
@@ -1350,10 +1361,9 @@ impl<C> Server<C> {
                     "No result found for job ID {} and run_id {}",
                     job_id, run_id
                 );
-                return Err(ApiError(format!(
-                    "No result found for job ID {} and run_id {} when transitioning to terminal status '{}'",
-                    job_id, run_id, new_status
-                )));
+                return Err(ApiError(
+                    "No result found when transitioning to terminal status".to_string(),
+                ));
             }
         }
 
@@ -1377,18 +1387,14 @@ impl<C> Server<C> {
                             "No rows affected for job ID {} when updating status",
                             job_id
                         );
-                        return Err(ApiError(format!(
-                            "Failed to update job status: no rows affected for job ID {}",
-                            job_id
-                        )));
+                        return Err(ApiError(
+                            "Failed to update job status: no rows affected".to_string(),
+                        ));
                     }
                 }
                 Err(e) => {
                     error!("Database error updating job status: {}", e);
-                    return Err(ApiError(format!(
-                        "Database error updating job status: {}",
-                        e
-                    )));
+                    return Err(database_error_with_msg(e, "Failed to update job status"));
                 }
             }
             // Signal that a job completed so the background task knows to check
@@ -1413,18 +1419,14 @@ impl<C> Server<C> {
                             "No rows affected for job ID {} when updating status",
                             job_id
                         );
-                        return Err(ApiError(format!(
-                            "Failed to update job status: no rows affected for job ID {}",
-                            job_id
-                        )));
+                        return Err(ApiError(
+                            "Failed to update job status: no rows affected".to_string(),
+                        ));
                     }
                 }
                 Err(e) => {
                     error!("Database error updating job status: {}", e);
-                    return Err(ApiError(format!(
-                        "Database error updating job status: {}",
-                        e
-                    )));
+                    return Err(database_error_with_msg(e, "Failed to update job status"));
                 }
             }
         }
@@ -1518,7 +1520,7 @@ impl<C> Server<C> {
                     Ok(result) => result.rows_affected(),
                     Err(e) => {
                         debug!("batch_unblock_jobs_tx: cancellation query failed: {}", e);
-                        return Err(ApiError(format!("Database error: {}", e)));
+                        return Err(database_error_with_msg(e, "Failed to update job status"));
                     }
                 };
 
@@ -1572,7 +1574,7 @@ impl<C> Server<C> {
             Ok(rows) => rows,
             Err(e) => {
                 debug!("batch_unblock_jobs_tx: ready query failed: {}", e);
-                return Err(ApiError(format!("Database error: {}", e)));
+                return Err(database_error_with_msg(e, "Failed to update job status"));
             }
         };
 
@@ -1708,7 +1710,7 @@ impl<C> Server<C> {
             Ok(rows) => rows,
             Err(e) => {
                 debug!("Fast path bulk update failed: {}", e);
-                return Err(ApiError(format!("Database error: {}", e)));
+                return Err(database_error_with_msg(e, "Failed to update job status"));
             }
         };
 

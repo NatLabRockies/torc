@@ -234,6 +234,7 @@ impl AccessGroupsApiImpl {
             Some("name".to_string()),
             None,
             "id",
+            &["id", "name", "description", "created_at"],
         )
         .build();
 

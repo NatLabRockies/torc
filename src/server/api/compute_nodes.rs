@@ -361,7 +361,14 @@ where
 
         let query = SqlQueryBuilder::new(base_query)
             .with_where(where_clause.clone())
-            .with_pagination_and_sorting(offset, limit, validated_sort_by, reverse_sort, "id")
+            .with_pagination_and_sorting(
+                offset,
+                limit,
+                validated_sort_by,
+                reverse_sort,
+                "id",
+                COMPUTE_NODE_COLUMNS,
+            )
             .build();
 
         debug!("Executing query: {}", query);

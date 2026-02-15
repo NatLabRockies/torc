@@ -342,6 +342,11 @@ impl WorkflowsApiImpl {
         // Use table prefix for default sort column when joining
         let default_sort_column = if is_archived.is_some() { "w.id" } else { "id" };
 
+        let all_columns: Vec<&str> = WORKFLOW_COLUMNS
+            .iter()
+            .chain(WORKFLOW_STATUS_COLUMNS.iter())
+            .copied()
+            .collect();
         let query = if where_clause.is_empty() {
             SqlQueryBuilder::new(base_query)
                 .with_pagination_and_sorting(
@@ -350,6 +355,7 @@ impl WorkflowsApiImpl {
                     validated_sort_by,
                     reverse_sort,
                     default_sort_column,
+                    &all_columns,
                 )
                 .build()
         } else {
@@ -361,6 +367,7 @@ impl WorkflowsApiImpl {
                     validated_sort_by,
                     reverse_sort,
                     default_sort_column,
+                    &all_columns,
                 )
                 .build()
         };

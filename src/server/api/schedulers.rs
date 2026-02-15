@@ -704,7 +704,14 @@ where
         // Build the complete query with pagination and sorting
         let query = SqlQueryBuilder::new(base_query)
             .with_where(where_clause.clone())
-            .with_pagination_and_sorting(offset, limit, validated_sort_by, reverse_sort, "id")
+            .with_pagination_and_sorting(
+                offset,
+                limit,
+                validated_sort_by,
+                reverse_sort,
+                "id",
+                LOCAL_SCHEDULER_COLUMNS,
+            )
             .build();
 
         debug!("Executing query: {}", query);
@@ -832,7 +839,14 @@ where
         // Build the complete query with pagination and sorting
         let query = SqlQueryBuilder::new(base_query)
             .with_where(where_clause.clone())
-            .with_pagination_and_sorting(offset, limit, validated_sort_by, reverse_sort, "id")
+            .with_pagination_and_sorting(
+                offset,
+                limit,
+                validated_sort_by,
+                reverse_sort,
+                "id",
+                SCHEDULED_COMPUTE_NODE_COLUMNS,
+            )
             .build();
 
         debug!("Executing query: {}", query);
@@ -962,7 +976,14 @@ where
         // Build the complete query with pagination and sorting
         let query = SqlQueryBuilder::new(base_query)
             .with_where(where_clause.clone())
-            .with_pagination_and_sorting(offset, limit, validated_sort_by, reverse_sort, "id")
+            .with_pagination_and_sorting(
+                offset,
+                limit,
+                validated_sort_by,
+                reverse_sort,
+                "id",
+                SLURM_SCHEDULER_COLUMNS,
+            )
             .build();
 
         debug!("Executing query: {}", query);
