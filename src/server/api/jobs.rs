@@ -978,19 +978,17 @@ impl JobsApiImpl {
             }
         }
 
-        // Compute hashes in memory and batch store them
-        let mut tx = pool
-            .begin()
-            .await
-            .map_err(|e| database_error_with_msg(e, "Failed to begin hash storage transaction"))?;
+        // Compute all hashes in memory first
+        let mut hash_pairs: Vec<(i64, String)> = Vec::with_capacity(job_rows.len());
 
         for job_row in &job_rows {
             let job_id: i64 = job_row.get("id");
             let command: Option<String> = job_row.get("command");
             // Normalize invocation_script: treat Some("") the same as None to ensure
             // consistent hashing between per-job and bulk hash computation methods.
-            let invocation_script: Option<String> =
-                job_row.get::<Option<String>, _>("invocation_script").filter(|s| !s.is_empty());
+            let invocation_script: Option<String> = job_row
+                .get::<Option<String>, _>("invocation_script")
+                .filter(|s| !s.is_empty());
 
             // Build the same JSON structure as compute_job_input_hash
             let depends_on: Option<&Vec<i64>> = depends_on_map.get(&job_id);
@@ -1037,20 +1035,35 @@ impl JobsApiImpl {
             hasher.update(json_string.as_bytes());
             let hash_hex = format!("{:x}", hasher.finalize());
 
-            sqlx::query!(
-                r#"
-                INSERT INTO job_internal (job_id, input_hash)
-                VALUES ($1, $2)
-                ON CONFLICT(job_id) DO UPDATE SET input_hash = excluded.input_hash
-                "#,
-                job_id,
-                hash_hex
-            )
-            .execute(&mut *tx)
+            hash_pairs.push((job_id, hash_hex));
+        }
+
+        // Batch store hashes using multi-row INSERT for efficiency
+        let mut tx = pool
+            .begin()
             .await
-            .map_err(|e| {
-                database_error_with_msg(e, format!("Failed to store input hash for job {}", job_id))
-            })?;
+            .map_err(|e| database_error_with_msg(e, "Failed to begin hash storage transaction"))?;
+
+        // SQLite has a variable limit (default 999), and each row needs 2 variables,
+        // so we batch in chunks of 499 rows.
+        for chunk in hash_pairs.chunks(499) {
+            let mut placeholders = Vec::with_capacity(chunk.len());
+            for i in 0..chunk.len() {
+                placeholders.push(format!("(${}, ${})", i * 2 + 1, i * 2 + 2));
+            }
+            let sql = format!(
+                "INSERT INTO job_internal (job_id, input_hash) VALUES {} \
+                 ON CONFLICT(job_id) DO UPDATE SET input_hash = excluded.input_hash",
+                placeholders.join(", ")
+            );
+            let mut query = sqlx::query(&sql);
+            for (job_id, hash_hex) in chunk {
+                query = query.bind(job_id).bind(hash_hex);
+            }
+            query
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to batch store input hashes"))?;
         }
 
         tx.commit()
