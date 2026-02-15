@@ -5,10 +5,14 @@ updates:
     schedule:
       interval: weekly
     groups:
-      rust-dependencies:
-        patterns:
-          - "*"
-    open-pull-requests-limit: 5
+      rust-patch-updates:
+        update-types:
+          - patch
+      rust-minor-updates:
+        update-types:
+          - minor
+    # Major version bumps get individual PRs (they often have breaking changes)
+    open-pull-requests-limit: 10
 
   - package-ecosystem: github-actions
     directory: /
