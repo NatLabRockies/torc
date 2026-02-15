@@ -489,7 +489,7 @@ impl AccessGroupsApiImpl {
                 return Ok(ListGroupMembersResponse::ForbiddenErrorResponse(e));
             }
             GetAccessGroupResponse::NotFoundErrorResponse(e) => {
-                return Ok(ListGroupMembersResponse::DefaultErrorResponse(e));
+                return Ok(ListGroupMembersResponse::NotFoundErrorResponse(e));
             }
             GetAccessGroupResponse::DefaultErrorResponse(e) => {
                 return Ok(ListGroupMembersResponse::DefaultErrorResponse(e));

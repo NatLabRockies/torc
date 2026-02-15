@@ -23,4 +23,4 @@ jobs:
         uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check
-          arguments: --config deny.toml
+          command-arguments: --config deny.toml

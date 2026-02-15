@@ -46,6 +46,50 @@ pub fn escape_like_pattern(input: &str) -> String {
         .replace('_', "\\_")
 }
 
+#[cfg(test)]
+mod tests {
+    use super::escape_like_pattern;
+
+    #[test]
+    fn escapes_percent_sign() {
+        assert_eq!(escape_like_pattern("100%"), "100\\%");
+        assert_eq!(escape_like_pattern("%start"), "\\%start");
+        assert_eq!(escape_like_pattern("middle%end"), "middle\\%end");
+    }
+
+    #[test]
+    fn escapes_underscore() {
+        assert_eq!(escape_like_pattern("user_name"), "user\\_name");
+        assert_eq!(escape_like_pattern("_leading"), "\\_leading");
+        assert_eq!(escape_like_pattern("trailing_"), "trailing\\_");
+    }
+
+    #[test]
+    fn escapes_backslash() {
+        assert_eq!(escape_like_pattern(r"c:\path"), r"c:\\path");
+        assert_eq!(escape_like_pattern(r"\\"), r"\\\\");
+    }
+
+    #[test]
+    fn escapes_multiple_consecutive_wildcards() {
+        assert_eq!(escape_like_pattern("%%"), "\\%\\%");
+        assert_eq!(escape_like_pattern("__"), "\\_\\_");
+        assert_eq!(escape_like_pattern("%_%"), "\\%\\_\\%");
+    }
+
+    #[test]
+    fn escapes_mixed_special_characters() {
+        assert_eq!(escape_like_pattern(r"50%_done\path"), r"50\%\_done\\path");
+    }
+
+    #[test]
+    fn leaves_normal_strings_unchanged() {
+        assert_eq!(escape_like_pattern("simpletext"), "simpletext");
+        assert_eq!(escape_like_pattern("123456"), "123456");
+        assert_eq!(escape_like_pattern(""), "");
+    }
+}
+
 /// Common pagination response structure
 #[derive(Debug)]
 pub struct PaginationInfo {

@@ -664,7 +664,8 @@ where
                             }
                             buf.extend_from_slice(&chunk);
                         }
-                        Err(_) => {
+                        Err(e) => {
+                            warn!("Error reading request body: {}", e);
                             return Ok(Response::builder()
                                 .status(StatusCode::BAD_REQUEST)
                                 .body(Body::from("Error reading request body"))
