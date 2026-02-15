@@ -42,14 +42,14 @@ Settings for the `torc` CLI.
 
 Settings for `torc run` command.
 
-| Option              | Type  | Default  | Description                                         |
-| ------------------- | ----- | -------- | --------------------------------------------------- |
-| `poll_interval`     | float | `5.0`    | Job completion poll interval (seconds)              |
-| `output_dir`        | path  | `output` | Output directory for job logs                       |
-| `max_parallel_jobs` | int   | (none)   | Maximum parallel jobs (overrides resource-based)    |
-| `num_cpus`          | int   | (none)   | Available CPUs for resource-based scheduling        |
-| `memory_gb`         | float | (none)   | Available memory (GB) for resource-based scheduling |
-| `num_gpus`          | int   | (none)   | Available GPUs for resource-based scheduling        |
+| Option              | Type  | Default       | Description                                         |
+| ------------------- | ----- | ------------- | --------------------------------------------------- |
+| `poll_interval`     | float | `5.0`         | Job completion poll interval (seconds)              |
+| `output_dir`        | path  | `torc_output` | Output directory for job logs                       |
+| `max_parallel_jobs` | int   | (none)        | Maximum parallel jobs (overrides resource-based)    |
+| `num_cpus`          | int   | (none)        | Available CPUs for resource-based scheduling        |
+| `memory_gb`         | float | (none)        | Available memory (GB) for resource-based scheduling |
+| `num_gpus`          | int   | (none)        | Available GPUs for resource-based scheduling        |
 
 ### `[client.tls]` Section
 
@@ -75,7 +75,7 @@ ca_cert = "/etc/pki/tls/certs/corporate-ca.pem"
 
 [client.run]
 poll_interval = 5.0
-output_dir = "output"
+output_dir = "torc_output"
 max_parallel_jobs = 4
 num_cpus = 8
 memory_gb = 32.0
@@ -317,7 +317,7 @@ ca_cert = "/etc/pki/tls/certs/corporate-ca.pem"
 
 [client.run]
 poll_interval = 5.0
-output_dir = "output"
+output_dir = "torc_output"
 num_cpus = 8
 memory_gb = 32.0
 num_gpus = 1

@@ -3,7 +3,7 @@
 ## Precompiled Binaries (Recommended)
 
 1. Download the appropriate archive for your platform from the
-   [releases page](https://github.com/NREL/torc/releases):
+   [releases page](https://github.com/NatLabRockies/torc/releases):
    - **Linux**: `torc-<version>-x86_64-unknown-linux-gnu.tar.gz`
    - **macOS (Intel)**: `torc-<version>-x86_64-apple-darwin.tar.gz`
    - **macOS (Apple Silicon)**: `torc-<version>-aarch64-apple-darwin.tar.gz`
@@ -47,7 +47,7 @@ Alternatively, you can right-click each binary and select "Open" to add a securi
 Some HPC facilities maintain pre-installed Torc binaries and shared servers. Check if your site is
 listed below.
 
-### NREL Kestrel
+### NLR Kestrel
 
 **Pre-installed binaries** are available at:
 
@@ -94,6 +94,74 @@ cargo install torc
 cargo install torc --features "server-bin,mcp-server,dash,slurm-runner"
 ```
 
+## Docker
+
+The `torc` Docker image provides the server and all binaries in a single container. Images are
+published to the GitHub Container Registry on every release.
+
+```bash
+docker pull ghcr.io/natlabrockies/torc:latest
+```
+
+> **Recommended**: Use the `latest` tag to automatically receive updates and bug fixes. Torc
+> maintains backwards compatibility across releases. Pinned version tags (e.g., `0.14.2`) are also
+> available.
+
+### Running the Server
+
+The container runs `torc-server` by default. Authentication is required, so you must provide an
+htpasswd file and at least one admin user.
+
+**1. Create an htpasswd file:**
+
+```bash
+# Using the bundled torc-htpasswd utility
+docker run --rm -it ghcr.io/natlabrockies/torc:latest \
+  torc-htpasswd /dev/stdout admin
+```
+
+Save the output to a local `htpasswd` file.
+
+**2. Start the server:**
+
+```bash
+docker run -d --name torc-server \
+  -p 8080:8080 \
+  -e TORC_AUTH_FILE=/data/htpasswd \
+  -e TORC_ADMIN_USERS=admin \
+  -v ./htpasswd:/data/htpasswd:ro \
+  -v torc-data:/data \
+  ghcr.io/natlabrockies/torc:latest
+```
+
+The server will be available at `http://localhost:8080`.
+
+### Environment Variables
+
+| Variable                              | Default         | Description                                  |
+| ------------------------------------- | --------------- | -------------------------------------------- |
+| `TORC_AUTH_FILE`                      | _(required)_    | Path to htpasswd file inside the container   |
+| `TORC_ADMIN_USERS`                    | _(required)_    | Comma-separated list of admin usernames      |
+| `TORC_PORT`                           | `8080`          | Server listen port                           |
+| `TORC_DATABASE`                       | `/data/torc.db` | SQLite database path                         |
+| `TORC_LOG_DIR`                        | `/data`         | Log file directory                           |
+| `TORC_LOG_LEVEL`                      | `info`          | Log level (`debug`, `info`, `warn`, `error`) |
+| `TORC_THREADS`                        | `4`             | Number of worker threads                     |
+| `TORC_COMPLETION_CHECK_INTERVAL_SECS` | `30`            | Job completion polling interval              |
+
+### Running CLI Commands
+
+You can also use the container to run any `torc` CLI command:
+
+```bash
+# Check version
+docker run --rm ghcr.io/natlabrockies/torc:latest torc --version
+
+# List workflows (pointing at a running server)
+docker run --rm ghcr.io/natlabrockies/torc:latest \
+  torc --url http://torc.hpc.nrel.gov:8080/torc-service/v1 workflows list
+```
+
 ## Building from Source
 
 ### Prerequisites
@@ -104,7 +172,7 @@ cargo install torc --features "server-bin,mcp-server,dash,slurm-runner"
 ### Clone the Repository
 
 ```bash
-git clone https://github.com/NREL/torc.git
+git clone https://github.com/NLR/torc.git
 cd torc
 ```
 
@@ -186,7 +254,7 @@ GitHub:
 
 ```julia
 using Pkg
-Pkg.add(url="https://github.com/NREL/torc.git", subdir="julia_client/Torc")
+Pkg.add(url="https://github.com/NatLabRockies/torc.git", subdir="julia_client/Torc")
 ```
 
 Then use it in your code:

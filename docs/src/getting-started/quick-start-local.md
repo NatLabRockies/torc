@@ -106,8 +106,8 @@ Dependencies are automatically inferred from file inputs/outputs:
 
 ## More Examples
 
-The [examples directory](https://github.com/NREL/torc/tree/main/examples) contains many more
-workflow examples in YAML, JSON5, and KDL formats.
+The [examples directory](https://github.com/NatLabRockies/torc/tree/main/examples) contains many
+more workflow examples in YAML, JSON5, and KDL formats.
 
 ## Next Steps
 

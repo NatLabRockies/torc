@@ -4,7 +4,7 @@
 //! It includes traits for HPC interfaces and concrete implementations for different
 //! scheduler types.
 //!
-//! It also provides HPC system profiles for known HPC systems (like NREL Kestrel)
+//! It also provides HPC system profiles for known HPC systems (like NLR Kestrel)
 //! that include partition configurations, resource limits, and auto-detection.
 
 pub mod common;

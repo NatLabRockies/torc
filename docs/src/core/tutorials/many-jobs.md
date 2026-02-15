@@ -154,7 +154,7 @@ In this tutorial, you learned how to:
 ## Example Files
 
 See
-[hundred_jobs_parameterized.yaml](https://github.com/NREL/torc/blob/main/examples/yaml/hundred_jobs_parameterized.yaml)
+[hundred_jobs_parameterized.yaml](https://github.com/NatLabRockies/torc/blob/main/examples/yaml/hundred_jobs_parameterized.yaml)
 for a ready-to-run version of this workflow.
 
 ## Next Steps

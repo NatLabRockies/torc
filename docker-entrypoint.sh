@@ -50,10 +50,8 @@ set -- torc-server run \
   --auth-file "${TORC_AUTH_FILE}" \
   "$@"
 
-# Optionally set the number of worker threads
-if [ -n "$TORC_THREADS" ]; then
-  set -- "$@" --threads "$TORC_THREADS"
-fi
+# Set the number of worker threads (default: 4)
+set -- "$@" --threads "${TORC_THREADS:-4}"
 
 # Append --admin-user flags for each comma-separated user in TORC_ADMIN_USERS
 if [ -n "$TORC_ADMIN_USERS" ]; then

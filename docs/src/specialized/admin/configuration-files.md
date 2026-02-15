@@ -56,7 +56,7 @@ username = "myuser"
 
 [client.run]
 poll_interval = 5.0
-output_dir = "output"
+output_dir = "torc_output"
 max_parallel_jobs = 4
 num_cpus = 8
 memory_gb = 32.0

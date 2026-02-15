@@ -56,23 +56,24 @@ flowchart LR
 
 The repository includes ready-to-run workflow specifications in YAML, JSON5, and KDL formats:
 
-| Example                                                                                                                       | Description                            | Tutorial                                                |
-| ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------- |
-| [diamond_workflow.yaml](https://github.com/NREL/torc/blob/main/examples/yaml/diamond_workflow.yaml)                           | Fan-out/fan-in pattern                 | [Diamond Workflow](../core/tutorials/diamond.md)        |
-| [hundred_jobs_parameterized.yaml](https://github.com/NREL/torc/blob/main/examples/yaml/hundred_jobs_parameterized.yaml)       | 100 parallel jobs via parameterization | [Many Jobs](../core/tutorials/many-jobs.md)             |
-| [hyperparameter_sweep.yaml](https://github.com/NREL/torc/blob/main/examples/yaml/hyperparameter_sweep.yaml)                   | ML grid search (3×3×2 = 18 jobs)       | [Advanced Params](../core/tutorials/advanced-params.md) |
-| [multi_stage_barrier_pattern.yaml](https://github.com/NREL/torc/blob/main/examples/yaml/multi_stage_barrier_pattern.yaml)     | Efficient multi-stage workflow         | [Barriers](../core/tutorials/multi-stage-barrier.md)    |
-| [resource_monitoring_demo.yaml](https://github.com/NREL/torc/blob/main/examples/yaml/resource_monitoring_demo.yaml)           | CPU/memory tracking                    | —                                                       |
-| [workflow_actions_simple_slurm.yaml](https://github.com/NREL/torc/blob/main/examples/yaml/workflow_actions_simple_slurm.yaml) | Automated Slurm scheduling             | —                                                       |
+| Example                                                                                                                                | Description                            | Tutorial                                                |
+| -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------- |
+| [diamond_workflow.yaml](https://github.com/NatLabRockies/torc/blob/main/examples/yaml/diamond_workflow.yaml)                           | Fan-out/fan-in pattern                 | [Diamond Workflow](../core/tutorials/diamond.md)        |
+| [hundred_jobs_parameterized.yaml](https://github.com/NatLabRockies/torc/blob/main/examples/yaml/hundred_jobs_parameterized.yaml)       | 100 parallel jobs via parameterization | [Many Jobs](../core/tutorials/many-jobs.md)             |
+| [hyperparameter_sweep.yaml](https://github.com/NatLabRockies/torc/blob/main/examples/yaml/hyperparameter_sweep.yaml)                   | ML grid search (3×3×2 = 18 jobs)       | [Advanced Params](../core/tutorials/advanced-params.md) |
+| [multi_stage_barrier_pattern.yaml](https://github.com/NatLabRockies/torc/blob/main/examples/yaml/multi_stage_barrier_pattern.yaml)     | Efficient multi-stage workflow         | [Barriers](../core/tutorials/multi-stage-barrier.md)    |
+| [resource_monitoring_demo.yaml](https://github.com/NatLabRockies/torc/blob/main/examples/yaml/resource_monitoring_demo.yaml)           | CPU/memory tracking                    | —                                                       |
+| [workflow_actions_simple_slurm.yaml](https://github.com/NatLabRockies/torc/blob/main/examples/yaml/workflow_actions_simple_slurm.yaml) | Automated Slurm scheduling             | —                                                       |
 
 **Browse all examples:**
 
-- [YAML examples](https://github.com/NREL/torc/tree/main/examples/yaml)
-- [JSON5 examples](https://github.com/NREL/torc/tree/main/examples/json)
-- [KDL examples](https://github.com/NREL/torc/tree/main/examples/kdl)
-- [Python examples](https://github.com/NREL/torc/tree/main/examples/python)
+- [YAML examples](https://github.com/NatLabRockies/torc/tree/main/examples/yaml)
+- [JSON5 examples](https://github.com/NatLabRockies/torc/tree/main/examples/json)
+- [KDL examples](https://github.com/NatLabRockies/torc/tree/main/examples/kdl)
+- [Python examples](https://github.com/NatLabRockies/torc/tree/main/examples/python)
 
-See the [examples README](https://github.com/NREL/torc/tree/main/examples) for the complete list.
+See the [examples README](https://github.com/NatLabRockies/torc/tree/main/examples) for the complete
+list.
 
 ## Choose Your Execution Mode
 

@@ -65,7 +65,7 @@ Generate a debugging report for a workflow:
 # Generate report for a specific workflow
 torc reports results <workflow_id>
 
-# Specify custom output directory (default: "output")
+# Specify custom output directory (default: "torc_output")
 torc reports results <workflow_id> --output-dir /path/to/output
 
 # Include all workflow runs (default: only latest run)
@@ -123,9 +123,9 @@ Each entry in the `results` array contains detailed information about a single j
   "exec_time_minutes": 5.2,
   "compute_node_id": 789,
   "compute_node_type": "local",
-  "job_stdout": "output/job_stdio/job_456.o",
-  "job_stderr": "output/job_stdio/job_456.e",
-  "job_runner_log": "output/job_runner_hostname_123_1.log"
+  "job_stdout": "torc_output/job_stdio/job_456.o",
+  "job_stderr": "torc_output/job_stdio/job_456.e",
+  "job_runner_log": "torc_output/job_runner_hostname_123_1.log"
 }
 ```
 
@@ -155,25 +155,25 @@ For jobs executed by the local job runner (`compute_node_type: "local"`):
 
 ```json
 {
-  "job_stdout": "output/job_stdio/job_456.o",
-  "job_stderr": "output/job_stdio/job_456.e",
-  "job_runner_log": "output/job_runner_hostname_123_1.log"
+  "job_stdout": "torc_output/job_stdio/job_456.o",
+  "job_stderr": "torc_output/job_stdio/job_456.e",
+  "job_runner_log": "torc_output/job_runner_hostname_123_1.log"
 }
 ```
 
 **Log File Descriptions**:
 
-1. **job_stdout** (`output/job_stdio/job_<workflow_id>_<job_id>_<run_id>.o`):
+1. **job_stdout** (`torc_output/job_stdio/job_<workflow_id>_<job_id>_<run_id>.o`):
    - Standard output from your job command
    - Contains print statements, normal program output
    - **Use for**: Checking expected output, debugging logic errors
 
-2. **job_stderr** (`output/job_stdio/job_<workflow_id>_<job_id>_<run_id>.e`):
+2. **job_stderr** (`torc_output/job_stdio/job_<workflow_id>_<job_id>_<run_id>.e`):
    - Standard error from your job command
    - Contains error messages, warnings, stack traces
    - **Use for**: Investigating crashes, exceptions, error messages
 
-3. **job_runner_log** (`output/job_runner_<hostname>_<workflow_id>_<run_id>.log`):
+3. **job_runner_log** (`torc_output/job_runner_<hostname>_<workflow_id>_<run_id>.log`):
    - Internal Torc job runner logging
    - Shows job lifecycle events, resource monitoring, process management
    - **Use for**: Understanding Torc's job execution behavior, timing issues
@@ -216,8 +216,8 @@ jobs. This is often the quickest way to investigate failed jobs without using co
 
 The Debug tab provides a report generator with the following options:
 
-- **Output Directory**: Specify where job logs are stored (default: `output`). This must match the
-  directory used during workflow execution.
+- **Output Directory**: Specify where job logs are stored (default: `torc_output`). This must match
+  the directory used during workflow execution.
 
 - **Include all runs**: Check this to see results from all workflow runs, not just the latest.
   Useful for comparing job behavior across reinitializations.
@@ -334,65 +334,65 @@ This is especially useful for tracing specific jobs or workflows across multiple
 
 ```bash
 # Find all log lines for workflow 123
-grep -r "workflow_id=123" output/
+grep -r "workflow_id=123" torc_output/
 
 # Find all log lines for workflow 123 in job runner logs only
-grep -r "workflow_id=123" output/job_runner_*.log
+grep -r "workflow_id=123" torc_output/job_runner_*.log
 ```
 
 **Search for a specific job:**
 
 ```bash
 # Find all log lines for job 456
-grep -r "job_id=456" output/
+grep -r "job_id=456" torc_output/
 
 # Find log lines for job 456 with more context (2 lines before/after)
-grep -r -C 2 "job_id=456" output/
+grep -r -C 2 "job_id=456" torc_output/
 ```
 
 **Combine workflow and job searches:**
 
 ```bash
 # Find log lines for job 456 in workflow 123
-grep -r "workflow_id=123" output/ | grep "job_id=456"
+grep -r "workflow_id=123" torc_output/ | grep "job_id=456"
 
 # Alternative using extended regex
-grep -rE "workflow_id=123.*job_id=456" output/
+grep -rE "workflow_id=123.*job_id=456" torc_output/
 ```
 
 **Search for specific runs or attempts:**
 
 ```bash
 # Find all log lines for run 2 of workflow 123
-grep -r "workflow_id=123" output/ | grep "run_id=2"
+grep -r "workflow_id=123" torc_output/ | grep "run_id=2"
 
 # Find retry attempts for a specific job
-grep -r "job_id=456" output/ | grep "attempt_id="
+grep -r "job_id=456" torc_output/ | grep "attempt_id="
 
 # Find entries for a specific compute node
-grep -r "compute_node_id=789" output/
+grep -r "compute_node_id=789" torc_output/
 ```
 
 **Common log message patterns to search for:**
 
 ```bash
 # Find job start events
-grep -r "Job started workflow_id=" output/
+grep -r "Job started workflow_id=" torc_output/
 
 # Find job completion events
-grep -r "Job completed workflow_id=" output/
+grep -r "Job completed workflow_id=" torc_output/
 
 # Find failed jobs
-grep -r "status=failed" output/
+grep -r "status=failed" torc_output/
 
 # Find all job process completions with return codes
-grep -r "Job process completed" output/ | grep "return_code="
+grep -r "Job process completed" torc_output/ | grep "return_code="
 ```
 
 **Tip**: Redirect grep output to a file for easier analysis of large result sets:
 
 ```bash
-grep -r "workflow_id=123" output/ > workflow_123_logs.txt
+grep -r "workflow_id=123" torc_output/ > workflow_123_logs.txt
 ```
 
 ### Example: Complete Debugging Session
@@ -450,8 +450,8 @@ The `reports results` command automatically checks for log file existence and pr
 stderr if files are missing:
 
 ```
-Warning: job stdout log file does not exist for job 456: output/job_stdio/job_456.o
-Warning: job runner log file does not exist for job 456: output/job_runner_host1_123_1.log
+Warning: job stdout log file does not exist for job 456: torc_output/job_stdio/job_456.o
+Warning: job runner log file does not exist for job 456: torc_output/job_runner_host1_123_1.log
 ```
 
 **Common causes of missing log files**:
@@ -499,7 +499,7 @@ default to `./output`.
 
 2. **Archive reports with logs**: Store the JSON report alongside log files for future reference
    ```bash
-   torc reports results "$WF_ID" > "output/report_${WF_ID}_$(date +%Y%m%d_%H%M%S).json"
+   torc reports results "$WF_ID" > "torc_output/report_${WF_ID}_$(date +%Y%m%d_%H%M%S).json"
    ```
 
 3. **Use version control**: Commit debug reports for important workflow runs to track changes over
@@ -536,7 +536,7 @@ default to `./output`.
 
 ```bash
 ls -ld output/  # Check if directory exists
-torc reports results <workflow_id> --output-dir "$(pwd)/output"
+torc reports results <workflow_id> --output-dir "$(pwd)/torc_output"
 ```
 
 ### Empty Results Array

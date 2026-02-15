@@ -10,7 +10,7 @@ torc submit-slurm --account <your-account> workflow.yaml
 
 Torc will:
 
-1. Detect your HPC system (e.g., NREL Kestrel, Eagle)
+1. Detect your HPC system (e.g., NLR Kestrel)
 2. Match job requirements to appropriate partitions
 3. Generate Slurm scheduler configurations
 4. Submit everything for execution

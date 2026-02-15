@@ -142,7 +142,7 @@ the Slurm job was submitted. Torc handles this automatically.
 ## Scenario 3: HPC with Non-Routable Hostname
 
 **Problem:** Some HPC systems have login nodes where the default hostname is not routable from
-compute nodes. For example, on NREL's Kestrel cluster, login node `kl1` must be accessed as
+compute nodes. For example, on NLR's Kestrel cluster, login node `kl1` must be accessed as
 `kl1.hsn.cm.kestrel.hpc.nrel.gov` from compute nodes.
 
 ```mermaid

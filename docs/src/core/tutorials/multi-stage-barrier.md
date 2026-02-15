@@ -450,7 +450,7 @@ As you can see, barriers become **essential** for large-scale workflows.
 ## Complete Example
 
 See
-[multi_stage_barrier_pattern.yaml](https://github.com/NREL/torc/blob/main/examples/yaml/multi_stage_barrier_pattern.yaml)
+[multi_stage_barrier_pattern.yaml](https://github.com/NatLabRockies/torc/blob/main/examples/yaml/multi_stage_barrier_pattern.yaml)
 for a comprehensive example with:
 
 - 3 distinct stages (1000 → 1000 → 100 jobs)

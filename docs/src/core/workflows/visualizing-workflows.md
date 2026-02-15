@@ -176,5 +176,5 @@ The execution plan helps you verify that:
 - [Slurm Workflows](../../specialized/hpc/slurm-workflows.md) — Understanding Slurm integration
 - [Workflow Actions](../../specialized/design/workflow-actions.md) — How actions trigger scheduler
   allocations
-- [Subgraphs Example](https://github.com/NREL/torc/tree/main/examples/subgraphs) — Complete example
-  with multiple subgraphs
+- [Subgraphs Example](https://github.com/NatLabRockies/torc/tree/main/examples/subgraphs) — Complete
+  example with multiple subgraphs

@@ -1,6 +1,6 @@
-//! NREL Kestrel HPC profile
+//! NLR Kestrel HPC profile
 //!
-//! Kestrel is NREL's flagship HPC system featuring:
+//! Kestrel is NLR's flagship HPC system featuring:
 //! - 2,240 standard CPU nodes (104 cores, 240GB RAM each)
 //! - 156 GPU nodes with 4x NVIDIA H100 GPUs (80GB each)
 //! - Various specialized partitions for different workload types
@@ -13,8 +13,8 @@ use super::profiles::{HpcDetection, HpcPartition, HpcProfile};
 pub fn kestrel_profile() -> HpcProfile {
     HpcProfile {
         name: "kestrel".to_string(),
-        display_name: "NREL Kestrel".to_string(),
-        description: "NREL's flagship HPC system with CPU and GPU nodes".to_string(),
+        display_name: "NLR Kestrel".to_string(),
+        description: "NLR's flagship HPC system with CPU and GPU nodes".to_string(),
         detection: vec![HpcDetection::EnvVar {
             name: "NREL_CLUSTER".to_string(),
             value: "kestrel".to_string(),

@@ -12,7 +12,7 @@ git push origin v0.7.0-test1
 
 ### 2. Monitor the build
 
-Go to: https://github.com/NREL/torc/actions/workflows/release.yml
+Go to: https://github.com/NatLabRockies/torc/actions/workflows/release.yml
 
 You should see 4 build jobs running in parallel:
 

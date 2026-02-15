@@ -10,7 +10,7 @@ published at pypi.org, you must clone this repository install the package in a v
 Use Python 3.11 or later.
 
 ```
-git clone https://github.com/NREL/torc
+git clone https://github.com/NatLabRockies/torc
 cd torc/python_client
 python -m venv .venv
 source .venv/bin/activate

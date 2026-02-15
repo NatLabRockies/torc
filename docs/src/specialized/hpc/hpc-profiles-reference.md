@@ -234,7 +234,7 @@ torc slurm generate [OPTIONS] --account <ACCOUNT> <WORKFLOW_FILE>
 
 ## Built-in Profiles
 
-### NREL Kestrel
+### NLR Kestrel
 
 **Profile name:** `kestrel`
 
@@ -266,9 +266,9 @@ torc slurm generate [OPTIONS] --account <ACCOUNT> <WORKFLOW_FILE>
 
 ### Custom Profiles
 
-> **Don't see your HPC?** Please [request built-in support](https://github.com/NREL/torc/issues) so
-> everyone benefits. See the [Custom HPC Profile Tutorial](./custom-hpc-profile.md) for creating a
-> profile while you wait.
+> **Don't see your HPC?** Please
+> [request built-in support](https://github.com/NatLabRockies/torc/issues) so everyone benefits. See
+> the [Custom HPC Profile Tutorial](./custom-hpc-profile.md) for creating a profile while you wait.
 
 Define custom profiles in your Torc configuration file:
 

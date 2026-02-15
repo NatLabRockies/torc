@@ -13,7 +13,7 @@ HPC profiles contain:
 - **Detection rules**: How to identify when you're on a specific HPC system
 - **Default settings**: Account names and other system-specific defaults
 
-Built-in profiles are available for systems like NREL's Kestrel. You can also define custom profiles
+Built-in profiles are available for systems like NLR's Kestrel. You can also define custom profiles
 for private clusters.
 
 ## Listing Available Profiles
@@ -32,7 +32,7 @@ Known HPC profiles:
 ╭─────────┬──────────────┬────────────┬──────────╮
 │ Name    │ Display Name │ Partitions │ Detected │
 ├─────────┼──────────────┼────────────┼──────────┤
-│ kestrel │ NREL Kestrel │ 15         │ ✓        │
+│ kestrel │ NLR Kestrel  │ 15         │ ✓        │
 ╰─────────┴──────────────┴────────────┴──────────╯
 ```
 
@@ -46,7 +46,7 @@ Torc can automatically detect which HPC system you're on:
 torc hpc detect
 ```
 
-Detection works through environment variables. For example, NREL Kestrel is detected when
+Detection works through environment variables. For example, NLR Kestrel is detected when
 `NREL_CLUSTER=kestrel` is set.
 
 ## Viewing Profile Details
@@ -111,8 +111,8 @@ If your HPC system doesn't have a built-in profile, you have two options:
 
 > **Request Built-in Support** (Recommended)
 >
-> If your HPC is widely used, please [open an issue](https://github.com/NREL/torc/issues) requesting
-> built-in support. Include:
+> If your HPC is widely used, please [open an issue](https://github.com/NatLabRockies/torc/issues)
+> requesting built-in support. Include:
 >
 > - Your HPC system name and organization
 > - Partition names with resource limits (CPUs, memory, walltime, GPUs)

@@ -10,7 +10,8 @@ built-in support for.
 > If your HPC system is widely used, consider requesting that Torc developers add it as a built-in
 > profile. This benefits everyone using that system.
 >
-> Open an issue at [github.com/NREL/torc/issues](https://github.com/NREL/torc/issues) with:
+> Open an issue at
+> [github.com/NatLabRockies/torc/issues](https://github.com/NatLabRockies/torc/issues) with:
 >
 > - Your HPC system name and organization
 > - Partition names and their resource limits (CPUs, memory, walltime, GPUs)
@@ -180,7 +181,7 @@ Known HPC profiles:
 ╭──────────┬──────────────────┬────────────┬──────────╮
 │ Name     │ Display Name     │ Partitions │ Detected │
 ├──────────┼──────────────────┼────────────┼──────────┤
-│ kestrel  │ NREL Kestrel     │ 15         │          │
+│ kestrel  │ NLR Kestrel      │ 15         │          │
 │ research │ Research Cluster │ 4          │ ✓        │
 ╰──────────┴──────────────────┴────────────┴──────────╯
 ```
@@ -355,13 +356,13 @@ You can also use the `TORC_CONFIG` environment variable to specify a custom path
 
 If your HPC is used by others, please contribute it upstream:
 
-1. Fork the [Torc repository](https://github.com/NREL/torc)
+1. Fork the [Torc repository](https://github.com/NatLabRockies/torc)
 2. Add your profile to `src/client/hpc_profiles.rs`
 3. Add tests for your profile
 4. Submit a pull request
 
-Or simply [open an issue](https://github.com/NREL/torc/issues) with your partition information and
-we'll add it for you.
+Or simply [open an issue](https://github.com/NatLabRockies/torc/issues) with your partition
+information and we'll add it for you.
 
 ## See Also
 

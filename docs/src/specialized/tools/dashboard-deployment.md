@@ -398,9 +398,9 @@ If Slurm jobs fail with connection errors (e.g., "Connection refused" or "Name n
    ```
 
 2. On some HPC systems, the login node's default hostname is not routable from compute nodes. For
-   example, on NREL's Kestrel, login node `kl1` must be accessed as
-   `kl1.hsn.cm.kestrel.hpc.nrel.gov` from compute nodes. Check with your HPC administrators for the
-   correct routable hostname, then use `--host`:
+   example, on NLR's Kestrel, login node `kl1` must be accessed as `kl1.hsn.cm.kestrel.hpc.nrel.gov`
+   from compute nodes. Check with your HPC administrators for the correct routable hostname, then
+   use `--host`:
    ```bash
    torc-server run --host <routable-hostname> --port 8080 ...
    ```

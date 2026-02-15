@@ -44,7 +44,7 @@ def _initialize_api():
 def mapped_function_workflow(tmp_path):
     """Creates a workflow out of a function mapped to jobs."""
     api = _initialize_api()
-    output_dir = tmp_path / "output"
+    output_dir = tmp_path / "torc_output"
     output_dir.mkdir()
     workflow = api.create_workflow(WorkflowModel(user="test", name="test_workflow"))
     params = [{"val": i} for i in range(5)]

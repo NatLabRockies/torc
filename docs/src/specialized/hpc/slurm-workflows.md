@@ -75,7 +75,7 @@ torc submit-slurm --account myproject workflow.yaml
 
 Torc will:
 
-1. Detect which HPC system you're on (e.g., NREL Kestrel)
+1. Detect which HPC system you're on (e.g., NLR Kestrel)
 2. Match each job's requirements to appropriate partitions
 3. Generate Slurm scheduler configurations
 4. Create workflow actions that stage resource allocation based on dependencies
@@ -124,7 +124,7 @@ See [Walltime Strategy Options](#walltime-strategy-options) for details.
 
 ### 4. HPC Profile Knowledge
 
-Torc includes built-in knowledge of HPC systems like NREL Kestrel, including:
+Torc includes built-in knowledge of HPC systems like NLR Kestrel, including:
 
 - Available partitions and their resource limits
 - GPU configurations
@@ -132,8 +132,8 @@ Torc includes built-in knowledge of HPC systems like NREL Kestrel, including:
 - Special requirements (e.g., minimum node counts for high-bandwidth partitions)
 
 > **Using an unsupported HPC?** Please
-> [request built-in support](https://github.com/NREL/torc/issues) so everyone benefits. You can also
-> [create a custom profile](./custom-hpc-profile.md) for immediate use.
+> [request built-in support](https://github.com/NatLabRockies/torc/issues) so everyone benefits. You
+> can also [create a custom profile](./custom-hpc-profile.md) for immediate use.
 
 ## Resource Requirements Specification
 

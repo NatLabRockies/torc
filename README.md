@@ -16,7 +16,7 @@ for user adoption. Interfaces are somewhat stable. Over the next 1-2 months we w
 user feedback and will consider changes. Our goal is to have a 1.0 release by March 2026.
 
 Please post comments or new ideas for Torc in the
-[discussions](https://github.com/NREL/torc/discussions).
+[discussions](https://github.com/NatLabRockies/torc/discussions).
 
 ## Features
 
@@ -37,7 +37,7 @@ Please post comments or new ideas for Torc in the
 
 ### Installation
 
-Download precompiled binaries from the [releases page](https://github.com/NREL/torc/releases),
+Download precompiled binaries from the [releases page](https://github.com/NatLabRockies/torc/releases),
 install from crates.io, or build from source:
 
 ```bash
@@ -182,8 +182,8 @@ Here are the features of Torc that we think differentiate it from other tools:
 
 ## License
 
-Torc is released under a BSD 3-Clause [license](https://github.com/NREL/torc/blob/main/LICENSE).
+Torc is released under a BSD 3-Clause [license](https://github.com/NatLabRockies/torc/blob/main/LICENSE).
 
 ## Software Record
 
-This package is developed under NREL Software Record SWR-24-127.
+This package is developed under NLR Software Record SWR-24-127.

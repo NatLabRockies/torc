@@ -88,7 +88,7 @@ username = "alice"
 poll_interval = 10.0
 
 # Default output directory
-output_dir = "workflow_output"
+output_dir = "torc_output"
 
 # Resource limits for local execution
 num_cpus = 8
@@ -246,7 +246,7 @@ log_level = "debug"
 
 [client.run]
 poll_interval = 2.0
-output_dir = "output"
+output_dir = "torc_output"
 ```
 
 ### Production Server

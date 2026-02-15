@@ -8,7 +8,7 @@ Create a simulation script with build and execute functions as defined in the
 
 ## Torc configuration script
 The script `configure_parallel_simulation.jl` builds a torc workflow and adds it to the database.
-It configures parameters for NREL's Kestrel HPC.
+It configures parameters for NLR's Kestrel HPC.
 
 Configuration parameters to customize:
 - TORC_SERVICE_URL: Adjust this for your environment.

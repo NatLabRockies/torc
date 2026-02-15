@@ -23,9 +23,9 @@ On most HPC systems, login nodes have multiple network interfaces:
 When running `torc-server` on a login node, you must use the **internal hostname** so compute nodes
 can connect.
 
-### NREL Kestrel Example
+### NLR Kestrel Example
 
-On NREL's Kestrel system, login nodes use the High-Speed Network (HSN) for internal communication:
+On NLR's Kestrel system, login nodes use the High-Speed Network (HSN) for internal communication:
 
 | Login Node | External Hostname  | Internal Hostname (for `--host` flag) |
 | ---------- | ------------------ | ------------------------------------- |

@@ -270,7 +270,7 @@ Dynamically allocate compute resources from a Slurm scheduler.
 ## Complete Examples
 
 Refer to this
-[example](https://github.com/NREL/torc/blob/main/examples/yaml/workflow_actions_simple_slurm.yaml)
+[example](https://github.com/NatLabRockies/torc/blob/main/examples/yaml/workflow_actions_simple_slurm.yaml)
 
 ## Execution Model
 

@@ -264,12 +264,12 @@ In this tutorial, you learned:
 
 See the diamond workflow examples in all three formats:
 
-- [diamond_workflow.yaml](https://github.com/NREL/torc/blob/main/examples/yaml/diamond_workflow.yaml)
-- [diamond_workflow.json5](https://github.com/NREL/torc/blob/main/examples/json/diamond_workflow.json5)
-- [diamond_workflow.kdl](https://github.com/NREL/torc/blob/main/examples/kdl/diamond_workflow.kdl)
+- [diamond_workflow.yaml](https://github.com/NatLabRockies/torc/blob/main/examples/yaml/diamond_workflow.yaml)
+- [diamond_workflow.json5](https://github.com/NatLabRockies/torc/blob/main/examples/json/diamond_workflow.json5)
+- [diamond_workflow.kdl](https://github.com/NatLabRockies/torc/blob/main/examples/kdl/diamond_workflow.kdl)
 
 A Python version is also available:
-[diamond_workflow.py](https://github.com/NREL/torc/blob/main/examples/python/diamond_workflow.py)
+[diamond_workflow.py](https://github.com/NatLabRockies/torc/blob/main/examples/python/diamond_workflow.py)
 
 ## Next Steps
 

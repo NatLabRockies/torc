@@ -345,9 +345,9 @@ In this tutorial, you learned:
 
 See these example files for hyperparameter sweep patterns:
 
-- [hyperparameter_sweep.yaml](https://github.com/NREL/torc/blob/main/examples/yaml/hyperparameter_sweep.yaml) -
+- [hyperparameter_sweep.yaml](https://github.com/NatLabRockies/torc/blob/main/examples/yaml/hyperparameter_sweep.yaml) -
   Basic 3×3×2 grid search
-- [hyperparameter_sweep_shared_params.yaml](https://github.com/NREL/torc/blob/main/examples/yaml/hyperparameter_sweep_shared_params.yaml) -
+- [hyperparameter_sweep_shared_params.yaml](https://github.com/NatLabRockies/torc/blob/main/examples/yaml/hyperparameter_sweep_shared_params.yaml) -
   Grid search with shared parameter definitions
 
 ## Next Steps
