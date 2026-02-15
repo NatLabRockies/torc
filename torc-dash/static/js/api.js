@@ -378,6 +378,51 @@ class TorcAPI {
         }
     }
 
+    // ==================== Import / Export ====================
+
+    /**
+     * Export a workflow to a JSON file on the server
+     * @param {string} workflowId - Workflow ID
+     * @param {string} [output] - Output file path on server (default: workflow_<id>.json)
+     * @param {boolean} includeResults - Include job results in export
+     * @param {boolean} includeEvents - Include events in export
+     * @returns {object} CLI response with export result
+     */
+    async cliExportWorkflow(workflowId, output = null, includeResults = false, includeEvents = false) {
+        const body = {
+            workflow_id: workflowId,
+            include_results: includeResults,
+            include_events: includeEvents,
+        };
+        if (output) {
+            body.output = output;
+        }
+        return this.cliRequest('/api/cli/export', body);
+    }
+
+    /**
+     * Import a workflow from a server-side file or uploaded content
+     * @param {object} options - Import options
+     * @param {string} [options.filePath] - Server-side file path to import from
+     * @param {string} [options.content] - Uploaded JSON content (alternative to filePath)
+     * @param {string} [options.name] - Optional name override
+     * @param {boolean} [options.skipResults] - Skip importing results
+     * @param {boolean} [options.skipEvents] - Skip importing events
+     * @returns {object} CLI response with import result in stdout
+     */
+    async cliImportWorkflow({ filePath = null, content = null, name = null, skipResults = false, skipEvents = false } = {}) {
+        const body = { skip_results: skipResults, skip_events: skipEvents };
+        if (filePath) {
+            body.file_path = filePath;
+        } else if (content) {
+            body.content = content;
+        }
+        if (name) {
+            body.name = name;
+        }
+        return this.cliRequest('/api/cli/import', body);
+    }
+
     // ==================== Resource Plots ====================
 
     /**

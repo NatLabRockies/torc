@@ -318,13 +318,177 @@ fn test_export_with_results(start_server: &ServerProcess) {
     run_cli_with_json(&args, start_server, Some("test_user"))
         .expect("Failed to export workflow with results");
 
-    // Verify export contains results
+    // Verify export contains results and compute nodes
     let export_content = fs::read_to_string(export_path).expect("Failed to read export file");
     let export_json: Value =
         serde_json::from_str(&export_content).expect("Failed to parse export JSON");
 
     assert!(export_json["results"].is_array());
-    assert!(!export_json["results"].as_array().unwrap().is_empty());
+    let exported_results = export_json["results"].as_array().unwrap();
+    assert_eq!(exported_results.len(), 1);
+
+    assert!(export_json["compute_nodes"].is_array());
+    let exported_nodes = export_json["compute_nodes"].as_array().unwrap();
+    assert_eq!(exported_nodes.len(), 1);
+
+    // Import the exported workflow and verify results round-trip
+    let args = [
+        "workflows",
+        "import",
+        export_path,
+        "--name",
+        "imported_with_results",
+    ];
+    let import_result = run_cli_with_json(&args, start_server, Some("test_user"))
+        .expect("Failed to import workflow with results");
+
+    let new_workflow_id = import_result["workflow_id"].as_i64().unwrap();
+    assert_ne!(new_workflow_id, workflow_id);
+
+    // Verify results were imported into the new workflow
+    let results_response = default_api::list_results(
+        config,
+        new_workflow_id,
+        None, // job_id
+        None, // run_id
+        None, // offset
+        None, // limit
+        None, // sort_by
+        None, // reverse_sort
+        None, // return_code
+        None, // status
+        None, // all_runs
+        None, // compute_node_id
+    )
+    .expect("Failed to list imported results");
+
+    let imported_results = results_response.items.unwrap();
+    assert_eq!(imported_results.len(), 1, "Expected 1 result after import");
+
+    let imported_result = &imported_results[0];
+    assert_eq!(imported_result.return_code, 0);
+    assert_eq!(imported_result.status, JobStatus::Completed);
+    assert!((imported_result.exec_time_minutes - 1.5).abs() < 0.01);
+
+    // Verify IDs were remapped (not the same as originals)
+    assert_ne!(imported_result.workflow_id, workflow_id);
+    assert_eq!(imported_result.workflow_id, new_workflow_id);
+    assert_ne!(imported_result.job_id, job_id);
+    assert_ne!(imported_result.compute_node_id, compute_node_id);
+}
+
+/// Test importing an old export file that has results but no compute_nodes section.
+/// The import should create a placeholder compute node so results are still preserved.
+#[rstest]
+fn test_import_results_without_compute_nodes(start_server: &ServerProcess) {
+    let config = &start_server.config;
+
+    // Create a workflow with a job, compute node, and result
+    let workflow = WorkflowModel::new("old_export_test".to_string(), "test_user".to_string());
+    let created_workflow =
+        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+    let workflow_id = created_workflow.id.unwrap();
+
+    let job = JobModel::new(
+        workflow_id,
+        "test_job".to_string(),
+        "echo hello".to_string(),
+    );
+    let created_job = default_api::create_job(config, job).expect("Failed to create job");
+    let job_id = created_job.id.unwrap();
+
+    let compute_node = torc::models::ComputeNodeModel::new(
+        workflow_id,
+        "localhost".to_string(),
+        std::process::id() as i64,
+        chrono::Utc::now().to_rfc3339(),
+        4,
+        16.0,
+        0,
+        1,
+        "local".to_string(),
+        None,
+    );
+    let created_cn = default_api::create_compute_node(config, compute_node)
+        .expect("Failed to create compute node");
+    let cn_id = created_cn.id.unwrap();
+
+    let result = torc::models::ResultModel::new(
+        job_id,
+        workflow_id,
+        1,
+        1,
+        cn_id,
+        0,
+        2.5,
+        "2024-06-01T12:00:00Z".to_string(),
+        JobStatus::Completed,
+    );
+    default_api::create_result(config, result).expect("Failed to create result");
+
+    // Export with results, then strip the compute_nodes field to simulate an old export
+    let export_file = NamedTempFile::new().expect("Failed to create temp file");
+    let export_path = export_file.path().to_str().unwrap();
+
+    let args = [
+        "workflows",
+        "export",
+        &workflow_id.to_string(),
+        "-o",
+        export_path,
+        "--include-results",
+    ];
+    run_cli_with_json(&args, start_server, Some("test_user")).expect("Failed to export workflow");
+
+    // Remove compute_nodes from the export to simulate an old format file
+    let export_content = fs::read_to_string(export_path).expect("Failed to read export file");
+    let mut export_json: Value =
+        serde_json::from_str(&export_content).expect("Failed to parse export JSON");
+    export_json.as_object_mut().unwrap().remove("compute_nodes");
+    fs::write(
+        export_path,
+        serde_json::to_string_pretty(&export_json).unwrap(),
+    )
+    .expect("Failed to write modified export");
+
+    // Import - should succeed and create results using a placeholder compute node
+    let args = [
+        "workflows",
+        "import",
+        export_path,
+        "--name",
+        "imported_old_format",
+    ];
+    let import_result = run_cli_with_json(&args, start_server, Some("test_user"))
+        .expect("Failed to import workflow without compute_nodes");
+
+    let new_workflow_id = import_result["workflow_id"].as_i64().unwrap();
+
+    // Verify results were imported
+    let results_response = default_api::list_results(
+        config,
+        new_workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list imported results");
+
+    let imported_results = results_response.items.unwrap();
+    assert_eq!(
+        imported_results.len(),
+        1,
+        "Expected 1 result from old-format import"
+    );
+    assert_eq!(imported_results[0].return_code, 0);
+    assert!((imported_results[0].exec_time_minutes - 2.5).abs() < 0.01);
 }
 
 #[rstest]

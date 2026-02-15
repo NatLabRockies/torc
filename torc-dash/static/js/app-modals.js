@@ -436,6 +436,137 @@ Object.assign(TorcDashboard.prototype, {
         }
     },
 
+    // ==================== Export Modal ====================
+
+    setupExportModal() {
+        document.getElementById('export-modal-close')?.addEventListener('click', () => {
+            this.hideModal('export-workflow-modal');
+        });
+
+        document.getElementById('btn-cancel-export')?.addEventListener('click', () => {
+            this.hideModal('export-workflow-modal');
+        });
+
+        document.getElementById('btn-confirm-export')?.addEventListener('click', async () => {
+            await this.executeExport();
+        });
+
+        document.getElementById('export-workflow-modal')?.addEventListener('mousedown', (e) => {
+            if (e.target.classList.contains('modal')) {
+                this.hideModal('export-workflow-modal');
+            }
+        });
+    },
+
+    // ==================== Import Modal ====================
+
+    setupImportModal() {
+        this.currentImportTab = 'path';
+
+        document.getElementById('import-modal-close')?.addEventListener('click', () => {
+            this.hideModal('import-workflow-modal');
+            this.clearImportState();
+        });
+
+        document.getElementById('btn-cancel-import')?.addEventListener('click', () => {
+            this.hideModal('import-workflow-modal');
+            this.clearImportState();
+        });
+
+        document.getElementById('btn-confirm-import')?.addEventListener('click', async () => {
+            await this.executeImport();
+        });
+
+        document.getElementById('import-workflow-modal')?.addEventListener('mousedown', (e) => {
+            if (e.target.classList.contains('modal')) {
+                this.hideModal('import-workflow-modal');
+                this.clearImportState();
+            }
+        });
+
+        // Import source tabs
+        document.querySelectorAll('.sub-tab[data-importtab]').forEach(tab => {
+            tab.addEventListener('click', () => {
+                this.switchImportTab(tab.dataset.importtab);
+            });
+        });
+
+        this.setupImportFileUpload();
+    },
+
+    switchImportTab(tabName) {
+        this.currentImportTab = tabName;
+        document.querySelectorAll('.sub-tab[data-importtab]').forEach(tab => {
+            tab.classList.toggle('active', tab.dataset.importtab === tabName);
+        });
+        document.getElementById('import-panel-path').style.display = tabName === 'path' ? 'block' : 'none';
+        document.getElementById('import-panel-upload').style.display = tabName === 'upload' ? 'block' : 'none';
+    },
+
+    setupImportFileUpload() {
+        const zone = document.getElementById('import-file-upload-zone');
+        const input = document.getElementById('import-file-input');
+        if (!zone || !input) return;
+
+        zone.addEventListener('click', () => input.click());
+
+        zone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            zone.classList.add('drag-over');
+        });
+
+        zone.addEventListener('dragleave', () => {
+            zone.classList.remove('drag-over');
+        });
+
+        zone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            zone.classList.remove('drag-over');
+            const file = e.dataTransfer.files[0];
+            if (file) this.handleImportFileUpload(file);
+        });
+
+        input.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) this.handleImportFileUpload(file);
+        });
+    },
+
+    handleImportFileUpload(file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            this.importFileContent = e.target.result;
+            document.getElementById('import-upload-status').innerHTML = `
+                <p style="color: var(--success-color)">Loaded: ${this.escapeHtml(file.name)} (${(file.size / 1024).toFixed(1)} KB)</p>
+            `;
+        };
+        reader.onerror = () => {
+            this.showToast('Error reading file', 'error');
+        };
+        reader.readAsText(file);
+    },
+
+    clearImportState() {
+        this.importFileContent = null;
+        this.currentImportTab = 'path';
+        const statusEl = document.getElementById('import-upload-status');
+        if (statusEl) statusEl.innerHTML = '';
+        const importStatusEl = document.getElementById('import-status');
+        if (importStatusEl) importStatusEl.innerHTML = '';
+        const nameInput = document.getElementById('import-name-override');
+        if (nameInput) nameInput.value = '';
+        const pathInput = document.getElementById('import-file-path');
+        if (pathInput) pathInput.value = '';
+        const fileInput = document.getElementById('import-file-input');
+        if (fileInput) fileInput.value = '';
+        const skipResults = document.getElementById('import-skip-results');
+        if (skipResults) skipResults.checked = false;
+        const skipEvents = document.getElementById('import-skip-events');
+        if (skipEvents) skipEvents.checked = false;
+        // Reset tabs to default
+        this.switchImportTab('path');
+    },
+
     async showExecutionPlan(workflowId) {
         this.showModal('execution-plan-modal');
         const content = document.getElementById('execution-plan-content');

@@ -34,6 +34,7 @@ class TorcDashboard {
         this.currentCreateTab = 'upload';
         this.uploadedSpecContent = null;
         this.uploadedSpecExtension = null;
+        this.importFileContent = null;
 
         // Show all users toggle
         this.showAllUsers = false;
@@ -98,6 +99,8 @@ class TorcDashboard {
         this.setupInitConfirmModal();
         this.setupReinitConfirmModal();
         this.setupRecoverModal();
+        this.setupExportModal();
+        this.setupImportModal();
         this.setupFileViewerModal();
         this.setupJobDetailsModal();
         this.setupSlurmLogsModal();

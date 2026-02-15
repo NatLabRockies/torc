@@ -80,6 +80,7 @@
                         <button class="btn btn-success btn-create-prominent" id="btn-create-workflow">
                             + Create Workflow
                         </button>
+                        <button class="btn btn-primary" id="btn-import-workflow">Import Workflow</button>
                         <input type="text" id="workflow-filter" class="text-input" placeholder="Filter workflows..." style="width: 200px;">
                         <label class="toggle-label" title="Show workflows from all users">
                             <input type="checkbox" id="show-all-users">
@@ -141,6 +142,7 @@
                         <button class="btn btn-primary" id="btn-init-workflow" title="Initialize a workflow, including all job statuses">Initialize</button>
                         <button class="btn btn-warning" id="btn-reinit-workflow" title="Reinitialize a workflow. This will reinitialize all jobs with a status of canceled, submitting, pending, or terminated. Jobs with a status of done will also be reinitialized if an input_file or user_data record has changed.">Re-initialize</button>
                         <button class="btn btn-danger" id="btn-reset-workflow" title="Reset workflow and job status">Reset</button>
+                        <button class="btn btn-secondary" id="btn-export-workflow" title="Download workflow as a JSON file for backup or migration">Export</button>
                     </div>
                     <div class="action-group">
                         <h4>Execution</h4>
@@ -843,6 +845,91 @@
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" id="btn-close-job-details">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Workflow Modal -->
+    <div class="modal" id="export-workflow-modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3>Export Workflow</h3>
+                <button class="modal-close" id="export-modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Save the workflow to a JSON file on the server.</p>
+                <div class="form-group">
+                    <label for="export-output-path">Output file path</label>
+                    <input type="text" id="export-output-path" class="text-input" style="width: 100%;">
+                </div>
+                <div class="form-group">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="export-include-results">
+                        Include results (job execution metrics)
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="export-include-events">
+                        Include events (workflow history)
+                    </label>
+                </div>
+                <div id="export-status"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="btn-cancel-export">Cancel</button>
+                <button class="btn btn-primary" id="btn-confirm-export">Export</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Workflow Modal -->
+    <div class="modal" id="import-workflow-modal">
+        <div class="modal-content" style="max-width: 550px;">
+            <div class="modal-header">
+                <h3>Import Workflow</h3>
+                <button class="modal-close" id="import-modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Import a previously exported workflow JSON file.</p>
+                <div class="sub-tabs" style="margin-bottom: 12px;">
+                    <button class="sub-tab active" data-importtab="path">File Path</button>
+                    <button class="sub-tab" data-importtab="upload">Upload</button>
+                </div>
+                <div id="import-panel-path" class="import-panel">
+                    <div class="form-group">
+                        <label for="import-file-path">Path to exported JSON file on the server</label>
+                        <input type="text" id="import-file-path" class="text-input" placeholder="/path/to/workflow_export.json" style="width: 100%;">
+                    </div>
+                </div>
+                <div id="import-panel-upload" class="import-panel" style="display: none;">
+                    <div class="file-upload-zone" id="import-file-upload-zone">
+                        <p>Drop an exported workflow JSON file here or click to select</p>
+                        <input type="file" id="import-file-input" accept=".json" style="display:none">
+                    </div>
+                    <div id="import-upload-status"></div>
+                </div>
+                <div class="form-group" style="margin-top: 12px;">
+                    <label for="import-name-override">Name override (optional)</label>
+                    <input type="text" id="import-name-override" class="text-input" placeholder="Leave empty to use original name" style="width: 100%;">
+                </div>
+                <div class="form-group">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="import-skip-results">
+                        Skip results (ignore job execution metrics)
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="import-skip-events">
+                        Skip events (ignore workflow history)
+                    </label>
+                </div>
+                <div id="import-status"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="btn-cancel-import">Cancel</button>
+                <button class="btn btn-primary" id="btn-confirm-import">Import</button>
             </div>
         </div>
     </div>

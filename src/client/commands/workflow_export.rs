@@ -22,7 +22,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::models::{
-    EventModel, FailureHandlerModel, FileModel, JobModel, LocalSchedulerModel,
+    ComputeNodeModel, EventModel, FailureHandlerModel, FileModel, JobModel, LocalSchedulerModel,
     ResourceRequirementsModel, ResultModel, SlurmSchedulerModel, UserDataModel,
     WorkflowActionModel, WorkflowModel,
 };
@@ -67,6 +67,10 @@ pub struct WorkflowExport {
     /// Workflow actions (triggers like on_workflow_start)
     pub workflow_actions: Vec<WorkflowActionModel>,
 
+    /// Compute nodes (included when results are included, since results reference them)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compute_nodes: Option<Vec<ComputeNodeModel>>,
+
     /// Job results (optional, only included with --include-results)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub results: Option<Vec<ResultModel>>,
@@ -91,6 +95,7 @@ impl WorkflowExport {
             failure_handlers: Vec::new(),
             jobs: Vec::new(),
             workflow_actions: Vec::new(),
+            compute_nodes: None,
             results: None,
             events: None,
         }
@@ -108,6 +113,7 @@ pub struct ExportImportStats {
     pub local_schedulers: usize,
     pub failure_handlers: usize,
     pub workflow_actions: usize,
+    pub compute_nodes: usize,
     pub results: usize,
     pub events: usize,
 }
@@ -123,6 +129,7 @@ impl ExportImportStats {
             local_schedulers: export.local_schedulers.len(),
             failure_handlers: export.failure_handlers.len(),
             workflow_actions: export.workflow_actions.len(),
+            compute_nodes: export.compute_nodes.as_ref().map(|c| c.len()).unwrap_or(0),
             results: export.results.as_ref().map(|r| r.len()).unwrap_or(0),
             events: export.events.as_ref().map(|e| e.len()).unwrap_or(0),
         }
@@ -141,6 +148,7 @@ pub struct IdMappings {
     pub local_schedulers: HashMap<i64, i64>,
     pub failure_handlers: HashMap<i64, i64>,
     pub jobs: HashMap<i64, i64>,
+    pub compute_nodes: HashMap<i64, i64>,
 }
 
 impl IdMappings {
@@ -179,6 +187,11 @@ impl IdMappings {
     /// Remap a job ID using the mapping table
     pub fn remap_job_id(&self, old_id: i64) -> Option<i64> {
         self.jobs.get(&old_id).copied()
+    }
+
+    /// Remap a compute_node ID using the mapping table
+    pub fn remap_compute_node_id(&self, old_id: i64) -> Option<i64> {
+        self.compute_nodes.get(&old_id).copied()
     }
 
     /// Remap a vector of file IDs

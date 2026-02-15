@@ -66,6 +66,20 @@ Object.assign(TorcDashboard.prototype, {
         document.getElementById('btn-cancel-workflow')?.addEventListener('click', () => {
             if (this.selectedWorkflowId) this.cancelWorkflow(this.selectedWorkflowId);
         });
+
+        document.getElementById('btn-export-workflow')?.addEventListener('click', () => {
+            if (this.selectedWorkflowId) {
+                document.getElementById('export-status').innerHTML = '';
+                // Pre-populate output path with workflow_name_id.json
+                const pathInput = document.getElementById('export-output-path');
+                if (pathInput) {
+                    const workflow = this.workflows.find(w => String(w.id) === String(this.selectedWorkflowId));
+                    const safeName = (workflow?.name || 'workflow').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '_');
+                    pathInput.value = `${safeName}_${this.selectedWorkflowId}.json`;
+                }
+                this.showModal('export-workflow-modal');
+            }
+        });
     },
 
     async cancelWorkflow(workflowId) {

@@ -163,6 +163,30 @@ where
             }
         };
         body.id = Some(result.id);
+
+        // Also populate workflow_result so this result is visible via default list queries.
+        // workflow_result tracks the latest result per (workflow_id, job_id).
+        let result_id = result.id;
+        let workflow_id = body.workflow_id;
+        let job_id = body.job_id;
+        if let Err(e) = sqlx::query!(
+            r#"
+            INSERT OR REPLACE INTO workflow_result (workflow_id, job_id, result_id)
+            VALUES (?, ?, ?)
+            "#,
+            workflow_id,
+            job_id,
+            result_id,
+        )
+        .execute(self.context.pool.as_ref())
+        .await
+        {
+            debug!(
+                "Failed to insert workflow_result for workflow_id={}, job_id={}: {}",
+                workflow_id, job_id, e
+            );
+        }
+
         Ok(CreateResultResponse::SuccessfulResponse(body))
     }
 

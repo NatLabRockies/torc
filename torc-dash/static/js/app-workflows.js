@@ -15,6 +15,11 @@ Object.assign(TorcDashboard.prototype, {
             this.showModal('create-workflow-modal');
         });
 
+        document.getElementById('btn-import-workflow')?.addEventListener('click', () => {
+            this.clearImportState();
+            this.showModal('import-workflow-modal');
+        });
+
         // Show all users toggle
         const showAllUsersCheckbox = document.getElementById('show-all-users');
         if (showAllUsersCheckbox) {
@@ -541,6 +546,122 @@ Object.assign(TorcDashboard.prototype, {
         } catch (error) {
             content.innerHTML = `<div class="recover-error">Error: ${this.escapeHtml(error.message)}</div>`;
             this.showToast('Recovery failed', 'error');
+        }
+    },
+
+    async executeExport() {
+        if (!this.selectedWorkflowId) {
+            this.showToast('No workflow selected', 'warning');
+            return;
+        }
+
+        const btn = document.getElementById('btn-confirm-export');
+        const statusEl = document.getElementById('export-status');
+        const originalText = btn.textContent;
+        btn.textContent = 'Exporting...';
+        btn.disabled = true;
+
+        try {
+            const output = document.getElementById('export-output-path')?.value?.trim() || null;
+            const includeResults = document.getElementById('export-include-results')?.checked || false;
+            const includeEvents = document.getElementById('export-include-events')?.checked || false;
+
+            const result = await api.cliExportWorkflow(this.selectedWorkflowId, output, includeResults, includeEvents);
+
+            if (result.success) {
+                // Try to extract output path from JSON response
+                let exportMsg = 'Workflow exported successfully';
+                try {
+                    const data = JSON.parse(result.stdout);
+                    if (data.output_file) {
+                        exportMsg = `Exported to ${data.output_file}`;
+                    }
+                } catch (e) {
+                    // Use default message
+                }
+
+                statusEl.innerHTML = `<p style="color: var(--success-color)">${this.escapeHtml(exportMsg)}</p>`;
+                this.showToast(exportMsg, 'success');
+            } else {
+                const errorMsg = result.stderr || result.stdout || 'Export failed';
+                statusEl.innerHTML = `<p style="color: var(--danger-color)">${this.escapeHtml(errorMsg)}</p>`;
+                this.showToast('Export failed', 'error');
+            }
+        } catch (error) {
+            statusEl.innerHTML = `<p style="color: var(--danger-color)">${this.escapeHtml(error.message)}</p>`;
+            this.showToast('Export failed: ' + error.message, 'error');
+        } finally {
+            btn.textContent = originalText;
+            btn.disabled = false;
+        }
+    },
+
+    async executeImport() {
+        const statusEl = document.getElementById('import-status');
+
+        // Determine import source based on active tab
+        let importArgs = {};
+        if (this.currentImportTab === 'path') {
+            const filePath = document.getElementById('import-file-path')?.value?.trim();
+            if (!filePath) {
+                this.showToast('Please enter a file path', 'warning');
+                return;
+            }
+            importArgs.filePath = filePath;
+        } else {
+            if (!this.importFileContent) {
+                this.showToast('Please select a workflow JSON file to upload', 'warning');
+                return;
+            }
+            // Validate JSON
+            try {
+                JSON.parse(this.importFileContent);
+            } catch (e) {
+                this.showToast('Invalid JSON file', 'error');
+                return;
+            }
+            importArgs.content = this.importFileContent;
+        }
+
+        const btn = document.getElementById('btn-confirm-import');
+        const originalText = btn.textContent;
+        btn.textContent = 'Importing...';
+        btn.disabled = true;
+
+        try {
+            importArgs.name = document.getElementById('import-name-override')?.value?.trim() || null;
+            importArgs.skipResults = document.getElementById('import-skip-results')?.checked || false;
+            importArgs.skipEvents = document.getElementById('import-skip-events')?.checked || false;
+
+            const result = await api.cliImportWorkflow(importArgs);
+
+            if (result.success) {
+                // Try to extract workflow ID from JSON output
+                let importMsg = 'Workflow imported successfully';
+                try {
+                    const importData = JSON.parse(result.stdout);
+                    if (importData.workflow_id) {
+                        importMsg = `Workflow imported with ID ${importData.workflow_id}`;
+                    }
+                } catch (e) {
+                    // Use default message
+                }
+
+                this.showToast(importMsg, 'success');
+                this.hideModal('import-workflow-modal');
+                this.clearImportState();
+                await this.loadWorkflows();
+            } else {
+                const errorMsg = result.stderr || result.stdout || 'Import failed';
+                statusEl.innerHTML = `<p style="color: var(--danger-color)">${this.escapeHtml(errorMsg)}</p>`;
+                this.showToast('Import failed', 'error');
+            }
+        } catch (error) {
+            statusEl.innerHTML = `<p style="color: var(--danger-color)">${this.escapeHtml(error.message)}</p>`;
+            this.showToast('Import failed: ' + error.message, 'error');
+        } finally {
+            btn.textContent = originalText;
+            btn.disabled = false;
         }
     },
 

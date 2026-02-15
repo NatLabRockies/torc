@@ -365,6 +365,8 @@ async fn main() -> Result<()> {
         .route("/api/cli/execution-plan", post(cli_execution_plan_handler))
         .route("/api/cli/run-stream", get(cli_run_stream_handler))
         .route("/api/cli/recover", post(cli_recover_handler))
+        .route("/api/cli/export", post(cli_export_handler))
+        .route("/api/cli/import", post(cli_import_handler))
         .route("/api/cli/read-file", post(cli_read_file_handler))
         .route("/api/cli/plot-resources", post(cli_plot_resources_handler))
         .route(
@@ -630,6 +632,34 @@ struct CliResponse {
     stdout: String,
     stderr: String,
     exit_code: Option<i32>,
+}
+
+#[derive(Deserialize)]
+struct ExportRequest {
+    workflow_id: String,
+    /// Output file path on the server (default: workflow_<id>.json in current dir)
+    #[serde(default)]
+    output: Option<String>,
+    #[serde(default)]
+    include_results: bool,
+    #[serde(default)]
+    include_events: bool,
+}
+
+#[derive(Deserialize)]
+struct ImportRequest {
+    /// Server-side file path to import from (mutually exclusive with content)
+    #[serde(default)]
+    file_path: Option<String>,
+    /// Inline JSON content uploaded from browser (mutually exclusive with file_path)
+    #[serde(default)]
+    content: Option<String>,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    skip_results: bool,
+    #[serde(default)]
+    skip_events: bool,
 }
 
 #[derive(Deserialize)]
@@ -1478,6 +1508,100 @@ async fn cli_read_file_handler(Json(req): Json<ReadFileRequest>) -> impl IntoRes
             exists: true,
         }),
     }
+}
+
+/// Export a workflow to a JSON file on the server
+async fn cli_export_handler(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<ExportRequest>,
+) -> impl IntoResponse {
+    // Default output path: workflow_<id>.json in current directory
+    let default_output = format!("workflow_{}.json", req.workflow_id);
+    let output_raw = req.output.as_deref().unwrap_or(&default_output);
+
+    // Resolve to absolute path so the user knows exactly where the file goes
+    let output_path = FsPath::new(output_raw);
+    let output_abs = if output_path.is_relative() {
+        std::env::current_dir()
+            .map(|cwd| cwd.join(output_path).to_string_lossy().to_string())
+            .unwrap_or_else(|_| output_raw.to_string())
+    } else {
+        output_raw.to_string()
+    };
+
+    let mut args = vec![
+        "-f",
+        "json",
+        "workflows",
+        "export",
+        &req.workflow_id,
+        "-o",
+        &output_abs,
+    ];
+    if req.include_results {
+        args.push("--include-results");
+    }
+    if req.include_events {
+        args.push("--include-events");
+    }
+    let result = run_torc_command(&state.torc_bin, &args, &state.api_url).await;
+    Json(result)
+}
+
+/// Import a workflow from a server-side file path or uploaded content
+async fn cli_import_handler(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<ImportRequest>,
+) -> impl IntoResponse {
+    // Determine the file path to import from
+    let temp_path_owned;
+    let import_path = if let Some(ref path) = req.file_path {
+        // Use server-side file path directly
+        path.as_str()
+    } else if let Some(ref content) = req.content {
+        // Write uploaded content to a temp file
+        let unique_id = uuid::Uuid::new_v4();
+        temp_path_owned = format!("/tmp/torc_import_{}.json", unique_id);
+        if let Err(e) = tokio::fs::write(&temp_path_owned, content).await {
+            return Json(CliResponse {
+                success: false,
+                stdout: String::new(),
+                stderr: format!("Failed to write temp file: {}", e),
+                exit_code: None,
+            });
+        }
+        temp_path_owned.as_str()
+    } else {
+        return Json(CliResponse {
+            success: false,
+            stdout: String::new(),
+            stderr: "Either file_path or content must be provided".to_string(),
+            exit_code: None,
+        });
+    };
+
+    let name_str;
+    let mut args = vec!["-f", "json", "workflows", "import", import_path];
+    if let Some(ref name) = req.name {
+        name_str = name.clone();
+        args.push("--name");
+        args.push(&name_str);
+    }
+    if req.skip_results {
+        args.push("--skip-results");
+    }
+    if req.skip_events {
+        args.push("--skip-events");
+    }
+
+    let result = run_torc_command(&state.torc_bin, &args, &state.api_url).await;
+
+    // Clean up temp file if we created one (not for server-side paths)
+    if req.file_path.is_none() && req.content.is_some() {
+        let _ = tokio::fs::remove_file(import_path).await;
+    }
+
+    Json(result)
 }
 
 #[derive(Deserialize)]
