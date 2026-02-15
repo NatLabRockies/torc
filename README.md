@@ -37,8 +37,9 @@ Please post comments or new ideas for Torc in the
 
 ### Installation
 
-Download precompiled binaries from the [releases page](https://github.com/NatLabRockies/torc/releases),
-install from crates.io, or build from source:
+Download precompiled binaries from the
+[releases page](https://github.com/NatLabRockies/torc/releases), install from crates.io, or build
+from source:
 
 ```bash
 # Install from crates.io (CLI only)
@@ -182,7 +183,8 @@ Here are the features of Torc that we think differentiate it from other tools:
 
 ## License
 
-Torc is released under a BSD 3-Clause [license](https://github.com/NatLabRockies/torc/blob/main/LICENSE).
+Torc is released under a BSD 3-Clause
+[license](https://github.com/NatLabRockies/torc/blob/main/LICENSE).
 
 ## Software Record
 
