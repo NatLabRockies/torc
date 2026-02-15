@@ -1047,6 +1047,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "AccessCheckResponse",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -1120,6 +1121,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "AccessCheckResponse",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -1193,6 +1195,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "AccessCheckResponse",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -1332,6 +1335,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ClaimAction200Response",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '409': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -1409,6 +1414,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ClaimAction200Response",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '409': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -1486,6 +1493,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ClaimAction200Response",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '409': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -1649,6 +1658,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ClaimJobsBasedOnResourcesResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -1733,6 +1744,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ClaimJobsBasedOnResourcesResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -1817,6 +1830,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ClaimJobsBasedOnResourcesResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -1981,6 +1996,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ClaimNextJobsResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -2057,6 +2074,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ClaimNextJobsResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -2133,6 +2152,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ClaimNextJobsResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -2293,6 +2314,9 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "JobModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
+            '422': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -2373,6 +2397,9 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "JobModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
+            '422': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -2453,6 +2480,9 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "JobModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
+            '422': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -2603,6 +2633,7 @@ class DefaultApi:
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "AccessGroupModel",
             '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '409': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -2673,6 +2704,7 @@ class DefaultApi:
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "AccessGroupModel",
             '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '409': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -2743,6 +2775,7 @@ class DefaultApi:
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "AccessGroupModel",
             '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '409': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -2884,6 +2917,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ComputeNodeModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -2953,6 +2987,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ComputeNodeModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -3022,6 +3057,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ComputeNodeModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -3163,6 +3199,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "EventModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -3232,6 +3269,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "EventModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -3301,6 +3339,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "EventModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -3442,6 +3481,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FailureHandlerModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -3511,6 +3551,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FailureHandlerModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -3580,6 +3621,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FailureHandlerModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -3721,6 +3763,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FileModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -3790,6 +3833,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FileModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -3859,6 +3903,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FileModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -4000,6 +4045,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "JobModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -4069,6 +4115,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "JobModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -4138,6 +4185,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "JobModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -4279,6 +4327,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "CreateJobsResponse",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '422': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
@@ -4349,6 +4398,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "CreateJobsResponse",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '422': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
@@ -4419,6 +4469,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "CreateJobsResponse",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '422': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
@@ -4561,6 +4612,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "LocalSchedulerModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -4629,6 +4682,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "LocalSchedulerModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -4697,6 +4752,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "LocalSchedulerModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -4841,6 +4898,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[RemoteWorkerModel]",
+            '403': "ForbiddenErrorResponse",
             '404': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -4914,6 +4972,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[RemoteWorkerModel]",
+            '403': "ForbiddenErrorResponse",
             '404': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -4987,6 +5046,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[RemoteWorkerModel]",
+            '403': "ForbiddenErrorResponse",
             '404': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -5132,6 +5192,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResourceRequirementsModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '422': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
@@ -5202,6 +5263,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResourceRequirementsModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '422': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
@@ -5272,6 +5334,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResourceRequirementsModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '422': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
@@ -5414,6 +5477,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResultModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -5482,6 +5547,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResultModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -5550,6 +5617,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResultModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -5690,6 +5759,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ScheduledComputeNodesModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -5758,6 +5829,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ScheduledComputeNodesModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -5826,6 +5899,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ScheduledComputeNodesModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -5966,6 +6041,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "SlurmSchedulerModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -6034,6 +6111,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "SlurmSchedulerModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -6102,6 +6181,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "SlurmSchedulerModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -6250,6 +6331,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "UserDataModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -6327,6 +6409,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "UserDataModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -6404,6 +6487,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "UserDataModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -6555,6 +6639,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "WorkflowModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -6623,6 +6709,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "WorkflowModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -6691,6 +6779,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "WorkflowModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -6835,6 +6925,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "WorkflowActionModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '422': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -6908,6 +7000,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "WorkflowActionModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '422': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -6981,6 +7075,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "WorkflowActionModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '422': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -7426,6 +7522,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -7498,6 +7596,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -7570,6 +7670,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -7719,6 +7821,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ComputeNodeModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -7791,6 +7895,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ComputeNodeModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -7863,6 +7969,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ComputeNodeModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -8010,6 +8118,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -8082,6 +8192,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -8154,6 +8266,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -8303,6 +8417,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "EventModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -8376,6 +8491,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "EventModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -8449,6 +8565,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "EventModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -8597,6 +8714,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -8669,6 +8788,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -8741,6 +8862,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -8890,6 +9013,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FailureHandlerModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -8963,6 +9087,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FailureHandlerModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -9036,6 +9161,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FailureHandlerModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -9184,6 +9310,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FileModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -9257,6 +9384,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FileModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -9330,6 +9458,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FileModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -9478,6 +9607,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -9550,6 +9681,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -9622,6 +9755,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -10068,6 +10203,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -10140,6 +10277,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -10212,6 +10351,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -10361,6 +10502,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "LocalSchedulerModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -10433,6 +10576,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "LocalSchedulerModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -10505,6 +10650,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "LocalSchedulerModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -10652,6 +10799,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -10724,6 +10873,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -10796,6 +10947,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -10945,6 +11098,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "RemoteWorkerModel",
+            '403': "ForbiddenErrorResponse",
             '404': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -11018,6 +11172,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "RemoteWorkerModel",
+            '403': "ForbiddenErrorResponse",
             '404': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -11091,6 +11246,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "RemoteWorkerModel",
+            '403': "ForbiddenErrorResponse",
             '404': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -11226,6 +11382,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResourceRequirementsModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -11299,6 +11456,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResourceRequirementsModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -11372,6 +11530,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResourceRequirementsModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -11520,6 +11679,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -11592,6 +11753,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -11664,6 +11827,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -11813,6 +11978,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResultModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -11886,6 +12052,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResultModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -11959,6 +12126,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResultModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -12107,6 +12275,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -12179,6 +12349,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -12251,6 +12423,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -12400,6 +12574,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ScheduledComputeNodesModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -12473,6 +12648,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ScheduledComputeNodesModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -12546,6 +12722,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ScheduledComputeNodesModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -12694,6 +12871,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -12766,6 +12945,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -12838,6 +13019,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -12987,6 +13170,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "SlurmSchedulerModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -13060,6 +13244,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "SlurmSchedulerModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -13133,6 +13318,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "SlurmSchedulerModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -13281,6 +13467,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -13353,6 +13541,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -13425,6 +13615,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -13574,6 +13766,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "UserDataModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -13647,6 +13840,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "UserDataModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -13720,6 +13914,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "UserDataModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -14427,6 +14622,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ComputeNodeModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -14496,6 +14692,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ComputeNodeModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -14565,6 +14762,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ComputeNodeModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -14693,6 +14891,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "EventModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -14762,6 +14961,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "EventModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -14831,6 +15031,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "EventModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -14959,6 +15160,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FailureHandlerModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -15028,6 +15230,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FailureHandlerModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -15097,6 +15300,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FailureHandlerModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -15225,6 +15429,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FileModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -15294,6 +15499,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FileModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -15363,6 +15569,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FileModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -16023,6 +16230,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "LocalSchedulerModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -16092,6 +16300,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "LocalSchedulerModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -16161,6 +16370,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "LocalSchedulerModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -16293,6 +16503,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[WorkflowActionModel]",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -16366,6 +16577,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[WorkflowActionModel]",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -16439,6 +16651,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[WorkflowActionModel]",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -16577,6 +16790,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "GetReadyJobRequirementsResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -16649,6 +16864,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "GetReadyJobRequirementsResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -16721,6 +16938,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "GetReadyJobRequirementsResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -16853,6 +17072,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResourceRequirementsModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -16922,6 +17142,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResourceRequirementsModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -16991,6 +17212,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResourceRequirementsModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -17119,6 +17341,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResultModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -17188,6 +17411,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResultModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -17257,6 +17481,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResultModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -17385,6 +17610,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ScheduledComputeNodesModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -17454,6 +17680,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ScheduledComputeNodesModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -17523,6 +17750,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ScheduledComputeNodesModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -17651,6 +17879,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "SlurmSchedulerModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -17720,6 +17949,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "SlurmSchedulerModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -17789,6 +18019,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "SlurmSchedulerModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -17917,6 +18148,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "UserDataModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -17986,6 +18218,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "UserDataModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -18055,6 +18288,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "UserDataModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -18700,6 +18934,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[WorkflowActionModel]",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -18769,6 +19004,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[WorkflowActionModel]",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -18838,6 +19074,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[WorkflowActionModel]",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -19566,6 +19803,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "IsCompleteResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -19634,6 +19873,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "IsCompleteResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -19702,6 +19943,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "IsCompleteResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -19829,6 +20072,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "IsUninitializedResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -19897,6 +20142,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "IsUninitializedResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -19965,6 +20212,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "IsUninitializedResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -20402,6 +20651,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListComputeNodesResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -20498,6 +20749,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListComputeNodesResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -20594,6 +20847,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListComputeNodesResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -20782,6 +21037,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListEventsResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -20874,6 +21131,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListEventsResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -20966,6 +21225,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListEventsResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -21133,6 +21394,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListFailureHandlersResponse",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -21210,6 +21472,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListFailureHandlersResponse",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -21287,6 +21550,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListFailureHandlersResponse",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -21457,6 +21721,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListFilesResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -21557,6 +21823,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListFilesResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -21657,6 +21925,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListFilesResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -22732,6 +23002,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListJobIdsResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -22800,6 +23072,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListJobIdsResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -22868,6 +23142,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListJobIdsResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -24095,6 +24371,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListMissingUserDataResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -24163,6 +24441,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListMissingUserDataResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -24231,6 +24511,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListMissingUserDataResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -24358,6 +24640,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[RemoteWorkerModel]",
+            '403': "ForbiddenErrorResponse",
             '404': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -24427,6 +24710,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[RemoteWorkerModel]",
+            '403': "ForbiddenErrorResponse",
             '404': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -24496,6 +24780,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[RemoteWorkerModel]",
+            '403': "ForbiddenErrorResponse",
             '404': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -24624,6 +24909,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListRequiredExistingFilesResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -24692,6 +24979,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListRequiredExistingFilesResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -24760,6 +25049,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListRequiredExistingFilesResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -27372,6 +27663,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListAccessGroupsResponse",
+            '403': "ForbiddenErrorResponse",
             '404': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -27441,6 +27733,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListAccessGroupsResponse",
+            '403': "ForbiddenErrorResponse",
             '404': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -27510,6 +27803,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListAccessGroupsResponse",
+            '403': "ForbiddenErrorResponse",
             '404': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -27666,6 +27960,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListWorkflowsResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -27762,6 +28058,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListWorkflowsResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -27858,6 +28156,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListWorkflowsResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -28034,6 +28334,9 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "JobModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
+            '422': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -28114,6 +28417,9 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "JobModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
+            '422': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -28194,6 +28500,9 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "JobModel",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
+            '422': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -28599,6 +28908,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ProcessChangedJobInputsResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -28675,6 +28986,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ProcessChangedJobInputsResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -28751,6 +29064,8 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ProcessChangedJobInputsResponse",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -29531,6 +29846,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResetJobStatusResponse",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -29608,6 +29924,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResetJobStatusResponse",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -29685,6 +30002,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResetJobStatusResponse",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -29842,6 +30160,9 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
+            '422': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -29918,6 +30239,9 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
+            '422': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -29994,6 +30318,9 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ForbiddenErrorResponse",
+            '404': "NotFoundErrorResponse",
+            '422': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -30150,6 +30477,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "JobModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '422': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
@@ -30228,6 +30556,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "JobModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '422': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
@@ -30306,6 +30635,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "JobModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '422': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
@@ -30466,7 +30796,9 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "JobModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
+            '422': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -30547,7 +30879,9 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "JobModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
+            '422': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -30628,7 +30962,9 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "JobModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
+            '422': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -30782,6 +31118,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ComputeNodeModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -30855,6 +31192,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ComputeNodeModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -30928,6 +31266,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ComputeNodeModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -31076,6 +31415,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "EventModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -31149,6 +31489,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "EventModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -31222,6 +31563,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "EventModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -31370,6 +31712,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FileModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -31443,6 +31786,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FileModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -31516,6 +31860,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FileModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -31961,6 +32306,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "LocalSchedulerModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -32034,6 +32380,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "LocalSchedulerModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -32107,6 +32454,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "LocalSchedulerModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -32255,6 +32603,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResourceRequirementsModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -32328,6 +32677,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResourceRequirementsModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -32401,6 +32751,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResourceRequirementsModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -32549,6 +32900,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResultModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -32622,6 +32974,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResultModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -32695,6 +33048,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResultModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -32843,6 +33197,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ScheduledComputeNodesModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -32916,6 +33271,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ScheduledComputeNodesModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -32989,6 +33345,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ScheduledComputeNodesModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -33137,6 +33494,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "SlurmSchedulerModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -33210,6 +33568,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "SlurmSchedulerModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -33283,6 +33642,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "SlurmSchedulerModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -33431,6 +33791,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "UserDataModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -33504,6 +33865,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "UserDataModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
@@ -33577,6 +33939,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "UserDataModel",
+            '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
             '500': "DefaultErrorResponse",
         }
