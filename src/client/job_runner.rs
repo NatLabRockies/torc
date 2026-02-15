@@ -1795,7 +1795,7 @@ impl JobRunner {
                         scheduler_id,
                         num_allocations,
                         "",
-                        "output",
+                        "torc_output",
                         self.torc_config.client.slurm.poll_interval,
                         max_parallel_jobs,
                         start_one_worker_per_node,

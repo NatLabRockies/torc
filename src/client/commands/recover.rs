@@ -677,7 +677,7 @@ fn get_slurm_log_info(workflow_id: i64, output_dir: &Path) -> Result<ResultsRepo
             "results",
             &workflow_id.to_string(),
             "-o",
-            output_dir.to_str().unwrap_or("output"),
+            output_dir.to_str().unwrap_or("torc_output"),
         ])
         .output()
         .map_err(|e| format!("Failed to run reports results: {}", e))?;
@@ -950,7 +950,7 @@ pub fn regenerate_and_submit(workflow_id: i64, output_dir: &Path) -> Result<(), 
             &workflow_id.to_string(),
             "--submit",
             "-o",
-            output_dir.to_str().unwrap_or("output"),
+            output_dir.to_str().unwrap_or("torc_output"),
         ])
         .output()
         .map_err(|e| format!("Failed to run slurm regenerate: {}", e))?;
@@ -995,7 +995,7 @@ fn get_scheduler_dry_run(
             "--include-job-ids",
             &job_ids_str,
             "-o",
-            output_dir.to_str().unwrap_or("output"),
+            output_dir.to_str().unwrap_or("torc_output"),
         ])
         .output()
         .map_err(|e| format!("Failed to run slurm regenerate --dry-run: {}", e))?;

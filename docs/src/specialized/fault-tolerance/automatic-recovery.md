@@ -170,7 +170,7 @@ torc watch <workflow_id> \
   --retry-unknown \             # Also retry jobs with unknown failures
   --recovery-hook "bash fix.sh" \  # Custom recovery script
   -p 60 \                       # Seconds between status checks (--poll-interval)
-  -o output \                   # Directory for job output files (--output-dir)
+  -o torc_output \                   # Directory for job output files (--output-dir)
   -s \                          # Display job counts during polling (--show-job-counts)
   --auto-schedule \             # Automatically schedule nodes for stranded jobs
   --auto-schedule-threshold 5 \ # Min retry jobs before scheduling (default: 5)
@@ -367,7 +367,7 @@ All `torc watch` output is logged to both the terminal and a log file:
 <output-dir>/watch_<hostname>_<workflow_id>.log
 ```
 
-For example: `output/watch_myhost_42.log`
+For example: `torc_output/watch_myhost_42.log`
 
 This ensures you have a complete record of the watch session even if your terminal disconnects.
 

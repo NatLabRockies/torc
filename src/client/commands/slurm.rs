@@ -378,7 +378,7 @@ EXAMPLES:
         #[arg(short, long, default_value = "1")]
         num_hpc_jobs: i32,
         /// Output directory for job output files
-        #[arg(short, long, default_value = "output")]
+        #[arg(short, long, default_value = "torc_output")]
         output: String,
         /// Poll interval in seconds
         #[arg(short, long, default_value = "60")]
@@ -397,7 +397,7 @@ EXAMPLES:
         #[arg()]
         workflow_id: Option<i64>,
         /// Output directory containing Slurm log files
-        #[arg(short, long, default_value = "output")]
+        #[arg(short, long, default_value = "torc_output")]
         output_dir: PathBuf,
         /// Only show errors (skip warnings)
         #[arg(long, default_value = "false")]
@@ -417,7 +417,7 @@ EXAMPLES:
         #[arg()]
         workflow_id: Option<i64>,
         /// Output directory for sacct JSON files (only used with --save-json)
-        #[arg(short, long, default_value = "output")]
+        #[arg(short, long, default_value = "torc_output")]
         output_dir: PathBuf,
         /// Save full JSON output to files in addition to displaying summary
         #[arg(long, default_value = "false")]
@@ -570,7 +570,7 @@ EXAMPLES:
         submit: bool,
 
         /// Output directory for job output files (used when submitting)
-        #[arg(short, long, default_value = "output")]
+        #[arg(short, long, default_value = "torc_output")]
         output_dir: PathBuf,
 
         /// Poll interval in seconds (used when submitting)
@@ -3617,7 +3617,7 @@ fn handle_regenerate(
                 scheduler_info.id,
                 scheduler_info.num_allocations as i32,
                 "",
-                output_dir.to_str().unwrap_or("output"),
+                output_dir.to_str().unwrap_or("torc_output"),
                 poll_interval,
                 None, // max_parallel_jobs
                 start_one_worker_per_node,

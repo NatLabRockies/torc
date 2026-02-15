@@ -173,7 +173,7 @@ api_url = "http://kl3.hsn.cm.kestrel.hpc.nrel.gov:8085/torc-service/v1"
 format = "table"
 
 [client.run]
-output_dir = "/scratch/myuser/torc/output"
+output_dir = "/scratch/myuser/torc/torc_output"
 ```
 
 ### Environment Variables
@@ -183,7 +183,7 @@ Alternatively, set environment variables in your shell profile:
 ```bash
 # Add to ~/.bashrc or ~/.bash_profile
 export TORC_API_URL="http://kl3.hsn.cm.kestrel.hpc.nrel.gov:8085/torc-service/v1"
-export TORC_CLIENT__RUN__OUTPUT_DIR="/scratch/$USER/torc/output"
+export TORC_CLIENT__RUN__OUTPUT_DIR="/scratch/$USER/torc/torc_output"
 ```
 
 ## Slurm Job Runner Configuration

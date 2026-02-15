@@ -140,7 +140,7 @@ Once jobs complete:
 torc results list <workflow-id>
 ```
 
-Job output is stored in the `output/` directory by default.
+Job output is stored in the `torc_output/` directory by default.
 
 ## Example: Multi-Stage Pipeline
 

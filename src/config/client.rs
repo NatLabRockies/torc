@@ -87,7 +87,7 @@ impl Default for ClientRunConfig {
         Self {
             poll_interval: 5.0,
             max_parallel_jobs: None,
-            output_dir: PathBuf::from("output"),
+            output_dir: PathBuf::from("torc_output"),
             num_cpus: None,
             memory_gb: None,
             num_gpus: None,
@@ -291,6 +291,6 @@ mod tests {
         let config = ClientRunConfig::default();
         assert_eq!(config.poll_interval, 5.0);
         assert!(config.max_parallel_jobs.is_none());
-        assert_eq!(config.output_dir, PathBuf::from("output"));
+        assert_eq!(config.output_dir, PathBuf::from("torc_output"));
     }
 }

@@ -133,7 +133,7 @@ EXAMPLES:
     torc run --max-parallel-jobs 4 workflow.yaml
 
     # Custom output directory
-    torc run -o /path/to/output workflow.yaml
+    torc run -o /path/to/torc_output workflow.yaml
 "
     )]
     Run {
@@ -396,7 +396,7 @@ SEE ALSO:
         recovery_hook: Option<String>,
 
         /// Output directory for job files
-        #[arg(short, long, default_value = "output")]
+        #[arg(short, long, default_value = "torc_output")]
         output_dir: PathBuf,
 
         /// Show job counts by status during polling
@@ -532,7 +532,7 @@ SEE ALSO:
         workflow_id: i64,
 
         /// Output directory for job files
-        #[arg(short, long, default_value = "output")]
+        #[arg(short, long, default_value = "torc_output")]
         output_dir: PathBuf,
 
         /// Memory multiplier for OOM failures (default: 1.5 = 50% increase)

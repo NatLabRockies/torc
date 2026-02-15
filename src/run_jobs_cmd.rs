@@ -45,7 +45,7 @@ pub struct Args {
     #[arg(short, long, default_value = "http://localhost:8080/torc-service/v1")]
     pub url: String,
     /// Output directory for jobs
-    #[arg(short, long, default_value = "output")]
+    #[arg(short, long, default_value = "torc_output")]
     pub output_dir: PathBuf,
     /// Job completion poll interval in seconds
     #[arg(short, long, default_value = "5.0")]

@@ -196,7 +196,7 @@ log_level = "info"
 poll_interval = 5.0
 
 # Output directory for job logs and artifacts
-output_dir = "output"
+output_dir = "torc_output"
 
 # Maximum number of parallel jobs (optional, uses resource-based if not set)
 # max_parallel_jobs = 4

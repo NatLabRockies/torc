@@ -13,7 +13,7 @@
 //! TORC_API_URL=http://server:8080/torc-service/v1 torc-mcp-server
 //!
 //! # Run with custom output directory for logs
-//! torc-mcp-server --output-dir /path/to/output
+//! torc-mcp-server --output-dir /path/to/torc_output
 //! ```
 
 use anyhow::Result;
@@ -41,7 +41,7 @@ struct Args {
     api_url: String,
 
     /// Output directory for job logs
-    #[arg(long, env = "TORC_OUTPUT_DIR", default_value = "output")]
+    #[arg(long, env = "TORC_OUTPUT_DIR", default_value = "torc_output")]
     output_dir: PathBuf,
 
     /// Password for API authentication (uses USER env var as username)

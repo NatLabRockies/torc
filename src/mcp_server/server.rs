@@ -180,7 +180,7 @@ pub struct AnalyzeWorkflowLogsParams {
     #[schemars(description = "Workflow ID to analyze logs for")]
     pub workflow_id: i64,
     #[schemars(
-        description = "Output directory where logs are stored (the same directory passed to `torc run`). Defaults to 'output'."
+        description = "Output directory where logs are stored (the same directory passed to `torc run`). Defaults to 'torc_output'."
     )]
     pub output_dir: Option<String>,
 }

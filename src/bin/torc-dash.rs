@@ -621,7 +621,7 @@ fn default_runtime_multiplier() -> f64 {
 }
 
 fn default_output_dir() -> String {
-    "output".to_string()
+    "torc_output".to_string()
 }
 
 #[derive(Serialize)]

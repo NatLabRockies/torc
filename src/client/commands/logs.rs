@@ -26,25 +26,25 @@ lazy_static! {
 #[command(after_long_help = "\
 EXAMPLES:
     # Bundle workflow logs
-    torc logs bundle 123 --output-dir ./output
+    torc logs bundle 123 --output-dir ./torc_output
 
     # Analyze logs for errors
     torc logs analyze wf123.tar.gz
-    torc logs analyze ./output --workflow-id 123
+    torc logs analyze ./torc_output --workflow-id 123
 ")]
 pub enum LogCommands {
     /// Bundle all log files for a workflow into a compressed tarball
     #[command(after_long_help = "\
 EXAMPLES:
     torc logs bundle 123
-    torc logs bundle 123 --output-dir ./output --bundle-dir ./bundles
+    torc logs bundle 123 --output-dir ./torc_output --bundle-dir ./bundles
 ")]
     Bundle {
         /// Workflow ID to bundle logs for
         #[arg()]
         workflow_id: Option<i64>,
         /// Output directory where logs are stored (the same directory passed to `torc run`)
-        #[arg(short, long, default_value = "output")]
+        #[arg(short, long, default_value = "torc_output")]
         output_dir: PathBuf,
         /// Directory to write the bundle to
         #[arg(long, default_value = ".")]
@@ -54,7 +54,7 @@ EXAMPLES:
     #[command(after_long_help = "\
 EXAMPLES:
     torc logs analyze wf123.tar.gz
-    torc logs analyze ./output --workflow-id 123
+    torc logs analyze ./torc_output --workflow-id 123
 ")]
     Analyze {
         /// Path to a bundle tarball (.tar.gz) or log directory

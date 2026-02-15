@@ -245,10 +245,10 @@ failure_handlers:
 Each attempt gets separate log files, preserving history across retries:
 
 ```
-output/job_stdio/job_wf1_j42_r1_a1.o  # Attempt 1 stdout
-output/job_stdio/job_wf1_j42_r1_a1.e  # Attempt 1 stderr
-output/job_stdio/job_wf1_j42_r1_a2.o  # Attempt 2 stdout
-output/job_stdio/job_wf1_j42_r1_a2.e  # Attempt 2 stderr
+torc_output/job_stdio/job_wf1_j42_r1_a1.o  # Attempt 1 stdout
+torc_output/job_stdio/job_wf1_j42_r1_a1.e  # Attempt 1 stderr
+torc_output/job_stdio/job_wf1_j42_r1_a2.o  # Attempt 2 stdout
+torc_output/job_stdio/job_wf1_j42_r1_a2.e  # Attempt 2 stderr
 ```
 
 The `a{N}` suffix indicates the attempt number.

@@ -1596,8 +1596,8 @@ impl App {
                 .max_by_key(|r| (r.run_id, r.attempt_id.unwrap_or(1)))
             {
                 // Construct log paths using the standard path pattern
-                // Default output directory is "output" in the current working directory
-                let output_dir = PathBuf::from("output");
+                // Default output directory is "torc_output" in the current working directory
+                let output_dir = PathBuf::from("torc_output");
 
                 let attempt_id = result.attempt_id.unwrap_or(1);
                 let stdout_path = get_job_stdout_path(
@@ -1688,8 +1688,8 @@ impl App {
     }
 
     fn load_slurm_logs(&self, viewer: &mut LogViewer, scheduler_id: &str) -> Result<()> {
-        // Default output directory is "output" in the current working directory
-        let output_dir = PathBuf::from("output");
+        // Default output directory is "torc_output" in the current working directory
+        let output_dir = PathBuf::from("torc_output");
 
         let workflow_id = self.selected_workflow_id.unwrap_or(0);
         let stdout_path = get_slurm_stdout_path(&output_dir, workflow_id, scheduler_id);

@@ -110,7 +110,7 @@ EXAMPLES:
         #[arg()]
         workflow_id: Option<i64>,
         /// Output directory (where job logs are stored, passed in `torc run` and `torc submit`)
-        #[arg(short, long, default_value = "output")]
+        #[arg(short, long, default_value = "torc_output")]
         output_dir: std::path::PathBuf,
         /// Include all runs for each job (default: only latest run)
         #[arg(long)]

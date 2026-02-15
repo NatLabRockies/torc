@@ -463,7 +463,7 @@ EXAMPLES:
     torc workflows run 123 --poll-interval 10 --max-parallel-jobs 4
 
     # Specify output directory
-    torc workflows run 123 --output-dir /path/to/output
+    torc workflows run 123 --output-dir /path/to/torc_output
 "
     )]
     Run {
@@ -477,7 +477,7 @@ EXAMPLES:
         #[arg(long)]
         max_parallel_jobs: Option<i64>,
         /// Output directory for job logs and results
-        #[arg(long, default_value = "output")]
+        #[arg(long, default_value = "torc_output")]
         output_dir: std::path::PathBuf,
     },
     /// Initialize a workflow, including all job statuses.
