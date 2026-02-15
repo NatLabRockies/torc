@@ -12,6 +12,7 @@
 #   docker run -d -p 8080:8080 \
 #     -e TORC_AUTH_FILE=/data/htpasswd \
 #     -e TORC_ADMIN_USERS=admin \
+#     -e TORC_THREADS=4 \
 #     -v ./htpasswd:/data/htpasswd:ro \
 #     -v torc-data:/data \
 #     ghcr.io/natlabrockies/torc:$VERSION
