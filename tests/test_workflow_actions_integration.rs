@@ -38,7 +38,7 @@ where
 fn test_on_workflow_start_run_commands_action(start_server: &ServerProcess) {
     let config = &start_server.config;
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let output_dir = temp_dir.path().join("output");
+    let output_dir = temp_dir.path().join("torc_output");
 
     // Create a workflow spec with on_workflow_start run_commands action
     let spec_content = format!(
@@ -170,7 +170,7 @@ actions:
 fn test_on_jobs_ready_action(start_server: &ServerProcess) {
     let config = &start_server.config;
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let output_dir = temp_dir.path().join("output");
+    let output_dir = temp_dir.path().join("torc_output");
     fs::create_dir_all(&output_dir).expect("Failed to create output dir");
 
     // Create a workflow spec with on_jobs_ready action
@@ -282,7 +282,7 @@ actions:
 fn test_on_jobs_complete_action(start_server: &ServerProcess) {
     let config = &start_server.config;
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let output_dir = temp_dir.path().join("output");
+    let output_dir = temp_dir.path().join("torc_output");
     fs::create_dir_all(&output_dir).expect("Failed to create output dir");
 
     // Create a workflow spec with on_jobs_complete action
@@ -386,7 +386,7 @@ actions:
 fn test_action_with_regex_job_selection(start_server: &ServerProcess) {
     let config = &start_server.config;
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let output_dir = temp_dir.path().join("output");
+    let output_dir = temp_dir.path().join("torc_output");
     fs::create_dir_all(&output_dir).expect("Failed to create output dir");
 
     // Create a workflow spec using regex for job selection
@@ -497,7 +497,7 @@ actions:
 fn test_multiple_actions_same_workflow(start_server: &ServerProcess) {
     let config = &start_server.config;
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let output_dir = temp_dir.path().join("output");
+    let output_dir = temp_dir.path().join("torc_output");
     fs::create_dir_all(&output_dir).expect("Failed to create output dir");
 
     // Create a workflow spec with multiple actions
@@ -628,7 +628,7 @@ actions:
 fn test_action_idempotency_multiple_runners(start_server: &ServerProcess) {
     let config = &start_server.config;
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let output_dir = temp_dir.path().join("output");
+    let output_dir = temp_dir.path().join("torc_output");
     fs::create_dir_all(&output_dir).expect("Failed to create output dir");
 
     // Create a workflow spec with an action that writes a counter
@@ -753,7 +753,7 @@ actions:
 fn test_on_worker_start_persistent_multiple_workers(start_server: &ServerProcess) {
     let config = &start_server.config;
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let output_dir = temp_dir.path().join("output");
+    let output_dir = temp_dir.path().join("torc_output");
     fs::create_dir_all(&output_dir).expect("Failed to create output dir");
 
     // Create a workflow spec with persistent on_worker_start action
@@ -891,7 +891,7 @@ actions:
 fn test_on_worker_complete_persistent_multiple_workers(start_server: &ServerProcess) {
     let config = &start_server.config;
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let output_dir = temp_dir.path().join("output");
+    let output_dir = temp_dir.path().join("torc_output");
     fs::create_dir_all(&output_dir).expect("Failed to create output dir");
 
     // Create a workflow spec with persistent on_worker_complete action
@@ -1029,7 +1029,7 @@ actions:
 fn test_on_worker_start_non_persistent_single_execution(start_server: &ServerProcess) {
     let config = &start_server.config;
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let output_dir = temp_dir.path().join("output");
+    let output_dir = temp_dir.path().join("torc_output");
     fs::create_dir_all(&output_dir).expect("Failed to create output dir");
 
     // Create a workflow spec with non-persistent on_worker_start action (default behavior)
@@ -1163,7 +1163,7 @@ actions:
 fn test_on_workflow_complete_action(start_server: &ServerProcess) {
     let config = &start_server.config;
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let output_dir = temp_dir.path().join("output");
+    let output_dir = temp_dir.path().join("torc_output");
     fs::create_dir_all(&output_dir).expect("Failed to create output dir");
 
     // Create a workflow spec with on_workflow_complete action
@@ -1275,7 +1275,7 @@ actions:
 fn test_on_workflow_complete_idempotency_multiple_workers(start_server: &ServerProcess) {
     let config = &start_server.config;
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let output_dir = temp_dir.path().join("output");
+    let output_dir = temp_dir.path().join("torc_output");
     fs::create_dir_all(&output_dir).expect("Failed to create output dir");
 
     // Create a workflow spec with on_workflow_complete action that writes a counter

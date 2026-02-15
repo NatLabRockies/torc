@@ -191,7 +191,7 @@ fn test_walltime_format() {
 fn test_kestrel_profile_basics() {
     let profile = kestrel_profile();
     assert_eq!(profile.name, "kestrel");
-    assert_eq!(profile.display_name, "NREL Kestrel");
+    assert_eq!(profile.display_name, "NLR Kestrel");
     assert!(!profile.partitions.is_empty());
 }
 

@@ -15,8 +15,8 @@ set -e
 WORKFLOW_ID="${1:-$TORC_WORKFLOW_ID}"
 
 if [ -z "$WORKFLOW_ID" ]; then
-    echo "ERROR: No workflow ID provided"
-    exit 1
+  echo "ERROR: No workflow ID provided"
+  exit 1
 fi
 
 echo "Recovery hook running for workflow $WORKFLOW_ID"
@@ -27,14 +27,14 @@ FAILED_JOBS=$(torc jobs list "$WORKFLOW_ID" --status failed -f json 2>/dev/null 
 echo "Failed jobs: $FAILED_JOBS"
 
 # Create the output directory if it doesn't exist
-# The output directory is typically "output" relative to where torc watch is run
+# The output directory is typically "torc_output" relative to where torc watch is run
 OUTPUT_DIR="${TORC_OUTPUT_DIR:-output}"
 mkdir -p "$OUTPUT_DIR"
 
 # Create the required file that work_3 needs
 REQUIRED_FILE="$OUTPUT_DIR/required_input.txt"
 echo "Creating required file: $REQUIRED_FILE"
-echo "This file was created by the recovery hook at $(date)" > "$REQUIRED_FILE"
+echo "This file was created by the recovery hook at $(date)" >"$REQUIRED_FILE"
 
 echo "Recovery hook completed successfully"
 echo "The missing file has been created. work_3 should succeed on retry."

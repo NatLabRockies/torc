@@ -48,7 +48,7 @@ fn test_bundle_creates_tarball() {
     ensure_binary_built();
 
     let temp_dir = TempDir::new().unwrap();
-    let output_dir = temp_dir.path().join("output");
+    let output_dir = temp_dir.path().join("torc_output");
     fs::create_dir_all(&output_dir).unwrap();
     fs::create_dir_all(output_dir.join("job_stdio")).unwrap();
 
@@ -184,7 +184,7 @@ fn test_analyze_bundle_detects_oom() {
     ensure_binary_built();
 
     let temp_dir = TempDir::new().unwrap();
-    let output_dir = temp_dir.path().join("output");
+    let output_dir = temp_dir.path().join("torc_output");
     fs::create_dir_all(&output_dir).unwrap();
 
     // Create log file with OOM error
@@ -217,7 +217,7 @@ fn test_analyze_bundle_detects_timeout() {
     ensure_binary_built();
 
     let temp_dir = TempDir::new().unwrap();
-    let output_dir = temp_dir.path().join("output");
+    let output_dir = temp_dir.path().join("torc_output");
     fs::create_dir_all(&output_dir).unwrap();
 
     // Create log file with timeout error
@@ -245,7 +245,7 @@ fn test_analyze_bundle_detects_segfault() {
     ensure_binary_built();
 
     let temp_dir = TempDir::new().unwrap();
-    let output_dir = temp_dir.path().join("output");
+    let output_dir = temp_dir.path().join("torc_output");
     fs::create_dir_all(&output_dir).unwrap();
 
     // Create log file with segfault
@@ -273,7 +273,7 @@ fn test_analyze_bundle_detects_python_exception() {
     ensure_binary_built();
 
     let temp_dir = TempDir::new().unwrap();
-    let output_dir = temp_dir.path().join("output");
+    let output_dir = temp_dir.path().join("torc_output");
     fs::create_dir_all(&output_dir).unwrap();
 
     // Create log file with Python traceback
@@ -308,7 +308,7 @@ fn test_analyze_bundle_detects_missing_output_files() {
     ensure_binary_built();
 
     let temp_dir = TempDir::new().unwrap();
-    let output_dir = temp_dir.path().join("output");
+    let output_dir = temp_dir.path().join("torc_output");
     fs::create_dir_all(&output_dir).unwrap();
 
     // Create log file with missing output files error (as logged by JobRunner)
@@ -340,7 +340,7 @@ fn test_analyze_bundle_no_errors() {
     ensure_binary_built();
 
     let temp_dir = TempDir::new().unwrap();
-    let output_dir = temp_dir.path().join("output");
+    let output_dir = temp_dir.path().join("torc_output");
     fs::create_dir_all(&output_dir).unwrap();
 
     // Create clean log files with no errors
@@ -373,7 +373,7 @@ fn test_analyze_directory_single_workflow() {
     ensure_binary_built();
 
     let temp_dir = TempDir::new().unwrap();
-    let output_dir = temp_dir.path().join("output");
+    let output_dir = temp_dir.path().join("torc_output");
     fs::create_dir_all(&output_dir).unwrap();
 
     // Create log files for a single workflow
@@ -403,7 +403,7 @@ fn test_analyze_directory_multiple_workflows_requires_id() {
     ensure_binary_built();
 
     let temp_dir = TempDir::new().unwrap();
-    let output_dir = temp_dir.path().join("output");
+    let output_dir = temp_dir.path().join("torc_output");
     fs::create_dir_all(&output_dir).unwrap();
 
     // Create log files for multiple workflows
@@ -433,7 +433,7 @@ fn test_analyze_directory_with_workflow_id() {
     ensure_binary_built();
 
     let temp_dir = TempDir::new().unwrap();
-    let output_dir = temp_dir.path().join("output");
+    let output_dir = temp_dir.path().join("torc_output");
     fs::create_dir_all(&output_dir).unwrap();
 
     // Create log files for multiple workflows
@@ -478,7 +478,7 @@ fn test_analyze_skips_slurm_env_files() {
     ensure_binary_built();
 
     let temp_dir = TempDir::new().unwrap();
-    let output_dir = temp_dir.path().join("output");
+    let output_dir = temp_dir.path().join("torc_output");
     fs::create_dir_all(&output_dir).unwrap();
 
     // Create slurm env file with content that would normally trigger error detection
@@ -531,7 +531,7 @@ fn test_analyze_empty_directory() {
     ensure_binary_built();
 
     let temp_dir = TempDir::new().unwrap();
-    let output_dir = temp_dir.path().join("output");
+    let output_dir = temp_dir.path().join("torc_output");
     fs::create_dir_all(&output_dir).unwrap();
 
     let (success, _stdout, stderr) = run_torc(&["logs", "analyze", output_dir.to_str().unwrap()]);
@@ -549,7 +549,7 @@ fn test_analyze_shows_metadata() {
     ensure_binary_built();
 
     let temp_dir = TempDir::new().unwrap();
-    let output_dir = temp_dir.path().join("output");
+    let output_dir = temp_dir.path().join("torc_output");
     fs::create_dir_all(&output_dir).unwrap();
 
     create_log_file(
@@ -586,7 +586,7 @@ fn test_analyze_reports_file_count() {
     ensure_binary_built();
 
     let temp_dir = TempDir::new().unwrap();
-    let output_dir = temp_dir.path().join("output");
+    let output_dir = temp_dir.path().join("torc_output");
     fs::create_dir_all(&output_dir).unwrap();
     fs::create_dir_all(output_dir.join("job_stdio")).unwrap();
 
