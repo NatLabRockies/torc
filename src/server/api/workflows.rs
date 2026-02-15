@@ -18,7 +18,10 @@ use crate::server::api_types::{
 
 use crate::models;
 
-use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg};
+use super::{
+    ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg,
+    escape_like_pattern,
+};
 
 /// Trait defining workflow-related API operations
 #[async_trait]
@@ -323,7 +326,7 @@ impl WorkflowsApiImpl {
         }
 
         if description.is_some() {
-            where_conditions.push(format!("{}description LIKE ?", table_prefix));
+            where_conditions.push(format!("{}description LIKE ? ESCAPE '\\'", table_prefix));
         }
 
         if let Some(archived) = is_archived {
@@ -405,7 +408,8 @@ impl WorkflowsApiImpl {
             sqlx_query = sqlx_query.bind(workflow_user);
         }
         if let Some(workflow_description) = &description {
-            sqlx_query = sqlx_query.bind(format!("%{}%", workflow_description));
+            sqlx_query =
+                sqlx_query.bind(format!("%{}%", escape_like_pattern(workflow_description)));
         }
         // Bind accessible IDs
         if let Some(ref ids) = accessible_ids {
@@ -482,7 +486,8 @@ impl WorkflowsApiImpl {
             count_sqlx_query = count_sqlx_query.bind(workflow_user);
         }
         if let Some(workflow_description) = &description {
-            count_sqlx_query = count_sqlx_query.bind(format!("%{}%", workflow_description));
+            count_sqlx_query =
+                count_sqlx_query.bind(format!("%{}%", escape_like_pattern(workflow_description)));
         }
         // Bind accessible IDs for count query
         if let Some(ref ids) = accessible_ids {

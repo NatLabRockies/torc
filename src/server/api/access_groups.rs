@@ -292,6 +292,9 @@ impl AccessGroupsApiImpl {
         // First get the group to return it after deletion
         let group = match self.get_access_group(id, context).await? {
             GetAccessGroupResponse::SuccessfulResponse(g) => g,
+            GetAccessGroupResponse::ForbiddenErrorResponse(e) => {
+                return Ok(DeleteAccessGroupResponse::ForbiddenErrorResponse(e));
+            }
             GetAccessGroupResponse::NotFoundErrorResponse(e) => {
                 return Ok(DeleteAccessGroupResponse::NotFoundErrorResponse(e));
             }
@@ -344,6 +347,9 @@ impl AccessGroupsApiImpl {
         // Verify group exists
         match self.get_access_group(group_id, context).await? {
             GetAccessGroupResponse::SuccessfulResponse(_) => {}
+            GetAccessGroupResponse::ForbiddenErrorResponse(e) => {
+                return Ok(AddUserToGroupResponse::ForbiddenErrorResponse(e));
+            }
             GetAccessGroupResponse::NotFoundErrorResponse(e) => {
                 return Ok(AddUserToGroupResponse::NotFoundErrorResponse(e));
             }
@@ -479,6 +485,9 @@ impl AccessGroupsApiImpl {
         // Verify group exists
         match self.get_access_group(group_id, context).await? {
             GetAccessGroupResponse::SuccessfulResponse(_) => {}
+            GetAccessGroupResponse::ForbiddenErrorResponse(e) => {
+                return Ok(ListGroupMembersResponse::ForbiddenErrorResponse(e));
+            }
             GetAccessGroupResponse::NotFoundErrorResponse(e) => {
                 return Ok(ListGroupMembersResponse::DefaultErrorResponse(e));
             }
@@ -644,6 +653,9 @@ impl AccessGroupsApiImpl {
         // Verify group exists
         match self.get_access_group(group_id, context).await? {
             GetAccessGroupResponse::SuccessfulResponse(_) => {}
+            GetAccessGroupResponse::ForbiddenErrorResponse(e) => {
+                return Ok(AddWorkflowToGroupResponse::ForbiddenErrorResponse(e));
+            }
             GetAccessGroupResponse::NotFoundErrorResponse(e) => {
                 return Ok(AddWorkflowToGroupResponse::NotFoundErrorResponse(e));
             }

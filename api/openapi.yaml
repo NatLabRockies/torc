@@ -85,6 +85,18 @@ paths:
               schema:
                 $ref: "#/components/schemas/list_access_groups_response"
           description: Successful response
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/forbidden_error_response"
+          description: Forbidden - admin access required
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/not_found_error_response"
+          description: Not found
         "500":
           content:
             application/json:
@@ -114,11 +126,17 @@ paths:
               schema:
                 $ref: "#/components/schemas/access_group_model"
           description: Successful response
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/forbidden_error_response"
+          description: Forbidden - admin access required
         "404":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/default_error_response"
+                $ref: "#/components/schemas/not_found_error_response"
           description: Not found
         "500":
           content:
@@ -266,6 +284,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/list_user_group_memberships_response"
           description: Successful response
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/forbidden_error_response"
+          description: Forbidden - admin access required
         "404":
           content:
             application/json:
@@ -373,6 +397,18 @@ paths:
               schema:
                 $ref: "#/components/schemas/list_access_groups_response"
           description: Successful response
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/forbidden_error_response"
+          description: Forbidden - admin access required (unless querying own groups)
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/not_found_error_response"
+          description: Not found
         "500":
           content:
             application/json:

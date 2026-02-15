@@ -1693,7 +1693,8 @@ end
 
 const _returntypes_get_access_group_DefaultApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => AccessGroupModel,
-    Regex("^" * replace("404", "x"=>".") * "\$") => DefaultErrorResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => NotFoundErrorResponse,
     Regex("^" * replace("500", "x"=>".") * "\$") => DefaultErrorResponse,
 )
 
@@ -2443,6 +2444,8 @@ end
 
 const _returntypes_list_access_groups_DefaultApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ListAccessGroupsResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => NotFoundErrorResponse,
     Regex("^" * replace("500", "x"=>".") * "\$") => DefaultErrorResponse,
 )
 
@@ -2659,6 +2662,7 @@ end
 
 const _returntypes_list_group_members_DefaultApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ListUserGroupMembershipsResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
     Regex("^" * replace("404", "x"=>".") * "\$") => DefaultErrorResponse,
     Regex("^" * replace("500", "x"=>".") * "\$") => DefaultErrorResponse,
 )
@@ -3312,6 +3316,8 @@ end
 
 const _returntypes_list_user_groups_DefaultApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ListAccessGroupsResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => NotFoundErrorResponse,
     Regex("^" * replace("500", "x"=>".") * "\$") => DefaultErrorResponse,
 )
 

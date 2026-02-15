@@ -2890,11 +2890,19 @@ where
             "get_version() - X-Span-ID: {:?}",
             Has::<XSpanIdString>::get(context).0.clone()
         );
-        Ok(GetVersionResponse::SuccessfulResponse(serde_json::json!({
-            "version": full_version(),
-            "api_version": API_VERSION,
-            "git_hash": GIT_HASH
-        })))
+        if self.authorization_service.enforce_access_control() {
+            // Don't expose internal build details when access control is enabled
+            Ok(GetVersionResponse::SuccessfulResponse(serde_json::json!({
+                "version": full_version(),
+                "api_version": API_VERSION,
+            })))
+        } else {
+            Ok(GetVersionResponse::SuccessfulResponse(serde_json::json!({
+                "version": full_version(),
+                "api_version": API_VERSION,
+                "git_hash": GIT_HASH
+            })))
+        }
     }
 
     async fn list_workflows(
@@ -5822,6 +5830,7 @@ where
         id: i64,
         context: &C,
     ) -> Result<GetAccessGroupResponse, ApiError> {
+        authorize_admin!(self, context, GetAccessGroupResponse);
         self.access_groups_api.get_access_group(id, context).await
     }
 
@@ -5831,6 +5840,7 @@ where
         limit: Option<i64>,
         context: &C,
     ) -> Result<ListAccessGroupsApiResponse, ApiError> {
+        authorize_admin!(self, context, ListAccessGroupsApiResponse);
         let (offset, limit) = process_pagination_params(offset, limit)?;
         self.access_groups_api
             .list_access_groups(offset, limit, context)
@@ -5902,6 +5912,7 @@ where
         limit: Option<i64>,
         context: &C,
     ) -> Result<ListGroupMembersResponse, ApiError> {
+        authorize_admin!(self, context, ListGroupMembersResponse);
         let (offset, limit) = process_pagination_params(offset, limit)?;
         self.access_groups_api
             .list_group_members(group_id, offset, limit, context)
@@ -5915,6 +5926,15 @@ where
         limit: Option<i64>,
         context: &C,
     ) -> Result<ListUserGroupsApiResponse, ApiError> {
+        // Allow users to query their own groups; require admin for other users
+        let auth: Option<Authorization> = Has::<Option<Authorization>>::get(context).clone();
+        let is_self = auth
+            .as_ref()
+            .map(|a| a.subject == user_name)
+            .unwrap_or(false);
+        if !is_self {
+            authorize_admin!(self, context, ListUserGroupsApiResponse);
+        }
         let (offset, limit) = process_pagination_params(offset, limit)?;
         self.access_groups_api
             .list_user_groups(&user_name, offset, limit, context)

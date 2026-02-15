@@ -14,7 +14,7 @@ use crate::server::api_types::{
 
 use crate::models;
 
-use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, database_error_with_msg};
+use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, database_error_with_msg, escape_like_pattern};
 
 /// Trait defining user data-related API operations
 #[async_trait]
@@ -394,7 +394,7 @@ where
 
         // Add name filter
         if name.is_some() {
-            where_conditions.push("ud.name LIKE ?".to_string());
+            where_conditions.push("ud.name LIKE ? ESCAPE '\\'".to_string());
         }
 
         // Add is_ephemeral filter
@@ -449,7 +449,7 @@ where
             sqlx_query = sqlx_query.bind(producer_id);
         }
         if let Some(name_filter) = &name {
-            sqlx_query = sqlx_query.bind(format!("%{}%", name_filter));
+            sqlx_query = sqlx_query.bind(format!("%{}%", escape_like_pattern(name_filter)));
         }
         if let Some(ephemeral_filter) = is_ephemeral {
             let ephemeral_int = if ephemeral_filter { 1 } else { 0 };
@@ -495,7 +495,8 @@ where
             count_sqlx_query = count_sqlx_query.bind(producer_id);
         }
         if let Some(name_filter) = &name {
-            count_sqlx_query = count_sqlx_query.bind(format!("%{}%", name_filter));
+            count_sqlx_query =
+                count_sqlx_query.bind(format!("%{}%", escape_like_pattern(name_filter)));
         }
         if let Some(ephemeral_filter) = is_ephemeral {
             let ephemeral_int = if ephemeral_filter { 1 } else { 0 };

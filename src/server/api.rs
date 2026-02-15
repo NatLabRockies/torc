@@ -37,6 +37,15 @@ pub fn json_parse_error(e: impl std::fmt::Display) -> ApiError {
     ApiError("Failed to parse event data".to_string())
 }
 
+/// Escape SQL LIKE wildcard characters in user input.
+/// Escapes `%`, `_`, and `\` with a backslash prefix.
+pub fn escape_like_pattern(input: &str) -> String {
+    input
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_")
+}
+
 /// Common pagination response structure
 #[derive(Debug)]
 pub struct PaginationInfo {

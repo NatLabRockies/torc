@@ -1395,6 +1395,8 @@ pub enum CreateAccessGroupResponse {
 pub enum GetAccessGroupResponse {
     /// Successful response
     SuccessfulResponse(models::AccessGroupModel),
+    /// Forbidden error response
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -1406,6 +1408,10 @@ pub enum GetAccessGroupResponse {
 pub enum ListAccessGroupsApiResponse {
     /// Successful response
     SuccessfulResponse(models::ListAccessGroupsResponse),
+    /// Forbidden error response
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }
@@ -1456,6 +1462,8 @@ pub enum RemoveUserFromGroupResponse {
 pub enum ListGroupMembersResponse {
     /// Successful response
     SuccessfulResponse(models::ListUserGroupMembershipsResponse),
+    /// Forbidden error response
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response - group not found
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
@@ -1467,6 +1475,10 @@ pub enum ListGroupMembersResponse {
 pub enum ListUserGroupsApiResponse {
     /// Successful response
     SuccessfulResponse(models::ListAccessGroupsResponse),
+    /// Forbidden error response
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }

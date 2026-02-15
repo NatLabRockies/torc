@@ -1,6 +1,6 @@
 #![allow(clippy::explicit_auto_deref, clippy::manual_unwrap_or_default)]
 
-use futures::{future, future::BoxFuture};
+use futures::{StreamExt, future, future::BoxFuture};
 use hyper::header::{CONTENT_LENGTH, CONTENT_TYPE, HeaderName, HeaderValue};
 use hyper::{Body, Request, Response, StatusCode};
 use log::warn;
@@ -629,9 +629,6 @@ where
 
             // Reject requests with Content-Length exceeding the maximum allowed body size.
             // If the header is present but unparseable, fail closed with 400.
-            // Note: chunked transfers without Content-Length are not checked here.
-            // Hyper 0.14's Body type doesn't support size-limited reads without
-            // modifying all 62 into_raw() call sites; this is tracked as a future improvement.
             if let Some(cl) = headers.get(CONTENT_LENGTH) {
                 match cl.to_str().ok().and_then(|s| s.parse::<u64>().ok()) {
                     Some(len) if len > max_request_body_bytes() => {
@@ -649,6 +646,34 @@ where
                     _ => {}
                 }
             }
+
+            // Consume the body incrementally with a size limit.
+            // This catches chunked transfers that bypass the Content-Length check above.
+            let body = {
+                let max = max_request_body_bytes() as usize;
+                let mut buf = Vec::new();
+                let mut stream = body;
+                while let Some(chunk_result) = stream.next().await {
+                    match chunk_result {
+                        Ok(chunk) => {
+                            if buf.len() + chunk.len() > max {
+                                return Ok(Response::builder()
+                                    .status(StatusCode::PAYLOAD_TOO_LARGE)
+                                    .body(Body::from("Request body too large"))
+                                    .expect("Unable to create response"));
+                            }
+                            buf.extend_from_slice(&chunk);
+                        }
+                        Err(_) => {
+                            return Ok(Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body(Body::from("Error reading request body"))
+                                .expect("Unable to create response"));
+                        }
+                    }
+                }
+                Body::from(buf)
+            };
 
             let path = paths::GLOBAL_REGEX_SET.matches(uri.path());
 
@@ -16225,6 +16250,22 @@ where
                                         .expect("impossible to fail to serialize");
                                     *response.body_mut() = Body::from(body);
                                 }
+                                ListAccessGroupsApiResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str("application/json").expect("Unable to create Content-Type header for application/json"));
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                ListAccessGroupsApiResponse::NotFoundErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(404)
+                                        .expect("Unable to turn 404 into a StatusCode");
+                                    response.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str("application/json").expect("Unable to create Content-Type header for application/json"));
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
                                 ListAccessGroupsApiResponse::DefaultErrorResponse(body) => {
                                     *response.status_mut() = StatusCode::from_u16(500)
                                         .expect("Unable to turn 500 into a StatusCode");
@@ -16283,6 +16324,14 @@ where
                                 GetAccessGroupResponse::SuccessfulResponse(body) => {
                                     *response.status_mut() = StatusCode::from_u16(200)
                                         .expect("Unable to turn 200 into a StatusCode");
+                                    response.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str("application/json").expect("Unable to create Content-Type header for application/json"));
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                GetAccessGroupResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
                                     response.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str("application/json").expect("Unable to create Content-Type header for application/json"));
                                     let body = serde_json::to_string(&body)
                                         .expect("impossible to fail to serialize");
@@ -16618,6 +16667,14 @@ where
                                         .expect("impossible to fail to serialize");
                                     *response.body_mut() = Body::from(body);
                                 }
+                                ListGroupMembersResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str("application/json").expect("Unable to create Content-Type header for application/json"));
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
                                 ListGroupMembersResponse::NotFoundErrorResponse(body) => {
                                     *response.status_mut() = StatusCode::from_u16(404)
                                         .expect("Unable to turn 404 into a StatusCode");
@@ -16829,6 +16886,22 @@ where
                                 ListUserGroupsApiResponse::SuccessfulResponse(body) => {
                                     *response.status_mut() = StatusCode::from_u16(200)
                                         .expect("Unable to turn 200 into a StatusCode");
+                                    response.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str("application/json").expect("Unable to create Content-Type header for application/json"));
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                ListUserGroupsApiResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str("application/json").expect("Unable to create Content-Type header for application/json"));
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                ListUserGroupsApiResponse::NotFoundErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(404)
+                                        .expect("Unable to turn 404 into a StatusCode");
                                     response.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str("application/json").expect("Unable to create Content-Type header for application/json"));
                                     let body = serde_json::to_string(&body)
                                         .expect("impossible to fail to serialize");

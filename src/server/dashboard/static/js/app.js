@@ -122,7 +122,7 @@ class TorcDashboard {
             if (result.success) {
                 serverInfo.innerHTML = `<p style="color: var(--success-color)">Connected to ${api.getBaseUrl()}</p>`;
             } else {
-                serverInfo.innerHTML = `<p style="color: var(--danger-color)">Connection failed: ${result.error}</p>`;
+                serverInfo.innerHTML = `<p style="color: var(--danger-color)">Connection failed: ${this.escapeHtml(result.error)}</p>`;
             }
         }
 
@@ -415,7 +415,7 @@ class TorcDashboard {
                     break;
             }
         } catch (error) {
-            content.innerHTML = `<div class="placeholder-message">Error loading ${subtab}: ${error.message}</div>`;
+            content.innerHTML = `<div class="placeholder-message">Error loading ${this.escapeHtml(subtab)}: ${this.escapeHtml(error.message)}</div>`;
         }
     }
 
