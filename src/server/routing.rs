@@ -28,7 +28,7 @@ fn max_request_body_bytes() -> u64 {
         std::env::var("TORC_MAX_REQUEST_BODY_MB")
             .ok()
             .and_then(|v| v.parse::<u64>().ok())
-            .map(|mb| mb * 1024 * 1024)
+            .and_then(|mb| mb.checked_mul(1024 * 1024))
             .unwrap_or(DEFAULT_MAX_REQUEST_BODY_BYTES)
     })
 }
@@ -627,15 +627,27 @@ where
             let (parts, body) = request.into_parts();
             let (method, uri, headers) = (parts.method, parts.uri, parts.headers);
 
-            // Reject requests with Content-Length exceeding the maximum allowed body size
-            if let Some(cl) = headers.get(CONTENT_LENGTH)
-                && let Ok(len) = cl.to_str().unwrap_or("0").parse::<u64>()
-                && len > max_request_body_bytes()
-            {
-                return Ok(Response::builder()
-                    .status(StatusCode::PAYLOAD_TOO_LARGE)
-                    .body(Body::from("Request body too large"))
-                    .expect("Unable to create Payload Too Large response"));
+            // Reject requests with Content-Length exceeding the maximum allowed body size.
+            // If the header is present but unparseable, fail closed with 400.
+            // Note: chunked transfers without Content-Length are not checked here.
+            // Hyper 0.14's Body type doesn't support size-limited reads without
+            // modifying all 62 into_raw() call sites; this is tracked as a future improvement.
+            if let Some(cl) = headers.get(CONTENT_LENGTH) {
+                match cl.to_str().ok().and_then(|s| s.parse::<u64>().ok()) {
+                    Some(len) if len > max_request_body_bytes() => {
+                        return Ok(Response::builder()
+                            .status(StatusCode::PAYLOAD_TOO_LARGE)
+                            .body(Body::from("Request body too large"))
+                            .expect("Unable to create Payload Too Large response"));
+                    }
+                    None => {
+                        return Ok(Response::builder()
+                            .status(StatusCode::BAD_REQUEST)
+                            .body(Body::from("Invalid Content-Length header"))
+                            .expect("Unable to create Bad Request response"));
+                    }
+                    _ => {}
+                }
             }
 
             let path = paths::GLOBAL_REGEX_SET.matches(uri.path());

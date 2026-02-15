@@ -173,6 +173,31 @@ const WORKFLOW_STATUS_COLUMNS: &[&str] = &[
     "has_detected_need_to_run_completion_script",
 ];
 
+/// Combined allowed sort columns for workflow listing queries (workflow + status columns).
+const ALL_WORKFLOW_COLUMNS: &[&str] = &[
+    "id",
+    "name",
+    "user",
+    "description",
+    "timestamp",
+    "compute_node_expiration_buffer_seconds",
+    "compute_node_wait_for_new_jobs_seconds",
+    "compute_node_ignore_workflow_completion",
+    "compute_node_wait_for_healthy_database_minutes",
+    "compute_node_min_time_for_new_jobs_seconds",
+    "jobs_sort_method",
+    "resource_monitor_config",
+    "slurm_defaults",
+    "use_pending_failed",
+    "project",
+    "metadata",
+    "status_id",
+    "run_id",
+    "is_archived",
+    "is_canceled",
+    "has_detected_need_to_run_completion_script",
+];
+
 impl WorkflowsApiImpl {
     pub fn new(context: ApiContext) -> Self {
         Self { context }
@@ -342,11 +367,6 @@ impl WorkflowsApiImpl {
         // Use table prefix for default sort column when joining
         let default_sort_column = if is_archived.is_some() { "w.id" } else { "id" };
 
-        let all_columns: Vec<&str> = WORKFLOW_COLUMNS
-            .iter()
-            .chain(WORKFLOW_STATUS_COLUMNS.iter())
-            .copied()
-            .collect();
         let query = if where_clause.is_empty() {
             SqlQueryBuilder::new(base_query)
                 .with_pagination_and_sorting(
@@ -355,7 +375,7 @@ impl WorkflowsApiImpl {
                     validated_sort_by,
                     reverse_sort,
                     default_sort_column,
-                    &all_columns,
+                    ALL_WORKFLOW_COLUMNS,
                 )
                 .build()
         } else {
@@ -367,7 +387,7 @@ impl WorkflowsApiImpl {
                     validated_sort_by,
                     reverse_sort,
                     default_sort_column,
-                    &all_columns,
+                    ALL_WORKFLOW_COLUMNS,
                 )
                 .build()
         };

@@ -306,9 +306,12 @@ async fn sync_admin_group(pool: &SqlitePool, admin_users: &[String]) -> Result<(
     Ok(())
 }
 
-/// Builds an SSL implementation for Simple HTTPS from some hard-coded file names
+/// Creates and starts the HTTP(S) server.
 ///
-/// Returns the actual port the server bound to (useful when port 0 is specified for auto-detection)
+/// When `https` is true, `tls_cert` and `tls_key` must provide paths to the
+/// TLS certificate chain and private key files (PEM format).
+///
+/// Returns the actual port the server bound to (useful when port 0 is specified for auto-detection).
 #[allow(clippy::too_many_arguments)]
 pub async fn create(
     addr: &str,
