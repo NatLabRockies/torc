@@ -553,6 +553,20 @@ fn is_database_lock_error(error: &ApiError) -> bool {
         || error_str.contains("sqlite_busy")
 }
 
+/// Like `database_error_with_msg` but preserves "database is locked" in the ApiError
+/// so that callers can detect lock contention and retry. Does not leak other database
+/// error details.
+fn database_lock_aware_error(e: impl std::fmt::Display, msg: impl Into<String>) -> ApiError {
+    let msg_str = msg.into();
+    let error_string = e.to_string().to_lowercase();
+    error!("Database error ({}): {}", msg_str, e);
+    if error_string.contains("database is locked") || error_string.contains("database is busy") {
+        ApiError(format!("{}: database is locked", msg_str))
+    } else {
+        ApiError(msg_str)
+    }
+}
+
 /// Process all pending unblocks for a specific workflow
 async fn process_workflow_unblocks<C>(server: &Server<C>, workflow_id: i64) -> Result<(), ApiError>
 where
@@ -613,7 +627,7 @@ where
                 "Failed to begin transaction for workflow {}: {}",
                 workflow_id, e
             );
-            return Err(database_error_with_msg(e, "Failed to begin transaction"));
+            return Err(database_lock_aware_error(e, "Failed to begin transaction"));
         }
     };
 
@@ -643,7 +657,7 @@ where
                 "Database error fetching completed jobs for workflow {}: {}",
                 workflow_id, e
             );
-            return Err(database_error_with_msg(e, "Failed to fetch completed jobs"));
+            return Err(database_lock_aware_error(e, "Failed to fetch completed jobs"));
         }
     };
 
@@ -713,7 +727,7 @@ where
             "Database error marking jobs as processed for workflow {}: {}",
             workflow_id, e
         );
-        return Err(database_error_with_msg(e, "Failed to mark jobs processed"));
+        return Err(database_lock_aware_error(e, "Failed to mark jobs processed"));
     }
 
     // Commit the transaction
@@ -722,7 +736,7 @@ where
             "Failed to commit transaction for workflow {}: {}",
             workflow_id, e
         );
-        return Err(database_error_with_msg(e, "Failed to commit transaction"));
+        return Err(database_lock_aware_error(e, "Failed to commit transaction"));
     }
 
     info!(
@@ -1521,7 +1535,7 @@ impl<C> Server<C> {
                     Ok(result) => result.rows_affected(),
                     Err(e) => {
                         debug!("batch_unblock_jobs_tx: cancellation query failed: {}", e);
-                        return Err(database_error_with_msg(e, "Failed to update job status"));
+                        return Err(database_lock_aware_error(e, "Failed to update job status"));
                     }
                 };
 
@@ -1575,7 +1589,7 @@ impl<C> Server<C> {
             Ok(rows) => rows,
             Err(e) => {
                 debug!("batch_unblock_jobs_tx: ready query failed: {}", e);
-                return Err(database_error_with_msg(e, "Failed to update job status"));
+                return Err(database_lock_aware_error(e, "Failed to update job status"));
             }
         };
 
