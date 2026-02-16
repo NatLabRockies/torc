@@ -4113,6 +4113,10 @@ fn handle_import(
         }
     }
 
+    // Track actual import counts (not export file counts)
+    let mut imported_compute_nodes: usize = 0;
+    let mut imported_results: usize = 0;
+
     // Import compute nodes if present (required for results, which reference them)
     if !skip_results && let Some(ref compute_nodes) = export.compute_nodes {
         for cn in compute_nodes {
@@ -4128,6 +4132,7 @@ fn handle_import(
             match default_api::create_compute_node(config, new_cn) {
                 Ok(created) => {
                     mappings.compute_nodes.insert(old_id, created.id.unwrap());
+                    imported_compute_nodes += 1;
                 }
                 Err(e) => {
                     print_error("creating compute node", &e);
@@ -4156,7 +4161,10 @@ fn handle_import(
             None,                   // scheduler
         );
         match default_api::create_compute_node(config, placeholder) {
-            Ok(created) => Some(created.id.unwrap()),
+            Ok(created) => {
+                imported_compute_nodes += 1;
+                Some(created.id.unwrap())
+            }
             Err(e) => {
                 print_error("creating placeholder compute node for results", &e);
                 None
@@ -4189,9 +4197,14 @@ fn handle_import(
                 continue;
             }
 
-            if let Err(e) = default_api::create_result(config, new_result) {
-                print_error("creating result", &e);
-                // Continue anyway - results are optional
+            match default_api::create_result(config, new_result) {
+                Ok(_) => {
+                    imported_results += 1;
+                }
+                Err(e) => {
+                    print_error("creating result", &e);
+                    // Continue anyway - results are optional
+                }
             }
         }
     }
@@ -4200,7 +4213,7 @@ fn handle_import(
     // that would be recreated by new operations on the imported workflow.
     // The skip_events flag exists for future use or special cases.
 
-    // Calculate stats
+    // Calculate stats - use actual import counts for results/compute_nodes
     let stats = ExportImportStats::from_export(&export);
 
     if format == "json" {
@@ -4213,8 +4226,8 @@ fn handle_import(
                 "jobs": stats.jobs,
                 "files": stats.files,
                 "user_data": stats.user_data,
-                "results": stats.results,
-                "compute_nodes": stats.compute_nodes,
+                "results": imported_results,
+                "compute_nodes": imported_compute_nodes,
             })
         );
     } else {
@@ -4222,8 +4235,8 @@ fn handle_import(
             "Imported workflow '{}' as ID {} ({} jobs, {} files",
             workflow_name, new_workflow_id, stats.jobs, stats.files
         );
-        if stats.results > 0 {
-            summary.push_str(&format!(", {} results", stats.results));
+        if imported_results > 0 {
+            summary.push_str(&format!(", {} results", imported_results));
         }
         summary.push_str(", status reset)");
         eprintln!("{}", summary);

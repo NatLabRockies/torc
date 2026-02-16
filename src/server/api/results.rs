@@ -117,8 +117,16 @@ where
             context.get().0.clone()
         );
         let status = body.status.to_int();
-
         let attempt_id = body.attempt_id.unwrap_or(1);
+
+        // Use a transaction to atomically insert into both result and workflow_result.
+        let mut tx = self
+            .context
+            .pool
+            .begin()
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to begin transaction"))?;
+
         let result = match sqlx::query!(
             r#"
             INSERT INTO result
@@ -154,7 +162,7 @@ where
             body.peak_cpu_percent,
             body.avg_cpu_percent,
         )
-        .fetch_one(self.context.pool.as_ref())
+        .fetch_one(&mut *tx)
         .await
         {
             Ok(result) => result,
@@ -178,14 +186,22 @@ where
             job_id,
             result_id,
         )
-        .execute(self.context.pool.as_ref())
+        .execute(&mut *tx)
         .await
         {
-            debug!(
+            error!(
                 "Failed to insert workflow_result for workflow_id={}, job_id={}: {}",
                 workflow_id, job_id, e
             );
+            return Err(database_error_with_msg(
+                e,
+                "Failed to create workflow_result record",
+            ));
         }
+
+        tx.commit()
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to commit transaction"))?;
 
         Ok(CreateResultResponse::SuccessfulResponse(body))
     }
