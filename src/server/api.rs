@@ -1,6 +1,6 @@
 //! Common API module with shared imports and traits
 
-use log::{error, info};
+use log::{debug, error, info};
 use sqlx::sqlite::SqlitePool;
 use std::sync::Arc;
 use swagger::ApiError;
@@ -30,6 +30,25 @@ pub fn database_error_with_msg(e: impl std::fmt::Display, msg: impl Into<String>
     let msg_str = msg.into();
     error!("Database error ({}): {}", msg_str, e);
     ApiError(msg_str)
+}
+
+/// Like `database_error_with_msg` but preserves "database is locked" in the `ApiError`
+/// so that callers can detect lock contention and retry. Does not leak other database
+/// error details. Lock contention is logged at debug level (expected transient condition)
+/// while other database errors are logged at error level.
+pub fn database_lock_aware_error(e: impl std::fmt::Display, msg: impl Into<String>) -> ApiError {
+    let msg_str = msg.into();
+    let error_string = e.to_string().to_lowercase();
+    if error_string.contains("database is locked")
+        || error_string.contains("database is busy")
+        || error_string.contains("sqlite_busy")
+    {
+        debug!("Database lock contention ({}): {}", msg_str, e);
+        ApiError(format!("{}: database is locked", msg_str))
+    } else {
+        error!("Database error ({}): {}", msg_str, e);
+        ApiError(msg_str)
+    }
 }
 
 pub fn json_parse_error(e: impl std::fmt::Display) -> ApiError {

@@ -18,7 +18,7 @@ use crate::server::api::SchedulersApi;
 use crate::server::api::UserDataApi;
 use crate::server::api::WorkflowActionsApi;
 use crate::server::api::WorkflowsApi;
-use crate::server::api::database_error_with_msg;
+use crate::server::api::{database_error_with_msg, database_lock_aware_error};
 use crate::server::api_types::*;
 use crate::server::auth::MakeHtpasswdAuthenticator;
 use crate::server::authorization::{AccessCheckResult, AuthorizationService};
@@ -553,20 +553,6 @@ fn is_database_lock_error(error: &ApiError) -> bool {
         || error_str.contains("sqlite_busy")
 }
 
-/// Like `database_error_with_msg` but preserves "database is locked" in the ApiError
-/// so that callers can detect lock contention and retry. Does not leak other database
-/// error details.
-fn database_lock_aware_error(e: impl std::fmt::Display, msg: impl Into<String>) -> ApiError {
-    let msg_str = msg.into();
-    let error_string = e.to_string().to_lowercase();
-    error!("Database error ({}): {}", msg_str, e);
-    if error_string.contains("database is locked") || error_string.contains("database is busy") {
-        ApiError(format!("{}: database is locked", msg_str))
-    } else {
-        ApiError(msg_str)
-    }
-}
-
 /// Process all pending unblocks for a specific workflow
 async fn process_workflow_unblocks<C>(server: &Server<C>, workflow_id: i64) -> Result<(), ApiError>
 where
@@ -657,7 +643,10 @@ where
                 "Database error fetching completed jobs for workflow {}: {}",
                 workflow_id, e
             );
-            return Err(database_lock_aware_error(e, "Failed to fetch completed jobs"));
+            return Err(database_lock_aware_error(
+                e,
+                "Failed to fetch completed jobs",
+            ));
         }
     };
 
@@ -727,7 +716,10 @@ where
             "Database error marking jobs as processed for workflow {}: {}",
             workflow_id, e
         );
-        return Err(database_lock_aware_error(e, "Failed to mark jobs processed"));
+        return Err(database_lock_aware_error(
+            e,
+            "Failed to mark jobs processed",
+        ));
     }
 
     // Commit the transaction
