@@ -20,7 +20,7 @@ pub const CLIENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// - Patch: bug fix in an existing endpoint (response field fix, etc.)
 /// - Minor: new endpoint, new optional field, new query parameter
 /// - Major: removed endpoint, renamed field, changed semantics
-pub const CLIENT_API_VERSION: &str = "0.8.0";
+pub const CLIENT_API_VERSION: &str = "0.9.0";
 
 /// The git commit hash of this binary, set at compile time via build.rs.
 pub const GIT_HASH: &str = env!("GIT_HASH");

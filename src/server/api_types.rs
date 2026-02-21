@@ -31,7 +31,7 @@ use tokio::sync::broadcast;
 pub type ServiceError = Box<dyn Error + Send + Sync + 'static>;
 
 pub const BASE_PATH: &str = "/torc-service/v1";
-pub const API_VERSION: &str = "0.8.0";
+pub const API_VERSION: &str = "0.9.0";
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[must_use]
