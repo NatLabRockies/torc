@@ -41,12 +41,18 @@ impl RotatingWriter {
 
 impl Write for RotatingWriter {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let mut file = self.file_rotate.lock().unwrap();
+        let mut file = self
+            .file_rotate
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         file.write(buf)
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        let mut file = self.file_rotate.lock().unwrap();
+        let mut file = self
+            .file_rotate
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         file.flush()
     }
 }

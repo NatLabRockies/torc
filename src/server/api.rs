@@ -4,7 +4,6 @@ use log::{debug, error, info};
 use sqlx::sqlite::SqlitePool;
 use std::sync::Arc;
 use swagger::ApiError;
-use tokio::sync::Mutex;
 
 /// Common constants used across all API modules
 pub const MAX_RECORD_TRANSFER_COUNT: i64 = 10_000;
@@ -13,14 +12,12 @@ pub const MAX_RECORD_TRANSFER_COUNT: i64 = 10_000;
 #[derive(Clone)]
 pub struct ApiContext {
     pub pool: Arc<SqlitePool>,
-    pub lock: Arc<Mutex<()>>,
 }
 
 impl ApiContext {
     pub fn new(pool: SqlitePool) -> Self {
         Self {
             pool: Arc::new(pool),
-            lock: Arc::new(Mutex::new(())),
         }
     }
 }

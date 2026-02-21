@@ -415,7 +415,13 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
             .create_if_missing(true)
             .busy_timeout(std::time::Duration::from_secs(45));
 
+        // Set max_connections based on thread count to prevent pool starvation.
+        // We add extra connections beyond the worker thread count to allow for:
+        // - The background unblock task (1 connection)
+        // - Concurrent read queries while write transactions hold connections
+        let max_connections = config.threads.max(2) + 2;
         let pool = SqlitePoolOptions::new()
+            .max_connections(max_connections)
             .connect_with(connect_options)
             .await?;
 
