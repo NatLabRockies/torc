@@ -81,7 +81,7 @@ use crate::server::api_types::{
     ListRequiredExistingFilesResponse, ListResourceRequirementsResponse, ListResultsResponse,
     ListScheduledComputeNodesResponse, ListSlurmSchedulersResponse, ListUserDataResponse,
     ListUserGroupsApiResponse, ListWorkflowGroupsResponse, ListWorkflowsResponse,
-    ManageStatusChangeResponse, PingResponse, ProcessChangedJobInputsResponse,
+    ManageStatusChangeResponse, PingResponse, ProcessChangedJobInputsResponse, ReloadAuthResponse,
     RemoveUserFromGroupResponse, RemoveWorkflowFromGroupResponse, ResetJobStatusResponse,
     ResetWorkflowStatusResponse, RetryJobResponse, StartJobResponse, UpdateComputeNodeResponse,
     UpdateEventResponse, UpdateFileResponse, UpdateJobResponse, UpdateLocalSchedulerResponse,
@@ -165,7 +165,9 @@ mod paths {
             // Retry job route (index 65)
             r"^/torc-service/v1/jobs/(?P<id>[^/?#]*)/retry/(?P<run_id>[^/?#]*)$",
             // SSE events stream route (index 66)
-            r"^/torc-service/v1/workflows/(?P<id>[^/?#]*)/events/stream$"
+            r"^/torc-service/v1/workflows/(?P<id>[^/?#]*)/events/stream$",
+            // Admin reload-auth route (index 67)
+            r"^/torc-service/v1/admin/reload-auth$"
         ])
         .expect("Unable to create global regex set");
     }
@@ -515,6 +517,8 @@ regex::Regex::new(
             regex::Regex::new(r"^/torc-service/v1/workflows/(?P<id>[^/?#]*)/events/stream$")
                 .expect("Unable to create regex for WORKFLOWS_ID_EVENTS_STREAM");
     }
+    // Admin reload-auth
+    pub(crate) static ID_ADMIN_RELOAD_AUTH: usize = 67;
 }
 
 pub struct MakeService<T, C>
@@ -16070,6 +16074,87 @@ where
                 }
 
                 // ============================================================================
+                // Admin routes
+                // ============================================================================
+
+                // ReloadAuth - POST /admin/reload-auth
+                hyper::Method::POST if path.matched(paths::ID_ADMIN_RELOAD_AUTH) => {
+                    let result = api_impl.reload_auth(&context).await;
+                    let mut response = Response::new(Body::empty());
+                    response.headers_mut().insert(
+                        HeaderName::from_static("x-span-id"),
+                        HeaderValue::from_str(
+                            (&context as &dyn Has<XSpanIdString>)
+                                .get()
+                                .0
+                                .clone()
+                                .as_str(),
+                        )
+                        .expect("Unable to create X-Span-ID header value"),
+                    );
+
+                    match result {
+                        Ok(rsp) => {
+                            match rsp {
+                                ReloadAuthResponse::SuccessfulResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(200)
+                                        .expect("Unable to turn 200 into a StatusCode");
+                                    response.headers_mut().insert(
+                                        CONTENT_TYPE,
+                                        HeaderValue::from_str("application/json")
+                                            .expect("Unable to create Content-Type header for application/json"));
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                ReloadAuthResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                        CONTENT_TYPE,
+                                        HeaderValue::from_str("application/json")
+                                            .expect("Unable to create Content-Type header for application/json"));
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                ReloadAuthResponse::NotFoundErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(404)
+                                        .expect("Unable to turn 404 into a StatusCode");
+                                    response.headers_mut().insert(
+                                        CONTENT_TYPE,
+                                        HeaderValue::from_str("application/json")
+                                            .expect("Unable to create Content-Type header for application/json"));
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                ReloadAuthResponse::DefaultErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(500)
+                                        .expect("Unable to turn 500 into a StatusCode");
+                                    response.headers_mut().insert(
+                                        CONTENT_TYPE,
+                                        HeaderValue::from_str("application/json")
+                                            .expect("Unable to create Content-Type header for application/json"));
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                            }
+                        }
+                        Err(_) => {
+                            // Application code returned an error. This should not happen, as the implementation should
+                            // return a valid response.
+                            *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+                            *response.body_mut() = Body::from("An internal error occurred");
+                        }
+                    }
+
+                    add_security_headers(&mut response);
+                    Ok(response)
+                }
+
+                // ============================================================================
                 // Access Groups routes
                 // ============================================================================
 
@@ -17899,6 +17984,7 @@ where
                     method_not_allowed()
                 }
                 _ if path.matched(paths::ID_WORKFLOWS_ID_EVENTS_STREAM) => method_not_allowed(),
+                _ if path.matched(paths::ID_ADMIN_RELOAD_AUTH) => method_not_allowed(),
                 // Serve dashboard for non-API routes, 404 otherwise
                 _ => {
                     // Try to serve dashboard assets for non-API paths
@@ -18042,6 +18128,8 @@ impl<T> RequestParser<T> for ApiRequestParser {
             hyper::Method::GET if path.matched(paths::ID_WORKFLOWS) => Some("ListWorkflows"),
             // Ping - GET /ping
             hyper::Method::GET if path.matched(paths::ID_PING) => Some("Ping"),
+            // ReloadAuth - POST /admin/reload-auth
+            hyper::Method::POST if path.matched(paths::ID_ADMIN_RELOAD_AUTH) => Some("ReloadAuth"),
             // CancelWorkflow - PUT /workflows/{id}/cancel
             hyper::Method::PUT if path.matched(paths::ID_WORKFLOWS_ID_CANCEL) => {
                 Some("CancelWorkflow")

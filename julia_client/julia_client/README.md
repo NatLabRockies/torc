@@ -21,6 +21,7 @@ Documentation is also embedded in Julia which can be used with a Julia specific 
 
 Class | Method
 ------------ | -------------
+*AdminApi* | [**reload_auth**](docs/AdminApi.md#reload_auth)<br/>**POST** /admin/reload-auth<br/>Reload auth credentials from htpasswd file
 *DefaultApi* | [**add_user_to_group**](docs/DefaultApi.md#add_user_to_group)<br/>**POST** /access_groups/{id}/members<br/>Add a user to an access group.
 *DefaultApi* | [**add_workflow_to_group**](docs/DefaultApi.md#add_workflow_to_group)<br/>**POST** /workflows/{id}/access_groups<br/>Grant an access group access to a workflow.
 *DefaultApi* | [**cancel_workflow**](docs/DefaultApi.md#cancel_workflow)<br/>**PUT** /workflows/{id}/cancel<br/>Cancel a workflow. Workers will detect the status change and cancel jobs.
@@ -187,6 +188,7 @@ Class | Method
  - [LocalSchedulerModel](docs/LocalSchedulerModel.md)
  - [NotFoundErrorResponse](docs/NotFoundErrorResponse.md)
  - [ProcessChangedJobInputsResponse](docs/ProcessChangedJobInputsResponse.md)
+ - [ReloadAuth200Response](docs/ReloadAuth200Response.md)
  - [RemoteWorkerModel](docs/RemoteWorkerModel.md)
  - [ResetJobStatusResponse](docs/ResetJobStatusResponse.md)
  - [ResourceRequirementsModel](docs/ResourceRequirementsModel.md)

@@ -1537,6 +1537,19 @@ pub enum CheckWorkflowAccessResponse {
     DefaultErrorResponse(models::ErrorResponse),
 }
 
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
+pub enum ReloadAuthResponse {
+    /// Successful response
+    SuccessfulResponse(serde_json::Value),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
 /// API
 #[async_trait]
 #[allow(clippy::too_many_arguments, clippy::ptr_arg)]
@@ -2509,6 +2522,9 @@ pub trait Api<C: Send + Sync> {
     /// Subscribe to the event broadcast channel for SSE streaming.
     /// Returns a broadcast receiver that will receive all future events.
     fn subscribe_to_events(&self) -> broadcast::Receiver<BroadcastEvent>;
+
+    /// Reload the htpasswd file from disk (admin only).
+    async fn reload_auth(&self, context: &C) -> Result<ReloadAuthResponse, ApiError>;
 }
 
 /// API where `Context` isn't passed on every API call
@@ -3262,6 +3278,9 @@ pub trait ApiNoContext<C: Send + Sync> {
         workflow_id: i64,
         user_name: String,
     ) -> Result<CheckWorkflowAccessResponse, ApiError>;
+
+    /// Reload the htpasswd file from disk (admin only).
+    async fn reload_auth(&self) -> Result<ReloadAuthResponse, ApiError>;
 }
 
 /// Trait to extend an API to make it easy to bind it to a context.
@@ -4565,6 +4584,11 @@ impl<T: Api<C> + Send + Sync, C: Clone + Send + Sync> ApiNoContext<C> for Contex
         self.api()
             .check_workflow_access(workflow_id, user_name, &context)
             .await
+    }
+
+    async fn reload_auth(&self) -> Result<ReloadAuthResponse, ApiError> {
+        let context = self.context().clone();
+        self.api().reload_auth(&context).await
     }
 }
 

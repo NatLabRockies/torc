@@ -193,3 +193,24 @@ bash run_test.sh
 ```
 
 See `tls_test/README.md` for detailed instructions.
+
+---
+
+### access_control_test/
+
+Tests authentication and workflow access control via access groups.
+
+**Scenario:**
+
+- 4 users (alice, bob, carol, dave) with overlapping team memberships
+- 3 teams: ml_team (alice, bob), data_team (bob, carol), infra_team (carol, dave)
+- 3 team workflows (one per group) + 4 private workflows (one per user)
+- ~35 assertions verify visibility rules, auth rejection, and direct ID access
+
+**Usage:**
+
+```bash
+bash tests/workflows/access_control_test/run_test.sh
+```
+
+See `access_control_test/README.md` for detailed instructions.

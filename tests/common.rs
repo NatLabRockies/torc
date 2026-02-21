@@ -1432,8 +1432,25 @@ fn create_htpasswd_file(users: &[&str]) -> NamedTempFile {
 /// Struct to hold both the server process and the htpasswd file
 pub struct AccessControlServerProcess {
     pub server: ServerProcess,
-    #[allow(dead_code)]
-    htpasswd_file: NamedTempFile, // Keep the htpasswd file alive
+    pub htpasswd_file: NamedTempFile, // Keep the htpasswd file alive
+}
+
+impl AccessControlServerProcess {
+    /// Get the path to the htpasswd file for direct manipulation in tests.
+    pub fn htpasswd_path(&self) -> String {
+        self.htpasswd_file.path().to_string_lossy().to_string()
+    }
+
+    /// Create a Configuration authenticated as a specific user.
+    pub fn config_for_user(&self, username: &str) -> Configuration {
+        let mut config = Configuration::new();
+        config.base_path = get_server_url(self.server.port);
+        config.basic_auth = Some((
+            username.to_string(),
+            Some("correct horse battery staple".to_string()),
+        ));
+        config
+    }
 }
 
 impl std::ops::Deref for AccessControlServerProcess {
@@ -1449,6 +1466,15 @@ fn start_process_with_access_control(
     db_url: &str,
     db_file: NamedTempFile,
     htpasswd_file: NamedTempFile,
+) -> AccessControlServerProcess {
+    start_process_with_access_control_impl(db_url, db_file, htpasswd_file, false)
+}
+
+fn start_process_with_access_control_impl(
+    db_url: &str,
+    db_file: NamedTempFile,
+    htpasswd_file: NamedTempFile,
+    require_auth: bool,
 ) -> AccessControlServerProcess {
     let port = find_available_port();
     println!("Setting up database with url: {}", db_url);
@@ -1475,8 +1501,8 @@ fn start_process_with_access_control(
 
     eprintln!("Starting server with access control on port {}", port);
     let htpasswd_path = htpasswd_file.path().to_string_lossy().to_string();
-    let child = Command::new(get_exe_path("./target/debug/torc-server"))
-        .arg("run")
+    let mut cmd = Command::new(get_exe_path("./target/debug/torc-server"));
+    cmd.arg("run")
         .arg("--port")
         .arg(port.to_string())
         .arg("--completion-check-interval-secs")
@@ -1500,7 +1526,11 @@ fn start_process_with_access_control(
         .arg("--admin-user")
         .arg("ml_api_owner")
         .arg("--admin-user")
-        .arg("data_api_owner")
+        .arg("data_api_owner");
+    if require_auth {
+        cmd.arg("--require-auth");
+    }
+    let child = cmd
         .env("DATABASE_URL", db_url)
         .env("RUST_LOG", "info")
         .stdout(std::process::Stdio::inherit())
@@ -1537,6 +1567,38 @@ fn start_process_with_access_control(
         },
         htpasswd_file,
     }
+}
+
+/// Start a test server instance with access control + require-auth enabled.
+///
+/// This creates a server that **rejects** requests with invalid or missing
+/// credentials (returns 401). Use this when testing authentication behavior
+/// like reload-auth, where you need to verify that invalid credentials are
+/// truly rejected rather than treated as anonymous.
+///
+/// Test users (all with password "correct horse battery staple"):
+/// - alice, bob (admin users)
+/// - carol, dave (non-admin users)
+#[fixture]
+#[once]
+pub fn start_server_with_required_auth() -> AccessControlServerProcess {
+    let _ = env_logger::try_init();
+
+    let test_users = ["alice", "bob", "carol", "dave"];
+    let htpasswd_file = create_htpasswd_file(&test_users);
+    eprintln!(
+        "Created htpasswd file with {} users (require-auth mode)",
+        test_users.len()
+    );
+
+    let db_file = NamedTempFile::new().expect("Failed to create temporary file");
+    let url = format!("sqlite:{}", db_file.path().display());
+    let process = start_process_with_access_control_impl(&url, db_file, htpasswd_file, true);
+    eprint!(
+        "Started server with required auth, database file {:?} on port {}",
+        process.server.db_file, process.server.port
+    );
+    process
 }
 
 /// Start a test server instance with access control enforcement enabled

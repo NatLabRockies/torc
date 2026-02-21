@@ -342,6 +342,24 @@ sudo systemctl status torc-server
 journalctl -u torc-server -f
 ```
 
+## Managing Users Without Downtime
+
+User credentials can be added, removed, or updated without restarting the server. After modifying
+the htpasswd file, reload the credentials:
+
+```bash
+# Add or remove users
+torc-htpasswd add --file /etc/torc/htpasswd new_user
+torc-htpasswd remove --file /etc/torc/htpasswd old_user
+
+# Reload on the running server (admin credentials required)
+torc admin reload-auth
+```
+
+For Docker/Kubernetes deployments, call `torc admin reload-auth` after updating the htpasswd file
+instead of restarting the container. See
+[Hot-Reloading Credentials](./authentication.md#hot-reloading-credentials) for details.
+
 ## Log Rotation Strategy
 
 The server uses automatic size-based rotation with the following defaults:

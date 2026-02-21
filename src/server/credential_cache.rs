@@ -95,6 +95,13 @@ impl CredentialCache {
         cache.retain(|_, entry| entry.expires_at > now);
     }
 
+    /// Clear all cached entries.
+    ///
+    /// Used when the htpasswd file is reloaded to invalidate stale credentials.
+    pub fn clear(&self) {
+        self.cache.write().clear();
+    }
+
     /// Get the number of entries in the cache (for debugging/monitoring).
     #[allow(dead_code)]
     pub fn len(&self) -> usize {

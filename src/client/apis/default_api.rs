@@ -640,6 +640,15 @@ pub enum PingError {
     UnknownValue(serde_json::Value),
 }
 
+/// struct for typed errors of method [`reload_auth`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ReloadAuthError {
+    Status403(models::ErrorResponse),
+    Status500(models::ErrorResponse),
+    UnknownValue(serde_json::Value),
+}
+
 /// struct for typed errors of method [`prepare_jobs_for_scheduling`]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -5624,6 +5633,57 @@ pub fn ping(
     } else {
         let content = resp.text()?;
         let entity: Option<PingError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent {
+            status,
+            content,
+            entity,
+        }))
+    }
+}
+
+/// Reload the htpasswd file from disk (admin only).
+pub fn reload_auth(
+    configuration: &configuration::Configuration,
+) -> Result<serde_json::Value, Error<ReloadAuthError>> {
+    let uri_str = format!("{}/admin/reload-auth", configuration.base_path);
+    let mut req_builder = configuration
+        .client
+        .request(reqwest::Method::POST, &uri_str);
+
+    if let Some(ref auth) = configuration.basic_auth {
+        req_builder = req_builder.basic_auth(&auth.0, auth.1.as_ref());
+    }
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req)?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text()?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => Err(Error::from(serde_json::Error::custom(
+                "Received `text/plain` content type response that cannot be converted to `serde_json::Value`",
+            ))),
+            ContentType::Unsupported(unknown_type) => {
+                Err(Error::from(serde_json::Error::custom(format!(
+                    "Received `{unknown_type}` content type response that cannot be converted to `serde_json::Value`"
+                ))))
+            }
+        }
+    } else {
+        let content = resp.text()?;
+        let entity: Option<ReloadAuthError> = serde_json::from_str(&content).ok();
         Err(Error::ResponseError(ResponseContent {
             status,
             content,

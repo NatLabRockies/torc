@@ -30,6 +30,7 @@ use futures::{Stream, StreamExt, TryFutureExt, TryStreamExt, future};
 use hyper::server::conn::Http;
 use hyper::service::Service;
 use log::{debug, error, info};
+use parking_lot;
 use sqlx::Row;
 use std::collections::hash_set::Union;
 use std::future::Future;
@@ -325,6 +326,7 @@ pub async fn create(
     admin_users: Vec<String>,
     #[allow(unused_variables)] tls_cert: Option<String>,
     #[allow(unused_variables)] tls_key: Option<String>,
+    auth_file_path: Option<String>,
 ) -> u16 {
     // Resolve hostname to socket address (supports both hostnames and IP addresses)
     let addr = tokio::net::lookup_host(addr)
@@ -356,7 +358,26 @@ pub async fn create(
         );
     }
 
-    let server = Server::new(pool.clone(), enforce_access_control);
+    // Create shared htpasswd and credential cache state
+    let shared_htpasswd: crate::server::auth::SharedHtpasswd =
+        Arc::new(parking_lot::RwLock::new(htpasswd));
+    let credential_cache = if shared_htpasswd.read().is_some() && credential_cache_ttl_secs > 0 {
+        Some(crate::server::credential_cache::CredentialCache::new(
+            std::time::Duration::from_secs(credential_cache_ttl_secs),
+        ))
+    } else {
+        None
+    };
+    let shared_credential_cache: crate::server::auth::SharedCredentialCache =
+        Arc::new(parking_lot::RwLock::new(credential_cache));
+
+    let server = Server::new(
+        pool.clone(),
+        enforce_access_control,
+        shared_htpasswd.clone(),
+        auth_file_path,
+        shared_credential_cache.clone(),
+    );
 
     // Spawn background task for deferred job unblocking
     let server_clone = server.clone();
@@ -366,11 +387,11 @@ pub async fn create(
 
     let service = MakeService::new(server);
 
-    let service = MakeHtpasswdAuthenticator::with_cache_ttl(
+    let service = MakeHtpasswdAuthenticator::new(
         service,
-        htpasswd,
+        shared_htpasswd,
         require_auth,
-        credential_cache_ttl_secs,
+        shared_credential_cache,
     );
 
     #[allow(unused_mut)]
@@ -782,6 +803,12 @@ pub struct Server<C> {
     authorization_service: AuthorizationService,
     /// Event broadcaster for SSE clients
     event_broadcaster: EventBroadcaster,
+    /// Shared htpasswd state (reloadable at runtime)
+    htpasswd: crate::server::auth::SharedHtpasswd,
+    /// Path to the htpasswd file on disk (None if auth is not configured)
+    auth_file_path: Option<String>,
+    /// Shared credential cache (clearable on auth reload)
+    credential_cache: crate::server::auth::SharedCredentialCache,
     access_groups_api: AccessGroupsApiImpl,
     compute_nodes_api: ComputeNodesApiImpl,
     events_api: EventsApiImpl,
@@ -798,7 +825,13 @@ pub struct Server<C> {
 }
 
 impl<C> Server<C> {
-    pub fn new(pool: SqlitePool, enforce_access_control: bool) -> Self {
+    pub fn new(
+        pool: SqlitePool,
+        enforce_access_control: bool,
+        htpasswd: crate::server::auth::SharedHtpasswd,
+        auth_file_path: Option<String>,
+        credential_cache: crate::server::auth::SharedCredentialCache,
+    ) -> Self {
         let pool_arc = Arc::new(pool);
         let api_context = ApiContext::new(pool_arc.as_ref().clone());
         let authorization_service =
@@ -815,6 +848,9 @@ impl<C> Server<C> {
             )),
             authorization_service,
             event_broadcaster: EventBroadcaster::new(512),
+            htpasswd,
+            auth_file_path,
+            credential_cache,
             access_groups_api: AccessGroupsApiImpl::new(api_context.clone()),
             compute_nodes_api: ComputeNodesApiImpl::new(api_context.clone()),
             events_api: EventsApiImpl::new(api_context.clone()),
@@ -2908,6 +2944,68 @@ where
                 "api_version": API_VERSION,
                 "git_hash": GIT_HASH
             })))
+        }
+    }
+
+    async fn reload_auth(&self, context: &C) -> Result<ReloadAuthResponse, ApiError> {
+        debug!(
+            "reload_auth() - X-Span-ID: {:?}",
+            Has::<XSpanIdString>::get(context).0.clone()
+        );
+
+        authorize_admin!(self, context, ReloadAuthResponse);
+
+        let auth_file_path = match &self.auth_file_path {
+            Some(path) => path.clone(),
+            None => {
+                return Ok(ReloadAuthResponse::DefaultErrorResponse(
+                    models::ErrorResponse::new(serde_json::json!({
+                        "error": "NoAuthFile",
+                        "message": "No auth file configured. Start the server with --auth-file to enable auth reloading."
+                    })),
+                ));
+            }
+        };
+
+        info!("Reloading htpasswd file from: {}", auth_file_path);
+
+        match HtpasswdFile::load(&auth_file_path) {
+            Ok(new_htpasswd) => {
+                let user_count = new_htpasswd.user_count();
+
+                // Replace the htpasswd data
+                {
+                    let mut htpasswd_guard = self.htpasswd.write();
+                    *htpasswd_guard = Some(new_htpasswd);
+                }
+
+                // Clear the credential cache so stale credentials are invalidated
+                {
+                    let cache_guard = self.credential_cache.read();
+                    if let Some(ref cache) = *cache_guard {
+                        cache.clear();
+                    }
+                }
+
+                info!(
+                    "Successfully reloaded htpasswd file with {} users, credential cache cleared",
+                    user_count
+                );
+
+                Ok(ReloadAuthResponse::SuccessfulResponse(serde_json::json!({
+                    "message": "Auth credentials reloaded successfully",
+                    "user_count": user_count
+                })))
+            }
+            Err(e) => {
+                error!("Failed to reload htpasswd file: {}", e);
+                Ok(ReloadAuthResponse::DefaultErrorResponse(
+                    models::ErrorResponse::new(serde_json::json!({
+                        "error": "ReloadFailed",
+                        "message": format!("Failed to reload htpasswd file: {}", e)
+                    })),
+                ))
+            }
         }
     }
 

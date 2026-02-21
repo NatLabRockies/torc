@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
+use torc::client::apis::configuration::{Configuration, TlsConfig};
 use zxcvbn::Score;
 
 /// Minimum zxcvbn score required for passwords (0-4 scale).
@@ -38,6 +39,19 @@ enum Commands {
         /// Bcrypt cost factor (4-31, default: 12, higher = more secure but slower)
         #[arg(short, long, default_value_t = 12)]
         cost: u32,
+
+        /// Reload auth credentials on the server after modifying the file.
+        /// Requires --url and credentials (TORC_PASSWORD or --server-password).
+        #[arg(long)]
+        reload_auth: bool,
+
+        /// Server URL for reload-auth (defaults to TORC_API_URL or http://localhost:8080/torc-service/v1)
+        #[arg(long, env = "TORC_API_URL")]
+        url: Option<String>,
+
+        /// Password for authenticating with the server (for reload-auth)
+        #[arg(long, env = "TORC_PASSWORD")]
+        server_password: Option<String>,
     },
 
     /// Generate a password hash and output to stdout (for sending to admin)
@@ -62,6 +76,19 @@ enum Commands {
 
         /// Username to remove
         username: String,
+
+        /// Reload auth credentials on the server after modifying the file.
+        /// Requires --url and credentials (TORC_PASSWORD or --server-password).
+        #[arg(long)]
+        reload_auth: bool,
+
+        /// Server URL for reload-auth (defaults to TORC_API_URL or http://localhost:8080/torc-service/v1)
+        #[arg(long, env = "TORC_API_URL")]
+        url: Option<String>,
+
+        /// Password for authenticating with the server (for reload-auth)
+        #[arg(long, env = "TORC_PASSWORD")]
+        server_password: Option<String>,
     },
 
     /// List all users in the htpasswd file
@@ -146,6 +173,47 @@ fn prompt_password(username: &str) -> String {
     password
 }
 
+/// Call the server's reload-auth endpoint if --reload-auth was specified.
+fn maybe_reload_auth(reload_auth: bool, url: &Option<String>, server_password: &Option<String>) {
+    if !reload_auth {
+        return;
+    }
+
+    let base_path = url
+        .clone()
+        .unwrap_or_else(|| "http://localhost:8080/torc-service/v1".to_string());
+
+    let mut config = Configuration::with_tls(TlsConfig::default());
+    config.base_path = base_path;
+
+    // Set up auth using the current USER env var and server_password
+    if let Some(password) = server_password {
+        let username = std::env::var("USER")
+            .or_else(|_| std::env::var("USERNAME"))
+            .unwrap_or_else(|_| "unknown".to_string());
+        config.basic_auth = Some((username, Some(password.clone())));
+    }
+
+    match torc::client::apis::default_api::reload_auth(&config) {
+        Ok(response) => {
+            let message = response
+                .get("message")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Auth reloaded");
+            let user_count = response
+                .get("user_count")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            println!("Server: {} ({} users)", message, user_count);
+        }
+        Err(e) => {
+            eprintln!("Warning: Failed to reload auth on server: {e}");
+            eprintln!("The htpasswd file was modified but the server has not reloaded it.");
+            eprintln!("Run 'torc admin reload-auth' manually to apply the changes.");
+        }
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
 
@@ -155,6 +223,9 @@ fn main() {
             username,
             password,
             cost,
+            reload_auth,
+            url,
+            server_password,
         } => {
             if !(4..=31).contains(&cost) {
                 eprintln!("Error: cost must be between 4 and 31");
@@ -230,6 +301,8 @@ fn main() {
             } else {
                 println!("Added user '{username}' to {file:?}");
             }
+
+            maybe_reload_auth(reload_auth, &url, &server_password);
         }
 
         Commands::Hash {
@@ -276,7 +349,13 @@ fn main() {
             eprintln!("Send the line above to your server administrator.");
         }
 
-        Commands::Remove { file, username } => {
+        Commands::Remove {
+            file,
+            username,
+            reload_auth,
+            url,
+            server_password,
+        } => {
             if !file.exists() {
                 eprintln!("Error: file {file:?} does not exist");
                 std::process::exit(1);
@@ -318,6 +397,8 @@ fn main() {
             }
 
             println!("Removed user '{username}' from {file:?}");
+
+            maybe_reload_auth(reload_auth, &url, &server_password);
         }
 
         Commands::List { file } => {

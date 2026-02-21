@@ -418,10 +418,61 @@ client = OpenAPI.Clients.Client(
 api = Torc.APIClient.DefaultApi(client)
 ```
 
+### Hot-Reloading Credentials
+
+You can add, remove, or update user credentials without restarting the server. This is especially
+useful in Docker, Kubernetes, and HPC environments where server restarts are disruptive.
+
+**Workflow: Add a user and reload**
+
+```bash
+# 1. Add user to the htpasswd file
+torc-htpasswd add --file /etc/torc/htpasswd alice_new
+
+# 2. Reload credentials on the running server
+torc admin reload-auth
+
+# 3. The new user can now authenticate immediately
+```
+
+**Convenience flag: auto-reload after modification**
+
+The `torc-htpasswd` tool supports a `--reload-auth` flag that automatically calls the server's
+reload endpoint after modifying the htpasswd file:
+
+```bash
+# Add a user and reload in one step
+torc-htpasswd add --file /etc/torc/htpasswd --reload-auth alice_new
+
+# Remove a user and reload in one step
+torc-htpasswd remove --file /etc/torc/htpasswd --reload-auth old_user
+
+# Specify server URL and credentials for reload
+torc-htpasswd add --file /etc/torc/htpasswd --reload-auth \
+  --url https://torc.example.com:8080/torc-service/v1 \
+  --server-password "$ADMIN_PASSWORD" alice_new
+```
+
+**Important notes:**
+
+- Only admin users can call `torc admin reload-auth` (requires `--admin-user` on server)
+- The credential cache is cleared on reload, so all users re-verify on their next request
+- If the server was started without `--auth-file`, the reload endpoint returns an error
+- The reload is atomic: either all credentials are updated or none are
+
+**Docker/Kubernetes:**
+
+```bash
+# After updating the htpasswd ConfigMap/Secret:
+kubectl exec torc-server -- torc admin reload-auth
+```
+
+No file-watching or container restart is needed.
+
 ### Load Balancer Considerations
 
 When running multiple Torc servers behind a load balancer:
 
 - Share the same htpasswd file across all servers (via NFS, S3, etc.)
 - Or use a configuration management tool to sync htpasswd files
-- Monitor for htpasswd file changes and reload if needed
+- After updating the htpasswd file, call `torc admin reload-auth` on each server instance

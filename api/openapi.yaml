@@ -6072,6 +6072,48 @@ paths:
       security: []
       summary: Delete a remote worker from a workflow.
       tags: []
+  # ============================================================================
+  # Admin endpoints
+  # ============================================================================
+  /admin/reload-auth:
+    post:
+      description: >-
+        Re-reads the htpasswd authentication file from disk without restarting
+        the server. This is useful for adding/removing users or changing
+        passwords. Only admin users can call this endpoint. The credential cache
+        is cleared after reload.
+      operationId: reload_auth
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  message:
+                    type: string
+                  user_count:
+                    type: integer
+                required:
+                  - message
+                  - user_count
+                type: object
+          description: Successful response
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/forbidden_error_response"
+          description: Forbidden - only admin users can reload auth
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/default_error_response"
+          description: Default error response
+      security: []
+      summary: Reload auth credentials from htpasswd file
+      tags:
+        - Admin
 components:
   schemas:
     # ==========================================================================

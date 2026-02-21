@@ -504,6 +504,7 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
             admin_users,
             config.tls_cert,
             config.tls_key,
+            config.auth_file.clone(),
         )
         .await;
         Ok(())

@@ -61,6 +61,7 @@ from torc.openapi_client.models.list_workflows_response import ListWorkflowsResp
 from torc.openapi_client.models.local_scheduler_model import LocalSchedulerModel
 from torc.openapi_client.models.not_found_error_response import NotFoundErrorResponse
 from torc.openapi_client.models.process_changed_job_inputs_response import ProcessChangedJobInputsResponse
+from torc.openapi_client.models.reload_auth200_response import ReloadAuth200Response
 from torc.openapi_client.models.remote_worker_model import RemoteWorkerModel
 from torc.openapi_client.models.reset_job_status_response import ResetJobStatusResponse
 from torc.openapi_client.models.resource_requirements_model import ResourceRequirementsModel

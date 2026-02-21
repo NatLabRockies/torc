@@ -18,6 +18,7 @@ __version__ = "0.7.0"
 
 # Define package exports
 __all__ = [
+    "AdminApi",
     "DefaultApi",
     "ApiResponse",
     "ApiClient",
@@ -76,6 +77,7 @@ __all__ = [
     "LocalSchedulerModel",
     "NotFoundErrorResponse",
     "ProcessChangedJobInputsResponse",
+    "ReloadAuth200Response",
     "RemoteWorkerModel",
     "ResetJobStatusResponse",
     "ResourceRequirementsModel",
@@ -91,6 +93,7 @@ __all__ = [
 ]
 
 # import apis into sdk package
+from torc.openapi_client.api.admin_api import AdminApi as AdminApi
 from torc.openapi_client.api.default_api import DefaultApi as DefaultApi
 
 # import ApiClient
@@ -153,6 +156,7 @@ from torc.openapi_client.models.list_workflows_response import ListWorkflowsResp
 from torc.openapi_client.models.local_scheduler_model import LocalSchedulerModel as LocalSchedulerModel
 from torc.openapi_client.models.not_found_error_response import NotFoundErrorResponse as NotFoundErrorResponse
 from torc.openapi_client.models.process_changed_job_inputs_response import ProcessChangedJobInputsResponse as ProcessChangedJobInputsResponse
+from torc.openapi_client.models.reload_auth200_response import ReloadAuth200Response as ReloadAuth200Response
 from torc.openapi_client.models.remote_worker_model import RemoteWorkerModel as RemoteWorkerModel
 from torc.openapi_client.models.reset_job_status_response import ResetJobStatusResponse as ResetJobStatusResponse
 from torc.openapi_client.models.resource_requirements_model import ResourceRequirementsModel as ResourceRequirementsModel

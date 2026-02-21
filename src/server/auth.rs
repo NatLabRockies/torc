@@ -1,15 +1,19 @@
 use super::credential_cache::CredentialCache;
 use super::htpasswd::HtpasswdFile;
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
-use std::time::Duration;
+use std::sync::Arc;
 use swagger::{
     ApiError,
     auth::{Authorization, Basic, Bearer},
 };
 
-/// Default TTL for credential cache (60 seconds)
-pub const DEFAULT_CREDENTIAL_CACHE_TTL_SECS: u64 = 60;
+/// Shared htpasswd state that can be reloaded at runtime.
+pub type SharedHtpasswd = Arc<RwLock<Option<HtpasswdFile>>>;
+
+/// Shared credential cache that can be cleared on reload.
+pub type SharedCredentialCache = Arc<RwLock<Option<CredentialCache>>>;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
@@ -141,9 +145,9 @@ where
     RC::Result: Send + 'static,
 {
     inner: T,
-    htpasswd: Option<HtpasswdFile>,
+    htpasswd: SharedHtpasswd,
     require_auth: bool,
-    credential_cache: Option<CredentialCache>,
+    credential_cache: SharedCredentialCache,
     marker: PhantomData<RC>,
 }
 
@@ -152,29 +156,12 @@ where
     RC: RcBound,
     RC::Result: Send + 'static,
 {
-    pub fn new(inner: T, htpasswd: Option<HtpasswdFile>, require_auth: bool) -> Self {
-        Self::with_cache_ttl(
-            inner,
-            htpasswd,
-            require_auth,
-            DEFAULT_CREDENTIAL_CACHE_TTL_SECS,
-        )
-    }
-
-    /// Create a new authenticator with a custom credential cache TTL.
-    /// Set ttl_secs to 0 to disable caching.
-    pub fn with_cache_ttl(
+    pub fn new(
         inner: T,
-        htpasswd: Option<HtpasswdFile>,
+        htpasswd: SharedHtpasswd,
         require_auth: bool,
-        ttl_secs: u64,
+        credential_cache: SharedCredentialCache,
     ) -> Self {
-        let credential_cache = if htpasswd.is_some() && ttl_secs > 0 {
-            Some(CredentialCache::new(Duration::from_secs(ttl_secs)))
-        } else {
-            None
-        };
-
         MakeHtpasswdAuthenticator {
             inner,
             htpasswd,
@@ -205,12 +192,13 @@ where
         let require_auth = self.require_auth;
         let credential_cache = self.credential_cache.clone();
         Box::pin(self.inner.call(target).map(move |s| {
-            Ok(HtpasswdAuthenticatorService::new(
-                s?,
+            Ok(HtpasswdAuthenticatorService {
+                inner: s?,
                 htpasswd,
                 require_auth,
                 credential_cache,
-            ))
+                marker: PhantomData,
+            })
         }))
     }
 }
@@ -223,9 +211,9 @@ where
     RC::Result: Send + 'static,
 {
     inner: T,
-    htpasswd: Option<HtpasswdFile>,
+    htpasswd: SharedHtpasswd,
     require_auth: bool,
-    credential_cache: Option<CredentialCache>,
+    credential_cache: SharedCredentialCache,
     marker: PhantomData<RC>,
 }
 
@@ -234,37 +222,25 @@ where
     RC: RcBound,
     RC::Result: Send + 'static,
 {
-    pub fn new(
-        inner: T,
-        htpasswd: Option<HtpasswdFile>,
-        require_auth: bool,
-        credential_cache: Option<CredentialCache>,
-    ) -> Self {
-        HtpasswdAuthenticatorService {
-            inner,
-            htpasswd,
-            require_auth,
-            credential_cache,
-            marker: PhantomData,
-        }
-    }
-
     /// Verify credentials with caching.
     /// First checks the cache, then falls back to bcrypt verification.
     /// Caches successful verifications.
     fn verify_with_cache(&self, htpasswd: &HtpasswdFile, username: &str, password: &str) -> bool {
         // Check cache first
-        if let Some(ref cache) = self.credential_cache
+        let cache_guard = self.credential_cache.read();
+        if let Some(ref cache) = *cache_guard
             && cache.is_cached(username, password)
         {
             log::debug!("User '{}' authenticated from cache", username);
             return true;
         }
+        drop(cache_guard);
 
         // Cache miss or no cache - do bcrypt verification
         if htpasswd.verify(username, password) {
             // Cache successful verification
-            if let Some(ref cache) = self.credential_cache {
+            let cache_guard = self.credential_cache.read();
+            if let Some(ref cache) = *cache_guard {
                 cache.cache_success(username, password);
             }
             true
@@ -283,9 +259,9 @@ where
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
-            htpasswd: self.htpasswd.clone(),
+            htpasswd: Arc::clone(&self.htpasswd),
             require_auth: self.require_auth,
-            credential_cache: self.credential_cache.clone(),
+            credential_cache: Arc::clone(&self.credential_cache),
             marker: PhantomData,
         }
     }
@@ -327,7 +303,8 @@ where
     }
 
     fn basic_authorization(&self, basic: &Basic) -> Result<Authorization, swagger::ApiError> {
-        match &self.htpasswd {
+        let htpasswd_guard = self.htpasswd.read();
+        match &*htpasswd_guard {
             Some(htpasswd) => {
                 // Basic auth password is always required
                 let password = match &basic.password {
@@ -401,7 +378,8 @@ where
         // Try to extract Basic auth from headers
         let basic_auth: Option<Basic> = from_headers(request.headers());
 
-        let authorization = match &self.htpasswd {
+        let htpasswd_guard = self.htpasswd.read();
+        let authorization = match &*htpasswd_guard {
             Some(htpasswd) => {
                 // We have an htpasswd file, verify credentials
                 match basic_auth {
@@ -454,6 +432,7 @@ where
                 }
             }
         };
+        drop(htpasswd_guard);
 
         // If require_auth is true and authorization failed, return 401 immediately
         if self.require_auth && authorization.is_none() {

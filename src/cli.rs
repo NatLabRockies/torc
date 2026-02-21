@@ -7,6 +7,7 @@ use clap::{Parser, Subcommand, builder::styling};
 use std::path::PathBuf;
 
 use crate::client::commands::access_groups::AccessGroupCommands;
+use crate::client::commands::admin::AdminCommands;
 use crate::client::commands::compute_nodes::ComputeNodeCommands;
 use crate::client::commands::config::ConfigCommands;
 use crate::client::commands::events::EventCommands;
@@ -69,6 +70,9 @@ const HELP_TEMPLATE: &str = "\
   \x1b[1;36mreports\x1b[0m                  Generate reports and analytics
   \x1b[1;36mlogs\x1b[0m                     Bundle and analyze workflow logs
   \x1b[1;36mjob-dependencies\x1b[0m         Job dependency queries
+
+\x1b[1;32mServer Administration:\x1b[0m
+  \x1b[1;36madmin\x1b[0m                    Server administration commands
 
 \x1b[1;32mConfiguration & Utilities:\x1b[0m
   \x1b[1;36mconfig\x1b[0m                   Manage configuration settings
@@ -724,6 +728,12 @@ EXAMPLES:
     AccessGroups {
         #[command(subcommand)]
         command: AccessGroupCommands,
+    },
+    /// Server administration commands
+    #[command(hide = true)]
+    Admin {
+        #[command(subcommand)]
+        command: AdminCommands,
     },
     /// Manage configuration files and settings
     #[command(hide = true)]

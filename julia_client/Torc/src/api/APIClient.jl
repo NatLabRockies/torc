@@ -11,6 +11,7 @@ const API_VERSION = "v0.7.0"
 
 include("modelincludes.jl")
 
+include("apis/api_AdminApi.jl")
 include("apis/api_DefaultApi.jl")
 
 end # module APIClient
