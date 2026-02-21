@@ -3,6 +3,14 @@ use clap::{Parser, Subcommand};
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
+use zxcvbn::Score;
+
+/// Minimum zxcvbn score required for passwords (0-4 scale).
+/// Score 3 = "safely unguessable: moderate protection from offline slow-hash scenario"
+const MIN_PASSWORD_SCORE: Score = Score::Three;
+
+/// Minimum password length (NIST SP 800-63B recommendation).
+const MIN_PASSWORD_LENGTH: usize = 8;
 
 #[derive(Parser)]
 #[command(name = "torc-htpasswd")]
@@ -78,6 +86,66 @@ enum Commands {
     },
 }
 
+/// Validate password strength using zxcvbn. Returns Ok(()) if the password is
+/// strong enough, or Err with a user-facing error message.
+fn validate_password(password: &str, username: &str) -> Result<(), String> {
+    if password.len() < MIN_PASSWORD_LENGTH {
+        return Err(format!(
+            "Password is too short ({} characters). Minimum length is {}.",
+            password.len(),
+            MIN_PASSWORD_LENGTH,
+        ));
+    }
+
+    let estimate = zxcvbn::zxcvbn(password, &[username, "torc"]);
+    let score = estimate.score();
+
+    if score >= MIN_PASSWORD_SCORE {
+        return Ok(());
+    }
+
+    let mut msg = format!(
+        "Password is too weak (score {}/4, minimum required: {}/4).",
+        score as u8, MIN_PASSWORD_SCORE as u8,
+    );
+
+    if let Some(feedback) = estimate.feedback() {
+        if let Some(warning) = feedback.warning() {
+            msg.push_str(&format!("\n  Warning: {warning}"));
+        }
+        for suggestion in feedback.suggestions() {
+            msg.push_str(&format!("\n  Suggestion: {suggestion}"));
+        }
+    }
+
+    Err(msg)
+}
+
+fn prompt_password(username: &str) -> String {
+    let password = match rpassword::prompt_password(format!("Password for '{username}': ")) {
+        Ok(pwd) => pwd,
+        Err(e) => {
+            eprintln!("Error reading password: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    let confirm = match rpassword::prompt_password("Confirm password: ") {
+        Ok(pwd) => pwd,
+        Err(e) => {
+            eprintln!("Error reading password: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    if password != confirm {
+        eprintln!("Error: passwords do not match.");
+        std::process::exit(1);
+    }
+
+    password
+}
+
 fn main() {
     let cli = Cli::parse();
 
@@ -93,24 +161,18 @@ fn main() {
                 std::process::exit(1);
             }
 
-            let password = match password {
-                Some(pwd) => pwd,
-                None => {
-                    match rpassword::prompt_password(format!("Password for '{}': ", username)) {
-                        Ok(pwd) => pwd,
-                        Err(e) => {
-                            eprintln!("Error reading password: {}", e);
-                            std::process::exit(1);
-                        }
-                    }
-                }
-            };
+            let password = password.unwrap_or_else(|| prompt_password(&username));
 
-            println!("Hashing password (cost={})...", cost);
+            if let Err(msg) = validate_password(&password, &username) {
+                eprintln!("Error: {msg}");
+                std::process::exit(1);
+            }
+
+            println!("Hashing password (cost={cost})...");
             let hash = match hash(&password, cost) {
                 Ok(h) => h,
                 Err(e) => {
-                    eprintln!("Error hashing password: {}", e);
+                    eprintln!("Error hashing password: {e}");
                     std::process::exit(1);
                 }
             };
@@ -121,7 +183,7 @@ fn main() {
                 let file_handle = match File::open(&file) {
                     Ok(f) => f,
                     Err(e) => {
-                        eprintln!("Error opening file: {}", e);
+                        eprintln!("Error opening file: {e}");
                         std::process::exit(1);
                     }
                 };
@@ -152,7 +214,7 @@ fn main() {
             {
                 Ok(f) => f,
                 Err(e) => {
-                    eprintln!("Error opening file for writing: {}", e);
+                    eprintln!("Error opening file for writing: {e}");
                     std::process::exit(1);
                 }
             };
@@ -160,13 +222,13 @@ fn main() {
             writeln!(file_handle, "# Torc htpasswd file").unwrap();
             writeln!(file_handle, "# Format: username:bcrypt_hash").unwrap();
             for (user, hash) in entries {
-                writeln!(file_handle, "{}:{}", user, hash).unwrap();
+                writeln!(file_handle, "{user}:{hash}").unwrap();
             }
 
             if is_update {
-                println!("Updated user '{}' in {:?}", username, file);
+                println!("Updated user '{username}' in {file:?}");
             } else {
-                println!("Added user '{}' to {:?}", username, file);
+                println!("Added user '{username}' to {file:?}");
             }
         }
 
@@ -193,36 +255,30 @@ fn main() {
                     }),
             };
 
-            let password = match password {
-                Some(pwd) => pwd,
-                None => {
-                    match rpassword::prompt_password(format!("Password for '{}': ", username)) {
-                        Ok(pwd) => pwd,
-                        Err(e) => {
-                            eprintln!("Error reading password: {}", e);
-                            std::process::exit(1);
-                        }
-                    }
-                }
-            };
+            let password = password.unwrap_or_else(|| prompt_password(&username));
 
-            eprintln!("Hashing password (cost={})...", cost);
+            if let Err(msg) = validate_password(&password, &username) {
+                eprintln!("Error: {msg}");
+                std::process::exit(1);
+            }
+
+            eprintln!("Hashing password (cost={cost})...");
             let hash_result = match hash(&password, cost) {
                 Ok(h) => h,
                 Err(e) => {
-                    eprintln!("Error hashing password: {}", e);
+                    eprintln!("Error hashing password: {e}");
                     std::process::exit(1);
                 }
             };
 
             // Output the htpasswd line to stdout (progress messages go to stderr)
-            println!("{}:{}", username, hash_result);
+            println!("{username}:{hash_result}");
             eprintln!("Send the line above to your server administrator.");
         }
 
         Commands::Remove { file, username } => {
             if !file.exists() {
-                eprintln!("Error: file {:?} does not exist", file);
+                eprintln!("Error: file {file:?} does not exist");
                 std::process::exit(1);
             }
 
@@ -242,7 +298,7 @@ fn main() {
             }
 
             if !entries.contains_key(&username) {
-                eprintln!("Error: user '{}' not found in {:?}", username, file);
+                eprintln!("Error: user '{username}' not found in {file:?}");
                 std::process::exit(1);
             }
 
@@ -258,15 +314,15 @@ fn main() {
             writeln!(file_handle, "# Torc htpasswd file").unwrap();
             writeln!(file_handle, "# Format: username:bcrypt_hash").unwrap();
             for (user, hash) in entries {
-                writeln!(file_handle, "{}:{}", user, hash).unwrap();
+                writeln!(file_handle, "{user}:{hash}").unwrap();
             }
 
-            println!("Removed user '{}' from {:?}", username, file);
+            println!("Removed user '{username}' from {file:?}");
         }
 
         Commands::List { file } => {
             if !file.exists() {
-                eprintln!("Error: file {:?} does not exist", file);
+                eprintln!("Error: file {file:?} does not exist");
                 std::process::exit(1);
             }
 
@@ -286,11 +342,11 @@ fn main() {
             }
 
             if users.is_empty() {
-                println!("No users found in {:?}", file);
+                println!("No users found in {file:?}");
             } else {
-                println!("Users in {:?}:", file);
+                println!("Users in {file:?}:");
                 for user in users {
-                    println!("  - {}", user);
+                    println!("  - {user}");
                 }
             }
         }
@@ -301,35 +357,33 @@ fn main() {
             password,
         } => {
             if !file.exists() {
-                eprintln!("Error: file {:?} does not exist", file);
+                eprintln!("Error: file {file:?} does not exist");
                 std::process::exit(1);
             }
 
             let password = match password {
                 Some(pwd) => pwd,
-                None => {
-                    match rpassword::prompt_password(format!("Password for '{}': ", username)) {
-                        Ok(pwd) => pwd,
-                        Err(e) => {
-                            eprintln!("Error reading password: {}", e);
-                            std::process::exit(1);
-                        }
+                None => match rpassword::prompt_password(format!("Password for '{username}': ")) {
+                    Ok(pwd) => pwd,
+                    Err(e) => {
+                        eprintln!("Error reading password: {e}");
+                        std::process::exit(1);
                     }
-                }
+                },
             };
 
             // Load htpasswd file
             match torc::server::htpasswd::HtpasswdFile::load(&file) {
                 Ok(htpasswd) => {
                     if htpasswd.verify(&username, &password) {
-                        println!("✓ Password is correct for user '{}'", username);
+                        println!("Password is correct for user '{username}'");
                     } else {
-                        println!("✗ Password is incorrect for user '{}'", username);
+                        println!("Password is incorrect for user '{username}'");
                         std::process::exit(1);
                     }
                 }
                 Err(e) => {
-                    eprintln!("Error loading htpasswd file: {}", e);
+                    eprintln!("Error loading htpasswd file: {e}");
                     std::process::exit(1);
                 }
             }

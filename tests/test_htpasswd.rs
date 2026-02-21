@@ -9,13 +9,19 @@ fn get_exe_path(path: &str) -> String {
         .to_string()
 }
 
+/// A password that scores >= 3 on zxcvbn (strong enough to pass validation).
+const STRONG_PASSWORD: &str = "correct horse battery staple";
+
+/// A password that scores < 3 on zxcvbn (too weak).
+const WEAK_PASSWORD: &str = "password";
+
 /// Test that the hash command outputs a valid htpasswd line to stdout
 #[test]
 fn test_hash_command_with_explicit_username() {
     let output = Command::new(get_exe_path("./target/debug/torc-htpasswd"))
         .arg("hash")
         .arg("--password")
-        .arg("testpassword123")
+        .arg(STRONG_PASSWORD)
         .arg("testuser")
         .output()
         .expect("Failed to run torc-htpasswd hash");
@@ -51,7 +57,7 @@ fn test_hash_command_defaults_to_env_user() {
     let output = Command::new(get_exe_path("./target/debug/torc-htpasswd"))
         .arg("hash")
         .arg("--password")
-        .arg("testpassword123")
+        .arg(STRONG_PASSWORD)
         .env("USER", "envuser")
         .output()
         .expect("Failed to run torc-htpasswd hash");
@@ -74,7 +80,7 @@ fn test_hash_command_falls_back_to_username_env() {
     let output = Command::new(get_exe_path("./target/debug/torc-htpasswd"))
         .arg("hash")
         .arg("--password")
-        .arg("testpassword123")
+        .arg(STRONG_PASSWORD)
         .env_remove("USER")
         .env("USERNAME", "winuser")
         .output()
@@ -98,7 +104,7 @@ fn test_hash_command_fails_without_username_or_env() {
     let output = Command::new(get_exe_path("./target/debug/torc-htpasswd"))
         .arg("hash")
         .arg("--password")
-        .arg("testpassword123")
+        .arg(STRONG_PASSWORD)
         .env_remove("USER")
         .env_remove("USERNAME")
         .output()
@@ -123,7 +129,7 @@ fn test_hash_command_explicit_username_overrides_env() {
     let output = Command::new(get_exe_path("./target/debug/torc-htpasswd"))
         .arg("hash")
         .arg("--password")
-        .arg("testpassword123")
+        .arg(STRONG_PASSWORD)
         .arg("explicituser")
         .env("USER", "envuser")
         .output()
@@ -147,7 +153,7 @@ fn test_hash_command_custom_cost() {
     let output = Command::new(get_exe_path("./target/debug/torc-htpasswd"))
         .arg("hash")
         .arg("--password")
-        .arg("testpassword123")
+        .arg(STRONG_PASSWORD)
         .arg("--cost")
         .arg("4")
         .arg("testuser")
@@ -163,5 +169,82 @@ fn test_hash_command_custom_cost() {
         stdout.starts_with("testuser:$2b$04$"),
         "stdout should contain hash with cost 4 ($2b$04$), got: {}",
         stdout
+    );
+}
+
+/// Test that a weak password is rejected
+#[test]
+fn test_hash_command_rejects_weak_password() {
+    let output = Command::new(get_exe_path("./target/debug/torc-htpasswd"))
+        .arg("hash")
+        .arg("--password")
+        .arg(WEAK_PASSWORD)
+        .arg("testuser")
+        .output()
+        .expect("Failed to run torc-htpasswd hash");
+
+    assert!(
+        !output.status.success(),
+        "hash command should fail with weak password"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("too weak"),
+        "stderr should contain 'too weak' message, got: {}",
+        stderr
+    );
+    assert!(
+        stderr.contains("score"),
+        "stderr should contain score info, got: {}",
+        stderr
+    );
+}
+
+/// Test that a too-short password is rejected
+#[test]
+fn test_hash_command_rejects_short_password() {
+    let output = Command::new(get_exe_path("./target/debug/torc-htpasswd"))
+        .arg("hash")
+        .arg("--password")
+        .arg("Ab3$xyz")
+        .arg("testuser")
+        .output()
+        .expect("Failed to run torc-htpasswd hash");
+
+    assert!(
+        !output.status.success(),
+        "hash command should fail with short password"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("too short"),
+        "stderr should contain 'too short' message, got: {}",
+        stderr
+    );
+}
+
+/// Test that a password matching the username is rejected
+#[test]
+fn test_hash_command_rejects_password_matching_username() {
+    let output = Command::new(get_exe_path("./target/debug/torc-htpasswd"))
+        .arg("hash")
+        .arg("--password")
+        .arg("testuser")
+        .arg("testuser")
+        .output()
+        .expect("Failed to run torc-htpasswd hash");
+
+    assert!(
+        !output.status.success(),
+        "hash command should fail when password matches username"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("too weak") || stderr.contains("too short"),
+        "stderr should indicate the password is inadequate, got: {}",
+        stderr
     );
 }
