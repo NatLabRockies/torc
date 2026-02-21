@@ -61,7 +61,7 @@ The script will:
 1. Create a temporary directory with htpasswd file and database
 2. Start `torc-server` with `--require-auth --enforce-access-control`
 3. Create users, groups, and workflows
-4. Run ~35 assertions checking visibility rules
+4. Run ~41 assertions checking visibility rules and credential hot-reload
 5. Print results and stop the server
 
 Use `TORC_TEST_PORT=9090` to set a specific port (defaults to 18321).

@@ -9,6 +9,8 @@
 #   4. Users CANNOT see workflows from teams they're not in
 #   5. Unauthenticated / wrong-password requests are rejected
 #   6. Direct access by workflow ID respects access control
+#   7. Unauthenticated access is rejected
+#   8. Direct access by workflow ID respects access control
 #   9. Hot-reload of auth credentials (add/remove user, reload, verify)
 #
 # Setup:
