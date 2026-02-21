@@ -617,12 +617,21 @@ fn test_action_executed_flag_reset_on_reinitialize(start_server: &ServerProcess)
     default_api::complete_job(config, job2_id, result2.status, run_id, result2)
         .expect("Failed to complete job2 with success");
 
-    // Wait for unblock processing
-    thread::sleep(Duration::from_millis(500));
-
-    // After both jobs complete, postprocess_job becomes ready and action becomes pending
-    let pending_actions = default_api::get_pending_actions(config, workflow_id, None)
-        .expect("Failed to get pending actions");
+    // Wait for unblock processing — poll until the action becomes pending
+    let start = std::time::Instant::now();
+    let mut pending_actions;
+    loop {
+        pending_actions = default_api::get_pending_actions(config, workflow_id, None)
+            .expect("Failed to get pending actions");
+        if !pending_actions.is_empty() {
+            break;
+        }
+        assert!(
+            start.elapsed().as_secs() < 10,
+            "Timed out waiting for action to become pending after postprocess_job becomes ready"
+        );
+        thread::sleep(Duration::from_millis(50));
+    }
     assert_eq!(
         pending_actions.len(),
         1,
@@ -733,8 +742,21 @@ fn test_action_executed_flag_reset_on_reinitialize(start_server: &ServerProcess)
     )
     .expect("Failed to complete job1");
 
-    // Wait for unblock processing
-    thread::sleep(Duration::from_millis(500));
+    // Wait for unblock processing — poll until action becomes pending again
+    let start = std::time::Instant::now();
+    let mut pending_final;
+    loop {
+        pending_final = default_api::get_pending_actions(config, workflow_id, None)
+            .expect("Failed to get pending actions");
+        if !pending_final.is_empty() {
+            break;
+        }
+        assert!(
+            start.elapsed().as_secs() < 10,
+            "Timed out waiting for action to become pending again after job1 completes"
+        );
+        thread::sleep(Duration::from_millis(50));
+    }
 
     // postprocess_job should now be Ready
     let postprocess_final =
@@ -745,9 +767,6 @@ fn test_action_executed_flag_reset_on_reinitialize(start_server: &ServerProcess)
         "postprocess_job should be Ready"
     );
 
-    // Action should be pending again!
-    let pending_final = default_api::get_pending_actions(config, workflow_id, None)
-        .expect("Failed to get pending actions");
     assert_eq!(
         pending_final.len(),
         1,
