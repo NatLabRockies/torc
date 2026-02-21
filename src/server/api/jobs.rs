@@ -2626,6 +2626,7 @@ where
 
         // Verify run_id matches
         if workflow_run_id != run_id {
+            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
             let error_response = models::ErrorResponse::new(serde_json::json!({
                 "message": format!(
                     "Run ID mismatch: provided {} but workflow is at run {}",
@@ -2644,6 +2645,7 @@ where
         let current_status = match JobStatus::from_int(status_int) {
             Ok(s) => s,
             Err(e) => {
+                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
                 error!("Failed to parse job status: {}", e);
                 return Err(ApiError(format!("Failed to parse job status: {}", e)));
             }
@@ -2653,6 +2655,7 @@ where
             && current_status != JobStatus::Failed
             && current_status != JobStatus::Terminated
         {
+            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
             let error_response = models::ErrorResponse::new(serde_json::json!({
                 "message": format!(
                     "Job cannot be retried: status is {:?}, must be Running, Failed, or Terminated",
@@ -2666,6 +2669,7 @@ where
 
         // Validate max_retries (server-side enforcement)
         if attempt_id >= max_retries as i64 {
+            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
             let error_response = models::ErrorResponse::new(serde_json::json!({
                 "message": format!(
                     "Job cannot be retried: attempt_id {} >= max_retries {}",
@@ -2732,6 +2736,7 @@ where
 
         // Commit the transaction
         if let Err(e) = sqlx::query("COMMIT").execute(&mut *conn).await {
+            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
             return Err(database_error_with_msg(e, "Failed to commit transaction"));
         }
 

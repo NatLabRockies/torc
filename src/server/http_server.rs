@@ -407,26 +407,39 @@ pub async fn create(
             let tls_acceptor = ssl.build();
 
             info!("Starting a server (with https) on port {}", actual_port);
+            let shutdown = async {
+                tokio::signal::ctrl_c()
+                    .await
+                    .expect("Failed to install Ctrl+C handler");
+                info!("Received shutdown signal, gracefully shutting down TLS server...");
+            };
+            tokio::pin!(shutdown);
+
             loop {
-                if let Ok((tcp, _)) = tcp_listener.accept().await {
-                    let ssl = Ssl::new(tls_acceptor.context()).unwrap();
-                    let addr = tcp.peer_addr().expect("Unable to get remote address");
-                    let service = service.call(addr);
+                tokio::select! {
+                    result = tcp_listener.accept() => {
+                        if let Ok((tcp, _)) = result {
+                            let ssl = Ssl::new(tls_acceptor.context()).unwrap();
+                            let addr = tcp.peer_addr().expect("Unable to get remote address");
+                            let service = service.call(addr);
 
-                    tokio::spawn(async move {
-                        let tls = tokio_openssl::SslStream::new(ssl, tcp).map_err(|_| ())?;
-                        let service = service.await.map_err(|_| ())?;
+                            tokio::spawn(async move {
+                                let tls = tokio_openssl::SslStream::new(ssl, tcp).map_err(|_| ())?;
+                                let service = service.await.map_err(|_| ())?;
 
-                        Http::new()
-                            .serve_connection(tls, service)
-                            .await
-                            .map_err(|_| ())
-                    });
+                                Http::new()
+                                    .serve_connection(tls, service)
+                                    .await
+                                    .map_err(|_| ())
+                            });
+                        }
+                    }
+                    _ = &mut shutdown => {
+                        break;
+                    }
                 }
             }
 
-            // Note: The loop above never exits, but we need to return the port for API consistency
-            #[allow(unreachable_code)]
             actual_port
         }
     } else {
@@ -568,7 +581,7 @@ where
     // Note: SQLite's busy_timeout doesn't work with sqlx's BEGIN DEFERRED transactions
     // because SQLITE_BUSY is returned immediately when upgrading to a write lock.
     // We implement our own retry logic with exponential backoff starting at 10ms,
-    // capped at 2 seconds per retry, for a total wait of ~45 seconds.
+    // capped at 2 seconds per retry, for a total wait of ~26 seconds.
     const MAX_RETRIES: u32 = 20;
     const INITIAL_DELAY_MS: u64 = 10;
     const MAX_DELAY_MS: u64 = 2000;
@@ -1419,12 +1432,10 @@ impl<C> Server<C> {
                 Ok(result) => {
                     if result.rows_affected() == 0 {
                         debug!(
-                            "Job {} already in terminal status, skipping status update",
+                            "Job {} already in terminal status, treating as idempotent success",
                             job_id
                         );
-                        return Err(ApiError(
-                            "Job is already in a terminal status".to_string(),
-                        ));
+                        return Ok(());
                     }
                 }
                 Err(e) => {
@@ -4949,7 +4960,25 @@ where
         })?;
 
         if update_result.rows_affected() == 0 {
-            // Status was changed by another thread between our read and write
+            // Distinguish "not found" from "concurrently modified" by re-checking
+            let exists = sqlx::query_scalar!("SELECT id FROM job WHERE id = ?", id)
+                .fetch_optional(self.pool.as_ref())
+                .await
+                .map_err(|e| {
+                    error!("Failed to check job existence: {}", e);
+                    ApiError("Database error".to_string())
+                })?;
+
+            if exists.is_none() {
+                let error_response = models::ErrorResponse::new(serde_json::json!({
+                    "message": format!("Job not found with ID: {}", id)
+                }));
+                return Ok(ManageStatusChangeResponse::NotFoundErrorResponse(
+                    error_response,
+                ));
+            }
+
+            // Job exists but status was changed by another thread
             let error_response = models::ErrorResponse::new(serde_json::json!({
                 "message": format!(
                     "Job {} status was concurrently modified (expected '{}'), please retry",
@@ -4962,7 +4991,16 @@ where
         }
 
         let workflow_id = job.workflow_id;
-        let updated_job = job;
+
+        // Re-fetch the job to return fresh data after the update
+        let updated_job = match self.get_job(id, context).await? {
+            GetJobResponse::SuccessfulResponse(fresh_job) => fresh_job,
+            _ => {
+                // Unlikely: job was deleted between our UPDATE and re-fetch
+                job.status = Some(status);
+                job
+            }
+        };
 
         // Handle reversion from complete to uninitialized
         if current_status.is_complete() && status == models::JobStatus::Uninitialized {
@@ -5059,33 +5097,11 @@ where
             ));
         }
 
-        // Set active_compute_node_id to track which compute node is running this job
-        match sqlx::query!(
-            "UPDATE job_internal SET active_compute_node_id = ? WHERE job_id = ?",
-            compute_node_id,
-            id
-        )
-        .execute(self.pool.as_ref())
-        .await
-        {
-            Ok(_) => {
-                debug!(
-                    "Set active_compute_node_id={} for job_id={}",
-                    compute_node_id, id
-                );
-            }
-            Err(e) => {
-                error!(
-                    "Failed to set active_compute_node_id for job_id={}: {}",
-                    id, e
-                );
-                // Continue anyway - this is not critical for job execution
-            }
-        }
-
         // Use a conditional UPDATE to atomically transition Pending -> Running.
         // This prevents TOCTOU race conditions where two threads could both read
         // Pending status and both try to start the same job.
+        // We do this BEFORE setting compute_node_id so we don't mutate job_internal
+        // if the status transition fails (e.g., due to concurrent start).
         let pending_int = models::JobStatus::Pending.to_int();
         let running_int = models::JobStatus::Running.to_int();
         let start_result = sqlx::query!(
@@ -5110,6 +5126,31 @@ where
                 "Job {} status was concurrently modified, cannot start",
                 id
             )));
+        }
+
+        // Set active_compute_node_id to track which compute node is running this job.
+        // Done after the status transition so we only update if we won the race.
+        match sqlx::query!(
+            "UPDATE job_internal SET active_compute_node_id = ? WHERE job_id = ?",
+            compute_node_id,
+            id
+        )
+        .execute(self.pool.as_ref())
+        .await
+        {
+            Ok(_) => {
+                debug!(
+                    "Set active_compute_node_id={} for job_id={}",
+                    compute_node_id, id
+                );
+            }
+            Err(e) => {
+                error!(
+                    "Failed to set active_compute_node_id for job_id={}: {}",
+                    id, e
+                );
+                // Continue anyway - this is not critical for job execution
+            }
         }
 
         // Broadcast job_started event to SSE clients (ephemeral, not persisted to DB)
