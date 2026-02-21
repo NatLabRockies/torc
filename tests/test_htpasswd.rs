@@ -243,8 +243,8 @@ fn test_hash_command_rejects_password_matching_username() {
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("too weak") || stderr.contains("too short"),
-        "stderr should indicate the password is inadequate, got: {}",
+        stderr.contains("too weak"),
+        "stderr should indicate the password is too weak, got: {}",
         stderr
     );
 }

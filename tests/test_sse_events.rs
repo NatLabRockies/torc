@@ -15,7 +15,10 @@ fn config_with_auth(base_config: &Configuration, username: &str) -> Configuratio
         base_path: base_config.base_path.clone(),
         user_agent: base_config.user_agent.clone(),
         client: base_config.client.clone(),
-        basic_auth: Some((username.to_string(), Some("password".to_string()))),
+        basic_auth: Some((
+            username.to_string(),
+            Some("correct horse battery staple".to_string()),
+        )),
         oauth_access_token: None,
         bearer_access_token: None,
         api_key: None,
@@ -193,7 +196,7 @@ fn test_sse_stream_authorized_user(start_server_with_access_control: &AccessCont
 
     let response = client
         .get(&url)
-        .basic_auth("alice", Some("password"))
+        .basic_auth("alice", Some("correct horse battery staple"))
         .header("Accept", "text/event-stream")
         .timeout(std::time::Duration::from_secs(2))
         .send();
@@ -235,7 +238,7 @@ fn test_sse_stream_unauthorized_user(
 
     let response = client
         .get(&url)
-        .basic_auth("bob", Some("password"))
+        .basic_auth("bob", Some("correct horse battery staple"))
         .header("Accept", "text/event-stream")
         .timeout(std::time::Duration::from_secs(5))
         .send()
@@ -293,7 +296,7 @@ fn test_sse_stream_shared_workflow_access(
 
     let response = client
         .get(&url)
-        .basic_auth("bob", Some("password"))
+        .basic_auth("bob", Some("correct horse battery staple"))
         .header("Accept", "text/event-stream")
         .timeout(std::time::Duration::from_secs(2))
         .send();
@@ -317,7 +320,7 @@ fn test_sse_stream_shared_workflow_access(
     // Carol (not in group) should still NOT be able to access
     let response = client
         .get(&url)
-        .basic_auth("carol", Some("password"))
+        .basic_auth("carol", Some("correct horse battery staple"))
         .header("Accept", "text/event-stream")
         .timeout(std::time::Duration::from_secs(5))
         .send()

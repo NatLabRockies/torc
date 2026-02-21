@@ -1406,14 +1406,14 @@ fn create_htpasswd_file(users: &[&str]) -> NamedTempFile {
     let htpasswd_file = NamedTempFile::new().expect("Failed to create htpasswd temp file");
     let htpasswd_path = htpasswd_file.path().to_string_lossy().to_string();
 
-    // Create each user with password "password" using torc-htpasswd add
+    // Create each user with a strong password using torc-htpasswd add
     for user in users.iter() {
         let status = Command::new(get_exe_path("./target/debug/torc-htpasswd"))
             .arg("add")
             .arg("--file")
             .arg(&htpasswd_path)
             .arg("--password")
-            .arg("password")
+            .arg("correct horse battery staple")
             .arg(user)
             .status()
             .expect("Failed to run torc-htpasswd");
@@ -1523,8 +1523,11 @@ fn start_process_with_access_control(
     );
     let mut config = Configuration::new();
     config.base_path = get_server_url(port);
-    // Set up basic auth as "alice" (one of the admin users) with password "password"
-    config.basic_auth = Some(("alice".to_string(), Some("password".to_string())));
+    // Set up basic auth as "alice" (one of the admin users)
+    config.basic_auth = Some((
+        "alice".to_string(),
+        Some("correct horse battery staple".to_string()),
+    ));
     AccessControlServerProcess {
         server: ServerProcess {
             child,
@@ -1542,7 +1545,7 @@ fn start_process_with_access_control(
 /// or have group access to. It creates an htpasswd file with test users that
 /// can be authenticated.
 ///
-/// Test users (all with password "password"):
+/// Test users (all with password "correct horse battery staple"):
 /// - alice, bob (ML team members)
 /// - carol, dave (Data team members)
 /// - shared_user (member of both teams)

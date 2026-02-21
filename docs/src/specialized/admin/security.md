@@ -146,11 +146,26 @@ factor (12) and HTTPS.
 
 ### Password Requirements
 
-**Recommendations:**
+**Enforced Validation:**
 
-- Minimum 12 characters
-- Mix of uppercase, lowercase, numbers, symbols
-- No dictionary words or common patterns
+The `torc-htpasswd` tool automatically validates passwords using
+[zxcvbn](https://github.com/shssoichern/zxcvbn-rs), a realistic password strength estimator inspired
+by password crackers. Unlike rule-based checkers (e.g., "must include a symbol"), zxcvbn recognizes
+common patterns such as dictionary words, keyboard sequences, repeated characters, l33t
+substitutions, and dates, then estimates the number of guesses an attacker would need.
+
+Passwords must meet two requirements:
+
+1. **Minimum length of 8 characters** (per
+   [NIST SP 800-63B](https://pages.nist.gov/800-63-3/sp800-63b.html))
+2. **zxcvbn strength score of at least 3 out of 4** ("safely unguessable: moderate effort to crack")
+
+When a password is rejected, the tool displays the score, a warning (e.g., "This is a top-10 common
+password"), and a suggestion for improvement.
+
+**Additional Recommendations:**
+
+- Minimum 12 characters for high-security environments
 - Unique per user and environment
 
 **Bcrypt Cost Factor:**

@@ -906,7 +906,10 @@ fn config_with_auth(base_config: &Configuration, username: &str) -> Configuratio
         base_path: base_config.base_path.clone(),
         user_agent: base_config.user_agent.clone(),
         client: base_config.client.clone(),
-        basic_auth: Some((username.to_string(), Some("password".to_string()))),
+        basic_auth: Some((
+            username.to_string(),
+            Some("correct horse battery staple".to_string()),
+        )),
         oauth_access_token: None,
         bearer_access_token: None,
         api_key: None,
@@ -1264,7 +1267,7 @@ fn test_comprehensive_access_control_workflow_execution(
     start_server_with_access_control: &AccessControlServerProcess,
 ) {
     let config = &start_server_with_access_control.config;
-    let password = "password"; // All test users have this password
+    let password = "correct horse battery staple"; // All test users have this password
 
     // =========================================================================
     // Step 1: Set up two access groups with different users
@@ -1546,7 +1549,7 @@ fn test_workflows_list_all_users_with_access_control(
     start_server_with_access_control: &AccessControlServerProcess,
 ) {
     let admin_config = &start_server_with_access_control.config;
-    let password = "password";
+    let password = "correct horse battery staple";
 
     // Create configs for different users
     let wf_user_config = config_with_auth(admin_config, "wf-user");
