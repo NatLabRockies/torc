@@ -64,7 +64,7 @@ The script will:
 4. Run ~35 assertions checking visibility rules
 5. Print results and stop the server
 
-Use `TORC_TEST_PORT=9090` to set a specific port (defaults to 0 = random).
+Use `TORC_TEST_PORT=9090` to set a specific port (defaults to 18321).
 
 ## Expected Output
 

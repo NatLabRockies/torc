@@ -2969,7 +2969,12 @@ where
 
         info!("Reloading htpasswd file from: {}", auth_file_path);
 
-        match HtpasswdFile::load(&auth_file_path) {
+        // Load the htpasswd file in a blocking task to avoid blocking the async runtime
+        let load_result = tokio::task::spawn_blocking(move || HtpasswdFile::load(&auth_file_path))
+            .await
+            .map_err(|e| ApiError(format!("spawn_blocking failed: {e}")))?;
+
+        match load_result {
             Ok(new_htpasswd) => {
                 let user_count = new_htpasswd.user_count();
 

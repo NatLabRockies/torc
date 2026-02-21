@@ -133,7 +133,8 @@ echo ""
 echo "=== Step 1: Creating users ==="
 HTPASSWD="$WORK_DIR/torc-passwd"
 
-for user in "$USER" alice bob carol dave; do
+CURRENT_USER="${USER:-$(whoami)}"
+for user in "$CURRENT_USER" alice bob carol dave; do
   torc-htpasswd add --file "$HTPASSWD" "$user" --password "$PASSWORD"
   echo "  Created user: $user"
 done
@@ -153,7 +154,7 @@ torc-server run \
   --enforce-access-control \
   --threads 4 \
   --require-auth \
-  --admin-user $USER \
+  --admin-user "$CURRENT_USER" \
   --admin-user alice \
   >"$WORK_DIR/server-stdout.log" 2>&1 &
 SERVER_PID=$!
