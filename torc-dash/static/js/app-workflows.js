@@ -629,7 +629,7 @@ Object.assign(TorcDashboard.prototype, {
         html += '</div></div>';
 
         // Affected jobs table
-        const affectedJobs = data.affected_jobs || [];
+        const affectedJobs = data.failed_job_details || [];
         if (affectedJobs.length > 0) {
             html += '<div class="recover-section">';
             html += '<h4>Affected Jobs</h4>';
