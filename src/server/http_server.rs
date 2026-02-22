@@ -417,23 +417,35 @@ pub async fn create(
 
             let mut connection_tasks = tokio::task::JoinSet::new();
 
+            let mut consecutive_accept_errors: u32 = 0;
+
             loop {
                 tokio::select! {
                     result = tcp_listener.accept() => {
-                        if let Ok((tcp, _)) = result {
-                            let ssl = Ssl::new(tls_acceptor.context()).unwrap();
-                            let addr = tcp.peer_addr().expect("Unable to get remote address");
-                            let service = service.call(addr);
+                        match result {
+                            Ok((tcp, _)) => {
+                                consecutive_accept_errors = 0;
+                                let ssl = Ssl::new(tls_acceptor.context()).unwrap();
+                                let addr = tcp.peer_addr().expect("Unable to get remote address");
+                                let service = service.call(addr);
 
-                            connection_tasks.spawn(async move {
-                                let tls = tokio_openssl::SslStream::new(ssl, tcp).map_err(|_| ())?;
-                                let service = service.await.map_err(|_| ())?;
+                                connection_tasks.spawn(async move {
+                                    let tls = tokio_openssl::SslStream::new(ssl, tcp).map_err(|_| ())?;
+                                    let service = service.await.map_err(|_| ())?;
 
-                                Http::new()
-                                    .serve_connection(tls, service)
-                                    .await
-                                    .map_err(|_| ())
-                            });
+                                    Http::new()
+                                        .serve_connection(tls, service)
+                                        .await
+                                        .map_err(|_| ())
+                                });
+                            }
+                            Err(e) => {
+                                consecutive_accept_errors += 1;
+                                error!("TLS accept error (consecutive: {}): {}", consecutive_accept_errors, e);
+                                // Backoff on repeated errors to avoid CPU spin
+                                let delay = std::cmp::min(consecutive_accept_errors * 10, 1000);
+                                tokio::time::sleep(std::time::Duration::from_millis(delay as u64)).await;
+                            }
                         }
                     }
                     _ = &mut shutdown => {
@@ -4552,10 +4564,14 @@ where
         }
 
         // Commit the transaction to release the database lock.
-        // Note: In SQLite, a failed COMMIT automatically rolls back the transaction,
-        // so no explicit ROLLBACK is needed here.
+        // If COMMIT fails (e.g. SQLITE_BUSY in WAL mode), the transaction may remain
+        // active. Best-effort ROLLBACK to avoid returning a pooled connection with an
+        // open transaction/write lock.
         if let Err(e) = sqlx::query("COMMIT").execute(&mut *conn).await {
             error!("Failed to commit transaction: {}", e);
+            if let Err(rollback_err) = sqlx::query("ROLLBACK").execute(&mut *conn).await {
+                error!("Failed to rollback after commit failure: {}", rollback_err);
+            }
             return Err(ApiError("Database commit error".to_string()));
         }
 
@@ -5955,10 +5971,14 @@ where
         }
 
         // Commit the transaction to release the database lock.
-        // Note: In SQLite, a failed COMMIT automatically rolls back the transaction,
-        // so no explicit ROLLBACK is needed here.
+        // If COMMIT fails (e.g. SQLITE_BUSY in WAL mode), the transaction may remain
+        // active. Best-effort ROLLBACK to avoid returning a pooled connection with an
+        // open transaction/write lock.
         if let Err(e) = sqlx::query("COMMIT").execute(&mut *conn).await {
             error!("Failed to commit transaction: {}", e);
+            if let Err(rollback_err) = sqlx::query("ROLLBACK").execute(&mut *conn).await {
+                error!("Failed to rollback after commit failure: {}", rollback_err);
+            }
             return Err(ApiError("Database commit error".to_string()));
         }
 

@@ -2734,10 +2734,13 @@ where
             error!("Failed to create retry event for job {}: {}", id, e);
         }
 
-        // Commit the transaction.
-        // Note: In SQLite, a failed COMMIT automatically rolls back the transaction,
-        // so no explicit ROLLBACK is needed here.
+        // Commit the transaction. If COMMIT fails (e.g. SQLITE_BUSY in WAL mode),
+        // the transaction may remain active. Best-effort ROLLBACK to avoid returning
+        // a pooled connection with an open transaction/write lock.
         if let Err(e) = sqlx::query("COMMIT").execute(&mut *conn).await {
+            if let Err(rollback_err) = sqlx::query("ROLLBACK").execute(&mut *conn).await {
+                error!("Failed to rollback after commit failure: {}", rollback_err);
+            }
             return Err(database_error_with_msg(e, "Failed to commit transaction"));
         }
 
