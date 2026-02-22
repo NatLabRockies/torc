@@ -420,6 +420,9 @@ pub async fn create(
             let mut consecutive_accept_errors: u32 = 0;
 
             loop {
+                // Reap completed connection tasks to avoid unbounded memory growth
+                while connection_tasks.try_join_next().is_some() {}
+
                 tokio::select! {
                     result = tcp_listener.accept() => {
                         match result {
@@ -1464,11 +1467,47 @@ impl<C> Server<C> {
             {
                 Ok(result) => {
                     if result.rows_affected() == 0 {
-                        debug!(
-                            "Job {} already in terminal status, treating as idempotent success",
+                        // Verify the job still exists and is actually in a terminal
+                        // status, rather than silently succeeding on a deleted job.
+                        let current = sqlx::query_scalar!(
+                            "SELECT status FROM job WHERE id = ?",
                             job_id
-                        );
-                        return Ok(());
+                        )
+                        .fetch_optional(self.pool.as_ref())
+                        .await
+                        .map_err(|e| {
+                            database_error_with_msg(e, "Failed to re-check job status")
+                        })?;
+
+                        match current {
+                            Some(status_int) => {
+                                let status = models::JobStatus::from_int(status_int as i32)
+                                    .unwrap_or(models::JobStatus::Failed);
+                                if status.is_complete() {
+                                    debug!(
+                                        "Job {} already in terminal status {:?}, treating as idempotent success",
+                                        job_id, status
+                                    );
+                                    return Ok(());
+                                }
+                                // Job exists but is in an unexpected non-terminal state
+                                error!(
+                                    "Job {} has unexpected status {:?} after conditional update matched 0 rows",
+                                    job_id, status
+                                );
+                                return Err(ApiError(format!(
+                                    "Job {} is in unexpected status {:?}",
+                                    job_id, status
+                                )));
+                            }
+                            None => {
+                                error!("Job {} was deleted during status transition", job_id);
+                                return Err(ApiError(format!(
+                                    "Job {} not found",
+                                    job_id
+                                )));
+                            }
+                        }
                     }
                 }
                 Err(e) => {
