@@ -415,6 +415,8 @@ pub async fn create(
             };
             tokio::pin!(shutdown);
 
+            let mut connection_tasks = tokio::task::JoinSet::new();
+
             loop {
                 tokio::select! {
                     result = tcp_listener.accept() => {
@@ -423,7 +425,7 @@ pub async fn create(
                             let addr = tcp.peer_addr().expect("Unable to get remote address");
                             let service = service.call(addr);
 
-                            tokio::spawn(async move {
+                            connection_tasks.spawn(async move {
                                 let tls = tokio_openssl::SslStream::new(ssl, tcp).map_err(|_| ())?;
                                 let service = service.await.map_err(|_| ())?;
 
@@ -437,6 +439,25 @@ pub async fn create(
                     _ = &mut shutdown => {
                         break;
                     }
+                }
+            }
+
+            // Wait for existing connections to finish (with timeout)
+            if !connection_tasks.is_empty() {
+                info!(
+                    "Waiting up to 30 seconds for {} active TLS connections to finish...",
+                    connection_tasks.len()
+                );
+                let drain = async { while connection_tasks.join_next().await.is_some() {} };
+                if tokio::time::timeout(std::time::Duration::from_secs(30), drain)
+                    .await
+                    .is_err()
+                {
+                    info!(
+                        "Timeout waiting for TLS connections, aborting {} remaining",
+                        connection_tasks.len()
+                    );
+                    connection_tasks.abort_all();
                 }
             }
 
@@ -4530,10 +4551,11 @@ where
             );
         }
 
-        // Commit the transaction to release the database lock
+        // Commit the transaction to release the database lock.
+        // Note: In SQLite, a failed COMMIT automatically rolls back the transaction,
+        // so no explicit ROLLBACK is needed here.
         if let Err(e) = sqlx::query("COMMIT").execute(&mut *conn).await {
             error!("Failed to commit transaction: {}", e);
-            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
             return Err(ApiError("Database commit error".to_string()));
         }
 
@@ -5932,10 +5954,11 @@ where
             );
         }
 
-        // Commit the transaction to release the database lock
+        // Commit the transaction to release the database lock.
+        // Note: In SQLite, a failed COMMIT automatically rolls back the transaction,
+        // so no explicit ROLLBACK is needed here.
         if let Err(e) = sqlx::query("COMMIT").execute(&mut *conn).await {
             error!("Failed to commit transaction: {}", e);
-            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
             return Err(ApiError("Database commit error".to_string()));
         }
 
