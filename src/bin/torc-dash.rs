@@ -401,6 +401,7 @@ async fn main() -> Result<()> {
         .route("/api/cli/execution-plan", post(cli_execution_plan_handler))
         .route("/api/cli/run-stream", get(cli_run_stream_handler))
         .route("/api/cli/recover", post(cli_recover_handler))
+        .route("/api/cli/sync-status", post(cli_sync_status_handler))
         .route("/api/cli/export", post(cli_export_handler))
         .route("/api/cli/import", post(cli_import_handler))
         .route("/api/cli/read-file", post(cli_read_file_handler))
@@ -722,6 +723,13 @@ fn default_runtime_multiplier() -> f64 {
 
 fn default_output_dir() -> String {
     "torc_output".to_string()
+}
+
+#[derive(Deserialize)]
+struct SyncStatusRequest {
+    workflow_id: String,
+    #[serde(default)]
+    dry_run: bool,
 }
 
 #[derive(Serialize)]
@@ -1557,6 +1565,86 @@ async fn cli_recover_handler(
         Err(e) => Json(serde_json::json!({
             "success": false,
             "error": format!("Failed to execute recover command: {}", e)
+        })),
+    }
+}
+
+/// Sync job statuses with Slurm — detect and fail orphaned running jobs
+/// Runs `torc -f json workflows sync-status <workflow_id>` with optional --dry-run
+async fn cli_sync_status_handler(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<SyncStatusRequest>,
+) -> impl IntoResponse {
+    info!(
+        "Running sync-status for workflow: {} (dry_run={})",
+        req.workflow_id, req.dry_run
+    );
+
+    let mut args = vec![
+        "-f".to_string(),
+        "json".to_string(),
+        "workflows".to_string(),
+        "sync-status".to_string(),
+        req.workflow_id.clone(),
+    ];
+
+    if req.dry_run {
+        args.push("--dry-run".to_string());
+    }
+
+    let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+
+    let output = Command::new(&state.torc_bin)
+        .args(&args_refs)
+        .env("TORC_API_URL", &state.api_url)
+        .output()
+        .await;
+
+    match output {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            let exit_code = output.status.code();
+
+            if output.status.success() {
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
+                    Json(serde_json::json!({
+                        "success": true,
+                        "data": json,
+                        "stderr": stderr,
+                        "exit_code": exit_code
+                    }))
+                } else {
+                    Json(serde_json::json!({
+                        "success": true,
+                        "stdout": stdout,
+                        "stderr": stderr,
+                        "exit_code": exit_code
+                    }))
+                }
+            } else {
+                let error_msg = if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout)
+                {
+                    json.get("error")
+                        .and_then(|e| e.as_str())
+                        .unwrap_or(&stderr)
+                        .to_string()
+                } else {
+                    stderr.clone()
+                };
+
+                Json(serde_json::json!({
+                    "success": false,
+                    "error": error_msg,
+                    "stdout": stdout,
+                    "stderr": stderr,
+                    "exit_code": exit_code
+                }))
+            }
+        }
+        Err(e) => Json(serde_json::json!({
+            "success": false,
+            "error": format!("Failed to execute sync-status command: {}", e)
         })),
     }
 }

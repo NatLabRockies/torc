@@ -549,6 +549,178 @@ Object.assign(TorcDashboard.prototype, {
         }
     },
 
+    async syncStatus(workflowId) {
+        this.pendingSyncStatusWorkflowId = workflowId;
+
+        const content = document.getElementById('sync-status-content');
+        const footer = document.getElementById('sync-status-modal-footer');
+        if (content) {
+            content.innerHTML = '<div class="placeholder-message">Checking Slurm job statuses...</div>';
+        }
+        if (footer) {
+            footer.style.display = 'none';
+        }
+        this.showModal('sync-status-modal');
+
+        try {
+            const response = await fetch('/api/cli/sync-status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    workflow_id: workflowId.toString(),
+                    dry_run: true
+                })
+            });
+
+            const result = await response.json();
+
+            if (!result.success) {
+                content.innerHTML = `<div class="recover-error">Error: ${this.escapeHtml(result.error || 'Sync status check failed')}</div>`;
+                footer.style.display = 'flex';
+                return;
+            }
+
+            const data = result.data;
+            content.innerHTML = this.buildSyncStatusContent(data);
+
+            footer.style.display = 'flex';
+            const confirmBtn = document.getElementById('btn-confirm-sync-status');
+            if (confirmBtn) {
+                const hasOrphans = data &&
+                    ((data.slurm_jobs_failed && data.slurm_jobs_failed > 0) ||
+                     (data.running_jobs_failed && data.running_jobs_failed > 0) ||
+                     (data.pending_allocations_cleaned && data.pending_allocations_cleaned > 0));
+                confirmBtn.style.display = hasOrphans ? 'inline-block' : 'none';
+            }
+
+        } catch (error) {
+            content.innerHTML = `<div class="recover-error">Error: ${this.escapeHtml(error.message)}</div>`;
+            footer.style.display = 'flex';
+        }
+    },
+
+    buildSyncStatusContent(data) {
+        if (!data) {
+            return '<div class="recover-no-data">No sync status data available.</div>';
+        }
+
+        let html = '';
+
+        // Summary section
+        const slurmFailed = data.slurm_jobs_failed || 0;
+        const pendingCleaned = data.pending_allocations_cleaned || 0;
+        const runningFailed = data.running_jobs_failed || 0;
+
+        html += '<div class="recover-section">';
+        html += '<h4>Summary</h4>';
+        html += '<div class="recover-summary">';
+        html += `<div class="recover-stat">
+            <div class="recover-stat-value ${slurmFailed > 0 ? 'danger' : 'success'}">${slurmFailed}</div>
+            <div class="recover-stat-label">Slurm Jobs Failed</div>
+        </div>`;
+        html += `<div class="recover-stat">
+            <div class="recover-stat-value ${pendingCleaned > 0 ? 'warning' : 'success'}">${pendingCleaned}</div>
+            <div class="recover-stat-label">Pending Allocations Cleaned</div>
+        </div>`;
+        html += `<div class="recover-stat">
+            <div class="recover-stat-value ${runningFailed > 0 ? 'danger' : 'success'}">${runningFailed}</div>
+            <div class="recover-stat-label">Running Jobs Failed</div>
+        </div>`;
+        html += '</div></div>';
+
+        // Affected jobs table
+        const affectedJobs = data.affected_jobs || [];
+        if (affectedJobs.length > 0) {
+            html += '<div class="recover-section">';
+            html += '<h4>Affected Jobs</h4>';
+            html += '<table class="recover-table">';
+            html += '<thead><tr><th>Job ID</th><th>Job Name</th><th>Reason</th><th>Slurm Job ID</th></tr></thead>';
+            html += '<tbody>';
+            for (const job of affectedJobs) {
+                html += `<tr>
+                    <td><code>${job.job_id ?? '-'}</code></td>
+                    <td>${this.escapeHtml(job.job_name || '-')}</td>
+                    <td>${this.escapeHtml(job.reason || '-')}</td>
+                    <td><code>${job.slurm_job_id ?? '-'}</code></td>
+                </tr>`;
+            }
+            html += '</tbody></table></div>';
+        }
+
+        // No orphans message
+        if (slurmFailed === 0 && pendingCleaned === 0 && runningFailed === 0) {
+            html += '<div class="recover-section">';
+            html += '<div class="recover-no-data">No orphaned jobs found. All running jobs have active Slurm allocations.</div>';
+            html += '</div>';
+        }
+
+        return html;
+    },
+
+    async executeSyncStatus(workflowId) {
+        const content = document.getElementById('sync-status-content');
+        const footer = document.getElementById('sync-status-modal-footer');
+
+        if (content) {
+            content.innerHTML = '<div class="placeholder-message">Applying sync status cleanup...</div>';
+        }
+        if (footer) {
+            footer.style.display = 'none';
+        }
+
+        try {
+            const response = await fetch('/api/cli/sync-status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    workflow_id: workflowId.toString(),
+                    dry_run: false
+                })
+            });
+
+            const result = await response.json();
+
+            if (!result.success) {
+                content.innerHTML = `<div class="recover-error">Sync failed: ${this.escapeHtml(result.error || 'Unknown error')}</div>`;
+                this.showToast('Sync status failed', 'error');
+                return;
+            }
+
+            const data = result.data;
+            const slurmFailed = data?.slurm_jobs_failed || 0;
+            const pendingCleaned = data?.pending_allocations_cleaned || 0;
+            const runningFailed = data?.running_jobs_failed || 0;
+
+            let successHtml = '<div class="recover-section" style="border-color: var(--success-color);">';
+            successHtml += '<h4 style="color: var(--success-color);">Sync Complete</h4>';
+            successHtml += '<ul style="margin: 0; padding-left: 20px;">';
+            if (slurmFailed > 0) {
+                successHtml += `<li>${slurmFailed} Slurm job(s) marked as failed</li>`;
+            }
+            if (pendingCleaned > 0) {
+                successHtml += `<li>${pendingCleaned} pending allocation(s) cleaned up</li>`;
+            }
+            if (runningFailed > 0) {
+                successHtml += `<li>${runningFailed} running job(s) marked as failed</li>`;
+            }
+            successHtml += '</ul></div>';
+
+            content.innerHTML = successHtml;
+            this.showToast('Sync status complete', 'success');
+
+            this.loadWorkflows();
+            this.loadWorkflowDetails(workflowId);
+
+            setTimeout(() => {
+                this.hideModal('sync-status-modal');
+            }, 3000);
+
+        } catch (error) {
+            content.innerHTML = `<div class="recover-error">Error: ${this.escapeHtml(error.message)}</div>`;
+            this.showToast('Sync status failed', 'error');
+        }
+    },
+
     async executeExport() {
         if (!this.selectedWorkflowId) {
             this.showToast('No workflow selected', 'warning');

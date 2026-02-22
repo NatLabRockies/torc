@@ -99,6 +99,7 @@ class TorcDashboard {
         this.setupInitConfirmModal();
         this.setupReinitConfirmModal();
         this.setupRecoverModal();
+        this.setupSyncStatusModal();
         this.setupExportModal();
         this.setupImportModal();
         this.setupFileViewerModal();

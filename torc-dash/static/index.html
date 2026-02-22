@@ -156,6 +156,7 @@
                     <div class="action-group">
                         <h4>Recovery</h4>
                         <button class="btn btn-warning" id="btn-recover-workflow" title="Analyze and recover failed jobs (adjust resources, reset, and resubmit)">Recover Failed Jobs</button>
+                        <button class="btn btn-info" id="btn-sync-status" title="Detect orphaned running jobs whose Slurm allocations have ended. Marks them as failed so the workflow can be recovered.">Sync Status</button>
                         <button class="btn btn-danger" id="btn-cancel-workflow" title="Cancel workflow and terminate all running Slurm jobs">Cancel Workflow</button>
                     </div>
                     <div class="action-group">
@@ -772,6 +773,25 @@
             <div class="modal-footer" id="recover-modal-footer">
                 <button class="btn btn-secondary" id="btn-cancel-recover">Cancel</button>
                 <button class="btn btn-success" id="btn-confirm-recover">Apply Recovery</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sync Status Modal -->
+    <div class="modal" id="sync-status-modal">
+        <div class="modal-content" style="max-width: 800px; max-height: 85vh;">
+            <div class="modal-header">
+                <h3>Sync Status Analysis</h3>
+                <button class="modal-close" id="sync-status-modal-close">&times;</button>
+            </div>
+            <div class="modal-body" style="overflow-y: auto;">
+                <div id="sync-status-content">
+                    <div class="placeholder-message">Checking Slurm job statuses...</div>
+                </div>
+            </div>
+            <div class="modal-footer" id="sync-status-modal-footer">
+                <button class="btn btn-secondary" id="btn-cancel-sync-status">Close</button>
+                <button class="btn btn-warning" id="btn-confirm-sync-status" style="display:none">Apply Sync</button>
             </div>
         </div>
     </div>

@@ -478,6 +478,15 @@ body {
     background: #e0a800;
 }
 
+.btn-info {
+    background: var(--info-color);
+    color: white;
+}
+
+.btn-info:hover {
+    background: #138496;
+}
+
 .btn-create-prominent {
     padding: 10px 20px;
     font-size: 15px;

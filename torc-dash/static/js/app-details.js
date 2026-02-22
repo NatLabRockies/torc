@@ -67,6 +67,10 @@ Object.assign(TorcDashboard.prototype, {
             if (this.selectedWorkflowId) this.cancelWorkflow(this.selectedWorkflowId);
         });
 
+        document.getElementById('btn-sync-status')?.addEventListener('click', () => {
+            if (this.selectedWorkflowId) this.syncStatus(this.selectedWorkflowId);
+        });
+
         document.getElementById('btn-export-workflow')?.addEventListener('click', () => {
             if (this.selectedWorkflowId) {
                 document.getElementById('export-status').innerHTML = '';

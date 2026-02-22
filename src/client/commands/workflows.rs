@@ -25,7 +25,7 @@ const WORKFLOWS_HELP_TEMPLATE: &str = "\
   \x1b[1;36mstatus\x1b[0m           Get workflow status
   \x1b[1;36mreset-status\x1b[0m     Reset workflow and job statuses
   \x1b[1;36mis-complete\x1b[0m      Check if workflow is complete
-  \x1b[1;36msync-status\x1b[0m      Sync job statuses with Slurm
+  \x1b[1;36msync-status\x1b[0m      Detect orphaned jobs from ended Slurm allocations
 
 \x1b[1;32mListing & Query:\x1b[0m
   \x1b[1;36mlist\x1b[0m             List workflows
@@ -778,30 +778,43 @@ EXAMPLES:
         skip_events: bool,
     },
 
-    /// Synchronize job statuses with Slurm (detect and fail orphaned jobs)
+    /// Detect orphaned running jobs whose Slurm allocations have ended
     ///
-    /// This command detects jobs that are stuck in "running" status because their
-    /// Slurm allocation terminated unexpectedly (e.g., due to timeout, node failure,
-    /// or admin intervention). It marks these orphaned jobs as failed so the workflow
-    /// can be recovered or restarted.
+    /// Checks Slurm (via squeue) for jobs that are still marked as "running" in
+    /// Torc but whose Slurm allocation has terminated unexpectedly — for example
+    /// due to a walltime timeout, node failure, preemption, or admin cancellation.
     ///
-    /// Use this when:
-    /// - `torc recover` reports "there are active Slurm allocations" but squeue shows none
+    /// Orphaned jobs are marked as failed so the workflow can be recovered with
+    /// `torc recover` or restarted. Pending Slurm allocations whose Slurm job is
+    /// no longer queued are also cleaned up.
+    ///
+    /// Common scenarios:
+    /// - `torc recover` reports "there are active Slurm allocations" but squeue
+    ///   shows none
     /// - Jobs appear stuck in "running" status after a Slurm allocation ended
-    /// - You want to clean up workflow state before running `torc recover`
+    /// - You want to clean up stale workflow state before running `torc recover`
     #[command(
-        hide = true,
         name = "sync-status",
         after_long_help = "\
 EXAMPLES:
-    # Preview what would be cleaned up
+    # Preview what would be cleaned up (safe, read-only)
     torc workflows sync-status 123 --dry-run
 
-    # Clean up orphaned jobs
+    # Apply cleanup: fail orphaned jobs and remove stale allocations
     torc workflows sync-status 123
 
-    # Get JSON output for scripting
-    torc -f json workflows sync-status 123
+    # Get machine-readable JSON output
+    torc -f json workflows sync-status 123 --dry-run
+
+TYPICAL WORKFLOW:
+    # 1. Check for orphaned jobs
+    torc workflows sync-status 123 --dry-run
+
+    # 2. Apply the cleanup
+    torc workflows sync-status 123
+
+    # 3. Now recover the failed jobs
+    torc recover 123
 "
     )]
     SyncStatus {

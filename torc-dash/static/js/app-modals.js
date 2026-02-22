@@ -360,6 +360,29 @@ Object.assign(TorcDashboard.prototype, {
         });
     },
 
+    setupSyncStatusModal() {
+        document.getElementById('sync-status-modal-close')?.addEventListener('click', () => {
+            this.hideModal('sync-status-modal');
+        });
+
+        document.getElementById('btn-cancel-sync-status')?.addEventListener('click', () => {
+            this.hideModal('sync-status-modal');
+        });
+
+        document.getElementById('btn-confirm-sync-status')?.addEventListener('click', async () => {
+            if (this.pendingSyncStatusWorkflowId) {
+                await this.executeSyncStatus(this.pendingSyncStatusWorkflowId);
+                this.pendingSyncStatusWorkflowId = null;
+            }
+        });
+
+        document.getElementById('sync-status-modal')?.addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal')) {
+                this.hideModal('sync-status-modal');
+            }
+        });
+    },
+
     setupFileViewerModal() {
         // Close button handlers
         document.getElementById('file-viewer-modal-close')?.addEventListener('click', () => {
