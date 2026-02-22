@@ -667,14 +667,30 @@ where
             }
         };
 
+        // Update workflow_status with the workflow_id back-reference
+        let workflow_id = workflow_result[0].id;
+        let status_id = status_result[0].id;
+        if let Err(e) = sqlx::query("UPDATE workflow_status SET workflow_id = $1 WHERE id = $2")
+            .bind(workflow_id)
+            .bind(status_id)
+            .execute(&mut *tx)
+            .await
+        {
+            let _ = tx.rollback().await;
+            return Err(database_error_with_msg(
+                e,
+                "Failed to update workflow_status with workflow_id",
+            ));
+        }
+
         // Commit the transaction
         if let Err(e) = tx.commit().await {
             return Err(database_error_with_msg(e, "Failed to commit transaction"));
         }
 
-        debug!("Workflow inserted with id: {:?}", workflow_result[0].id);
-        body.id = Some(workflow_result[0].id);
-        body.status_id = Some(status_result[0].id);
+        debug!("Workflow inserted with id: {:?}", workflow_id);
+        body.id = Some(workflow_id);
+        body.status_id = Some(status_id);
         let response = CreateWorkflowResponse::SuccessfulResponse(body);
         Ok(response)
     }
@@ -1577,10 +1593,24 @@ where
         }
         .await;
 
-        // Always re-enable FK checks before returning the connection to the pool.
-        // If this fails, drop the connection instead of returning it to the pool
-        // with FK checks disabled — this prevents any subsequent operation on this
-        // connection from silently bypassing FK enforcement.
+        // On error, ROLLBACK to close the transaction before restoring FK checks.
+        // PRAGMA foreign_keys is a no-op inside an open transaction, so we must
+        // close it first. If rollback fails, detach the connection to prevent
+        // returning it to the pool with an open write lock.
+        if let Err(delete_err) = result {
+            if let Err(rb_err) = sqlx::query("ROLLBACK").execute(&mut *conn).await {
+                error!("Failed to rollback transaction: {rb_err}; dropping connection");
+                conn.detach();
+            } else {
+                // Rollback succeeded. Re-enable FK checks before returning.
+                let _ = sqlx::query("PRAGMA foreign_keys = ON")
+                    .execute(&mut *conn)
+                    .await;
+            }
+            return Err(delete_err);
+        }
+
+        // Success path: re-enable FK checks before returning connection to pool.
         if sqlx::query("PRAGMA foreign_keys = ON")
             .execute(&mut *conn)
             .await
@@ -1589,8 +1619,6 @@ where
             error!("Failed to re-enable foreign key checks; dropping connection");
             conn.detach();
         }
-
-        result?;
 
         info!(
             "Successfully deleted workflow {} (name: {:?})",

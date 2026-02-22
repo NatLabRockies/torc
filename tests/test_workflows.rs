@@ -417,6 +417,13 @@ fn test_workflows_delete_command_json(start_server: &ServerProcess) {
     // Verify the workflow is actually deleted by trying to get it
     let get_result = default_api::get_workflow(config, workflow_id);
     assert!(get_result.is_err(), "Workflow should be deleted");
+
+    // Verify the workflow status is also cleaned up (not orphaned)
+    let status_result = default_api::get_workflow_status(config, workflow_id);
+    assert!(
+        status_result.is_err(),
+        "Workflow status should be deleted with the workflow"
+    );
 }
 
 #[rstest]
