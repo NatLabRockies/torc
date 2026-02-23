@@ -3667,6 +3667,16 @@ fn handle_export(
             }
         };
 
+    // Get all RO-Crate entities
+    export.ro_crate_entities =
+        match default_api::list_ro_crate_entities(config, workflow_id, None, None) {
+            Ok(response) => response.items.unwrap_or_default(),
+            Err(e) => {
+                print_error("listing RO-Crate entities", &e);
+                std::process::exit(1);
+            }
+        };
+
     // Get all jobs (with relationships)
     let job_params = JobListParams {
         workflow_id,
@@ -4001,6 +4011,27 @@ fn handle_import(
             }
             Err(e) => {
                 print_error("creating failure handler", &e);
+                let _ = default_api::delete_workflow(config, new_workflow_id, None);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    // Create RO-Crate entities (with remapped file IDs)
+    for entity in &export.ro_crate_entities {
+        let mut new_entity = entity.clone();
+        new_entity.id = None;
+        new_entity.workflow_id = new_workflow_id;
+
+        // Remap file_id if present
+        if let Some(old_file_id) = new_entity.file_id {
+            new_entity.file_id = mappings.remap_file_id(old_file_id);
+        }
+
+        match default_api::create_ro_crate_entity(config, new_entity) {
+            Ok(_) => {}
+            Err(e) => {
+                print_error("creating RO-Crate entity", &e);
                 let _ = default_api::delete_workflow(config, new_workflow_id, None);
                 std::process::exit(1);
             }

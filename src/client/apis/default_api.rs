@@ -88,6 +88,54 @@ pub enum ListFailureHandlersError {
     UnknownValue(serde_json::Value),
 }
 
+/// struct for typed errors of method [`create_ro_crate_entity`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum CreateRoCrateEntityError {
+    Status500(models::ErrorResponse),
+    UnknownValue(serde_json::Value),
+}
+
+/// struct for typed errors of method [`get_ro_crate_entity`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum GetRoCrateEntityError {
+    Status500(models::ErrorResponse),
+    UnknownValue(serde_json::Value),
+}
+
+/// struct for typed errors of method [`list_ro_crate_entities`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ListRoCrateEntitiesError {
+    Status500(models::ErrorResponse),
+    UnknownValue(serde_json::Value),
+}
+
+/// struct for typed errors of method [`update_ro_crate_entity`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum UpdateRoCrateEntityError {
+    Status500(models::ErrorResponse),
+    UnknownValue(serde_json::Value),
+}
+
+/// struct for typed errors of method [`delete_ro_crate_entity`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum DeleteRoCrateEntityError {
+    Status500(models::ErrorResponse),
+    UnknownValue(serde_json::Value),
+}
+
+/// struct for typed errors of method [`delete_ro_crate_entities`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum DeleteRoCrateEntitiesError {
+    Status500(models::ErrorResponse),
+    UnknownValue(serde_json::Value),
+}
+
 /// struct for typed errors of method [`delete_failure_handler`]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -8140,6 +8188,344 @@ pub fn list_failure_handlers(
     } else {
         let content = resp.text()?;
         let entity: Option<ListFailureHandlersError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent {
+            status,
+            content,
+            entity,
+        }))
+    }
+}
+
+/// Create an RO-Crate entity
+pub fn create_ro_crate_entity(
+    configuration: &configuration::Configuration,
+    body: models::RoCrateEntityModel,
+) -> Result<models::RoCrateEntityModel, Error<CreateRoCrateEntityError>> {
+    let uri_str = format!("{}/ro_crate_entities", configuration.base_path);
+    let mut req_builder = configuration
+        .client
+        .request(reqwest::Method::POST, &uri_str);
+
+    if let Some(ref auth) = configuration.basic_auth {
+        req_builder = req_builder.basic_auth(&auth.0, auth.1.as_ref());
+    }
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+    req_builder = req_builder.json(&body);
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req)?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text()?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => Err(Error::from(serde_json::Error::custom(
+                "Received `text/plain` content type response that cannot be converted to `models::RoCrateEntityModel`",
+            ))),
+            ContentType::Unsupported(unknown_type) => {
+                Err(Error::from(serde_json::Error::custom(format!(
+                    "Received `{unknown_type}` content type response that cannot be converted to `models::RoCrateEntityModel`"
+                ))))
+            }
+        }
+    } else {
+        let content = resp.text()?;
+        let entity: Option<CreateRoCrateEntityError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent {
+            status,
+            content,
+            entity,
+        }))
+    }
+}
+
+/// Get an RO-Crate entity by ID
+pub fn get_ro_crate_entity(
+    configuration: &configuration::Configuration,
+    id: i64,
+) -> Result<models::RoCrateEntityModel, Error<GetRoCrateEntityError>> {
+    let uri_str = format!(
+        "{}/ro_crate_entities/{id}",
+        configuration.base_path,
+        id = id
+    );
+    let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
+
+    if let Some(ref auth) = configuration.basic_auth {
+        req_builder = req_builder.basic_auth(&auth.0, auth.1.as_ref());
+    }
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req)?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text()?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => Err(Error::from(serde_json::Error::custom(
+                "Received `text/plain` content type response that cannot be converted to `models::RoCrateEntityModel`",
+            ))),
+            ContentType::Unsupported(unknown_type) => {
+                Err(Error::from(serde_json::Error::custom(format!(
+                    "Received `{unknown_type}` content type response that cannot be converted to `models::RoCrateEntityModel`"
+                ))))
+            }
+        }
+    } else {
+        let content = resp.text()?;
+        let entity: Option<GetRoCrateEntityError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent {
+            status,
+            content,
+            entity,
+        }))
+    }
+}
+
+/// List RO-Crate entities for a workflow
+pub fn list_ro_crate_entities(
+    configuration: &configuration::Configuration,
+    workflow_id: i64,
+    offset: Option<i64>,
+    limit: Option<i64>,
+) -> Result<models::ListRoCrateEntitiesResponse, Error<ListRoCrateEntitiesError>> {
+    let uri_str = format!(
+        "{}/workflows/{workflow_id}/ro_crate_entities",
+        configuration.base_path,
+        workflow_id = workflow_id
+    );
+    let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
+
+    if let Some(ref param_value) = offset {
+        req_builder = req_builder.query(&[("offset", &param_value.to_string())]);
+    }
+    if let Some(ref param_value) = limit {
+        req_builder = req_builder.query(&[("limit", &param_value.to_string())]);
+    }
+
+    if let Some(ref auth) = configuration.basic_auth {
+        req_builder = req_builder.basic_auth(&auth.0, auth.1.as_ref());
+    }
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req)?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text()?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => Err(Error::from(serde_json::Error::custom(
+                "Received `text/plain` content type response that cannot be converted to `models::ListRoCrateEntitiesResponse`",
+            ))),
+            ContentType::Unsupported(unknown_type) => {
+                Err(Error::from(serde_json::Error::custom(format!(
+                    "Received `{unknown_type}` content type response that cannot be converted to `models::ListRoCrateEntitiesResponse`"
+                ))))
+            }
+        }
+    } else {
+        let content = resp.text()?;
+        let entity: Option<ListRoCrateEntitiesError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent {
+            status,
+            content,
+            entity,
+        }))
+    }
+}
+
+/// Update an RO-Crate entity
+pub fn update_ro_crate_entity(
+    configuration: &configuration::Configuration,
+    id: i64,
+    body: models::RoCrateEntityModel,
+) -> Result<models::RoCrateEntityModel, Error<UpdateRoCrateEntityError>> {
+    let uri_str = format!(
+        "{}/ro_crate_entities/{id}",
+        configuration.base_path,
+        id = id
+    );
+    let mut req_builder = configuration.client.request(reqwest::Method::PUT, &uri_str);
+
+    if let Some(ref auth) = configuration.basic_auth {
+        req_builder = req_builder.basic_auth(&auth.0, auth.1.as_ref());
+    }
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+    req_builder = req_builder.json(&body);
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req)?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text()?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => Err(Error::from(serde_json::Error::custom(
+                "Received `text/plain` content type response that cannot be converted to `models::RoCrateEntityModel`",
+            ))),
+            ContentType::Unsupported(unknown_type) => {
+                Err(Error::from(serde_json::Error::custom(format!(
+                    "Received `{unknown_type}` content type response that cannot be converted to `models::RoCrateEntityModel`"
+                ))))
+            }
+        }
+    } else {
+        let content = resp.text()?;
+        let entity: Option<UpdateRoCrateEntityError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent {
+            status,
+            content,
+            entity,
+        }))
+    }
+}
+
+/// Delete an RO-Crate entity by ID
+pub fn delete_ro_crate_entity(
+    configuration: &configuration::Configuration,
+    id: i64,
+) -> Result<serde_json::Value, Error<DeleteRoCrateEntityError>> {
+    let uri_str = format!(
+        "{}/ro_crate_entities/{id}",
+        configuration.base_path,
+        id = id
+    );
+    let mut req_builder = configuration
+        .client
+        .request(reqwest::Method::DELETE, &uri_str);
+
+    if let Some(ref auth) = configuration.basic_auth {
+        req_builder = req_builder.basic_auth(&auth.0, auth.1.as_ref());
+    }
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req)?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text()?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => Err(Error::from(serde_json::Error::custom(
+                "Received `text/plain` content type response that cannot be converted to `serde_json::Value`",
+            ))),
+            ContentType::Unsupported(unknown_type) => {
+                Err(Error::from(serde_json::Error::custom(format!(
+                    "Received `{unknown_type}` content type response that cannot be converted to `serde_json::Value`"
+                ))))
+            }
+        }
+    } else {
+        let content = resp.text()?;
+        let entity: Option<DeleteRoCrateEntityError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent {
+            status,
+            content,
+            entity,
+        }))
+    }
+}
+
+/// Delete all RO-Crate entities for a workflow
+pub fn delete_ro_crate_entities(
+    configuration: &configuration::Configuration,
+    workflow_id: i64,
+) -> Result<serde_json::Value, Error<DeleteRoCrateEntitiesError>> {
+    let uri_str = format!(
+        "{}/workflows/{workflow_id}/ro_crate_entities",
+        configuration.base_path,
+        workflow_id = workflow_id
+    );
+    let mut req_builder = configuration
+        .client
+        .request(reqwest::Method::DELETE, &uri_str);
+
+    if let Some(ref auth) = configuration.basic_auth {
+        req_builder = req_builder.basic_auth(&auth.0, auth.1.as_ref());
+    }
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req)?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text()?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => Err(Error::from(serde_json::Error::custom(
+                "Received `text/plain` content type response that cannot be converted to `serde_json::Value`",
+            ))),
+            ContentType::Unsupported(unknown_type) => {
+                Err(Error::from(serde_json::Error::custom(format!(
+                    "Received `{unknown_type}` content type response that cannot be converted to `serde_json::Value`"
+                ))))
+            }
+        }
+    } else {
+        let content = resp.text()?;
+        let entity: Option<DeleteRoCrateEntitiesError> = serde_json::from_str(&content).ok();
         Err(Error::ResponseError(ResponseContent {
             status,
             content,

@@ -167,6 +167,84 @@ pub enum DeleteFailureHandlerResponse {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[must_use]
+pub enum CreateRoCrateEntityResponse {
+    /// Successful response
+    SuccessfulResponse(models::RoCrateEntityModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
+pub enum GetRoCrateEntityResponse {
+    /// Successful response
+    SuccessfulResponse(models::RoCrateEntityModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
+pub enum ListRoCrateEntitiesResponse {
+    /// Successful response
+    SuccessfulResponse(models::ListRoCrateEntitiesResponse),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
+pub enum UpdateRoCrateEntityResponse {
+    /// Successful response
+    SuccessfulResponse(models::RoCrateEntityModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
+pub enum DeleteRoCrateEntityResponse {
+    /// Successful response
+    SuccessfulResponse(serde_json::Value),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
+pub enum DeleteRoCrateEntitiesResponse {
+    /// Successful response
+    SuccessfulResponse(serde_json::Value),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
 pub enum RetryJobResponse {
     /// Successful response
     SuccessfulResponse(models::JobModel),
@@ -1633,6 +1711,53 @@ pub trait Api<C: Send + Sync> {
         body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteFailureHandlerResponse, ApiError>;
+
+    /// Store an RO-Crate entity.
+    async fn create_ro_crate_entity(
+        &self,
+        body: models::RoCrateEntityModel,
+        context: &C,
+    ) -> Result<CreateRoCrateEntityResponse, ApiError>;
+
+    /// Retrieve an RO-Crate entity by ID.
+    async fn get_ro_crate_entity(
+        &self,
+        id: i64,
+        context: &C,
+    ) -> Result<GetRoCrateEntityResponse, ApiError>;
+
+    /// Retrieve all RO-Crate entities for one workflow.
+    async fn list_ro_crate_entities(
+        &self,
+        workflow_id: i64,
+        offset: Option<i64>,
+        limit: Option<i64>,
+        context: &C,
+    ) -> Result<ListRoCrateEntitiesResponse, ApiError>;
+
+    /// Update an RO-Crate entity.
+    async fn update_ro_crate_entity(
+        &self,
+        id: i64,
+        body: models::RoCrateEntityModel,
+        context: &C,
+    ) -> Result<UpdateRoCrateEntityResponse, ApiError>;
+
+    /// Delete an RO-Crate entity.
+    async fn delete_ro_crate_entity(
+        &self,
+        id: i64,
+        body: Option<serde_json::Value>,
+        context: &C,
+    ) -> Result<DeleteRoCrateEntityResponse, ApiError>;
+
+    /// Delete all RO-Crate entities for a workflow.
+    async fn delete_ro_crate_entities(
+        &self,
+        workflow_id: i64,
+        body: Option<serde_json::Value>,
+        context: &C,
+    ) -> Result<DeleteRoCrateEntitiesResponse, ApiError>;
 
     /// Store one resource requirements record.
     async fn create_resource_requirements(

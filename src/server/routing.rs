@@ -52,41 +52,128 @@ type ServiceFuture =
     BoxFuture<'static, Result<Response<Body>, crate::server::api_types::ServiceError>>;
 
 use crate::server::api_types::{
-    AddUserToGroupResponse, AddWorkflowToGroupResponse, Api, CancelWorkflowResponse,
-    CheckWorkflowAccessResponse, ClaimActionResponse, ClaimJobsBasedOnResources,
-    ClaimNextJobsResponse, CompleteJobResponse, CreateAccessGroupResponse,
-    CreateComputeNodeResponse, CreateEventResponse, CreateFailureHandlerResponse,
-    CreateFileResponse, CreateJobResponse, CreateJobsResponse, CreateLocalSchedulerResponse,
-    CreateRemoteWorkersResponse, CreateResourceRequirementsResponse, CreateResultResponse,
-    CreateScheduledComputeNodeResponse, CreateSlurmSchedulerResponse, CreateUserDataResponse,
-    CreateWorkflowActionResponse, CreateWorkflowResponse, DeleteAccessGroupResponse,
-    DeleteAllResourceRequirementsResponse, DeleteAllUserDataResponse, DeleteComputeNodeResponse,
-    DeleteComputeNodesResponse, DeleteEventResponse, DeleteEventsResponse,
-    DeleteFailureHandlerResponse, DeleteFileResponse, DeleteFilesResponse, DeleteJobResponse,
-    DeleteJobsResponse, DeleteLocalSchedulerResponse, DeleteLocalSchedulersResponse,
-    DeleteRemoteWorkerResponse, DeleteResourceRequirementsResponse, DeleteResultResponse,
-    DeleteResultsResponse, DeleteScheduledComputeNodeResponse, DeleteScheduledComputeNodesResponse,
-    DeleteSlurmSchedulerResponse, DeleteSlurmSchedulersResponse, DeleteUserDataResponse,
-    DeleteWorkflowResponse, GetAccessGroupResponse, GetComputeNodeResponse, GetDotGraphResponse,
-    GetEventResponse, GetFailureHandlerResponse, GetFileResponse, GetJobResponse,
-    GetLocalSchedulerResponse, GetPendingActionsResponse, GetReadyJobRequirementsResponse,
-    GetResourceRequirementsResponse, GetResultResponse, GetScheduledComputeNodeResponse,
-    GetSlurmSchedulerResponse, GetUserDataResponse, GetVersionResponse, GetWorkflowActionsResponse,
-    GetWorkflowResponse, GetWorkflowStatusResponse, InitializeJobsResponse,
-    IsWorkflowCompleteResponse, IsWorkflowUninitializedResponse, ListAccessGroupsApiResponse,
-    ListComputeNodesResponse, ListEventsResponse, ListFailureHandlersResponse, ListFilesResponse,
-    ListGroupMembersResponse, ListJobDependenciesResponse, ListJobFileRelationshipsResponse,
-    ListJobIdsResponse, ListJobUserDataRelationshipsResponse, ListJobsResponse,
-    ListLocalSchedulersResponse, ListMissingUserDataResponse, ListRemoteWorkersResponse,
-    ListRequiredExistingFilesResponse, ListResourceRequirementsResponse, ListResultsResponse,
-    ListScheduledComputeNodesResponse, ListSlurmSchedulersResponse, ListUserDataResponse,
-    ListUserGroupsApiResponse, ListWorkflowGroupsResponse, ListWorkflowsResponse,
-    ManageStatusChangeResponse, PingResponse, ProcessChangedJobInputsResponse, ReloadAuthResponse,
-    RemoveUserFromGroupResponse, RemoveWorkflowFromGroupResponse, ResetJobStatusResponse,
-    ResetWorkflowStatusResponse, RetryJobResponse, StartJobResponse, UpdateComputeNodeResponse,
-    UpdateEventResponse, UpdateFileResponse, UpdateJobResponse, UpdateLocalSchedulerResponse,
-    UpdateResourceRequirementsResponse, UpdateResultResponse, UpdateScheduledComputeNodeResponse,
-    UpdateSlurmSchedulerResponse, UpdateUserDataResponse, UpdateWorkflowResponse,
+    AddUserToGroupResponse,
+    AddWorkflowToGroupResponse,
+    Api,
+    CancelWorkflowResponse,
+    CheckWorkflowAccessResponse,
+    ClaimActionResponse,
+    ClaimJobsBasedOnResources,
+    ClaimNextJobsResponse,
+    CompleteJobResponse,
+    CreateAccessGroupResponse,
+    CreateComputeNodeResponse,
+    CreateEventResponse,
+    CreateFailureHandlerResponse,
+    CreateFileResponse,
+    CreateJobResponse,
+    CreateJobsResponse,
+    CreateLocalSchedulerResponse,
+    CreateRemoteWorkersResponse,
+    CreateResourceRequirementsResponse,
+    CreateResultResponse,
+    // RO-Crate entities
+    CreateRoCrateEntityResponse,
+    CreateScheduledComputeNodeResponse,
+    CreateSlurmSchedulerResponse,
+    CreateUserDataResponse,
+    CreateWorkflowActionResponse,
+    CreateWorkflowResponse,
+    DeleteAccessGroupResponse,
+    DeleteAllResourceRequirementsResponse,
+    DeleteAllUserDataResponse,
+    DeleteComputeNodeResponse,
+    DeleteComputeNodesResponse,
+    DeleteEventResponse,
+    DeleteEventsResponse,
+    DeleteFailureHandlerResponse,
+    DeleteFileResponse,
+    DeleteFilesResponse,
+    DeleteJobResponse,
+    DeleteJobsResponse,
+    DeleteLocalSchedulerResponse,
+    DeleteLocalSchedulersResponse,
+    DeleteRemoteWorkerResponse,
+    DeleteResourceRequirementsResponse,
+    DeleteResultResponse,
+    DeleteResultsResponse,
+    DeleteRoCrateEntitiesResponse,
+    DeleteRoCrateEntityResponse,
+    DeleteScheduledComputeNodeResponse,
+    DeleteScheduledComputeNodesResponse,
+    DeleteSlurmSchedulerResponse,
+    DeleteSlurmSchedulersResponse,
+    DeleteUserDataResponse,
+    DeleteWorkflowResponse,
+    GetAccessGroupResponse,
+    GetComputeNodeResponse,
+    GetDotGraphResponse,
+    GetEventResponse,
+    GetFailureHandlerResponse,
+    GetFileResponse,
+    GetJobResponse,
+    GetLocalSchedulerResponse,
+    GetPendingActionsResponse,
+    GetReadyJobRequirementsResponse,
+    GetResourceRequirementsResponse,
+    GetResultResponse,
+    GetRoCrateEntityResponse,
+    GetScheduledComputeNodeResponse,
+    GetSlurmSchedulerResponse,
+    GetUserDataResponse,
+    GetVersionResponse,
+    GetWorkflowActionsResponse,
+    GetWorkflowResponse,
+    GetWorkflowStatusResponse,
+    InitializeJobsResponse,
+    IsWorkflowCompleteResponse,
+    IsWorkflowUninitializedResponse,
+    ListAccessGroupsApiResponse,
+    ListComputeNodesResponse,
+    ListEventsResponse,
+    ListFailureHandlersResponse,
+    ListFilesResponse,
+    ListGroupMembersResponse,
+    ListJobDependenciesResponse,
+    ListJobFileRelationshipsResponse,
+    ListJobIdsResponse,
+    ListJobUserDataRelationshipsResponse,
+    ListJobsResponse,
+    ListLocalSchedulersResponse,
+    ListMissingUserDataResponse,
+    ListRemoteWorkersResponse,
+    ListRequiredExistingFilesResponse,
+    ListResourceRequirementsResponse,
+    ListResultsResponse,
+    ListRoCrateEntitiesResponse,
+    ListScheduledComputeNodesResponse,
+    ListSlurmSchedulersResponse,
+    ListUserDataResponse,
+    ListUserGroupsApiResponse,
+    ListWorkflowGroupsResponse,
+    ListWorkflowsResponse,
+    ManageStatusChangeResponse,
+    PingResponse,
+    ProcessChangedJobInputsResponse,
+    ReloadAuthResponse,
+    RemoveUserFromGroupResponse,
+    RemoveWorkflowFromGroupResponse,
+    ResetJobStatusResponse,
+    ResetWorkflowStatusResponse,
+    RetryJobResponse,
+    StartJobResponse,
+    UpdateComputeNodeResponse,
+    UpdateEventResponse,
+    UpdateFileResponse,
+    UpdateJobResponse,
+    UpdateLocalSchedulerResponse,
+    UpdateResourceRequirementsResponse,
+    UpdateResultResponse,
+    UpdateRoCrateEntityResponse,
+    UpdateScheduledComputeNodeResponse,
+    UpdateSlurmSchedulerResponse,
+    UpdateUserDataResponse,
+    UpdateWorkflowResponse,
     UpdateWorkflowStatusResponse,
 };
 
@@ -167,7 +254,11 @@ mod paths {
             // SSE events stream route (index 66)
             r"^/torc-service/v1/workflows/(?P<id>[^/?#]*)/events/stream$",
             // Admin reload-auth route (index 67)
-            r"^/torc-service/v1/admin/reload-auth$"
+            r"^/torc-service/v1/admin/reload-auth$",
+            // RO-Crate entity routes (indices 68-70)
+            r"^/torc-service/v1/ro_crate_entities$",
+            r"^/torc-service/v1/ro_crate_entities/(?P<id>[^/?#]*)$",
+            r"^/torc-service/v1/workflows/(?P<id>[^/?#]*)/ro_crate_entities$"
         ])
         .expect("Unable to create global regex set");
     }
@@ -519,6 +610,20 @@ regex::Regex::new(
     }
     // Admin reload-auth
     pub(crate) static ID_ADMIN_RELOAD_AUTH: usize = 67;
+    // RO-Crate entities
+    pub(crate) static ID_RO_CRATE_ENTITIES: usize = 68;
+    pub(crate) static ID_RO_CRATE_ENTITIES_ID: usize = 69;
+    lazy_static! {
+        pub static ref REGEX_RO_CRATE_ENTITIES_ID: regex::Regex =
+            regex::Regex::new(r"^/torc-service/v1/ro_crate_entities/(?P<id>[^/?#]*)$")
+                .expect("Unable to create regex for RO_CRATE_ENTITIES_ID");
+    }
+    pub(crate) static ID_WORKFLOWS_ID_RO_CRATE_ENTITIES: usize = 70;
+    lazy_static! {
+        pub static ref REGEX_WORKFLOWS_ID_RO_CRATE_ENTITIES: regex::Regex =
+            regex::Regex::new(r"^/torc-service/v1/workflows/(?P<id>[^/?#]*)/ro_crate_entities$")
+                .expect("Unable to create regex for WORKFLOWS_ID_RO_CRATE_ENTITIES");
+    }
 }
 
 pub struct MakeService<T, C>
@@ -17894,6 +17999,690 @@ where
                 // ============================================================================
 
                 // ============================================================================
+                // RO-Crate Entity routes
+                // ============================================================================
+
+                // CreateRoCrateEntity - POST /ro_crate_entities
+                hyper::Method::POST if path.matched(paths::ID_RO_CRATE_ENTITIES) => {
+                    // Body parameters (note that non-incremental parsing is used here)
+                    let result = body.into_raw().await;
+                    match result {
+                        Ok(body) => {
+                            let mut unused_elements = Vec::new();
+                            let param_body: Option<models::RoCrateEntityModel> = if !body.is_empty()
+                            {
+                                let deserializer = &mut serde_json::Deserializer::from_slice(&body);
+                                match serde_ignored::deserialize(deserializer, |path| {
+                                    warn!("Ignoring unknown field in body: {}", path);
+                                    unused_elements.push(path.to_string());
+                                }) {
+                                    Ok(param_body) => param_body,
+                                    Err(e) => return Ok(Response::builder()
+                                        .status(StatusCode::BAD_REQUEST)
+                                        .body(Body::from(format!("Couldn't parse body parameter body - doesn't match schema: {}", e)))
+                                        .expect("Unable to create Bad Request response for invalid body parameter body due to schema")),
+                                }
+                            } else {
+                                None
+                            };
+                            let param_body = match param_body {
+                                Some(param_body) => param_body,
+                                None => return Ok(Response::builder()
+                                    .status(StatusCode::BAD_REQUEST)
+                                    .body(Body::from("Missing required body parameter body"))
+                                    .expect("Unable to create Bad Request response for missing body parameter body")),
+                            };
+
+                            let result =
+                                api_impl.create_ro_crate_entity(param_body, &context).await;
+                            let mut response = Response::new(Body::empty());
+                            response.headers_mut().insert(
+                                HeaderName::from_static("x-span-id"),
+                                HeaderValue::from_str(
+                                    (&context as &dyn Has<XSpanIdString>)
+                                        .get()
+                                        .0
+                                        .clone()
+                                        .as_str(),
+                                )
+                                .expect("Unable to create X-Span-ID header value"),
+                            );
+
+                            if !unused_elements.is_empty() {
+                                response.headers_mut().insert(
+                                    HeaderName::from_static("warning"),
+                                    HeaderValue::from_str(
+                                        format!(
+                                            "Ignoring unknown fields in body: {:?}",
+                                            unused_elements
+                                        )
+                                        .as_str(),
+                                    )
+                                    .expect("Unable to create Warning header value"),
+                                );
+                            }
+                            match result {
+                                Ok(rsp) => match rsp {
+                                    CreateRoCrateEntityResponse::SuccessfulResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(200)
+                                            .expect("Unable to turn 200 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                                                            CONTENT_TYPE,
+                                                                                            HeaderValue::from_str("application/json")
+                                                                                                .expect("Unable to create Content-Type header for application/json"));
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    CreateRoCrateEntityResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                                                            CONTENT_TYPE,
+                                                                                            HeaderValue::from_str("application/json")
+                                                                                                .expect("Unable to create Content-Type header for application/json"));
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    CreateRoCrateEntityResponse::NotFoundErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(404)
+                                            .expect("Unable to turn 404 into a StatusCode");
+                                        response.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str("application/json").expect("Unable to create Content-Type header for application/json"));
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    CreateRoCrateEntityResponse::DefaultErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(500)
+                                            .expect("Unable to turn 500 into a StatusCode");
+                                        response.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str("application/json").expect("Unable to create Content-Type header for application/json"));
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                },
+                                Err(_) => {
+                                    *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+                                    *response.body_mut() = Body::from("An internal error occurred");
+                                }
+                            }
+                            Ok(response)
+                        }
+                        Err(e) => Ok(Response::builder()
+                            .status(StatusCode::BAD_REQUEST)
+                            .body(Body::from(format!("Unable to read body: {}", e)))
+                            .expect(
+                                "Unable to create Bad Request response due to unable to read body",
+                            )),
+                    }
+                }
+
+                // GetRoCrateEntity - GET /ro_crate_entities/{id}
+                hyper::Method::GET if path.matched(paths::ID_RO_CRATE_ENTITIES_ID) => {
+                    let path: &str = uri.path();
+                    let path_params = paths::REGEX_RO_CRATE_ENTITIES_ID.captures(path)
+                        .unwrap_or_else(|| panic!("Path {} matched RE RO_CRATE_ENTITIES_ID in set but failed match against \"{}\"", path, paths::REGEX_RO_CRATE_ENTITIES_ID.as_str()));
+
+                    let param_id = match percent_encoding::percent_decode(path_params["id"].as_bytes()).decode_utf8() {
+                        Ok(param_id) => match param_id.parse::<i64>() {
+                            Ok(param_id) => param_id,
+                            Err(e) => return Ok(Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body(Body::from(format!("Couldn't parse path parameter id: {}", e)))
+                                .expect("Unable to create Bad Request response for invalid path parameter")),
+                        },
+                        Err(_) => return Ok(Response::builder()
+                            .status(StatusCode::BAD_REQUEST)
+                            .body(Body::from(format!("Couldn't percent-decode path parameter as UTF-8: {}", &path_params["id"])))
+                            .expect("Unable to create Bad Request response for invalid percent decode"))
+                    };
+
+                    let result = api_impl.get_ro_crate_entity(param_id, &context).await;
+                    let mut response = Response::new(Body::empty());
+                    response.headers_mut().insert(
+                        HeaderName::from_static("x-span-id"),
+                        HeaderValue::from_str(
+                            (&context as &dyn Has<XSpanIdString>)
+                                .get()
+                                .0
+                                .clone()
+                                .as_str(),
+                        )
+                        .expect("Unable to create X-Span-ID header value"),
+                    );
+
+                    match result {
+                        Ok(rsp) => {
+                            match rsp {
+                                GetRoCrateEntityResponse::SuccessfulResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(200)
+                                        .expect("Unable to turn 200 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                GetRoCrateEntityResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                GetRoCrateEntityResponse::NotFoundErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(404)
+                                        .expect("Unable to turn 404 into a StatusCode");
+                                    response.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str("application/json").expect("Unable to create Content-Type header for application/json"));
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                GetRoCrateEntityResponse::DefaultErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(500)
+                                        .expect("Unable to turn 500 into a StatusCode");
+                                    response.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str("application/json").expect("Unable to create Content-Type header for application/json"));
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                            }
+                        }
+                        Err(_) => {
+                            *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+                            *response.body_mut() = Body::from("An internal error occurred");
+                        }
+                    }
+                    Ok(response)
+                }
+
+                // UpdateRoCrateEntity - PUT /ro_crate_entities/{id}
+                hyper::Method::PUT if path.matched(paths::ID_RO_CRATE_ENTITIES_ID) => {
+                    let path: &str = uri.path();
+                    let path_params = paths::REGEX_RO_CRATE_ENTITIES_ID.captures(path)
+                        .unwrap_or_else(|| panic!("Path {} matched RE RO_CRATE_ENTITIES_ID in set but failed match against \"{}\"", path, paths::REGEX_RO_CRATE_ENTITIES_ID.as_str()));
+
+                    let param_id = match percent_encoding::percent_decode(path_params["id"].as_bytes()).decode_utf8() {
+                        Ok(param_id) => match param_id.parse::<i64>() {
+                            Ok(param_id) => param_id,
+                            Err(e) => return Ok(Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body(Body::from(format!("Couldn't parse path parameter id: {}", e)))
+                                .expect("Unable to create Bad Request response for invalid path parameter")),
+                        },
+                        Err(_) => return Ok(Response::builder()
+                            .status(StatusCode::BAD_REQUEST)
+                            .body(Body::from(format!("Couldn't percent-decode path parameter as UTF-8: {}", &path_params["id"])))
+                            .expect("Unable to create Bad Request response for invalid percent decode"))
+                    };
+
+                    let result = body.into_raw().await;
+                    match result {
+                        Ok(body) => {
+                            let mut unused_elements = Vec::new();
+                            let param_body: Option<models::RoCrateEntityModel> = if !body.is_empty()
+                            {
+                                let deserializer = &mut serde_json::Deserializer::from_slice(&body);
+                                match serde_ignored::deserialize(deserializer, |path| {
+                                    warn!("Ignoring unknown field in body: {}", path);
+                                    unused_elements.push(path.to_string());
+                                }) {
+                                    Ok(param_body) => param_body,
+                                    Err(e) => return Ok(Response::builder()
+                                        .status(StatusCode::BAD_REQUEST)
+                                        .body(Body::from(format!("Couldn't parse body parameter body - doesn't match schema: {}", e)))
+                                        .expect("Unable to create Bad Request response for invalid body parameter body due to schema")),
+                                }
+                            } else {
+                                None
+                            };
+                            let param_body = match param_body {
+                                Some(param_body) => param_body,
+                                None => return Ok(Response::builder()
+                                    .status(StatusCode::BAD_REQUEST)
+                                    .body(Body::from("Missing required body parameter body"))
+                                    .expect("Unable to create Bad Request response for missing body parameter body")),
+                            };
+
+                            let result = api_impl
+                                .update_ro_crate_entity(param_id, param_body, &context)
+                                .await;
+                            let mut response = Response::new(Body::empty());
+                            response.headers_mut().insert(
+                                HeaderName::from_static("x-span-id"),
+                                HeaderValue::from_str(
+                                    (&context as &dyn Has<XSpanIdString>)
+                                        .get()
+                                        .0
+                                        .clone()
+                                        .as_str(),
+                                )
+                                .expect("Unable to create X-Span-ID header value"),
+                            );
+
+                            if !unused_elements.is_empty() {
+                                response.headers_mut().insert(
+                                    HeaderName::from_static("warning"),
+                                    HeaderValue::from_str(
+                                        format!(
+                                            "Ignoring unknown fields in body: {:?}",
+                                            unused_elements
+                                        )
+                                        .as_str(),
+                                    )
+                                    .expect("Unable to create Warning header value"),
+                                );
+                            }
+                            match result {
+                                Ok(rsp) => match rsp {
+                                    UpdateRoCrateEntityResponse::SuccessfulResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(200)
+                                            .expect("Unable to turn 200 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                                                            CONTENT_TYPE,
+                                                                                            HeaderValue::from_str("application/json")
+                                                                                                .expect("Unable to create Content-Type header for application/json"));
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    UpdateRoCrateEntityResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                                                            CONTENT_TYPE,
+                                                                                            HeaderValue::from_str("application/json")
+                                                                                                .expect("Unable to create Content-Type header for application/json"));
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    UpdateRoCrateEntityResponse::NotFoundErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(404)
+                                            .expect("Unable to turn 404 into a StatusCode");
+                                        response.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str("application/json").expect("Unable to create Content-Type header for application/json"));
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    UpdateRoCrateEntityResponse::DefaultErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(500)
+                                            .expect("Unable to turn 500 into a StatusCode");
+                                        response.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str("application/json").expect("Unable to create Content-Type header for application/json"));
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                },
+                                Err(_) => {
+                                    *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+                                    *response.body_mut() = Body::from("An internal error occurred");
+                                }
+                            }
+                            Ok(response)
+                        }
+                        Err(e) => Ok(Response::builder()
+                            .status(StatusCode::BAD_REQUEST)
+                            .body(Body::from(format!("Unable to read body: {}", e)))
+                            .expect(
+                                "Unable to create Bad Request response due to unable to read body",
+                            )),
+                    }
+                }
+
+                // DeleteRoCrateEntity - DELETE /ro_crate_entities/{id}
+                hyper::Method::DELETE if path.matched(paths::ID_RO_CRATE_ENTITIES_ID) => {
+                    let path: &str = uri.path();
+                    let path_params = paths::REGEX_RO_CRATE_ENTITIES_ID.captures(path)
+                        .unwrap_or_else(|| panic!("Path {} matched RE RO_CRATE_ENTITIES_ID in set but failed match against \"{}\"", path, paths::REGEX_RO_CRATE_ENTITIES_ID.as_str()));
+
+                    let param_id = match percent_encoding::percent_decode(path_params["id"].as_bytes()).decode_utf8() {
+                        Ok(param_id) => match param_id.parse::<i64>() {
+                            Ok(param_id) => param_id,
+                            Err(e) => return Ok(Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body(Body::from(format!("Couldn't parse path parameter id: {}", e)))
+                                .expect("Unable to create Bad Request response for invalid path parameter")),
+                        },
+                        Err(_) => return Ok(Response::builder()
+                            .status(StatusCode::BAD_REQUEST)
+                            .body(Body::from(format!("Couldn't percent-decode path parameter as UTF-8: {}", &path_params["id"])))
+                            .expect("Unable to create Bad Request response for invalid percent decode"))
+                    };
+
+                    // Body parameters (note that non-incremental parsing is used here)
+                    let result = body.into_raw().await;
+                    match result {
+                        Ok(body) => {
+                            let param_body: Option<serde_json::Value> = if !body.is_empty() {
+                                match serde_json::from_slice(&body) {
+                                    Ok(param_body) => param_body,
+                                    Err(_) => None,
+                                }
+                            } else {
+                                None
+                            };
+
+                            let result = api_impl
+                                .delete_ro_crate_entity(param_id, param_body, &context)
+                                .await;
+                            let mut response = Response::new(Body::empty());
+                            response.headers_mut().insert(
+                                HeaderName::from_static("x-span-id"),
+                                HeaderValue::from_str(
+                                    (&context as &dyn Has<XSpanIdString>)
+                                        .get()
+                                        .0
+                                        .clone()
+                                        .as_str(),
+                                )
+                                .expect("Unable to create X-Span-ID header value"),
+                            );
+
+                            match result {
+                                Ok(rsp) => match rsp {
+                                    DeleteRoCrateEntityResponse::SuccessfulResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(200)
+                                            .expect("Unable to turn 200 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                                                            CONTENT_TYPE,
+                                                                                            HeaderValue::from_str("application/json")
+                                                                                                .expect("Unable to create Content-Type header for application/json"));
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    DeleteRoCrateEntityResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                                                            CONTENT_TYPE,
+                                                                                            HeaderValue::from_str("application/json")
+                                                                                                .expect("Unable to create Content-Type header for application/json"));
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    DeleteRoCrateEntityResponse::NotFoundErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(404)
+                                            .expect("Unable to turn 404 into a StatusCode");
+                                        response.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str("application/json").expect("Unable to create Content-Type header for application/json"));
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    DeleteRoCrateEntityResponse::DefaultErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(500)
+                                            .expect("Unable to turn 500 into a StatusCode");
+                                        response.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str("application/json").expect("Unable to create Content-Type header for application/json"));
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                },
+                                Err(_) => {
+                                    *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+                                    *response.body_mut() = Body::from("An internal error occurred");
+                                }
+                            }
+                            Ok(response)
+                        }
+                        Err(e) => Ok(Response::builder()
+                            .status(StatusCode::BAD_REQUEST)
+                            .body(Body::from(format!("Unable to read body: {}", e)))
+                            .expect(
+                                "Unable to create Bad Request response due to unable to read body",
+                            )),
+                    }
+                }
+
+                // ListRoCrateEntities - GET /workflows/{id}/ro_crate_entities
+                hyper::Method::GET if path.matched(paths::ID_WORKFLOWS_ID_RO_CRATE_ENTITIES) => {
+                    let path: &str = uri.path();
+                    let path_params = paths::REGEX_WORKFLOWS_ID_RO_CRATE_ENTITIES.captures(path)
+                        .unwrap_or_else(|| panic!("Path {} matched RE WORKFLOWS_ID_RO_CRATE_ENTITIES in set but failed match against \"{}\"", path, paths::REGEX_WORKFLOWS_ID_RO_CRATE_ENTITIES.as_str()));
+
+                    let param_id = match percent_encoding::percent_decode(path_params["id"].as_bytes()).decode_utf8() {
+                        Ok(param_id) => match param_id.parse::<i64>() {
+                            Ok(param_id) => param_id,
+                            Err(e) => return Ok(Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body(Body::from(format!("Couldn't parse path parameter id: {}", e)))
+                                .expect("Unable to create Bad Request response for invalid path parameter")),
+                        },
+                        Err(_) => return Ok(Response::builder()
+                            .status(StatusCode::BAD_REQUEST)
+                            .body(Body::from(format!("Couldn't percent-decode path parameter as UTF-8: {}", &path_params["id"])))
+                            .expect("Unable to create Bad Request response for invalid percent decode"))
+                    };
+
+                    let query_params =
+                        form_urlencoded::parse(uri.query().unwrap_or_default().as_bytes())
+                            .collect::<Vec<_>>();
+                    let param_offset = query_params
+                        .iter()
+                        .filter(|e| e.0 == "offset")
+                        .map(|e| e.1.clone())
+                        .next();
+                    let param_offset = match param_offset {
+                        Some(param_offset) => {
+                            let param_offset = <i64 as std::str::FromStr>::from_str(&param_offset);
+                            match param_offset {
+                                Ok(param_offset) => Some(param_offset),
+                                Err(e) => return Ok(Response::builder()
+                                    .status(StatusCode::BAD_REQUEST)
+                                    .body(Body::from(format!("Couldn't parse query parameter offset - doesn't match schema: {}", e)))
+                                    .expect("Unable to create Bad Request response for invalid query parameter offset")),
+                            }
+                        }
+                        None => None,
+                    };
+                    let param_limit = query_params
+                        .iter()
+                        .filter(|e| e.0 == "limit")
+                        .map(|e| e.1.clone())
+                        .next();
+                    let param_limit = match param_limit {
+                        Some(param_limit) => {
+                            let param_limit = <i64 as std::str::FromStr>::from_str(&param_limit);
+                            match param_limit {
+                                Ok(param_limit) => Some(param_limit),
+                                Err(e) => return Ok(Response::builder()
+                                    .status(StatusCode::BAD_REQUEST)
+                                    .body(Body::from(format!("Couldn't parse query parameter limit - doesn't match schema: {}", e)))
+                                    .expect("Unable to create Bad Request response for invalid query parameter limit")),
+                            }
+                        }
+                        None => None,
+                    };
+
+                    let result = api_impl
+                        .list_ro_crate_entities(param_id, param_offset, param_limit, &context)
+                        .await;
+                    let mut response = Response::new(Body::empty());
+                    response.headers_mut().insert(
+                        HeaderName::from_static("x-span-id"),
+                        HeaderValue::from_str(
+                            (&context as &dyn Has<XSpanIdString>)
+                                .get()
+                                .0
+                                .clone()
+                                .as_str(),
+                        )
+                        .expect("Unable to create X-Span-ID header value"),
+                    );
+
+                    match result {
+                        Ok(rsp) => {
+                            match rsp {
+                                ListRoCrateEntitiesResponse::SuccessfulResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(200)
+                                        .expect("Unable to turn 200 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                ListRoCrateEntitiesResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                ListRoCrateEntitiesResponse::NotFoundErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(404)
+                                        .expect("Unable to turn 404 into a StatusCode");
+                                    response.headers_mut().insert(
+                                                                                        CONTENT_TYPE,
+                                                                                        HeaderValue::from_str("application/json")
+                                                                                            .expect("Unable to create Content-Type header for application/json"));
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                                ListRoCrateEntitiesResponse::DefaultErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(500)
+                                        .expect("Unable to turn 500 into a StatusCode");
+                                    response.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str("application/json").expect("Unable to create Content-Type header for application/json"));
+                                    let body = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body);
+                                }
+                            }
+                        }
+                        Err(_) => {
+                            *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+                            *response.body_mut() = Body::from("An internal error occurred");
+                        }
+                    }
+                    Ok(response)
+                }
+
+                // DeleteRoCrateEntities - DELETE /workflows/{id}/ro_crate_entities
+                hyper::Method::DELETE if path.matched(paths::ID_WORKFLOWS_ID_RO_CRATE_ENTITIES) => {
+                    let path: &str = uri.path();
+                    let path_params = paths::REGEX_WORKFLOWS_ID_RO_CRATE_ENTITIES.captures(path)
+                        .unwrap_or_else(|| panic!("Path {} matched RE WORKFLOWS_ID_RO_CRATE_ENTITIES in set but failed match against \"{}\"", path, paths::REGEX_WORKFLOWS_ID_RO_CRATE_ENTITIES.as_str()));
+
+                    let param_id = match percent_encoding::percent_decode(path_params["id"].as_bytes()).decode_utf8() {
+                        Ok(param_id) => match param_id.parse::<i64>() {
+                            Ok(param_id) => param_id,
+                            Err(e) => return Ok(Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body(Body::from(format!("Couldn't parse path parameter id: {}", e)))
+                                .expect("Unable to create Bad Request response for invalid path parameter")),
+                        },
+                        Err(_) => return Ok(Response::builder()
+                            .status(StatusCode::BAD_REQUEST)
+                            .body(Body::from(format!("Couldn't percent-decode path parameter as UTF-8: {}", &path_params["id"])))
+                            .expect("Unable to create Bad Request response for invalid percent decode"))
+                    };
+
+                    let result = body.into_raw().await;
+                    match result {
+                        Ok(body) => {
+                            let param_body: Option<serde_json::Value> = if !body.is_empty() {
+                                match serde_json::from_slice(&body) {
+                                    Ok(param_body) => param_body,
+                                    Err(_) => None,
+                                }
+                            } else {
+                                None
+                            };
+
+                            let result = api_impl
+                                .delete_ro_crate_entities(param_id, param_body, &context)
+                                .await;
+                            let mut response = Response::new(Body::empty());
+                            response.headers_mut().insert(
+                                HeaderName::from_static("x-span-id"),
+                                HeaderValue::from_str(
+                                    (&context as &dyn Has<XSpanIdString>)
+                                        .get()
+                                        .0
+                                        .clone()
+                                        .as_str(),
+                                )
+                                .expect("Unable to create X-Span-ID header value"),
+                            );
+
+                            match result {
+                                Ok(rsp) => match rsp {
+                                    DeleteRoCrateEntitiesResponse::SuccessfulResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(200)
+                                            .expect("Unable to turn 200 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                                                            CONTENT_TYPE,
+                                                                                            HeaderValue::from_str("application/json")
+                                                                                                .expect("Unable to create Content-Type header for application/json"));
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    DeleteRoCrateEntitiesResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                                                            CONTENT_TYPE,
+                                                                                            HeaderValue::from_str("application/json")
+                                                                                                .expect("Unable to create Content-Type header for application/json"));
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    DeleteRoCrateEntitiesResponse::NotFoundErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(404)
+                                            .expect("Unable to turn 404 into a StatusCode");
+                                        response.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str("application/json").expect("Unable to create Content-Type header for application/json"));
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    DeleteRoCrateEntitiesResponse::DefaultErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(500)
+                                            .expect("Unable to turn 500 into a StatusCode");
+                                        response.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str("application/json").expect("Unable to create Content-Type header for application/json"));
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                },
+                                Err(_) => {
+                                    *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+                                    *response.body_mut() = Body::from("An internal error occurred");
+                                }
+                            }
+                            Ok(response)
+                        }
+                        Err(e) => Ok(Response::builder()
+                            .status(StatusCode::BAD_REQUEST)
+                            .body(Body::from(format!("Unable to read body: {}", e)))
+                            .expect(
+                                "Unable to create Bad Request response due to unable to read body",
+                            )),
+                    }
+                }
+
+                // ============================================================================
+                // End of RO-Crate Entity routes
+                // ============================================================================
+
+                // ============================================================================
                 // End of Access Groups routes
                 // ============================================================================
                 _ if path.matched(paths::ID_ACCESS_GROUPS) => method_not_allowed(),
@@ -17913,6 +18702,9 @@ where
                 _ if path.matched(paths::ID_FAILURE_HANDLERS) => method_not_allowed(),
                 _ if path.matched(paths::ID_FAILURE_HANDLERS_ID) => method_not_allowed(),
                 _ if path.matched(paths::ID_WORKFLOWS_ID_FAILURE_HANDLERS) => method_not_allowed(),
+                _ if path.matched(paths::ID_RO_CRATE_ENTITIES) => method_not_allowed(),
+                _ if path.matched(paths::ID_RO_CRATE_ENTITIES_ID) => method_not_allowed(),
+                _ if path.matched(paths::ID_WORKFLOWS_ID_RO_CRATE_ENTITIES) => method_not_allowed(),
                 _ if path.matched(paths::ID_BULK_JOBS) => method_not_allowed(),
                 _ if path.matched(paths::ID_COMPUTE_NODES) => method_not_allowed(),
                 _ if path.matched(paths::ID_COMPUTE_NODES_ID) => method_not_allowed(),
@@ -18045,6 +18837,24 @@ impl<T> RequestParser<T> for ApiRequestParser {
             // DeleteFailureHandler - DELETE /failure_handlers/{id}
             hyper::Method::DELETE if path.matched(paths::ID_FAILURE_HANDLERS_ID) => {
                 Some("DeleteFailureHandler")
+            }
+            hyper::Method::POST if path.matched(paths::ID_RO_CRATE_ENTITIES) => {
+                Some("CreateRoCrateEntity")
+            }
+            hyper::Method::GET if path.matched(paths::ID_RO_CRATE_ENTITIES_ID) => {
+                Some("GetRoCrateEntity")
+            }
+            hyper::Method::PUT if path.matched(paths::ID_RO_CRATE_ENTITIES_ID) => {
+                Some("UpdateRoCrateEntity")
+            }
+            hyper::Method::DELETE if path.matched(paths::ID_RO_CRATE_ENTITIES_ID) => {
+                Some("DeleteRoCrateEntity")
+            }
+            hyper::Method::GET if path.matched(paths::ID_WORKFLOWS_ID_RO_CRATE_ENTITIES) => {
+                Some("ListRoCrateEntities")
+            }
+            hyper::Method::DELETE if path.matched(paths::ID_WORKFLOWS_ID_RO_CRATE_ENTITIES) => {
+                Some("DeleteRoCrateEntities")
             }
             // CreateResourceRequirements - POST /resource_requirements
             hyper::Method::POST if path.matched(paths::ID_RESOURCE_REQUIREMENTS) => {

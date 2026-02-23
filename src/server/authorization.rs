@@ -210,6 +210,7 @@ impl AuthorizationService {
         "local_scheduler",
         "resource_requirements",
         "result",
+        "ro_crate_entity",
         "scheduled_compute_node",
         "slurm_scheduler",
         "user_data",

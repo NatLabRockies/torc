@@ -21,6 +21,7 @@ use torc::client::commands::remote::handle_remote_commands;
 use torc::client::commands::reports::handle_report_commands;
 use torc::client::commands::resource_requirements::handle_resource_requirements_commands;
 use torc::client::commands::results::handle_result_commands;
+use torc::client::commands::ro_crate::handle_ro_crate_commands;
 use torc::client::commands::scheduled_compute_nodes::handle_scheduled_compute_node_commands;
 use torc::client::commands::slurm::handle_slurm_commands;
 use torc::client::commands::user_data::handle_user_data_commands;
@@ -695,6 +696,9 @@ fn main() {
         }
         Commands::FailureHandlers { command } => {
             handle_failure_handler_commands(&config, command, &format);
+        }
+        Commands::RoCrate { command } => {
+            handle_ro_crate_commands(&config, command, &format);
         }
         Commands::Events { command } => {
             handle_event_commands(&config, command, &format);

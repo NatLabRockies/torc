@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::models::{
     ComputeNodeModel, EventModel, FailureHandlerModel, FileModel, JobModel, LocalSchedulerModel,
-    ResourceRequirementsModel, ResultModel, SlurmSchedulerModel, UserDataModel,
+    ResourceRequirementsModel, ResultModel, RoCrateEntityModel, SlurmSchedulerModel, UserDataModel,
     WorkflowActionModel, WorkflowModel,
 };
 
@@ -61,6 +61,10 @@ pub struct WorkflowExport {
     #[serde(default)]
     pub failure_handlers: Vec<FailureHandlerModel>,
 
+    /// RO-Crate entities in the workflow
+    #[serde(default)]
+    pub ro_crate_entities: Vec<RoCrateEntityModel>,
+
     /// All jobs in the workflow (includes relationship IDs)
     pub jobs: Vec<JobModel>,
 
@@ -93,6 +97,7 @@ impl WorkflowExport {
             slurm_schedulers: Vec::new(),
             local_schedulers: Vec::new(),
             failure_handlers: Vec::new(),
+            ro_crate_entities: Vec::new(),
             jobs: Vec::new(),
             workflow_actions: Vec::new(),
             compute_nodes: None,
@@ -112,6 +117,7 @@ pub struct ExportImportStats {
     pub slurm_schedulers: usize,
     pub local_schedulers: usize,
     pub failure_handlers: usize,
+    pub ro_crate_entities: usize,
     pub workflow_actions: usize,
     pub compute_nodes: usize,
     pub results: usize,
@@ -128,6 +134,7 @@ impl ExportImportStats {
             slurm_schedulers: export.slurm_schedulers.len(),
             local_schedulers: export.local_schedulers.len(),
             failure_handlers: export.failure_handlers.len(),
+            ro_crate_entities: export.ro_crate_entities.len(),
             workflow_actions: export.workflow_actions.len(),
             compute_nodes: export.compute_nodes.as_ref().map(|c| c.len()).unwrap_or(0),
             results: export.results.as_ref().map(|r| r.len()).unwrap_or(0),
