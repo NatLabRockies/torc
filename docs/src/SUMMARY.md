@@ -36,6 +36,7 @@
   - [Check Resource Utilization](./core/how-to/check-resource-utilization.md)
   - [View Resource Plots](./core/how-to/view-resource-plots.md)
   - [Parameterize Jobs with Files](./core/how-to/parameterize-with-files.md)
+  - [Add RO-Crate Metadata](./core/how-to/ro-crate-metadata.md)
 - [Tutorials](./core/tutorials/index.md)
   - [Many Independent Jobs](./core/tutorials/many-jobs.md)
   - [Diamond Workflow](./core/tutorials/diamond.md)

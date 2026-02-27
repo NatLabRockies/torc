@@ -10,3 +10,4 @@ Step-by-step guides for common tasks.
 - [Check Resource Utilization](./check-resource-utilization.md) - Monitoring resource usage
 - [View Resource Plots](./view-resource-plots.md) - Visualizing resource metrics
 - [Parameterize Jobs with Files](./parameterize-with-files.md) - Using file-based parameters
+- [Add RO-Crate Metadata](./ro-crate-metadata.md) - Storing provenance with RO-Crate
