@@ -225,6 +225,40 @@ The monitoring system automatically tracks child processes spawned by jobs. When
 worker processes (e.g., Python multiprocessing), all descendants are included in the aggregated
 metrics.
 
+## Slurm Accounting Stats
+
+When running inside a Slurm allocation, Torc calls `sacct` after each job step completes and stores
+the results in the `slurm_stats` table. These complement the sysinfo-based metrics above with
+Slurm-native cgroup measurements.
+
+### Fields
+
+| Field                  | sacct source   | Description                           |
+| ---------------------- | -------------- | ------------------------------------- |
+| `max_rss_bytes`        | `MaxRSS`       | Peak resident-set size (from cgroups) |
+| `max_vm_size_bytes`    | `MaxVMSize`    | Peak virtual memory size              |
+| `max_disk_read_bytes`  | `MaxDiskRead`  | Peak disk read bytes                  |
+| `max_disk_write_bytes` | `MaxDiskWrite` | Peak disk write bytes                 |
+| `ave_cpu_seconds`      | `AveCPU`       | Average CPU time in seconds           |
+| `node_list`            | `NodeList`     | Nodes used by the job step            |
+
+Additional identifying fields stored per record: `workflow_id`, `job_id`, `run_id`, `attempt_id`,
+`slurm_job_id`.
+
+Fields are `null` when:
+
+- The job ran locally (no `SLURM_JOB_ID` in the environment)
+- `sacct` is not available on the node
+- The step was not found in the Slurm accounting database at collection time
+
+### Viewing Stats
+
+```bash
+torc slurm stats <workflow_id>
+torc slurm stats <workflow_id> --job-id <job_id>
+torc -f json slurm stats <workflow_id>
+```
+
 ## Performance Characteristics
 
 - Single background monitoring thread regardless of job count

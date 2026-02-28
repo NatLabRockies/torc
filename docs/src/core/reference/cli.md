@@ -1499,6 +1499,7 @@ Slurm scheduler commands
 - `schedule-nodes` — Schedule compute nodes using Slurm
 - `parse-logs` — Parse Slurm log files for known error messages
 - `sacct` — Call sacct for scheduled compute nodes and display summary
+- `stats` — Show per-job Slurm accounting stats stored in the database
 - `generate` — Generate Slurm schedulers for a workflow based on job resource requirements
 - `regenerate` — Regenerate Slurm schedulers for an existing workflow based on pending jobs
 
@@ -1635,6 +1636,20 @@ Call sacct for scheduled compute nodes and display summary
 - `-o`, `--output-dir <OUTPUT_DIR>` — Output directory for sacct JSON files (only used with
   --save-json). Default: `output`
 - `--save-json` — Save full JSON output to files in addition to displaying summary. Default: `false`
+
+## `torc slurm stats`
+
+Show per-job Slurm accounting stats stored in the database
+
+**Usage:** `torc slurm stats [OPTIONS] <WORKFLOW_ID>`
+
+###### **Arguments:**
+
+- `<WORKFLOW_ID>` — Workflow ID
+
+###### **Options:**
+
+- `--job-id <JOB_ID>` — Filter by job ID
 
 ## `torc slurm generate`
 

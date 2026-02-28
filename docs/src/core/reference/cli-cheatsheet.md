@@ -48,6 +48,7 @@
 | `torc workflows sync-status <id>`              | Fix orphaned jobs (stuck in "running")         |
 | `torc workflows correct-resources <id>`        | Upscale violated + downsize over-allocated RRs |
 | `torc slurm sacct <id>`                        | Get Slurm accounting data                      |
+| `torc slurm stats <id>`                        | Per-job sacct stats stored in the database     |
 | `torc slurm usage <id>`                        | Total compute node and CPU time consumed       |
 
 ## Remote Workers
