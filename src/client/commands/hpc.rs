@@ -203,10 +203,16 @@ pub fn handle_hpc_commands(command: &HpcCommands, format: &str) {
 
         HpcCommands::Detect => {
             if let Some(profile) = registry.detect() {
-                println!(
-                    "Detected HPC system: {} ({})",
-                    profile.display_name, profile.name
-                );
+                if format == "json" {
+                    print_json(&profile, "detected hpc profile");
+                } else {
+                    println!(
+                        "Detected HPC system: {} ({})",
+                        profile.display_name, profile.name
+                    );
+                }
+            } else if format == "json" {
+                print_json(&Option::<HpcProfile>::None, "detected hpc profile");
             } else {
                 println!("No known HPC system detected.");
             }
@@ -214,17 +220,21 @@ pub fn handle_hpc_commands(command: &HpcCommands, format: &str) {
 
         HpcCommands::Show { name } => {
             if let Some(profile) = registry.get(name) {
-                println!("HPC Profile: {}", profile.display_name);
-                println!("Identifier:  {}", profile.name);
-                if !profile.description.is_empty() {
-                    println!("Description: {}", profile.description);
-                }
-                println!("Partitions:  {}", profile.partitions.len());
+                if format == "json" {
+                    print_json(&profile, "hpc profile");
+                } else {
+                    println!("HPC Profile: {}", profile.display_name);
+                    println!("Identifier:  {}", profile.name);
+                    if !profile.description.is_empty() {
+                        println!("Description: {}", profile.description);
+                    }
+                    println!("Partitions:  {}", profile.partitions.len());
 
-                if !profile.metadata.is_empty() {
-                    println!("\nMetadata:");
-                    for (k, v) in &profile.metadata {
-                        println!("  {}: {}", k, v);
+                    if !profile.metadata.is_empty() {
+                        println!("\nMetadata:");
+                        for (k, v) in &profile.metadata {
+                            println!("  {}: {}", k, v);
+                        }
                     }
                 }
             } else {
@@ -291,9 +301,21 @@ pub fn handle_hpc_commands(command: &HpcCommands, format: &str) {
             };
 
             if let Some(profile) = profile {
-                let mem_mb = crate::client::commands::slurm::parse_memory_mb(memory).unwrap_or(0);
+                let mem_mb = match crate::client::commands::slurm::parse_memory_mb(memory) {
+                    Ok(m) => m,
+                    Err(e) => {
+                        eprintln!("Error parsing memory: {}", e);
+                        std::process::exit(1);
+                    }
+                };
                 let walltime_secs =
-                    crate::client::commands::slurm::parse_walltime_secs(walltime).unwrap_or(0);
+                    match crate::client::commands::slurm::parse_walltime_secs(walltime) {
+                        Ok(w) => w,
+                        Err(e) => {
+                            eprintln!("Error parsing walltime: {}", e);
+                            std::process::exit(1);
+                        }
+                    };
 
                 let matching =
                     profile.find_matching_partitions(*cpus, mem_mb, walltime_secs, *gpus);
@@ -304,17 +326,24 @@ pub fn handle_hpc_commands(command: &HpcCommands, format: &str) {
                 } else {
                     let rows: Vec<_> = matching
                         .iter()
-                        .map(|p| PartitionRow {
-                            name: p.name.clone(),
-                            cpus: p.cpus_per_node,
-                            memory: format!("{:.1} GB", p.memory_gb()),
-                            walltime: p.max_walltime_str(),
-                            gpus: p
-                                .gpus_per_node
-                                .map(|n| format!("{}x", n))
-                                .unwrap_or_else(|| "-".to_string()),
-                            shared: p.shared,
-                            explicit: p.requires_explicit_request,
+                        .map(|p| {
+                            let mut name_display = p.name.clone();
+                            if Some(*p) == best {
+                                name_display = format!("{} (BEST)", name_display);
+                            }
+
+                            PartitionRow {
+                                name: name_display,
+                                cpus: p.cpus_per_node,
+                                memory: format!("{:.1} GB", p.memory_gb()),
+                                walltime: p.max_walltime_str(),
+                                gpus: p
+                                    .gpus_per_node
+                                    .map(|n| format!("{}x", n))
+                                    .unwrap_or_else(|| "-".to_string()),
+                                shared: p.shared,
+                                explicit: p.requires_explicit_request,
+                            }
                         })
                         .collect();
 

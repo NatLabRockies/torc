@@ -1,6 +1,7 @@
 //! Tests for HPC profile system and scheduler generation
 
 use rstest::rstest;
+use serial_test::serial;
 use std::collections::HashMap;
 use torc::client::commands::slurm::{
     GroupByStrategy, WalltimeStrategy, generate_schedulers_for_workflow, parse_memory_mb,
@@ -1608,6 +1609,7 @@ fn test_generate_schedulers_cpu_vs_memory_constraint() {
 // ============== Dynamic Slurm Profile Tests ==============
 
 #[rstest]
+#[serial]
 fn test_detect_slurm_profile() {
     use std::env;
     use std::path::Path;
@@ -1649,6 +1651,7 @@ fn test_detect_slurm_profile() {
 }
 
 #[rstest]
+#[serial]
 fn test_registry_detect_dynamic_slurm() {
     use std::env;
     use std::path::Path;
@@ -1682,6 +1685,7 @@ fn test_registry_detect_dynamic_slurm() {
 }
 
 #[rstest]
+#[serial]
 fn test_registry_get_slurm() {
     use std::env;
     use std::path::Path;

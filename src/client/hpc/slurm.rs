@@ -168,8 +168,7 @@ pub fn generate_dynamic_slurm_profile(
         // Determine if shared based on OverSubscribe setting or partition name
         let shared = scontrol_info.oversubscribe.as_ref().is_some_and(|o| {
             o.to_lowercase().contains("yes") || o.to_lowercase().contains("force")
-        }) || name.to_lowercase().contains("shared")
-            || gpus_per_node.is_some(); // GPU partitions are typically shared
+        }) || name.to_lowercase().contains("shared");
 
         let partition = HpcPartition {
             name,
@@ -329,7 +328,7 @@ fn parse_scontrol_partition(name: &str) -> Option<ScontrolPartitionInfo> {
                 "MinNodes" => info.min_nodes = value.parse().ok(),
                 "MaxNodes" => info.max_nodes = value.parse().ok(),
                 "OverSubscribe" => info.oversubscribe = Some(value.to_string()),
-                "QOS" => info.default_qos = Some(value.to_string()),
+                "QOS" | "QoS" => info.default_qos = Some(value.to_string()),
                 _ => {}
             }
         }

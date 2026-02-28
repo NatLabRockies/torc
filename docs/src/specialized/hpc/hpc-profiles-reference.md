@@ -96,8 +96,14 @@ torc hpc partitions [PROFILE] [OPTIONS]
 Find partitions matching resource requirements.
 
 ```bash
-torc hpc match [OPTIONS]
+torc hpc match [OPTIONS] [PROFILE]
 ```
+
+**Arguments:**
+
+| Argument    | Description                               |
+| ----------- | ----------------------------------------- |
+| `[PROFILE]` | Profile to use (auto-detected if omitted) |
 
 **Options:**
 
@@ -107,7 +113,6 @@ torc hpc match [OPTIONS]
 | `--memory <SIZE>`       | Required memory (e.g., `64g`, `512m`)     |
 | `--walltime <DURATION>` | Required walltime (e.g., `2h`, `4:00:00`) |
 | `--gpus <N>`            | Required GPUs                             |
-| `--profile <PROFILE>`   | Profile to use (auto-detected if omitted) |
 | `-f, --format <FORMAT>` | Output format: `table` or `json`          |
 
 **Memory format:** `<number><unit>` where unit is `k`, `m`, `g`, or `t` (case-insensitive).

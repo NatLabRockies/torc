@@ -1976,7 +1976,11 @@ Show partitions for an HPC profile
 
 Find partitions matching resource requirements
 
-**Usage:** `torc hpc match [OPTIONS]`
+**Usage:** `torc hpc match [OPTIONS] [PROFILE]`
+
+###### **Arguments:**
+
+- `[PROFILE]` — Profile name (if not specified, tries to detect current system)
 
 ###### **Options:**
 
@@ -1984,7 +1988,6 @@ Find partitions matching resource requirements
 - `--memory <MEMORY>` — Memory required (e.g., "100g", "512m", or MB as number). Default: `1g`
 - `--walltime <WALLTIME>` — Wall time required (e.g., "4:00:00", "2-00:00:00"). Default: `1:00:00`
 - `--gpus <GPUS>` — Number of GPUs required
-- `--profile <PROFILE>` — Profile name (if not specified, tries to detect current system)
 
 ## `torc hpc generate`
 
