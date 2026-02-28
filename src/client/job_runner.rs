@@ -1275,6 +1275,8 @@ impl JobRunner {
                         attempt_id,
                         self.resource_monitor.as_ref(),
                         &self.config.base_path,
+                        Some(&job_rr),
+                        self.workflow.limit_resources.unwrap_or(true),
                     ) {
                         Ok(()) => {
                             info!(
@@ -1398,6 +1400,8 @@ impl JobRunner {
                         attempt_id,
                         self.resource_monitor.as_ref(),
                         &self.config.base_path,
+                        None,
+                        true,
                     ) {
                         Ok(()) => {
                             info!(

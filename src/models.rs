@@ -8462,6 +8462,26 @@ pub struct ResultModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub avg_cpu_percent: Option<f64>,
 
+    /// Slurm accounting: max resident set size in bytes (from sacct MaxRSS)
+    #[serde(rename = "sacct_max_rss_bytes")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sacct_max_rss_bytes: Option<i64>,
+
+    /// Slurm accounting: max disk read in bytes (from sacct MaxDiskRead)
+    #[serde(rename = "sacct_max_disk_read_bytes")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sacct_max_disk_read_bytes: Option<i64>,
+
+    /// Slurm accounting: max disk write in bytes (from sacct MaxDiskWrite)
+    #[serde(rename = "sacct_max_disk_write_bytes")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sacct_max_disk_write_bytes: Option<i64>,
+
+    /// Slurm accounting: average CPU time in seconds (from sacct AveCPU)
+    #[serde(rename = "sacct_ave_cpu_seconds")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sacct_ave_cpu_seconds: Option<f64>,
+
     #[serde(rename = "status")]
     pub status: JobStatus,
 }
@@ -8493,6 +8513,10 @@ impl ResultModel {
             avg_memory_bytes: None,
             peak_cpu_percent: None,
             avg_cpu_percent: None,
+            sacct_max_rss_bytes: None,
+            sacct_max_disk_read_bytes: None,
+            sacct_max_disk_write_bytes: None,
+            sacct_ave_cpu_seconds: None,
             status,
         }
     }
@@ -8550,6 +8574,10 @@ impl std::str::FromStr for ResultModel {
             pub avg_memory_bytes: Vec<i64>,
             pub peak_cpu_percent: Vec<f64>,
             pub avg_cpu_percent: Vec<f64>,
+            pub sacct_max_rss_bytes: Vec<i64>,
+            pub sacct_max_disk_read_bytes: Vec<i64>,
+            pub sacct_max_disk_write_bytes: Vec<i64>,
+            pub sacct_ave_cpu_seconds: Vec<f64>,
             pub status: Vec<JobStatus>,
         }
 
@@ -8658,6 +8686,16 @@ impl std::str::FromStr for ResultModel {
             avg_memory_bytes: intermediate_rep.avg_memory_bytes.into_iter().next(),
             peak_cpu_percent: intermediate_rep.peak_cpu_percent.into_iter().next(),
             avg_cpu_percent: intermediate_rep.avg_cpu_percent.into_iter().next(),
+            sacct_max_rss_bytes: intermediate_rep.sacct_max_rss_bytes.into_iter().next(),
+            sacct_max_disk_read_bytes: intermediate_rep
+                .sacct_max_disk_read_bytes
+                .into_iter()
+                .next(),
+            sacct_max_disk_write_bytes: intermediate_rep
+                .sacct_max_disk_write_bytes
+                .into_iter()
+                .next(),
+            sacct_ave_cpu_seconds: intermediate_rep.sacct_ave_cpu_seconds.into_iter().next(),
             status: intermediate_rep
                 .status
                 .into_iter()
@@ -9748,6 +9786,13 @@ pub struct WorkflowModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub use_pending_failed: Option<bool>,
 
+    /// When true (default), srun passes --mem and --cpus-per-task to enforce cgroup limits for
+    /// each job step when running inside a Slurm allocation. Set to false to allow jobs to exceed
+    /// their stated resource requirements (useful for exploratory workloads).
+    #[serde(rename = "limit_resources")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit_resources: Option<bool>,
+
     /// Project name or identifier for grouping workflows
     #[serde(rename = "project")]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -9781,6 +9826,7 @@ impl WorkflowModel {
             resource_monitor_config: None,
             slurm_defaults: None,
             use_pending_failed: Some(false),
+            limit_resources: Some(true),
             project: None,
             metadata: None,
             status_id: None,
@@ -9860,6 +9906,9 @@ impl std::string::ToString for WorkflowModel {
                 ]
                 .join(",")
             }),
+            self.limit_resources.as_ref().map(|limit_resources| {
+                ["limit_resources".to_string(), limit_resources.to_string()].join(",")
+            }),
             self.status_id
                 .as_ref()
                 .map(|status_id| ["status_id".to_string(), status_id.to_string()].join(",")),
@@ -9894,6 +9943,7 @@ impl std::str::FromStr for WorkflowModel {
             pub resource_monitor_config: Vec<String>,
             pub slurm_defaults: Vec<String>,
             pub use_pending_failed: Vec<bool>,
+            pub limit_resources: Vec<bool>,
             pub project: Vec<String>,
             pub metadata: Vec<String>,
             pub status_id: Vec<i64>,
@@ -9969,6 +10019,9 @@ impl std::str::FromStr for WorkflowModel {
                     "use_pending_failed" => intermediate_rep.use_pending_failed.push(
                         <bool as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
                     ),
+                    "limit_resources" => intermediate_rep.limit_resources.push(
+                        <bool as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
+                    ),
                     "project" => intermediate_rep.project.push(
                         <String as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
                     ),
@@ -10026,6 +10079,7 @@ impl std::str::FromStr for WorkflowModel {
             resource_monitor_config: intermediate_rep.resource_monitor_config.into_iter().next(),
             slurm_defaults: intermediate_rep.slurm_defaults.into_iter().next(),
             use_pending_failed: intermediate_rep.use_pending_failed.into_iter().next(),
+            limit_resources: intermediate_rep.limit_resources.into_iter().next(),
             project: intermediate_rep.project.into_iter().next(),
             metadata: intermediate_rep.metadata.into_iter().next(),
             status_id: intermediate_rep.status_id.into_iter().next(),

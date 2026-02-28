@@ -312,6 +312,83 @@ From a compute node:
 curl $TORC_API_URL/health
 ```
 
+## srun Job Step Wrapping
+
+When Torc detects that it is running inside a Slurm allocation (`SLURM_JOB_ID` is set in the
+environment), it automatically wraps each individual job with `srun`. This creates a dedicated Slurm
+job step for every Torc job, which provides:
+
+- **Cgroup enforcement** — Slurm enforces CPU and memory limits from the job's resource
+  requirements. Jobs that exceed their stated requirements are immediately killed.
+- **`sstat` visibility** — HPC administrators and users can inspect per-step metrics (CPU, memory,
+  wall-time) with `sstat -j <SLURM_JOB_ID>`.
+- **Scheduler awareness** — Every running Torc job appears as a named step in `squeue`, giving the
+  HPC team and users full visibility into what is actually executing.
+- **Accounting data** — After each step exits, Torc calls `sacct` to collect Slurm accounting
+  statistics and stores them with the job result (see
+  [Slurm Accounting Stats](#slurm-accounting-stats) below).
+
+### Step Naming
+
+Each `srun` step is named `wf<workflow_id>_j<job_id>_r<run_id>_a<attempt_id>`, for example
+`wf10_j42_r1_a1`. This name appears in `squeue --me` and `sacct` output, and is also used as the log
+file prefix, so all Slurm and Torc records for a job share the same identifier.
+
+### Multi-Node Jobs
+
+Torc passes `--nodes=<num_nodes>` from the job's resource requirements to `srun`. Jobs with
+`num_nodes: 1` (the default) run on a single node. Jobs with `num_nodes > 1` span multiple nodes,
+which is correct for workloads that manage their own internal parallelism (MPI, Julia
+`Distributed.jl`, Dask, etc.) via `SLURM_JOB_NODELIST`.
+
+### Resource Limit Enforcement
+
+By default (`limit_resources = true`), Torc passes `--cpus-per-task` and `--mem` to `srun` so Slurm
+enforces the cgroup limits defined in each job's resource requirements. This is the recommended
+setting for production workflows to prevent runaway jobs from impacting other users.
+
+To disable cgroup enforcement while still using `srun` (useful when exploring resource requirements
+for new jobs), set `limit_resources: false` in your workflow specification:
+
+```yaml
+name: my_workflow
+limit_resources: false
+jobs:
+  ...
+```
+
+The setting is stored per-workflow in the database, so different workflows can have different
+enforcement policies. It can also be updated via the API after a workflow is created.
+
+> **Warning**: With `limit_resources: false`, jobs can exceed their stated resource requirements. On
+> shared clusters this may affect other users. Use this setting only for exploratory workloads.
+
+### Slurm Accounting Stats
+
+After each job step exits, Torc calls `sacct` once to collect the following Slurm-native accounting
+fields and stores them with the job result:
+
+| Field                        | sacct source   | Description                           |
+| ---------------------------- | -------------- | ------------------------------------- |
+| `sacct_max_rss_bytes`        | `MaxRSS`       | Peak resident-set size (from cgroups) |
+| `sacct_max_disk_read_bytes`  | `MaxDiskRead`  | Peak disk read bytes                  |
+| `sacct_max_disk_write_bytes` | `MaxDiskWrite` | Peak disk write bytes                 |
+| `sacct_ave_cpu_seconds`      | `AveCPU`       | Average CPU time in seconds           |
+
+These fields complement the existing sysinfo-based metrics (`peak_memory_bytes`, `peak_cpu_percent`,
+etc.) and are available in the job result API and `torc reports results`.
+
+`sacct` data is collected on a best-effort basis. Fields are `null` when:
+
+- The job ran locally (no `SLURM_JOB_ID`)
+- `sacct` is not available on the node
+- The step was not found in the Slurm accounting database at collection time
+
+### Local Execution
+
+When running locally (no `SLURM_JOB_ID` environment variable), Torc uses its standard shell wrapper
+and the `srun` behavior is never triggered. No configuration is needed for local runs.
+
 ## See Also
 
 - [Slurm Overview](./slurm-workflows.md) — Simplified workflow approach

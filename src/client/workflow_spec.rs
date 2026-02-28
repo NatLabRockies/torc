@@ -685,6 +685,11 @@ pub struct WorkflowSpec {
     /// Use PendingFailed status for failed jobs (enables AI-assisted recovery)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub use_pending_failed: Option<bool>,
+    /// When true (default), srun passes --mem and --cpus-per-task to enforce cgroup limits
+    /// for each job step when running inside a Slurm allocation. Set to false to allow jobs
+    /// to exceed their stated resource requirements.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit_resources: Option<bool>,
     /// Project name or identifier for grouping workflows
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<String>,
@@ -722,6 +727,7 @@ impl WorkflowSpec {
             resource_monitor: None,
             actions: None,
             use_pending_failed: None,
+            limit_resources: None,
             project: None,
             metadata: None,
         }
@@ -1704,6 +1710,11 @@ impl WorkflowSpec {
         // Set use_pending_failed if present
         if let Some(value) = spec.use_pending_failed {
             workflow_model.use_pending_failed = Some(value);
+        }
+
+        // Set limit_resources if present
+        if let Some(value) = spec.limit_resources {
+            workflow_model.limit_resources = Some(value);
         }
 
         // Set project if present
@@ -3416,6 +3427,11 @@ impl WorkflowSpec {
                         obj.insert("use_pending_failed".to_string(), serde_json::Value::Bool(v));
                     }
                 }
+                "limit_resources" => {
+                    if let Some(v) = node.entries().first().and_then(|e| e.value().as_bool()) {
+                        obj.insert("limit_resources".to_string(), serde_json::Value::Bool(v));
+                    }
+                }
                 _ => {
                     // Ignore unknown nodes
                 }
@@ -4558,6 +4574,7 @@ job "train_lr{lr:.4f}_bs{batch_size}" {
             actions: None,
             failure_handlers: None,
             use_pending_failed: None,
+            limit_resources: None,
             project: None,
             metadata: None,
         };

@@ -26,13 +26,14 @@
 
 use crate::client::log_paths::{get_job_stderr_path, get_job_stdout_path};
 use crate::client::resource_monitor::ResourceMonitor;
-use crate::models::{JobModel, JobStatus, ResultModel};
+use crate::memory_utils::memory_string_to_mb;
+use crate::models::{JobModel, JobStatus, ResourceRequirementsModel, ResultModel};
 use chrono::{DateTime, Utc};
 use log::{self, debug, error, info};
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::Path;
-use std::process::{Child, Stdio};
+use std::process::{Child, Command, Stdio};
 
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
@@ -45,6 +46,9 @@ pub struct AsyncCliCommand {
     pub job_id: i64,
     workflow_id: Option<i64>,
     run_id: Option<i64>,
+    attempt_id: Option<i64>,
+    /// Slurm step name set when running inside an allocation (for sacct lookup).
+    step_name: Option<String>,
     handle: Option<Child>,
     pid: Option<u32>,
     pub is_running: bool,
@@ -56,6 +60,11 @@ pub struct AsyncCliCommand {
     status: JobStatus,
     stdout_fp: Option<BufWriter<File>>,
     stderr_fp: Option<BufWriter<File>>,
+    // Slurm accounting stats collected via sacct after step completion.
+    sacct_max_rss_bytes: Option<i64>,
+    sacct_max_disk_read_bytes: Option<i64>,
+    sacct_max_disk_write_bytes: Option<i64>,
+    sacct_ave_cpu_seconds: Option<f64>,
 }
 
 impl AsyncCliCommand {
@@ -67,6 +76,8 @@ impl AsyncCliCommand {
             job_id,
             workflow_id: None,
             run_id: None,
+            attempt_id: None,
+            step_name: None,
             handle: None,
             pid: None,
             is_running: false,
@@ -78,9 +89,14 @@ impl AsyncCliCommand {
             status,
             stdout_fp: None,
             stderr_fp: None,
+            sacct_max_rss_bytes: None,
+            sacct_max_disk_read_bytes: None,
+            sacct_max_disk_write_bytes: None,
+            sacct_ave_cpu_seconds: None,
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn start(
         &mut self,
         output_dir: &Path,
@@ -89,6 +105,8 @@ impl AsyncCliCommand {
         attempt_id: i64,
         resource_monitor: Option<&ResourceMonitor>,
         api_url: &str,
+        resource_requirements: Option<&ResourceRequirementsModel>,
+        limit_resources: bool,
     ) -> Result<(), Box<dyn std::error::Error>> {
         if self.is_running {
             return Err("Job is already running".into());
@@ -112,15 +130,50 @@ impl AsyncCliCommand {
         self.stdout_fp = Some(BufWriter::new(stdout_file));
         self.stderr_fp = Some(BufWriter::new(stderr_file));
 
-        let mut cmd = crate::client::utils::shell_command();
-
         let command_str = if let Some(ref invocation_script) = self.job.invocation_script {
             format!("{} {}", invocation_script, self.job.command)
         } else {
             self.job.command.clone()
         };
+
+        let mut cmd = if let Ok(slurm_job_id) = std::env::var("SLURM_JOB_ID") {
+            // Running inside a Slurm allocation — wrap with srun so Slurm creates a
+            // per-job cgroup step, enables sacct accounting, and gives HPC admins visibility.
+            let step_name = format!(
+                "wf{}_j{}_r{}_a{}",
+                workflow_id, self.job_id, run_id, attempt_id
+            );
+            debug!(
+                "Wrapping job with srun: slurm_job_id={} step={}",
+                slurm_job_id, step_name
+            );
+            let mut srun = Command::new("srun");
+            srun.arg("--exclusive"); // each step gets its own cgroup
+            srun.arg("--ntasks=1");
+            srun.arg(format!("--job-name={}", step_name));
+            if let Some(rr) = resource_requirements {
+                let num_nodes = rr.num_nodes.max(1);
+                srun.arg(format!("--nodes={}", num_nodes));
+                if limit_resources {
+                    srun.arg(format!("--cpus-per-task={}", rr.num_cpus));
+                    let mem_mb = memory_string_to_mb(&rr.memory);
+                    srun.arg(format!("--mem={}M", mem_mb));
+                }
+            } else {
+                srun.arg("--nodes=1");
+            }
+            // Run via bash so job.command can use shell features
+            srun.args(["bash", "-c", &command_str]);
+            self.step_name = Some(step_name);
+            srun
+        } else {
+            // Local execution — use the standard shell wrapper
+            let mut shell = crate::client::utils::shell_command();
+            shell.arg(&command_str);
+            shell
+        };
+
         let child = cmd
-            .arg(&command_str)
             .env("TORC_WORKFLOW_ID", workflow_id_str)
             .env("TORC_JOB_ID", job_id_str)
             .env("TORC_JOB_NAME", &self.job.name)
@@ -136,6 +189,7 @@ impl AsyncCliCommand {
         self.handle = Some(child);
         self.workflow_id = Some(workflow_id);
         self.run_id = Some(run_id);
+        self.attempt_id = Some(attempt_id);
         self.is_running = true;
         self.start_time = Utc::now();
         self.status = JobStatus::Running;
@@ -236,6 +290,12 @@ impl AsyncCliCommand {
         result.avg_memory_bytes = avg_mem;
         result.peak_cpu_percent = peak_cpu;
         result.avg_cpu_percent = avg_cpu;
+
+        // Set Slurm accounting stats (only populated when running inside a Slurm allocation)
+        result.sacct_max_rss_bytes = self.sacct_max_rss_bytes;
+        result.sacct_max_disk_read_bytes = self.sacct_max_disk_read_bytes;
+        result.sacct_max_disk_write_bytes = self.sacct_max_disk_write_bytes;
+        result.sacct_ave_cpu_seconds = self.sacct_ave_cpu_seconds;
 
         result
     }
@@ -376,6 +436,18 @@ impl AsyncCliCommand {
         self.stdout_fp = None;
         self.stderr_fp = None;
         self.handle = None;
+
+        // Collect Slurm accounting stats via sacct when running inside an allocation.
+        if let (Ok(slurm_job_id), Some(step_name)) =
+            (std::env::var("SLURM_JOB_ID"), self.step_name.as_deref())
+            && let Some(stats) = collect_sacct_stats(&slurm_job_id, step_name)
+        {
+            self.sacct_max_rss_bytes = stats.max_rss_bytes;
+            self.sacct_max_disk_read_bytes = stats.max_disk_read_bytes;
+            self.sacct_max_disk_write_bytes = stats.max_disk_write_bytes;
+            self.sacct_ave_cpu_seconds = stats.ave_cpu_seconds;
+        }
+
         let status_str = format!("{:?}", status).to_lowercase();
         info!(
             "Job process completed workflow_id={} job_id={} run_id={} return_code={} status={} exec_time_s={:.3}",
@@ -475,6 +547,126 @@ impl AsyncCliCommand {
     }
 }
 
+/// Slurm accounting stats collected from `sacct` after step completion.
+struct SacctStats {
+    max_rss_bytes: Option<i64>,
+    max_disk_read_bytes: Option<i64>,
+    max_disk_write_bytes: Option<i64>,
+    ave_cpu_seconds: Option<f64>,
+}
+
+/// Call `sacct` once after a job step exits to collect Slurm accounting data.
+///
+/// Returns `None` if sacct is unavailable, returns no data for the step, or
+/// the output cannot be parsed. This is a best-effort call — failures are
+/// logged at debug level and do not affect job result reporting.
+fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats> {
+    let output = std::process::Command::new("sacct")
+        .args([
+            "-j",
+            slurm_job_id,
+            "--name",
+            step_name,
+            "--format",
+            "MaxRSS,MaxDiskRead,MaxDiskWrite,AveCPU",
+            "-P", // pipe-separated output
+            "-n", // no header
+        ])
+        .output();
+
+    let output = match output {
+        Ok(o) => o,
+        Err(e) => {
+            debug!(
+                "sacct not available or failed for step {}: {}",
+                step_name, e
+            );
+            return None;
+        }
+    };
+
+    if !output.status.success() {
+        debug!(
+            "sacct returned non-zero exit code for step {}: {}",
+            step_name,
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+        return None;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // sacct may return multiple lines (e.g. job + batch step); pick the first non-empty one.
+    let line = stdout.lines().find(|l| !l.trim().is_empty())?;
+    let fields: Vec<&str> = line.split('|').collect();
+    if fields.len() < 4 {
+        debug!(
+            "sacct output for step {} has fewer than 4 fields: {:?}",
+            step_name, fields
+        );
+        return None;
+    }
+
+    debug!(
+        "sacct stats for step {}: MaxRSS={} MaxDiskRead={} MaxDiskWrite={} AveCPU={}",
+        step_name, fields[0], fields[1], fields[2], fields[3]
+    );
+
+    Some(SacctStats {
+        max_rss_bytes: parse_slurm_memory(fields[0]),
+        max_disk_read_bytes: parse_slurm_memory(fields[1]),
+        max_disk_write_bytes: parse_slurm_memory(fields[2]),
+        ave_cpu_seconds: parse_slurm_cpu_time(fields[3]),
+    })
+}
+
+/// Parse a Slurm memory string (e.g. "512K", "1.50M", "2G") into bytes.
+/// Returns `None` for empty or unparseable values; `Some(0)` for "0".
+fn parse_slurm_memory(s: &str) -> Option<i64> {
+    let s = s.trim();
+    if s.is_empty() {
+        return None;
+    }
+    if s == "0" {
+        return Some(0);
+    }
+    let (num_str, multiplier) = if let Some(rest) = s.strip_suffix('K') {
+        (rest, 1_024i64)
+    } else if let Some(rest) = s.strip_suffix('M') {
+        (rest, 1_024 * 1_024)
+    } else if let Some(rest) = s.strip_suffix('G') {
+        (rest, 1_024 * 1_024 * 1_024)
+    } else if let Some(rest) = s.strip_suffix('T') {
+        (rest, 1_024 * 1_024 * 1_024 * 1_024)
+    } else {
+        (s, 1)
+    };
+    let n: f64 = num_str.parse().ok()?;
+    Some((n * multiplier as f64) as i64)
+}
+
+/// Parse a Slurm CPU time string (`[D-]HH:MM:SS`) into seconds.
+/// Returns `None` for empty or unparseable values.
+fn parse_slurm_cpu_time(s: &str) -> Option<f64> {
+    let s = s.trim();
+    if s.is_empty() {
+        return None;
+    }
+    let (days, rest) = if let Some(dash) = s.find('-') {
+        let d: u64 = s[..dash].parse().ok()?;
+        (d, &s[dash + 1..])
+    } else {
+        (0, s)
+    };
+    let parts: Vec<&str> = rest.split(':').collect();
+    if parts.len() != 3 {
+        return None;
+    }
+    let h: u64 = parts[0].parse().ok()?;
+    let m: u64 = parts[1].parse().ok()?;
+    let sec: f64 = parts[2].parse().ok()?;
+    Some((days * 86_400 + h * 3_600 + m * 60) as f64 + sec)
+}
+
 impl Drop for AsyncCliCommand {
     fn drop(&mut self) {
         if self.is_running {
@@ -484,5 +676,68 @@ impl Drop for AsyncCliCommand {
             );
             let _ = self.terminate();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_slurm_memory_units() {
+        assert_eq!(parse_slurm_memory("0"), Some(0));
+        assert_eq!(parse_slurm_memory("512K"), Some(512 * 1_024));
+        assert_eq!(parse_slurm_memory("2M"), Some(2 * 1_024 * 1_024));
+        assert_eq!(parse_slurm_memory("1G"), Some(1_024 * 1_024 * 1_024));
+        assert_eq!(
+            parse_slurm_memory("1T"),
+            Some(1_024 * 1_024 * 1_024 * 1_024)
+        );
+    }
+
+    #[test]
+    fn test_parse_slurm_memory_decimal() {
+        // sacct can emit fractional values like "1.50M"
+        let result = parse_slurm_memory("1.50M").unwrap();
+        assert!((result as f64 - 1.5 * 1_024.0 * 1_024.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_parse_slurm_memory_no_suffix() {
+        // Raw bytes
+        assert_eq!(parse_slurm_memory("1024"), Some(1024));
+    }
+
+    #[test]
+    fn test_parse_slurm_memory_empty() {
+        assert_eq!(parse_slurm_memory(""), None);
+        assert_eq!(parse_slurm_memory("  "), None);
+    }
+
+    #[test]
+    fn test_parse_slurm_cpu_time_hhmmss() {
+        assert_eq!(parse_slurm_cpu_time("00:01:30"), Some(90.0));
+        assert_eq!(parse_slurm_cpu_time("01:00:00"), Some(3_600.0));
+        assert_eq!(parse_slurm_cpu_time("00:00:00"), Some(0.0));
+    }
+
+    #[test]
+    fn test_parse_slurm_cpu_time_with_days() {
+        // Format: D-HH:MM:SS
+        assert_eq!(parse_slurm_cpu_time("1-02:30:00"), Some(95_400.0));
+        assert_eq!(parse_slurm_cpu_time("0-00:00:01"), Some(1.0));
+    }
+
+    #[test]
+    fn test_parse_slurm_cpu_time_empty() {
+        assert_eq!(parse_slurm_cpu_time(""), None);
+        assert_eq!(parse_slurm_cpu_time("  "), None);
+    }
+
+    #[test]
+    fn test_parse_slurm_cpu_time_fractional_seconds() {
+        // Some sacct versions emit sub-second values
+        let result = parse_slurm_cpu_time("00:00:01.5").unwrap();
+        assert!((result - 1.5).abs() < 0.001);
     }
 }
