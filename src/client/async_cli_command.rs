@@ -29,7 +29,7 @@ use crate::client::resource_monitor::ResourceMonitor;
 use crate::memory_utils::memory_string_to_mb;
 use crate::models::{JobModel, JobStatus, ResourceRequirementsModel, ResultModel};
 use chrono::{DateTime, Utc};
-use log::{self, debug, error, info};
+use log::{self, debug, error, info, warn};
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::Path;
@@ -147,7 +147,10 @@ impl AsyncCliCommand {
                 "Wrapping job with srun: slurm_job_id={} step={}",
                 slurm_job_id, step_name
             );
-            let mut srun = Command::new("srun");
+            // Allow tests to substitute a fake srun binary via TORC_FAKE_SRUN.
+            let srun_binary =
+                std::env::var("TORC_FAKE_SRUN").unwrap_or_else(|_| "srun".to_string());
+            let mut srun = Command::new(&srun_binary);
             srun.arg("--exclusive"); // each step gets its own cgroup
             srun.arg("--ntasks=1");
             srun.arg(format!("--job-name={}", step_name));
@@ -156,8 +159,14 @@ impl AsyncCliCommand {
                 srun.arg(format!("--nodes={}", num_nodes));
                 if limit_resources {
                     srun.arg(format!("--cpus-per-task={}", rr.num_cpus));
-                    let mem_mb = memory_string_to_mb(&rr.memory);
-                    srun.arg(format!("--mem={}M", mem_mb));
+                    if let Some(mem_mb) = memory_string_to_mb(&rr.memory) {
+                        srun.arg(format!("--mem={}M", mem_mb));
+                    } else {
+                        warn!(
+                            "Could not parse memory string {:?} for job {}; omitting --mem from srun",
+                            rr.memory, self.job_id
+                        );
+                    }
                 }
             } else {
                 srun.arg("--nodes=1");
@@ -561,7 +570,9 @@ struct SacctStats {
 /// the output cannot be parsed. This is a best-effort call — failures are
 /// logged at debug level and do not affect job result reporting.
 fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats> {
-    let output = std::process::Command::new("sacct")
+    // Allow tests to substitute a fake sacct binary via TORC_FAKE_SACCT.
+    let sacct_binary = std::env::var("TORC_FAKE_SACCT").unwrap_or_else(|_| "sacct".to_string());
+    let output = std::process::Command::new(&sacct_binary)
         .args([
             "-j",
             slurm_job_id,
@@ -595,8 +606,16 @@ fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    // sacct may return multiple lines (e.g. job + batch step); pick the first non-empty one.
-    let line = stdout.lines().find(|l| !l.trim().is_empty())?;
+    // sacct may return multiple lines for the same step (e.g. allocation entry + step entry).
+    // Allocation-level rows have empty memory fields; pick the first line that has at least
+    // one non-empty memory field (MaxRSS, MaxDiskRead, or MaxDiskWrite).
+    let line = stdout.lines().find(|l| {
+        let fields: Vec<&str> = l.split('|').collect();
+        fields.len() >= 3
+            && (!fields[0].trim().is_empty()
+                || !fields[1].trim().is_empty()
+                || !fields[2].trim().is_empty())
+    })?;
     let fields: Vec<&str> = line.split('|').collect();
     if fields.len() < 4 {
         debug!(

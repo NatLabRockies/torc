@@ -1687,6 +1687,7 @@ fn setup_fake_slurm_commands() -> (PathBuf, PathBuf, PathBuf, PathBuf) {
     let squeue = current_dir.join("tests/scripts/fake_squeue.sh");
     let sacct = current_dir.join("tests/scripts/fake_sacct.sh");
     let scancel = current_dir.join("tests/scripts/fake_scancel.sh");
+    let srun = current_dir.join("tests/scripts/fake_srun.sh");
 
     // Verify scripts exist
     assert!(sbatch.exists(), "fake_sbatch.sh not found at {:?}", sbatch);
@@ -1697,13 +1698,15 @@ fn setup_fake_slurm_commands() -> (PathBuf, PathBuf, PathBuf, PathBuf) {
         "fake_scancel.sh not found at {:?}",
         scancel
     );
+    assert!(srun.exists(), "fake_srun.sh not found at {:?}", srun);
 
     // Set environment variables to use fake commands
     unsafe {
         env::set_var("TORC_FAKE_SBATCH", sbatch.to_string_lossy().to_string());
         env::set_var("TORC_FAKE_SQUEUE", squeue.to_string_lossy().to_string());
-        env::set_var("TORC_FAKE_SACCT", squeue.to_string_lossy().to_string());
-        env::set_var("TORC_FAKE_SCANCEL", squeue.to_string_lossy().to_string());
+        env::set_var("TORC_FAKE_SACCT", sacct.to_string_lossy().to_string());
+        env::set_var("TORC_FAKE_SCANCEL", scancel.to_string_lossy().to_string());
+        env::set_var("TORC_FAKE_SRUN", srun.to_string_lossy().to_string());
     }
 
     (sbatch, squeue, sacct, scancel)
@@ -1723,6 +1726,7 @@ fn cleanup_fake_slurm_state() {
         env::remove_var("TORC_FAKE_SBATCH");
         env::remove_var("TORC_FAKE_SCANCEL");
         env::remove_var("TORC_FAKE_SQUEUE");
+        env::remove_var("TORC_FAKE_SRUN");
         env::remove_var("TORC_FAKE_SBATCH_FAIL");
         env::remove_var("TORC_FAKE_SQUEUE_FAIL");
         env::remove_var("TORC_FAKE_SACCT_FAIL");

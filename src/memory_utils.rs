@@ -73,23 +73,23 @@ pub fn memory_string_to_bytes(memory_str: &str) -> Result<i64, String> {
 /// Convert a memory string to megabytes (as u64).
 ///
 /// Supports the same formats as [`memory_string_to_bytes`].
-/// Returns 0 if the string is invalid.
+/// Returns `None` if the string is invalid or empty.
 ///
 /// # Examples
 ///
 /// ```
 /// use torc::memory_utils::memory_string_to_mb;
 ///
-/// assert_eq!(memory_string_to_mb("1g"), 1024);
-/// assert_eq!(memory_string_to_mb("512m"), 512);
-/// assert_eq!(memory_string_to_mb("2G"), 2048);
+/// assert_eq!(memory_string_to_mb("1g"), Some(1024));
+/// assert_eq!(memory_string_to_mb("512m"), Some(512));
+/// assert_eq!(memory_string_to_mb("2G"), Some(2048));
+/// assert_eq!(memory_string_to_mb("bad"), None);
 /// ```
-pub fn memory_string_to_mb(memory_str: &str) -> u64 {
+pub fn memory_string_to_mb(memory_str: &str) -> Option<u64> {
     const MB: i64 = 1024 * 1024;
-    match memory_string_to_bytes(memory_str) {
-        Ok(bytes) => (bytes / MB) as u64,
-        Err(_) => 0,
-    }
+    memory_string_to_bytes(memory_str)
+        .ok()
+        .map(|bytes| (bytes / MB) as u64)
 }
 
 /// Convert memory string to gigabytes (as f64).
