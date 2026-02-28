@@ -3,6 +3,37 @@
 use rstest::rstest;
 use serial_test::serial;
 use std::collections::HashMap;
+
+/// RAII guard to restore environment variables after a test
+struct EnvGuard {
+    vars: HashMap<String, Option<String>>,
+}
+
+impl EnvGuard {
+    fn new(overrides: HashMap<&str, &str>) -> Self {
+        let mut vars = HashMap::new();
+        for (key, value) in overrides {
+            vars.insert(key.to_string(), std::env::var(key).ok());
+            unsafe {
+                std::env::set_var(key, value);
+            }
+        }
+        Self { vars }
+    }
+}
+
+impl Drop for EnvGuard {
+    fn drop(&mut self) {
+        for (key, value) in &self.vars {
+            unsafe {
+                match value {
+                    Some(v) => std::env::set_var(key, v),
+                    None => std::env::remove_var(key),
+                }
+            }
+        }
+    }
+}
 use torc::client::commands::slurm::{
     GroupByStrategy, WalltimeStrategy, generate_schedulers_for_workflow, parse_memory_mb,
     parse_walltime_secs, secs_to_walltime,
@@ -1611,7 +1642,6 @@ fn test_generate_schedulers_cpu_vs_memory_constraint() {
 #[rstest]
 #[serial]
 fn test_detect_slurm_profile() {
-    use std::env;
     use std::path::Path;
     use torc::client::hpc::slurm::detect_slurm_profile;
 
@@ -1622,13 +1652,10 @@ fn test_detect_slurm_profile() {
         .canonicalize()
         .unwrap();
 
-    unsafe {
-        env::set_var("TORC_FAKE_SINFO", sinfo_path.to_string_lossy().to_string());
-        env::set_var(
-            "TORC_FAKE_SCONTROL",
-            scontrol_path.to_string_lossy().to_string(),
-        );
-    }
+    let mut overrides = HashMap::new();
+    overrides.insert("TORC_FAKE_SINFO", sinfo_path.to_str().unwrap());
+    overrides.insert("TORC_FAKE_SCONTROL", scontrol_path.to_str().unwrap());
+    let _guard = EnvGuard::new(overrides);
 
     let profile = detect_slurm_profile().expect("Should detect slurm profile");
 
@@ -1643,17 +1670,11 @@ fn test_detect_slurm_profile() {
     let gpu = profile.get_partition("gpu").unwrap();
     assert_eq!(gpu.gpus_per_node, Some(4));
     assert_eq!(gpu.gpu_type, Some("h100".to_string()));
-
-    unsafe {
-        env::remove_var("TORC_FAKE_SINFO");
-        env::remove_var("TORC_FAKE_SCONTROL");
-    }
 }
 
 #[rstest]
 #[serial]
 fn test_registry_detect_dynamic_slurm() {
-    use std::env;
     use std::path::Path;
 
     let sinfo_path = Path::new("tests/scripts/fake_sinfo.sh")
@@ -1663,13 +1684,10 @@ fn test_registry_detect_dynamic_slurm() {
         .canonicalize()
         .unwrap();
 
-    unsafe {
-        env::set_var("TORC_FAKE_SINFO", sinfo_path.to_string_lossy().to_string());
-        env::set_var(
-            "TORC_FAKE_SCONTROL",
-            scontrol_path.to_string_lossy().to_string(),
-        );
-    }
+    let mut overrides = HashMap::new();
+    overrides.insert("TORC_FAKE_SINFO", sinfo_path.to_str().unwrap());
+    overrides.insert("TORC_FAKE_SCONTROL", scontrol_path.to_str().unwrap());
+    let _guard = EnvGuard::new(overrides);
 
     let registry = HpcProfileRegistry::new();
     let profile = registry
@@ -1677,17 +1695,11 @@ fn test_registry_detect_dynamic_slurm() {
         .expect("Should detect dynamic slurm profile");
 
     assert_eq!(profile.name, "test_cluster");
-
-    unsafe {
-        env::remove_var("TORC_FAKE_SINFO");
-        env::remove_var("TORC_FAKE_SCONTROL");
-    }
 }
 
 #[rstest]
 #[serial]
 fn test_registry_get_slurm() {
-    use std::env;
     use std::path::Path;
 
     let sinfo_path = Path::new("tests/scripts/fake_sinfo.sh")
@@ -1697,23 +1709,15 @@ fn test_registry_get_slurm() {
         .canonicalize()
         .unwrap();
 
-    unsafe {
-        env::set_var("TORC_FAKE_SINFO", sinfo_path.to_string_lossy().to_string());
-        env::set_var(
-            "TORC_FAKE_SCONTROL",
-            scontrol_path.to_string_lossy().to_string(),
-        );
-    }
+    let mut overrides = HashMap::new();
+    overrides.insert("TORC_FAKE_SINFO", sinfo_path.to_str().unwrap());
+    overrides.insert("TORC_FAKE_SCONTROL", scontrol_path.to_str().unwrap());
+    let _guard = EnvGuard::new(overrides);
 
     let registry = HpcProfileRegistry::new();
     let profile = registry.get("slurm").expect("Should return slurm profile");
 
     assert_eq!(profile.name, "test_cluster");
-
-    unsafe {
-        env::remove_var("TORC_FAKE_SINFO");
-        env::remove_var("TORC_FAKE_SCONTROL");
-    }
 }
 
 use torc::client::hpc::slurm::parse_sinfo_string;

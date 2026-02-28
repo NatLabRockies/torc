@@ -1969,7 +1969,6 @@ Show partitions for an HPC profile
 ###### **Options:**
 
 - `--gpu` — Filter to GPU partitions only
-- `--cpu` — Filter to CPU-only partitions
 - `--shared` — Filter to shared partitions
 
 ## `torc hpc match`
@@ -1984,9 +1983,9 @@ Find partitions matching resource requirements
 
 ###### **Options:**
 
-- `--cpus <CPUS>` — Number of CPUs required. Default: `1`
-- `--memory <MEMORY>` — Memory required (e.g., "100g", "512m", or MB as number). Default: `1g`
-- `--walltime <WALLTIME>` — Wall time required (e.g., "4:00:00", "2-00:00:00"). Default: `1:00:00`
+- `--cpus <CPUS>` — Number of CPUs required
+- `--memory <MEMORY>` — Memory required (e.g., "100g", "512m", or MB as number)
+- `--walltime <WALLTIME>` — Wall time required (e.g., "4:00:00", "2-00:00:00")
 - `--gpus <GPUS>` — Number of GPUs required
 
 ## `torc hpc generate`

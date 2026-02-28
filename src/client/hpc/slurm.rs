@@ -72,7 +72,8 @@ pub fn generate_dynamic_slurm_profile(
     // Get cluster name
     let cluster_name = name.unwrap_or_else(|| {
         std::env::var("SLURM_CLUSTER_NAME")
-            .or_else(|_| {
+            .ok()
+            .or_else(|| {
                 // Try to get from scontrol
                 Command::new(get_scontrol_exec())
                     .args(["show", "config"])
@@ -86,9 +87,8 @@ pub fn generate_dynamic_slurm_profile(
                                 .map(|s| s.trim().to_string())
                         })
                     })
-                    .ok_or(())
             })
-            .unwrap_or_else(|_| {
+            .unwrap_or_else(|| {
                 // Fall back to hostname
                 hostname::get()
                     .map(|h| h.to_string_lossy().to_string())
