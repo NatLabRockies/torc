@@ -4,7 +4,7 @@
 # This simulates srun's behavior of running a command inside a Slurm step
 # without requiring an actual Slurm installation.
 
-while [[ "$1" == --* ]]; do
+while [[ "$1" == -* ]]; do
     shift
 done
 

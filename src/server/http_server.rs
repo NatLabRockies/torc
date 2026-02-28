@@ -2892,14 +2892,8 @@ where
         limit: Option<i64>,
         context: &C,
     ) -> Result<ListSlurmStatsResponse, ApiError> {
-        let wf_id = match workflow_id {
-            Some(id) => id,
-            None => {
-                return Ok(ListSlurmStatsResponse::ForbiddenErrorResponse(
-                    forbidden_error!("workflow_id is required to list Slurm stats"),
-                ));
-            }
-        };
+        // workflow_id is enforced as required by the routing layer; this branch is unreachable.
+        let wf_id = workflow_id.unwrap_or_else(|| unreachable!("workflow_id is required"));
         authorize_workflow!(self, wf_id, context, ListSlurmStatsResponse);
         let offset = offset.unwrap_or(0);
         let limit = limit.unwrap_or(MAX_RECORD_TRANSFER_COUNT);

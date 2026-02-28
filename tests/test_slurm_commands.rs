@@ -253,7 +253,7 @@ fn test_get_statuses_multiple_jobs() {
 #[serial]
 fn test_cancel_job_success() {
     cleanup_fake_slurm_state();
-    let (_, _, _, scancel) = setup_fake_slurm_commands();
+    let (_, _, _, scancel, _) = setup_fake_slurm_commands();
 
     let interface = SlurmInterface::new().expect("Failed to create SlurmInterface");
 
@@ -284,7 +284,7 @@ fn test_cancel_job_success() {
 #[serial]
 fn test_get_job_stats() {
     cleanup_fake_slurm_state();
-    let (_, _, sacct, _) = setup_fake_slurm_commands();
+    let (_, _, sacct, _, _) = setup_fake_slurm_commands();
 
     let interface = SlurmInterface::new().expect("Failed to create SlurmInterface");
 
@@ -1680,7 +1680,7 @@ fn test_cancel_workflow_with_slurm_scheduler(start_server: &ServerProcess) {
     );
 }
 
-fn setup_fake_slurm_commands() -> (PathBuf, PathBuf, PathBuf, PathBuf) {
+fn setup_fake_slurm_commands() -> (PathBuf, PathBuf, PathBuf, PathBuf, PathBuf) {
     let current_dir = env::current_dir().expect("Failed to get current directory");
 
     let sbatch = current_dir.join("tests/scripts/fake_sbatch.sh");
@@ -1709,7 +1709,7 @@ fn setup_fake_slurm_commands() -> (PathBuf, PathBuf, PathBuf, PathBuf) {
         env::set_var("TORC_FAKE_SRUN", srun.to_string_lossy().to_string());
     }
 
-    (sbatch, squeue, sacct, scancel)
+    (sbatch, squeue, sacct, scancel, srun)
 }
 
 fn cleanup_fake_slurm_state() {

@@ -451,9 +451,9 @@ impl AsyncCliCommand {
         self.handle = None;
 
         // Collect Slurm accounting stats via sacct when running inside an allocation.
-        // Note: collect_sacct_stats is synchronous and may delay this polling cycle if the
-        // Slurm accounting daemon is slow.  This is acceptable because the runner loop is
-        // synchronous and sacct typically completes in well under a second.
+        // Note: collect_sacct_stats is synchronous and may delay this polling cycle: it sleeps
+        // 5 seconds between retry attempts (up to 3 retries, worst-case ~15 seconds) when the
+        // Slurm accounting daemon hasn't written the step record yet.
         if let (Ok(slurm_job_id), Some(step_name)) =
             (std::env::var("SLURM_JOB_ID"), self.step_name.as_deref())
             && let Some(stats) = collect_sacct_stats(&slurm_job_id, step_name)
@@ -596,8 +596,10 @@ fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats
     let sacct_binary = std::env::var("TORC_FAKE_SACCT").unwrap_or_else(|_| "sacct".to_string());
 
     for attempt in 1..=MAX_SACCT_ATTEMPTS {
-        // slurmdbd may not have written the step record yet; wait before each attempt.
-        std::thread::sleep(SACCT_RETRY_DELAY);
+        // slurmdbd may not have written the step record yet; wait before retries.
+        if attempt > 1 {
+            std::thread::sleep(SACCT_RETRY_DELAY);
+        }
 
         let output = std::process::Command::new(&sacct_binary)
             .args([
