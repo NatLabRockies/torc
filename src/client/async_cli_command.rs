@@ -145,7 +145,6 @@ impl AsyncCliCommand {
             let srun_binary =
                 std::env::var("TORC_FAKE_SRUN").unwrap_or_else(|_| "srun".to_string());
             let mut srun = Command::new(&srun_binary);
-            srun.arg("--exclusive"); // each step gets its own cgroup
             srun.arg("--ntasks=1");
             srun.arg(format!("--job-name={}", step_name));
             if let Some(rr) = resource_requirements {
