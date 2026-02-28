@@ -146,6 +146,12 @@ impl AsyncCliCommand {
                 std::env::var("TORC_FAKE_SRUN").unwrap_or_else(|_| "srun".to_string());
             let mut srun = Command::new(&srun_binary);
             srun.arg("--ntasks=1");
+            // Without --overlap, each srun step takes exclusive ownership of its node slot
+            // within the allocation, so concurrent steps on the same node (or same allocation)
+            // queue up and retry with "Requested nodes are busy".  --overlap explicitly permits
+            // steps to share resources with other running steps in the same job allocation.
+            // Requires Slurm 21.08+.
+            srun.arg("--overlap");
             srun.arg(format!("--job-name={}", step_name));
             if let Some(rr) = resource_requirements {
                 // step_nodes controls how many nodes this srun step spans.
