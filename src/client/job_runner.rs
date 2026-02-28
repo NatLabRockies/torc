@@ -80,7 +80,7 @@ use crate::config::TorcConfig;
 use crate::memory_utils::memory_string_to_gb;
 use crate::models::{
     ClaimJobsSortMethod, ComputeNodesResources, JobStatus, ResourceRequirementsModel, ResultModel,
-    WorkflowModel,
+    SlurmStatsModel, WorkflowModel,
 };
 
 /// Rule definition for failure handler (parsed from JSON stored in database)
@@ -877,6 +877,19 @@ impl JobRunner {
     }
 
     fn handle_job_completion(&mut self, job_id: i64, result: ResultModel) {
+        // Take sacct stats now, before the result is sent to the server, so we can backfill
+        // resource fields.  For srun-wrapped jobs the sysinfo monitor only sees the srun process
+        // (negligible overhead), so sacct provides the authoritative peak memory and CPU data.
+        let slurm_stats = self
+            .running_jobs
+            .get_mut(&job_id)
+            .and_then(|j| j.take_slurm_stats());
+
+        let mut final_result = result;
+        if let Some(ref stats) = slurm_stats {
+            backfill_sacct_into_result(&mut final_result, stats);
+        }
+
         // Get job info before removing from running_jobs
         let job_info = self.running_jobs.get(&job_id).map(|cmd| {
             (
@@ -887,7 +900,6 @@ impl JobRunner {
         });
 
         // Check if we should try to recover a failed job
-        let mut final_result = result;
         if final_result.status == JobStatus::Failed
             && let Some((job_name, attempt_id, failure_handler_id)) = &job_info
         {
@@ -968,10 +980,10 @@ impl JobRunner {
                     self.workflow_id, job_id, final_result.run_id, status_str
                 );
                 // Store Slurm accounting stats if collected (best-effort, non-blocking).
-                if let Some(async_job) = self.running_jobs.get_mut(&job_id)
-                    && let Some(slurm_stats) = async_job.take_slurm_stats()
-                {
-                    match default_api::create_slurm_stats(&self.config, slurm_stats) {
+                // slurm_stats was taken at the top of handle_job_completion so we could backfill
+                // resource fields into the result before reporting to the server.
+                if let Some(stats) = slurm_stats {
+                    match default_api::create_slurm_stats(&self.config, stats) {
                         Ok(_) => {
                             info!(
                                 "Stored slurm_stats workflow_id={} job_id={}",
@@ -1891,6 +1903,32 @@ impl ComputeNodeRules {
             compute_node_min_time_for_new_jobs_seconds: compute_node_min_time_for_new_jobs_seconds
                 .unwrap_or(300) as u64,
             jobs_sort_method: jobs_sort_method.unwrap_or(ClaimJobsSortMethod::GpusRuntimeMemory),
+        }
+    }
+}
+
+/// Backfill Slurm sacct accounting data into a [`ResultModel`] result.
+///
+/// When a job runs through `srun`, torc's sysinfo-based resource monitor only sees the
+/// srun launcher process (negligible overhead), not the actual job.  This function fills
+/// the summary resource fields from the authoritative sacct record collected after job
+/// completion.
+///
+/// Fields updated:
+/// - `peak_memory_bytes` ← `max_rss_bytes` (sacct MaxRSS, the step's peak RSS)
+/// - `avg_cpu_percent`   ← `ave_cpu_seconds / exec_time_s * 100`  (lifetime average)
+///
+/// `avg_memory_bytes` and `peak_cpu_percent` are left as-is: sacct does not provide an
+/// average RSS or an instantaneous CPU peak; those come from the sstat time-series if
+/// TimeSeries monitoring was configured.
+fn backfill_sacct_into_result(result: &mut ResultModel, stats: &SlurmStatsModel) {
+    if let Some(max_rss) = stats.max_rss_bytes {
+        result.peak_memory_bytes = Some(max_rss);
+    }
+    if let Some(ave_cpu_s) = stats.ave_cpu_seconds {
+        let exec_s = result.exec_time_minutes * 60.0;
+        if exec_s > 0.0 {
+            result.avg_cpu_percent = Some(ave_cpu_s / exec_s * 100.0);
         }
     }
 }

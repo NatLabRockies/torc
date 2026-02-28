@@ -211,9 +211,26 @@ impl AsyncCliCommand {
             workflow_id, self.job_id, pid
         );
 
-        // Start resource monitoring if enabled
+        // Start resource monitoring if enabled.
+        // When running inside a Slurm allocation with srun, the job executes inside
+        // slurmstepd (not as a child of the srun process), so sysinfo process-tree
+        // monitoring captures only the negligible srun overhead.  Instead:
+        //   - TimeSeries mode: use sstat polling via start_monitoring_slurm().
+        //   - Summary mode: skip the monitor; sacct backfill in job_runner provides final stats.
         if let Some(monitor) = resource_monitor {
-            monitor.start_monitoring(pid, self.job_id, self.job.name.clone())?;
+            if let Some(ref step) = self.step_name {
+                if let Ok(slurm_job_id) = std::env::var("SLURM_JOB_ID") {
+                    monitor.start_monitoring_slurm(
+                        pid,
+                        slurm_job_id,
+                        step.clone(),
+                        self.job_id,
+                        self.job.name.clone(),
+                    )?;
+                }
+            } else {
+                monitor.start_monitoring(pid, self.job_id, self.job.name.clone())?;
+            }
         }
 
         // TODO: CPU Affinity
@@ -722,7 +739,7 @@ fn parse_sacct_line(line: &str, step_name: &str) -> Option<SacctStats> {
 
 /// Parse a Slurm memory string (e.g. "512K", "1.50M", "2G") into bytes.
 /// Returns `None` for empty or unparseable values; `Some(0)` for "0".
-fn parse_slurm_memory(s: &str) -> Option<i64> {
+pub(crate) fn parse_slurm_memory(s: &str) -> Option<i64> {
     let s = s.trim();
     if s.is_empty() {
         return None;
@@ -747,7 +764,7 @@ fn parse_slurm_memory(s: &str) -> Option<i64> {
 
 /// Parse a Slurm CPU time string (`[D-]HH:MM:SS`) into seconds.
 /// Returns `None` for empty or unparseable values.
-fn parse_slurm_cpu_time(s: &str) -> Option<f64> {
+pub(crate) fn parse_slurm_cpu_time(s: &str) -> Option<f64> {
     let s = s.trim();
     if s.is_empty() {
         return None;

@@ -1,3 +1,4 @@
+use crate::client::async_cli_command::{parse_slurm_cpu_time, parse_slurm_memory};
 use log::{debug, error, info, warn};
 use rusqlite::{Connection, Result as SqliteResult};
 use std::collections::{HashMap, HashSet};
@@ -82,10 +83,39 @@ impl JobMetrics {
     }
 }
 
+/// Source of resource samples for a monitored job.
+enum MonitorJobSource {
+    /// Local execution: walk the process tree via sysinfo.
+    Local { pid: u32 },
+    /// Slurm step: poll `sstat` for live accounting data (TimeSeries mode only).
+    ///
+    /// `prev_ave_cpu_s` and `prev_sample_at` are used to derive an instantaneous
+    /// CPU-utilisation rate from the monotonically-increasing `AveCPU` counter that
+    /// sstat returns.
+    Slurm {
+        slurm_job_id: String,
+        step_name: String,
+        /// AveCPU value (in seconds) from the previous sstat poll.  Initialised to 0.
+        prev_ave_cpu_s: f64,
+        /// Wall-clock time of the previous sstat poll.
+        prev_sample_at: Instant,
+    },
+}
+
 /// Commands sent to the monitoring thread
 enum MonitorCommand {
     StartMonitoring {
         pid: u32,
+        job_id: i64,
+        job_name: String,
+    },
+    /// Register a Slurm step for sstat-based monitoring (TimeSeries mode).
+    /// `pid` is the srun PID, used as the map key so that `stop_monitoring(pid)` works
+    /// without API changes.
+    StartMonitoringSlurm {
+        pid: u32,
+        slurm_job_id: String,
+        step_name: String,
         job_id: i64,
         job_name: String,
     },
@@ -98,8 +128,10 @@ enum MonitorCommand {
 /// Active job being monitored
 struct MonitoredJob {
     job_id: i64,
+    /// PID used as map key.  For Slurm jobs this is the srun PID.
     #[allow(dead_code)]
     pid: u32,
+    source: MonitorJobSource,
     metrics: JobMetrics,
 }
 
@@ -108,6 +140,7 @@ pub struct ResourceMonitor {
     tx: Sender<MonitorCommand>,
     metrics: Arc<Mutex<HashMap<u32, JobMetrics>>>,
     handle: Option<JoinHandle<()>>,
+    config: ResourceMonitorConfig,
 }
 
 impl ResourceMonitor {
@@ -120,9 +153,11 @@ impl ResourceMonitor {
         let (tx, rx) = channel();
         let metrics = Arc::new(Mutex::new(HashMap::new()));
         let metrics_clone = Arc::clone(&metrics);
+        let config_clone = config.clone();
 
         let handle = thread::spawn(move || {
-            if let Err(e) = run_monitoring_loop(config, output_dir, unique_label, rx, metrics_clone)
+            if let Err(e) =
+                run_monitoring_loop(config_clone, output_dir, unique_label, rx, metrics_clone)
             {
                 error!("Resource monitoring thread failed: {}", e);
             }
@@ -132,10 +167,16 @@ impl ResourceMonitor {
             tx,
             metrics,
             handle: Some(handle),
+            config,
         })
     }
 
-    /// Start monitoring a process
+    /// Returns `true` when the monitor is configured for `TimeSeries` granularity.
+    pub fn is_timeseries(&self) -> bool {
+        matches!(self.config.granularity, MonitorGranularity::TimeSeries)
+    }
+
+    /// Start monitoring a local process (sysinfo process-tree walk).
     pub fn start_monitoring(
         &self,
         pid: u32,
@@ -148,6 +189,39 @@ impl ResourceMonitor {
             job_name,
         })?;
         debug!("Started monitoring job {} with PID {}", job_id, pid);
+        Ok(())
+    }
+
+    /// Register a Slurm step for sstat-based monitoring.
+    ///
+    /// Only meaningful in `TimeSeries` mode — in `Summary` mode the call is a no-op because
+    /// final resource values come from sacct backfill in `job_runner.rs`.
+    ///
+    /// `pid` must be the srun process PID so that the existing `stop_monitoring(pid)` API
+    /// continues to work without changes.
+    pub fn start_monitoring_slurm(
+        &self,
+        pid: u32,
+        slurm_job_id: String,
+        step_name: String,
+        job_id: i64,
+        job_name: String,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        if !self.is_timeseries() {
+            // In Summary mode sacct backfill provides the resource data; no sstat needed.
+            return Ok(());
+        }
+        self.tx.send(MonitorCommand::StartMonitoringSlurm {
+            pid,
+            slurm_job_id,
+            step_name,
+            job_id,
+            job_name,
+        })?;
+        debug!(
+            "Started sstat monitoring for job {} (srun PID {})",
+            job_id, pid
+        );
         Ok(())
     }
 
@@ -211,6 +285,9 @@ fn run_monitoring_loop(
     let mut monitored_jobs: HashMap<u32, MonitoredJob> = HashMap::new();
     let sample_interval = Duration::from_secs(config.sample_interval_seconds as u64);
 
+    // Allow tests to substitute a fake sstat binary via TORC_FAKE_SSTAT.
+    let sstat_binary = std::env::var("TORC_FAKE_SSTAT").unwrap_or_else(|_| "sstat".to_string());
+
     // Initialize database if using TimeSeries
     let mut db_conn = match config.granularity {
         MonitorGranularity::TimeSeries => Some(init_timeseries_db(&output_dir, &unique_label)?),
@@ -245,10 +322,43 @@ fn run_monitoring_loop(
                         MonitoredJob {
                             job_id,
                             pid,
+                            source: MonitorJobSource::Local { pid },
                             metrics: JobMetrics::new(),
                         },
                     );
                     debug!("Now monitoring {} jobs", monitored_jobs.len());
+                }
+                MonitorCommand::StartMonitoringSlurm {
+                    pid,
+                    slurm_job_id,
+                    step_name,
+                    job_id,
+                    job_name,
+                } => {
+                    if let Some(ref mut conn) = db_conn
+                        && let Err(e) = store_job_metadata(conn, job_id, &job_name)
+                    {
+                        error!("Failed to store job metadata for job {}: {}", job_id, e);
+                    }
+
+                    monitored_jobs.insert(
+                        pid,
+                        MonitoredJob {
+                            job_id,
+                            pid,
+                            source: MonitorJobSource::Slurm {
+                                slurm_job_id,
+                                step_name,
+                                prev_ave_cpu_s: 0.0,
+                                prev_sample_at: Instant::now(),
+                            },
+                            metrics: JobMetrics::new(),
+                        },
+                    );
+                    debug!(
+                        "Now monitoring {} jobs (Slurm sstat mode)",
+                        monitored_jobs.len()
+                    );
                 }
                 MonitorCommand::StopMonitoring { pid } => {
                     if let Some(job) = monitored_jobs.remove(&pid) {
@@ -272,12 +382,49 @@ fn run_monitoring_loop(
 
         // Sample all monitored jobs if interval has elapsed
         if last_sample_time.elapsed() >= sample_interval && !monitored_jobs.is_empty() {
-            sys.refresh_processes();
+            // Refresh sysinfo once for all local jobs.
+            let has_local_jobs = monitored_jobs
+                .values()
+                .any(|j| matches!(j.source, MonitorJobSource::Local { .. }));
+            if has_local_jobs {
+                sys.refresh_processes();
+            }
+
             let timestamp = chrono::Utc::now().timestamp();
 
             for (pid, job) in monitored_jobs.iter_mut() {
-                let (cpu_percent, memory_bytes, num_processes) =
-                    collect_process_tree_stats(*pid, &sys);
+                let (cpu_percent, memory_bytes, num_processes) = match &mut job.source {
+                    MonitorJobSource::Local { pid: local_pid } => {
+                        collect_process_tree_stats(*local_pid, &sys)
+                    }
+                    MonitorJobSource::Slurm {
+                        slurm_job_id,
+                        step_name,
+                        prev_ave_cpu_s,
+                        prev_sample_at,
+                    } => {
+                        let now = Instant::now();
+                        let elapsed_s = now.duration_since(*prev_sample_at).as_secs_f64();
+                        match collect_sstat_sample(
+                            slurm_job_id,
+                            step_name,
+                            &sstat_binary,
+                            *prev_ave_cpu_s,
+                            elapsed_s,
+                        ) {
+                            Some((cpu, mem, new_ave_cpu_s)) => {
+                                *prev_ave_cpu_s = new_ave_cpu_s;
+                                *prev_sample_at = now;
+                                (cpu, mem, 1)
+                            }
+                            None => {
+                                // sstat returned no data (step may not have started yet or
+                                // already exited); skip this sample.
+                                continue;
+                            }
+                        }
+                    }
+                };
 
                 job.metrics.add_sample(cpu_percent, memory_bytes);
 
@@ -340,6 +487,77 @@ fn collect_process_tree_stats(root_pid: u32, sys: &System) -> (f64, u64, usize) 
     }
 
     (total_cpu, total_memory, visited.len())
+}
+
+/// Poll `sstat` for the named Slurm step and return `(cpu_percent, max_rss_bytes, new_ave_cpu_s)`.
+///
+/// `sstat` reports `AveCPU` as cumulative CPU time since step start.  To convert to an
+/// instantaneous utilisation rate we compute:
+///
+/// ```text
+/// cpu_percent = (new_ave_cpu_s - prev_ave_cpu_s) / elapsed_s * 100.0
+/// ```
+///
+/// Returns `None` when the step cannot be found (not yet started, already exited, or sstat
+/// unavailable / `JobName` field not supported on this Slurm installation).
+///
+/// **Slurm version note**: the `JobName` format field in `sstat` requires Slurm ≥ 17.11.
+/// On older clusters this function will consistently return `None` and the time-series DB will
+/// remain empty for this job (sacct backfill will still populate the result summary fields).
+fn collect_sstat_sample(
+    slurm_job_id: &str,
+    step_name: &str,
+    sstat_binary: &str,
+    prev_ave_cpu_s: f64,
+    elapsed_s: f64,
+) -> Option<(f64, u64, f64)> {
+    let output = std::process::Command::new(sstat_binary)
+        .args([
+            "-j",
+            slurm_job_id,
+            "--allsteps",
+            "--format",
+            // JobName lets us filter by step name in code (same technique as sacct).
+            // AveCPU is used for CPU rate; MaxRSS is the running peak RSS.
+            "JobName,AveCPU,MaxRSS",
+            "-P", // pipe-separated
+            "-n", // no header
+        ])
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        debug!(
+            "sstat returned non-zero exit code for step {}: {}",
+            step_name,
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+        return None;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for line in stdout.lines() {
+        let fields: Vec<&str> = line.split('|').collect();
+        if fields.len() < 3 {
+            continue;
+        }
+        if fields[0].trim() != step_name {
+            continue;
+        }
+
+        let new_ave_cpu_s = parse_slurm_cpu_time(fields[1]).unwrap_or(0.0);
+        let max_rss = parse_slurm_memory(fields[2]).unwrap_or(0).max(0) as u64;
+
+        let cpu_percent = if elapsed_s > 0.0 {
+            ((new_ave_cpu_s - prev_ave_cpu_s) / elapsed_s * 100.0).max(0.0)
+        } else {
+            0.0
+        };
+
+        return Some((cpu_percent, max_rss, new_ave_cpu_s));
+    }
+
+    None
 }
 
 /// Initialize the TimeSeries database
