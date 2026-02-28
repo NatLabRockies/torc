@@ -4090,6 +4090,104 @@ paths:
       summary: Update a Slurm compute node configuration.
       tags: []
       x-codegen-request-body-name: body
+  /slurm_stats:
+    post:
+      description: Store Slurm accounting stats collected via sacct for a job step.
+      operationId: create_slurm_stats
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/slurm_stats_model"
+        description: Slurm stats record.
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/slurm_stats_model"
+          description: Successful response
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/forbidden_error_response"
+          description: Forbidden - user does not have access to this resource
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/not_found_error_response"
+          description: Not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/default_error_response"
+          description: Default error response
+      security: []
+      summary: Store Slurm accounting stats for a job step.
+      tags: []
+      x-codegen-request-body-name: body
+    get:
+      description: Retrieve Slurm accounting stats, optionally filtered by workflow and job.
+      operationId: list_slurm_stats
+      parameters:
+      - description: Workflow ID
+        explode: false
+        in: query
+        name: workflow_id
+        required: false
+        schema:
+          type: integer
+        style: simple
+      - description: Return the stats for a specific job.
+        explode: false
+        in: query
+        name: job_id
+        required: false
+        schema:
+          type: integer
+        style: simple
+      - explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          default: 0
+          type: integer
+        style: form
+      - explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          default: 10000
+          type: integer
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list_slurm_stats_response"
+          description: Successful response
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/forbidden_error_response"
+          description: Forbidden - user does not have access
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/default_error_response"
+          description: Default error response
+      security: []
+      summary: List Slurm accounting stats.
+      tags: []
   /user_data:
     post:
       description: Store a user data record.
@@ -7758,6 +7856,70 @@ components:
       - max_limit
       - offset
       - total_count
+    slurm_stats_model:
+      description: Per-step Slurm accounting data collected via sacct.
+      properties:
+        id:
+          description: Database ID for the record
+          type: integer
+        workflow_id:
+          description: Database ID for the workflow
+          type: integer
+        job_id:
+          description: Database ID for the job
+          type: integer
+        run_id:
+          description: ID of the workflow run
+          type: integer
+        attempt_id:
+          description: Retry attempt number (starts at 1)
+          type: integer
+        slurm_job_id:
+          description: Slurm allocation ID (from SLURM_JOB_ID env var)
+          type: string
+        max_rss_bytes:
+          description: Max resident set size in bytes (from sacct MaxRSS)
+          type: integer
+        max_vm_size_bytes:
+          description: Max virtual memory size in bytes (from sacct MaxVMSize)
+          type: integer
+        max_disk_read_bytes:
+          description: Max disk read in bytes (from sacct MaxDiskRead)
+          type: integer
+        max_disk_write_bytes:
+          description: Max disk write in bytes (from sacct MaxDiskWrite)
+          type: integer
+        ave_cpu_seconds:
+          description: Average CPU time in seconds (from sacct AveCPU)
+          type: number
+        node_list:
+          description: "Node(s) on which the step ran (from sacct NodeList)"
+          type: string
+      required:
+      - workflow_id
+      - job_id
+      - run_id
+      - attempt_id
+      type: object
+    list_slurm_stats_response:
+      description: Response containing a list of Slurm accounting stats records.
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/slurm_stats_model"
+          type: array
+        offset:
+          type: integer
+        count:
+          type: integer
+        total_count:
+          type: integer
+      required:
+      - items
+      - count
+      - offset
+      - total_count
+      type: object
     list_user_data_response:
       example:
         max_limit: 6

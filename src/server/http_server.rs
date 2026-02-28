@@ -15,6 +15,7 @@ use crate::server::api::RemoteWorkersApi;
 use crate::server::api::ResourceRequirementsApi;
 use crate::server::api::ResultsApi;
 use crate::server::api::SchedulersApi;
+use crate::server::api::SlurmStatsApi;
 use crate::server::api::UserDataApi;
 use crate::server::api::WorkflowActionsApi;
 use crate::server::api::WorkflowsApi;
@@ -879,6 +880,7 @@ pub struct Server<C> {
     resource_requirements_api: ResourceRequirementsApiImpl,
     results_api: ResultsApiImpl,
     schedulers_api: SchedulersApiImpl,
+    slurm_stats_api: SlurmStatsApiImpl,
     user_data_api: UserDataApiImpl,
     workflow_actions_api: WorkflowActionsApiImpl,
     workflows_api: WorkflowsApiImpl,
@@ -921,6 +923,7 @@ impl<C> Server<C> {
             resource_requirements_api: ResourceRequirementsApiImpl::new(api_context.clone()),
             results_api: ResultsApiImpl::new(api_context.clone()),
             schedulers_api: SchedulersApiImpl::new(api_context.clone()),
+            slurm_stats_api: SlurmStatsApiImpl::new(api_context.clone()),
             user_data_api: UserDataApiImpl::new(api_context.clone()),
             workflow_actions_api: WorkflowActionsApiImpl::new(api_context.clone()),
             workflows_api: WorkflowsApiImpl::new(api_context.clone()),
@@ -2456,12 +2459,13 @@ use crate::server::{
     CompleteJobResponse, CreateComputeNodeResponse, CreateEventResponse, CreateFileResponse,
     CreateJobResponse, CreateJobsResponse, CreateLocalSchedulerResponse,
     CreateResourceRequirementsResponse, CreateResultResponse, CreateScheduledComputeNodeResponse,
-    CreateSlurmSchedulerResponse, CreateUserDataResponse, CreateWorkflowResponse,
-    DeleteAllResourceRequirementsResponse, DeleteAllUserDataResponse, DeleteComputeNodeResponse,
-    DeleteComputeNodesResponse, DeleteEventResponse, DeleteEventsResponse, DeleteFileResponse,
-    DeleteFilesResponse, DeleteJobResponse, DeleteJobsResponse, DeleteLocalSchedulerResponse,
-    DeleteLocalSchedulersResponse, DeleteResourceRequirementsResponse, DeleteResultResponse,
-    DeleteResultsResponse, DeleteScheduledComputeNodeResponse, DeleteScheduledComputeNodesResponse,
+    CreateSlurmSchedulerResponse, CreateSlurmStatsResponse, CreateUserDataResponse,
+    CreateWorkflowResponse, DeleteAllResourceRequirementsResponse, DeleteAllUserDataResponse,
+    DeleteComputeNodeResponse, DeleteComputeNodesResponse, DeleteEventResponse,
+    DeleteEventsResponse, DeleteFileResponse, DeleteFilesResponse, DeleteJobResponse,
+    DeleteJobsResponse, DeleteLocalSchedulerResponse, DeleteLocalSchedulersResponse,
+    DeleteResourceRequirementsResponse, DeleteResultResponse, DeleteResultsResponse,
+    DeleteScheduledComputeNodeResponse, DeleteScheduledComputeNodesResponse,
     DeleteSlurmSchedulerResponse, DeleteSlurmSchedulersResponse, DeleteUserDataResponse,
     DeleteWorkflowResponse, GetComputeNodeResponse, GetDotGraphResponse, GetEventResponse,
     GetFileResponse, GetJobResponse, GetLocalSchedulerResponse, GetReadyJobRequirementsResponse,
@@ -2472,13 +2476,14 @@ use crate::server::{
     ListFilesResponse, ListJobIdsResponse, ListJobsResponse, ListLocalSchedulersResponse,
     ListMissingUserDataResponse, ListRequiredExistingFilesResponse,
     ListResourceRequirementsResponse, ListResultsResponse, ListScheduledComputeNodesResponse,
-    ListSlurmSchedulersResponse, ListUserDataResponse, ListWorkflowsResponse,
-    ManageStatusChangeResponse, PingResponse, ProcessChangedJobInputsResponse,
-    ResetJobStatusResponse, ResetWorkflowStatusResponse, RetryJobResponse, StartJobResponse,
-    UpdateComputeNodeResponse, UpdateEventResponse, UpdateFileResponse, UpdateJobResponse,
-    UpdateLocalSchedulerResponse, UpdateResourceRequirementsResponse, UpdateResultResponse,
-    UpdateScheduledComputeNodeResponse, UpdateSlurmSchedulerResponse, UpdateUserDataResponse,
-    UpdateWorkflowResponse, UpdateWorkflowStatusResponse,
+    ListSlurmSchedulersResponse, ListSlurmStatsResponse, ListUserDataResponse,
+    ListWorkflowsResponse, ManageStatusChangeResponse, PingResponse,
+    ProcessChangedJobInputsResponse, ResetJobStatusResponse, ResetWorkflowStatusResponse,
+    RetryJobResponse, StartJobResponse, UpdateComputeNodeResponse, UpdateEventResponse,
+    UpdateFileResponse, UpdateJobResponse, UpdateLocalSchedulerResponse,
+    UpdateResourceRequirementsResponse, UpdateResultResponse, UpdateScheduledComputeNodeResponse,
+    UpdateSlurmSchedulerResponse, UpdateUserDataResponse, UpdateWorkflowResponse,
+    UpdateWorkflowStatusResponse,
 };
 use crate::time_utils::duration_string_to_seconds;
 use std::error::Error;
@@ -2488,7 +2493,7 @@ use swagger::ApiError;
 use crate::server::api::{
     ApiContext, ComputeNodesApiImpl, EventsApiImpl, FilesApiImpl, JobsApiImpl,
     RemoteWorkersApiImpl, ResourceRequirementsApiImpl, ResultsApiImpl, SchedulersApiImpl,
-    UserDataApiImpl, WorkflowActionsApiImpl, WorkflowsApiImpl,
+    SlurmStatsApiImpl, UserDataApiImpl, WorkflowActionsApiImpl, WorkflowsApiImpl,
 };
 
 impl<C> Server<C>
@@ -2865,6 +2870,32 @@ where
         );
         self.schedulers_api
             .create_slurm_scheduler(body, context)
+            .await
+    }
+
+    /// Store Slurm accounting stats for a job step.
+    async fn create_slurm_stats(
+        &self,
+        body: models::SlurmStatsModel,
+        context: &C,
+    ) -> Result<CreateSlurmStatsResponse, ApiError> {
+        authorize_workflow!(self, body.workflow_id, context, CreateSlurmStatsResponse);
+        self.slurm_stats_api.create_slurm_stats(body, context).await
+    }
+
+    /// List Slurm accounting stats.
+    async fn list_slurm_stats(
+        &self,
+        workflow_id: Option<i64>,
+        job_id: Option<i64>,
+        offset: Option<i64>,
+        limit: Option<i64>,
+        context: &C,
+    ) -> Result<ListSlurmStatsResponse, ApiError> {
+        let offset = offset.unwrap_or(0);
+        let limit = limit.unwrap_or(MAX_RECORD_TRANSFER_COUNT);
+        self.slurm_stats_api
+            .list_slurm_stats(workflow_id, job_id, offset, limit, context)
             .await
     }
 

@@ -25,6 +25,7 @@ const SLURM_HELP_TEMPLATE: &str = "\
 \x1b[1;32mDiagnostics:\x1b[0m
   \x1b[1;36mparse-logs\x1b[0m       Parse Slurm logs for error messages
   \x1b[1;36msacct\x1b[0m            Show Slurm accounting info for allocations
+  \x1b[1;36mstats\x1b[0m            Show per-job Slurm accounting stats stored in the database
   \x1b[1;36musage\x1b[0m            Total compute node and CPU time consumed
 {after-help}";
 use regex::Regex;
@@ -115,6 +116,28 @@ impl std::fmt::Display for WalltimeStrategy {
             WalltimeStrategy::MaxPartitionTime => write!(f, "max-partition-time"),
         }
     }
+}
+
+#[derive(Tabled)]
+struct SlurmStatsTableRow {
+    #[tabled(rename = "ID")]
+    id: i64,
+    #[tabled(rename = "Job ID")]
+    job_id: i64,
+    #[tabled(rename = "Run")]
+    run_id: i64,
+    #[tabled(rename = "Attempt")]
+    attempt_id: i64,
+    #[tabled(rename = "Slurm Job")]
+    slurm_job_id: String,
+    #[tabled(rename = "Max RSS")]
+    max_rss: String,
+    #[tabled(rename = "Max VM")]
+    max_vm: String,
+    #[tabled(rename = "AveCPU (s)")]
+    ave_cpu_seconds: String,
+    #[tabled(rename = "Nodes")]
+    node_list: String,
 }
 
 #[derive(Tabled)]
@@ -422,6 +445,21 @@ EXAMPLES:
         /// Save full JSON output to files in addition to displaying summary
         #[arg(long, default_value = "false")]
         save_json: bool,
+    },
+    /// Show per-job Slurm accounting stats stored in the database
+    #[command(after_long_help = "\
+EXAMPLES:
+    torc slurm stats 123
+    torc slurm stats 123 --job-id 456
+    torc -f json slurm stats 123
+")]
+    Stats {
+        /// Workflow ID
+        #[arg()]
+        workflow_id: i64,
+        /// Filter by job ID
+        #[arg(long)]
+        job_id: Option<i64>,
     },
     /// Total compute node and CPU time consumed by Slurm allocations
     #[command(
@@ -1238,6 +1276,12 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
                 })
             });
             run_sacct_for_workflow(config, wf_id, output_dir, *save_json, format);
+        }
+        SlurmCommands::Stats {
+            workflow_id,
+            job_id,
+        } => {
+            handle_slurm_stats(config, *workflow_id, *job_id, format);
         }
         SlurmCommands::Usage { workflow_id } => {
             let user_name = get_env_user_name();
@@ -3736,4 +3780,78 @@ fn handle_regenerate(
             println!("  torc slurm regenerate {} --submit", workflow_id);
         }
     }
+}
+
+fn fmt_opt_bytes(v: Option<i64>) -> String {
+    match v {
+        Some(b) if b >= 0 => format_bytes(b as u64),
+        _ => String::new(),
+    }
+}
+
+fn fmt_opt_f64(v: Option<f64>) -> String {
+    match v {
+        Some(f) => format!("{:.1}", f),
+        None => String::new(),
+    }
+}
+
+/// Display per-job Slurm accounting stats stored in the database.
+fn handle_slurm_stats(config: &Configuration, workflow_id: i64, job_id: Option<i64>, format: &str) {
+    let mut all_items: Vec<models::SlurmStatsModel> = Vec::new();
+    let limit = 10_000i64;
+    let mut offset = 0i64;
+    loop {
+        match default_api::list_slurm_stats(
+            config,
+            Some(workflow_id),
+            job_id,
+            Some(offset),
+            Some(limit),
+        ) {
+            Ok(response) => {
+                let items = response.items.unwrap_or_default();
+                if items.is_empty() {
+                    break;
+                }
+                let fetched = items.len() as i64;
+                all_items.extend(items);
+                if fetched < limit {
+                    break;
+                }
+                offset += fetched;
+            }
+            Err(e) => {
+                print_error("listing slurm stats", &e);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    if format == "json" {
+        print_json(&serde_json::json!({ "items": all_items }), "Slurm stats");
+        return;
+    }
+
+    if all_items.is_empty() {
+        println!("No Slurm stats found for workflow {}", workflow_id);
+        return;
+    }
+
+    let rows: Vec<SlurmStatsTableRow> = all_items
+        .iter()
+        .map(|s| SlurmStatsTableRow {
+            id: s.id.unwrap_or(-1),
+            job_id: s.job_id,
+            run_id: s.run_id,
+            attempt_id: s.attempt_id,
+            slurm_job_id: s.slurm_job_id.clone().unwrap_or_default(),
+            max_rss: fmt_opt_bytes(s.max_rss_bytes),
+            max_vm: fmt_opt_bytes(s.max_vm_size_bytes),
+            ave_cpu_seconds: fmt_opt_f64(s.ave_cpu_seconds),
+            node_list: s.node_list.clone().unwrap_or_default(),
+        })
+        .collect();
+
+    display_table_with_count(&rows, "slurm stats");
 }

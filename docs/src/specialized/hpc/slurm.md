@@ -331,8 +331,10 @@ job step for every Torc job, which provides:
 ### Step Naming
 
 Each `srun` step is named `wf<workflow_id>_j<job_id>_r<run_id>_a<attempt_id>`, for example
-`wf10_j42_r1_a1`. This name appears in `squeue --me` and `sacct` output, and is also used as the log
-file prefix, so all Slurm and Torc records for a job share the same identifier.
+`wf10_j42_r1_a1`. This name appears in `squeue --me` and `sacct` output, and the same component
+string is embedded in the log file prefix `job_wf<workflow_id>_j<job_id>_r<run_id>_a<attempt_id>`
+(for example, `job_wf10_j42_r1_a1.o`), so all Slurm and Torc records for a job can be easily
+correlated.
 
 ### Multi-Node Jobs
 

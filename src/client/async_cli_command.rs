@@ -27,7 +27,7 @@
 use crate::client::log_paths::{get_job_stderr_path, get_job_stdout_path};
 use crate::client::resource_monitor::ResourceMonitor;
 use crate::memory_utils::memory_string_to_mb;
-use crate::models::{JobModel, JobStatus, ResourceRequirementsModel, ResultModel};
+use crate::models::{JobModel, JobStatus, ResourceRequirementsModel, ResultModel, SlurmStatsModel};
 use chrono::{DateTime, Utc};
 use log::{self, debug, error, info, warn};
 use std::fs::File;
@@ -49,6 +49,8 @@ pub struct AsyncCliCommand {
     attempt_id: Option<i64>,
     /// Slurm step name set when running inside an allocation (for sacct lookup).
     step_name: Option<String>,
+    /// Slurm accounting stats collected via sacct after step completion.
+    slurm_stats: Option<SlurmStatsModel>,
     handle: Option<Child>,
     pid: Option<u32>,
     pub is_running: bool,
@@ -60,11 +62,6 @@ pub struct AsyncCliCommand {
     status: JobStatus,
     stdout_fp: Option<BufWriter<File>>,
     stderr_fp: Option<BufWriter<File>>,
-    // Slurm accounting stats collected via sacct after step completion.
-    sacct_max_rss_bytes: Option<i64>,
-    sacct_max_disk_read_bytes: Option<i64>,
-    sacct_max_disk_write_bytes: Option<i64>,
-    sacct_ave_cpu_seconds: Option<f64>,
 }
 
 impl AsyncCliCommand {
@@ -78,6 +75,7 @@ impl AsyncCliCommand {
             run_id: None,
             attempt_id: None,
             step_name: None,
+            slurm_stats: None,
             handle: None,
             pid: None,
             is_running: false,
@@ -89,10 +87,6 @@ impl AsyncCliCommand {
             status,
             stdout_fp: None,
             stderr_fp: None,
-            sacct_max_rss_bytes: None,
-            sacct_max_disk_read_bytes: None,
-            sacct_max_disk_write_bytes: None,
-            sacct_ave_cpu_seconds: None,
         }
     }
 
@@ -300,13 +294,13 @@ impl AsyncCliCommand {
         result.peak_cpu_percent = peak_cpu;
         result.avg_cpu_percent = avg_cpu;
 
-        // Set Slurm accounting stats (only populated when running inside a Slurm allocation)
-        result.sacct_max_rss_bytes = self.sacct_max_rss_bytes;
-        result.sacct_max_disk_read_bytes = self.sacct_max_disk_read_bytes;
-        result.sacct_max_disk_write_bytes = self.sacct_max_disk_write_bytes;
-        result.sacct_ave_cpu_seconds = self.sacct_ave_cpu_seconds;
-
         result
+    }
+
+    /// Returns the Slurm accounting stats collected for this job step, if any.
+    /// Only populated when the job ran inside a Slurm allocation and sacct succeeded.
+    pub fn take_slurm_stats(&mut self) -> Option<SlurmStatsModel> {
+        self.slurm_stats.take()
     }
 
     /// Immediately kills the job process using SIGKILL.
@@ -450,11 +444,19 @@ impl AsyncCliCommand {
         if let (Ok(slurm_job_id), Some(step_name)) =
             (std::env::var("SLURM_JOB_ID"), self.step_name.as_deref())
             && let Some(stats) = collect_sacct_stats(&slurm_job_id, step_name)
+            && let (Some(workflow_id), Some(run_id), Some(attempt_id)) =
+                (self.workflow_id, self.run_id, self.attempt_id)
         {
-            self.sacct_max_rss_bytes = stats.max_rss_bytes;
-            self.sacct_max_disk_read_bytes = stats.max_disk_read_bytes;
-            self.sacct_max_disk_write_bytes = stats.max_disk_write_bytes;
-            self.sacct_ave_cpu_seconds = stats.ave_cpu_seconds;
+            let mut slurm_stats =
+                SlurmStatsModel::new(workflow_id, self.job_id, run_id, attempt_id);
+            slurm_stats.slurm_job_id = Some(slurm_job_id);
+            slurm_stats.max_rss_bytes = stats.max_rss_bytes;
+            slurm_stats.max_vm_size_bytes = stats.max_vm_size_bytes;
+            slurm_stats.max_disk_read_bytes = stats.max_disk_read_bytes;
+            slurm_stats.max_disk_write_bytes = stats.max_disk_write_bytes;
+            slurm_stats.ave_cpu_seconds = stats.ave_cpu_seconds;
+            slurm_stats.node_list = stats.node_list;
+            self.slurm_stats = Some(slurm_stats);
         }
 
         let status_str = format!("{:?}", status).to_lowercase();
@@ -559,9 +561,11 @@ impl AsyncCliCommand {
 /// Slurm accounting stats collected from `sacct` after step completion.
 struct SacctStats {
     max_rss_bytes: Option<i64>,
+    max_vm_size_bytes: Option<i64>,
     max_disk_read_bytes: Option<i64>,
     max_disk_write_bytes: Option<i64>,
     ave_cpu_seconds: Option<f64>,
+    node_list: Option<String>,
 }
 
 /// Call `sacct` once after a job step exits to collect Slurm accounting data.
@@ -579,7 +583,7 @@ fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats
             "--name",
             step_name,
             "--format",
-            "MaxRSS,MaxDiskRead,MaxDiskWrite,AveCPU",
+            "MaxRSS,MaxVMSize,MaxDiskRead,MaxDiskWrite,AveCPU,NodeList",
             "-P", // pipe-separated output
             "-n", // no header
         ])
@@ -608,7 +612,7 @@ fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats
     let stdout = String::from_utf8_lossy(&output.stdout);
     // sacct may return multiple lines for the same step (e.g. allocation entry + step entry).
     // Allocation-level rows have empty memory fields; pick the first line that has at least
-    // one non-empty memory field (MaxRSS, MaxDiskRead, or MaxDiskWrite).
+    // one non-empty memory field (MaxRSS, MaxVMSize, or MaxDiskRead).
     let line = stdout.lines().find(|l| {
         let fields: Vec<&str> = l.split('|').collect();
         fields.len() >= 3
@@ -617,24 +621,35 @@ fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats
                 || !fields[2].trim().is_empty())
     })?;
     let fields: Vec<&str> = line.split('|').collect();
-    if fields.len() < 4 {
+    if fields.len() < 6 {
         debug!(
-            "sacct output for step {} has fewer than 4 fields: {:?}",
+            "sacct output for step {} has fewer than 6 fields: {:?}",
             step_name, fields
         );
         return None;
     }
 
     debug!(
-        "sacct stats for step {}: MaxRSS={} MaxDiskRead={} MaxDiskWrite={} AveCPU={}",
-        step_name, fields[0], fields[1], fields[2], fields[3]
+        "sacct stats for step {}: MaxRSS={} MaxVMSize={} MaxDiskRead={} MaxDiskWrite={} AveCPU={} NodeList={}",
+        step_name, fields[0], fields[1], fields[2], fields[3], fields[4], fields[5]
     );
+
+    let node_list = {
+        let v = fields[5].trim();
+        if v.is_empty() {
+            None
+        } else {
+            Some(v.to_string())
+        }
+    };
 
     Some(SacctStats {
         max_rss_bytes: parse_slurm_memory(fields[0]),
-        max_disk_read_bytes: parse_slurm_memory(fields[1]),
-        max_disk_write_bytes: parse_slurm_memory(fields[2]),
-        ave_cpu_seconds: parse_slurm_cpu_time(fields[3]),
+        max_vm_size_bytes: parse_slurm_memory(fields[1]),
+        max_disk_read_bytes: parse_slurm_memory(fields[2]),
+        max_disk_write_bytes: parse_slurm_memory(fields[3]),
+        ave_cpu_seconds: parse_slurm_cpu_time(fields[4]),
+        node_list,
     })
 }
 

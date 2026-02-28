@@ -236,6 +236,19 @@ pub enum CreateSlurmSchedulerResponse {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[must_use]
+pub enum CreateSlurmStatsResponse {
+    /// Successful response
+    SuccessfulResponse(models::SlurmStatsModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
 pub enum CreateUserDataResponse {
     /// Successful response
     SuccessfulResponse(models::UserDataModel),
@@ -583,6 +596,17 @@ pub enum ListResultsResponse {
     ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
+pub enum ListSlurmStatsResponse {
+    /// Successful response
+    SuccessfulResponse(models::ListSlurmStatsResponse),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }
@@ -1662,6 +1686,23 @@ pub trait Api<C: Send + Sync> {
         context: &C,
     ) -> Result<CreateSlurmSchedulerResponse, ApiError>;
 
+    /// Store Slurm accounting stats for a job step.
+    async fn create_slurm_stats(
+        &self,
+        body: models::SlurmStatsModel,
+        context: &C,
+    ) -> Result<CreateSlurmStatsResponse, ApiError>;
+
+    /// List Slurm accounting stats.
+    async fn list_slurm_stats(
+        &self,
+        workflow_id: Option<i64>,
+        job_id: Option<i64>,
+        offset: Option<i64>,
+        limit: Option<i64>,
+        context: &C,
+    ) -> Result<ListSlurmStatsResponse, ApiError>;
+
     /// Store remote workers for a workflow.
     async fn create_remote_workers(
         &self,
@@ -2587,6 +2628,21 @@ pub trait ApiNoContext<C: Send + Sync> {
         body: models::SlurmSchedulerModel,
     ) -> Result<CreateSlurmSchedulerResponse, ApiError>;
 
+    /// Store Slurm accounting stats for a job step.
+    async fn create_slurm_stats(
+        &self,
+        body: models::SlurmStatsModel,
+    ) -> Result<CreateSlurmStatsResponse, ApiError>;
+
+    /// List Slurm accounting stats.
+    async fn list_slurm_stats(
+        &self,
+        workflow_id: Option<i64>,
+        job_id: Option<i64>,
+        offset: Option<i64>,
+        limit: Option<i64>,
+    ) -> Result<ListSlurmStatsResponse, ApiError>;
+
     /// Store a user data record.
     async fn create_user_data(
         &self,
@@ -3391,6 +3447,29 @@ impl<T: Api<C> + Send + Sync, C: Clone + Send + Sync> ApiNoContext<C> for Contex
     ) -> Result<CreateSlurmSchedulerResponse, ApiError> {
         let context = self.context().clone();
         self.api().create_slurm_scheduler(body, &context).await
+    }
+
+    /// Store Slurm accounting stats for a job step.
+    async fn create_slurm_stats(
+        &self,
+        body: models::SlurmStatsModel,
+    ) -> Result<CreateSlurmStatsResponse, ApiError> {
+        let context = self.context().clone();
+        self.api().create_slurm_stats(body, &context).await
+    }
+
+    /// List Slurm accounting stats.
+    async fn list_slurm_stats(
+        &self,
+        workflow_id: Option<i64>,
+        job_id: Option<i64>,
+        offset: Option<i64>,
+        limit: Option<i64>,
+    ) -> Result<ListSlurmStatsResponse, ApiError> {
+        let context = self.context().clone();
+        self.api()
+            .list_slurm_stats(workflow_id, job_id, offset, limit, &context)
+            .await
     }
 
     /// Store a user data record.

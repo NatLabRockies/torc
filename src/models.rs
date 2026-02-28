@@ -8462,26 +8462,6 @@ pub struct ResultModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub avg_cpu_percent: Option<f64>,
 
-    /// Slurm accounting: max resident set size in bytes (from sacct MaxRSS)
-    #[serde(rename = "sacct_max_rss_bytes")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sacct_max_rss_bytes: Option<i64>,
-
-    /// Slurm accounting: max disk read in bytes (from sacct MaxDiskRead)
-    #[serde(rename = "sacct_max_disk_read_bytes")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sacct_max_disk_read_bytes: Option<i64>,
-
-    /// Slurm accounting: max disk write in bytes (from sacct MaxDiskWrite)
-    #[serde(rename = "sacct_max_disk_write_bytes")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sacct_max_disk_write_bytes: Option<i64>,
-
-    /// Slurm accounting: average CPU time in seconds (from sacct AveCPU)
-    #[serde(rename = "sacct_ave_cpu_seconds")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sacct_ave_cpu_seconds: Option<f64>,
-
     #[serde(rename = "status")]
     pub status: JobStatus,
 }
@@ -8513,10 +8493,6 @@ impl ResultModel {
             avg_memory_bytes: None,
             peak_cpu_percent: None,
             avg_cpu_percent: None,
-            sacct_max_rss_bytes: None,
-            sacct_max_disk_read_bytes: None,
-            sacct_max_disk_write_bytes: None,
-            sacct_ave_cpu_seconds: None,
             status,
         }
     }
@@ -8574,10 +8550,6 @@ impl std::str::FromStr for ResultModel {
             pub avg_memory_bytes: Vec<i64>,
             pub peak_cpu_percent: Vec<f64>,
             pub avg_cpu_percent: Vec<f64>,
-            pub sacct_max_rss_bytes: Vec<i64>,
-            pub sacct_max_disk_read_bytes: Vec<i64>,
-            pub sacct_max_disk_write_bytes: Vec<i64>,
-            pub sacct_ave_cpu_seconds: Vec<f64>,
             pub status: Vec<JobStatus>,
         }
 
@@ -8686,16 +8658,6 @@ impl std::str::FromStr for ResultModel {
             avg_memory_bytes: intermediate_rep.avg_memory_bytes.into_iter().next(),
             peak_cpu_percent: intermediate_rep.peak_cpu_percent.into_iter().next(),
             avg_cpu_percent: intermediate_rep.avg_cpu_percent.into_iter().next(),
-            sacct_max_rss_bytes: intermediate_rep.sacct_max_rss_bytes.into_iter().next(),
-            sacct_max_disk_read_bytes: intermediate_rep
-                .sacct_max_disk_read_bytes
-                .into_iter()
-                .next(),
-            sacct_max_disk_write_bytes: intermediate_rep
-                .sacct_max_disk_write_bytes
-                .into_iter()
-                .next(),
-            sacct_ave_cpu_seconds: intermediate_rep.sacct_ave_cpu_seconds.into_iter().next(),
             status: intermediate_rep
                 .status
                 .into_iter()
@@ -11141,4 +11103,110 @@ pub struct AccessCheckResponse {
     /// Reason for access denial
     #[serde(rename = "reason", skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, validator::Validate)]
+#[cfg_attr(feature = "conversion", derive(frunk::LabelledGeneric))]
+pub struct SlurmStatsModel {
+    #[serde(rename = "id")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<i64>,
+
+    /// Database ID for the workflow
+    #[serde(rename = "workflow_id")]
+    pub workflow_id: i64,
+
+    /// Database ID for the job
+    #[serde(rename = "job_id")]
+    pub job_id: i64,
+
+    /// ID of the workflow run
+    #[serde(rename = "run_id")]
+    pub run_id: i64,
+
+    /// Retry attempt number (starts at 1)
+    #[serde(rename = "attempt_id")]
+    pub attempt_id: i64,
+
+    /// Slurm allocation ID (from SLURM_JOB_ID env var)
+    #[serde(rename = "slurm_job_id")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slurm_job_id: Option<String>,
+
+    /// Max resident set size in bytes (from sacct MaxRSS)
+    #[serde(rename = "max_rss_bytes")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_rss_bytes: Option<i64>,
+
+    /// Max virtual memory size in bytes (from sacct MaxVMSize)
+    #[serde(rename = "max_vm_size_bytes")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_vm_size_bytes: Option<i64>,
+
+    /// Max disk read in bytes (from sacct MaxDiskRead)
+    #[serde(rename = "max_disk_read_bytes")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_disk_read_bytes: Option<i64>,
+
+    /// Max disk write in bytes (from sacct MaxDiskWrite)
+    #[serde(rename = "max_disk_write_bytes")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_disk_write_bytes: Option<i64>,
+
+    /// Average CPU time in seconds (from sacct AveCPU)
+    #[serde(rename = "ave_cpu_seconds")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ave_cpu_seconds: Option<f64>,
+
+    /// Node(s) on which the step ran (from sacct NodeList)
+    #[serde(rename = "node_list")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub node_list: Option<String>,
+}
+
+impl SlurmStatsModel {
+    pub fn new(workflow_id: i64, job_id: i64, run_id: i64, attempt_id: i64) -> SlurmStatsModel {
+        SlurmStatsModel {
+            id: None,
+            workflow_id,
+            job_id,
+            run_id,
+            attempt_id,
+            slurm_job_id: None,
+            max_rss_bytes: None,
+            max_vm_size_bytes: None,
+            max_disk_read_bytes: None,
+            max_disk_write_bytes: None,
+            ave_cpu_seconds: None,
+            node_list: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, validator::Validate)]
+#[cfg_attr(feature = "conversion", derive(frunk::LabelledGeneric))]
+pub struct ListSlurmStatsResponse {
+    #[serde(rename = "items")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub items: Option<Vec<models::SlurmStatsModel>>,
+
+    #[serde(rename = "offset")]
+    pub offset: i64,
+
+    #[serde(rename = "count")]
+    pub count: i64,
+
+    #[serde(rename = "total_count")]
+    pub total_count: i64,
+}
+
+impl ListSlurmStatsResponse {
+    pub fn new(offset: i64, count: i64, total_count: i64) -> ListSlurmStatsResponse {
+        ListSlurmStatsResponse {
+            items: None,
+            offset,
+            count,
+            total_count,
+        }
+    }
 }

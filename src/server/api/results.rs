@@ -92,10 +92,6 @@ const RESULT_COLUMNS: &[&str] = &[
     "avg_memory_bytes",
     "peak_cpu_percent",
     "avg_cpu_percent",
-    "sacct_max_rss_bytes",
-    "sacct_max_disk_read_bytes",
-    "sacct_max_disk_write_bytes",
-    "sacct_ave_cpu_seconds",
 ];
 
 impl ResultsApiImpl {
@@ -148,12 +144,8 @@ where
                 ,avg_memory_bytes
                 ,peak_cpu_percent
                 ,avg_cpu_percent
-                ,sacct_max_rss_bytes
-                ,sacct_max_disk_read_bytes
-                ,sacct_max_disk_write_bytes
-                ,sacct_ave_cpu_seconds
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             RETURNING rowid
         "#,
             body.job_id,
@@ -169,10 +161,6 @@ where
             body.avg_memory_bytes,
             body.peak_cpu_percent,
             body.avg_cpu_percent,
-            body.sacct_max_rss_bytes,
-            body.sacct_max_disk_read_bytes,
-            body.sacct_max_disk_write_bytes,
-            body.sacct_ave_cpu_seconds,
         )
         .fetch_one(&mut *tx)
         .await
@@ -267,8 +255,7 @@ where
         let record = match sqlx::query!(
             r#"
             SELECT id, job_id, workflow_id, run_id, attempt_id, compute_node_id, return_code, exec_time_minutes, completion_time, status,
-                   peak_memory_bytes, avg_memory_bytes, peak_cpu_percent, avg_cpu_percent,
-                   sacct_max_rss_bytes, sacct_max_disk_read_bytes, sacct_max_disk_write_bytes, sacct_ave_cpu_seconds
+                   peak_memory_bytes, avg_memory_bytes, peak_cpu_percent, avg_cpu_percent
             FROM result
             WHERE id = $1
             "#,
@@ -314,10 +301,6 @@ where
             avg_memory_bytes: record.avg_memory_bytes,
             peak_cpu_percent: record.peak_cpu_percent,
             avg_cpu_percent: record.avg_cpu_percent,
-            sacct_max_rss_bytes: record.sacct_max_rss_bytes,
-            sacct_max_disk_read_bytes: record.sacct_max_disk_read_bytes,
-            sacct_max_disk_write_bytes: record.sacct_max_disk_write_bytes,
-            sacct_ave_cpu_seconds: record.sacct_ave_cpu_seconds,
             status,
         };
 
@@ -362,9 +345,9 @@ where
         // Build base query
         // If all_runs is false, only return results that are in workflow_result table (current results)
         let base_query = if show_all_results {
-            "SELECT id, job_id, workflow_id, run_id, attempt_id, compute_node_id, return_code, exec_time_minutes, completion_time, status, peak_memory_bytes, avg_memory_bytes, peak_cpu_percent, avg_cpu_percent, sacct_max_rss_bytes, sacct_max_disk_read_bytes, sacct_max_disk_write_bytes, sacct_ave_cpu_seconds FROM result".to_string()
+            "SELECT id, job_id, workflow_id, run_id, attempt_id, compute_node_id, return_code, exec_time_minutes, completion_time, status, peak_memory_bytes, avg_memory_bytes, peak_cpu_percent, avg_cpu_percent FROM result".to_string()
         } else {
-            "SELECT r.id, r.job_id, r.workflow_id, r.run_id, r.attempt_id, r.compute_node_id, r.return_code, r.exec_time_minutes, r.completion_time, r.status, r.peak_memory_bytes, r.avg_memory_bytes, r.peak_cpu_percent, r.avg_cpu_percent, r.sacct_max_rss_bytes, r.sacct_max_disk_read_bytes, r.sacct_max_disk_write_bytes, r.sacct_ave_cpu_seconds FROM result r INNER JOIN workflow_result wr ON r.id = wr.result_id".to_string()
+            "SELECT r.id, r.job_id, r.workflow_id, r.run_id, r.attempt_id, r.compute_node_id, r.return_code, r.exec_time_minutes, r.completion_time, r.status, r.peak_memory_bytes, r.avg_memory_bytes, r.peak_cpu_percent, r.avg_cpu_percent FROM result r INNER JOIN workflow_result wr ON r.id = wr.result_id".to_string()
         };
 
         // Build WHERE clause conditions
@@ -488,10 +471,6 @@ where
                 avg_memory_bytes: record.get("avg_memory_bytes"),
                 peak_cpu_percent: record.get("peak_cpu_percent"),
                 avg_cpu_percent: record.get("avg_cpu_percent"),
-                sacct_max_rss_bytes: record.get("sacct_max_rss_bytes"),
-                sacct_max_disk_read_bytes: record.get("sacct_max_disk_read_bytes"),
-                sacct_max_disk_write_bytes: record.get("sacct_max_disk_write_bytes"),
-                sacct_ave_cpu_seconds: record.get("sacct_ave_cpu_seconds"),
                 status,
             });
         }

@@ -43,6 +43,7 @@ Class | Method
 *DefaultApi* | [**create_result**](docs/DefaultApi.md#create_result)<br/>**POST** /results<br/>Store a job result.
 *DefaultApi* | [**create_scheduled_compute_node**](docs/DefaultApi.md#create_scheduled_compute_node)<br/>**POST** /scheduled_compute_nodes<br/>Store a scheduled compute node.
 *DefaultApi* | [**create_slurm_scheduler**](docs/DefaultApi.md#create_slurm_scheduler)<br/>**POST** /slurm_schedulers<br/>Store a Slurm compute node configuration.
+*DefaultApi* | [**create_slurm_stats**](docs/DefaultApi.md#create_slurm_stats)<br/>**POST** /slurm_stats<br/>Store Slurm accounting stats for a job step.
 *DefaultApi* | [**create_user_data**](docs/DefaultApi.md#create_user_data)<br/>**POST** /user_data<br/>Store a user data record.
 *DefaultApi* | [**create_workflow**](docs/DefaultApi.md#create_workflow)<br/>**POST** /workflows<br/>Store a workflow.
 *DefaultApi* | [**create_workflow_action**](docs/DefaultApi.md#create_workflow_action)<br/>**POST** /workflows/{id}/actions<br/>Create a workflow action.
@@ -111,6 +112,7 @@ Class | Method
 *DefaultApi* | [**list_results**](docs/DefaultApi.md#list_results)<br/>**GET** /results<br/>Retrieve all job results for one workflow.
 *DefaultApi* | [**list_scheduled_compute_nodes**](docs/DefaultApi.md#list_scheduled_compute_nodes)<br/>**GET** /scheduled_compute_nodes<br/>Retrieve scheduled compute node records for one workflow.
 *DefaultApi* | [**list_slurm_schedulers**](docs/DefaultApi.md#list_slurm_schedulers)<br/>**GET** /slurm_schedulers<br/>Retrieve a Slurm compute node configuration.
+*DefaultApi* | [**list_slurm_stats**](docs/DefaultApi.md#list_slurm_stats)<br/>**GET** /slurm_stats<br/>List Slurm accounting stats.
 *DefaultApi* | [**list_user_data**](docs/DefaultApi.md#list_user_data)<br/>**GET** /user_data<br/>Retrieve all user data records for one workflow.
 *DefaultApi* | [**list_user_groups**](docs/DefaultApi.md#list_user_groups)<br/>**GET** /users/{user_name}/groups<br/>List groups a user belongs to.
 *DefaultApi* | [**list_workflow_groups**](docs/DefaultApi.md#list_workflow_groups)<br/>**GET** /workflows/{id}/access_groups<br/>List access groups that have access to a workflow.
@@ -182,6 +184,7 @@ Class | Method
  - [ListResultsResponse](docs/ListResultsResponse.md)
  - [ListScheduledComputeNodesResponse](docs/ListScheduledComputeNodesResponse.md)
  - [ListSlurmSchedulersResponse](docs/ListSlurmSchedulersResponse.md)
+ - [ListSlurmStatsResponse](docs/ListSlurmStatsResponse.md)
  - [ListUserDataResponse](docs/ListUserDataResponse.md)
  - [ListUserGroupMembershipsResponse](docs/ListUserGroupMembershipsResponse.md)
  - [ListWorkflowsResponse](docs/ListWorkflowsResponse.md)
@@ -195,6 +198,7 @@ Class | Method
  - [ResultModel](docs/ResultModel.md)
  - [ScheduledComputeNodesModel](docs/ScheduledComputeNodesModel.md)
  - [SlurmSchedulerModel](docs/SlurmSchedulerModel.md)
+ - [SlurmStatsModel](docs/SlurmStatsModel.md)
  - [UserDataModel](docs/UserDataModel.md)
  - [UserGroupMembershipModel](docs/UserGroupMembershipModel.md)
  - [WorkflowAccessGroupModel](docs/WorkflowAccessGroupModel.md)
