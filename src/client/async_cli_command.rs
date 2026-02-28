@@ -657,8 +657,8 @@ fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats
                         step_name, attempt, MAX_SACCT_ATTEMPTS
                     );
                 } else {
-                    debug!(
-                        "sacct returned no step data for step {} after {} attempts",
+                    warn!(
+                        "sacct returned no step data for step {} after {} attempts; Slurm stats will not be recorded",
                         step_name, MAX_SACCT_ATTEMPTS
                     );
                 }
