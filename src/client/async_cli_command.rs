@@ -665,25 +665,43 @@ fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats
         };
 
         if !output.status.success() {
-            warn!(
-                "sacct returned non-zero exit code for step {}: {}",
-                step_name,
-                String::from_utf8_lossy(&output.stderr).trim()
-            );
-            return None;
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if attempt < MAX_SACCT_ATTEMPTS {
+                debug!(
+                    "sacct returned non-zero exit code for step {} (attempt {}/{}): {}",
+                    step_name,
+                    attempt,
+                    MAX_SACCT_ATTEMPTS,
+                    stderr.trim()
+                );
+                std::thread::sleep(SACCT_RETRY_DELAY);
+                continue;
+            } else {
+                warn!(
+                    "sacct returned non-zero exit code for step {} after {} attempts: {}",
+                    step_name,
+                    MAX_SACCT_ATTEMPTS,
+                    stderr.trim()
+                );
+                return None;
+            }
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
+        debug!(
+            "sacct output for step {} (attempt {}/{}): {:?}",
+            step_name,
+            attempt,
+            MAX_SACCT_ATTEMPTS,
+            stdout.as_ref()
+        );
         // sacct returns one row per step (and one for the allocation itself).
-        // Find the row whose JobName matches our step name AND has at least one non-empty memory
-        // field. Filtering by JobName in code is more portable than using sacct's --name flag.
+        // Match by JobName only — do NOT also require non-empty memory fields: clusters
+        // without cgroup memory accounting return an otherwise valid step row with empty
+        // memory columns, and filtering those out causes all retries to fail silently.
         let line = stdout.lines().find(|l| {
             let fields: Vec<&str> = l.split('|').collect();
-            fields.len() >= 4
-                && fields[0].trim() == step_name
-                && (!fields[1].trim().is_empty()
-                    || !fields[2].trim().is_empty()
-                    || !fields[3].trim().is_empty())
+            fields.len() >= 2 && fields[0].trim() == step_name
         });
 
         match line {
@@ -693,13 +711,16 @@ fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats
             None => {
                 if attempt < MAX_SACCT_ATTEMPTS {
                     debug!(
-                        "sacct returned no step data for step {} (attempt {}/{}), retrying",
+                        "sacct has no record for step {} yet (attempt {}/{}), retrying",
                         step_name, attempt, MAX_SACCT_ATTEMPTS
                     );
                 } else {
                     warn!(
-                        "sacct returned no step data for step {} after {} attempts; Slurm stats will not be recorded",
-                        step_name, MAX_SACCT_ATTEMPTS
+                        "sacct has no record for step {} after {} attempts; \
+                         raw sacct output: {:?}",
+                        step_name,
+                        MAX_SACCT_ATTEMPTS,
+                        stdout.as_ref()
                     );
                 }
             }
