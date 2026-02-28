@@ -2310,6 +2310,18 @@ where
                                         .expect("impossible to fail to serialize");
                                     *response.body_mut() = Body::from(body_content);
                                 }
+                                ListSlurmStatsResponse::NotFoundErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(404)
+                                        .expect("Unable to turn 404 into a StatusCode");
+                                    response.headers_mut().insert(
+                                    CONTENT_TYPE,
+                                    HeaderValue::from_str("application/json")
+                                        .expect("Unable to create Content-Type header for application/json"),
+                                );
+                                    let body_content = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body_content);
+                                }
                                 ListSlurmStatsResponse::DefaultErrorResponse(body) => {
                                     *response.status_mut() = StatusCode::from_u16(500)
                                         .expect("Unable to turn 500 into a StatusCode");

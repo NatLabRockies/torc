@@ -2892,6 +2892,9 @@ where
         limit: Option<i64>,
         context: &C,
     ) -> Result<ListSlurmStatsResponse, ApiError> {
+        if let Some(wf_id) = workflow_id {
+            authorize_workflow!(self, wf_id, context, ListSlurmStatsResponse);
+        }
         let offset = offset.unwrap_or(0);
         let limit = limit.unwrap_or(MAX_RECORD_TRANSFER_COUNT);
         self.slurm_stats_api

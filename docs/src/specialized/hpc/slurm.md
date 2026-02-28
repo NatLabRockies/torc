@@ -368,17 +368,19 @@ enforcement policies. It can also be updated via the API after a workflow is cre
 ### Slurm Accounting Stats
 
 After each job step exits, Torc calls `sacct` once to collect the following Slurm-native accounting
-fields and stores them with the job result:
+fields and stores them in the `slurm_stats` table:
 
-| Field                        | sacct source   | Description                           |
-| ---------------------------- | -------------- | ------------------------------------- |
-| `sacct_max_rss_bytes`        | `MaxRSS`       | Peak resident-set size (from cgroups) |
-| `sacct_max_disk_read_bytes`  | `MaxDiskRead`  | Peak disk read bytes                  |
-| `sacct_max_disk_write_bytes` | `MaxDiskWrite` | Peak disk write bytes                 |
-| `sacct_ave_cpu_seconds`      | `AveCPU`       | Average CPU time in seconds           |
+| Field                  | sacct source   | Description                           |
+| ---------------------- | -------------- | ------------------------------------- |
+| `max_rss_bytes`        | `MaxRSS`       | Peak resident-set size (from cgroups) |
+| `max_vm_size_bytes`    | `MaxVMSize`    | Peak virtual memory size              |
+| `max_disk_read_bytes`  | `MaxDiskRead`  | Peak disk read bytes                  |
+| `max_disk_write_bytes` | `MaxDiskWrite` | Peak disk write bytes                 |
+| `ave_cpu_seconds`      | `AveCPU`       | Average CPU time in seconds           |
+| `node_list`            | `NodeList`     | Nodes used by the job step            |
 
 These fields complement the existing sysinfo-based metrics (`peak_memory_bytes`, `peak_cpu_percent`,
-etc.) and are available in the job result API and `torc reports results`.
+etc.) and are available via `torc slurm stats <workflow_id>`.
 
 `sacct` data is collected on a best-effort basis. Fields are `null` when:
 

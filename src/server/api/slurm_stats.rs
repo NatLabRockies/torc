@@ -115,6 +115,26 @@ impl<C: Send + Sync + Has<XSpanIdString>> SlurmStatsApi<C> for SlurmStatsApiImpl
         let limit = limit.min(MAX_RECORD_TRANSFER_COUNT);
         let pool = self.context.pool.clone();
 
+        let count_row = sqlx::query!(
+            r#"
+            SELECT COUNT(*) as total
+            FROM slurm_stats
+            WHERE ($1 IS NULL OR workflow_id = $1)
+              AND ($2 IS NULL OR job_id = $2)
+            "#,
+            workflow_id,
+            job_id,
+        )
+        .fetch_one(&*pool)
+        .await;
+
+        let total_count = match count_row {
+            Ok(row) => row.total,
+            Err(e) => {
+                return Err(database_error_with_msg(e, "Failed to count slurm_stats"));
+            }
+        };
+
         let rows = sqlx::query!(
             r#"
             SELECT id, workflow_id, job_id, run_id, attempt_id,
@@ -138,7 +158,6 @@ impl<C: Send + Sync + Has<XSpanIdString>> SlurmStatsApi<C> for SlurmStatsApiImpl
 
         match rows {
             Ok(records) => {
-                let total_count = records.len() as i64;
                 let items: Vec<models::SlurmStatsModel> = records
                     .into_iter()
                     .map(|r| models::SlurmStatsModel {

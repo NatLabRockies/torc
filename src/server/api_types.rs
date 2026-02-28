@@ -607,6 +607,8 @@ pub enum ListSlurmStatsResponse {
     SuccessfulResponse(models::ListSlurmStatsResponse),
     /// Forbidden - user does not have access
     ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }
