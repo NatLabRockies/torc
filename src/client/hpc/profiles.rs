@@ -53,7 +53,7 @@ impl HpcDetection {
 }
 
 /// A partition on an HPC system
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct HpcPartition {
     /// Partition name (as used with --partition)
     pub name: String,
@@ -181,7 +181,7 @@ impl HpcPartition {
 }
 
 /// An HPC system profile
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct HpcProfile {
     /// System identifier (e.g., "kestrel", "perlmutter")
     pub name: String,
@@ -376,13 +376,23 @@ impl HpcProfileRegistry {
     }
 
     /// Get a profile by name
-    pub fn get(&self, name: &str) -> Option<&HpcProfile> {
-        self.profiles.iter().find(|p| p.name == name)
+    pub fn get(&self, name: &str) -> Option<HpcProfile> {
+        // Special case for dynamic Slurm profile
+        if name == "slurm" {
+            return super::slurm::detect_slurm_profile();
+        }
+        self.profiles.iter().find(|p| p.name == name).cloned()
     }
 
     /// Detect the current HPC system
-    pub fn detect(&self) -> Option<&HpcProfile> {
-        self.profiles.iter().find(|p| p.detect())
+    pub fn detect(&self) -> Option<HpcProfile> {
+        // First check for known built-in/custom profiles
+        if let Some(profile) = self.profiles.iter().find(|p| p.detect()) {
+            return Some(profile.clone());
+        }
+
+        // Fall back to dynamic Slurm detection if no other profile matches
+        super::slurm::detect_slurm_profile()
     }
 
     /// Get profile names

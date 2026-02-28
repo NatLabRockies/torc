@@ -2803,7 +2803,7 @@ fn handle_generate(
     // Generate schedulers
     let result = match generate_schedulers_for_workflow(
         &mut spec,
-        profile,
+        &profile,
         &resolved_account,
         single_allocation,
         group_by,
@@ -3303,7 +3303,7 @@ fn handle_regenerate(
     let plan = generate_scheduler_plan(
         &graph,
         &rr_name_to_model,
-        profile,
+        &profile,
         &account_to_use,
         single_allocation,
         group_by,

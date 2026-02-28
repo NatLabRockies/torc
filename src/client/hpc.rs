@@ -13,6 +13,7 @@ pub mod hpc_interface;
 pub mod hpc_manager;
 pub mod kestrel;
 pub mod profiles;
+pub mod slurm;
 pub mod slurm_interface;
 
 pub use common::{HpcJobInfo, HpcJobStats, HpcJobStatus, HpcType};

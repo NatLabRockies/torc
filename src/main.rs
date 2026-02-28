@@ -431,7 +431,7 @@ fn main() {
             // Generate schedulers
             match generate_schedulers_for_workflow(
                 &mut spec,
-                profile,
+                &profile,
                 &resolved_account,
                 *single_allocation,
                 *group_by,

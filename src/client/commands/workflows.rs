@@ -3111,7 +3111,7 @@ fn handle_create_slurm(
     // Don't allow force=true - if schedulers already exist, user should use the _no_slurm variant
     match generate_schedulers_for_workflow(
         &mut spec,
-        profile,
+        &profile,
         &resolved_account,
         single_allocation,
         group_by,

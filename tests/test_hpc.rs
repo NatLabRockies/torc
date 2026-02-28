@@ -1605,9 +1605,114 @@ fn test_generate_schedulers_cpu_vs_memory_constraint() {
     );
 }
 
-// ============== sinfo Parsing Tests ==============
+// ============== Dynamic Slurm Profile Tests ==============
 
-use torc::client::commands::hpc::parse_sinfo_string;
+#[rstest]
+fn test_detect_slurm_profile() {
+    use std::env;
+    use std::path::Path;
+    use torc::client::hpc::slurm::detect_slurm_profile;
+
+    let sinfo_path = Path::new("tests/scripts/fake_sinfo.sh")
+        .canonicalize()
+        .unwrap();
+    let scontrol_path = Path::new("tests/scripts/fake_scontrol.sh")
+        .canonicalize()
+        .unwrap();
+
+    unsafe {
+        env::set_var("TORC_FAKE_SINFO", sinfo_path.to_string_lossy().to_string());
+        env::set_var(
+            "TORC_FAKE_SCONTROL",
+            scontrol_path.to_string_lossy().to_string(),
+        );
+    }
+
+    let profile = detect_slurm_profile().expect("Should detect slurm profile");
+
+    assert_eq!(profile.name, "test_cluster");
+    assert!(profile.display_name.contains("Test_cluster"));
+    assert_eq!(profile.partitions.len(), 2);
+
+    let standard = profile.get_partition("standard").unwrap();
+    assert_eq!(standard.cpus_per_node, 104);
+    assert_eq!(standard.memory_mb, 246064);
+
+    let gpu = profile.get_partition("gpu").unwrap();
+    assert_eq!(gpu.gpus_per_node, Some(4));
+    assert_eq!(gpu.gpu_type, Some("h100".to_string()));
+
+    unsafe {
+        env::remove_var("TORC_FAKE_SINFO");
+        env::remove_var("TORC_FAKE_SCONTROL");
+    }
+}
+
+#[rstest]
+fn test_registry_detect_dynamic_slurm() {
+    use std::env;
+    use std::path::Path;
+
+    let sinfo_path = Path::new("tests/scripts/fake_sinfo.sh")
+        .canonicalize()
+        .unwrap();
+    let scontrol_path = Path::new("tests/scripts/fake_scontrol.sh")
+        .canonicalize()
+        .unwrap();
+
+    unsafe {
+        env::set_var("TORC_FAKE_SINFO", sinfo_path.to_string_lossy().to_string());
+        env::set_var(
+            "TORC_FAKE_SCONTROL",
+            scontrol_path.to_string_lossy().to_string(),
+        );
+    }
+
+    let registry = HpcProfileRegistry::new();
+    let profile = registry
+        .detect()
+        .expect("Should detect dynamic slurm profile");
+
+    assert_eq!(profile.name, "test_cluster");
+
+    unsafe {
+        env::remove_var("TORC_FAKE_SINFO");
+        env::remove_var("TORC_FAKE_SCONTROL");
+    }
+}
+
+#[rstest]
+fn test_registry_get_slurm() {
+    use std::env;
+    use std::path::Path;
+
+    let sinfo_path = Path::new("tests/scripts/fake_sinfo.sh")
+        .canonicalize()
+        .unwrap();
+    let scontrol_path = Path::new("tests/scripts/fake_scontrol.sh")
+        .canonicalize()
+        .unwrap();
+
+    unsafe {
+        env::set_var("TORC_FAKE_SINFO", sinfo_path.to_string_lossy().to_string());
+        env::set_var(
+            "TORC_FAKE_SCONTROL",
+            scontrol_path.to_string_lossy().to_string(),
+        );
+    }
+
+    let registry = HpcProfileRegistry::new();
+    let profile = registry.get("slurm").expect("Should return slurm profile");
+
+    assert_eq!(profile.name, "test_cluster");
+
+    unsafe {
+        env::remove_var("TORC_FAKE_SINFO");
+        env::remove_var("TORC_FAKE_SCONTROL");
+    }
+}
+
+use torc::client::hpc::slurm::parse_sinfo_string;
 
 /// Test parsing sinfo output from Kestrel HPC cluster
 #[rstest]
