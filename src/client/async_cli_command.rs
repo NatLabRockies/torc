@@ -582,59 +582,94 @@ struct SacctStats {
     node_list: Option<String>,
 }
 
-/// Call `sacct` once after a job step exits to collect Slurm accounting data.
+/// Call `sacct` after a job step exits to collect Slurm accounting data.
 ///
-/// Returns `None` if sacct is unavailable, returns no data for the step, or
-/// the output cannot be parsed. This is a best-effort call — failures are
-/// logged at debug level and do not affect job result reporting.
+/// `slurmdbd` often does not commit the step record immediately after the step exits, so this
+/// function retries up to `MAX_SACCT_ATTEMPTS` times with a short sleep between each attempt.
+/// Returns `None` if sacct is unavailable, returns no data for the step after all retries, or
+/// the output cannot be parsed. This is a best-effort call — failures are logged at debug level
+/// and do not affect job result reporting.
 fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats> {
+    const MAX_SACCT_ATTEMPTS: u32 = 4;
+    const SACCT_RETRY_DELAY: std::time::Duration = std::time::Duration::from_secs(5);
+
     // Allow tests to substitute a fake sacct binary via TORC_FAKE_SACCT.
     let sacct_binary = std::env::var("TORC_FAKE_SACCT").unwrap_or_else(|_| "sacct".to_string());
-    let output = std::process::Command::new(&sacct_binary)
-        .args([
-            "-j",
-            slurm_job_id,
-            "--name",
-            step_name,
-            "--allsteps", // include job step records, not just the allocation-level entry
-            "--format",
-            "MaxRSS,MaxVMSize,MaxDiskRead,MaxDiskWrite,AveCPU,NodeList",
-            "-P", // pipe-separated output
-            "-n", // no header
-        ])
-        .output();
 
-    let output = match output {
-        Ok(o) => o,
-        Err(e) => {
+    for attempt in 1..=MAX_SACCT_ATTEMPTS {
+        // slurmdbd may not have written the step record yet; wait before each attempt.
+        std::thread::sleep(SACCT_RETRY_DELAY);
+
+        let output = std::process::Command::new(&sacct_binary)
+            .args([
+                "-j",
+                slurm_job_id,
+                "--name",
+                step_name,
+                "--allsteps", // include job step records, not just the allocation-level entry
+                "--format",
+                "MaxRSS,MaxVMSize,MaxDiskRead,MaxDiskWrite,AveCPU,NodeList",
+                "-P", // pipe-separated output
+                "-n", // no header
+            ])
+            .output();
+
+        let output = match output {
+            Ok(o) => o,
+            Err(e) => {
+                debug!(
+                    "sacct not available or failed for step {}: {}",
+                    step_name, e
+                );
+                return None;
+            }
+        };
+
+        if !output.status.success() {
             debug!(
-                "sacct not available or failed for step {}: {}",
-                step_name, e
+                "sacct returned non-zero exit code for step {}: {}",
+                step_name,
+                String::from_utf8_lossy(&output.stderr).trim()
             );
             return None;
         }
-    };
 
-    if !output.status.success() {
-        debug!(
-            "sacct returned non-zero exit code for step {}: {}",
-            step_name,
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
-        return None;
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        // sacct may return multiple lines for the same step (e.g. allocation entry + step entry).
+        // Allocation-level rows have empty memory fields; pick the first line that has at least
+        // one non-empty memory field (MaxRSS, MaxVMSize, or MaxDiskRead).
+        let line = stdout.lines().find(|l| {
+            let fields: Vec<&str> = l.split('|').collect();
+            fields.len() >= 3
+                && (!fields[0].trim().is_empty()
+                    || !fields[1].trim().is_empty()
+                    || !fields[2].trim().is_empty())
+        });
+
+        match line {
+            Some(line) => {
+                return parse_sacct_line(line, step_name);
+            }
+            None => {
+                if attempt < MAX_SACCT_ATTEMPTS {
+                    debug!(
+                        "sacct returned no step data for step {} (attempt {}/{}), retrying",
+                        step_name, attempt, MAX_SACCT_ATTEMPTS
+                    );
+                } else {
+                    debug!(
+                        "sacct returned no step data for step {} after {} attempts",
+                        step_name, MAX_SACCT_ATTEMPTS
+                    );
+                }
+            }
+        }
     }
+    None
+}
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    // sacct may return multiple lines for the same step (e.g. allocation entry + step entry).
-    // Allocation-level rows have empty memory fields; pick the first line that has at least
-    // one non-empty memory field (MaxRSS, MaxVMSize, or MaxDiskRead).
-    let line = stdout.lines().find(|l| {
-        let fields: Vec<&str> = l.split('|').collect();
-        fields.len() >= 3
-            && (!fields[0].trim().is_empty()
-                || !fields[1].trim().is_empty()
-                || !fields[2].trim().is_empty())
-    })?;
+/// Parse a single pipe-separated `sacct` output line into a [`SacctStats`].
+fn parse_sacct_line(line: &str, step_name: &str) -> Option<SacctStats> {
     let fields: Vec<&str> = line.split('|').collect();
     if fields.len() < 6 {
         debug!(
