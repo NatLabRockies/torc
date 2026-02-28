@@ -4131,14 +4131,14 @@ paths:
       tags: []
       x-codegen-request-body-name: body
     get:
-      description: Retrieve Slurm accounting stats, optionally filtered by workflow and job.
+      description: Retrieve Slurm accounting stats for a workflow, optionally filtered by job.
       operationId: list_slurm_stats
       parameters:
       - description: Workflow ID
         explode: false
         in: query
         name: workflow_id
-        required: false
+        required: true
         schema:
           type: integer
         style: simple

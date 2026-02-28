@@ -2204,7 +2204,14 @@ where
                                 .expect("Unable to create Bad Request response for invalid query parameter workflow_id")),
                         }
                         }
-                        None => None,
+                        None => {
+                            return Ok(Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body(Body::from("Missing required query parameter workflow_id"))
+                                .expect(
+                                    "Unable to create Bad Request response for missing workflow_id",
+                                ));
+                        }
                     };
                     let param_job_id = query_params
                         .iter()

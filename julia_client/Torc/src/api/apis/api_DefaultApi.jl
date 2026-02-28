@@ -3303,7 +3303,7 @@ const _returntypes_list_slurm_stats_DefaultApi = Dict{Regex,Type}(
     Regex("^" * replace("500", "x"=>".") * "\$") => DefaultErrorResponse,
 )
 
-function _oacinternal_list_slurm_stats(_api::DefaultApi; workflow_id=nothing, job_id=nothing, offset=nothing, limit=nothing, _mediaType=nothing)
+function _oacinternal_list_slurm_stats(_api::DefaultApi, workflow_id::Int64; job_id=nothing, offset=nothing, limit=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_slurm_stats_DefaultApi, "/slurm_stats", [])
     OpenAPI.Clients.set_param(_ctx.query, "workflow_id", workflow_id; style="simple", is_explode=false)  # type Int64
     OpenAPI.Clients.set_param(_ctx.query, "job_id", job_id; style="simple", is_explode=false)  # type Int64
@@ -3316,23 +3316,23 @@ end
 
 @doc raw"""List Slurm accounting stats.
 
-Retrieve Slurm accounting stats, optionally filtered by workflow and job.
+Retrieve Slurm accounting stats for a workflow, optionally filtered by job.
 
 Params:
-- workflow_id::Int64
+- workflow_id::Int64 (required)
 - job_id::Int64
 - offset::Int64
 - limit::Int64
 
 Return: ListSlurmStatsResponse, OpenAPI.Clients.ApiResponse
 """
-function list_slurm_stats(_api::DefaultApi; workflow_id=nothing, job_id=nothing, offset=nothing, limit=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_list_slurm_stats(_api; workflow_id=workflow_id, job_id=job_id, offset=offset, limit=limit, _mediaType=_mediaType)
+function list_slurm_stats(_api::DefaultApi, workflow_id::Int64; job_id=nothing, offset=nothing, limit=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_list_slurm_stats(_api, workflow_id; job_id=job_id, offset=offset, limit=limit, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function list_slurm_stats(_api::DefaultApi, response_stream::Channel; workflow_id=nothing, job_id=nothing, offset=nothing, limit=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_list_slurm_stats(_api; workflow_id=workflow_id, job_id=job_id, offset=offset, limit=limit, _mediaType=_mediaType)
+function list_slurm_stats(_api::DefaultApi, response_stream::Channel, workflow_id::Int64; job_id=nothing, offset=nothing, limit=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_list_slurm_stats(_api, workflow_id; job_id=job_id, offset=offset, limit=limit, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 

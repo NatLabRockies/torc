@@ -1400,6 +1400,9 @@ impl JobRunner {
                     }
 
                     let attempt_id = async_job.job.attempt_id.unwrap_or(1);
+                    // Note: resource requirements are not fetched in this code path, so
+                    // --cpus-per-task and --mem are not passed to srun even when
+                    // limit_resources is true.  Slurm will use its default step sizing.
                     match async_job.start(
                         &self.output_dir,
                         self.workflow_id,

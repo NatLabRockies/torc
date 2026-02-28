@@ -2892,13 +2892,19 @@ where
         limit: Option<i64>,
         context: &C,
     ) -> Result<ListSlurmStatsResponse, ApiError> {
-        if let Some(wf_id) = workflow_id {
-            authorize_workflow!(self, wf_id, context, ListSlurmStatsResponse);
-        }
+        let wf_id = match workflow_id {
+            Some(id) => id,
+            None => {
+                return Ok(ListSlurmStatsResponse::ForbiddenErrorResponse(
+                    forbidden_error!("workflow_id is required to list Slurm stats"),
+                ));
+            }
+        };
+        authorize_workflow!(self, wf_id, context, ListSlurmStatsResponse);
         let offset = offset.unwrap_or(0);
         let limit = limit.unwrap_or(MAX_RECORD_TRANSFER_COUNT);
         self.slurm_stats_api
-            .list_slurm_stats(workflow_id, job_id, offset, limit, context)
+            .list_slurm_stats(Some(wf_id), job_id, offset, limit, context)
             .await
     }
 

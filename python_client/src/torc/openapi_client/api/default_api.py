@@ -27203,7 +27203,7 @@ class DefaultApi:
     @validate_call
     def list_slurm_stats(
         self,
-        workflow_id: Annotated[Optional[StrictInt], Field(description="Workflow ID")] = None,
+        workflow_id: Annotated[StrictInt, Field(description="Workflow ID")],
         job_id: Annotated[Optional[StrictInt], Field(description="Return the stats for a specific job.")] = None,
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
@@ -27222,9 +27222,9 @@ class DefaultApi:
     ) -> ListSlurmStatsResponse:
         """List Slurm accounting stats.
 
-        Retrieve Slurm accounting stats, optionally filtered by workflow and job.
+        Retrieve Slurm accounting stats for a workflow, optionally filtered by job.
 
-        :param workflow_id: Workflow ID
+        :param workflow_id: Workflow ID (required)
         :type workflow_id: int
         :param job_id: Return the stats for a specific job.
         :type job_id: int
@@ -27284,7 +27284,7 @@ class DefaultApi:
     @validate_call
     def list_slurm_stats_with_http_info(
         self,
-        workflow_id: Annotated[Optional[StrictInt], Field(description="Workflow ID")] = None,
+        workflow_id: Annotated[StrictInt, Field(description="Workflow ID")],
         job_id: Annotated[Optional[StrictInt], Field(description="Return the stats for a specific job.")] = None,
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
@@ -27303,9 +27303,9 @@ class DefaultApi:
     ) -> ApiResponse[ListSlurmStatsResponse]:
         """List Slurm accounting stats.
 
-        Retrieve Slurm accounting stats, optionally filtered by workflow and job.
+        Retrieve Slurm accounting stats for a workflow, optionally filtered by job.
 
-        :param workflow_id: Workflow ID
+        :param workflow_id: Workflow ID (required)
         :type workflow_id: int
         :param job_id: Return the stats for a specific job.
         :type job_id: int
@@ -27365,7 +27365,7 @@ class DefaultApi:
     @validate_call
     def list_slurm_stats_without_preload_content(
         self,
-        workflow_id: Annotated[Optional[StrictInt], Field(description="Workflow ID")] = None,
+        workflow_id: Annotated[StrictInt, Field(description="Workflow ID")],
         job_id: Annotated[Optional[StrictInt], Field(description="Return the stats for a specific job.")] = None,
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
@@ -27384,9 +27384,9 @@ class DefaultApi:
     ) -> RESTResponseType:
         """List Slurm accounting stats.
 
-        Retrieve Slurm accounting stats, optionally filtered by workflow and job.
+        Retrieve Slurm accounting stats for a workflow, optionally filtered by job.
 
-        :param workflow_id: Workflow ID
+        :param workflow_id: Workflow ID (required)
         :type workflow_id: int
         :param job_id: Return the stats for a specific job.
         :type job_id: int

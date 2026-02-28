@@ -153,13 +153,24 @@ impl AsyncCliCommand {
                 srun.arg(format!("--nodes={}", num_nodes));
                 if limit_resources {
                     srun.arg(format!("--cpus-per-task={}", rr.num_cpus));
-                    if let Some(mem_mb) = memory_string_to_mb(&rr.memory) {
-                        srun.arg(format!("--mem={}M", mem_mb));
-                    } else {
-                        warn!(
-                            "Could not parse memory string {:?} for job {}; omitting --mem from srun",
-                            rr.memory, self.job_id
-                        );
+                    match memory_string_to_mb(&rr.memory) {
+                        Some(mem_mb) if mem_mb > 0 => {
+                            srun.arg(format!("--mem={}M", mem_mb));
+                        }
+                        Some(_) => {
+                            // Sub-MB value rounded to 0; omit --mem to avoid --mem=0 which in
+                            // Slurm means "request all available memory on the node".
+                            warn!(
+                                "Memory string {:?} for job {} rounds to 0 MB; omitting --mem from srun",
+                                rr.memory, self.job_id
+                            );
+                        }
+                        None => {
+                            warn!(
+                                "Could not parse memory string {:?} for job {}; omitting --mem from srun",
+                                rr.memory, self.job_id
+                            );
+                        }
                     }
                 }
             } else {
@@ -441,6 +452,9 @@ impl AsyncCliCommand {
         self.handle = None;
 
         // Collect Slurm accounting stats via sacct when running inside an allocation.
+        // Note: collect_sacct_stats is synchronous and may delay this polling cycle if the
+        // Slurm accounting daemon is slow.  This is acceptable because the runner loop is
+        // synchronous and sacct typically completes in well under a second.
         if let (Ok(slurm_job_id), Some(step_name)) =
             (std::env::var("SLURM_JOB_ID"), self.step_name.as_deref())
             && let Some(stats) = collect_sacct_stats(&slurm_job_id, step_name)
@@ -582,6 +596,7 @@ fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats
             slurm_job_id,
             "--name",
             step_name,
+            "--allsteps", // include job step records, not just the allocation-level entry
             "--format",
             "MaxRSS,MaxVMSize,MaxDiskRead,MaxDiskWrite,AveCPU,NodeList",
             "-P", // pipe-separated output

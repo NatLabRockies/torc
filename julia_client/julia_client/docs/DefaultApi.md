@@ -3180,24 +3180,24 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **list_slurm_stats**
-> list_slurm_stats(_api::DefaultApi; workflow_id=nothing, job_id=nothing, offset=nothing, limit=nothing, _mediaType=nothing) -> ListSlurmStatsResponse, OpenAPI.Clients.ApiResponse <br/>
-> list_slurm_stats(_api::DefaultApi, response_stream::Channel; workflow_id=nothing, job_id=nothing, offset=nothing, limit=nothing, _mediaType=nothing) -> Channel{ ListSlurmStatsResponse }, OpenAPI.Clients.ApiResponse
+> list_slurm_stats(_api::DefaultApi, workflow_id::Int64; job_id=nothing, offset=nothing, limit=nothing, _mediaType=nothing) -> ListSlurmStatsResponse, OpenAPI.Clients.ApiResponse <br/>
+> list_slurm_stats(_api::DefaultApi, response_stream::Channel, workflow_id::Int64; job_id=nothing, offset=nothing, limit=nothing, _mediaType=nothing) -> Channel{ ListSlurmStatsResponse }, OpenAPI.Clients.ApiResponse
 
 List Slurm accounting stats.
 
-Retrieve Slurm accounting stats, optionally filtered by workflow and job.
+Retrieve Slurm accounting stats for a workflow, optionally filtered by job.
 
 ### Required Parameters
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **DefaultApi** | API context | 
+**workflow_id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **workflow_id** | **Int64** | Workflow ID | [default to nothing]
  **job_id** | **Int64** | Return the stats for a specific job. | [default to nothing]
  **offset** | **Int64** |  | [default to 0]
  **limit** | **Int64** |  | [default to 10000]
