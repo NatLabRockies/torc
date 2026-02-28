@@ -2982,6 +2982,7 @@ where
                     num_cpus: 1,
                     num_gpus: 0,
                     num_nodes: 1,
+                    step_nodes: None,
                     memory: "1m".to_string(),
                     runtime: "P0DT1M".to_string(),
                 };

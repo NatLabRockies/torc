@@ -198,6 +198,11 @@ pub struct ResourceRequirementsSpec {
     /// Number of nodes required (defaults to 1)
     #[serde(default = "ResourceRequirementsSpec::default_num_nodes")]
     pub num_nodes: i64,
+    /// Number of nodes each srun step spans (defaults to 1).
+    /// Distinct from `num_nodes` (allocation size used by sbatch).
+    /// Set to `num_nodes` for MPI or Julia Distributed.jl jobs.
+    #[serde(default)]
+    pub step_nodes: Option<i64>,
     /// Memory requirement
     pub memory: String,
     /// Runtime limit (defaults to 1 hour)
@@ -1833,6 +1838,7 @@ impl WorkflowSpec {
                     num_cpus: resource_req_spec.num_cpus,
                     num_gpus: resource_req_spec.num_gpus,
                     num_nodes: resource_req_spec.num_nodes,
+                    step_nodes: resource_req_spec.step_nodes,
                     memory: resource_req_spec.memory.clone(),
                     runtime: resource_req_spec.runtime.clone(),
                 };

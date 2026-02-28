@@ -345,6 +345,7 @@ pub fn update_job_resources(
             num_cpus: reqs.num_cpus,
             num_gpus: reqs.num_gpus,
             num_nodes: reqs.num_nodes,
+            step_nodes: reqs.step_nodes,
             memory: reqs.memory.clone(),
             runtime: reqs.runtime.clone(),
         },
@@ -1406,6 +1407,7 @@ pub fn classify_and_resolve_failures(
                                     num_cpus: reqs.num_cpus,
                                     num_gpus: reqs.num_gpus,
                                     num_nodes: reqs.num_nodes,
+                                    step_nodes: reqs.step_nodes,
                                     memory: reqs.memory.clone(),
                                     runtime: reqs.runtime.clone(),
                                 },
@@ -1921,6 +1923,7 @@ pub fn regroup_job_resources(
             num_cpus: group.num_cpus,
             num_gpus: resolved_num_gpus,
             num_nodes: resolved_num_nodes,
+            step_nodes: None,
             memory: group.memory.clone(),
             runtime: group.runtime.clone(),
         };

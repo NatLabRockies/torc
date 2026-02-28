@@ -4,14 +4,15 @@ Technical reference for job resource specifications and allocation strategies.
 
 ## Resource Requirements Fields
 
-| Field       | Type    | Required | Description                          |
-| ----------- | ------- | -------- | ------------------------------------ |
-| `name`      | string  | Yes      | Identifier to reference from jobs    |
-| `num_cpus`  | integer | No       | Number of CPU cores                  |
-| `num_gpus`  | integer | No       | Number of GPUs                       |
-| `num_nodes` | integer | No       | Number of compute nodes              |
-| `memory`    | string  | No       | Memory allocation (see format below) |
-| `runtime`   | string  | No       | Maximum runtime (ISO 8601 duration)  |
+| Field        | Type    | Required | Default | Description                                            |
+| ------------ | ------- | -------- | ------- | ------------------------------------------------------ |
+| `name`       | string  | Yes      | —       | Identifier to reference from jobs                      |
+| `num_cpus`   | integer | No       | `1`     | Number of CPU cores                                    |
+| `num_gpus`   | integer | No       | `0`     | Number of GPUs                                         |
+| `num_nodes`  | integer | No       | `1`     | Slurm allocation size (`sbatch --nodes`)               |
+| `step_nodes` | integer | No       | `1`     | Nodes each srun step spans (`srun --nodes`); see below |
+| `memory`     | string  | No       | `1m`    | Memory allocation (see format below)                   |
+| `runtime`    | string  | No       | `PT1H`  | Maximum runtime (ISO 8601 duration)                    |
 
 ### Example
 
@@ -30,7 +31,34 @@ resource_requirements:
     num_nodes: 1
     memory: 128g
     runtime: PT8H
+
+  - name: mpi_job       # multi-node MPI or Julia Distributed.jl
+    num_cpus: 32
+    num_nodes: 4        # sbatch allocates 4 nodes
+    step_nodes: 4       # srun spans all 4 nodes per step
+    memory: 128g
+    runtime: PT8H
 ```
+
+### `num_nodes` vs `step_nodes`
+
+These two fields are independent and serve different purposes in Slurm workflows:
+
+- **`num_nodes`** — passed to `sbatch --nodes`. Controls how large the Slurm allocation is. This is
+  the total number of nodes reserved for the job.
+
+- **`step_nodes`** — passed to `srun --nodes`. Controls how many nodes each individual torc job step
+  spans within the allocation.
+
+For most jobs both values are `1`. They differ in two patterns:
+
+| Pattern                                                  | `num_nodes` | `step_nodes` | Description                                                         |
+| -------------------------------------------------------- | ----------- | ------------ | ------------------------------------------------------------------- |
+| Single-node jobs (default)                               | `1`         | `1`          | Each job runs on one node                                           |
+| Multi-node allocation, one worker per node               | `N`         | `1`          | N workers share a large allocation, each job still runs on one node |
+| True multi-node job steps (MPI / Julia `Distributed.jl`) | `N`         | `N`          | Each job spans all N nodes                                          |
+
+See [srun Job Step Wrapping](../specialized/hpc/slurm.md#srun-job-step-wrapping) for details.
 
 ## Memory Format
 

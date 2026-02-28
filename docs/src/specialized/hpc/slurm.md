@@ -338,10 +338,62 @@ correlated.
 
 ### Multi-Node Jobs
 
-Torc passes `--nodes=<num_nodes>` from the job's resource requirements to `srun`. Jobs with
-`num_nodes: 1` (the default) run on a single node. Jobs with `num_nodes > 1` span multiple nodes,
-which is correct for workloads that manage their own internal parallelism (MPI, Julia
-`Distributed.jl`, Dask, etc.) via `SLURM_JOB_NODELIST`.
+Two resource requirement fields control node usage:
+
+| Field        | Controls                             | Passed to        | Default |
+| ------------ | ------------------------------------ | ---------------- | ------- |
+| `num_nodes`  | Slurm allocation size                | `sbatch --nodes` | `1`     |
+| `step_nodes` | Nodes each individual job step spans | `srun --nodes`   | `1`     |
+
+For most workloads these two values are the same, but they must be set independently for the
+patterns below.
+
+**Single-node jobs (default)** — no extra configuration needed:
+
+```yaml
+resource_requirements:
+  - name: standard
+    num_cpus: 4
+    memory: 16g
+    runtime: PT2H
+    # num_nodes defaults to 1, step_nodes defaults to 1
+```
+
+**Multi-node allocation with one worker per node** (`start_one_worker_per_node: true`) — each worker
+runs single-node job steps, so `step_nodes` must stay at `1` (the default) even though `num_nodes`
+may be large:
+
+```yaml
+resource_requirements:
+  - name: standard
+    num_cpus: 8
+    memory: 64g
+    runtime: PT4H
+    num_nodes: 10   # sbatch allocates 10 nodes
+    # step_nodes: 1 is the default — each srun step uses exactly one node
+```
+
+**True multi-node job steps** (MPI, Julia `Distributed.jl`, etc.) — the job itself spans all nodes
+in its allocation, so set `step_nodes` equal to `num_nodes`:
+
+```yaml
+resource_requirements:
+  - name: mpi_job
+    num_cpus: 32
+    memory: 128g
+    runtime: PT8H
+    num_nodes: 4      # sbatch allocates 4 nodes
+    step_nodes: 4     # srun --nodes=4: each job step spans all 4 nodes
+```
+
+In this pattern, Torc passes `srun --nodes=4` when launching the job. The job command receives
+`SLURM_JOB_NODELIST`, `SLURM_NTASKS`, and the rest of the standard Slurm step environment, so MPI
+launchers (`mpirun`, `mpiexec`) and Julia `Distributed.jl` will automatically use all allocated
+nodes.
+
+> **Important**: Do not mix `start_one_worker_per_node: true` with `step_nodes > 1`. Use
+> `start_one_worker_per_node` for single-node jobs sharing a large allocation, or set
+> `step_nodes = num_nodes` for genuine multi-node tasks — but not both at once.
 
 ### Resource Limit Enforcement
 

@@ -92,6 +92,7 @@ const RESOURCE_REQUIREMENTS_COLUMNS: &[&str] = &[
     "num_cpus",
     "num_gpus",
     "num_nodes",
+    "step_nodes",
     "memory",
     "runtime",
 ];
@@ -151,6 +152,7 @@ where
             }
         };
 
+        let step_nodes = body.step_nodes.unwrap_or(1);
         let result = match sqlx::query!(
             r#"
             INSERT INTO resource_requirements
@@ -160,12 +162,13 @@ where
                 ,num_cpus
                 ,num_gpus
                 ,num_nodes
+                ,step_nodes
                 ,memory
                 ,runtime
                 ,memory_bytes
                 ,runtime_s
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             RETURNING rowid
         "#,
             body.workflow_id,
@@ -173,6 +176,7 @@ where
             body.num_cpus,
             body.num_gpus,
             body.num_nodes,
+            step_nodes,
             body.memory,
             body.runtime,
             memory_bytes,
@@ -251,7 +255,7 @@ where
 
         let record = match sqlx::query!(
             r#"
-                SELECT id, workflow_id, name, num_cpus, num_gpus, num_nodes, memory, runtime
+                SELECT id, workflow_id, name, num_cpus, num_gpus, num_nodes, step_nodes, memory, runtime
                 FROM resource_requirements
                 WHERE id = $1
             "#,
@@ -284,6 +288,7 @@ where
             num_cpus: record.num_cpus,
             num_gpus: record.num_gpus,
             num_nodes: record.num_nodes,
+            step_nodes: Some(record.step_nodes),
             memory: record.memory,
             runtime: record.runtime,
         };
@@ -328,7 +333,7 @@ where
         );
 
         // Build base query
-        let base_query = "SELECT id, workflow_id, name, num_cpus, num_gpus, num_nodes, memory, runtime FROM resource_requirements".to_string();
+        let base_query = "SELECT id, workflow_id, name, num_cpus, num_gpus, num_nodes, step_nodes, memory, runtime FROM resource_requirements".to_string();
 
         // Build WHERE clause conditions
         let mut where_conditions = vec!["workflow_id = ?".to_string()];
@@ -445,6 +450,7 @@ where
                 num_cpus: record.get("num_cpus"),
                 num_gpus: record.get("num_gpus"),
                 num_nodes: record.get("num_nodes"),
+                step_nodes: record.get("step_nodes"),
                 memory: record.get("memory"),
                 runtime: record.get("runtime"),
             });
@@ -559,6 +565,7 @@ where
             }
         };
 
+        let step_nodes = body.step_nodes.unwrap_or(1);
         // Update the record
         match sqlx::query!(
             r#"
@@ -568,17 +575,19 @@ where
                 num_cpus = $3,
                 num_gpus = $4,
                 num_nodes = $5,
-                memory = $6,
-                runtime = $7,
-                memory_bytes = $8,
-                runtime_s = $9
-            WHERE id = $10
+                step_nodes = $6,
+                memory = $7,
+                runtime = $8,
+                memory_bytes = $9,
+                runtime_s = $10
+            WHERE id = $11
             "#,
             body.workflow_id,
             body.name,
             body.num_cpus,
             body.num_gpus,
             body.num_nodes,
+            step_nodes,
             body.memory,
             body.runtime,
             memory_bytes,
