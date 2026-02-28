@@ -515,7 +515,8 @@ fn collect_sstat_sample(
         .args([
             "-j",
             slurm_job_id,
-            "--allsteps",
+            // Note: do NOT pass --allsteps; it is unrecognized on some Slurm versions.
+            // sstat -j <jobid> already shows all running steps of the job.
             "--format",
             // JobName lets us filter by step name in code (same technique as sacct).
             // AveCPU is used for CPU rate; MaxRSS is the running peak RSS.
@@ -527,7 +528,7 @@ fn collect_sstat_sample(
         .ok()?;
 
     if !output.status.success() {
-        debug!(
+        warn!(
             "sstat returned non-zero exit code for step {}: {}",
             step_name,
             String::from_utf8_lossy(&output.stderr).trim()
