@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "torc": {
+      "command": "/Users/dthom/repos/torc/target/debug/torc-mcp-server",
+      "env": {
+        "TORC_API_URL": "http://localhost:8080/torc-service/v1",
+        "TORC_OUTPUT_DIR": "/Users/dthom/repos/torc/output"
+      }
+    }
+  }
+}

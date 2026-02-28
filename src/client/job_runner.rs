@@ -1917,10 +1917,11 @@ impl ComputeNodeRules {
 /// Fields updated:
 /// - `peak_memory_bytes` ← `max_rss_bytes` (sacct MaxRSS, the step's peak RSS)
 /// - `avg_cpu_percent`   ← `ave_cpu_seconds / exec_time_s * 100`  (lifetime average)
+/// - `peak_cpu_percent`  ← same formula, only when the sstat time-series left it at zero
+///   (sacct does not provide an instantaneous CPU peak, but the avg is better than 0%)
 ///
-/// `avg_memory_bytes` and `peak_cpu_percent` are left as-is: sacct does not provide an
-/// average RSS or an instantaneous CPU peak; those come from the sstat time-series if
-/// TimeSeries monitoring was configured.
+/// `avg_memory_bytes` is left as-is: sacct does not provide an average RSS; that comes
+/// from the sstat time-series if TimeSeries monitoring was configured.
 fn backfill_sacct_into_result(result: &mut ResultModel, stats: &SlurmStatsModel) {
     if let Some(max_rss) = stats.max_rss_bytes {
         result.peak_memory_bytes = Some(max_rss);
@@ -1928,7 +1929,14 @@ fn backfill_sacct_into_result(result: &mut ResultModel, stats: &SlurmStatsModel)
     if let Some(ave_cpu_s) = stats.ave_cpu_seconds {
         let exec_s = result.exec_time_minutes * 60.0;
         if exec_s > 0.0 {
-            result.avg_cpu_percent = Some(ave_cpu_s / exec_s * 100.0);
+            let avg_pct = ave_cpu_s / exec_s * 100.0;
+            result.avg_cpu_percent = Some(avg_pct);
+            // Use sacct avg as a proxy for peak when sstat gave nothing useful (0% or None).
+            // This is better than displaying 0% for jobs where sstat is unavailable.
+            let peak_is_zero = result.peak_cpu_percent.unwrap_or(0.0) == 0.0;
+            if peak_is_zero {
+                result.peak_cpu_percent = Some(avg_pct);
+            }
         }
     }
 }
