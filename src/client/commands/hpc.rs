@@ -160,16 +160,29 @@ struct ProfileRow {
     name: String,
     display: String,
     partitions: usize,
-    detected: String,
+    detected: bool,
 }
 
 #[derive(Tabled, Serialize)]
 struct PartitionRow {
     name: String,
     cpus: u32,
+    #[serde(skip_serializing)]
     memory: String,
+    #[serde(skip_serializing)]
     walltime: String,
+    #[serde(skip_serializing)]
     gpus: String,
+
+    #[tabled(skip)]
+    memory_mb: u64,
+    #[tabled(skip)]
+    max_walltime_secs: u64,
+    #[tabled(skip)]
+    gpus_per_node: Option<u32>,
+    #[tabled(skip)]
+    gpu_type: Option<String>,
+
     shared: bool,
     explicit: bool,
 }
@@ -186,11 +199,7 @@ pub fn handle_hpc_commands(command: &HpcCommands, format: &str) {
                     name: profile.name.clone(),
                     display: profile.display_name.clone(),
                     partitions: profile.partitions.len(),
-                    detected: if profile.detect() {
-                        "YES".to_string()
-                    } else {
-                        "".to_string()
-                    },
+                    detected: profile.detect(),
                 });
             }
 
@@ -271,6 +280,10 @@ pub fn handle_hpc_commands(command: &HpcCommands, format: &str) {
                                 format!("{}x {}", n, p.gpu_type.as_deref().unwrap_or("unknown"))
                             })
                             .unwrap_or_else(|| "-".to_string()),
+                        memory_mb: p.memory_mb,
+                        max_walltime_secs: p.max_walltime_secs,
+                        gpus_per_node: p.gpus_per_node,
+                        gpu_type: p.gpu_type.clone(),
                         shared: p.shared,
                         explicit: p.requires_explicit_request,
                     });
@@ -341,6 +354,10 @@ pub fn handle_hpc_commands(command: &HpcCommands, format: &str) {
                                     .gpus_per_node
                                     .map(|n| format!("{}x", n))
                                     .unwrap_or_else(|| "-".to_string()),
+                                memory_mb: p.memory_mb,
+                                max_walltime_secs: p.max_walltime_secs,
+                                gpus_per_node: p.gpus_per_node,
+                                gpu_type: p.gpu_type.clone(),
                                 shared: p.shared,
                                 explicit: p.requires_explicit_request,
                             }

@@ -2,13 +2,11 @@
 //!
 //! This module provides functionality to detect the current Slurm cluster
 //! and dynamically generate an HPC profile based on sinfo and scontrol output.
-
 use log::debug;
 use std::collections::HashMap;
 use std::process::Command;
 
 use super::profiles::{HpcPartition, HpcProfile};
-
 /// Information about a partition gathered from sinfo
 #[derive(Debug)]
 pub struct SinfoPartition {
@@ -31,16 +29,28 @@ struct ScontrolPartitionInfo {
     default_qos: Option<String>,
 }
 
-use std::env;
-
 /// Get the sinfo executable path (allows for testing with fake binary)
 fn get_sinfo_exec() -> String {
-    env::var("TORC_FAKE_SINFO").unwrap_or_else(|_| "sinfo".to_string())
+    #[cfg(any(test, debug_assertions))]
+    {
+        std::env::var("TORC_FAKE_SINFO").unwrap_or_else(|_| "sinfo".to_string())
+    }
+    #[cfg(not(any(test, debug_assertions)))]
+    {
+        "sinfo".to_string()
+    }
 }
 
 /// Get the scontrol executable path (allows for testing with fake binary)
 fn get_scontrol_exec() -> String {
-    env::var("TORC_FAKE_SCONTROL").unwrap_or_else(|_| "scontrol".to_string())
+    #[cfg(any(test, debug_assertions))]
+    {
+        std::env::var("TORC_FAKE_SCONTROL").unwrap_or_else(|_| "scontrol".to_string())
+    }
+    #[cfg(not(any(test, debug_assertions)))]
+    {
+        "scontrol".to_string()
+    }
 }
 
 /// Detect if Slurm is available and return a dynamic profile
@@ -176,16 +186,16 @@ pub fn generate_dynamic_slurm_profile(
             cpus_per_node: min_cpus,
             memory_mb: min_memory,
             max_walltime_secs: max_walltime,
-            max_nodes: None,
+            max_nodes: scontrol_info.max_nodes,
             max_nodes_per_user: None,
-            min_nodes: None,
+            min_nodes: scontrol_info.min_nodes,
             gpus_per_node,
             gpu_type,
             gpu_memory_gb: None,
             local_disk_gb: None,
             shared,
             requires_explicit_request: false,
-            default_qos: None,
+            default_qos: scontrol_info.default_qos.filter(|q| q != "N/A"),
             features: vec![],
         };
 

@@ -820,9 +820,29 @@ pub fn parse_memory_mb(s: &str) -> Result<u64, String> {
     }
 }
 
-/// Parse walltime string like "4:00:00", "2-00:00:00" into seconds
+/// Parse walltime string like "4:00:00", "2-00:00:00", "2h", "30m" into seconds
 pub fn parse_walltime_secs(s: &str) -> Result<u64, String> {
     let s = s.trim();
+
+    // Check for units like "2h", "30m", "120s"
+    if s.ends_with('h') && s.len() > 1 {
+        let val = s[..s.len() - 1]
+            .parse::<u64>()
+            .map_err(|_| format!("Invalid hours: {}", s))?;
+        return Ok(val * 3600);
+    }
+    if s.ends_with('m') && s.len() > 1 {
+        let val = s[..s.len() - 1]
+            .parse::<u64>()
+            .map_err(|_| format!("Invalid minutes: {}", s))?;
+        return Ok(val * 60);
+    }
+    if s.ends_with('s') && s.len() > 1 {
+        let val = s[..s.len() - 1]
+            .parse::<u64>()
+            .map_err(|_| format!("Invalid seconds: {}", s))?;
+        return Ok(val);
+    }
 
     // Check for day format: D-HH:MM:SS
     if let Some((days_str, rest)) = s.split_once('-') {
