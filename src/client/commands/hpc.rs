@@ -451,7 +451,7 @@ fn generate_toml_profile(
     output.push('\n');
 
     // Profile header
-    output.push_str(&format!("[client.hpc.custom_profiles.{}]\n", name));
+    output.push_str(&format!("[client.hpc.custom_profiles.\"{}\"]\n", name));
     output.push_str(&format!("display_name = \"{}\"\n", display_name));
 
     // Try to generate hostname detection pattern
@@ -470,7 +470,7 @@ fn generate_toml_profile(
     // Partitions
     for partition in partitions {
         output.push_str(&format!(
-            "[[client.hpc.custom_profiles.{}.partitions]]\n",
+            "[[client.hpc.custom_profiles.\"{}\".partitions]]\n",
             name
         ));
         output.push_str(&format!("name = \"{}\"\n", partition.name));

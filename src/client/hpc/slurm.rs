@@ -106,14 +106,17 @@ pub fn generate_dynamic_slurm_profile(
             })
     });
 
-    let display = display_name.unwrap_or_else(|| {
-        // Capitalize first letter
+    let final_display_name = if let Some(d) = display_name {
+        d
+    } else {
+        // Capitalize first letter of cluster_name and add suffix
         let mut chars = cluster_name.chars();
-        match chars.next() {
+        let capitalized = match chars.next() {
             None => cluster_name.clone(),
             Some(c) => c.to_uppercase().chain(chars).collect(),
-        }
-    });
+        };
+        format!("{} (Slurm)", capitalized)
+    };
 
     // Get partition info from sinfo
     let sinfo_partitions = parse_sinfo_output()?;
@@ -204,7 +207,7 @@ pub fn generate_dynamic_slurm_profile(
 
     Ok(HpcProfile {
         name: cluster_name,
-        display_name: format!("{} (Slurm)", display),
+        display_name: final_display_name,
         description: "Dynamically detected Slurm cluster".to_string(),
         detection: vec![], // Not used for dynamic profiles
         default_account: None,
@@ -414,4 +417,71 @@ fn parse_gres(gres: &Option<String>) -> (Option<u32>, Option<String>) {
     }
 
     (None, None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_slurm_timelimit() {
+        assert_eq!(parse_slurm_timelimit("infinite"), 365 * 24 * 3600);
+        assert_eq!(parse_slurm_timelimit("UNLIMITED"), 365 * 24 * 3600);
+        assert_eq!(parse_slurm_timelimit("1-00:00:00"), 24 * 3600);
+        assert_eq!(parse_slurm_timelimit("04:30:00"), 4 * 3600 + 30 * 60);
+        assert_eq!(parse_slurm_timelimit("30:00"), 30 * 60);
+        assert_eq!(parse_slurm_timelimit("45"), 45 * 60);
+    }
+
+    #[test]
+    fn test_parse_gres_simple() {
+        // gpu:4
+        let (count, gpu_type) = parse_gres(&Some("gpu:4".to_string()));
+        assert_eq!(count, Some(4));
+        assert_eq!(gpu_type, None);
+    }
+
+    #[test]
+    fn test_parse_gres_with_type() {
+        // gpu:a100:2
+        let (count, gpu_type) = parse_gres(&Some("gpu:a100:2".to_string()));
+        assert_eq!(count, Some(2));
+        assert_eq!(gpu_type, Some("a100".to_string()));
+    }
+
+    #[test]
+    fn test_parse_gres_with_socket_info() {
+        // gpu:h100:2(S:0-3)
+        let (count, gpu_type) = parse_gres(&Some("gpu:h100:2(S:0-3)".to_string()));
+        assert_eq!(count, Some(2));
+        assert_eq!(gpu_type, Some("h100".to_string()));
+    }
+
+    #[test]
+    fn test_parse_gres_multiple() {
+        // nvme:1,gpu:4
+        let (count, gpu_type) = parse_gres(&Some("nvme:1,gpu:4".to_string()));
+        assert_eq!(count, Some(4));
+        assert_eq!(gpu_type, None);
+    }
+
+    #[test]
+    fn test_parse_gres_none() {
+        let (count, gpu_type) = parse_gres(&None);
+        assert_eq!(count, None);
+        assert_eq!(gpu_type, None);
+    }
+
+    #[test]
+    fn test_infer_gpu_from_name() {
+        assert_eq!(
+            infer_gpu_from_name("gpu-h100"),
+            Some((4, "h100".to_string()))
+        );
+        assert_eq!(
+            infer_gpu_from_name("standard-gpu"),
+            Some((4, "gpu".to_string()))
+        );
+        assert_eq!(infer_gpu_from_name("compute"), None);
+    }
 }
