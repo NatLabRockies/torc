@@ -35,9 +35,6 @@ use std::io::BufWriter;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 
-#[cfg(unix)]
-use std::os::unix::process::ExitStatusExt;
-
 const JOB_STDIO_DIR: &str = "job_stdio";
 
 #[allow(dead_code)]
@@ -256,13 +253,13 @@ impl AsyncCliCommand {
                     // Process is still running
                 }
                 Some(exit_status) => {
-                    let return_code = exit_status.code().unwrap_or(-1);
+                    let return_code = exit_status_to_return_code(&exit_status);
                     let status = if return_code == 0 {
                         JobStatus::Completed
                     } else {
                         JobStatus::Failed
                     };
-                    return match self.handle_completion(return_code as i64, status) {
+                    return match self.handle_completion(return_code, status) {
                         Ok(_) => Ok(()),
                         Err(e) => Err(e),
                     };
@@ -579,32 +576,14 @@ impl AsyncCliCommand {
             // If we have issues with the process hanging, we could try_wait
             // with a timeout.
             let exit_status = child.wait()?;
-
-            #[cfg(unix)]
-            {
-                // On Unix, check if the process was terminated by a signal
-                if let Some(code) = exit_status.code() {
-                    code
-                } else if let Some(signal) = exit_status.signal() {
-                    // Process was killed by a signal - return negative signal number
-                    // This is a common Unix convention
-                    debug!("Job {} was terminated by signal {}", self.job_id, signal);
-                    -signal
-                } else {
-                    -1
-                }
-            }
-            #[cfg(not(unix))]
-            {
-                exit_status.code().unwrap_or(-1)
-            }
+            exit_status_to_return_code(&exit_status)
         } else {
             -1
         };
 
         // Mark as terminated with the actual exit code
-        self.handle_completion(exit_code as i64, JobStatus::Terminated)?;
-        Ok(exit_code)
+        self.handle_completion(exit_code, JobStatus::Terminated)?;
+        Ok(exit_code as i32)
     }
 }
 
@@ -616,6 +595,32 @@ struct SacctStats {
     max_disk_write_bytes: Option<i64>,
     ave_cpu_seconds: Option<f64>,
     node_list: Option<String>,
+}
+
+/// Convert a `std::process::ExitStatus` to a return code.
+///
+/// On Unix, `ExitStatus::code()` returns `None` when the process was killed by a signal
+/// (e.g. OOM kill sends SIGKILL = 9, Slurm time-limit sends SIGTERM = 15). The standard
+/// shell convention encodes signal deaths as `128 + signal`, so SIGKILL → 137, which is
+/// what the recovery heuristics check for OOM detection.  Falling back to `-1` would lose
+/// this information and prevent correct OOM/timeout classification.
+fn exit_status_to_return_code(status: &std::process::ExitStatus) -> i64 {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        if let Some(code) = status.code() {
+            return code as i64;
+        }
+        // Killed by signal — encode as 128 + signal (POSIX shell convention)
+        if let Some(signal) = status.signal() {
+            return 128 + signal as i64;
+        }
+        -1
+    }
+    #[cfg(not(unix))]
+    {
+        status.code().unwrap_or(-1) as i64
+    }
 }
 
 /// Call `sacct` after a job step exits to collect Slurm accounting data.
