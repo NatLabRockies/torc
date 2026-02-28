@@ -537,6 +537,8 @@ fn collect_sstat_sample(
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
+    debug!("sstat output for step {}: {:?}", step_name, stdout.trim());
+
     for line in stdout.lines() {
         let fields: Vec<&str> = line.split('|').collect();
         if fields.len() < 3 {
@@ -555,8 +557,28 @@ fn collect_sstat_sample(
             0.0
         };
 
+        debug!(
+            "sstat sample for step {}: AveCPU={:.3}s (delta={:.3}s over {:.3}s) \
+             => cpu_pct={:.1}%, MaxRSS={}B",
+            step_name,
+            new_ave_cpu_s,
+            new_ave_cpu_s - prev_ave_cpu_s,
+            elapsed_s,
+            cpu_percent,
+            max_rss
+        );
+
         return Some((cpu_percent, max_rss, new_ave_cpu_s));
     }
+
+    // sstat ran successfully but returned no line for our step name.
+    // This can happen when: the step hasn't started yet, has already exited,
+    // or when the sstat JobName format differs from what we expect.
+    debug!(
+        "sstat found no line matching step_name={:?}; raw output: {:?}",
+        step_name,
+        stdout.trim()
+    );
 
     None
 }
