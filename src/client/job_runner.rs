@@ -970,9 +970,21 @@ impl JobRunner {
                 // Store Slurm accounting stats if collected (best-effort, non-blocking).
                 if let Some(async_job) = self.running_jobs.get_mut(&job_id)
                     && let Some(slurm_stats) = async_job.take_slurm_stats()
-                    && let Err(e) = default_api::create_slurm_stats(&self.config, slurm_stats)
                 {
-                    debug!("Failed to store slurm_stats for job {}: {}", job_id, e);
+                    match default_api::create_slurm_stats(&self.config, slurm_stats) {
+                        Ok(_) => {
+                            info!(
+                                "Stored slurm_stats workflow_id={} job_id={}",
+                                self.workflow_id, job_id
+                            );
+                        }
+                        Err(e) => {
+                            warn!(
+                                "Failed to store slurm_stats workflow_id={} job_id={}: {}",
+                                self.workflow_id, job_id, e
+                            );
+                        }
+                    }
                 }
                 if let Some(job_rr) = self.job_resources.get(&job_id).cloned() {
                     self.increment_resources(&job_rr);

@@ -456,20 +456,32 @@ impl AsyncCliCommand {
         // Slurm accounting daemon hasn't written the step record yet.
         if let (Ok(slurm_job_id), Some(step_name)) =
             (std::env::var("SLURM_JOB_ID"), self.step_name.as_deref())
-            && let Some(stats) = collect_sacct_stats(&slurm_job_id, step_name)
-            && let (Some(workflow_id), Some(run_id), Some(attempt_id)) =
-                (self.workflow_id, self.run_id, self.attempt_id)
         {
-            let mut slurm_stats =
-                SlurmStatsModel::new(workflow_id, self.job_id, run_id, attempt_id);
-            slurm_stats.slurm_job_id = Some(slurm_job_id);
-            slurm_stats.max_rss_bytes = stats.max_rss_bytes;
-            slurm_stats.max_vm_size_bytes = stats.max_vm_size_bytes;
-            slurm_stats.max_disk_read_bytes = stats.max_disk_read_bytes;
-            slurm_stats.max_disk_write_bytes = stats.max_disk_write_bytes;
-            slurm_stats.ave_cpu_seconds = stats.ave_cpu_seconds;
-            slurm_stats.node_list = stats.node_list;
-            self.slurm_stats = Some(slurm_stats);
+            info!(
+                "Collecting sacct stats for workflow_id={} job_id={} step={}",
+                self.workflow_id.unwrap_or(0),
+                self.job_id,
+                step_name
+            );
+            if let Some(stats) = collect_sacct_stats(&slurm_job_id, step_name)
+                && let (Some(workflow_id), Some(run_id), Some(attempt_id)) =
+                    (self.workflow_id, self.run_id, self.attempt_id)
+            {
+                let mut slurm_stats =
+                    SlurmStatsModel::new(workflow_id, self.job_id, run_id, attempt_id);
+                slurm_stats.slurm_job_id = Some(slurm_job_id);
+                slurm_stats.max_rss_bytes = stats.max_rss_bytes;
+                slurm_stats.max_vm_size_bytes = stats.max_vm_size_bytes;
+                slurm_stats.max_disk_read_bytes = stats.max_disk_read_bytes;
+                slurm_stats.max_disk_write_bytes = stats.max_disk_write_bytes;
+                slurm_stats.ave_cpu_seconds = stats.ave_cpu_seconds;
+                slurm_stats.node_list = stats.node_list;
+                info!(
+                    "Sacct stats collected workflow_id={} job_id={} step={}",
+                    workflow_id, self.job_id, step_name
+                );
+                self.slurm_stats = Some(slurm_stats);
+            }
         }
 
         let status_str = format!("{:?}", status).to_lowercase();
@@ -605,11 +617,12 @@ fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats
             .args([
                 "-j",
                 slurm_job_id,
-                "--name",
-                step_name,
                 "--allsteps", // include job step records, not just the allocation-level entry
                 "--format",
-                "MaxRSS,MaxVMSize,MaxDiskRead,MaxDiskWrite,AveCPU,NodeList",
+                // JobName is first so we can filter by step name in code — more reliable than
+                // sacct's --name flag, which on some Slurm versions matches the allocation name
+                // rather than the step name.
+                "JobName,MaxRSS,MaxVMSize,MaxDiskRead,MaxDiskWrite,AveCPU,NodeList",
                 "-P", // pipe-separated output
                 "-n", // no header
             ])
@@ -627,7 +640,7 @@ fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats
         };
 
         if !output.status.success() {
-            debug!(
+            warn!(
                 "sacct returned non-zero exit code for step {}: {}",
                 step_name,
                 String::from_utf8_lossy(&output.stderr).trim()
@@ -636,15 +649,16 @@ fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
-        // sacct may return multiple lines for the same step (e.g. allocation entry + step entry).
-        // Allocation-level rows have empty memory fields; pick the first line that has at least
-        // one non-empty memory field (MaxRSS, MaxVMSize, or MaxDiskRead).
+        // sacct returns one row per step (and one for the allocation itself).
+        // Find the row whose JobName matches our step name AND has at least one non-empty memory
+        // field. Filtering by JobName in code is more portable than using sacct's --name flag.
         let line = stdout.lines().find(|l| {
             let fields: Vec<&str> = l.split('|').collect();
-            fields.len() >= 3
-                && (!fields[0].trim().is_empty()
-                    || !fields[1].trim().is_empty()
-                    || !fields[2].trim().is_empty())
+            fields.len() >= 4
+                && fields[0].trim() == step_name
+                && (!fields[1].trim().is_empty()
+                    || !fields[2].trim().is_empty()
+                    || !fields[3].trim().is_empty())
         });
 
         match line {
@@ -670,11 +684,13 @@ fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats
 }
 
 /// Parse a single pipe-separated `sacct` output line into a [`SacctStats`].
+///
+/// Expected format (7 fields): `JobName|MaxRSS|MaxVMSize|MaxDiskRead|MaxDiskWrite|AveCPU|NodeList`
 fn parse_sacct_line(line: &str, step_name: &str) -> Option<SacctStats> {
     let fields: Vec<&str> = line.split('|').collect();
-    if fields.len() < 6 {
+    if fields.len() < 7 {
         debug!(
-            "sacct output for step {} has fewer than 6 fields: {:?}",
+            "sacct output for step {} has fewer than 7 fields: {:?}",
             step_name, fields
         );
         return None;
@@ -682,11 +698,11 @@ fn parse_sacct_line(line: &str, step_name: &str) -> Option<SacctStats> {
 
     debug!(
         "sacct stats for step {}: MaxRSS={} MaxVMSize={} MaxDiskRead={} MaxDiskWrite={} AveCPU={} NodeList={}",
-        step_name, fields[0], fields[1], fields[2], fields[3], fields[4], fields[5]
+        step_name, fields[1], fields[2], fields[3], fields[4], fields[5], fields[6]
     );
 
     let node_list = {
-        let v = fields[5].trim();
+        let v = fields[6].trim();
         if v.is_empty() {
             None
         } else {
@@ -695,11 +711,11 @@ fn parse_sacct_line(line: &str, step_name: &str) -> Option<SacctStats> {
     };
 
     Some(SacctStats {
-        max_rss_bytes: parse_slurm_memory(fields[0]),
-        max_vm_size_bytes: parse_slurm_memory(fields[1]),
-        max_disk_read_bytes: parse_slurm_memory(fields[2]),
-        max_disk_write_bytes: parse_slurm_memory(fields[3]),
-        ave_cpu_seconds: parse_slurm_cpu_time(fields[4]),
+        max_rss_bytes: parse_slurm_memory(fields[1]),
+        max_vm_size_bytes: parse_slurm_memory(fields[2]),
+        max_disk_read_bytes: parse_slurm_memory(fields[3]),
+        max_disk_write_bytes: parse_slurm_memory(fields[4]),
+        ave_cpu_seconds: parse_slurm_cpu_time(fields[5]),
         node_list,
     })
 }

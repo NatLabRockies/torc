@@ -1,7 +1,7 @@
 //! Slurm accounting stats API endpoints
 
 use async_trait::async_trait;
-use log::{debug, info};
+use log::debug;
 use swagger::{ApiError, Has, XSpanIdString};
 
 use crate::models;
@@ -49,7 +49,7 @@ impl<C: Send + Sync + Has<XSpanIdString>> SlurmStatsApi<C> for SlurmStatsApiImpl
         context: &C,
     ) -> Result<CreateSlurmStatsResponse, ApiError> {
         let span_id: &XSpanIdString = context.get();
-        info!(
+        debug!(
             "create_slurm_stats(workflow_id={} job_id={} run_id={} attempt_id={}) - X-Span-ID: {:?}",
             body.workflow_id, body.job_id, body.run_id, body.attempt_id, span_id
         );
