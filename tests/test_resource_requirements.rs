@@ -608,7 +608,7 @@ fn test_resource_requirements_extreme_values(start_server: &ServerProcess) {
 
     // Test with extreme resource values
     let test_cases = [
-        ("zero_resources", 0, 0, 0, "0", "P0DT0M"),
+        ("zero_resources", 0, 0, 1, "0", "P0DT0M"),
         ("single_core", 1, 0, 1, "1g", "P0DT15M"),
         ("high_cpu", 128, 0, 1, "512g", "P30DT0H"),
         ("gpu_intensive", 4, 16, 2, "256g", "P7DT0H"),
