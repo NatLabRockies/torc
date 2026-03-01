@@ -32,7 +32,7 @@ run_test_multi_node_single_worker() {
         if [ -n "$host" ]; then
             hostnames="$hostnames $host"
         fi
-    done < <(echo "$jobs_json" | jq -r '.[].id')
+    done < <(echo "$jobs_json" | jq -r '.jobs[].id')
 
     local unique_count
     unique_count=$(echo "$hostnames" | tr ' ' '\n' | sort -u | grep -c . || echo 0)

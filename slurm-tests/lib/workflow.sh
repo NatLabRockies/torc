@@ -153,7 +153,7 @@ poll_all_workflows() {
 get_job_id() {
     local wf_id="$1" job_name="$2"
     torc --url "$TORC_API_URL" -f json jobs list "$wf_id" 2>/dev/null \
-        | jq -r ".[] | select(.name == \"$job_name\") | .id"
+        | jq -r ".jobs[] | select(.name == \"$job_name\") | .id"
 }
 
 # get_job_stdout WF_ID JOB_ID

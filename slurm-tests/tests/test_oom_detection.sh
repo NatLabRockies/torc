@@ -23,7 +23,7 @@ run_test_oom_detection() {
     # OOM job should fail (status may be "failed" or "terminated")
     local oom_status
     oom_status=$(torc --url "$TORC_API_URL" -f json jobs list "$wf_id" 2>/dev/null \
-        | jq -r '.[] | select(.name == "oom_job") | .status')
+        | jq -r '.jobs[] | select(.name == "oom_job") | .status')
     if [ "$oom_status" = "failed" ] || [ "$oom_status" = "terminated" ]; then
         _pass "oom_job has terminal failure status ($oom_status)"
     else
@@ -35,7 +35,7 @@ run_test_oom_detection() {
     local oom_id
     oom_id=$(get_job_id "$wf_id" "oom_job")
     oom_rc=$(torc --url "$TORC_API_URL" -f json reports results "$wf_id" 2>/dev/null \
-        | jq -r ".[] | select(.job_id == $oom_id) | .return_code" | tail -1)
+        | jq -r ".results[] | select(.job_id == $oom_id) | .return_code" | tail -1)
     assert_ne "${oom_rc:-0}" "0" "oom_job has non-zero return code (got $oom_rc)"
 
     # parse-logs should detect OOM

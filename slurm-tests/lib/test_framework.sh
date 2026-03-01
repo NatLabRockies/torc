@@ -150,8 +150,8 @@ assert_all_jobs_completed() {
     local jobs_json
     jobs_json=$(torc --url "$TORC_API_URL" -f json jobs list "$wf_id" 2>/dev/null)
     local total completed
-    total=$(echo "$jobs_json" | jq 'length')
-    completed=$(echo "$jobs_json" | jq '[.[] | select(.status == "completed")] | length')
+    total=$(echo "$jobs_json" | jq '.jobs | length')
+    completed=$(echo "$jobs_json" | jq '[.jobs[] | select(.status == "completed")] | length')
     assert_eq "$completed" "$expected" "workflow $wf_id: $expected jobs completed"
     assert_eq "$total" "$expected" "workflow $wf_id: $expected total jobs"
 }
@@ -161,7 +161,7 @@ assert_job_status() {
     local wf_id="$1" job_name="$2" expected_status="$3"
     local status
     status=$(torc --url "$TORC_API_URL" -f json jobs list "$wf_id" 2>/dev/null \
-        | jq -r ".[] | select(.name == \"$job_name\") | .status")
+        | jq -r ".jobs[] | select(.name == \"$job_name\") | .status")
     assert_eq "$status" "$expected_status" "job '$job_name' has status '$expected_status'"
 }
 
@@ -177,9 +177,9 @@ assert_return_code() {
     local wf_id="$1" job_name="$2" expected_code="$3"
     local job_id rc
     job_id=$(torc --url "$TORC_API_URL" -f json jobs list "$wf_id" 2>/dev/null \
-        | jq -r ".[] | select(.name == \"$job_name\") | .id")
+        | jq -r ".jobs[] | select(.name == \"$job_name\") | .id")
     rc=$(torc --url "$TORC_API_URL" -f json reports results "$wf_id" 2>/dev/null \
-        | jq -r ".[] | select(.job_id == $job_id) | .return_code" | tail -1)
+        | jq -r ".results[] | select(.job_id == $job_id) | .return_code" | tail -1)
     assert_eq "$rc" "$expected_code" "job '$job_name' return code is $expected_code"
 }
 
@@ -238,7 +238,7 @@ assert_multi_node_dispatch() {
         if [ -n "$host" ]; then
             hostnames="$hostnames $host"
         fi
-    done < <(echo "$jobs_json" | jq -r '.[].id')
+    done < <(echo "$jobs_json" | jq -r '.jobs[].id')
     count=$(echo "$hostnames" | tr ' ' '\n' | sort -u | grep -c . || echo 0)
     assert_ge "$count" "$expected" "workflow $wf_id dispatched to >= $expected distinct nodes (got $count)"
 }
@@ -249,9 +249,9 @@ assert_peak_cpu_nonzero() {
     local wf_id="$1" job_name="$2"
     local job_id peak_cpu
     job_id=$(torc --url "$TORC_API_URL" -f json jobs list "$wf_id" 2>/dev/null \
-        | jq -r ".[] | select(.name == \"$job_name\") | .id")
+        | jq -r ".jobs[] | select(.name == \"$job_name\") | .id")
     peak_cpu=$(torc --url "$TORC_API_URL" -f json reports results "$wf_id" 2>/dev/null \
-        | jq -r ".[] | select(.job_id == $job_id) | .peak_cpu_percent // 0" | tail -1)
+        | jq -r ".results[] | select(.job_id == $job_id) | .peak_cpu_percent // 0" | tail -1)
     assert_gt_float "${peak_cpu:-0}" "0" "job '$job_name' peak_cpu_percent > 0 (got $peak_cpu)"
 }
 
@@ -260,9 +260,9 @@ assert_peak_memory_nonzero() {
     local wf_id="$1" job_name="$2"
     local job_id peak_mem
     job_id=$(torc --url "$TORC_API_URL" -f json jobs list "$wf_id" 2>/dev/null \
-        | jq -r ".[] | select(.name == \"$job_name\") | .id")
+        | jq -r ".jobs[] | select(.name == \"$job_name\") | .id")
     peak_mem=$(torc --url "$TORC_API_URL" -f json reports results "$wf_id" 2>/dev/null \
-        | jq -r ".[] | select(.job_id == $job_id) | .peak_memory_bytes // 0" | tail -1)
+        | jq -r ".results[] | select(.job_id == $job_id) | .peak_memory_bytes // 0" | tail -1)
     assert_gt "${peak_mem:-0}" "0" "job '$job_name' peak_memory_bytes > 0 (got $peak_mem)"
 }
 

@@ -35,7 +35,7 @@ run_test_failure_recovery() {
     # Check that the results show work_3 had multiple attempts
     local results work3_results_count
     results=$(torc --url "$TORC_API_URL" -f json reports results "$wf_id" 2>/dev/null)
-    work3_results_count=$(echo "$results" | jq "[.[] | select(.job_id == $work3_id)] | length")
+    work3_results_count=$(echo "$results" | jq "[.results[] | select(.job_id == $work3_id)] | length")
     assert_ge "$work3_results_count" "2" "work_3 has >= 2 result entries (retry evidence)"
 
     # postprocess should contain completion message
