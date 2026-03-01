@@ -178,7 +178,14 @@ fn main() {
                     *skip_checks,
                 ) {
                     Ok(id) => {
-                        println!("Created workflow {}", id);
+                        if format == "json" {
+                            println!(
+                                "{}",
+                                serde_json::json!({"workflow_id": id, "message": format!("Created workflow {}", id)})
+                            );
+                        } else {
+                            println!("Created workflow {}", id);
+                        }
                         id
                     }
                     Err(e) => {
@@ -284,7 +291,14 @@ fn main() {
                     *skip_checks,
                 ) {
                     Ok(id) => {
-                        println!("Created workflow {}", id);
+                        if format == "json" {
+                            println!(
+                                "{}",
+                                serde_json::json!({"workflow_id": id, "message": format!("Created workflow {}", id)})
+                            );
+                        } else {
+                            println!("Created workflow {}", id);
+                        }
                         id
                     }
                     Err(e) => {
@@ -345,7 +359,14 @@ fn main() {
                         WorkflowManager::new(config.clone(), torc_config, workflow);
                     match workflow_manager.start(*ignore_missing_data) {
                         Ok(()) => {
-                            println!("Successfully submitted workflow {}", workflow_id);
+                            if format == "json" {
+                                println!(
+                                    "{}",
+                                    serde_json::json!({"workflow_id": workflow_id, "message": format!("Successfully submitted workflow {}", workflow_id)})
+                                );
+                            } else {
+                                println!("Successfully submitted workflow {}", workflow_id);
+                            }
                         }
                         Err(e) => {
                             eprintln!("Error submitting workflow {}: {}", workflow_id, e);
@@ -487,7 +508,14 @@ fn main() {
                 *skip_checks,
             ) {
                 Ok(id) => {
-                    println!("Created workflow {}", id);
+                    if format == "json" {
+                        println!(
+                            "{}",
+                            serde_json::json!({"workflow_id": id, "message": format!("Created workflow {}", id)})
+                        );
+                    } else {
+                        println!("Created workflow {}", id);
+                    }
                     id
                 }
                 Err(e) => {
@@ -503,7 +531,14 @@ fn main() {
                         WorkflowManager::new(config.clone(), torc_config, workflow);
                     match workflow_manager.start(*ignore_missing_data) {
                         Ok(()) => {
-                            println!("Successfully submitted workflow {}", workflow_id);
+                            if format == "json" {
+                                println!(
+                                    "{}",
+                                    serde_json::json!({"workflow_id": workflow_id, "message": format!("Successfully submitted workflow {}", workflow_id)})
+                                );
+                            } else {
+                                println!("Successfully submitted workflow {}", workflow_id);
+                            }
                         }
                         Err(e) => {
                             eprintln!("Error submitting workflow {}: {}", workflow_id, e);
