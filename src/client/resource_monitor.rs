@@ -511,16 +511,17 @@ fn collect_sstat_sample(
     prev_ave_cpu_s: f64,
     elapsed_s: f64,
 ) -> Option<(f64, u64, f64)> {
+    // Query the specific step directly via "jobid.stepname".  This avoids needing the
+    // "JobName" format field, which is not supported on all Slurm versions (notably
+    // some HPE Cray installations).  sstat returns only the requested step's data, so
+    // no client-side filtering is needed.
+    let job_step = format!("{}.{}", slurm_job_id, step_name);
     let output = std::process::Command::new(sstat_binary)
         .args([
             "-j",
-            slurm_job_id,
-            // Note: do NOT pass --allsteps; it is unrecognized on some Slurm versions.
-            // sstat -j <jobid> already shows all running steps of the job.
+            &job_step,
             "--format",
-            // JobName lets us filter by step name in code (same technique as sacct).
-            // AveCPU is used for CPU rate; MaxRSS is the running peak RSS.
-            "JobName,AveCPU,MaxRSS",
+            "AveCPU,MaxRSS",
             "-P", // pipe-separated
             "-n", // no header
         ])
@@ -539,17 +540,15 @@ fn collect_sstat_sample(
     let stdout = String::from_utf8_lossy(&output.stdout);
     debug!("sstat output for step {}: {:?}", step_name, stdout.trim());
 
+    // Take the first non-empty line — we queried a single step so there should be at most one.
     for line in stdout.lines() {
         let fields: Vec<&str> = line.split('|').collect();
-        if fields.len() < 3 {
-            continue;
-        }
-        if fields[0].trim() != step_name {
+        if fields.len() < 2 {
             continue;
         }
 
-        let new_ave_cpu_s = parse_slurm_cpu_time(fields[1]).unwrap_or(0.0);
-        let max_rss = parse_slurm_memory(fields[2]).unwrap_or(0).max(0) as u64;
+        let new_ave_cpu_s = parse_slurm_cpu_time(fields[0]).unwrap_or(0.0);
+        let max_rss = parse_slurm_memory(fields[1]).unwrap_or(0).max(0) as u64;
 
         let cpu_percent = if elapsed_s > 0.0 {
             ((new_ave_cpu_s - prev_ave_cpu_s) / elapsed_s * 100.0).max(0.0)
@@ -571,13 +570,11 @@ fn collect_sstat_sample(
         return Some((cpu_percent, max_rss, new_ave_cpu_s));
     }
 
-    // sstat ran successfully but returned no line for our step name.
-    // This can happen when: the step hasn't started yet, has already exited,
-    // or when the sstat JobName format differs from what we expect.
+    // sstat ran successfully but returned no output for this step.
+    // Normal during the brief window before the step appears in slurmstepd.
     debug!(
-        "sstat found no line matching step_name={:?}; raw output: {:?}",
+        "sstat returned no data for step {:?} (step may not be visible yet)",
         step_name,
-        stdout.trim()
     );
 
     None
