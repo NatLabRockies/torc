@@ -149,6 +149,11 @@ impl AsyncCliCommand {
             // steps to share resources with other running steps in the same job allocation.
             // Requires Slurm 21.08+.
             srun.arg("--overlap");
+            // Disable explicit CPU affinity binding. Without this, srun's default binding
+            // algorithm may try to pin tasks to CPU IDs outside the step's allocated mask,
+            // causing "CPU binding outside of job step allocation" errors. CPU limits are
+            // still enforced via cgroups even with binding disabled.
+            srun.arg("--cpu-bind=none");
             srun.arg(format!("--job-name={}", step_name));
             if let Some(rr) = resource_requirements {
                 // step_nodes controls how many nodes this srun step spans.
