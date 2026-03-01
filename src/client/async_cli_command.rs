@@ -631,7 +631,7 @@ fn exit_status_to_return_code(status: &std::process::ExitStatus) -> i64 {
 /// the output cannot be parsed. This is a best-effort call — failures are logged at debug level
 /// and do not affect job result reporting.
 fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats> {
-    const MAX_SACCT_ATTEMPTS: u32 = 4;
+    const MAX_SACCT_ATTEMPTS: u32 = 6;
     const SACCT_RETRY_DELAY: std::time::Duration = std::time::Duration::from_secs(5);
 
     // Allow tests to substitute a fake sacct binary via TORC_FAKE_SACCT.
@@ -713,7 +713,20 @@ fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats
 
         match line {
             Some(line) => {
-                return parse_sacct_line(line, step_name);
+                let stats = parse_sacct_line(line, step_name);
+                // The step row can appear with node_list populated but MaxRSS/AveCPU still
+                // empty while slurmdbd is committing the accounting data asynchronously.
+                // Retry if we have no useful data yet, rather than returning empty stats.
+                let has_data = stats
+                    .as_ref()
+                    .is_some_and(|s| s.max_rss_bytes.is_some() || s.ave_cpu_seconds.is_some());
+                if has_data || attempt == MAX_SACCT_ATTEMPTS {
+                    return stats;
+                }
+                debug!(
+                    "sacct row for step {} found but data fields are empty (attempt {}/{}), retrying",
+                    step_name, attempt, MAX_SACCT_ATTEMPTS
+                );
             }
             None => {
                 if attempt < MAX_SACCT_ATTEMPTS {
