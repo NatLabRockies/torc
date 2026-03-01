@@ -39,3 +39,4 @@ actions:
     scheduler: "two_node_scheduler"
     scheduler_type: "slurm"
     num_allocations: 1
+    start_one_worker_per_node: true
