@@ -53,14 +53,24 @@ cancel_slurm_jobs() {
 }
 
 # is_workflow_terminal WF_ID
-#   Returns 0 if the workflow is complete (all jobs in terminal state), 1 otherwise.
+#   Returns 0 if the workflow is in a terminal state (complete or canceled), 1 otherwise.
 is_workflow_terminal() {
     local wf_id="$1"
     local result
     result=$(torc --url "$TORC_API_URL" -f json workflows is-complete "$wf_id" 2>/dev/null) || return 1
-    local is_complete
+    local is_complete is_canceled
     is_complete=$(echo "$result" | jq -r '.is_complete // false')
-    [ "$is_complete" = "true" ]
+    is_canceled=$(echo "$result" | jq -r '.is_canceled // false')
+    [ "$is_complete" = "true" ] || [ "$is_canceled" = "true" ]
+}
+
+# workflow_job_summary WF_ID
+#   Prints a compact summary of job counts by status (e.g., "completed=3 running=2 ready=1").
+workflow_job_summary() {
+    local wf_id="$1"
+    torc --url "$TORC_API_URL" -f json reports summary "$wf_id" 2>/dev/null \
+        | jq -r '.jobs_by_status | to_entries | map(select(.value > 0)) | map("\(.key)=\(.value)") | join(" ")' \
+        2>/dev/null || echo "unknown"
 }
 
 # poll_workflow WF_ID TIMEOUT_SECONDS [POLL_INTERVAL]
@@ -82,15 +92,12 @@ poll_workflow() {
         elapsed=$((elapsed + interval))
         # Print progress every 60 seconds
         if [ $((elapsed % 60)) -eq 0 ]; then
-            local status_line
-            status_line=$(torc --url "$TORC_API_URL" -f json workflows status "$wf_id" 2>/dev/null \
-                | jq -r 'to_entries | map("\(.key)=\(.value)") | join(", ")' 2>/dev/null || echo "unknown")
-            echo "  [${elapsed}s] workflow $wf_id: $status_line"
+            echo "  [${elapsed}s] workflow $wf_id: $(workflow_job_summary "$wf_id")"
         fi
     done
 
     echo "WARNING: Workflow $wf_id timed out after ${timeout}s."
-    torc --url "$TORC_API_URL" -f json workflows status "$wf_id" 2>/dev/null || true
+    echo "  $(workflow_job_summary "$wf_id")"
     return 1
 }
 
@@ -127,10 +134,7 @@ poll_all_workflows() {
         if [ $((elapsed % 60)) -eq 0 ]; then
             echo "  [${elapsed}s] Still waiting..."
             for wf_id in "${wf_ids[@]}"; do
-                local status_line
-                status_line=$(torc --url "$TORC_API_URL" -f json workflows status "$wf_id" 2>/dev/null \
-                    | jq -r 'to_entries | map("\(.key)=\(.value)") | join(", ")' 2>/dev/null || echo "unknown")
-                echo "    workflow $wf_id: $status_line"
+                echo "    workflow $wf_id: $(workflow_job_summary "$wf_id")"
             done
         fi
     done
@@ -138,8 +142,7 @@ poll_all_workflows() {
     echo "WARNING: Not all workflows completed within ${timeout}s."
     for wf_id in "${wf_ids[@]}"; do
         if ! is_workflow_terminal "$wf_id"; then
-            echo "  workflow $wf_id still running:"
-            torc --url "$TORC_API_URL" -f json workflows status "$wf_id" 2>/dev/null || true
+            echo "  workflow $wf_id still running: $(workflow_job_summary "$wf_id")"
         fi
     done
     return 1
