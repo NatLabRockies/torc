@@ -409,21 +409,13 @@ fn main() {
                 &torc_config.client.hpc,
             );
 
-            let profile = if let Some(name) = hpc_profile {
-                registry.get(name)
-            } else {
-                registry.detect()
-            };
-
-            let profile = match profile {
-                Some(p) => p,
-                None => {
-                    if hpc_profile.is_some() {
-                        eprintln!("Unknown HPC profile: {}", hpc_profile.as_ref().unwrap());
-                    } else {
-                        eprintln!("No HPC profile specified and no system detected.");
-                        eprintln!("Use --hpc-profile <name> to specify a profile.");
-                    }
+            let profile = match torc::client::commands::hpc::resolve_hpc_profile(
+                &registry,
+                hpc_profile.as_deref(),
+            ) {
+                Ok(p) => p,
+                Err(msg) => {
+                    eprintln!("{}", msg);
                     std::process::exit(1);
                 }
             };

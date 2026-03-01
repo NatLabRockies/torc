@@ -20,6 +20,45 @@ pub fn create_registry_with_config_public(hpc_config: &ClientHpcConfig) -> HpcPr
     create_registry_with_config(hpc_config)
 }
 
+/// Resolve an HPC profile by name or auto-detection, with dynamic Slurm fallback.
+///
+/// Resolution order:
+/// 1. If `name` is provided → look up in registry (supports "slurm" for dynamic detection)
+/// 2. Else → try auto-detection via registry (built-in profiles, then dynamic Slurm fallback)
+/// 3. If nothing found → return Err with helpful message
+///
+/// When the profile is resolved via dynamic Slurm detection (not a pre-configured profile),
+/// an informational message is printed to stderr.
+pub fn resolve_hpc_profile(
+    registry: &HpcProfileRegistry,
+    name: Option<&str>,
+) -> Result<HpcProfile, String> {
+    if let Some(name) = name {
+        if let Some(profile) = registry.get(name) {
+            return Ok(profile);
+        }
+        return Err(format!("Unknown HPC profile: {}", name));
+    }
+
+    // Try built-in/custom profile detection first (env vars, hostname patterns)
+    if let Some(profile) = registry.profiles().iter().find(|p| p.detect()) {
+        return Ok(profile.clone());
+    }
+
+    // Fall back to dynamic Slurm detection via registry.detect()
+    if let Some(profile) = registry.detect() {
+        eprintln!(
+            "No pre-configured HPC profile found. Using dynamically detected Slurm cluster: {}",
+            profile.display_name
+        );
+        return Ok(profile);
+    }
+
+    Err("No HPC profile specified and no system detected.\n\
+         Use --hpc-profile <name> to specify a profile, or run on a Slurm cluster."
+        .to_string())
+}
+
 /// Create an HPC profile registry with built-in profiles and user-defined profiles from config
 fn create_registry_with_config(hpc_config: &ClientHpcConfig) -> HpcProfileRegistry {
     let mut registry = HpcProfileRegistry::with_builtin_profiles();
@@ -234,6 +273,18 @@ pub fn handle_hpc_commands(command: &HpcCommands, format: &str) {
                         "Detected HPC system: {} ({})",
                         profile.display_name, profile.name
                     );
+                }
+            } else if let Some(profile) = crate::client::hpc::slurm::detect_slurm_profile() {
+                if format == "json" {
+                    print_json(&profile, "detected hpc profile");
+                } else {
+                    println!(
+                        "Dynamically detected Slurm cluster: {} ({})",
+                        profile.display_name, profile.name
+                    );
+                    println!("  {} partition(s) available", profile.partitions.len());
+                    println!();
+                    println!("Tip: Run 'torc hpc generate' to save this as a reusable profile.");
                 }
             } else if format == "json" {
                 print_json(&Option::<HpcProfile>::None, "detected hpc profile");

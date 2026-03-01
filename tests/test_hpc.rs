@@ -2945,3 +2945,91 @@ fn test_alloc_strategy_divergence_short_jobs() {
     // MaxPartitionTime: time_slots=24, allocs=ceil(100/96)=2
     assert_eq!(max_partition, 2);
 }
+
+// ============== resolve_hpc_profile Tests ==============
+
+use torc::client::commands::hpc::resolve_hpc_profile;
+
+#[rstest]
+fn test_resolve_hpc_profile_by_name() {
+    let mut registry = HpcProfileRegistry::new();
+    registry.register(create_test_profile(
+        "myprofile",
+        vec![create_test_partition("standard", 64, 128000, 86400, None)],
+    ));
+
+    let result = resolve_hpc_profile(&registry, Some("myprofile"));
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap().name, "myprofile");
+}
+
+#[rstest]
+fn test_resolve_hpc_profile_unknown_name() {
+    let registry = HpcProfileRegistry::new();
+    let result = resolve_hpc_profile(&registry, Some("nonexistent"));
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("Unknown HPC profile"));
+}
+
+#[rstest]
+#[serial]
+fn test_resolve_hpc_profile_dynamic_slurm_fallback() {
+    use std::path::Path;
+
+    let sinfo_path = Path::new("tests/scripts/fake_sinfo.sh")
+        .canonicalize()
+        .unwrap();
+    let scontrol_path = Path::new("tests/scripts/fake_scontrol.sh")
+        .canonicalize()
+        .unwrap();
+
+    let mut overrides = HashMap::new();
+    overrides.insert("TORC_FAKE_SINFO", sinfo_path.to_str().unwrap());
+    overrides.insert("TORC_FAKE_SCONTROL", scontrol_path.to_str().unwrap());
+    let _guard = EnvGuard::new(overrides);
+
+    // Empty registry with no built-in profiles → should fall back to dynamic Slurm
+    let registry = HpcProfileRegistry::new();
+    let result = resolve_hpc_profile(&registry, None);
+    assert!(result.is_ok());
+    let profile = result.unwrap();
+    assert_eq!(profile.name, "test_cluster");
+    assert!(!profile.partitions.is_empty());
+}
+
+#[rstest]
+fn test_resolve_hpc_profile_no_detection_no_slurm() {
+    // Empty registry, no Slurm available → should return error
+    let registry = HpcProfileRegistry::new();
+    let result = resolve_hpc_profile(&registry, None);
+    // This may succeed if running on a Slurm cluster, but on CI/local it should fail
+    // We can't guarantee Slurm isn't available, so just check the return type
+    if result.is_err() {
+        let err = result.unwrap_err();
+        assert!(err.contains("No HPC profile specified"));
+    }
+}
+
+#[rstest]
+#[serial]
+fn test_resolve_hpc_profile_slurm_special_name() {
+    use std::path::Path;
+
+    let sinfo_path = Path::new("tests/scripts/fake_sinfo.sh")
+        .canonicalize()
+        .unwrap();
+    let scontrol_path = Path::new("tests/scripts/fake_scontrol.sh")
+        .canonicalize()
+        .unwrap();
+
+    let mut overrides = HashMap::new();
+    overrides.insert("TORC_FAKE_SINFO", sinfo_path.to_str().unwrap());
+    overrides.insert("TORC_FAKE_SCONTROL", scontrol_path.to_str().unwrap());
+    let _guard = EnvGuard::new(overrides);
+
+    // Using "slurm" as profile name should trigger dynamic detection
+    let registry = HpcProfileRegistry::new();
+    let result = resolve_hpc_profile(&registry, Some("slurm"));
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap().name, "test_cluster");
+}

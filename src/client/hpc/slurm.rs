@@ -31,26 +31,12 @@ struct ScontrolPartitionInfo {
 
 /// Get the sinfo executable path (allows for testing with fake binary)
 fn get_sinfo_exec() -> String {
-    #[cfg(test)]
-    {
-        std::env::var("TORC_FAKE_SINFO").unwrap_or_else(|_| "sinfo".to_string())
-    }
-    #[cfg(not(test))]
-    {
-        "sinfo".to_string()
-    }
+    std::env::var("TORC_FAKE_SINFO").unwrap_or_else(|_| "sinfo".to_string())
 }
 
 /// Get the scontrol executable path (allows for testing with fake binary)
 fn get_scontrol_exec() -> String {
-    #[cfg(test)]
-    {
-        std::env::var("TORC_FAKE_SCONTROL").unwrap_or_else(|_| "scontrol".to_string())
-    }
-    #[cfg(not(test))]
-    {
-        "scontrol".to_string()
-    }
+    std::env::var("TORC_FAKE_SCONTROL").unwrap_or_else(|_| "scontrol".to_string())
 }
 
 /// Detect if Slurm is available and return a dynamic profile

@@ -378,7 +378,7 @@ You can also use the `TORC_CONFIG` environment variable to specify a custom path
 If your HPC is used by others, please contribute it upstream:
 
 1. Fork the [Torc repository](https://github.com/NatLabRockies/torc)
-2. Add your profile to `src/client/hpc_profiles.rs`
+2. Add your profile as a new module in `src/client/hpc/` (see `kestrel.rs` for an example)
 3. Add tests for your profile
 4. Submit a pull request
 

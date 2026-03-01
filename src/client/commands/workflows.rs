@@ -3059,22 +3059,11 @@ fn handle_create_slurm(
     let torc_config = TorcConfig::load().unwrap_or_default();
     let registry = create_registry_with_config_public(&torc_config.client.hpc);
 
-    // Get the HPC profile
-    let profile = if let Some(name) = hpc_profile {
-        registry.get(name)
-    } else {
-        registry.detect()
-    };
-
-    let profile = match profile {
-        Some(p) => p,
-        None => {
-            if let Some(name) = hpc_profile {
-                eprintln!("Unknown HPC profile: {}", name);
-            } else {
-                eprintln!("No HPC profile specified and no system detected.");
-                eprintln!("Use --hpc-profile <name> to specify a profile.");
-            }
+    // Get the HPC profile (with dynamic Slurm fallback)
+    let profile = match super::hpc::resolve_hpc_profile(&registry, hpc_profile) {
+        Ok(p) => p,
+        Err(msg) => {
+            eprintln!("{}", msg);
             std::process::exit(1);
         }
     };
