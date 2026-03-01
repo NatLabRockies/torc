@@ -95,6 +95,9 @@ enum MonitorJobSource {
     Slurm {
         slurm_job_id: String,
         step_name: String,
+        /// Numeric step ID (e.g., "1") discovered via `scontrol show step`.
+        /// `None` until the step is registered in Slurm's accounting.
+        numeric_step_id: Option<String>,
         /// AveCPU value (in seconds) from the previous sstat poll.  Initialised to 0.
         prev_ave_cpu_s: f64,
         /// Wall-clock time of the previous sstat poll.
@@ -116,6 +119,9 @@ enum MonitorCommand {
         pid: u32,
         slurm_job_id: String,
         step_name: String,
+        /// Numeric step ID (e.g., "1") discovered at launch time. `None` if discovery
+        /// failed, in which case the monitor will attempt batch discovery via scontrol.
+        numeric_step_id: Option<String>,
         job_id: i64,
         job_name: String,
     },
@@ -208,6 +214,7 @@ impl ResourceMonitor {
         pid: u32,
         slurm_job_id: String,
         step_name: String,
+        numeric_step_id: Option<String>,
         job_id: i64,
         job_name: String,
     ) -> Result<(), Box<dyn std::error::Error>> {
@@ -215,6 +222,7 @@ impl ResourceMonitor {
             pid,
             slurm_job_id,
             step_name,
+            numeric_step_id,
             job_id,
             job_name,
         })?;
@@ -332,6 +340,7 @@ fn run_monitoring_loop(
                     pid,
                     slurm_job_id,
                     step_name,
+                    numeric_step_id,
                     job_id,
                     job_name,
                 } => {
@@ -349,6 +358,7 @@ fn run_monitoring_loop(
                             source: MonitorJobSource::Slurm {
                                 slurm_job_id,
                                 step_name,
+                                numeric_step_id,
                                 prev_ave_cpu_s: 0.0,
                                 prev_sample_at: Instant::now(),
                             },
@@ -390,6 +400,44 @@ fn run_monitoring_loop(
                 sys.refresh_processes();
             }
 
+            // Batch-discover numeric step IDs for any Slurm steps that need them.
+            // Run `scontrol show step` once per unique slurm_job_id (typically just one)
+            // instead of once per step.
+            let needs_discovery: Vec<String> = monitored_jobs
+                .values()
+                .filter_map(|j| match &j.source {
+                    MonitorJobSource::Slurm {
+                        slurm_job_id,
+                        numeric_step_id: None,
+                        ..
+                    } => Some(slurm_job_id.clone()),
+                    _ => None,
+                })
+                .collect::<std::collections::HashSet<_>>()
+                .into_iter()
+                .collect();
+            for job_id in &needs_discovery {
+                let step_map = discover_step_ids(job_id);
+                for job in monitored_jobs.values_mut() {
+                    if let MonitorJobSource::Slurm {
+                        slurm_job_id,
+                        step_name,
+                        numeric_step_id,
+                        ..
+                    } = &mut job.source
+                        && numeric_step_id.is_none()
+                        && slurm_job_id == job_id
+                        && let Some(id) = step_map.get(step_name.as_str())
+                    {
+                        debug!(
+                            "Discovered numeric step ID for {}: {}.{}",
+                            step_name, slurm_job_id, id
+                        );
+                        *numeric_step_id = Some(id.clone());
+                    }
+                }
+            }
+
             let timestamp = chrono::Utc::now().timestamp();
 
             for (pid, job) in monitored_jobs.iter_mut() {
@@ -399,15 +447,23 @@ fn run_monitoring_loop(
                     }
                     MonitorJobSource::Slurm {
                         slurm_job_id,
-                        step_name,
+                        numeric_step_id,
                         prev_ave_cpu_s,
                         prev_sample_at,
+                        ..
                     } => {
+                        let step_id = match numeric_step_id {
+                            Some(id) => id.as_str(),
+                            None => {
+                                // Step not registered yet; skip this sample.
+                                continue;
+                            }
+                        };
                         let now = Instant::now();
                         let elapsed_s = now.duration_since(*prev_sample_at).as_secs_f64();
                         match collect_sstat_sample(
                             slurm_job_id,
-                            step_name,
+                            step_id,
                             &sstat_binary,
                             *prev_ave_cpu_s,
                             elapsed_s,
@@ -418,8 +474,7 @@ fn run_monitoring_loop(
                                 (cpu, mem, 1)
                             }
                             None => {
-                                // sstat returned no data (step may not have started yet or
-                                // already exited); skip this sample.
+                                // sstat returned no data; skip this sample.
                                 continue;
                             }
                         }
@@ -498,24 +553,104 @@ fn collect_process_tree_stats(root_pid: u32, sys: &System) -> (f64, u64, usize) 
 /// cpu_percent = (new_ave_cpu_s - prev_ave_cpu_s) / elapsed_s * 100.0
 /// ```
 ///
-/// Returns `None` when the step cannot be found (not yet started, already exited, or sstat
-/// unavailable / `JobName` field not supported on this Slurm installation).
+/// Discover the numeric step ID for a named step, retrying a few times for Slurm registration.
 ///
-/// **Slurm version note**: the `JobName` format field in `sstat` requires Slurm ≥ 17.11.
-/// On older clusters this function will consistently return `None` and the time-series DB will
-/// remain empty for this job (sacct backfill will still populate the result summary fields).
+/// Called at srun launch time. Returns `None` if the step doesn't appear within ~1 second.
+pub fn discover_step_id_with_retries(slurm_job_id: &str, step_name: &str) -> Option<String> {
+    for attempt in 0..5 {
+        let map = discover_step_ids(slurm_job_id);
+        if let Some(id) = map.get(step_name) {
+            return Some(id.clone());
+        }
+        if attempt < 4 {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+    }
+    debug!(
+        "Could not discover numeric step ID for {} in job {} after retries",
+        step_name, slurm_job_id
+    );
+    None
+}
+
+/// Discover numeric step IDs for all steps in a Slurm job via `squeue --steps`.
+///
+/// Slurm assigns numeric IDs to steps (e.g., `.0`, `.1`, `.2`). Our srun commands set
+/// `--job-name=<step_name>` which appears in squeue output. We parse that to build a
+/// map from step name to numeric ID, since `sstat` requires numeric step IDs on HPE Cray
+/// and other Slurm installations.
+///
+/// Returns an empty map if squeue fails or no steps are found.
+fn discover_step_ids(slurm_job_id: &str) -> HashMap<String, String> {
+    let mut map = HashMap::new();
+
+    // squeue --steps is much more compact than scontrol show step, producing one
+    // line per step instead of a verbose multi-line block. Critical for allocations
+    // with thousands of concurrent steps.
+    let output = match std::process::Command::new("squeue")
+        .args(["--steps", "-j", slurm_job_id, "-o", "%i|%j", "--noheader"])
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => {
+            debug!(
+                "squeue --steps for job {} failed to execute: {}",
+                slurm_job_id, e
+            );
+            return map;
+        }
+    };
+
+    if !output.status.success() {
+        debug!(
+            "squeue --steps for job {} returned non-zero: {}",
+            slurm_job_id,
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+        return map;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Each line is "<jobid>.<stepid>|<stepname>", e.g., "12893801.2|my-sleep-job"
+    for line in stdout.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if let Some((step_full_id, name)) = line.split_once('|') {
+            // Extract the part after the dot: "12893801.2" -> "2"
+            if let Some(numeric_id) = step_full_id.split('.').nth(1) {
+                map.insert(name.to_string(), numeric_id.to_string());
+            }
+        }
+    }
+
+    map
+}
+
+/// Poll `sstat` for the named Slurm step and return `(cpu_percent, max_rss_bytes, new_ave_cpu_s)`.
+///
+/// `sstat` reports `AveCPU` as cumulative CPU time since step start.  To convert to an
+/// instantaneous utilisation rate we compute:
+///
+/// ```text
+/// cpu_percent = (new_ave_cpu_s - prev_ave_cpu_s) / elapsed_s * 100.0
+/// ```
+///
+/// Returns `None` when the step cannot be found (not yet started, already exited, or sstat
+/// unavailable).
 fn collect_sstat_sample(
     slurm_job_id: &str,
-    step_name: &str,
+    step_id: &str,
     sstat_binary: &str,
     prev_ave_cpu_s: f64,
     elapsed_s: f64,
 ) -> Option<(f64, u64, f64)> {
-    // Query the specific step directly via "jobid.stepname".  This avoids needing the
-    // "JobName" format field, which is not supported on all Slurm versions (notably
-    // some HPE Cray installations).  sstat returns only the requested step's data, so
-    // no client-side filtering is needed.
-    let job_step = format!("{}.{}", slurm_job_id, step_name);
+    // Query the specific step via its numeric ID (e.g., "12893794.1").
+    // Name-based lookup ("jobid.stepname") is not supported on all Slurm installations
+    // (notably HPE Cray EX clusters).
+    let job_step = format!("{}.{}", slurm_job_id, step_id);
     let output = std::process::Command::new(sstat_binary)
         .args([
             "-j",
@@ -531,14 +666,14 @@ fn collect_sstat_sample(
     if !output.status.success() {
         warn!(
             "sstat returned non-zero exit code for step {}: {}",
-            step_name,
+            job_step,
             String::from_utf8_lossy(&output.stderr).trim()
         );
         return None;
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    debug!("sstat output for step {}: {:?}", step_name, stdout.trim());
+    debug!("sstat output for step {}: {:?}", job_step, stdout.trim());
 
     // Take the first non-empty line — we queried a single step so there should be at most one.
     for line in stdout.lines() {
@@ -559,7 +694,7 @@ fn collect_sstat_sample(
         debug!(
             "sstat sample for step {}: AveCPU={:.3}s (delta={:.3}s over {:.3}s) \
              => cpu_pct={:.1}%, MaxRSS={}B",
-            step_name,
+            job_step,
             new_ave_cpu_s,
             new_ave_cpu_s - prev_ave_cpu_s,
             elapsed_s,
@@ -574,7 +709,7 @@ fn collect_sstat_sample(
     // Normal during the brief window before the step appears in slurmstepd.
     debug!(
         "sstat returned no data for step {:?} (step may not be visible yet)",
-        step_name,
+        job_step,
     );
 
     None

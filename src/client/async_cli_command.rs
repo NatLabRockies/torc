@@ -142,6 +142,7 @@ impl AsyncCliCommand {
             let srun_binary =
                 std::env::var("TORC_FAKE_SRUN").unwrap_or_else(|_| "srun".to_string());
             let mut srun = Command::new(&srun_binary);
+            srun.arg(format!("--jobid={}", slurm_job_id));
             srun.arg("--ntasks=1");
             // Without --overlap, each srun step takes exclusive ownership of its node slot
             // within the allocation, so concurrent steps on the same node (or same allocation)
@@ -230,10 +231,19 @@ impl AsyncCliCommand {
         if let Some(monitor) = resource_monitor {
             if let Some(ref step) = self.step_name {
                 if let Ok(slurm_job_id) = std::env::var("SLURM_JOB_ID") {
+                    // Discover the numeric step ID that Slurm assigned. sstat requires
+                    // numeric IDs (e.g., "1") — name-based lookup doesn't work on all
+                    // Slurm installations (notably HPE Cray EX).
+                    let numeric_step_id =
+                        crate::client::resource_monitor::discover_step_id_with_retries(
+                            &slurm_job_id,
+                            step,
+                        );
                     monitor.start_monitoring_slurm(
                         pid,
                         slurm_job_id,
                         step.clone(),
+                        numeric_step_id,
                         self.job_id,
                         self.job.name.clone(),
                     )?;
