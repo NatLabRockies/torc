@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM failure_handler WHERE workflow_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "3d4483911aacdf2d1035a9baf044c19db0d8ca3f51347240c9e5ebfb4e54e162"
+}

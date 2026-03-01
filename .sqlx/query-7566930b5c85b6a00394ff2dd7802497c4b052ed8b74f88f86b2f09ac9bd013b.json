@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM user_data WHERE workflow_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "7566930b5c85b6a00394ff2dd7802497c4b052ed8b74f88f86b2f09ac9bd013b"
+}

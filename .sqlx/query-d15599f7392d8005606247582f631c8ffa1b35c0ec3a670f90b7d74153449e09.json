@@ -92,6 +92,11 @@
         "name": "metadata",
         "ordinal": 17,
         "type_info": "Text"
+      },
+      {
+        "name": "limit_resources",
+        "ordinal": 18,
+        "type_info": "Integer"
       }
     ],
     "parameters": {
@@ -112,6 +117,7 @@
       false,
       true,
       false,
+      true,
       true,
       true,
       true,

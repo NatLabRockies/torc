@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n                SELECT id, workflow_id, name, num_cpus, num_gpus, num_nodes, memory, runtime\n                FROM resource_requirements\n                WHERE id = $1\n            ",
+  "query": "\n                SELECT id, workflow_id, name, num_cpus, num_gpus, num_nodes, step_nodes, memory, runtime\n                FROM resource_requirements\n                WHERE id = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -34,13 +34,18 @@
         "type_info": "Integer"
       },
       {
-        "name": "memory",
+        "name": "step_nodes",
         "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "memory",
+        "ordinal": 7,
         "type_info": "Text"
       },
       {
         "name": "runtime",
-        "ordinal": 7,
+        "ordinal": 8,
         "type_info": "Text"
       }
     ],
@@ -55,8 +60,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "7cdf5958511c15ecf013ea0e7aacd7526ca9cf52de9f2368b0fa28e2f4298b89"
+  "hash": "13dc4eb4d1c680947e5ece023e163fd67ceb605435690129654a16cb1ab622f7"
 }
