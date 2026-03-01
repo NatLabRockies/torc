@@ -1924,11 +1924,22 @@ impl ComputeNodeRules {
 /// from the sstat time-series if TimeSeries monitoring was configured.
 fn backfill_sacct_into_result(result: &mut ResultModel, stats: &SlurmStatsModel) {
     if let Some(max_rss) = stats.max_rss_bytes {
-        result.peak_memory_bytes = Some(max_rss);
+        // sacct MaxRSS is the job-lifetime peak memory. Take the max against any
+        // sstat-based value already in result (sstat may have seen a brief spike between
+        // sacct samples). Also skip updating if sacct reports 0: this happens for very
+        // short or failed steps where the accounting daemon never flushed real data, and
+        // we do not want to clobber a meaningful sstat measurement with a zero.
+        if max_rss > 0 {
+            let current = result.peak_memory_bytes.unwrap_or(0);
+            result.peak_memory_bytes = Some(current.max(max_rss));
+        }
     }
     if let Some(ave_cpu_s) = stats.ave_cpu_seconds {
         let exec_s = result.exec_time_minutes * 60.0;
-        if exec_s > 0.0 {
+        // Skip the update when ave_cpu_s is 0: a zero usually means the step finished
+        // before accounting was collected (not that the job used no CPU). Keeping any
+        // sstat-derived avg_cpu_percent is more informative than replacing it with 0%.
+        if exec_s > 0.0 && ave_cpu_s > 0.0 {
             let avg_pct = ave_cpu_s / exec_s * 100.0;
             result.avg_cpu_percent = Some(avg_pct);
             // Use sacct avg as a proxy for peak when sstat gave nothing useful (0% or None).

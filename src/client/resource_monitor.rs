@@ -194,8 +194,12 @@ impl ResourceMonitor {
 
     /// Register a Slurm step for sstat-based monitoring.
     ///
-    /// Only meaningful in `TimeSeries` mode — in `Summary` mode the call is a no-op because
-    /// final resource values come from sacct backfill in `job_runner.rs`.
+    /// Registers a Slurm step for sstat-based monitoring in both `TimeSeries` and `Summary` modes.
+    ///
+    /// In `TimeSeries` mode the per-sample data is written to the time-series database.
+    /// In `Summary` mode only the peak metrics are kept in memory — this provides a fallback
+    /// when sacct has no useful data for short or failed steps (sacct may report MaxRSS=0 /
+    /// AveCPU=00:00:00 for steps that finished before the accounting daemon could flush).
     ///
     /// `pid` must be the srun process PID so that the existing `stop_monitoring(pid)` API
     /// continues to work without changes.
@@ -207,10 +211,6 @@ impl ResourceMonitor {
         job_id: i64,
         job_name: String,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        if !self.is_timeseries() {
-            // In Summary mode sacct backfill provides the resource data; no sstat needed.
-            return Ok(());
-        }
         self.tx.send(MonitorCommand::StartMonitoringSlurm {
             pid,
             slurm_job_id,
