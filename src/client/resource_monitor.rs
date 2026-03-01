@@ -98,8 +98,10 @@ enum MonitorJobSource {
         /// Numeric step ID (e.g., "1") discovered via `scontrol show step`.
         /// `None` until the step is registered in Slurm's accounting.
         numeric_step_id: Option<String>,
-        /// AveCPU value (in seconds) from the previous sstat poll.  Initialised to 0.
-        prev_ave_cpu_s: f64,
+        /// AveCPU value (in seconds) from the previous sstat poll.
+        /// `None` until the first successful sstat sample (used to skip the first
+        /// sample whose cumulative AveCPU has no valid baseline for delta computation).
+        prev_ave_cpu_s: Option<f64>,
         /// Wall-clock time of the previous sstat poll.
         prev_sample_at: Instant,
     },
@@ -359,7 +361,7 @@ fn run_monitoring_loop(
                                 slurm_job_id,
                                 step_name,
                                 numeric_step_id,
-                                prev_ave_cpu_s: 0.0,
+                                prev_ave_cpu_s: None,
                                 prev_sample_at: Instant::now(),
                             },
                             metrics: JobMetrics::new(),
@@ -465,20 +467,19 @@ fn run_monitoring_loop(
                             slurm_job_id,
                             step_id,
                             &sstat_binary,
-                            *prev_ave_cpu_s,
+                            prev_ave_cpu_s.unwrap_or(0.0),
                             elapsed_s,
                         ) {
                             Some((cpu, mem, new_ave_cpu_s)) => {
                                 *prev_sample_at = now;
                                 // On the first successful sample, AveCPU is cumulative
-                                // since step start but elapsed_s is only since we began
-                                // monitoring (possibly microseconds). Just record the
-                                // baseline without emitting a bogus CPU percentage.
-                                if *prev_ave_cpu_s == 0.0 && elapsed_s < 1.0 {
-                                    *prev_ave_cpu_s = new_ave_cpu_s;
+                                // since step start and we have no valid baseline for
+                                // delta computation. Record the baseline and skip.
+                                if prev_ave_cpu_s.is_none() {
+                                    *prev_ave_cpu_s = Some(new_ave_cpu_s);
                                     continue;
                                 }
-                                *prev_ave_cpu_s = new_ave_cpu_s;
+                                *prev_ave_cpu_s = Some(new_ave_cpu_s);
                                 (cpu, mem, 1)
                             }
                             None => {
