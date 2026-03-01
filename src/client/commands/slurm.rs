@@ -861,21 +861,21 @@ fn parse_hms(s: &str) -> Result<u64, String> {
     let parts: Vec<&str> = s.split(':').collect();
     match parts.len() {
         1 => {
-            // Just hours
-            let hours: u64 = parts[0]
+            // Just minutes (Slurm convention)
+            let mins: u64 = parts[0]
                 .parse()
-                .map_err(|_| format!("Invalid hours: {}", parts[0]))?;
-            Ok(hours * 3600)
+                .map_err(|_| format!("Invalid minutes: {}", parts[0]))?;
+            Ok(mins * 60)
         }
         2 => {
-            // HH:MM
-            let hours: u64 = parts[0]
+            // MM:SS (Slurm convention)
+            let mins: u64 = parts[0]
                 .parse()
-                .map_err(|_| format!("Invalid hours: {}", parts[0]))?;
-            let mins: u64 = parts[1]
+                .map_err(|_| format!("Invalid minutes: {}", parts[0]))?;
+            let secs: u64 = parts[1]
                 .parse()
-                .map_err(|_| format!("Invalid minutes: {}", parts[1]))?;
-            Ok(hours * 3600 + mins * 60)
+                .map_err(|_| format!("Invalid seconds: {}", parts[1]))?;
+            Ok(mins * 60 + secs)
         }
         3 => {
             // HH:MM:SS
@@ -3755,5 +3755,26 @@ fn handle_regenerate(
             println!("To submit the allocations, run:");
             println!("  torc slurm regenerate {} --submit", workflow_id);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_walltime_secs_units() {
+        assert_eq!(parse_walltime_secs("2h").unwrap(), 2 * 3600);
+        assert_eq!(parse_walltime_secs("30m").unwrap(), 30 * 60);
+        assert_eq!(parse_walltime_secs("120s").unwrap(), 120);
+        assert!(parse_walltime_secs("1h 30m").is_err());
+        assert!(parse_walltime_secs("abc").is_err());
+    }
+
+    #[test]
+    fn test_parse_walltime_secs_slurm() {
+        assert_eq!(parse_walltime_secs("04:30:00").unwrap(), 4 * 3600 + 30 * 60);
+        assert_eq!(parse_walltime_secs("1-00:00:00").unwrap(), 24 * 3600);
+        assert_eq!(parse_walltime_secs("30:00").unwrap(), 30 * 60);
     }
 }

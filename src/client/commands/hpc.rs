@@ -187,6 +187,21 @@ struct PartitionRow {
     explicit: bool,
 }
 
+#[derive(Serialize)]
+struct MatchResult {
+    requirements: MatchRequirements,
+    matching_partitions: Vec<HpcPartition>,
+    best_partition: Option<HpcPartition>,
+}
+
+#[derive(Serialize)]
+struct MatchRequirements {
+    cpus: u32,
+    memory_mb: u64,
+    walltime_secs: u64,
+    gpus: Option<u32>,
+}
+
 pub fn handle_hpc_commands(command: &HpcCommands, format: &str) {
     let config = TorcConfig::load().unwrap_or_default();
     let registry = create_registry_with_config(&config.client.hpc);
@@ -335,7 +350,17 @@ pub fn handle_hpc_commands(command: &HpcCommands, format: &str) {
                 let best = profile.find_best_partition(*cpus, mem_mb, walltime_secs, *gpus);
 
                 if format == "json" {
-                    print_json(&matching, "matching partitions");
+                    let result = MatchResult {
+                        requirements: MatchRequirements {
+                            cpus: *cpus,
+                            memory_mb: mem_mb,
+                            walltime_secs,
+                            gpus: *gpus,
+                        },
+                        matching_partitions: matching.iter().map(|&p| p.clone()).collect(),
+                        best_partition: best.cloned(),
+                    };
+                    print_json(&result, "match result");
                 } else {
                     let rows: Vec<_> = matching
                         .iter()
@@ -474,6 +499,11 @@ fn generate_toml_profile(
             name
         ));
         output.push_str(&format!("name = \"{}\"\n", partition.name));
+        if !partition.description.is_empty() {
+            output.push_str(&format!("description = \"{}\"\n", partition.description));
+        } else {
+            output.push_str("# description = \"\"\n");
+        }
         output.push_str(&format!("cpus_per_node = {}\n", partition.cpus_per_node));
         output.push_str(&format!("memory_mb = {}\n", partition.memory_mb));
         output.push_str(&format!(
@@ -487,8 +517,20 @@ fn generate_toml_profile(
         if let Some(ref gpu_type) = partition.gpu_type {
             output.push_str(&format!("gpu_type = \"{}\"\n", gpu_type));
         }
+        if let Some(gpu_mem) = partition.gpu_memory_gb {
+            output.push_str(&format!("gpu_memory_gb = {}\n", gpu_mem));
+        } else {
+            output.push_str("# gpu_memory_gb = 0\n");
+        }
         if partition.shared {
             output.push_str("shared = true\n");
+        } else {
+            output.push_str("shared = false\n");
+        }
+        if partition.requires_explicit_request {
+            output.push_str("requires_explicit_request = true\n");
+        } else {
+            output.push_str("requires_explicit_request = false\n");
         }
 
         output.push('\n');

@@ -31,11 +31,11 @@ struct ScontrolPartitionInfo {
 
 /// Get the sinfo executable path (allows for testing with fake binary)
 fn get_sinfo_exec() -> String {
-    #[cfg(any(test, debug_assertions))]
+    #[cfg(test)]
     {
         std::env::var("TORC_FAKE_SINFO").unwrap_or_else(|_| "sinfo".to_string())
     }
-    #[cfg(not(any(test, debug_assertions)))]
+    #[cfg(not(test))]
     {
         "sinfo".to_string()
     }
@@ -43,11 +43,11 @@ fn get_sinfo_exec() -> String {
 
 /// Get the scontrol executable path (allows for testing with fake binary)
 fn get_scontrol_exec() -> String {
-    #[cfg(any(test, debug_assertions))]
+    #[cfg(test)]
     {
         std::env::var("TORC_FAKE_SCONTROL").unwrap_or_else(|_| "scontrol".to_string())
     }
-    #[cfg(not(any(test, debug_assertions)))]
+    #[cfg(not(test))]
     {
         "scontrol".to_string()
     }
