@@ -10,7 +10,7 @@ project: slurm-tests
 
 resource_monitor:
   enabled: true
-  granularity: TimeSeries
+  granularity: time_series
   sample_interval_seconds: 2
 
 resource_requirements:
