@@ -37,6 +37,7 @@ use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::LazyLock;
 
 use crate::client::apis::configuration::Configuration;
 use crate::client::apis::default_api;
@@ -1892,8 +1893,9 @@ fn extract_node_from_line(line: &str) -> Option<String> {
 /// Returns (workflow_id, slurm_job_id) if successful
 fn extract_slurm_job_id_from_filename(filename: &str) -> Option<(i64, String)> {
     // Pattern: slurm_output_wf1234_sl12345.o or slurm_output_wf1234_sl12345.e
-    let re = Regex::new(r"slurm_output_wf(\d+)_sl(\d+)\.[oe]$").ok()?;
-    re.captures(filename).and_then(|caps| {
+    static RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"slurm_output_wf(\d+)_sl(\d+)\.[oe]$").unwrap());
+    RE.captures(filename).and_then(|caps| {
         let wf_id = caps.get(1)?.as_str().parse::<i64>().ok()?;
         let slurm_id = caps.get(2)?.as_str().to_string();
         Some((wf_id, slurm_id))
@@ -1904,8 +1906,8 @@ fn extract_slurm_job_id_from_filename(filename: &str) -> Option<(i64, String)> {
 /// Returns (workflow_id, job_id) if successful
 fn extract_torc_job_ids_from_filename(filename: &str) -> Option<(i64, i64)> {
     // Pattern: job_wf123_j456_r1_a1.o or job_wf123_j456_r1_a1.e
-    let re = Regex::new(r"job_wf(\d+)_j(\d+)_").ok()?;
-    re.captures(filename).and_then(|caps| {
+    static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"job_wf(\d+)_j(\d+)_").unwrap());
+    RE.captures(filename).and_then(|caps| {
         let wf_id = caps.get(1)?.as_str().parse::<i64>().ok()?;
         let job_id = caps.get(2)?.as_str().parse::<i64>().ok()?;
         Some((wf_id, job_id))
@@ -1914,9 +1916,17 @@ fn extract_torc_job_ids_from_filename(filename: &str) -> Option<(i64, i64)> {
 
 /// Extract Slurm job ID from a log line if present
 fn extract_slurm_job_id_from_line(line: &str) -> Option<String> {
-    // Look for patterns like StepId=12890812.8 or job 12890812
-    let re = Regex::new(r"(?i)(?:StepId=|job\s+)(\d+)(?:\.\d+)?").ok()?;
-    re.captures(line)
+    // Match Slurm-specific patterns:
+    //   StepId=12890812.8, JobId=12890812, slurmstepd: error: .* StepId=12890812
+    //   "Slurm job 12890812", "slurm job ID 12890812", "SLURM_JOB_ID=12890812"
+    //   "batch job 12890812" (Slurm batch wrapper messages)
+    static RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"(?i)(?:StepId=|JobId=|SLURM_JOB_ID=|(?:slurm|batch)\s+job\s+(?:ID\s+)?)(\d+)(?:\.\d+)?",
+        )
+        .unwrap()
+    });
+    RE.captures(line)
         .and_then(|caps| caps.get(1).map(|m| m.as_str().to_string()))
 }
 
@@ -2062,7 +2072,8 @@ fn build_slurm_to_jobs_map(
     slurm_to_jobs
 }
 
-/// Scan a single log file for Slurm error patterns
+/// Scan a single log file for Slurm error patterns.
+/// Returns the number of errors found, or `None` if the file could not be opened.
 fn scan_file_for_slurm_errors(
     path: &Path,
     initial_slurm_job_id: &str,
@@ -2070,19 +2081,17 @@ fn scan_file_for_slurm_errors(
     errors_only: bool,
     slurm_to_jobs: &HashMap<String, Vec<AffectedJob>>,
     all_errors: &mut Vec<SlurmLogError>,
-) -> bool {
-    let filename = match path.file_name().and_then(|n| n.to_str()) {
-        Some(name) => name,
-        None => return false,
-    };
-
+) -> Option<usize> {
     let file = match fs::File::open(path) {
         Ok(f) => f,
         Err(e) => {
             warn!("Could not open file {}: {}", path.display(), e);
-            return false;
+            return None;
         }
     };
+
+    let file_display = path.display().to_string();
+    let mut count = 0;
 
     let reader = BufReader::new(file);
     for (line_num, line_result) in reader.lines().enumerate() {
@@ -2108,7 +2117,7 @@ fn scan_file_for_slurm_errors(
                 let affected_jobs = slurm_to_jobs.get(&current_slurm_id).cloned();
 
                 all_errors.push(SlurmLogError {
-                    file: filename.to_string(),
+                    file: file_display.clone(),
                     slurm_job_id: current_slurm_id,
                     line_number: line_num + 1,
                     line: line.trim().to_string(),
@@ -2117,11 +2126,12 @@ fn scan_file_for_slurm_errors(
                     node,
                     affected_jobs,
                 });
+                count += 1;
                 break; // Only match one pattern per line
             }
         }
     }
-    true
+    Some(count)
 }
 
 /// Parse Slurm log files for known error messages
@@ -2243,11 +2253,15 @@ pub fn parse_slurm_logs(
                     errors_only,
                     &slurm_to_jobs,
                     &mut all_errors,
-                ) {
+                )
+                .is_some()
+                {
                     scanned_files += 1;
                 }
             }
         }
+    } else {
+        warn!("Could not read output directory: {}", output_dir.display());
     }
 
     // Phase 2: Scan job_stdio subdirectory for job logs
@@ -2284,7 +2298,9 @@ pub fn parse_slurm_logs(
                     errors_only,
                     &slurm_to_jobs,
                     &mut all_errors,
-                ) {
+                )
+                .is_some()
+                {
                     scanned_files += 1;
                 }
             }
