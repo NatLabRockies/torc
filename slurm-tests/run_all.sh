@@ -137,6 +137,7 @@ echo "Run directory: $RUN_DIR"
 cleanup() {
     echo ""
     echo "Cleaning up..."
+    cancel_slurm_jobs
     stop_server
     echo "Server stopped. Logs at: $RUN_DIR/server.log"
 }

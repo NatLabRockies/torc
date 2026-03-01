@@ -3,8 +3,13 @@
 #
 # Requires: TORC_API_URL to be set before calling these functions.
 
+# Global array of Slurm job IDs created during this test run.
+# Used by cancel_slurm_jobs to clean up on exit.
+SLURM_JOB_IDS=()
+
 # submit_workflow SPEC_FILE
 #   Submits a workflow from a spec file and prints the workflow ID.
+#   Slurm job IDs from the submission are tracked in SLURM_JOB_IDS.
 submit_workflow() {
     local spec_file="$1"
     local stderr_file
@@ -17,6 +22,10 @@ submit_workflow() {
         rm -f "$stderr_file"
         return 1
     }
+    # Capture any Slurm job IDs from stderr (format: "with ID=12345")
+    while IFS= read -r slurm_id; do
+        SLURM_JOB_IDS+=("$slurm_id")
+    done < <(grep -oP 'with ID=\K\d+' "$stderr_file" || true)
     rm -f "$stderr_file"
     local wf_id
     # Try JSON format: {"workflow_id": 123}
@@ -31,6 +40,16 @@ submit_workflow() {
         return 1
     fi
     echo "$wf_id"
+}
+
+# cancel_slurm_jobs
+#   Cancels all Slurm jobs tracked in SLURM_JOB_IDS.
+cancel_slurm_jobs() {
+    if [ ${#SLURM_JOB_IDS[@]} -eq 0 ]; then
+        return 0
+    fi
+    echo "Canceling ${#SLURM_JOB_IDS[@]} Slurm job(s): ${SLURM_JOB_IDS[*]}"
+    scancel "${SLURM_JOB_IDS[@]}" 2>/dev/null || true
 }
 
 # is_workflow_terminal WF_ID
