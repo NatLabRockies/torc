@@ -1,16 +1,10 @@
 #!/bin/bash
+# Demonstrates transient failure and recovery behavior.
 #
-# This script demonstrates transient failure and recovery behavior.
-#
-# On the first attempt (ATTEMPT=1), it fails with exit code 42.
-# On retry attempts (ATTEMPT=2+), it succeeds.
+# On the first attempt (ATTEMPT=1), fails with exit code 42.
+# On retry attempts (ATTEMPT=2+), succeeds.
 #
 # Exit code 42 is configured in the failure handler to trigger automatic retry.
-# The job runner will:
-# 1. Detect exit code 42
-# 2. Find the matching failure handler rule
-# 3. Retry the job automatically (up to 2 times)
-# 4. On the second run, the job succeeds
 
 # Get the attempt number from environment or default to 1
 ATTEMPT=${TORC_ATTEMPT_ID:-1}

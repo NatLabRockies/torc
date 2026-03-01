@@ -1,7 +1,7 @@
 #!/bin/bash
 # Single-node work job for parallel dispatch test.
 #
-# Prints hostname and timing info so the README verification steps can confirm
+# Prints hostname and timing info so verification steps can confirm
 # that jobs ran on different nodes and overlapped in time.
 
 JOB_NUM=${1:-?}

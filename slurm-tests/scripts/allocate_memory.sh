@@ -1,10 +1,9 @@
 #!/bin/bash
-# Script that allocates a specified amount of memory in GB
+# Script that allocates a specified amount of memory in GB.
 #
 # Usage: allocate_memory.sh <size_in_gb>
 #
-# This script is designed to test OOM recovery by allocating more memory
-# than the job has been allocated by Slurm.
+# Designed to trigger OOM when the allocation exceeds Slurm's cgroup memory limit.
 
 set -e
 
@@ -21,7 +20,7 @@ if [ -f /proc/meminfo ]; then
     echo "Available memory: ${AVAILABLE_MB}MB"
 fi
 
-# Allocate memory using Python (more reliable than dd/fallocate for triggering OOM)
+# Allocate memory using Python (reliable for triggering OOM)
 echo "Allocating ${SIZE_GB}GB of memory..."
 
 python3 << EOF
@@ -33,8 +32,6 @@ size_bytes = size_gb * 1024 * 1024 * 1024
 
 print(f"Attempting to allocate {size_gb}GB ({size_bytes:,} bytes)")
 
-# Allocate memory by creating a large bytearray
-# This forces actual memory allocation, not just virtual address space
 try:
     data = bytearray(size_bytes)
     # Touch the memory to ensure it's actually allocated
