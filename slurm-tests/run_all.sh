@@ -92,11 +92,10 @@ if [ -z "$TORC_BIN" ]; then missing+=("torc"); fi
 if [ -z "$TORC_SERVER_BIN" ]; then missing+=("torc-server"); fi
 if ! command -v jq &>/dev/null; then missing+=("jq"); fi
 if ! command -v sbatch &>/dev/null; then missing+=("sbatch"); fi
-if ! command -v curl &>/dev/null; then missing+=("curl"); fi
 
 if [ ${#missing[@]} -gt 0 ]; then
     echo "ERROR: Missing prerequisites: ${missing[*]}"
-    echo "Ensure torc, torc-server, jq, curl, and Slurm tools are on your PATH."
+    echo "Ensure torc, torc-server, jq, and Slurm tools are on your PATH."
     exit 1
 fi
 

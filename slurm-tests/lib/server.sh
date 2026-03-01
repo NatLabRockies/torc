@@ -1,7 +1,7 @@
 #!/bin/bash
 # server.sh — Helpers for starting, stopping, and health-checking the torc server.
 #
-# Requires: TORC_SERVER_BIN, RUN_DIR to be set before sourcing.
+# Requires: TORC_BIN, TORC_SERVER_BIN, RUN_DIR to be set before sourcing.
 
 # start_server DB_PATH PORT
 #   Starts the torc server with a SQLite database at DB_PATH on PORT.
@@ -31,7 +31,7 @@ wait_for_server() {
     local elapsed=0
 
     while [ "$elapsed" -lt "$timeout" ]; do
-        if curl -sf "http://127.0.0.1:${port}/torc-service/v1/health" > /dev/null 2>&1; then
+        if "$TORC_BIN" ping > /dev/null 2>&1; then
             echo "Server is healthy (port $port)."
             return 0
         fi
