@@ -1900,6 +1900,26 @@ fn extract_slurm_job_id_from_filename(filename: &str) -> Option<(i64, String)> {
     })
 }
 
+/// Extract Torc workflow ID and job ID from filename
+/// Returns (workflow_id, job_id) if successful
+fn extract_torc_job_ids_from_filename(filename: &str) -> Option<(i64, i64)> {
+    // Pattern: job_wf123_j456_r1_a1.o or job_wf123_j456_r1_a1.e
+    let re = Regex::new(r"job_wf(\d+)_j(\d+)_").ok()?;
+    re.captures(filename).and_then(|caps| {
+        let wf_id = caps.get(1)?.as_str().parse::<i64>().ok()?;
+        let job_id = caps.get(2)?.as_str().parse::<i64>().ok()?;
+        Some((wf_id, job_id))
+    })
+}
+
+/// Extract Slurm job ID from a log line if present
+fn extract_slurm_job_id_from_line(line: &str) -> Option<String> {
+    // Look for patterns like StepId=12890812.8 or job 12890812
+    let re = Regex::new(r"(?i)(?:StepId=|job\s+)(\d+)(?:\.\d+)?").ok()?;
+    re.captures(line)
+        .and_then(|caps| caps.get(1).map(|m| m.as_str().to_string()))
+}
+
 /// Build a map of Slurm job ID -> affected Torc jobs
 /// This queries the API to correlate:
 /// 1. ScheduledComputeNode.scheduler_id (Slurm job ID) -> ScheduledComputeNode.id
@@ -2042,6 +2062,68 @@ fn build_slurm_to_jobs_map(
     slurm_to_jobs
 }
 
+/// Scan a single log file for Slurm error patterns
+fn scan_file_for_slurm_errors(
+    path: &Path,
+    initial_slurm_job_id: &str,
+    compiled_patterns: &[(Regex, &SlurmErrorPattern)],
+    errors_only: bool,
+    slurm_to_jobs: &HashMap<String, Vec<AffectedJob>>,
+    all_errors: &mut Vec<SlurmLogError>,
+) -> bool {
+    let filename = match path.file_name().and_then(|n| n.to_str()) {
+        Some(name) => name,
+        None => return false,
+    };
+
+    let file = match fs::File::open(path) {
+        Ok(f) => f,
+        Err(e) => {
+            warn!("Could not open file {}: {}", path.display(), e);
+            return false;
+        }
+    };
+
+    let reader = BufReader::new(file);
+    for (line_num, line_result) in reader.lines().enumerate() {
+        let line = match line_result {
+            Ok(l) => l,
+            Err(_) => continue,
+        };
+
+        for (regex, pattern) in compiled_patterns {
+            if errors_only && pattern.severity != "error" {
+                continue;
+            }
+
+            if regex.is_match(&line) {
+                let node = extract_node_from_line(&line);
+
+                // Try to refine the Slurm job ID from the line if possible
+                let mut current_slurm_id = initial_slurm_job_id.to_string();
+                if let Some(extracted_id) = extract_slurm_job_id_from_line(&line) {
+                    current_slurm_id = extracted_id;
+                }
+
+                let affected_jobs = slurm_to_jobs.get(&current_slurm_id).cloned();
+
+                all_errors.push(SlurmLogError {
+                    file: filename.to_string(),
+                    slurm_job_id: current_slurm_id,
+                    line_number: line_num + 1,
+                    line: line.trim().to_string(),
+                    pattern_description: pattern.description.clone(),
+                    severity: pattern.severity.clone(),
+                    node,
+                    affected_jobs,
+                });
+                break; // Only match one pattern per line
+            }
+        }
+    }
+    true
+}
+
 /// Parse Slurm log files for known error messages
 pub fn parse_slurm_logs(
     config: &Configuration,
@@ -2116,6 +2198,14 @@ pub fn parse_slurm_logs(
     // Build job correlation map
     let slurm_to_jobs = build_slurm_to_jobs_map(config, workflow_id);
 
+    // Build reverse map: Torc Job ID -> Slurm Job ID
+    let mut torc_job_to_slurm_id: HashMap<i64, String> = HashMap::new();
+    for (slurm_id, affected_jobs) in &slurm_to_jobs {
+        for job in affected_jobs {
+            torc_job_to_slurm_id.insert(job.job_id, slurm_id.clone());
+        }
+    }
+
     let patterns = get_slurm_error_patterns();
     let compiled_patterns: Vec<(Regex, &SlurmErrorPattern)> = patterns
         .iter()
@@ -2125,91 +2215,77 @@ pub fn parse_slurm_logs(
     let mut all_errors: Vec<SlurmLogError> = Vec::new();
     let mut scanned_files = 0;
 
-    // Find all slurm log files (*.o and *.e files matching slurm_output_*.*)
-    let entries = match fs::read_dir(output_dir) {
-        Ok(entries) => entries,
-        Err(e) => {
-            eprintln!("Error reading directory: {}", e);
-            std::process::exit(1);
-        }
-    };
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if !path.is_file() {
-            continue;
-        }
-
-        let filename = match path.file_name().and_then(|n| n.to_str()) {
-            Some(name) => name,
-            None => continue,
-        };
-
-        // Check if this is a slurm output file
-        if !filename.starts_with("slurm_output_") {
-            continue;
-        }
-
-        let (file_wf_id, slurm_job_id) = match extract_slurm_job_id_from_filename(filename) {
-            Some(ids) => ids,
-            None => continue,
-        };
-
-        // Only process log files for this workflow
-        if file_wf_id != workflow_id {
-            debug!(
-                "Skipping log file {} - workflow ID {} does not match {}",
-                filename, file_wf_id, workflow_id
-            );
-            continue;
-        }
-
-        // Only process log files for Slurm jobs belonging to this workflow
-        if !valid_slurm_job_ids.contains(&slurm_job_id) {
-            debug!(
-                "Skipping log file {} - Slurm job {} not in workflow {}",
-                filename, slurm_job_id, workflow_id
-            );
-            continue;
-        }
-
-        debug!("Scanning log file: {}", path.display());
-        scanned_files += 1;
-
-        let file = match fs::File::open(&path) {
-            Ok(f) => f,
-            Err(e) => {
-                warn!("Could not open file {}: {}", path.display(), e);
+    // Phase 1: Scan main directory for slurm_output files
+    if let Ok(entries) = fs::read_dir(output_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_file() {
                 continue;
             }
-        };
 
-        let reader = BufReader::new(file);
-        for (line_num, line_result) in reader.lines().enumerate() {
-            let line = match line_result {
-                Ok(l) => l,
-                Err(_) => continue,
+            let filename = match path.file_name().and_then(|n| n.to_str()) {
+                Some(name) => name,
+                None => continue,
             };
 
-            for (regex, pattern) in &compiled_patterns {
-                if errors_only && pattern.severity != "error" {
-                    continue;
+            // Check if this is a slurm output file
+            if filename.starts_with("slurm_output_")
+                && let Some((file_wf_id, slurm_job_id)) =
+                    extract_slurm_job_id_from_filename(filename)
+                && file_wf_id == workflow_id
+                && valid_slurm_job_ids.contains(&slurm_job_id)
+            {
+                debug!("Scanning Slurm output file: {}", path.display());
+                if scan_file_for_slurm_errors(
+                    &path,
+                    &slurm_job_id,
+                    &compiled_patterns,
+                    errors_only,
+                    &slurm_to_jobs,
+                    &mut all_errors,
+                ) {
+                    scanned_files += 1;
                 }
+            }
+        }
+    }
 
-                if regex.is_match(&line) {
-                    let node = extract_node_from_line(&line);
-                    let affected_jobs = slurm_to_jobs.get(&slurm_job_id).cloned();
-                    all_errors.push(SlurmLogError {
-                        file: path.display().to_string(),
-                        slurm_job_id: slurm_job_id.clone(),
-                        line_number: line_num + 1,
-                        line: line.clone(),
-                        pattern_description: pattern.description.clone(),
-                        severity: pattern.severity.clone(),
-                        node,
-                        affected_jobs,
-                    });
-                    break; // Only match one pattern per line
+    // Phase 2: Scan job_stdio subdirectory for job logs
+    let job_stdio_dir = output_dir.join("job_stdio");
+    if job_stdio_dir.exists()
+        && let Ok(entries) = fs::read_dir(&job_stdio_dir)
+    {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+
+            let filename = match path.file_name().and_then(|n| n.to_str()) {
+                Some(name) => name,
+                None => continue,
+            };
+
+            // Check if this is a job log file for this workflow
+            if let Some((file_wf_id, job_id)) = extract_torc_job_ids_from_filename(filename)
+                && file_wf_id == workflow_id
+            {
+                // Find the Slurm job ID for this Torc job
+                let slurm_job_id = torc_job_to_slurm_id
+                    .get(&job_id)
+                    .cloned()
+                    .unwrap_or_else(|| "unknown".to_string());
+
+                debug!("Scanning job stdio file: {}", path.display());
+                if scan_file_for_slurm_errors(
+                    &path,
+                    &slurm_job_id,
+                    &compiled_patterns,
+                    errors_only,
+                    &slurm_to_jobs,
+                    &mut all_errors,
+                ) {
+                    scanned_files += 1;
                 }
             }
         }
@@ -2252,9 +2328,14 @@ pub fn parse_slurm_logs(
                 .push(err);
         }
 
-        for (job_id, errors) in errors_by_job.iter() {
-            let job_label = if job_id.is_empty() {
-                "Unknown Job".to_string()
+        // Sort job IDs for consistent output
+        let mut sorted_job_ids: Vec<_> = errors_by_job.keys().cloned().collect();
+        sorted_job_ids.sort();
+
+        for job_id in sorted_job_ids {
+            let errors = errors_by_job.get(&job_id).unwrap();
+            let job_label = if job_id == "unknown" || job_id.is_empty() {
+                "Unknown Slurm Job".to_string()
             } else {
                 format!("Slurm Job {}", job_id)
             };
