@@ -90,9 +90,8 @@ torc reports results 42
 ```
 
 A `peak_cpu_percent` value near or above 100% (for 2-CPU jobs) confirms that sstat was polled
-successfully during job execution. A value of exactly 0.0% means sstat returned no data — check for
-the `--allsteps` flag error (should have been removed) or verify that the `sstat` binary is
-available on compute nodes.
+successfully during job execution. A value of exactly 0.0% means sstat returned no data — verify
+that the `sstat` binary is available on compute nodes.
 
 ### 7. Verify step naming in squeue (during run)
 
@@ -123,7 +122,6 @@ srun step naming is working and administrators can track individual jobs.
 
 **`peak_cpu_percent` is 0.0% for all jobs**: sstat polling is not working. Possible causes:
 
-- `sstat --allsteps` being passed (unrecognized on some Slurm versions) — should be removed
 - `sstat` binary not available on compute nodes
 - Time-series monitoring not enabled in the workflow spec (add `resource_monitor.enabled: true`)
 

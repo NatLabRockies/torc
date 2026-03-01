@@ -663,7 +663,6 @@ fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats
             .args([
                 "-j",
                 slurm_job_id,
-                // Note: do NOT pass --allsteps; it is unrecognized on some Slurm versions.
                 // sacct -j <jobid> already returns all step records (allocation, batch, srun
                 // steps) for the specified job without any extra flag.
                 "--format",
