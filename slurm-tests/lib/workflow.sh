@@ -19,10 +19,11 @@ submit_workflow() {
     }
     rm -f "$stderr_file"
     local wf_id
+    # Try JSON format: {"workflow_id": 123}
     wf_id=$(echo "$output" | grep -oP '"workflow_id"\s*:\s*\K\d+' | head -1)
     if [ -z "$wf_id" ]; then
-        # Try alternative: some versions output as plain number on the last line
-        wf_id=$(echo "$output" | grep -oP '^\d+$' | head -1)
+        # Try plain text: "Created workflow 123"
+        wf_id=$(echo "$output" | grep -oP 'Created workflow \K\d+' | head -1)
     fi
     if [ -z "$wf_id" ]; then
         echo "ERROR: Could not parse workflow ID from submit output" >&2
