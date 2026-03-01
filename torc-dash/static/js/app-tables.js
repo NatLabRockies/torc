@@ -388,7 +388,7 @@ Object.assign(TorcDashboard.prototype, {
                         ${this.renderSortableHeader('Slurm Job', 'slurm_job_id')}
                         ${this.renderSortableHeader('Max RSS', 'max_rss_bytes')}
                         ${this.renderSortableHeader('Max VM', 'max_vm_size_bytes')}
-                        ${this.renderSortableHeader('AveCPU (s)', 'ave_cpu_seconds')}
+                        ${this.renderSortableHeader('Ave CPU (s)', 'ave_cpu_seconds')}
                         <th>Nodes</th>
                     </tr>
                 </thead>
