@@ -469,8 +469,16 @@ fn run_monitoring_loop(
                             elapsed_s,
                         ) {
                             Some((cpu, mem, new_ave_cpu_s)) => {
-                                *prev_ave_cpu_s = new_ave_cpu_s;
                                 *prev_sample_at = now;
+                                // On the first successful sample, AveCPU is cumulative
+                                // since step start but elapsed_s is only since we began
+                                // monitoring (possibly microseconds). Just record the
+                                // baseline without emitting a bogus CPU percentage.
+                                if *prev_ave_cpu_s == 0.0 && elapsed_s < 1.0 {
+                                    *prev_ave_cpu_s = new_ave_cpu_s;
+                                    continue;
+                                }
+                                *prev_ave_cpu_s = new_ave_cpu_s;
                                 (cpu, mem, 1)
                             }
                             None => {
