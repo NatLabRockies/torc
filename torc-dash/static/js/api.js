@@ -234,6 +234,13 @@ class TorcAPI {
         return this.extractItems(response);
     }
 
+    // ==================== Slurm Stats ====================
+
+    async listSlurmStats(workflowId, offset = 0, limit = 1000) {
+        const response = await this.request(`/slurm_stats?workflow_id=${workflowId}&offset=${offset}&limit=${limit}`);
+        return this.extractItems(response);
+    }
+
     // ==================== Workflow Events ====================
 
     async listWorkflowEvents(workflowId, offset = 0, limit = 1000) {
