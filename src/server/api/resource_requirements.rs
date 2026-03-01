@@ -153,6 +153,33 @@ where
         };
 
         let step_nodes = body.step_nodes.unwrap_or(1);
+        if step_nodes <= 0 {
+            let error_response = models::ErrorResponse::new(serde_json::json!({
+                "message": format!("step_nodes must be > 0, got {}", step_nodes),
+                "field": "step_nodes",
+                "value": step_nodes
+            }));
+            return Ok(
+                CreateResourceRequirementsResponse::UnprocessableContentErrorResponse(
+                    error_response,
+                ),
+            );
+        }
+        if step_nodes > body.num_nodes {
+            let error_response = models::ErrorResponse::new(serde_json::json!({
+                "message": format!(
+                    "step_nodes ({}) must be <= num_nodes ({})",
+                    step_nodes, body.num_nodes
+                ),
+                "field": "step_nodes",
+                "value": step_nodes
+            }));
+            return Ok(
+                CreateResourceRequirementsResponse::UnprocessableContentErrorResponse(
+                    error_response,
+                ),
+            );
+        }
         let result = match sqlx::query!(
             r#"
             INSERT INTO resource_requirements
@@ -566,6 +593,18 @@ where
         };
 
         let step_nodes = body.step_nodes.unwrap_or(1);
+        if step_nodes <= 0 {
+            return Err(ApiError(format!(
+                "step_nodes must be > 0, got {}",
+                step_nodes
+            )));
+        }
+        if step_nodes > body.num_nodes {
+            return Err(ApiError(format!(
+                "step_nodes ({}) must be <= num_nodes ({})",
+                step_nodes, body.num_nodes
+            )));
+        }
         // Update the record
         match sqlx::query!(
             r#"

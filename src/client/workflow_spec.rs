@@ -1129,7 +1129,7 @@ impl WorkflowSpec {
             }
         }
 
-        // Check duplicate resource_requirements names
+        // Check duplicate resource_requirements names and validate step_nodes
         if let Some(ref resource_reqs) = spec.resource_requirements {
             let mut rr_names_set = HashSet::new();
             for rr in resource_reqs {
@@ -1138,6 +1138,21 @@ impl WorkflowSpec {
                         "Duplicate resource_requirements name: '{}'",
                         rr.name
                     ));
+                }
+                // Validate step_nodes: must be > 0 and <= num_nodes
+                if let Some(step_nodes) = rr.step_nodes {
+                    if step_nodes <= 0 {
+                        errors.push(format!(
+                            "Resource requirement '{}': step_nodes must be > 0, got {}",
+                            rr.name, step_nodes
+                        ));
+                    }
+                    if step_nodes > rr.num_nodes {
+                        errors.push(format!(
+                            "Resource requirement '{}': step_nodes ({}) must be <= num_nodes ({})",
+                            rr.name, step_nodes, rr.num_nodes
+                        ));
+                    }
                 }
             }
         }
@@ -1829,6 +1844,24 @@ impl WorkflowSpec {
                         resource_req_spec.name
                     )
                     .into());
+                }
+
+                // Validate step_nodes: must be > 0 and <= num_nodes
+                if let Some(step_nodes) = resource_req_spec.step_nodes {
+                    if step_nodes <= 0 {
+                        return Err(format!(
+                            "Resource requirement '{}': step_nodes must be > 0, got {}",
+                            resource_req_spec.name, step_nodes
+                        )
+                        .into());
+                    }
+                    if step_nodes > resource_req_spec.num_nodes {
+                        return Err(format!(
+                            "Resource requirement '{}': step_nodes ({}) must be <= num_nodes ({})",
+                            resource_req_spec.name, step_nodes, resource_req_spec.num_nodes
+                        )
+                        .into());
+                    }
                 }
 
                 let resource_req_model = models::ResourceRequirementsModel {

@@ -1418,19 +1418,25 @@ pub fn create_slurm_stats(
 /// List Slurm accounting stats, optionally filtered by workflow and job.
 pub fn list_slurm_stats(
     configuration: &configuration::Configuration,
-    workflow_id: Option<i64>,
+    workflow_id: i64,
     job_id: Option<i64>,
+    run_id: Option<i64>,
+    attempt_id: Option<i64>,
     offset: Option<i64>,
     limit: Option<i64>,
 ) -> Result<models::ListSlurmStatsResponse, Error<ListSlurmStatsError>> {
     let uri_str = format!("{}/slurm_stats", configuration.base_path);
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
 
-    if let Some(wf_id) = workflow_id {
-        req_builder = req_builder.query(&[("workflow_id", &wf_id.to_string())]);
-    }
+    req_builder = req_builder.query(&[("workflow_id", &workflow_id.to_string())]);
     if let Some(j_id) = job_id {
         req_builder = req_builder.query(&[("job_id", &j_id.to_string())]);
+    }
+    if let Some(r_id) = run_id {
+        req_builder = req_builder.query(&[("run_id", &r_id.to_string())]);
+    }
+    if let Some(a_id) = attempt_id {
+        req_builder = req_builder.query(&[("attempt_id", &a_id.to_string())]);
     }
     if let Some(off) = offset {
         req_builder = req_builder.query(&[("offset", &off.to_string())]);

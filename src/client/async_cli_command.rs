@@ -26,6 +26,7 @@
 
 use crate::client::log_paths::{get_job_stderr_path, get_job_stdout_path};
 use crate::client::resource_monitor::ResourceMonitor;
+use crate::client::slurm_utils::{parse_slurm_cpu_time, parse_slurm_memory};
 use crate::memory_utils::memory_string_to_mb;
 use crate::models::{JobModel, JobStatus, ResourceRequirementsModel, ResultModel, SlurmStatsModel};
 use chrono::{DateTime, Utc};
@@ -391,7 +392,7 @@ impl AsyncCliCommand {
     /// ```ignore
     /// async_cmd.send_sigterm()?;
     /// let exit_code = async_cmd.wait_for_completion()?;
-    /// // exit_code will be negative (-15) if killed by SIGTERM on Unix
+    /// // exit_code will be 143 (128 + 15) if killed by SIGTERM on Unix
     /// ```
     #[cfg(unix)]
     pub fn send_sigterm(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -489,7 +490,7 @@ impl AsyncCliCommand {
 
         // Collect Slurm accounting stats via sacct when running inside an allocation.
         // Note: collect_sacct_stats is synchronous and may delay this polling cycle: it sleeps
-        // 5 seconds between retry attempts (up to 3 retries, worst-case ~15 seconds) when the
+        // 5 seconds between retry attempts (up to 6 attempts, worst-case ~25 seconds) when the
         // Slurm accounting daemon hasn't written the step record yet.
         if let (Ok(slurm_job_id), Some(step_name)) =
             (std::env::var("SLURM_JOB_ID"), self.step_name.as_deref())
@@ -569,7 +570,7 @@ impl AsyncCliCommand {
     /// # Returns
     ///
     /// - **Positive value**: Normal exit code from the process
-    /// - **Negative value** (Unix): Signal number that killed the process (e.g., -15 for SIGTERM, -9 for SIGKILL)
+    /// - **128 + signal** (POSIX convention): Signal number that killed the process (e.g., 137 for SIGKILL, 143 for SIGTERM)
     /// - **-1**: Unknown exit status
     ///
     /// # Example
@@ -580,8 +581,8 @@ impl AsyncCliCommand {
     ///
     /// if exit_code == 0 {
     ///     println!("Job exited normally");
-    /// } else if exit_code < 0 {
-    ///     println!("Job killed by signal {}", -exit_code);
+    /// } else if exit_code > 128 {
+    ///     println!("Job killed by signal {}", exit_code - 128);
     /// } else {
     ///     println!("Job exited with error code {}", exit_code);
     /// }
@@ -696,7 +697,6 @@ fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats
                     MAX_SACCT_ATTEMPTS,
                     stderr.trim()
                 );
-                std::thread::sleep(SACCT_RETRY_DELAY);
                 continue;
             } else {
                 warn!(
@@ -801,54 +801,6 @@ fn parse_sacct_line(line: &str, step_name: &str) -> Option<SacctStats> {
     })
 }
 
-/// Parse a Slurm memory string (e.g. "512K", "1.50M", "2G") into bytes.
-/// Returns `None` for empty or unparseable values; `Some(0)` for "0".
-pub(crate) fn parse_slurm_memory(s: &str) -> Option<i64> {
-    let s = s.trim();
-    if s.is_empty() {
-        return None;
-    }
-    if s == "0" {
-        return Some(0);
-    }
-    let (num_str, multiplier) = if let Some(rest) = s.strip_suffix('K') {
-        (rest, 1_024i64)
-    } else if let Some(rest) = s.strip_suffix('M') {
-        (rest, 1_024 * 1_024)
-    } else if let Some(rest) = s.strip_suffix('G') {
-        (rest, 1_024 * 1_024 * 1_024)
-    } else if let Some(rest) = s.strip_suffix('T') {
-        (rest, 1_024 * 1_024 * 1_024 * 1_024)
-    } else {
-        (s, 1)
-    };
-    let n: f64 = num_str.parse().ok()?;
-    Some((n * multiplier as f64) as i64)
-}
-
-/// Parse a Slurm CPU time string (`[D-]HH:MM:SS`) into seconds.
-/// Returns `None` for empty or unparseable values.
-pub(crate) fn parse_slurm_cpu_time(s: &str) -> Option<f64> {
-    let s = s.trim();
-    if s.is_empty() {
-        return None;
-    }
-    let (days, rest) = if let Some(dash) = s.find('-') {
-        let d: u64 = s[..dash].parse().ok()?;
-        (d, &s[dash + 1..])
-    } else {
-        (0, s)
-    };
-    let parts: Vec<&str> = rest.split(':').collect();
-    if parts.len() != 3 {
-        return None;
-    }
-    let h: u64 = parts[0].parse().ok()?;
-    let m: u64 = parts[1].parse().ok()?;
-    let sec: f64 = parts[2].parse().ok()?;
-    Some((days * 86_400 + h * 3_600 + m * 60) as f64 + sec)
-}
-
 impl Drop for AsyncCliCommand {
     fn drop(&mut self) {
         if self.is_running {
@@ -858,68 +810,5 @@ impl Drop for AsyncCliCommand {
             );
             let _ = self.terminate();
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_slurm_memory_units() {
-        assert_eq!(parse_slurm_memory("0"), Some(0));
-        assert_eq!(parse_slurm_memory("512K"), Some(512 * 1_024));
-        assert_eq!(parse_slurm_memory("2M"), Some(2 * 1_024 * 1_024));
-        assert_eq!(parse_slurm_memory("1G"), Some(1_024 * 1_024 * 1_024));
-        assert_eq!(
-            parse_slurm_memory("1T"),
-            Some(1_024 * 1_024 * 1_024 * 1_024)
-        );
-    }
-
-    #[test]
-    fn test_parse_slurm_memory_decimal() {
-        // sacct can emit fractional values like "1.50M"
-        let result = parse_slurm_memory("1.50M").unwrap();
-        assert!((result as f64 - 1.5 * 1_024.0 * 1_024.0).abs() < 1.0);
-    }
-
-    #[test]
-    fn test_parse_slurm_memory_no_suffix() {
-        // Raw bytes
-        assert_eq!(parse_slurm_memory("1024"), Some(1024));
-    }
-
-    #[test]
-    fn test_parse_slurm_memory_empty() {
-        assert_eq!(parse_slurm_memory(""), None);
-        assert_eq!(parse_slurm_memory("  "), None);
-    }
-
-    #[test]
-    fn test_parse_slurm_cpu_time_hhmmss() {
-        assert_eq!(parse_slurm_cpu_time("00:01:30"), Some(90.0));
-        assert_eq!(parse_slurm_cpu_time("01:00:00"), Some(3_600.0));
-        assert_eq!(parse_slurm_cpu_time("00:00:00"), Some(0.0));
-    }
-
-    #[test]
-    fn test_parse_slurm_cpu_time_with_days() {
-        // Format: D-HH:MM:SS
-        assert_eq!(parse_slurm_cpu_time("1-02:30:00"), Some(95_400.0));
-        assert_eq!(parse_slurm_cpu_time("0-00:00:01"), Some(1.0));
-    }
-
-    #[test]
-    fn test_parse_slurm_cpu_time_empty() {
-        assert_eq!(parse_slurm_cpu_time(""), None);
-        assert_eq!(parse_slurm_cpu_time("  "), None);
-    }
-
-    #[test]
-    fn test_parse_slurm_cpu_time_fractional_seconds() {
-        // Some sacct versions emit sub-second values
-        let result = parse_slurm_cpu_time("00:00:01.5").unwrap();
-        assert!((result - 1.5).abs() < 0.001);
     }
 }

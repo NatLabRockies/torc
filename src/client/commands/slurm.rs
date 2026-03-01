@@ -120,8 +120,6 @@ impl std::fmt::Display for WalltimeStrategy {
 
 #[derive(Tabled)]
 struct SlurmStatsTableRow {
-    #[tabled(rename = "ID")]
-    id: i64,
     #[tabled(rename = "Job ID")]
     job_id: i64,
     #[tabled(rename = "Run")]
@@ -134,7 +132,7 @@ struct SlurmStatsTableRow {
     max_rss: String,
     #[tabled(rename = "Max VM")]
     max_vm: String,
-    #[tabled(rename = "AveCPU (s)")]
+    #[tabled(rename = "Ave CPU (s)")]
     ave_cpu_seconds: String,
     #[tabled(rename = "Nodes")]
     node_list: String,
@@ -451,6 +449,8 @@ EXAMPLES:
 EXAMPLES:
     torc slurm stats 123
     torc slurm stats 123 --job-id 456
+    torc slurm stats 123 --run-id 2
+    torc slurm stats 123 --run-id 1 --attempt-id 1
     torc -f json slurm stats 123
 ")]
     Stats {
@@ -460,6 +460,12 @@ EXAMPLES:
         /// Filter by job ID
         #[arg(long)]
         job_id: Option<i64>,
+        /// Filter by run ID
+        #[arg(long)]
+        run_id: Option<i64>,
+        /// Filter by attempt ID
+        #[arg(long)]
+        attempt_id: Option<i64>,
     },
     /// Total compute node and CPU time consumed by Slurm allocations
     #[command(
@@ -1280,8 +1286,10 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
         SlurmCommands::Stats {
             workflow_id,
             job_id,
+            run_id,
+            attempt_id,
         } => {
-            handle_slurm_stats(config, *workflow_id, *job_id, format);
+            handle_slurm_stats(config, *workflow_id, *job_id, *run_id, *attempt_id, format);
         }
         SlurmCommands::Usage { workflow_id } => {
             let user_name = get_env_user_name();
@@ -3873,27 +3881,36 @@ fn handle_regenerate(
 fn fmt_opt_bytes(v: Option<i64>) -> String {
     match v {
         Some(b) if b >= 0 => format_bytes(b as u64),
-        _ => String::new(),
+        _ => "-".to_string(),
     }
 }
 
 fn fmt_opt_f64(v: Option<f64>) -> String {
     match v {
         Some(f) => format!("{:.1}", f),
-        None => String::new(),
+        None => "-".to_string(),
     }
 }
 
 /// Display per-job Slurm accounting stats stored in the database.
-fn handle_slurm_stats(config: &Configuration, workflow_id: i64, job_id: Option<i64>, format: &str) {
+fn handle_slurm_stats(
+    config: &Configuration,
+    workflow_id: i64,
+    job_id: Option<i64>,
+    run_id: Option<i64>,
+    attempt_id: Option<i64>,
+    format: &str,
+) {
     let mut all_items: Vec<models::SlurmStatsModel> = Vec::new();
     let limit = 10_000i64;
     let mut offset = 0i64;
     loop {
         match default_api::list_slurm_stats(
             config,
-            Some(workflow_id),
+            workflow_id,
             job_id,
+            run_id,
+            attempt_id,
             Some(offset),
             Some(limit),
         ) {
@@ -3929,15 +3946,14 @@ fn handle_slurm_stats(config: &Configuration, workflow_id: i64, job_id: Option<i
     let rows: Vec<SlurmStatsTableRow> = all_items
         .iter()
         .map(|s| SlurmStatsTableRow {
-            id: s.id.unwrap_or(-1),
             job_id: s.job_id,
             run_id: s.run_id,
             attempt_id: s.attempt_id,
-            slurm_job_id: s.slurm_job_id.clone().unwrap_or_default(),
+            slurm_job_id: s.slurm_job_id.clone().unwrap_or_else(|| "-".to_string()),
             max_rss: fmt_opt_bytes(s.max_rss_bytes),
             max_vm: fmt_opt_bytes(s.max_vm_size_bytes),
             ave_cpu_seconds: fmt_opt_f64(s.ave_cpu_seconds),
-            node_list: s.node_list.clone().unwrap_or_default(),
+            node_list: s.node_list.clone().unwrap_or_else(|| "-".to_string()),
         })
         .collect();
 

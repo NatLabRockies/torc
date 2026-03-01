@@ -114,6 +114,7 @@
   - [AI-Assisted Recovery Design](./specialized/design/ai-assisted-recovery.md)
   - [Workflow Graph](./specialized/design/workflow-graph.md)
   - [Interface Architecture](./specialized/design/interfaces.md)
+  - [Slurm Job Step Monitoring](./specialized/design/srun-monitoring.md)
 
 ---
 

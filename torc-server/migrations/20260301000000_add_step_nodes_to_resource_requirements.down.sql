@@ -20,3 +20,6 @@ INSERT INTO resource_requirements_new
 
 DROP TABLE resource_requirements;
 ALTER TABLE resource_requirements_new RENAME TO resource_requirements;
+
+-- Recreate index that was dropped with the old table.
+CREATE INDEX idx_resource_requirements_workflow_id ON resource_requirements(workflow_id);

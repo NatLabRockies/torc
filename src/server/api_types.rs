@@ -1698,8 +1698,10 @@ pub trait Api<C: Send + Sync> {
     /// List Slurm accounting stats.
     async fn list_slurm_stats(
         &self,
-        workflow_id: Option<i64>,
+        workflow_id: i64,
         job_id: Option<i64>,
+        run_id: Option<i64>,
+        attempt_id: Option<i64>,
         offset: Option<i64>,
         limit: Option<i64>,
         context: &C,
@@ -2639,8 +2641,10 @@ pub trait ApiNoContext<C: Send + Sync> {
     /// List Slurm accounting stats.
     async fn list_slurm_stats(
         &self,
-        workflow_id: Option<i64>,
+        workflow_id: i64,
         job_id: Option<i64>,
+        run_id: Option<i64>,
+        attempt_id: Option<i64>,
         offset: Option<i64>,
         limit: Option<i64>,
     ) -> Result<ListSlurmStatsResponse, ApiError>;
@@ -3463,14 +3467,24 @@ impl<T: Api<C> + Send + Sync, C: Clone + Send + Sync> ApiNoContext<C> for Contex
     /// List Slurm accounting stats.
     async fn list_slurm_stats(
         &self,
-        workflow_id: Option<i64>,
+        workflow_id: i64,
         job_id: Option<i64>,
+        run_id: Option<i64>,
+        attempt_id: Option<i64>,
         offset: Option<i64>,
         limit: Option<i64>,
     ) -> Result<ListSlurmStatsResponse, ApiError> {
         let context = self.context().clone();
         self.api()
-            .list_slurm_stats(workflow_id, job_id, offset, limit, &context)
+            .list_slurm_stats(
+                workflow_id,
+                job_id,
+                run_id,
+                attempt_id,
+                offset,
+                limit,
+                &context,
+            )
             .await
     }
 

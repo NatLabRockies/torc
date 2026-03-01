@@ -2886,19 +2886,27 @@ where
     /// List Slurm accounting stats.
     async fn list_slurm_stats(
         &self,
-        workflow_id: Option<i64>,
+        workflow_id: i64,
         job_id: Option<i64>,
+        run_id: Option<i64>,
+        attempt_id: Option<i64>,
         offset: Option<i64>,
         limit: Option<i64>,
         context: &C,
     ) -> Result<ListSlurmStatsResponse, ApiError> {
-        // workflow_id is enforced as required by the routing layer; this branch is unreachable.
-        let wf_id = workflow_id.unwrap_or_else(|| unreachable!("workflow_id is required"));
-        authorize_workflow!(self, wf_id, context, ListSlurmStatsResponse);
+        authorize_workflow!(self, workflow_id, context, ListSlurmStatsResponse);
         let offset = offset.unwrap_or(0);
         let limit = limit.unwrap_or(MAX_RECORD_TRANSFER_COUNT);
         self.slurm_stats_api
-            .list_slurm_stats(Some(wf_id), job_id, offset, limit, context)
+            .list_slurm_stats(
+                workflow_id,
+                job_id,
+                run_id,
+                attempt_id,
+                offset,
+                limit,
+                context,
+            )
             .await
     }
 

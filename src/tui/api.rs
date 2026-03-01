@@ -162,8 +162,10 @@ impl TorcClient {
     pub fn list_slurm_stats(&self, workflow_id: i64) -> Result<Vec<SlurmStatsModel>> {
         let response = default_api::list_slurm_stats(
             &self.config,
-            Some(workflow_id),
+            workflow_id,
             None, // job_id
+            None, // run_id
+            None, // attempt_id
             None, // offset
             None, // limit
         )

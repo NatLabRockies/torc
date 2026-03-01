@@ -11214,20 +11214,35 @@ pub struct ListSlurmStatsResponse {
     #[serde(rename = "offset")]
     pub offset: i64,
 
+    #[serde(rename = "max_limit")]
+    pub max_limit: i64,
+
     #[serde(rename = "count")]
     pub count: i64,
 
     #[serde(rename = "total_count")]
     pub total_count: i64,
+
+    #[serde(rename = "has_more")]
+    pub has_more: bool,
 }
 
 impl ListSlurmStatsResponse {
-    pub fn new(offset: i64, count: i64, total_count: i64) -> ListSlurmStatsResponse {
+    #[allow(clippy::new_without_default)]
+    pub fn new(
+        offset: i64,
+        max_limit: i64,
+        count: i64,
+        total_count: i64,
+        has_more: bool,
+    ) -> ListSlurmStatsResponse {
         ListSlurmStatsResponse {
             items: None,
             offset,
+            max_limit,
             count,
             total_count,
+            has_more,
         }
     }
 }

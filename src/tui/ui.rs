@@ -907,7 +907,7 @@ fn draw_slurm_stats_table(f: &mut Frame, area: Rect, app: &mut App) {
         "Slurm Job",
         "Max RSS",
         "Max VM",
-        "AveCPU (s)",
+        "Ave CPU (s)",
         "Nodes",
     ])
     .style(header_style)
@@ -917,7 +917,7 @@ fn draw_slurm_stats_table(f: &mut Frame, area: Rect, app: &mut App) {
         let job_id = stat.job_id.to_string();
         let run_id = stat.run_id.to_string();
         let attempt_id = stat.attempt_id.to_string();
-        let slurm_job_id = stat.slurm_job_id.clone().unwrap_or_default();
+        let slurm_job_id = stat.slurm_job_id.clone().unwrap_or_else(|| "-".to_string());
         let max_rss = stat
             .max_rss_bytes
             .filter(|&b| b > 0)
@@ -933,7 +933,7 @@ fn draw_slurm_stats_table(f: &mut Frame, area: Rect, app: &mut App) {
             .filter(|&s| s > 0.0)
             .map(|s| format!("{:.1}", s))
             .unwrap_or_else(|| "-".to_string());
-        let nodes = stat.node_list.clone().unwrap_or_default();
+        let nodes = stat.node_list.clone().unwrap_or_else(|| "-".to_string());
 
         Row::new(vec![
             Cell::from(job_id),
@@ -981,7 +981,7 @@ fn draw_slurm_stats_table(f: &mut Frame, area: Rect, app: &mut App) {
             Constraint::Length(12), // Slurm Job
             Constraint::Length(10), // Max RSS
             Constraint::Length(10), // Max VM
-            Constraint::Length(12), // AveCPU (s)
+            Constraint::Length(12), // Ave CPU (s)
             Constraint::Min(10),    // Nodes
         ],
     )

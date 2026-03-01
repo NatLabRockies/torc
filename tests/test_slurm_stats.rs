@@ -58,7 +58,7 @@ fn test_list_slurm_stats_by_workflow(start_server: &ServerProcess) {
     create_test_slurm_stats(config, workflow_id, job1.id.unwrap());
     create_test_slurm_stats(config, workflow_id, job2.id.unwrap());
 
-    let response = default_api::list_slurm_stats(config, Some(workflow_id), None, None, None)
+    let response = default_api::list_slurm_stats(config, workflow_id, None, None, None, None, None)
         .expect("Failed to list slurm_stats");
 
     assert_eq!(response.total_count, 2);
@@ -81,7 +81,7 @@ fn test_list_slurm_stats_filter_by_job(start_server: &ServerProcess) {
     create_test_slurm_stats(config, workflow_id, job2.id.unwrap());
 
     let response =
-        default_api::list_slurm_stats(config, Some(workflow_id), Some(job1_id), None, None)
+        default_api::list_slurm_stats(config, workflow_id, Some(job1_id), None, None, None, None)
             .expect("Failed to list slurm_stats filtered by job");
 
     assert_eq!(response.total_count, 1);
@@ -97,7 +97,7 @@ fn test_list_slurm_stats_empty_workflow(start_server: &ServerProcess) {
     let workflow = create_test_workflow(config, "test_list_slurm_stats_empty");
     let workflow_id = workflow.id.unwrap();
 
-    let response = default_api::list_slurm_stats(config, Some(workflow_id), None, None, None)
+    let response = default_api::list_slurm_stats(config, workflow_id, None, None, None, None, None)
         .expect("Failed to list slurm_stats for empty workflow");
 
     assert_eq!(response.total_count, 0);
@@ -118,14 +118,16 @@ fn test_list_slurm_stats_pagination(start_server: &ServerProcess) {
     }
 
     // Fetch first page of 2
-    let page1 = default_api::list_slurm_stats(config, Some(workflow_id), None, Some(0), Some(2))
-        .expect("Failed to list page 1");
+    let page1 =
+        default_api::list_slurm_stats(config, workflow_id, None, None, None, Some(0), Some(2))
+            .expect("Failed to list page 1");
     assert_eq!(page1.total_count, 5);
     assert_eq!(page1.items.unwrap().len(), 2);
 
     // Fetch second page
-    let page2 = default_api::list_slurm_stats(config, Some(workflow_id), None, Some(2), Some(2))
-        .expect("Failed to list page 2");
+    let page2 =
+        default_api::list_slurm_stats(config, workflow_id, None, None, None, Some(2), Some(2))
+            .expect("Failed to list page 2");
     assert_eq!(page2.total_count, 5);
     assert_eq!(page2.items.unwrap().len(), 2);
 }

@@ -11,6 +11,7 @@ use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, database_error_with_msg};
 
 /// Trait defining slurm_stats API operations
 #[async_trait]
+#[allow(clippy::too_many_arguments)]
 pub trait SlurmStatsApi<C> {
     /// Store Slurm accounting stats for a job step.
     async fn create_slurm_stats(
@@ -19,11 +20,13 @@ pub trait SlurmStatsApi<C> {
         context: &C,
     ) -> Result<CreateSlurmStatsResponse, ApiError>;
 
-    /// List Slurm accounting stats, optionally filtered by workflow and job.
+    /// List Slurm accounting stats for a workflow, optionally filtered by job/run/attempt.
     async fn list_slurm_stats(
         &self,
-        workflow_id: Option<i64>,
+        workflow_id: i64,
         job_id: Option<i64>,
+        run_id: Option<i64>,
+        attempt_id: Option<i64>,
         offset: i64,
         limit: i64,
         context: &C,
@@ -100,16 +103,18 @@ impl<C: Send + Sync + Has<XSpanIdString>> SlurmStatsApi<C> for SlurmStatsApiImpl
 
     async fn list_slurm_stats(
         &self,
-        workflow_id: Option<i64>,
+        workflow_id: i64,
         job_id: Option<i64>,
+        run_id: Option<i64>,
+        attempt_id: Option<i64>,
         offset: i64,
         limit: i64,
         context: &C,
     ) -> Result<ListSlurmStatsResponse, ApiError> {
         let span_id: &XSpanIdString = context.get();
         debug!(
-            "list_slurm_stats(workflow_id={:?} job_id={:?}) - X-Span-ID: {:?}",
-            workflow_id, job_id, span_id
+            "list_slurm_stats(workflow_id={} job_id={:?} run_id={:?} attempt_id={:?}) - X-Span-ID: {:?}",
+            workflow_id, job_id, run_id, attempt_id, span_id
         );
 
         let limit = limit.min(MAX_RECORD_TRANSFER_COUNT);
@@ -119,11 +124,15 @@ impl<C: Send + Sync + Has<XSpanIdString>> SlurmStatsApi<C> for SlurmStatsApiImpl
             r#"
             SELECT COUNT(*) as total
             FROM slurm_stats
-            WHERE ($1 IS NULL OR workflow_id = $1)
+            WHERE workflow_id = $1
               AND ($2 IS NULL OR job_id = $2)
+              AND ($3 IS NULL OR run_id = $3)
+              AND ($4 IS NULL OR attempt_id = $4)
             "#,
             workflow_id,
             job_id,
+            run_id,
+            attempt_id,
         )
         .fetch_one(&*pool)
         .await;
@@ -143,13 +152,17 @@ impl<C: Send + Sync + Has<XSpanIdString>> SlurmStatsApi<C> for SlurmStatsApiImpl
                    max_disk_read_bytes, max_disk_write_bytes,
                    ave_cpu_seconds, node_list
             FROM slurm_stats
-            WHERE ($1 IS NULL OR workflow_id = $1)
+            WHERE workflow_id = $1
               AND ($2 IS NULL OR job_id = $2)
+              AND ($3 IS NULL OR run_id = $3)
+              AND ($4 IS NULL OR attempt_id = $4)
             ORDER BY id
-            LIMIT $3 OFFSET $4
+            LIMIT $5 OFFSET $6
             "#,
             workflow_id,
             job_id,
+            run_id,
+            attempt_id,
             limit,
             offset,
         )
@@ -176,7 +189,14 @@ impl<C: Send + Sync + Has<XSpanIdString>> SlurmStatsApi<C> for SlurmStatsApiImpl
                     })
                     .collect();
                 let count = items.len() as i64;
-                let mut response = models::ListSlurmStatsResponse::new(offset, count, total_count);
+                let has_more = offset + count < total_count;
+                let mut response = models::ListSlurmStatsResponse::new(
+                    offset,
+                    MAX_RECORD_TRANSFER_COUNT,
+                    count,
+                    total_count,
+                    has_more,
+                );
                 response.items = Some(items);
                 Ok(ListSlurmStatsResponse::SuccessfulResponse(response))
             }

@@ -89,7 +89,7 @@ pub fn memory_string_to_mb(memory_str: &str) -> Option<u64> {
     const MB: i64 = 1024 * 1024;
     memory_string_to_bytes(memory_str)
         .ok()
-        .map(|bytes| (bytes / MB) as u64)
+        .map(|bytes| (bytes / MB).max(1) as u64)
 }
 
 /// Convert memory string to gigabytes (as f64).

@@ -2268,10 +2268,51 @@ where
                         None => 10_000,
                     };
 
+                    let param_run_id = query_params
+                        .iter()
+                        .filter(|e| e.0 == "run_id")
+                        .map(|e| e.1.clone())
+                        .next();
+                    let param_run_id = match param_run_id {
+                        Some(param_run_id) => {
+                            let param_run_id = <i64 as std::str::FromStr>::from_str(&param_run_id);
+                            match param_run_id {
+                            Ok(param_run_id) => Some(param_run_id),
+                            Err(e) => return Ok(Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body(Body::from(format!("Couldn't parse query parameter run_id - doesn't match schema: {}", e)))
+                                .expect("Unable to create Bad Request response for invalid query parameter run_id")),
+                        }
+                        }
+                        None => None,
+                    };
+                    let param_attempt_id = query_params
+                        .iter()
+                        .filter(|e| e.0 == "attempt_id")
+                        .map(|e| e.1.clone())
+                        .next();
+                    let param_attempt_id = match param_attempt_id {
+                        Some(param_attempt_id) => {
+                            let param_attempt_id =
+                                <i64 as std::str::FromStr>::from_str(&param_attempt_id);
+                            match param_attempt_id {
+                            Ok(param_attempt_id) => Some(param_attempt_id),
+                            Err(e) => return Ok(Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body(Body::from(format!("Couldn't parse query parameter attempt_id - doesn't match schema: {}", e)))
+                                .expect("Unable to create Bad Request response for invalid query parameter attempt_id")),
+                        }
+                        }
+                        None => None,
+                    };
+
+                    // param_workflow_id is guaranteed Some by the 400 guard above.
                     let result = api_impl
                         .list_slurm_stats(
-                            param_workflow_id,
+                            param_workflow_id.unwrap(),
                             param_job_id,
+                            param_run_id,
+                            param_attempt_id,
                             Some(param_offset),
                             Some(param_limit),
                             &context,

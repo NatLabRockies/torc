@@ -1398,7 +1398,23 @@ impl JobRunner {
                 // Start each job asynchronously
                 for job in jobs {
                     let job_id = job.id.expect("Job must have an ID");
+                    let rr_id = job
+                        .resource_requirements_id
+                        .expect("Job must have a resource_requirements_id");
                     let mut async_job = AsyncCliCommand::new(job);
+
+                    let job_rr = match self.send_with_retries(|| {
+                        default_api::get_resource_requirements(&self.config, rr_id)
+                    }) {
+                        Ok(rr) => rr,
+                        Err(e) => {
+                            error!(
+                                "Error getting resource requirements for job {}: {}",
+                                job_id, e
+                            );
+                            panic!("Failed to get resource requirements");
+                        }
+                    };
 
                     // Mark job as started in the database before actually starting it
                     match self.send_with_retries(|| {
@@ -1424,9 +1440,6 @@ impl JobRunner {
                     }
 
                     let attempt_id = async_job.job.attempt_id.unwrap_or(1);
-                    // Note: resource requirements are not fetched in this code path, so
-                    // --cpus-per-task and --mem are not passed to srun even when
-                    // limit_resources is true.  Slurm will use its default step sizing.
                     match async_job.start(
                         &self.output_dir,
                         self.workflow_id,
@@ -1434,7 +1447,7 @@ impl JobRunner {
                         attempt_id,
                         self.resource_monitor.as_ref(),
                         &self.config.base_path,
-                        None,
+                        Some(&job_rr),
                         self.workflow.limit_resources.unwrap_or(true),
                     ) {
                         Ok(()) => {
@@ -1922,6 +1935,10 @@ impl ComputeNodeRules {
 ///
 /// `avg_memory_bytes` is left as-is: sacct does not provide an average RSS; that comes
 /// from the sstat time-series if TimeSeries monitoring was configured.
+/// Backfill sacct accounting data into a job result, preferring the max of sacct vs sstat peaks.
+///
+/// This ensures that even when sstat time-series monitoring missed a spike, the sacct
+/// post-mortem data fills in accurate resource usage.
 fn backfill_sacct_into_result(result: &mut ResultModel, stats: &SlurmStatsModel) {
     if let Some(max_rss) = stats.max_rss_bytes {
         // sacct MaxRSS is the job-lifetime peak memory. Take the max against any
@@ -1949,5 +1966,128 @@ fn backfill_sacct_into_result(result: &mut ResultModel, stats: &SlurmStatsModel)
                 result.peak_cpu_percent = Some(avg_pct);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{JobStatus, ResultModel, SlurmStatsModel};
+
+    fn make_result(
+        peak_memory_bytes: Option<i64>,
+        peak_cpu_percent: Option<f64>,
+        avg_cpu_percent: Option<f64>,
+        exec_time_minutes: f64,
+    ) -> ResultModel {
+        let mut r = ResultModel::new(
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            exec_time_minutes,
+            "2026-01-01T00:00:00Z".to_string(),
+            JobStatus::Completed,
+        );
+        r.peak_memory_bytes = peak_memory_bytes;
+        r.peak_cpu_percent = peak_cpu_percent;
+        r.avg_cpu_percent = avg_cpu_percent;
+        r
+    }
+
+    fn make_stats(max_rss_bytes: Option<i64>, ave_cpu_seconds: Option<f64>) -> SlurmStatsModel {
+        let mut s = SlurmStatsModel::new(1, 1, 1, 1);
+        s.max_rss_bytes = max_rss_bytes;
+        s.ave_cpu_seconds = ave_cpu_seconds;
+        s
+    }
+
+    #[test]
+    fn test_backfill_sacct_memory_takes_max() {
+        // sacct reports higher peak than sstat: use sacct value
+        let mut result = make_result(Some(1_000_000), None, None, 1.0);
+        let stats = make_stats(Some(2_000_000), None);
+        backfill_sacct_into_result(&mut result, &stats);
+        assert_eq!(result.peak_memory_bytes, Some(2_000_000));
+    }
+
+    #[test]
+    fn test_backfill_sacct_memory_keeps_higher_sstat() {
+        // sstat already has a higher peak: keep sstat value
+        let mut result = make_result(Some(5_000_000), None, None, 1.0);
+        let stats = make_stats(Some(2_000_000), None);
+        backfill_sacct_into_result(&mut result, &stats);
+        assert_eq!(result.peak_memory_bytes, Some(5_000_000));
+    }
+
+    #[test]
+    fn test_backfill_sacct_memory_fills_none() {
+        // No sstat data: sacct fills in
+        let mut result = make_result(None, None, None, 1.0);
+        let stats = make_stats(Some(1_000_000), None);
+        backfill_sacct_into_result(&mut result, &stats);
+        assert_eq!(result.peak_memory_bytes, Some(1_000_000));
+    }
+
+    #[test]
+    fn test_backfill_sacct_memory_skips_zero() {
+        // sacct reports 0: don't clobber sstat value
+        let mut result = make_result(Some(500_000), None, None, 1.0);
+        let stats = make_stats(Some(0), None);
+        backfill_sacct_into_result(&mut result, &stats);
+        assert_eq!(result.peak_memory_bytes, Some(500_000));
+    }
+
+    #[test]
+    fn test_backfill_sacct_memory_none_unchanged() {
+        // sacct has no memory data: result stays None
+        let mut result = make_result(None, None, None, 1.0);
+        let stats = make_stats(None, None);
+        backfill_sacct_into_result(&mut result, &stats);
+        assert_eq!(result.peak_memory_bytes, None);
+    }
+
+    #[test]
+    fn test_backfill_sacct_cpu_sets_avg_and_peak() {
+        // exec_time = 2 min = 120s, ave_cpu = 120s => 100% avg CPU
+        // peak_cpu was None (or 0%) => backfill with avg
+        let mut result = make_result(None, None, None, 2.0);
+        let stats = make_stats(None, Some(120.0));
+        backfill_sacct_into_result(&mut result, &stats);
+        assert!((result.avg_cpu_percent.unwrap() - 100.0).abs() < 0.1);
+        assert!((result.peak_cpu_percent.unwrap() - 100.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_backfill_sacct_cpu_preserves_nonzero_peak() {
+        // peak_cpu already has a non-zero value from sstat: keep it
+        let mut result = make_result(None, Some(200.0), None, 2.0);
+        let stats = make_stats(None, Some(120.0));
+        backfill_sacct_into_result(&mut result, &stats);
+        assert!((result.avg_cpu_percent.unwrap() - 100.0).abs() < 0.1);
+        assert!((result.peak_cpu_percent.unwrap() - 200.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_backfill_sacct_cpu_skips_zero_ave_cpu() {
+        // ave_cpu_seconds = 0: skip (means accounting wasn't collected)
+        let mut result = make_result(None, Some(50.0), Some(25.0), 2.0);
+        let stats = make_stats(None, Some(0.0));
+        backfill_sacct_into_result(&mut result, &stats);
+        // Should be unchanged
+        assert!((result.avg_cpu_percent.unwrap() - 25.0).abs() < 0.1);
+        assert!((result.peak_cpu_percent.unwrap() - 50.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_backfill_sacct_cpu_skips_zero_exec_time() {
+        // exec_time = 0: skip (division by zero guard)
+        let mut result = make_result(None, None, None, 0.0);
+        let stats = make_stats(None, Some(10.0));
+        backfill_sacct_into_result(&mut result, &stats);
+        assert!(result.avg_cpu_percent.is_none());
+        assert!(result.peak_cpu_percent.is_none());
     }
 }

@@ -1,4 +1,4 @@
-use crate::client::async_cli_command::{parse_slurm_cpu_time, parse_slurm_memory};
+use crate::client::slurm_utils::{parse_slurm_cpu_time, parse_slurm_memory};
 use log::{debug, error, info, warn};
 use rusqlite::{Connection, Result as SqliteResult};
 use std::collections::{HashMap, HashSet};
@@ -95,7 +95,7 @@ enum MonitorJobSource {
     Slurm {
         slurm_job_id: String,
         step_name: String,
-        /// Numeric step ID (e.g., "1") discovered via `scontrol show step`.
+        /// Numeric step ID (e.g., "1") discovered via `squeue --steps`.
         /// `None` until the step is registered in Slurm's accounting.
         numeric_step_id: Option<String>,
         /// AveCPU value (in seconds) from the previous sstat poll.
@@ -122,7 +122,7 @@ enum MonitorCommand {
         slurm_job_id: String,
         step_name: String,
         /// Numeric step ID (e.g., "1") discovered at launch time. `None` if discovery
-        /// failed, in which case the monitor will attempt batch discovery via scontrol.
+        /// failed, in which case the monitor will attempt batch discovery via squeue --steps.
         numeric_step_id: Option<String>,
         job_id: i64,
         job_name: String,
@@ -403,7 +403,7 @@ fn run_monitoring_loop(
             }
 
             // Batch-discover numeric step IDs for any Slurm steps that need them.
-            // Run `scontrol show step` once per unique slurm_job_id (typically just one)
+            // Run `squeue --steps` once per unique slurm_job_id (typically just one)
             // instead of once per step.
             let needs_discovery: Vec<String> = monitored_jobs
                 .values()
@@ -553,15 +553,6 @@ fn collect_process_tree_stats(root_pid: u32, sys: &System) -> (f64, u64, usize) 
     (total_cpu, total_memory, visited.len())
 }
 
-/// Poll `sstat` for the named Slurm step and return `(cpu_percent, max_rss_bytes, new_ave_cpu_s)`.
-///
-/// `sstat` reports `AveCPU` as cumulative CPU time since step start.  To convert to an
-/// instantaneous utilisation rate we compute:
-///
-/// ```text
-/// cpu_percent = (new_ave_cpu_s - prev_ave_cpu_s) / elapsed_s * 100.0
-/// ```
-///
 /// Discover the numeric step ID for a named step, retrying a few times for Slurm registration.
 ///
 /// Called at srun launch time. Returns `None` if the step doesn't appear within ~1 second.
@@ -673,7 +664,7 @@ fn collect_sstat_sample(
         .ok()?;
 
     if !output.status.success() {
-        warn!(
+        debug!(
             "sstat returned non-zero exit code for step {}: {}",
             job_step,
             String::from_utf8_lossy(&output.stderr).trim()
