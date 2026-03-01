@@ -4179,6 +4179,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/forbidden_error_response"
           description: Forbidden - user does not have access
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/not_found_error_response"
+          description: Not found error response
         "500":
           content:
             application/json:
