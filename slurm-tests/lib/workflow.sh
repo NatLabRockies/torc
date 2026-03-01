@@ -7,8 +7,17 @@
 #   Submits a workflow from a spec file and prints the workflow ID.
 submit_workflow() {
     local spec_file="$1"
+    local stderr_file
+    stderr_file=$(mktemp)
     local output
-    output=$(torc --url "$TORC_API_URL" -f json submit "$spec_file" 2>&1)
+    output=$(torc --url "$TORC_API_URL" -f json submit "$spec_file" 2>"$stderr_file") || {
+        echo "ERROR: Failed to submit workflow from $spec_file" >&2
+        echo "Output: $output" >&2
+        echo "Stderr: $(cat "$stderr_file")" >&2
+        rm -f "$stderr_file"
+        return 1
+    }
+    rm -f "$stderr_file"
     local wf_id
     wf_id=$(echo "$output" | grep -oP '"workflow_id"\s*:\s*\K\d+' | head -1)
     if [ -z "$wf_id" ]; then
@@ -16,7 +25,7 @@ submit_workflow() {
         wf_id=$(echo "$output" | grep -oP '^\d+$' | head -1)
     fi
     if [ -z "$wf_id" ]; then
-        echo "ERROR: Failed to submit workflow from $spec_file" >&2
+        echo "ERROR: Could not parse workflow ID from submit output" >&2
         echo "Output: $output" >&2
         return 1
     fi
