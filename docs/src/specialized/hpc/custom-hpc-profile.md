@@ -232,13 +232,13 @@ Verify that Torc correctly matches resource requirements to partitions:
 
 ```bash
 # Should match 'short' partition
-torc hpc match research --cpus 8 --memory 16g --walltime 2h
+torc hpc match research --cpus 8 --memory 16g --walltime 02:00:00
 
 # Should match 'gpu' partition
-torc hpc match research --cpus 16 --memory 64g --walltime 8h --gpus 2
+torc hpc match research --cpus 16 --memory 64g --walltime 08:00:00 --gpus 2
 
 # Should match 'himem' partition
-torc hpc match research --cpus 24 --memory 512g --walltime 24h
+torc hpc match research --cpus 24 --memory 512g --walltime 24:00:00
 ```
 
 ## Step 6: Test Scheduler Generation
@@ -356,7 +356,7 @@ If `torc slurm generate` can't find a matching partition:
 
 1. Check if any partition satisfies all requirements:
    ```bash
-   torc hpc match research --cpus 32 --memory 128g --walltime 8h
+   torc hpc match research --cpus 32 --memory 128g --walltime 08:00:00
    ```
 
 2. Verify memory is specified in MB in the config (not GB)

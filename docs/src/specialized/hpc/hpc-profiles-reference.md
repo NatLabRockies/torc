@@ -107,22 +107,22 @@ torc hpc match [OPTIONS] [PROFILE]
 
 **Options:**
 
-| Option                  | Description                               |
-| ----------------------- | ----------------------------------------- |
-| `--cpus <N>`            | Required CPU cores                        |
-| `--memory <SIZE>`       | Required memory (e.g., `64g`, `512m`)     |
-| `--walltime <DURATION>` | Required walltime (e.g., `2h`, `4:00:00`) |
-| `--gpus <N>`            | Required GPUs                             |
-| `-f, --format <FORMAT>` | Output format: `table` or `json`          |
+| Option                  | Description                                   |
+| ----------------------- | --------------------------------------------- |
+| `--cpus <N>`            | Required CPU cores                            |
+| `--memory <SIZE>`       | Required memory (e.g., `64g`, `512m`)         |
+| `--walltime <DURATION>` | Required walltime (e.g., `02:00:00`, `30:00`) |
+| `--gpus <N>`            | Required GPUs                                 |
+| `-f, --format <FORMAT>` | Output format: `table` or `json`              |
 
 **Memory format:** `<number><unit>` where unit is `k`, `m`, `g`, or `t` (case-insensitive).
 
-**Walltime formats:**
+**Walltime formats** (Slurm-compatible):
 
+- `MM` (minutes only, e.g., `30`)
+- `MM:SS` (e.g., `30:00`)
 - `HH:MM:SS` (e.g., `04:00:00`)
-- `<N>h` (e.g., `4h`)
-- `<N>m` (e.g., `30m`)
-- `<N>s` (e.g., `3600s`)
+- `D-HH:MM:SS` (e.g., `1-00:00:00`)
 
 ---
 

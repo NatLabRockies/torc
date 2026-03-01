@@ -104,7 +104,7 @@ torc hpc partitions slurm
 Find partitions that can satisfy specific resource requirements:
 
 ```bash
-torc hpc match --cpus 32 --memory 64g --walltime 2h
+torc hpc match --cpus 32 --memory 64g --walltime 02:00:00
 ```
 
 If no profile is specified, it will use the detected system (including dynamic Slurm).

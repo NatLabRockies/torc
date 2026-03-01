@@ -820,29 +820,15 @@ pub fn parse_memory_mb(s: &str) -> Result<u64, String> {
     }
 }
 
-/// Parse walltime string like "4:00:00", "2-00:00:00", "2h", "30m" into seconds
+/// Parse walltime string in Slurm format into seconds.
+///
+/// Supported formats:
+/// - `MM` (minutes only, e.g., "30")
+/// - `MM:SS` (e.g., "30:00")
+/// - `HH:MM:SS` (e.g., "04:00:00")
+/// - `D-HH:MM:SS` (e.g., "1-00:00:00")
 pub fn parse_walltime_secs(s: &str) -> Result<u64, String> {
     let s = s.trim();
-
-    // Check for units like "2h", "30m", "120s"
-    if s.ends_with('h') && s.len() > 1 {
-        let val = s[..s.len() - 1]
-            .parse::<u64>()
-            .map_err(|_| format!("Invalid hours: {}", s))?;
-        return Ok(val * 3600);
-    }
-    if s.ends_with('m') && s.len() > 1 {
-        let val = s[..s.len() - 1]
-            .parse::<u64>()
-            .map_err(|_| format!("Invalid minutes: {}", s))?;
-        return Ok(val * 60);
-    }
-    if s.ends_with('s') && s.len() > 1 {
-        let val = s[..s.len() - 1]
-            .parse::<u64>()
-            .map_err(|_| format!("Invalid seconds: {}", s))?;
-        return Ok(val);
-    }
 
     // Check for day format: D-HH:MM:SS
     if let Some((days_str, rest)) = s.split_once('-') {
@@ -3763,10 +3749,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_walltime_secs_units() {
-        assert_eq!(parse_walltime_secs("2h").unwrap(), 2 * 3600);
-        assert_eq!(parse_walltime_secs("30m").unwrap(), 30 * 60);
-        assert_eq!(parse_walltime_secs("120s").unwrap(), 120);
+    fn test_parse_walltime_secs_rejects_unit_suffixes() {
+        assert!(parse_walltime_secs("2h").is_err());
+        assert!(parse_walltime_secs("30m").is_err());
+        assert!(parse_walltime_secs("120s").is_err());
         assert!(parse_walltime_secs("1h 30m").is_err());
         assert!(parse_walltime_secs("abc").is_err());
     }
