@@ -3,7 +3,7 @@
 # run_all.sh — Main entry point for the automated Slurm integration test suite.
 #
 # Usage:
-#   ./slurm-tests/run_all.sh --account myproject [--partition debug] [--timeout 45]
+#   ./slurm-tests/run_all.sh --account myproject --host kl1.hsn.cm.kestrel.hpc.nrel.gov [--partition debug] [--timeout 45]
 #
 # This script:
 #   1. Validates prerequisites (torc, torc-server, jq, sbatch)
@@ -22,46 +22,58 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # ── Parse arguments ───────────────────────────────────────────────────────────
 
 ACCOUNT=""
+HOST=""
 PARTITION="debug"
 TIMEOUT_MINUTES=45
 
 usage() {
-    echo "Usage: $0 --account ACCOUNT [--partition PARTITION] [--timeout MINUTES]"
-    echo ""
-    echo "Options:"
-    echo "  --account   ACCOUNT    Slurm account (required)"
-    echo "  --partition PARTITION  Slurm partition (default: debug)"
-    echo "  --timeout   MINUTES    Max wait time in minutes (default: 45)"
-    exit 1
+  echo "Usage: $0 --account ACCOUNT --host HOSTNAME [--partition PARTITION] [--timeout MINUTES]"
+  echo ""
+  echo "Options:"
+  echo "  --account   ACCOUNT    Slurm account (required)"
+  echo "  --host      HOSTNAME   Server hostname reachable from compute nodes (required)"
+  echo "  --partition PARTITION  Slurm partition (default: debug)"
+  echo "  --timeout   MINUTES    Max wait time in minutes (default: 45)"
+  exit 1
 }
 
 while [ $# -gt 0 ]; do
-    case "$1" in
-        --account)
-            ACCOUNT="$2"
-            shift 2
-            ;;
-        --partition)
-            PARTITION="$2"
-            shift 2
-            ;;
-        --timeout)
-            TIMEOUT_MINUTES="$2"
-            shift 2
-            ;;
-        -h|--help)
-            usage
-            ;;
-        *)
-            echo "Unknown option: $1"
-            usage
-            ;;
-    esac
+  case "$1" in
+  --account)
+    ACCOUNT="$2"
+    shift 2
+    ;;
+  --host)
+    HOST="$2"
+    shift 2
+    ;;
+  --partition)
+    PARTITION="$2"
+    shift 2
+    ;;
+  --timeout)
+    TIMEOUT_MINUTES="$2"
+    shift 2
+    ;;
+  -h | --help)
+    usage
+    ;;
+  *)
+    echo "Unknown option: $1"
+    usage
+    ;;
+  esac
 done
 
 if [ -z "$ACCOUNT" ]; then
-    echo "ERROR: --account is required."
-    usage
+  echo "ERROR: --account is required."
+  usage
+fi
+
+if [ -z "$HOST" ]; then
+  echo "ERROR: --host is required."
+  echo "Specify a hostname reachable from compute nodes (e.g., the login node's FQDN)."
+  usage
 fi
 
 TIMEOUT_SECONDS=$((TIMEOUT_MINUTES * 60))
@@ -75,16 +87,16 @@ TORC_SERVER_BIN=$(command -v torc-server 2>/dev/null || echo "")
 
 # Also check in repo target directories
 if [ -z "$TORC_BIN" ] && [ -x "$REPO_ROOT/target/release/torc" ]; then
-    TORC_BIN="$REPO_ROOT/target/release/torc"
+  TORC_BIN="$REPO_ROOT/target/release/torc"
 fi
 if [ -z "$TORC_SERVER_BIN" ] && [ -x "$REPO_ROOT/target/release/torc-server" ]; then
-    TORC_SERVER_BIN="$REPO_ROOT/target/release/torc-server"
+  TORC_SERVER_BIN="$REPO_ROOT/target/release/torc-server"
 fi
 
 # Override torc command to use the found binary
 if [ -n "$TORC_BIN" ]; then
-    torc() { "$TORC_BIN" "$@"; }
-    export -f torc
+  torc() { "$TORC_BIN" "$@"; }
+  export -f torc
 fi
 
 missing=()
@@ -94,9 +106,9 @@ if ! command -v jq &>/dev/null; then missing+=("jq"); fi
 if ! command -v sbatch &>/dev/null; then missing+=("sbatch"); fi
 
 if [ ${#missing[@]} -gt 0 ]; then
-    echo "ERROR: Missing prerequisites: ${missing[*]}"
-    echo "Ensure torc, torc-server, jq, and Slurm tools are on your PATH."
-    exit 1
+  echo "ERROR: Missing prerequisites: ${missing[*]}"
+  echo "Ensure torc, torc-server, jq, and Slurm tools are on your PATH."
+  exit 1
 fi
 
 echo "  torc:        $TORC_BIN"
@@ -104,6 +116,7 @@ echo "  torc-server: $TORC_SERVER_BIN"
 echo "  jq:          $(command -v jq)"
 echo "  sbatch:      $(command -v sbatch)"
 echo "  account:     $ACCOUNT"
+echo "  host:        $HOST"
 echo "  partition:    $PARTITION"
 echo "  timeout:      ${TIMEOUT_MINUTES}m"
 
@@ -118,8 +131,8 @@ source "$SCRIPT_DIR/lib/workflow.sh"
 
 # Source all test scripts
 for test_file in "$SCRIPT_DIR/tests"/test_*.sh; do
-    # shellcheck source=/dev/null
-    source "$test_file"
+  # shellcheck source=/dev/null
+  source "$test_file"
 done
 
 # ── Create run directory ──────────────────────────────────────────────────────
@@ -135,11 +148,11 @@ echo "Run directory: $RUN_DIR"
 
 # shellcheck disable=SC2329  # Used via trap
 cleanup() {
-    echo ""
-    echo "Cleaning up..."
-    cancel_slurm_jobs
-    stop_server
-    echo "Server stopped. Logs at: $RUN_DIR/server.log"
+  echo ""
+  echo "Cleaning up..."
+  cancel_slurm_jobs
+  stop_server
+  echo "Server stopped. Logs at: $RUN_DIR/server.log"
 }
 trap cleanup EXIT
 
@@ -148,7 +161,7 @@ trap cleanup EXIT
 DB_PATH="$RUN_DIR/torc.db"
 PORT=$(find_free_port)
 
-start_server "$DB_PATH" "$PORT"
+start_server "$DB_PATH" "$PORT" "$HOST"
 
 echo ""
 echo "Server running on port $PORT (PID $SERVER_PID)"
@@ -166,13 +179,13 @@ mkdir -p "$PREP_DIR"
 
 # Prepare all workflow specs (substitute placeholders)
 WORKFLOW_NAMES=(
-    single_node_basic
-    multi_node_parallel
-    multi_node_single_worker
-    multi_node_mpi_step
-    oom_detection
-    resource_monitoring
-    failure_recovery
+  single_node_basic
+  multi_node_parallel
+  multi_node_single_worker
+  multi_node_mpi_step
+  oom_detection
+  resource_monitoring
+  failure_recovery
 )
 
 declare -A WF_IDS
@@ -180,34 +193,34 @@ declare -A WF_IDS
 cd "$REPO_ROOT"
 
 for name in "${WORKFLOW_NAMES[@]}"; do
-    echo ""
-    echo "Submitting: $name"
-    local_spec="$PREP_DIR/${name}.yaml"
-    prepare_workflow_spec \
-        "$SCRIPT_DIR/workflows/${name}.yaml" \
-        "$ACCOUNT" \
-        "$PARTITION" \
-        "$local_spec"
+  echo ""
+  echo "Submitting: $name"
+  local_spec="$PREP_DIR/${name}.yaml"
+  prepare_workflow_spec \
+    "$SCRIPT_DIR/workflows/${name}.yaml" \
+    "$ACCOUNT" \
+    "$PARTITION" \
+    "$local_spec"
 
-    wf_id=$(submit_workflow "$local_spec")
-    if [ -z "$wf_id" ]; then
-        echo "FATAL: Failed to submit $name"
-        exit 1
-    fi
-    WF_IDS[$name]=$wf_id
-    echo "  -> workflow_id=$wf_id"
+  wf_id=$(submit_workflow "$local_spec")
+  if [ -z "$wf_id" ]; then
+    echo "FATAL: Failed to submit $name"
+    exit 1
+  fi
+  WF_IDS[$name]=$wf_id
+  echo "  -> workflow_id=$wf_id"
 done
 
 echo ""
 echo "All workflows submitted:"
 for name in "${WORKFLOW_NAMES[@]}"; do
-    echo "  $name: ${WF_IDS[$name]}"
+  echo "  $name: ${WF_IDS[$name]}"
 done
 
 # Save workflow IDs for reference
 for name in "${WORKFLOW_NAMES[@]}"; do
-    echo "${WF_IDS[$name]} $name"
-done > "$RUN_DIR/workflow_ids.txt"
+  echo "${WF_IDS[$name]} $name"
+done >"$RUN_DIR/workflow_ids.txt"
 
 # ── Poll until all complete ───────────────────────────────────────────────────
 
@@ -218,7 +231,7 @@ echo "════════════════════════�
 
 ALL_IDS=()
 for name in "${WORKFLOW_NAMES[@]}"; do
-    ALL_IDS+=("${WF_IDS[$name]}")
+  ALL_IDS+=("${WF_IDS[$name]}")
 done
 
 poll_all_workflows "$TIMEOUT_SECONDS" "${ALL_IDS[@]}" || true
@@ -230,13 +243,13 @@ echo "════════════════════════�
 echo "  RUNNING VERIFICATIONS"
 echo "═══════════════════════════════════════════════════════════════"
 
-run_test_single_node_basic       "${WF_IDS[single_node_basic]}"
-run_test_multi_node_parallel     "${WF_IDS[multi_node_parallel]}"
+run_test_single_node_basic "${WF_IDS[single_node_basic]}"
+run_test_multi_node_parallel "${WF_IDS[multi_node_parallel]}"
 run_test_multi_node_single_worker "${WF_IDS[multi_node_single_worker]}"
-run_test_multi_node_mpi_step     "${WF_IDS[multi_node_mpi_step]}"
-run_test_oom_detection           "${WF_IDS[oom_detection]}"
-run_test_resource_monitoring     "${WF_IDS[resource_monitoring]}"
-run_test_failure_recovery        "${WF_IDS[failure_recovery]}"
+run_test_multi_node_mpi_step "${WF_IDS[multi_node_mpi_step]}"
+run_test_oom_detection "${WF_IDS[oom_detection]}"
+run_test_resource_monitoring "${WF_IDS[resource_monitoring]}"
+run_test_failure_recovery "${WF_IDS[failure_recovery]}"
 
 # ── Report ────────────────────────────────────────────────────────────────────
 
@@ -257,10 +270,10 @@ exit_code=$?
 echo ""
 echo "Final workflow statuses:"
 for name in "${WORKFLOW_NAMES[@]}"; do
-    wf_id="${WF_IDS[$name]}"
-    status_line=$(torc --url "$TORC_API_URL" -f json workflows status "$wf_id" 2>/dev/null \
-        | jq -r 'to_entries | map("\(.key)=\(.value)") | join(", ")' 2>/dev/null || echo "unknown")
-    echo "  $name ($wf_id): $status_line"
+  wf_id="${WF_IDS[$name]}"
+  status_line=$(torc --url "$TORC_API_URL" -f json workflows status "$wf_id" 2>/dev/null |
+    jq -r 'to_entries | map("\(.key)=\(.value)") | join(", ")' 2>/dev/null || echo "unknown")
+  echo "  $name ($wf_id): $status_line"
 done
 
 exit "$exit_code"

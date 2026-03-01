@@ -3,21 +3,23 @@
 #
 # Requires: TORC_BIN, TORC_SERVER_BIN, RUN_DIR to be set before sourcing.
 
-# start_server DB_PATH PORT
+# start_server DB_PATH PORT HOST
 #   Starts the torc server with a SQLite database at DB_PATH on PORT.
+#   HOST is the hostname/IP the server binds to (must be reachable from compute nodes).
 #   Sets SERVER_PID and TORC_API_URL.
 start_server() {
     local db_path="$1"
     local port="$2"
+    local host="$3"
     local log_file="${RUN_DIR}/server.log"
 
-    echo "Starting torc server on port $port with database $db_path..."
+    echo "Starting torc server on ${host}:${port} with database $db_path..."
     DATABASE_URL="sqlite:${db_path}" "$TORC_SERVER_BIN" run \
-        --host 127.0.0.1 -p "$port" \
+        --host "$host" -p "$port" \
         > "$log_file" 2>&1 &
     SERVER_PID=$!
 
-    export TORC_API_URL="http://127.0.0.1:${port}/torc-service/v1"
+    export TORC_API_URL="http://${host}:${port}/torc-service/v1"
 
     # Wait for server to become healthy
     wait_for_server "$port" 30
