@@ -2368,7 +2368,62 @@ struct SacctAllocationStats {
     max_cpu_time_secs: i64,
 }
 
+/// Extract exit code from a sacct JSON entry.
+/// Handles both `{"return_code": 0}` and `{"return_code": {"set": true, "number": 0}}`.
+fn extract_exit_code(entry: &serde_json::Value) -> String {
+    entry
+        .get("exit_code")
+        .and_then(|e| {
+            e.get("return_code").and_then(|r| {
+                // Try {set, infinite, number} wrapper first (Kestrel/HPE Cray format)
+                r.get("number")
+                    .and_then(|n| n.as_i64())
+                    .map(|n| n.to_string())
+                    // Then try direct integer
+                    .or_else(|| r.as_i64().map(|n| n.to_string()))
+            })
+        })
+        .unwrap_or("-".to_string())
+}
+
+/// Extract max RSS (peak memory) from a sacct JSON entry's tres.requested.max array.
+fn extract_max_rss(entry: &serde_json::Value) -> String {
+    entry
+        .get("tres")
+        .and_then(|t| t.get("requested"))
+        .and_then(|r| r.get("max"))
+        .and_then(|m| m.as_array())
+        .and_then(|arr| {
+            arr.iter()
+                .find(|item| item.get("type").and_then(|t| t.as_str()) == Some("mem"))
+        })
+        .and_then(|mem| mem.get("count").and_then(|c| c.as_i64()))
+        .map(|bytes| format_bytes(bytes as u64))
+        .unwrap_or("-".to_string())
+}
+
+/// Extract elapsed seconds from a sacct JSON entry's time.elapsed field.
+fn extract_elapsed_secs(entry: &serde_json::Value) -> Option<i64> {
+    entry
+        .get("time")
+        .and_then(|t| t.get("elapsed"))
+        .and_then(|e| e.as_i64())
+}
+
+/// Extract CPU time in seconds from a sacct JSON entry's time.total.seconds field.
+fn extract_cpu_time_secs(entry: &serde_json::Value) -> Option<i64> {
+    entry
+        .get("time")
+        .and_then(|t| t.get("total"))
+        .and_then(|t| t.get("seconds"))
+        .and_then(|s| s.as_i64())
+}
+
 /// Parse sacct JSON output and extract summary rows plus allocation-level stats.
+///
+/// The sacct `--json` output has one entry per allocation in `jobs`, with individual
+/// srun steps nested in a `steps` array. This function creates a row for each step
+/// so the dashboard shows per-step details rather than just the allocation summary.
 fn parse_sacct_json_to_rows(
     sacct_json: &serde_json::Value,
     slurm_job_id: &str,
@@ -2380,36 +2435,38 @@ fn parse_sacct_json_to_rows(
 
     if let Some(jobs) = sacct_json.get("jobs").and_then(|j| j.as_array()) {
         for job in jobs {
-            // Get job step name
+            // Collect allocation-level stats (walltime, nodes, CPU time)
+            if let Some(secs) = extract_elapsed_secs(job) {
+                max_elapsed_secs = max_elapsed_secs.max(secs);
+            }
+            if let Some(secs) = extract_cpu_time_secs(job) {
+                max_cpu_time_secs = max_cpu_time_secs.max(secs);
+            }
+            let alloc_nodes = job.get("nodes").and_then(|n| n.as_str()).unwrap_or("");
+            if !alloc_nodes.is_empty() {
+                max_num_nodes = max_num_nodes.max(alloc_nodes.split(',').count() as i64);
+            }
+
+            // Parse nested steps if present; otherwise fall back to allocation-level row
+            let steps = job.get("steps").and_then(|s| s.as_array());
+            if let Some(steps) = steps
+                && !steps.is_empty()
+            {
+                for step in steps {
+                    rows.push(parse_step_to_row(step, slurm_job_id));
+                }
+                continue;
+            }
+
+            // No steps array: create a row from the allocation-level entry
             let job_step = job
                 .get("name")
                 .and_then(|n| n.as_str())
                 .unwrap_or("")
                 .to_string();
-
-            // Get state - handles various sacct JSON formats
             let state = extract_state_from_job(job);
-
-            // Get exit code - handle different sacct JSON formats
-            let exit_code = job
-                .get("exit_code")
-                .and_then(|e| {
-                    // Could be {"status": "SUCCESS", "return_code": 0} or just a number
-                    if let Some(obj) = e.as_object() {
-                        obj.get("return_code")
-                            .and_then(|r| r.as_i64())
-                            .map(|r| r.to_string())
-                    } else {
-                        e.as_i64().map(|r| r.to_string())
-                    }
-                })
-                .unwrap_or("-".to_string());
-
-            // Get elapsed time - could be in different formats
-            let elapsed_secs = job
-                .get("time")
-                .and_then(|t| t.get("elapsed"))
-                .and_then(|e| e.as_i64());
+            let exit_code = extract_exit_code(job);
+            let elapsed_secs = extract_elapsed_secs(job);
             let elapsed = elapsed_secs
                 .map(format_duration_seconds)
                 .or_else(|| {
@@ -2418,64 +2475,16 @@ fn parse_sacct_json_to_rows(
                         .map(|s| s.to_string())
                 })
                 .unwrap_or("-".to_string());
-            if let Some(secs) = elapsed_secs {
-                max_elapsed_secs = max_elapsed_secs.max(secs);
-            }
-
-            // Get max RSS - handle different formats
-            let max_rss = job
-                .get("tres")
-                .and_then(|t| t.get("requested"))
-                .and_then(|r| r.get("max"))
-                .and_then(|m| m.as_array())
-                .and_then(|arr| {
-                    arr.iter()
-                        .find(|item| item.get("type").and_then(|t| t.as_str()) == Some("mem"))
-                })
-                .and_then(|mem| mem.get("count").and_then(|c| c.as_i64()))
-                .map(|bytes| format_bytes(bytes as u64))
-                .or_else(|| {
-                    job.get("steps")
-                        .and_then(|s| s.as_array())
-                        .and_then(|arr| arr.first())
-                        .and_then(|step| step.get("tres").and_then(|t| t.get("requested")))
-                        .and_then(|r| r.get("max"))
-                        .and_then(|m| m.as_array())
-                        .and_then(|arr| {
-                            arr.iter().find(|item| {
-                                item.get("type").and_then(|t| t.as_str()) == Some("mem")
-                            })
-                        })
-                        .and_then(|mem| mem.get("count").and_then(|c| c.as_i64()))
-                        .map(|bytes| format_bytes(bytes as u64))
-                })
-                .unwrap_or("-".to_string());
-
-            // Get CPU time
-            let cpu_time_secs = job
-                .get("time")
-                .and_then(|t| t.get("total"))
-                .and_then(|t| t.get("seconds"))
-                .and_then(|s| s.as_i64());
+            let max_rss = extract_max_rss(job);
+            let cpu_time_secs = extract_cpu_time_secs(job);
             let cpu_time = cpu_time_secs
                 .map(format_duration_seconds)
                 .unwrap_or("-".to_string());
-            if let Some(secs) = cpu_time_secs {
-                max_cpu_time_secs = max_cpu_time_secs.max(secs);
-            }
-
-            // Get nodes string and count
-            let nodes = job
-                .get("nodes")
-                .and_then(|n| n.as_str())
-                .unwrap_or("-")
-                .to_string();
-            let num_nodes = if nodes != "-" && !nodes.is_empty() {
-                nodes.split(',').count() as i64
+            let nodes = if alloc_nodes.is_empty() {
+                "-".to_string()
             } else {
-                0
+                alloc_nodes.to_string()
             };
-            max_num_nodes = max_num_nodes.max(num_nodes);
 
             rows.push(SacctSummaryRow {
                 slurm_job_id: slurm_job_id.to_string(),
@@ -2498,6 +2507,85 @@ fn parse_sacct_json_to_rows(
             max_cpu_time_secs,
         },
     )
+}
+
+/// Parse a single step entry from the sacct `steps` array into a summary row.
+///
+/// Step entries have slightly different field formats from allocation-level entries:
+/// - `state` is a direct array `["COMPLETED"]` rather than `{"current": [...]}`
+/// - `nodes` is an object `{"range": "node01", "count": 1}` rather than a plain string
+/// - `step.name` holds the step name (e.g., "batch", "wf103_j1160_r1_a1")
+fn parse_step_to_row(step: &serde_json::Value, slurm_job_id: &str) -> SacctSummaryRow {
+    // Step name from step.step.name or step.step.id
+    let step_name = step
+        .get("step")
+        .and_then(|s| {
+            s.get("name")
+                .and_then(|n| n.as_str())
+                .or_else(|| s.get("id").and_then(|i| i.as_str()))
+        })
+        .unwrap_or("")
+        .to_string();
+
+    // State: at step level, state can be a direct array ["COMPLETED"] or {"current": [...]}
+    let state = step
+        .get("state")
+        .and_then(|s| {
+            // Direct array format (HPE Cray/Kestrel)
+            if let Some(arr) = s.as_array() {
+                let states: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
+                if !states.is_empty() {
+                    return Some(states.join(", "));
+                }
+            }
+            // Nested {current: [...]} format
+            if let Some(current) = s.get("current")
+                && let Some(arr) = current.as_array()
+            {
+                let states: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
+                if !states.is_empty() {
+                    return Some(states.join(", "));
+                }
+            }
+            s.as_str().map(|s| s.to_string())
+        })
+        .unwrap_or("-".to_string());
+
+    let exit_code = extract_exit_code(step);
+
+    let elapsed_secs = extract_elapsed_secs(step);
+    let elapsed = elapsed_secs
+        .map(format_duration_seconds)
+        .unwrap_or("-".to_string());
+
+    let max_rss = extract_max_rss(step);
+
+    let cpu_time_secs = extract_cpu_time_secs(step);
+    let cpu_time = cpu_time_secs
+        .map(format_duration_seconds)
+        .unwrap_or("-".to_string());
+
+    // Nodes: at step level, nodes is an object with "range" or "list" field
+    let nodes = step
+        .get("nodes")
+        .and_then(|n| {
+            n.get("range")
+                .and_then(|r| r.as_str())
+                .or_else(|| n.as_str())
+        })
+        .unwrap_or("-")
+        .to_string();
+
+    SacctSummaryRow {
+        slurm_job_id: slurm_job_id.to_string(),
+        job_step: step_name,
+        state,
+        exit_code,
+        elapsed,
+        max_rss,
+        cpu_time,
+        nodes,
+    }
 }
 
 /// Format duration in seconds to human-readable format
