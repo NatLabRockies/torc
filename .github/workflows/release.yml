@@ -234,3 +234,150 @@ jobs:
           tags: |
             ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}
             ${{ steps.meta.outputs.image }}:latest
+
+  deploy-docs:
+    name: Deploy Versioned Docs
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    concurrency:
+      group: "pages"
+      cancel-in-progress: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Setup mdBook
+        uses: peaceiris/actions-mdbook@v2
+        with:
+          mdbook-version: '0.4.52'
+
+      - name: Install mdbook-mermaid
+        run: cargo install mdbook-mermaid@0.16.0
+
+      - name: Build documentation
+        run: |
+          cd docs
+          VERSION="${{ steps.version.outputs.version }}"
+          # Override site-url and edit-url for this release version
+          sed -i "s|site-url = \"/torc/\"|site-url = \"/torc/${VERSION}/\"|" book.toml
+          sed -i "s|edit-url-template = \"https://github.com/NatLabRockies/torc/edit/main/docs/{path}\"|edit-url-template = \"https://github.com/NatLabRockies/torc/tree/${VERSION}/docs/{path}\"|" book.toml
+          mdbook build
+
+      - name: Deploy to gh-pages
+        run: |
+          set -e
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # Configure git
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Clone gh-pages branch (shallow)
+          git clone --depth 1 --branch gh-pages \
+            "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" \
+            gh-pages-deploy 2>/dev/null || {
+            mkdir gh-pages-deploy
+            cd gh-pages-deploy
+            git init
+            git checkout -b gh-pages
+            git remote add origin \
+              "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+            cd ..
+          }
+
+          cd gh-pages-deploy
+
+          # Copy build into versioned subdirectory
+          rm -rf "${VERSION}"
+          cp -r ../docs/book "${VERSION}"
+
+          # Ensure root files exist
+          touch .nojekyll
+          if [ ! -f index.html ]; then
+            cp ../docs/redirect.html index.html
+          fi
+
+          # Update versions.json using inline Python
+          python3 << 'PYEOF'
+          import json, os, re, shutil
+
+          version = os.environ.get("VERSION", "${{ steps.version.outputs.version }}")
+          versions_file = "versions.json"
+
+          # Load existing or create new
+          if os.path.exists(versions_file):
+              with open(versions_file) as f:
+                  data = json.load(f)
+          else:
+              data = {"latest_release": None, "versions": []}
+
+          # Ensure "latest (dev)" entry exists
+          has_latest = any(v["version"] == "latest" for v in data["versions"])
+          if not has_latest:
+              data["versions"].insert(0, {
+                  "version": "latest",
+                  "label": "latest (dev)",
+                  "path": "/torc/latest/"
+              })
+
+          # Remove existing entry for this version if present
+          data["versions"] = [v for v in data["versions"] if v["version"] != version]
+
+          # Add new version entry after "latest"
+          new_entry = {
+              "version": version,
+              "label": version,
+              "path": f"/torc/{version}/"
+          }
+
+          # Find insertion point: after "latest", before other versions
+          insert_idx = 1  # after "latest"
+          data["versions"].insert(insert_idx, new_entry)
+
+          # Sort release versions by semver (descending), keep "latest" first
+          def semver_key(v):
+              if v["version"] == "latest":
+                  return (999, 999, 999)
+              m = re.match(r"v?(\d+)\.(\d+)\.(\d+)", v["version"])
+              if m:
+                  return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+              return (0, 0, 0)
+
+          data["versions"].sort(key=semver_key, reverse=True)
+
+          # Update latest_release
+          data["latest_release"] = version
+
+          # Prune to latest + 5 release versions
+          release_versions = [v for v in data["versions"] if v["version"] != "latest"]
+          if len(release_versions) > 5:
+              pruned = release_versions[5:]
+              data["versions"] = [v for v in data["versions"] if v not in pruned]
+              # Delete directories for pruned versions
+              for p in pruned:
+                  dir_name = p["version"]
+                  if os.path.isdir(dir_name):
+                      shutil.rmtree(dir_name)
+                      print(f"Pruned old version: {dir_name}")
+
+          with open(versions_file, "w") as f:
+              json.dump(data, f, indent=2)
+              f.write("\n")
+
+          print(f"Updated versions.json: {json.dumps(data, indent=2)}")
+          PYEOF
+
+          # Commit and push
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to deploy"
+          else
+            git commit -m "Deploy docs ${VERSION} from ${GITHUB_SHA::8}"
+            git push origin gh-pages
+          fi
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
