@@ -413,14 +413,21 @@ EXAMPLES:
         start_one_worker_per_node: bool,
     },
     /// Parse Slurm log files for known error messages
-    #[command(hide = true)]
+    #[command(
+        hide = true,
+        after_long_help = "\
+EXAMPLES:
+    torc slurm parse-logs ./torc_output --workflow-id 123
+    torc slurm parse-logs ./torc_output --workflow-id 123 --errors-only
+"
+    )]
     ParseLogs {
-        /// Workflow ID
+        /// Path to output directory containing Slurm log files
         #[arg()]
+        path: PathBuf,
+        /// Workflow ID to filter logs (required when directory contains multiple workflows)
+        #[arg(short, long)]
         workflow_id: Option<i64>,
-        /// Output directory containing Slurm log files
-        #[arg(short, long, default_value = "torc_output")]
-        output_dir: PathBuf,
         /// Only show errors (skip warnings)
         #[arg(long, default_value = "false")]
         errors_only: bool,
@@ -1257,18 +1264,34 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
             }
         }
         SlurmCommands::ParseLogs {
+            path,
             workflow_id,
-            output_dir,
             errors_only,
         } => {
-            let user_name = get_env_user_name();
-            let wf_id = workflow_id.unwrap_or_else(|| {
-                select_workflow_interactively(config, &user_name).unwrap_or_else(|e| {
-                    eprintln!("Error selecting workflow: {}", e);
-                    std::process::exit(1);
-                })
-            });
-            parse_slurm_logs(config, wf_id, output_dir, *errors_only, format);
+            if !path.exists() {
+                eprintln!("Error: Path not found: {}", path.display());
+                std::process::exit(1);
+            }
+            let wf_id = match workflow_id {
+                Some(id) => *id,
+                None => {
+                    let detected = super::logs::detect_workflow_ids(path);
+                    if detected.is_empty() {
+                        eprintln!(
+                            "No workflow log files found in directory: {}",
+                            path.display()
+                        );
+                        std::process::exit(1);
+                    }
+                    if detected.len() > 1 {
+                        eprintln!("Multiple workflows detected in directory: {:?}", detected);
+                        eprintln!("Please specify a workflow ID with --workflow-id");
+                        std::process::exit(1);
+                    }
+                    detected[0]
+                }
+            };
+            parse_slurm_logs(config, wf_id, path, *errors_only, format);
         }
         SlurmCommands::Sacct {
             workflow_id,

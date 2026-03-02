@@ -756,7 +756,7 @@ fn analyze_bundle(bundle_path: &Path) {
 }
 
 /// Detect workflow IDs present in a directory by scanning filenames
-fn detect_workflow_ids(dir: &Path) -> Vec<i64> {
+pub(crate) fn detect_workflow_ids(dir: &Path) -> Vec<i64> {
     let wf_pattern = Regex::new(r"wf(\d+)").unwrap();
     let mut workflow_ids: std::collections::HashSet<i64> = std::collections::HashSet::new();
 
