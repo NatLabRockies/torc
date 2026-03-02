@@ -36,7 +36,7 @@ jobs:
     resource_requirements: fast_resources
 
   - name: job_slow
-    command: bash slurm-tests/scripts/slow_work.sh 10
+    command: bash slurm-tests/scripts/slow_work.sh 20
     resource_requirements: slow_resources
 
 slurm_schedulers:
@@ -45,7 +45,7 @@ slurm_schedulers:
     partition: PLACEHOLDER_PARTITION
     mem: 240G
     nodes: 1
-    walltime: "00:08:00"
+    walltime: "00:10:00"
 
 actions:
   - trigger_type: "on_workflow_start"
