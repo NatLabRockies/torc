@@ -1,5 +1,5 @@
 #!/bin/bash
-# shellcheck disable=SC2034  # CURRENT_TEST used by sourced test_framework.sh
+# shellcheck disable=SC2034  # CURRENT_TEST, CURRENT_WF_ID used by sourced test_framework.sh
 # Test 1: single_node_basic
 #
 # Verifies:
@@ -10,6 +10,7 @@
 run_test_single_node_basic() {
     local wf_id="$1"
     CURRENT_TEST="single_node_basic"
+    CURRENT_WF_ID="$wf_id"
     echo ""
     echo "── Test 1: single_node_basic (workflow $wf_id) ──"
 

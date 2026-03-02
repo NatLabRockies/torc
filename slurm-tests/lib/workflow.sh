@@ -178,7 +178,7 @@ prepare_workflow_spec() {
     local partition="$3"
     local output="$4"
 
-    sed -e "s/PLACEHOLDER_ACCOUNT/$account/g" \
-        -e "s/PLACEHOLDER_PARTITION/$partition/g" \
+    sed -e "s|PLACEHOLDER_ACCOUNT|$account|g" \
+        -e "s|PLACEHOLDER_PARTITION|$partition|g" \
         "$template" > "$output"
 }

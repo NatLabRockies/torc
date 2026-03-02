@@ -1,5 +1,5 @@
 #!/bin/bash
-# shellcheck disable=SC2034  # CURRENT_TEST used by sourced test_framework.sh
+# shellcheck disable=SC2034  # CURRENT_TEST, CURRENT_WF_ID used by sourced test_framework.sh
 # Test 6: resource_monitoring
 #
 # Verifies:
@@ -10,6 +10,7 @@
 run_test_resource_monitoring() {
     local wf_id="$1"
     CURRENT_TEST="resource_monitoring"
+    CURRENT_WF_ID="$wf_id"
     echo ""
     echo "── Test 6: resource_monitoring (workflow $wf_id) ──"
 
@@ -31,4 +32,7 @@ run_test_resource_monitoring() {
     local result_count
     result_count=$(echo "$results" | jq 'length')
     assert_ge "$result_count" "2" "at least 2 results in reports"
+
+    # Check time-series resource metrics DB exists and has data
+    assert_resource_metrics_db_has_data "$RUN_DIR"
 }

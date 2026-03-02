@@ -1,0 +1,47 @@
+# OOM Auto-Recovery Test Workflow
+#
+# This workflow tests the automatic OOM recovery feature of `torc watch --recover`.
+#
+# Setup:
+# - 10 work jobs that each request 10GB memory and 10 CPUs
+# - Each job runs a script that attempts to allocate 30GB of memory
+# - This will cause OOM failures since the jobs only request 10GB
+#
+# Test procedure:
+# 1. Submit the workflow: torc submit-slurm --account <account> workflow.yaml
+# 2. Watch with auto-recover: torc watch <workflow_id> --recover
+# 3. Jobs will fail with OOM, watcher increases memory (10GB -> 15GB -> 22GB -> 33GB)
+# 4. Eventually jobs get enough memory and succeed
+#
+# Note: The debug partition typically has nodes with 256GB memory, so this should work.
+
+name: oom_auto_recovery_test
+description: Test workflow for automatic OOM recovery
+
+resource_requirements:
+  - name: work_resources
+    num_cpus: 10
+    memory: 10g
+    runtime: PT30M
+
+jobs:
+  - name: work_{i}
+    command: bash slurm-tests/scripts/allocate_memory.sh 30
+    resource_requirements: work_resources
+    parameters:
+      i: 1:10
+
+slurm_schedulers:
+  - name: debug
+    partition: debug
+    account: PLACEHOLDER_ACCOUNT
+    mem: 240G
+    nodes: 1
+    walltime: "01:00:00"
+
+actions:
+  - trigger_type: "on_workflow_start"
+    action_type: "schedule_nodes"
+    scheduler: "debug"
+    scheduler_type: "slurm"
+    num_allocations: 1

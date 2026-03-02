@@ -1,5 +1,5 @@
 #!/bin/bash
-# shellcheck disable=SC2034  # CURRENT_TEST used by sourced test_framework.sh
+# shellcheck disable=SC2034  # CURRENT_TEST, CURRENT_WF_ID used by sourced test_framework.sh
 # Test 4: multi_node_mpi_step
 #
 # Verifies:
@@ -10,6 +10,7 @@
 run_test_multi_node_mpi_step() {
     local wf_id="$1"
     CURRENT_TEST="multi_node_mpi_step"
+    CURRENT_WF_ID="$wf_id"
     echo ""
     echo "── Test 4: multi_node_mpi_step (workflow $wf_id) ──"
 

@@ -60,6 +60,19 @@ stop_server() {
     fi
 }
 
+# is_server_alive
+#   Returns 0 if the server process is still running and responsive, 1 otherwise.
+is_server_alive() {
+    if [ -z "${SERVER_PID:-}" ]; then
+        return 1
+    fi
+    if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+        return 1
+    fi
+    # Also verify the server is responsive
+    "$TORC_BIN" ping > /dev/null 2>&1
+}
+
 # find_free_port
 #   Prints a free TCP port. Falls back to a random port in 10000-60000.
 find_free_port() {

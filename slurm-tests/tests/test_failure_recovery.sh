@@ -1,5 +1,5 @@
 #!/bin/bash
-# shellcheck disable=SC2034  # CURRENT_TEST used by sourced test_framework.sh
+# shellcheck disable=SC2034  # CURRENT_TEST, CURRENT_WF_ID used by sourced test_framework.sh
 # Test 7: failure_recovery
 #
 # Verifies:
@@ -10,6 +10,7 @@
 run_test_failure_recovery() {
     local wf_id="$1"
     CURRENT_TEST="failure_recovery"
+    CURRENT_WF_ID="$wf_id"
     echo ""
     echo "── Test 7: failure_recovery (workflow $wf_id) ──"
 

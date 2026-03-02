@@ -11,6 +11,7 @@ TESTS_PASSED=0
 TESTS_FAILED=0
 TESTS_SKIPPED=0
 CURRENT_TEST=""
+CURRENT_WF_ID=""
 
 # Accumulated failures for the final report
 declare -a FAILURE_MESSAGES=()
@@ -27,6 +28,30 @@ _fail() {
     local msg="$1"
     echo "  FAIL: $msg"
     FAILURE_MESSAGES+=("[$CURRENT_TEST] $msg")
+    _dump_debug_info
+}
+
+# _dump_debug_info
+#   Dumps workflow debug info on assertion failure. Output goes to both console
+#   (truncated) and a debug file in $RUN_DIR.
+_dump_debug_info() {
+    if [ -z "${CURRENT_WF_ID:-}" ] || [ -z "${RUN_DIR:-}" ]; then
+        return 0
+    fi
+    local debug_file="$RUN_DIR/debug_${CURRENT_TEST}_wf${CURRENT_WF_ID}.txt"
+    {
+        echo "=== Debug info for $CURRENT_TEST (workflow $CURRENT_WF_ID) ==="
+        echo ""
+        echo "--- Workflow Summary ---"
+        torc --url "$TORC_API_URL" reports summary "$CURRENT_WF_ID" 2>&1 || true
+        echo ""
+        echo "--- Jobs ---"
+        torc --url "$TORC_API_URL" jobs list "$CURRENT_WF_ID" 2>&1 || true
+        echo ""
+        echo "--- Results ---"
+        torc --url "$TORC_API_URL" -f json reports results "$CURRENT_WF_ID" 2>&1 || true
+    } > "$debug_file" 2>&1
+    echo "    (debug info saved to $debug_file)"
 }
 
 _skip() {
@@ -179,7 +204,7 @@ assert_return_code() {
     job_id=$(torc --url "$TORC_API_URL" -f json jobs list "$wf_id" 2>/dev/null \
         | jq -r ".jobs[] | select(.name == \"$job_name\") | .id")
     rc=$(torc --url "$TORC_API_URL" -f json reports results "$wf_id" 2>/dev/null \
-        | jq -r ".results[] | select(.job_id == $job_id) | .return_code" | tail -1)
+        | jq -r "[.results[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .return_code")
     assert_eq "$rc" "$expected_code" "job '$job_name' return code is $expected_code"
 }
 
@@ -206,6 +231,32 @@ assert_logs_analyze_detect_oom() {
         _pass "logs analyze detected OOM for workflow $wf_id"
     else
         _fail "logs analyze did NOT detect OOM for workflow $wf_id"
+    fi
+}
+
+# assert_parse_logs_detect_timeout WF_ID OUTPUT_DIR
+#   Runs `torc slurm parse-logs` and checks for timeout-related output.
+assert_parse_logs_detect_timeout() {
+    local wf_id="$1" output_dir="$2"
+    local parse_output
+    parse_output=$(torc --url "$TORC_API_URL" slurm parse-logs "$wf_id" --output-dir "$output_dir" 2>&1) || true
+    if echo "$parse_output" | grep -qiE "timeout|time.limit|walltime|exceeded.*time|killed.*time"; then
+        _pass "parse-logs detected timeout for workflow $wf_id"
+    else
+        _fail "parse-logs did NOT detect timeout for workflow $wf_id"
+    fi
+}
+
+# assert_logs_analyze_detect_timeout WF_ID OUTPUT_DIR
+#   Runs `torc logs analyze` and checks for timeout-related output.
+assert_logs_analyze_detect_timeout() {
+    local wf_id="$1" output_dir="$2"
+    local analyze_output
+    analyze_output=$(torc --url "$TORC_API_URL" logs analyze "$wf_id" --output-dir "$output_dir" 2>&1) || true
+    if echo "$analyze_output" | grep -qiE "timeout|time.limit|walltime|exceeded.*time|killed.*time"; then
+        _pass "logs analyze detected timeout for workflow $wf_id"
+    else
+        _fail "logs analyze did NOT detect timeout for workflow $wf_id"
     fi
 }
 
@@ -251,7 +302,7 @@ assert_peak_cpu_nonzero() {
     job_id=$(torc --url "$TORC_API_URL" -f json jobs list "$wf_id" 2>/dev/null \
         | jq -r ".jobs[] | select(.name == \"$job_name\") | .id")
     peak_cpu=$(torc --url "$TORC_API_URL" -f json reports results "$wf_id" 2>/dev/null \
-        | jq -r ".results[] | select(.job_id == $job_id) | .peak_cpu_percent // 0" | tail -1)
+        | jq -r "[.results[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .peak_cpu_percent // 0")
     assert_gt_float "${peak_cpu:-0}" "0" "job '$job_name' peak_cpu_percent > 0 (got $peak_cpu)"
 }
 
@@ -262,7 +313,7 @@ assert_peak_memory_nonzero() {
     job_id=$(torc --url "$TORC_API_URL" -f json jobs list "$wf_id" 2>/dev/null \
         | jq -r ".jobs[] | select(.name == \"$job_name\") | .id")
     peak_mem=$(torc --url "$TORC_API_URL" -f json reports results "$wf_id" 2>/dev/null \
-        | jq -r ".results[] | select(.job_id == $job_id) | .peak_memory_bytes // 0" | tail -1)
+        | jq -r "[.results[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .peak_memory_bytes // 0")
     assert_gt "${peak_mem:-0}" "0" "job '$job_name' peak_memory_bytes > 0 (got $peak_mem)"
 }
 
@@ -276,6 +327,39 @@ assert_resource_utilization_flags_violation() {
     local violation_count
     violation_count=$(echo "$output" | jq '.resource_violations_count // .failed_jobs_count // 0' 2>/dev/null || echo 0)
     assert_gt "$violation_count" "0" "check-resource-utilization flags violations for workflow $wf_id"
+}
+
+# assert_slurm_stats_available WF_ID
+#   Checks that `torc slurm stats` returns non-empty data.
+assert_slurm_stats_available() {
+    local wf_id="$1"
+    local stats_output
+    stats_output=$(torc --url "$TORC_API_URL" -f json slurm stats "$wf_id" 2>&1) || true
+    if [ -n "$stats_output" ] && [ "$stats_output" != "null" ] && [ "$stats_output" != "{}" ]; then
+        _pass "slurm stats available for workflow $wf_id"
+    else
+        _fail "slurm stats not available for workflow $wf_id"
+    fi
+}
+
+# assert_resource_metrics_db_has_data OUTPUT_DIR
+#   Checks that a resource_metrics_*.db file exists and has sample data.
+assert_resource_metrics_db_has_data() {
+    local output_dir="$1"
+    local db_file
+    db_file=$(find "$output_dir" -name "resource_metrics_*.db" -type f 2>/dev/null | head -1)
+    if [ -z "$db_file" ]; then
+        _fail "no resource_metrics_*.db file found in $output_dir"
+        return
+    fi
+    _pass "resource_metrics DB exists: $db_file"
+    if command -v sqlite3 &>/dev/null; then
+        local count
+        count=$(sqlite3 "$db_file" "SELECT COUNT(*) FROM resource_samples;" 2>/dev/null || echo 0)
+        assert_gt "$count" "0" "resource_metrics DB has $count sample rows"
+    else
+        _skip "sqlite3 not available, cannot verify resource_metrics DB content"
+    fi
 }
 
 # ── Summary ───────────────────────────────────────────────────────────────────

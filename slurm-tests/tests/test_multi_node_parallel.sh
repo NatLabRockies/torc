@@ -1,5 +1,5 @@
 #!/bin/bash
-# shellcheck disable=SC2034  # CURRENT_TEST used by sourced test_framework.sh
+# shellcheck disable=SC2034  # CURRENT_TEST, CURRENT_WF_ID used by sourced test_framework.sh
 # Test 2: multi_node_parallel
 #
 # Verifies:
@@ -10,6 +10,7 @@
 run_test_multi_node_parallel() {
     local wf_id="$1"
     CURRENT_TEST="multi_node_parallel"
+    CURRENT_WF_ID="$wf_id"
     echo ""
     echo "── Test 2: multi_node_parallel (workflow $wf_id) ──"
 
@@ -32,4 +33,7 @@ run_test_multi_node_parallel() {
     local sacct_output
     sacct_output=$(torc --url "$TORC_API_URL" slurm sacct "$wf_id" 2>&1) || true
     assert_ne "$sacct_output" "" "sacct output is not empty"
+
+    # Check slurm stats are available
+    assert_slurm_stats_available "$wf_id"
 }

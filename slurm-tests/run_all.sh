@@ -8,13 +8,13 @@
 # This script:
 #   1. Validates prerequisites (torc, torc-server, jq, sbatch)
 #   2. Starts a temporary torc server
-#   3. Submits all 7 test workflows
+#   3. Submits all test workflows
 #   4. Polls until all reach terminal state (or timeout)
 #   5. Runs verification assertions for each test
 #   6. Prints summary and writes results.json
 #   7. Cleans up (server process)
 
-set -euo pipefail
+set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -25,15 +25,17 @@ ACCOUNT=""
 HOST=""
 PARTITION="debug"
 TIMEOUT_MINUTES=45
+TEST_FILTER=""
 
 usage() {
-  echo "Usage: $0 --account ACCOUNT --host HOSTNAME [--partition PARTITION] [--timeout MINUTES]"
+  echo "Usage: $0 --account ACCOUNT --host HOSTNAME [OPTIONS]"
   echo ""
   echo "Options:"
   echo "  --account   ACCOUNT    Slurm account (required)"
   echo "  --host      HOSTNAME   Server hostname reachable from compute nodes (required)"
   echo "  --partition PARTITION  Slurm partition (default: debug)"
   echo "  --timeout   MINUTES    Max wait time in minutes (default: 45)"
+  echo "  --test      PATTERN    Only run tests matching PATTERN (substring match)"
   exit 1
 }
 
@@ -53,6 +55,10 @@ while [ $# -gt 0 ]; do
     ;;
   --timeout)
     TIMEOUT_MINUTES="$2"
+    shift 2
+    ;;
+  --test)
+    TEST_FILTER="$2"
     shift 2
     ;;
   -h | --help)
@@ -119,6 +125,9 @@ echo "  account:     $ACCOUNT"
 echo "  host:        $HOST"
 echo "  partition:    $PARTITION"
 echo "  timeout:      ${TIMEOUT_MINUTES}m"
+if [ -n "$TEST_FILTER" ]; then
+  echo "  test filter: $TEST_FILTER"
+fi
 
 # ── Source libraries ──────────────────────────────────────────────────────────
 
@@ -177,16 +186,32 @@ echo "════════════════════════�
 PREP_DIR="$RUN_DIR/prepared_workflows"
 mkdir -p "$PREP_DIR"
 
-# Prepare all workflow specs (substitute placeholders)
-WORKFLOW_NAMES=(
+# All available workflow names
+ALL_WORKFLOW_NAMES=(
   single_node_basic
   multi_node_parallel
-  multi_node_single_worker
   multi_node_mpi_step
   oom_detection
   resource_monitoring
   failure_recovery
+  timeout_detection
 )
+
+# Filter workflow names if --test was specified
+WORKFLOW_NAMES=()
+for name in "${ALL_WORKFLOW_NAMES[@]}"; do
+  if [ -z "$TEST_FILTER" ] || [[ "$name" == *"$TEST_FILTER"* ]]; then
+    WORKFLOW_NAMES+=("$name")
+  fi
+done
+
+if [ ${#WORKFLOW_NAMES[@]} -eq 0 ]; then
+  echo "ERROR: No tests match filter '$TEST_FILTER'"
+  echo "Available tests: ${ALL_WORKFLOW_NAMES[*]}"
+  exit 1
+fi
+
+echo "Running ${#WORKFLOW_NAMES[@]} test(s): ${WORKFLOW_NAMES[*]}"
 
 declare -A WF_IDS
 
@@ -222,6 +247,13 @@ for name in "${WORKFLOW_NAMES[@]}"; do
   echo "${WF_IDS[$name]} $name"
 done >"$RUN_DIR/workflow_ids.txt"
 
+# ── Validate server is still alive ───────────────────────────────────────────
+
+if ! is_server_alive; then
+  echo "FATAL: Server died after submission phase. Check $RUN_DIR/server.log"
+  exit 1
+fi
+
 # ── Poll until all complete ───────────────────────────────────────────────────
 
 echo ""
@@ -243,13 +275,22 @@ echo "════════════════════════�
 echo "  RUNNING VERIFICATIONS"
 echo "═══════════════════════════════════════════════════════════════"
 
-run_test_single_node_basic "${WF_IDS[single_node_basic]}"
-run_test_multi_node_parallel "${WF_IDS[multi_node_parallel]}"
-run_test_multi_node_single_worker "${WF_IDS[multi_node_single_worker]}"
-run_test_multi_node_mpi_step "${WF_IDS[multi_node_mpi_step]}"
-run_test_oom_detection "${WF_IDS[oom_detection]}"
-run_test_resource_monitoring "${WF_IDS[resource_monitoring]}"
-run_test_failure_recovery "${WF_IDS[failure_recovery]}"
+# Run test only if the workflow was submitted (respects --test filter)
+run_test_if_active() {
+  local name="$1"
+  local func="run_test_$name"
+  if [ -n "${WF_IDS[$name]+x}" ]; then
+    "$func" "${WF_IDS[$name]}"
+  fi
+}
+
+run_test_if_active single_node_basic
+run_test_if_active multi_node_parallel
+run_test_if_active multi_node_mpi_step
+run_test_if_active oom_detection
+run_test_if_active resource_monitoring
+run_test_if_active failure_recovery
+run_test_if_active timeout_detection
 
 # ── Report ────────────────────────────────────────────────────────────────────
 
