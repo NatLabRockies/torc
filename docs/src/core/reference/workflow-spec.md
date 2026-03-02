@@ -25,6 +25,7 @@ The top-level container for a complete workflow definition.
 | `resource_monitor`                               | [ResourceMonitorConfig](#resourcemonitorconfig)         | none         | Resource monitoring configuration                                         |
 | `actions`                                        | [[WorkflowActionSpec](#workflowactionspec)]             | none         | Actions to execute based on workflow/job state transitions                |
 | `use_pending_failed`                             | boolean                                                 | false        | Use PendingFailed status for failed jobs (enables AI-assisted recovery)   |
+| `limit_resources`                                | boolean                                                 | true         | Enforce cgroup limits via srun `--mem`/`--cpus-per-task` in Slurm         |
 | `compute_node_expiration_buffer_seconds`         | integer                                                 | none         | Shut down compute nodes this many seconds before expiration               |
 | `compute_node_wait_for_new_jobs_seconds`         | integer                                                 | none         | Compute nodes wait for new jobs this long before exiting                  |
 | `compute_node_ignore_workflow_completion`        | boolean                                                 | false        | Compute nodes hold allocations even after workflow completes              |

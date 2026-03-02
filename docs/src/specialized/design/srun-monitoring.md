@@ -127,6 +127,24 @@ killed by the OOM killer (exit code 137), and CPU usage is throttled.
 
 Without `limit_resources`, Slurm still creates per-step accounting but does not enforce hard limits.
 
+### Memory vs Runtime Enforcement
+
+Memory and runtime are handled differently because they carry different risks:
+
+- **Memory (`--mem`)** enforces a **per-job cgroup limit** based on the job's own resource
+  requirements. A job that exceeds its declared memory is killed by the OOM killer (exit code 137).
+  This strict enforcement is necessary because a runaway memory consumer can destabilize the entire
+  node by starving other concurrent jobs of memory.
+
+- **Runtime (`--time`)** is **not passed** to srun. A per-job time limit is unnecessary because
+  Slurm already sends SIGTERM to the job runner before the allocation's walltime expires (typically
+  60-120 seconds before). The job runner catches this signal and gracefully terminates all running
+  jobs. Since srun steps cannot outlive their parent allocation, there is no scenario where a
+  per-step `--time` would trigger before the allocation-level shutdown. Additionally, unlike excess
+  memory usage, a long-running job does not endanger other jobs — it simply runs longer than
+  expected. Killing a job at 95% completion because it slightly exceeded its estimated runtime would
+  waste all the compute invested.
+
 ## sstat Monitoring
 
 **Module:** `src/client/resource_monitor.rs`
