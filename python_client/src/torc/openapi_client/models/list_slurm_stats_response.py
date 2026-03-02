@@ -27,7 +27,7 @@ class ListSlurmStatsResponse(BaseModel):
     """
     Response containing a list of Slurm accounting stats records.
     """ # noqa: E501
-    items: Optional[List[SlurmStatsModel]] = None
+    items: List[SlurmStatsModel]
     offset: StrictInt
     max_limit: StrictInt
     count: StrictInt
@@ -101,3 +101,5 @@ class ListSlurmStatsResponse(BaseModel):
             "has_more": obj.get("has_more")
         })
         return _obj
+
+
