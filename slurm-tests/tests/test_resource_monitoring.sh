@@ -34,5 +34,5 @@ run_test_resource_monitoring() {
     assert_ge "$result_count" "2" "at least 2 results in reports"
 
     # Check time-series resource metrics DB exists and has data
-    assert_resource_metrics_db_has_data "$RUN_DIR"
+    assert_resource_metrics_db_has_data "$REPO_ROOT/torc_output"
 }

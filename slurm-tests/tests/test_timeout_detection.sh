@@ -41,10 +41,10 @@ run_test_timeout_detection() {
     assert_ne "${slow_rc:-0}" "0" "job_slow has non-zero return code (got $slow_rc)"
 
     # parse-logs should detect timeout
-    assert_parse_logs_detect_timeout "$wf_id" "$RUN_DIR"
+    assert_parse_logs_detect_timeout "$wf_id" "$REPO_ROOT/torc_output"
 
     # logs analyze should detect timeout
-    assert_logs_analyze_detect_timeout "$wf_id" "$RUN_DIR"
+    assert_logs_analyze_detect_timeout "$wf_id" "$REPO_ROOT/torc_output"
 
     # sacct should show TIMEOUT or FAILED state
     local sacct_output

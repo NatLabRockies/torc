@@ -41,10 +41,10 @@ run_test_oom_detection() {
     assert_eq "${oom_rc:-0}" "137" "oom_job return code is 137 (SIGKILL)"
 
     # parse-logs should detect OOM
-    assert_parse_logs_detect_oom "$wf_id" "$RUN_DIR"
+    assert_parse_logs_detect_oom "$wf_id" "$REPO_ROOT/torc_output"
 
     # logs analyze should detect OOM
-    assert_logs_analyze_detect_oom "$wf_id" "$RUN_DIR"
+    assert_logs_analyze_detect_oom "$wf_id" "$REPO_ROOT/torc_output"
 
     # sacct should show OOM state
     assert_sacct_job_state "$wf_id" "OUT_OF_MEMORY"

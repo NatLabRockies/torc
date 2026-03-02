@@ -279,6 +279,8 @@ if [ -n "${WF_IDS[cancel_workflow]+x}" ]; then
     echo "  WARNING: Timed out waiting for cancel_workflow jobs to start running."
     echo '{"status": "error", "message": "jobs never reached running status"}' \
       > "$RUN_DIR/cancel_workflow_output.json"
+    # Cancel the workflow so it doesn't block polling
+    torc --url "$TORC_API_URL" workflows cancel "${WF_IDS[cancel_workflow]}" > /dev/null 2>&1 || true
   fi
 fi
 
@@ -309,6 +311,8 @@ if [ -n "${WF_IDS[sync_status]+x}" ]; then
     echo "  WARNING: Timed out waiting for sync_status jobs to start running."
     echo '{"slurm_jobs_failed": 0, "error": "jobs never reached running status"}' \
       > "$RUN_DIR/sync_status_output.json"
+    # Cancel the workflow so it doesn't block polling
+    torc --url "$TORC_API_URL" workflows cancel "${WF_IDS[sync_status]}" > /dev/null 2>&1 || true
   fi
 fi
 

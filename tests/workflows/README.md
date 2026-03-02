@@ -9,11 +9,11 @@ Slurm-focused integration tests have been moved to `slurm-tests/` at the reposit
 with:
 
 ```bash
-./slurm-tests/run_all.sh --account myproject [--partition debug] [--timeout 45]
+./slurm-tests/run_all.sh --account myproject --host <login-node-fqdn> [--partition debug] [--timeout 45]
 ```
 
-This covers: single-node basic, multi-node parallel, multi-node single worker, multi-node MPI step,
-OOM detection, resource monitoring, and failure recovery tests.
+This covers: single-node basic, multi-node parallel, multi-node MPI step, OOM detection, resource
+monitoring, failure recovery, timeout detection, cancel workflow, and sync-status tests.
 
 ---
 
