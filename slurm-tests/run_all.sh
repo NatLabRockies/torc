@@ -193,15 +193,17 @@ PREP_DIR="$RUN_DIR/prepared_workflows"
 mkdir -p "$PREP_DIR"
 
 # All available workflow names
+# cancel_workflow is placed early so it gets a Slurm allocation before the pre-poll timeout.
 ALL_WORKFLOW_NAMES=(
   single_node_basic
+  no_srun_basic
+  cancel_workflow
   multi_node_parallel
   multi_node_mpi_step
   oom_detection
   resource_monitoring
   failure_recovery
   timeout_detection
-  cancel_workflow
   sync_status
 )
 
@@ -347,6 +349,7 @@ run_test_if_active() {
 }
 
 run_test_if_active single_node_basic
+run_test_if_active no_srun_basic
 run_test_if_active multi_node_parallel
 run_test_if_active multi_node_mpi_step
 run_test_if_active oom_detection

@@ -38,7 +38,12 @@ run_test_oom_detection() {
     oom_rc=$(torc --url "$TORC_API_URL" -f json reports results "$wf_id" 2>/dev/null \
         | jq -r "[.results[] | select(.job_id == $oom_id)] | sort_by(.attempt_id) | last | .return_code")
     assert_ne "${oom_rc:-0}" "0" "oom_job has non-zero return code (got $oom_rc)"
-    assert_eq "${oom_rc:-0}" "137" "oom_job return code is 137 (SIGKILL)"
+    # srun may report exit code 1 for OOM kills instead of 137 (SIGKILL)
+    if [ "${oom_rc:-0}" = "137" ] || [ "${oom_rc:-0}" = "1" ]; then
+        _pass "oom_job return code indicates OOM ($oom_rc)"
+    else
+        _fail "oom_job return code expected 1 or 137, got '${oom_rc:-0}'"
+    fi
 
     # parse-logs should detect OOM
     assert_parse_logs_detect_oom "$wf_id" "$REPO_ROOT/torc_output"

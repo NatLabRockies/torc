@@ -157,17 +157,35 @@ get_job_id() {
 }
 
 # get_job_stdout WF_ID JOB_ID
-#   Returns the stdout of a job.
+#   Returns the stdout of a job by reading the log file from torc_output/job_stdio/.
+#   Uses `torc reports results` to determine run_id and attempt_id for the file path.
 get_job_stdout() {
     local wf_id="$1" job_id="$2"
-    torc --url "$TORC_API_URL" logs stdout "$wf_id" "$job_id" 2>/dev/null || true
+    local result run_id attempt_id stdout_path
+    result=$(torc --url "$TORC_API_URL" -f json reports results "$wf_id" 2>/dev/null) || return 0
+    run_id=$(echo "$result" | jq -r "[.results[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .run_id")
+    attempt_id=$(echo "$result" | jq -r "[.results[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .attempt_id // 1")
+    if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
+        return 0
+    fi
+    stdout_path="${REPO_ROOT}/torc_output/job_stdio/job_wf${wf_id}_j${job_id}_r${run_id}_a${attempt_id}.o"
+    cat "$stdout_path" 2>/dev/null || true
 }
 
 # get_job_stderr WF_ID JOB_ID
-#   Returns the stderr of a job.
+#   Returns the stderr of a job by reading the log file from torc_output/job_stdio/.
+#   Uses `torc reports results` to determine run_id and attempt_id for the file path.
 get_job_stderr() {
     local wf_id="$1" job_id="$2"
-    torc --url "$TORC_API_URL" logs stderr "$wf_id" "$job_id" 2>/dev/null || true
+    local result run_id attempt_id stderr_path
+    result=$(torc --url "$TORC_API_URL" -f json reports results "$wf_id" 2>/dev/null) || return 0
+    run_id=$(echo "$result" | jq -r "[.results[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .run_id")
+    attempt_id=$(echo "$result" | jq -r "[.results[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .attempt_id // 1")
+    if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
+        return 0
+    fi
+    stderr_path="${REPO_ROOT}/torc_output/job_stdio/job_wf${wf_id}_j${job_id}_r${run_id}_a${attempt_id}.e"
+    cat "$stderr_path" 2>/dev/null || true
 }
 
 # wait_for_job_status WF_ID STATUS [TIMEOUT_SECONDS]

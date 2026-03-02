@@ -4,7 +4,6 @@ use rusqlite::{Connection, Result as SqliteResult};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender, channel};
-use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 use sysinfo::{
@@ -129,6 +128,8 @@ enum MonitorCommand {
     },
     StopMonitoring {
         pid: u32,
+        /// Channel to send back the collected metrics for this PID.
+        response_tx: Sender<Option<JobMetrics>>,
     },
     Shutdown,
 }
@@ -146,7 +147,6 @@ struct MonitoredJob {
 /// Resource monitor manages a single background thread that monitors all running jobs
 pub struct ResourceMonitor {
     tx: Sender<MonitorCommand>,
-    metrics: Arc<Mutex<HashMap<u32, JobMetrics>>>,
     handle: Option<JoinHandle<()>>,
     config: ResourceMonitorConfig,
 }
@@ -159,21 +159,16 @@ impl ResourceMonitor {
         unique_label: String,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let (tx, rx) = channel();
-        let metrics = Arc::new(Mutex::new(HashMap::new()));
-        let metrics_clone = Arc::clone(&metrics);
         let config_clone = config.clone();
 
         let handle = thread::spawn(move || {
-            if let Err(e) =
-                run_monitoring_loop(config_clone, output_dir, unique_label, rx, metrics_clone)
-            {
+            if let Err(e) = run_monitoring_loop(config_clone, output_dir, unique_label, rx) {
                 error!("Resource monitoring thread failed: {}", e);
             }
         });
 
         Ok(ResourceMonitor {
             tx,
-            metrics,
             handle: Some(handle),
             config,
         })
@@ -235,22 +230,30 @@ impl ResourceMonitor {
         Ok(())
     }
 
-    /// Stop monitoring a process and return its metrics
+    /// Stop monitoring a process and return its metrics.
+    ///
+    /// Sends a stop command to the monitoring thread and waits for it to return
+    /// the collected metrics via a response channel, with a 5-second timeout.
     pub fn stop_monitoring(&self, pid: u32) -> Option<JobMetrics> {
-        if let Err(e) = self.tx.send(MonitorCommand::StopMonitoring { pid }) {
+        let (response_tx, response_rx) = channel();
+        if let Err(e) = self
+            .tx
+            .send(MonitorCommand::StopMonitoring { pid, response_tx })
+        {
             error!("Failed to send stop monitoring command: {}", e);
             return None;
         }
 
-        // Wait briefly for the thread to process the stop command
-        thread::sleep(Duration::from_millis(100));
-
-        self.metrics.lock().ok()?.remove(&pid)
-    }
-
-    /// Get metrics for a specific PID without stopping monitoring
-    pub fn get_metrics(&self, pid: u32) -> Option<JobMetrics> {
-        self.metrics.lock().ok()?.get(&pid).cloned()
+        match response_rx.recv_timeout(Duration::from_secs(5)) {
+            Ok(metrics) => metrics,
+            Err(e) => {
+                warn!(
+                    "Timed out or error waiting for metrics from monitoring thread for PID {}: {}",
+                    pid, e
+                );
+                None
+            }
+        }
     }
 
     /// Shutdown the monitoring thread
@@ -283,7 +286,6 @@ fn run_monitoring_loop(
     output_dir: PathBuf,
     unique_label: String,
     rx: Receiver<MonitorCommand>,
-    metrics: Arc<Mutex<HashMap<u32, JobMetrics>>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Use new_with_specifics to only refresh processes, CPU, and memory, avoiding user enumeration
     // which can crash on HPC systems with large LDAP user databases
@@ -372,18 +374,15 @@ fn run_monitoring_loop(
                         monitored_jobs.len()
                     );
                 }
-                MonitorCommand::StopMonitoring { pid } => {
-                    if let Some(job) = monitored_jobs.remove(&pid) {
-                        // Store final metrics in shared map
-                        if let Ok(mut metrics_lock) = metrics.lock() {
-                            metrics_lock.insert(pid, job.metrics);
-                        }
-                        debug!(
-                            "Stopped monitoring PID {}, {} jobs remaining",
-                            pid,
-                            monitored_jobs.len()
-                        );
-                    }
+                MonitorCommand::StopMonitoring { pid, response_tx } => {
+                    let metrics = monitored_jobs.remove(&pid).map(|job| job.metrics);
+                    debug!(
+                        "Stopped monitoring PID {}, {} jobs remaining",
+                        pid,
+                        monitored_jobs.len()
+                    );
+                    // Send metrics back; ignore error if receiver was dropped.
+                    let _ = response_tx.send(metrics);
                 }
                 MonitorCommand::Shutdown => {
                     info!("Resource monitor received shutdown command");

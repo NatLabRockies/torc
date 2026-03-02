@@ -241,7 +241,7 @@ assert_parse_logs_detect_oom() {
 assert_logs_analyze_detect_oom() {
     local wf_id="$1" output_dir="$2"
     local analyze_output
-    analyze_output=$(torc --url "$TORC_API_URL" logs analyze "$wf_id" --output-dir "$output_dir" 2>&1) || true
+    analyze_output=$(torc --url "$TORC_API_URL" logs analyze "$output_dir" --workflow-id "$wf_id" 2>&1) || true
     if echo "$analyze_output" | grep -qiE "oom|out.of.memory|oom-kill|killed process|exceeded memory"; then
         _pass "logs analyze detected OOM for workflow $wf_id"
     else
@@ -267,7 +267,7 @@ assert_parse_logs_detect_timeout() {
 assert_logs_analyze_detect_timeout() {
     local wf_id="$1" output_dir="$2"
     local analyze_output
-    analyze_output=$(torc --url "$TORC_API_URL" logs analyze "$wf_id" --output-dir "$output_dir" 2>&1) || true
+    analyze_output=$(torc --url "$TORC_API_URL" logs analyze "$output_dir" --workflow-id "$wf_id" 2>&1) || true
     if echo "$analyze_output" | grep -qiE "timeout|time.limit|walltime|exceeded.*time|killed.*time"; then
         _pass "logs analyze detected timeout for workflow $wf_id"
     else
@@ -298,9 +298,9 @@ assert_multi_node_dispatch() {
     hostnames=""
     while IFS= read -r job_id; do
         local stdout
-        stdout=$(torc --url "$TORC_API_URL" logs stdout "$wf_id" "$job_id" 2>/dev/null) || true
+        stdout=$(get_job_stdout "$wf_id" "$job_id")
         local host
-        host=$(echo "$stdout" | grep -oP 'on \K\S+' | head -1)
+        host=$(echo "$stdout" | grep -oP 'on \K\S+' | head -1 || true)
         if [ -n "$host" ]; then
             hostnames="$hostnames $host"
         fi
@@ -357,20 +357,27 @@ assert_slurm_stats_available() {
     fi
 }
 
-# assert_resource_metrics_db_has_data OUTPUT_DIR
+# assert_resource_metrics_db_has_data OUTPUT_DIR [WF_ID]
 #   Checks that a resource_metrics_*.db file exists and has sample data.
+#   If WF_ID is provided, only looks for DBs matching that workflow.
 assert_resource_metrics_db_has_data() {
     local output_dir="$1"
-    local db_file
-    db_file=$(find "$output_dir" -name "resource_metrics_*.db" -type f 2>/dev/null | head -1)
+    local wf_id="${2:-}"
+    local db_file pattern
+    if [ -n "$wf_id" ]; then
+        pattern="resource_metrics_wf${wf_id}_*.db"
+    else
+        pattern="resource_metrics_*.db"
+    fi
+    db_file=$(find "$output_dir" -name "$pattern" -type f 2>/dev/null | head -1)
     if [ -z "$db_file" ]; then
-        _fail "no resource_metrics_*.db file found in $output_dir"
+        _fail "no $pattern file found in $output_dir"
         return
     fi
     _pass "resource_metrics DB exists: $db_file"
     if command -v sqlite3 &>/dev/null; then
         local count
-        count=$(sqlite3 "$db_file" "SELECT COUNT(*) FROM resource_samples;" 2>/dev/null || echo 0)
+        count=$(sqlite3 "$db_file" "SELECT COUNT(*) FROM job_resource_samples;" 2>/dev/null || echo 0)
         assert_gt "$count" "0" "resource_metrics DB has $count sample rows"
     else
         _skip "sqlite3 not available, cannot verify resource_metrics DB content"
