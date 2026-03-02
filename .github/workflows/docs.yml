@@ -8,6 +8,8 @@ on:
       - 'docs/**'
       - '.github/workflows/docs.yml'
 
+# contents:write is required to push to the gh-pages branch directly
+# (the previous pages:write + id-token:write approach used the Pages API instead)
 permissions:
   contents: write
 
@@ -37,28 +39,13 @@ jobs:
           sed -i 's|site-url = "/torc/"|site-url = "/torc/latest/"|' book.toml
           mdbook build
 
-      - name: Deploy to gh-pages
+      - name: Setup gh-pages branch
+        run: .github/scripts/gh-pages-setup.sh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Deploy latest docs
         run: |
-          set -e
-
-          # Configure git
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-
-          # Clone gh-pages branch (shallow)
-          git clone --depth 1 --branch gh-pages \
-            "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" \
-            gh-pages-deploy 2>/dev/null || {
-            # Branch doesn't exist yet — create it
-            mkdir gh-pages-deploy
-            cd gh-pages-deploy
-            git init
-            git checkout -b gh-pages
-            git remote add origin \
-              "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
-            cd ..
-          }
-
           cd gh-pages-deploy
 
           # One-time: clean legacy Sphinx content
@@ -68,9 +55,6 @@ jobs:
           # Replace latest/ with new build
           rm -rf latest
           cp -r ../docs/book latest
-
-          # Ensure root files exist
-          touch .nojekyll
 
           # Root redirect
           cp ../docs/redirect.html index.html
@@ -87,11 +71,7 @@ jobs:
           VJSON
           fi
 
-          # Commit and push (no-op if no changes)
-          git add -A
-          if git diff --cached --quiet; then
-            echo "No changes to deploy"
-          else
-            git commit -m "Deploy docs from ${GITHUB_SHA::8}"
-            git push origin gh-pages
-          fi
+      - name: Commit and push
+        run: |
+          cd gh-pages-deploy
+          ../.github/scripts/gh-pages-commit.sh "Deploy docs from ${GITHUB_SHA::8}"

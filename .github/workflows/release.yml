@@ -267,36 +267,21 @@ jobs:
           sed -i "s|edit-url-template = \"https://github.com/NatLabRockies/torc/edit/main/docs/{path}\"|edit-url-template = \"https://github.com/NatLabRockies/torc/tree/${VERSION}/docs/{path}\"|" book.toml
           mdbook build
 
-      - name: Deploy to gh-pages
+      - name: Setup gh-pages branch
+        run: .github/scripts/gh-pages-setup.sh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Deploy versioned docs
         run: |
-          set -e
-          VERSION="${{ steps.version.outputs.version }}"
-
-          # Configure git
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-
-          # Clone gh-pages branch (shallow)
-          git clone --depth 1 --branch gh-pages \
-            "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" \
-            gh-pages-deploy 2>/dev/null || {
-            mkdir gh-pages-deploy
-            cd gh-pages-deploy
-            git init
-            git checkout -b gh-pages
-            git remote add origin \
-              "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
-            cd ..
-          }
-
           cd gh-pages-deploy
+          VERSION="${{ steps.version.outputs.version }}"
 
           # Copy build into versioned subdirectory
           rm -rf "${VERSION}"
           cp -r ../docs/book "${VERSION}"
 
-          # Ensure root files exist
-          touch .nojekyll
+          # Root redirect (only if missing)
           if [ ! -f index.html ]; then
             cp ../docs/redirect.html index.html
           fi
@@ -342,6 +327,7 @@ jobs:
           def semver_key(v):
               if v["version"] == "latest":
                   return (999, 999, 999)
+              # Extracts major.minor.patch; pre-release suffixes are ignored for sorting
               m = re.match(r"v?(\d+)\.(\d+)\.(\d+)", v["version"])
               if m:
                   return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
@@ -352,10 +338,12 @@ jobs:
           # Update latest_release
           data["latest_release"] = version
 
-          # Prune to latest + 5 release versions
+          # Keep at most MAX_VERSIONS release versions (plus "latest").
+          # Older versions beyond this limit are pruned from versions.json and disk.
+          MAX_VERSIONS = 5
           release_versions = [v for v in data["versions"] if v["version"] != "latest"]
-          if len(release_versions) > 5:
-              pruned = release_versions[5:]
+          if len(release_versions) > MAX_VERSIONS:
+              pruned = release_versions[MAX_VERSIONS:]
               data["versions"] = [v for v in data["versions"] if v not in pruned]
               # Delete directories for pruned versions
               for p in pruned:
@@ -370,14 +358,12 @@ jobs:
 
           print(f"Updated versions.json: {json.dumps(data, indent=2)}")
           PYEOF
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
 
-          # Commit and push
-          git add -A
-          if git diff --cached --quiet; then
-            echo "No changes to deploy"
-          else
-            git commit -m "Deploy docs ${VERSION} from ${GITHUB_SHA::8}"
-            git push origin gh-pages
-          fi
+      - name: Commit and push
+        run: |
+          cd gh-pages-deploy
+          ../.github/scripts/gh-pages-commit.sh "Deploy docs ${VERSION} from ${GITHUB_SHA::8}"
         env:
           VERSION: ${{ steps.version.outputs.version }}

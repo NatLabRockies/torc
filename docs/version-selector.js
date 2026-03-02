@@ -7,15 +7,15 @@
   // Parse current version from URL path
   function getCurrentVersion() {
     var path = window.location.pathname;
-    // Match /torc/vX.Y.Z/ or /torc/latest/
-    var match = path.match(/^\/torc\/(v[\d.]+|latest)\//);
+    // Match /torc/<version>/ where version is "latest" or a tag like v1.2.3, v1.2.3-rc1
+    var match = path.match(/^\/torc\/(v[^/]+|latest)\//);
     return match ? match[1] : "latest";
   }
 
   // Get the relative page path within the versioned docs
   function getRelativePath() {
     var path = window.location.pathname;
-    var match = path.match(/^\/torc\/(?:v[\d.]+|latest)\/(.*)/);
+    var match = path.match(/^\/torc\/(?:v[^/]+|latest)\/(.*)/);
     return match ? match[1] : "";
   }
 
@@ -39,7 +39,16 @@
 
     select.addEventListener("change", function () {
       var relativePath = getRelativePath();
-      window.location.href = select.value + relativePath;
+      var targetUrl = select.value + relativePath;
+
+      // Check if the page exists in the target version; fall back to version root
+      fetch(targetUrl, { method: "HEAD" })
+        .then(function (response) {
+          window.location.href = response.ok ? targetUrl : select.value;
+        })
+        .catch(function () {
+          window.location.href = select.value;
+        });
     });
 
     container.appendChild(select);

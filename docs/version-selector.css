@@ -17,7 +17,7 @@
 }
 
 #version-select:hover {
-  border-color: var(--sidebar-active);
+  border-color: var(--links);
   background-color: var(--sidebar-bg);
 }
 
