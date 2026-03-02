@@ -90,6 +90,7 @@ echo "Validating prerequisites..."
 
 TORC_BIN=$(command -v torc 2>/dev/null || echo "")
 TORC_SERVER_BIN=$(command -v torc-server 2>/dev/null || echo "")
+TORC_HTPASSWD_BIN=$(command -v torc-htpasswd 2>/dev/null || echo "")
 
 # Also check in repo target directories
 if [ -z "$TORC_BIN" ] && [ -x "$REPO_ROOT/target/release/torc" ]; then
@@ -97,6 +98,9 @@ if [ -z "$TORC_BIN" ] && [ -x "$REPO_ROOT/target/release/torc" ]; then
 fi
 if [ -z "$TORC_SERVER_BIN" ] && [ -x "$REPO_ROOT/target/release/torc-server" ]; then
   TORC_SERVER_BIN="$REPO_ROOT/target/release/torc-server"
+fi
+if [ -z "$TORC_HTPASSWD_BIN" ] && [ -x "$REPO_ROOT/target/release/torc-htpasswd" ]; then
+  TORC_HTPASSWD_BIN="$REPO_ROOT/target/release/torc-htpasswd"
 fi
 
 # Override torc command to use the found binary
@@ -108,25 +112,27 @@ fi
 missing=()
 if [ -z "$TORC_BIN" ]; then missing+=("torc"); fi
 if [ -z "$TORC_SERVER_BIN" ]; then missing+=("torc-server"); fi
+if [ -z "$TORC_HTPASSWD_BIN" ]; then missing+=("torc-htpasswd"); fi
 if ! command -v jq &>/dev/null; then missing+=("jq"); fi
 if ! command -v sbatch &>/dev/null; then missing+=("sbatch"); fi
 
 if [ ${#missing[@]} -gt 0 ]; then
   echo "ERROR: Missing prerequisites: ${missing[*]}"
-  echo "Ensure torc, torc-server, jq, and Slurm tools are on your PATH."
+  echo "Ensure torc, torc-server, torc-htpasswd, jq, and Slurm tools are on your PATH."
   exit 1
 fi
 
-echo "  torc:        $TORC_BIN"
-echo "  torc-server: $TORC_SERVER_BIN"
-echo "  jq:          $(command -v jq)"
-echo "  sbatch:      $(command -v sbatch)"
-echo "  account:     $ACCOUNT"
-echo "  host:        $HOST"
-echo "  partition:    $PARTITION"
-echo "  timeout:      ${TIMEOUT_MINUTES}m"
+echo "  torc:           $TORC_BIN"
+echo "  torc-server:    $TORC_SERVER_BIN"
+echo "  torc-htpasswd:  $TORC_HTPASSWD_BIN"
+echo "  jq:             $(command -v jq)"
+echo "  sbatch:         $(command -v sbatch)"
+echo "  account:        $ACCOUNT"
+echo "  host:           $HOST"
+echo "  partition:      $PARTITION"
+echo "  timeout:        ${TIMEOUT_MINUTES}m"
 if [ -n "$TEST_FILTER" ]; then
-  echo "  test filter: $TEST_FILTER"
+  echo "  test filter:    $TEST_FILTER"
 fi
 
 # ── Source libraries ──────────────────────────────────────────────────────────

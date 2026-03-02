@@ -7,15 +7,36 @@
 #   Starts the torc server with a SQLite database at DB_PATH on PORT.
 #   HOST is the hostname/IP the server binds to (must be reachable from compute nodes).
 #   Sets SERVER_PID and TORC_API_URL.
+#   Enables authentication with two users: "admin" and the current $USER.
 start_server() {
     local db_path="$1"
     local port="$2"
     local host="$3"
     local log_file="${RUN_DIR}/server.log"
+    local htpasswd_file="${RUN_DIR}/htpasswd"
 
-    echo "Starting torc server on ${host}:${port} with database $db_path..."
+    # Generate a random password for test users
+    if [ -f /usr/share/dict/words ]; then
+        TORC_TEST_PASSWORD=$(shuf -n3 /usr/share/dict/words | tr '\n' '-' | sed 's/-$//')
+    else
+        TORC_TEST_PASSWORD=$(head -c 24 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 16)
+    fi
+
+    # Create htpasswd file with admin and current user
+    echo "Creating auth users (admin, $USER)..."
+    "$TORC_HTPASSWD_BIN" add --file "$htpasswd_file" admin --password "$TORC_TEST_PASSWORD"
+    "$TORC_HTPASSWD_BIN" add --file "$htpasswd_file" "$USER" --password "$TORC_TEST_PASSWORD"
+
+    # Export password so all torc CLI calls authenticate automatically
+    export TORC_PASSWORD="$TORC_TEST_PASSWORD"
+
+    echo "Starting torc server on ${host}:${port} with database $db_path (auth enabled)..."
     DATABASE_URL="sqlite:${db_path}" "$TORC_SERVER_BIN" run \
         --host "$host" -p "$port" \
+        --require-auth \
+        --auth-file "$htpasswd_file" \
+        --admin-user admin \
+        --enforce-access-control \
         > "$log_file" 2>&1 &
     SERVER_PID=$!
 
