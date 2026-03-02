@@ -1585,14 +1585,14 @@ fn handle_cancel(config: &Configuration, workflow_id: &Option<i64>, format: &str
                             if format != "json" {
                                 println!("  Canceled Slurm job: {}", node.scheduler_id);
                             }
-                            // Update the ScheduledComputeNode status to "complete"
+                            // Update the ScheduledComputeNode status to "canceled"
                             if let Some(node_id) = node.id {
                                 let updated_node = models::ScheduledComputeNodesModel::new(
                                     node.workflow_id,
                                     node.scheduler_id,
                                     node.scheduler_config_id,
                                     node.scheduler_type.clone(),
-                                    "complete".to_string(),
+                                    "canceled".to_string(),
                                 );
                                 if let Err(e) = default_api::update_scheduled_compute_node(
                                     config,
@@ -1607,7 +1607,7 @@ fn handle_cancel(config: &Configuration, workflow_id: &Option<i64>, format: &str
                                     }
                                 } else if format != "json" {
                                     println!(
-                                        "  Updated node {} status to complete",
+                                        "  Updated node {} status to canceled",
                                         node.scheduler_id
                                     );
                                 }
