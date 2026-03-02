@@ -568,11 +568,37 @@ where
             context.get().0.clone()
         );
 
-        let memory_bytes = memory_string_to_bytes(&body.memory)
-            .map_err(|e| ApiError(format!("Invalid memory format '{}': {}", body.memory, e)))?;
+        let memory_bytes = match memory_string_to_bytes(&body.memory) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                let error_response = models::ErrorResponse::new(serde_json::json!({
+                    "message": format!("Invalid memory format '{}': {}", body.memory, e),
+                    "field": "memory",
+                    "value": body.memory
+                }));
+                return Ok(
+                    UpdateResourceRequirementsResponse::UnprocessableContentErrorResponse(
+                        error_response,
+                    ),
+                );
+            }
+        };
 
-        let runtime_seconds = duration_string_to_seconds(&body.runtime)
-            .map_err(|e| ApiError(format!("Invalid runtime format '{}': {}", body.runtime, e)))?;
+        let runtime_seconds = match duration_string_to_seconds(&body.runtime) {
+            Ok(seconds) => seconds,
+            Err(e) => {
+                let error_response = models::ErrorResponse::new(serde_json::json!({
+                    "message": format!("Invalid runtime format '{}': {}", body.runtime, e),
+                    "field": "runtime",
+                    "value": body.runtime
+                }));
+                return Ok(
+                    UpdateResourceRequirementsResponse::UnprocessableContentErrorResponse(
+                        error_response,
+                    ),
+                );
+            }
+        };
 
         // First check if the record exists
         match self.get_resource_requirements(id, context).await? {
@@ -594,16 +620,31 @@ where
 
         let step_nodes = body.step_nodes.unwrap_or(1);
         if step_nodes <= 0 {
-            return Err(ApiError(format!(
-                "step_nodes must be > 0, got {}",
-                step_nodes
-            )));
+            let error_response = models::ErrorResponse::new(serde_json::json!({
+                "message": format!("step_nodes must be > 0, got {}", step_nodes),
+                "field": "step_nodes",
+                "value": step_nodes
+            }));
+            return Ok(
+                UpdateResourceRequirementsResponse::UnprocessableContentErrorResponse(
+                    error_response,
+                ),
+            );
         }
         if step_nodes > body.num_nodes {
-            return Err(ApiError(format!(
-                "step_nodes ({}) must be <= num_nodes ({})",
-                step_nodes, body.num_nodes
-            )));
+            let error_response = models::ErrorResponse::new(serde_json::json!({
+                "message": format!(
+                    "step_nodes ({}) must be <= num_nodes ({})",
+                    step_nodes, body.num_nodes
+                ),
+                "field": "step_nodes",
+                "value": step_nodes
+            }));
+            return Ok(
+                UpdateResourceRequirementsResponse::UnprocessableContentErrorResponse(
+                    error_response,
+                ),
+            );
         }
         // Update the record
         match sqlx::query!(

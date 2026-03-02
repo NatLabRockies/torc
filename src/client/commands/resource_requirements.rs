@@ -96,7 +96,7 @@ pub enum ResourceRequirementsCommands {
         /// Amount of memory required (e.g., "20g")
         #[arg(long)]
         memory: Option<String>,
-        /// Maximum runtime (e.g., "1h", "30m")
+        /// Maximum runtime in ISO 8601 duration format (e.g., "PT1H", "PT30M")
         #[arg(long)]
         runtime: Option<String>,
     },
