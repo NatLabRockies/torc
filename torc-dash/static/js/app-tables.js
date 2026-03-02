@@ -370,11 +370,12 @@ Object.assign(TorcDashboard.prototype, {
 
     renderSlurmStatsTable(stats) {
         const controls = this.renderTableControls('slurm-stats');
-        const count = `<span class="table-count">${stats.length} stat${stats.length !== 1 ? 's' : ''}</span>`;
 
         if (!stats || stats.length === 0) {
             return `${controls}<div class="placeholder-message">No Slurm stats in this workflow</div>`;
         }
+
+        const count = `<span class="table-count">${stats.length} stat${stats.length !== 1 ? 's' : ''}</span>`;
 
         return `
             ${controls}

@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictInt
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt
 from typing import Any, ClassVar, Dict, List
 from torc.openapi_client.models.slurm_stats_model import SlurmStatsModel
 from typing import Optional, Set
@@ -27,11 +27,13 @@ class ListSlurmStatsResponse(BaseModel):
     """
     Response containing a list of Slurm accounting stats records.
     """ # noqa: E501
-    items: List[SlurmStatsModel]
+    items: Optional[List[SlurmStatsModel]] = None
     offset: StrictInt
+    max_limit: StrictInt
     count: StrictInt
     total_count: StrictInt
-    __properties: ClassVar[List[str]] = ["items", "offset", "count", "total_count"]
+    has_more: StrictBool
+    __properties: ClassVar[List[str]] = ["items", "offset", "max_limit", "count", "total_count", "has_more"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -93,9 +95,9 @@ class ListSlurmStatsResponse(BaseModel):
         _obj = cls.model_validate({
             "items": [SlurmStatsModel.from_dict(_item) for _item in obj["items"]] if obj.get("items") is not None else None,
             "offset": obj.get("offset"),
+            "max_limit": obj.get("max_limit"),
             "count": obj.get("count"),
-            "total_count": obj.get("total_count")
+            "total_count": obj.get("total_count"),
+            "has_more": obj.get("has_more")
         })
         return _obj
-
-
