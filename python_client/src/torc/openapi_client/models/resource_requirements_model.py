@@ -32,7 +32,7 @@ class ResourceRequirementsModel(BaseModel):
     num_cpus: Optional[StrictInt] = Field(default=1, description="Number of CPUs required by a job")
     num_gpus: Optional[StrictInt] = Field(default=0, description="Number of GPUs required by a job")
     num_nodes: Optional[StrictInt] = Field(default=1, description="Number of nodes required by a job (allocation size for sbatch)")
-    step_nodes: Optional[StrictInt] = Field(default=1, description="Number of nodes each srun step spans. Distinct from num_nodes (allocation size). Defaults to 1. Set to num_nodes for MPI or Julia Distributed.jl jobs. ")
+    step_nodes: Optional[StrictInt] = Field(default=1, description="Number of nodes each srun step spans. Distinct from num_nodes (allocation size). Defaults to 1. Set to num_nodes for MPI or Julia Distributed.jl jobs.")
     memory: Optional[StrictStr] = Field(default='1m', description="Amount of memory required by a job, e.g., 20g")
     runtime: Optional[StrictStr] = Field(default='P0DT1M', description="Maximum runtime for a job")
     __properties: ClassVar[List[str]] = ["id", "workflow_id", "name", "num_cpus", "num_gpus", "num_nodes", "step_nodes", "memory", "runtime"]
