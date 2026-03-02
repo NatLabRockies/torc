@@ -201,6 +201,8 @@ ALL_WORKFLOW_NAMES=(
   resource_monitoring
   failure_recovery
   timeout_detection
+  cancel_workflow
+  sync_status
 )
 
 # Filter workflow names if --test was specified
@@ -260,6 +262,56 @@ if ! is_server_alive; then
   exit 1
 fi
 
+# ── Pre-poll actions ──────────────────────────────────────────────────────────
+# Some tests require actions while jobs are actively running (e.g., canceling
+# the workflow or externally killing the Slurm allocation). We wait for jobs
+# to reach "running" status, then perform the action before polling.
+
+if [ -n "${WF_IDS[cancel_workflow]+x}" ]; then
+  echo ""
+  echo "Pre-poll: cancel_workflow — waiting for jobs to start running..."
+  if wait_for_job_status "${WF_IDS[cancel_workflow]}" "running" 300; then
+    echo "  Canceling workflow ${WF_IDS[cancel_workflow]}..."
+    torc --url "$TORC_API_URL" -f json workflows cancel "${WF_IDS[cancel_workflow]}" \
+      > "$RUN_DIR/cancel_workflow_output.json" 2>"$RUN_DIR/cancel_workflow_stderr.log"
+    echo "  Cancel output saved to $RUN_DIR/cancel_workflow_output.json"
+  else
+    echo "  WARNING: Timed out waiting for cancel_workflow jobs to start running."
+    echo '{"status": "error", "message": "jobs never reached running status"}' \
+      > "$RUN_DIR/cancel_workflow_output.json"
+  fi
+fi
+
+if [ -n "${WF_IDS[sync_status]+x}" ]; then
+  echo ""
+  echo "Pre-poll: sync_status — waiting for jobs to start running..."
+  if wait_for_job_status "${WF_IDS[sync_status]}" "running" 300; then
+    # Query Slurm job IDs for this workflow from the API
+    sync_slurm_ids=$(torc --url "$TORC_API_URL" -f json scheduled-compute-nodes list \
+      "${WF_IDS[sync_status]}" 2>/dev/null \
+      | jq -r '.scheduled_compute_nodes[].scheduler_id' 2>/dev/null | tr '\n' ' ')
+    if [ -n "$sync_slurm_ids" ]; then
+      echo "  Externally killing Slurm allocation(s): $sync_slurm_ids"
+      # shellcheck disable=SC2086  # Intentional word splitting for multiple Slurm IDs
+      scancel $sync_slurm_ids 2>/dev/null || true
+      echo "  Waiting 15s for Slurm to fully terminate the allocation..."
+      sleep 15
+    else
+      echo "  WARNING: No Slurm job IDs found for sync_status workflow."
+    fi
+    echo "  Running sync-status to detect orphaned jobs..."
+    torc --url "$TORC_API_URL" -f json workflows sync-status "${WF_IDS[sync_status]}" \
+      > "$RUN_DIR/sync_status_output.json" 2>"$RUN_DIR/sync_status_stderr.log"
+    echo "  sync-status output saved to $RUN_DIR/sync_status_output.json"
+    # Cancel workflow so ready/blocked jobs don't prevent poll_all_workflows from completing
+    torc --url "$TORC_API_URL" workflows cancel "${WF_IDS[sync_status]}" > /dev/null 2>&1 || true
+  else
+    echo "  WARNING: Timed out waiting for sync_status jobs to start running."
+    echo '{"slurm_jobs_failed": 0, "error": "jobs never reached running status"}' \
+      > "$RUN_DIR/sync_status_output.json"
+  fi
+fi
+
 # ── Poll until all complete ───────────────────────────────────────────────────
 
 echo ""
@@ -297,6 +349,8 @@ run_test_if_active oom_detection
 run_test_if_active resource_monitoring
 run_test_if_active failure_recovery
 run_test_if_active timeout_detection
+run_test_if_active cancel_workflow
+run_test_if_active sync_status
 
 # ── Report ────────────────────────────────────────────────────────────────────
 

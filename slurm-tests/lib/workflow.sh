@@ -170,6 +170,36 @@ get_job_stderr() {
     torc --url "$TORC_API_URL" logs stderr "$wf_id" "$job_id" 2>/dev/null || true
 }
 
+# wait_for_job_status WF_ID STATUS [TIMEOUT_SECONDS]
+#   Polls `reports summary` until jobs_by_status.$STATUS > 0 or timeout.
+#   Returns 0 if status found, 1 if timed out.
+wait_for_job_status() {
+    local wf_id="$1"
+    local target_status="$2"
+    local timeout="${3:-300}"
+    local interval=10
+    local elapsed=0
+
+    echo "Waiting for workflow $wf_id to have '$target_status' jobs (timeout: ${timeout}s)..."
+    while [ "$elapsed" -lt "$timeout" ]; do
+        local count
+        count=$(torc --url "$TORC_API_URL" -f json reports summary "$wf_id" 2>/dev/null \
+            | jq -r ".jobs_by_status.${target_status} // 0")
+        if [ "$count" -gt 0 ] 2>/dev/null; then
+            echo "  Workflow $wf_id has $count '$target_status' job(s) after ${elapsed}s."
+            return 0
+        fi
+        sleep "$interval"
+        elapsed=$((elapsed + interval))
+        if [ $((elapsed % 60)) -eq 0 ]; then
+            echo "  [${elapsed}s] Still waiting for '$target_status' jobs..."
+        fi
+    done
+
+    echo "WARNING: Timed out waiting for '$target_status' jobs in workflow $wf_id after ${timeout}s."
+    return 1
+}
+
 # prepare_workflow_spec TEMPLATE ACCOUNT PARTITION OUTPUT_FILE
 #   Substitutes placeholders in a workflow template and writes to output.
 prepare_workflow_spec() {

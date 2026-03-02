@@ -168,6 +168,21 @@ assert_workflow_complete() {
     fi
 }
 
+# assert_workflow_canceled WF_ID
+#   Checks that the workflow is marked as canceled.
+assert_workflow_canceled() {
+    local wf_id="$1"
+    local result
+    result=$(torc --url "$TORC_API_URL" -f json workflows is-complete "$wf_id" 2>/dev/null)
+    local is_canceled
+    is_canceled=$(echo "$result" | jq -r '.is_canceled // false')
+    if [ "$is_canceled" = "true" ]; then
+        _pass "workflow $wf_id is canceled"
+    else
+        _fail "workflow $wf_id is NOT canceled"
+    fi
+}
+
 # assert_all_jobs_completed WF_ID EXPECTED_COUNT
 #   Verifies every job has status "completed" and the count matches.
 assert_all_jobs_completed() {
