@@ -150,6 +150,7 @@ impl AsyncCliCommand {
                 std::env::var("TORC_FAKE_SRUN").unwrap_or_else(|_| "srun".to_string());
             let mut srun = Command::new(&srun_binary);
             srun.arg(format!("--jobid={}", slurm_job_id));
+            srun.arg("--ntasks=1");
             // Without --overlap, each srun step takes exclusive ownership of its node slot
             // within the allocation, so concurrent steps on the same node (or same allocation)
             // queue up and retry with "Requested nodes are busy".  --overlap explicitly permits
@@ -169,9 +170,6 @@ impl AsyncCliCommand {
                 // Default to 1 (single-node step); set step_nodes > 1 for MPI / Julia Distributed.jl.
                 let step_nodes = rr.step_nodes.unwrap_or(1).max(1);
                 srun.arg(format!("--nodes={}", step_nodes));
-                // Set --ntasks to match step_nodes for multi-node steps (e.g., MPI).
-                // For single-node steps, --ntasks=1 ensures srun creates exactly one task.
-                srun.arg(format!("--ntasks={}", step_nodes));
                 if limit_resources {
                     srun.arg(format!("--cpus-per-task={}", rr.num_cpus));
                     match memory_string_to_mb(&rr.memory) {
@@ -194,8 +192,6 @@ impl AsyncCliCommand {
                         }
                     }
                 }
-            } else {
-                srun.arg("--ntasks=1");
             }
             // Run via bash so job.command can use shell features
             srun.args(["bash", "-c", &command_str]);
