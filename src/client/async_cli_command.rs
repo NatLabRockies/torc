@@ -99,6 +99,7 @@ impl AsyncCliCommand {
         api_url: &str,
         resource_requirements: Option<&ResourceRequirementsModel>,
         limit_resources: bool,
+        use_srun: bool,
     ) -> Result<(), Box<dyn std::error::Error>> {
         if self.is_running {
             return Err("Job is already running".into());
@@ -128,7 +129,12 @@ impl AsyncCliCommand {
             self.job.command.clone()
         };
 
-        let mut cmd = if let Ok(slurm_job_id) = std::env::var("SLURM_JOB_ID") {
+        let slurm_job_id = if use_srun {
+            std::env::var("SLURM_JOB_ID").ok()
+        } else {
+            None
+        };
+        let mut cmd = if let Some(slurm_job_id) = slurm_job_id {
             // Running inside a Slurm allocation — wrap with srun so Slurm creates a
             // per-job cgroup step, enables sacct accounting, and gives HPC admins visibility.
             let step_name = format!(

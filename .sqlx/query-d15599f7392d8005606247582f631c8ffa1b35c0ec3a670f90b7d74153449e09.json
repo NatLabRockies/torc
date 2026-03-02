@@ -97,6 +97,11 @@
         "name": "limit_resources",
         "ordinal": 18,
         "type_info": "Integer"
+      },
+      {
+        "name": "use_srun",
+        "ordinal": 19,
+        "type_info": "Integer"
       }
     ],
     "parameters": {
@@ -117,6 +122,7 @@
       false,
       true,
       false,
+      true,
       true,
       true,
       true,

@@ -382,7 +382,8 @@ impl JobRunner {
         info!(
             "Starting torc job runner version={} client_api_version={} server_version={} server_api_version={} \
             workflow_id={} hostname={} output_dir={} resources={:?} rules={:?} \
-            job_completion_poll_interval={}s max_parallel_jobs={:?} end_time={:?} strict_scheduler_match={}",
+            job_completion_poll_interval={}s max_parallel_jobs={:?} end_time={:?} strict_scheduler_match={} \
+            use_srun={} limit_resources={}",
             version,
             version_check::CLIENT_API_VERSION,
             server_version,
@@ -395,7 +396,9 @@ impl JobRunner {
             self.job_completion_poll_interval,
             self.max_parallel_jobs,
             self.end_time,
-            self.torc_config.client.slurm.strict_scheduler_match
+            self.torc_config.client.slurm.strict_scheduler_match,
+            self.workflow.use_srun.unwrap_or(true),
+            self.workflow.limit_resources.unwrap_or(true),
         );
 
         // Warn about version mismatches
@@ -1308,6 +1311,7 @@ impl JobRunner {
                         &self.config.base_path,
                         Some(&job_rr),
                         self.workflow.limit_resources.unwrap_or(true),
+                        self.workflow.use_srun.unwrap_or(true),
                     ) {
                         Ok(()) => {
                             info!(
@@ -1449,6 +1453,7 @@ impl JobRunner {
                         &self.config.base_path,
                         Some(&job_rr),
                         self.workflow.limit_resources.unwrap_or(true),
+                        self.workflow.use_srun.unwrap_or(true),
                     ) {
                         Ok(()) => {
                             info!(

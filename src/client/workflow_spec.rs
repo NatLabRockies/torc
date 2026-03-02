@@ -695,6 +695,10 @@ pub struct WorkflowSpec {
     /// to exceed their stated resource requirements.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit_resources: Option<bool>,
+    /// When true (default), jobs are wrapped with srun inside Slurm allocations.
+    /// Set to false to use direct shell execution.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub use_srun: Option<bool>,
     /// Project name or identifier for grouping workflows
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<String>,
@@ -733,6 +737,7 @@ impl WorkflowSpec {
             actions: None,
             use_pending_failed: None,
             limit_resources: None,
+            use_srun: None,
             project: None,
             metadata: None,
         }
@@ -1735,6 +1740,11 @@ impl WorkflowSpec {
         // Set limit_resources if present
         if let Some(value) = spec.limit_resources {
             workflow_model.limit_resources = Some(value);
+        }
+
+        // Set use_srun if present
+        if let Some(value) = spec.use_srun {
+            workflow_model.use_srun = Some(value);
         }
 
         // Set project if present
@@ -3471,6 +3481,11 @@ impl WorkflowSpec {
                         obj.insert("limit_resources".to_string(), serde_json::Value::Bool(v));
                     }
                 }
+                "use_srun" => {
+                    if let Some(v) = node.entries().first().and_then(|e| e.value().as_bool()) {
+                        obj.insert("use_srun".to_string(), serde_json::Value::Bool(v));
+                    }
+                }
                 _ => {
                     // Ignore unknown nodes
                 }
@@ -4614,6 +4629,7 @@ job "train_lr{lr:.4f}_bs{batch_size}" {
             failure_handlers: None,
             use_pending_failed: None,
             limit_resources: None,
+            use_srun: None,
             project: None,
             metadata: None,
         };

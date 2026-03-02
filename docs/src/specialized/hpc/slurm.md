@@ -417,6 +417,29 @@ enforcement policies. It can also be updated via the API after a workflow is cre
 > **Warning**: With `limit_resources: false`, jobs can exceed their stated resource requirements. On
 > shared clusters this may affect other users. Use this setting only for exploratory workloads.
 
+### Disabling srun Wrapping
+
+By default (`use_srun = true`), Torc wraps every job command with `srun` when running inside a Slurm
+allocation. This creates a per-job cgroup step, enables `sacct` accounting, and gives HPC admins
+visibility into individual job steps.
+
+To disable srun wrapping entirely and run jobs via direct shell execution, set `use_srun: false` in
+your workflow specification:
+
+```yaml
+name: my_workflow
+use_srun: false
+jobs:
+  ...
+```
+
+When `use_srun` is false, `limit_resources` is silently ignored because there is no srun to pass
+resource flags to. Slurm accounting (`sacct`) and live monitoring (`sstat`) are also unavailable
+since jobs do not run as Slurm steps.
+
+> **Note**: `use_srun: false` is a safety valve for users who encounter compatibility issues with
+> srun wrapping. For most workflows, the default (`use_srun: true`) is recommended.
+
 ### Slurm Accounting Stats
 
 After each job step exits, Torc calls `sacct` once to collect the following Slurm-native accounting

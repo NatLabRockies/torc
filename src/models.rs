@@ -9776,6 +9776,13 @@ pub struct WorkflowModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit_resources: Option<bool>,
 
+    /// When true (default), jobs are wrapped with srun inside Slurm allocations for cgroup
+    /// enforcement and accounting. Set to false to use direct shell execution even inside
+    /// a Slurm allocation (disables srun job steps, sacct, and sstat monitoring).
+    #[serde(rename = "use_srun")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub use_srun: Option<bool>,
+
     /// Project name or identifier for grouping workflows
     #[serde(rename = "project")]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -9810,6 +9817,7 @@ impl WorkflowModel {
             slurm_defaults: None,
             use_pending_failed: Some(false),
             limit_resources: Some(true),
+            use_srun: Some(true),
             project: None,
             metadata: None,
             status_id: None,
@@ -9892,6 +9900,9 @@ impl std::string::ToString for WorkflowModel {
             self.limit_resources.as_ref().map(|limit_resources| {
                 ["limit_resources".to_string(), limit_resources.to_string()].join(",")
             }),
+            self.use_srun
+                .as_ref()
+                .map(|use_srun| ["use_srun".to_string(), use_srun.to_string()].join(",")),
             self.status_id
                 .as_ref()
                 .map(|status_id| ["status_id".to_string(), status_id.to_string()].join(",")),
@@ -9927,6 +9938,7 @@ impl std::str::FromStr for WorkflowModel {
             pub slurm_defaults: Vec<String>,
             pub use_pending_failed: Vec<bool>,
             pub limit_resources: Vec<bool>,
+            pub use_srun: Vec<bool>,
             pub project: Vec<String>,
             pub metadata: Vec<String>,
             pub status_id: Vec<i64>,
@@ -10005,6 +10017,9 @@ impl std::str::FromStr for WorkflowModel {
                     "limit_resources" => intermediate_rep.limit_resources.push(
                         <bool as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
                     ),
+                    "use_srun" => intermediate_rep.use_srun.push(
+                        <bool as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
+                    ),
                     "project" => intermediate_rep.project.push(
                         <String as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
                     ),
@@ -10063,6 +10078,7 @@ impl std::str::FromStr for WorkflowModel {
             slurm_defaults: intermediate_rep.slurm_defaults.into_iter().next(),
             use_pending_failed: intermediate_rep.use_pending_failed.into_iter().next(),
             limit_resources: intermediate_rep.limit_resources.into_iter().next(),
+            use_srun: intermediate_rep.use_srun.into_iter().next(),
             project: intermediate_rep.project.into_iter().next(),
             metadata: intermediate_rep.metadata.into_iter().next(),
             status_id: intermediate_rep.status_id.into_iter().next(),
