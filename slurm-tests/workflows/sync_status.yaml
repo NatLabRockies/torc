@@ -14,7 +14,7 @@ resource_requirements:
     num_cpus: 1
     num_nodes: 1
     memory: 512m
-    runtime: PT15M
+    runtime: PT5M
 
 jobs:
   - name: sleep_job_1
