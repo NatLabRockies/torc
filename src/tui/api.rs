@@ -1,4 +1,4 @@
-use crate::client::apis::configuration::{Configuration, TlsConfig};
+use crate::client::apis::configuration::{BasicAuth, Configuration, TlsConfig};
 use crate::client::apis::default_api;
 use crate::client::config::TorcConfig;
 use crate::client::workflow_spec::WorkflowSpec;
@@ -15,10 +15,10 @@ pub struct TorcClient {
 impl TorcClient {
     #[allow(dead_code)]
     pub fn new() -> Result<Self> {
-        Self::new_with_tls(TlsConfig::default())
+        Self::new_with_tls(TlsConfig::default(), None)
     }
 
-    pub fn new_with_tls(tls: TlsConfig) -> Result<Self> {
+    pub fn new_with_tls(tls: TlsConfig, basic_auth: Option<BasicAuth>) -> Result<Self> {
         // Load configuration from files (system, user, local) and environment variables
         // Priority: TORC_API_URL env var > config system > default
         //
@@ -32,18 +32,24 @@ impl TorcClient {
 
         let mut config = Configuration::with_tls(tls);
         config.base_path = base_url;
+        config.basic_auth = basic_auth;
 
         Ok(Self { config })
     }
 
     #[allow(dead_code)]
     pub fn from_url(base_url: String) -> Result<Self> {
-        Self::from_url_with_tls(base_url, TlsConfig::default())
+        Self::from_url_with_tls(base_url, TlsConfig::default(), None)
     }
 
-    pub fn from_url_with_tls(base_url: String, tls: TlsConfig) -> Result<Self> {
+    pub fn from_url_with_tls(
+        base_url: String,
+        tls: TlsConfig,
+        basic_auth: Option<BasicAuth>,
+    ) -> Result<Self> {
         let mut config = Configuration::with_tls(tls);
         config.base_path = base_url;
+        config.basic_auth = basic_auth;
 
         Ok(Self { config })
     }

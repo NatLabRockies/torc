@@ -733,7 +733,8 @@ fn main() {
             handle_config_commands(command);
         }
         Commands::Tui(args) => {
-            if let Err(e) = tui_runner::run(args) {
+            let basic_auth = config.basic_auth.clone();
+            if let Err(e) = tui_runner::run(args, basic_auth) {
                 eprintln!("Error running TUI: {}", e);
                 std::process::exit(1);
             }

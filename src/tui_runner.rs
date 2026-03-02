@@ -1,6 +1,8 @@
 use anyhow::Result;
 use clap::Parser;
 
+use crate::client::apis::configuration::BasicAuth;
+
 #[derive(Parser, Debug)]
 #[command(about = "Interactive terminal UI for managing workflows", long_about = None)]
 pub struct Args {
@@ -25,7 +27,7 @@ pub struct Args {
     pub tls_insecure: bool,
 }
 
-pub fn run(args: &Args) -> Result<()> {
+pub fn run(args: &Args, basic_auth: Option<BasicAuth>) -> Result<()> {
     // Initialize the TUI
     // The TUI code will be in the optional 'tui' module
     #[cfg(feature = "tui")]
@@ -36,12 +38,14 @@ pub fn run(args: &Args) -> Result<()> {
             args.database.clone(),
             args.tls_ca_cert.clone(),
             args.tls_insecure,
+            basic_auth,
         )
     }
 
     #[cfg(not(feature = "tui"))]
     {
         let _ = args; // Suppress unused warning
+        let _ = basic_auth;
         eprintln!("Error: TUI support was not compiled into this binary");
         eprintln!("Please rebuild with --features tui or use the standalone torc-tui binary");
         std::process::exit(1);
