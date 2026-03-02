@@ -593,7 +593,7 @@ impl AsyncCliCommand {
     ///     println!("Job exited with error code {}", exit_code);
     /// }
     /// ```
-    pub fn wait_for_completion(&mut self) -> Result<i32, Box<dyn std::error::Error>> {
+    pub fn wait_for_completion(&mut self) -> Result<i64, Box<dyn std::error::Error>> {
         let exit_code = if let Some(ref mut child) = self.handle {
             // If we have issues with the process hanging, we could try_wait
             // with a timeout.
@@ -605,7 +605,7 @@ impl AsyncCliCommand {
 
         // Mark as terminated with the actual exit code
         self.handle_completion(exit_code, JobStatus::Terminated)?;
-        Ok(exit_code as i32)
+        Ok(exit_code)
     }
 }
 

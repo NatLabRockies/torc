@@ -5,7 +5,7 @@ info:
     name: BSD 3-Clause
     identifier: BSD 3-Clause
   title: torc
-  version: v0.9.0
+  version: v0.10.0
 servers:
 - url: /torc-service/v1
 paths:
@@ -7915,6 +7915,25 @@ components:
       type: object
     list_slurm_stats_response:
       description: Response containing a list of Slurm accounting stats records.
+      example:
+        max_limit: 6
+        total_count: 5
+        count: 1
+        offset: 0
+        has_more: true
+        items:
+        - workflow_id: 6
+          job_id: 1
+          run_id: 1
+          attempt_id: 1
+          slurm_job_id: "12345"
+          max_rss_bytes: 1048576
+        - workflow_id: 6
+          job_id: 2
+          run_id: 1
+          attempt_id: 1
+          slurm_job_id: "12346"
+          max_rss_bytes: 2097152
       properties:
         items:
           items:
@@ -7922,13 +7941,19 @@ components:
           type: array
         offset:
           type: integer
+        max_limit:
+          type: integer
         count:
           type: integer
         total_count:
           type: integer
+        has_more:
+          type: boolean
       required:
       - items
       - count
+      - has_more
+      - max_limit
       - offset
       - total_count
       type: object

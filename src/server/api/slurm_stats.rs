@@ -192,7 +192,7 @@ impl<C: Send + Sync + Has<XSpanIdString>> SlurmStatsApi<C> for SlurmStatsApiImpl
                 let has_more = offset + count < total_count;
                 let mut response = models::ListSlurmStatsResponse::new(
                     offset,
-                    MAX_RECORD_TRANSFER_COUNT,
+                    limit,
                     count,
                     total_count,
                     has_more,
