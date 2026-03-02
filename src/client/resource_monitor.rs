@@ -65,7 +65,21 @@ impl JobMetrics {
         }
     }
 
+    /// Upper bound for a plausible CPU percentage.  Even on a 1024-core node at
+    /// 100 % per core the value would be 102400 %.  Anything above this threshold
+    /// is treated as a garbage sample (e.g. sstat returning stale data for an
+    /// OOM-killed step, or sysinfo reading /proc for a dying process).
+    const MAX_PLAUSIBLE_CPU_PERCENT: f64 = 100_000.0;
+
     fn add_sample(&mut self, cpu_percent: f64, memory_bytes: u64) {
+        // Sanitize: reject garbage CPU values (NaN, infinity, or unreasonably high).
+        let cpu_percent =
+            if cpu_percent.is_finite() && cpu_percent <= Self::MAX_PLAUSIBLE_CPU_PERCENT {
+                cpu_percent
+            } else {
+                0.0
+            };
+
         self.sample_count += 1;
         self.total_cpu_percent += cpu_percent;
         self.total_memory_bytes += memory_bytes;

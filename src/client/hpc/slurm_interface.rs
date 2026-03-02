@@ -283,7 +283,7 @@ impl HpcInterface for SlurmInterface {
             // TODO: this is still not ideal.
             // This will have to change if we ever rely on these environment variables.
             script.push_str("unset SLURM_MEM_PER_CPU SLURM_MEM_PER_GPU\n");
-            script.push_str("srun ");
+            script.push_str("srun --ntasks-per-node=1 ");
         }
         script.push_str(&command);
         script.push('\n');

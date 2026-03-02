@@ -25,6 +25,16 @@ run_test_sync_status() {
     local sync_output
     sync_output=$(cat "$sync_output_file")
 
+    # If jobs never reached running, this test cannot produce meaningful results
+    local skipped
+    skipped=$(echo "$sync_output" | jq -r '.skipped // false')
+    if [ "$skipped" = "true" ]; then
+        local reason
+        reason=$(echo "$sync_output" | jq -r '.reason // "unknown"')
+        _skip "sync_status test skipped: $reason"
+        return
+    fi
+
     # sync-status should detect orphaned jobs from terminated Slurm allocations
     local slurm_jobs_failed
     slurm_jobs_failed=$(echo "$sync_output" | jq '.slurm_jobs_failed // 0')

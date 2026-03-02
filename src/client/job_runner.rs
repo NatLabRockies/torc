@@ -1963,12 +1963,16 @@ fn backfill_sacct_into_result(result: &mut ResultModel, stats: &SlurmStatsModel)
         // sstat-derived avg_cpu_percent is more informative than replacing it with 0%.
         if exec_s > 0.0 && ave_cpu_s > 0.0 {
             let avg_pct = ave_cpu_s / exec_s * 100.0;
-            result.avg_cpu_percent = Some(avg_pct);
-            // Use sacct avg as a proxy for peak when sstat gave nothing useful (0% or None).
-            // This is better than displaying 0% for jobs where sstat is unavailable.
-            let peak_is_zero = result.peak_cpu_percent.unwrap_or(0.0) == 0.0;
-            if peak_is_zero {
-                result.peak_cpu_percent = Some(avg_pct);
+            // Sanity check: reject clearly garbage values (same threshold as
+            // JobMetrics::add_sample).
+            if avg_pct.is_finite() && avg_pct <= 100_000.0 {
+                result.avg_cpu_percent = Some(avg_pct);
+                // Use sacct avg as a proxy for peak when sstat gave nothing useful (0% or None).
+                // This is better than displaying 0% for jobs where sstat is unavailable.
+                let peak_is_zero = result.peak_cpu_percent.unwrap_or(0.0) == 0.0;
+                if peak_is_zero {
+                    result.peak_cpu_percent = Some(avg_pct);
+                }
             }
         }
     }

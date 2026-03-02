@@ -189,7 +189,7 @@ get_job_stderr() {
 }
 
 # wait_for_job_status WF_ID STATUS [TIMEOUT_SECONDS]
-#   Polls `reports summary` until jobs_by_status.$STATUS > 0 or timeout.
+#   Polls the torc server until jobs_by_status.$STATUS > 0 or timeout.
 #   Returns 0 if status found, 1 if timed out.
 wait_for_job_status() {
     local wf_id="$1"
@@ -200,9 +200,9 @@ wait_for_job_status() {
 
     echo "Waiting for workflow $wf_id to have '$target_status' jobs (timeout: ${timeout}s)..."
     while [ "$elapsed" -lt "$timeout" ]; do
-        local count
-        count=$(torc --url "$TORC_API_URL" -f json reports summary "$wf_id" 2>/dev/null \
-            | jq -r ".jobs_by_status.${target_status} // 0")
+        local summary count
+        summary=$(torc --url "$TORC_API_URL" -f json reports summary "$wf_id" 2>/dev/null)
+        count=$(echo "$summary" | jq -r ".jobs_by_status.${target_status} // 0")
         if [ "$count" -gt 0 ] 2>/dev/null; then
             echo "  Workflow $wf_id has $count '$target_status' job(s) after ${elapsed}s."
             return 0
@@ -210,7 +210,11 @@ wait_for_job_status() {
         sleep "$interval"
         elapsed=$((elapsed + interval))
         if [ $((elapsed % 60)) -eq 0 ]; then
-            echo "  [${elapsed}s] Still waiting for '$target_status' jobs..."
+            local status_line
+            status_line=$(echo "$summary" | jq -r \
+                '.jobs_by_status | to_entries | map(select(.value > 0)) | map("\(.key)=\(.value)") | join(" ")' \
+                2>/dev/null || echo "unknown")
+            echo "  [${elapsed}s] Still waiting for '$target_status' jobs... (jobs: ${status_line})"
         fi
     done
 

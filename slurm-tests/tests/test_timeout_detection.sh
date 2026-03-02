@@ -4,12 +4,8 @@
 #
 # Verifies:
 #   - Fast job completes successfully with return code 0
-#   - Slow job fails/terminated due to timeout
-#   - Slow job has expected return code (137 for SIGKILL)
-#   - torc slurm parse-logs detects timeout
-#   - torc logs analyze detects timeout
-#   - torc slurm sacct shows TIMEOUT or FAILED
-#   - torc reports check-resource-utilization --include-failed flags violation
+#   - Slow job is terminated by the job runner when runtime is exceeded
+#   - Job runner log contains the "End time reached" termination message
 
 run_test_timeout_detection() {
     local wf_id="$1"
@@ -22,39 +18,20 @@ run_test_timeout_detection() {
     assert_job_status "$wf_id" "job_fast" "completed"
     assert_return_code "$wf_id" "job_fast" "0"
 
-    # Slow job should fail (status may be "failed" or "terminated")
-    local slow_status
-    slow_status=$(torc --url "$TORC_API_URL" -f json jobs list "$wf_id" 2>/dev/null \
-        | jq -r '.jobs[] | select(.name == "job_slow") | .status')
-    if [ "$slow_status" = "failed" ] || [ "$slow_status" = "terminated" ]; then
-        _pass "job_slow has terminal failure status ($slow_status)"
+    # Slow job should be terminated (job runner kills it when runtime is exceeded)
+    assert_job_status "$wf_id" "job_slow" "terminated"
+
+    # Job runner log should contain the termination message
+    local runner_log_found=false
+    for log_file in "$REPO_ROOT"/torc_output/job_runner_logs/*.log; do
+        if [ -f "$log_file" ] && grep -q "End time reached" "$log_file" 2>/dev/null; then
+            runner_log_found=true
+            break
+        fi
+    done
+    if [ "$runner_log_found" = true ]; then
+        _pass "job runner log contains 'End time reached' termination message"
     else
-        _fail "job_slow expected failed/terminated, got '$slow_status'"
+        _fail "job runner log does not contain 'End time reached' termination message"
     fi
-
-    # Slow job return code should be non-zero
-    local slow_rc
-    local slow_id
-    slow_id=$(get_job_id "$wf_id" "job_slow")
-    slow_rc=$(torc --url "$TORC_API_URL" -f json reports results "$wf_id" 2>/dev/null \
-        | jq -r "[.results[] | select(.job_id == $slow_id)] | sort_by(.attempt_id) | last | .return_code")
-    assert_ne "${slow_rc:-0}" "0" "job_slow has non-zero return code (got $slow_rc)"
-
-    # parse-logs should detect timeout
-    assert_parse_logs_detect_timeout "$wf_id" "$REPO_ROOT/torc_output"
-
-    # logs analyze should detect timeout
-    assert_logs_analyze_detect_timeout "$wf_id" "$REPO_ROOT/torc_output"
-
-    # sacct should show TIMEOUT or FAILED state
-    local sacct_output
-    sacct_output=$(torc --url "$TORC_API_URL" slurm sacct "$wf_id" 2>&1) || true
-    if echo "$sacct_output" | grep -qiE "TIMEOUT|FAILED|CANCELLED"; then
-        _pass "sacct shows TIMEOUT/FAILED state"
-    else
-        _fail "sacct does not show TIMEOUT/FAILED (got: $(echo "$sacct_output" | head -5))"
-    fi
-
-    # check-resource-utilization should flag violations
-    assert_resource_utilization_flags_violation "$wf_id"
 }

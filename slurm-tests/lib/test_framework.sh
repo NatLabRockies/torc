@@ -316,7 +316,7 @@ assert_peak_cpu_nonzero() {
     local job_id peak_cpu
     job_id=$(torc --url "$TORC_API_URL" -f json jobs list "$wf_id" 2>/dev/null \
         | jq -r ".jobs[] | select(.name == \"$job_name\") | .id")
-    peak_cpu=$(torc --url "$TORC_API_URL" -f json reports results "$wf_id" 2>/dev/null \
+    peak_cpu=$(torc --url "$TORC_API_URL" -f json results list "$wf_id" 2>/dev/null \
         | jq -r "[.results[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .peak_cpu_percent // 0")
     assert_gt_float "${peak_cpu:-0}" "0" "job '$job_name' peak_cpu_percent > 0 (got $peak_cpu)"
 }
@@ -327,7 +327,7 @@ assert_peak_memory_nonzero() {
     local job_id peak_mem
     job_id=$(torc --url "$TORC_API_URL" -f json jobs list "$wf_id" 2>/dev/null \
         | jq -r ".jobs[] | select(.name == \"$job_name\") | .id")
-    peak_mem=$(torc --url "$TORC_API_URL" -f json reports results "$wf_id" 2>/dev/null \
+    peak_mem=$(torc --url "$TORC_API_URL" -f json results list "$wf_id" 2>/dev/null \
         | jq -r "[.results[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .peak_memory_bytes // 0")
     assert_gt "${peak_mem:-0}" "0" "job '$job_name' peak_memory_bytes > 0 (got $peak_mem)"
 }
@@ -338,7 +338,7 @@ assert_resource_utilization_flags_violation() {
     local wf_id="$1"
     local output
     output=$(torc --url "$TORC_API_URL" -f json reports check-resource-utilization "$wf_id" \
-        --include-failed 2>&1) || true
+        --include-failed 2>/dev/null) || true
     local violation_count
     violation_count=$(echo "$output" | jq '.resource_violations_count // .failed_jobs_count // 0' 2>/dev/null || echo 0)
     assert_gt "$violation_count" "0" "check-resource-utilization flags violations for workflow $wf_id"

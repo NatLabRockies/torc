@@ -33,11 +33,11 @@ run_test_failure_recovery() {
     stdout_work3=$(get_job_stdout "$wf_id" "$work3_id")
     assert_contains "$stdout_work3" "Completed successfully" "work_3 eventually succeeded"
 
-    # Check that the results show work_3 had multiple attempts
-    local results work3_results_count
-    results=$(torc --url "$TORC_API_URL" -f json reports results "$wf_id" 2>/dev/null)
-    work3_results_count=$(echo "$results" | jq "[.results[] | select(.job_id == $work3_id)] | length")
-    assert_ge "$work3_results_count" "2" "work_3 has >= 2 result entries (retry evidence)"
+    # Check that work_3 was retried by verifying its attempt_id >= 2
+    local work3_attempt
+    work3_attempt=$(torc --url "$TORC_API_URL" -f json results list "$wf_id" 2>/dev/null \
+        | jq -r "[.results[] | select(.job_id == $work3_id)] | sort_by(.attempt_id) | last | .attempt_id // 0")
+    assert_ge "${work3_attempt:-0}" "2" "work_3 attempt_id >= 2 (retry evidence)"
 
     # postprocess should contain completion message
     local post_id stdout_post
