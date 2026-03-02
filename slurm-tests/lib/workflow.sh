@@ -158,11 +158,11 @@ get_job_id() {
 
 # get_job_stdout WF_ID JOB_ID
 #   Returns the stdout of a job by reading the log file from torc_output/job_stdio/.
-#   Uses `torc reports results` to determine run_id and attempt_id for the file path.
+#   Uses `torc results list` to determine run_id and attempt_id for the file path.
 get_job_stdout() {
     local wf_id="$1" job_id="$2"
     local result run_id attempt_id stdout_path
-    result=$(torc --url "$TORC_API_URL" -f json reports results "$wf_id" 2>/dev/null) || return 0
+    result=$(torc --url "$TORC_API_URL" -f json results list "$wf_id" 2>/dev/null) || return 0
     run_id=$(echo "$result" | jq -r "[.results[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .run_id")
     attempt_id=$(echo "$result" | jq -r "[.results[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .attempt_id // 1")
     if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
@@ -174,11 +174,11 @@ get_job_stdout() {
 
 # get_job_stderr WF_ID JOB_ID
 #   Returns the stderr of a job by reading the log file from torc_output/job_stdio/.
-#   Uses `torc reports results` to determine run_id and attempt_id for the file path.
+#   Uses `torc results list` to determine run_id and attempt_id for the file path.
 get_job_stderr() {
     local wf_id="$1" job_id="$2"
     local result run_id attempt_id stderr_path
-    result=$(torc --url "$TORC_API_URL" -f json reports results "$wf_id" 2>/dev/null) || return 0
+    result=$(torc --url "$TORC_API_URL" -f json results list "$wf_id" 2>/dev/null) || return 0
     run_id=$(echo "$result" | jq -r "[.results[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .run_id")
     attempt_id=$(echo "$result" | jq -r "[.results[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .attempt_id // 1")
     if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then

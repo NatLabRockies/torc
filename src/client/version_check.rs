@@ -224,7 +224,9 @@ fn format_api_version_message(
             )
         }
         VersionMismatchSeverity::Minor => {
-            let direction = if client_api > server_api {
+            let client_parsed = parse_version(client_api);
+            let server_parsed = parse_version(server_api);
+            let direction = if client_parsed > server_parsed {
                 "client is newer than server"
             } else {
                 "server is newer than client"

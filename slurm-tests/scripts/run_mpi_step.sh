@@ -1,30 +1,30 @@
 #!/bin/bash
-# Simulates an MPI-style job that uses all allocated nodes.
-# Run via srun with --nodes=2 so each task runs on a different node.
+# Simulates an MPI-style job that uses a multi-node allocation.
 #
-# This script is invoked by torc via:
-#   srun --nodes=2 --ntasks=1 bash run_mpi_step.sh
-#
-# The environment will contain Slurm multi-node variables if step_nodes=2 is set.
+# With start_one_worker_per_node=false (default), a single torc worker runs
+# the job via srun --nodes=2 --ntasks=1.  The allocation spans 2 nodes but only
+# one task executes.  We verify the allocation size (SLURM_JOB_NUM_NODES) to
+# confirm that the scheduler requested the correct number of nodes.
 
 echo "=== Multi-node step job ==="
 echo "Hostname: $(hostname)"
 echo "SLURM_JOB_NODELIST: ${SLURM_JOB_NODELIST:-not set}"
 echo "SLURM_STEP_NODELIST: ${SLURM_STEP_NODELIST:-not set}"
 echo "SLURM_NNODES: ${SLURM_NNODES:-not set}"
+echo "SLURM_JOB_NUM_NODES: ${SLURM_JOB_NUM_NODES:-not set}"
 echo "SLURM_NTASKS: ${SLURM_NTASKS:-not set}"
 echo "SLURM_STEP_NUM_NODES: ${SLURM_STEP_NUM_NODES:-not set}"
 
-# Verify we see multiple nodes in the step node list
-NODE_COUNT=${SLURM_STEP_NUM_NODES:-${SLURM_NNODES:-1}}
-echo "Node count visible to this step: $NODE_COUNT"
+# Check the allocation node count (not the step node count)
+ALLOC_NODES=${SLURM_JOB_NUM_NODES:-${SLURM_NNODES:-1}}
+echo "Allocation node count: $ALLOC_NODES"
 
-if [ "$NODE_COUNT" -lt 2 ]; then
-    echo "WARNING: Expected at least 2 nodes in the step, got $NODE_COUNT"
-    echo "Check that step_nodes=2 is set in resource requirements"
+if [ "$ALLOC_NODES" -lt 2 ]; then
+    echo "WARNING: Expected at least 2 nodes in the allocation, got $ALLOC_NODES"
+    echo "Check that the Slurm scheduler has nodes=2"
 fi
 
-# Simulate work spanning multiple nodes
+# Simulate work
 echo "Doing multi-node work..."
 sleep 2
 

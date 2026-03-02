@@ -4,8 +4,8 @@
 #
 # Verifies:
 #   - Job completes successfully
-#   - SLURM_STEP_NUM_NODES >= 2 in job output
-#   - sacct shows multi-node step
+#   - Allocation spans >= 2 nodes (SLURM_JOB_NUM_NODES)
+#   - sacct shows multi-node allocation
 
 run_test_multi_node_mpi_step() {
     local wf_id="$1"
@@ -26,10 +26,10 @@ run_test_multi_node_mpi_step() {
 
     assert_contains "$stdout" "Multi-node step complete" "mpi_job produced expected output"
 
-    # Check node count >= 2 in stdout
+    # Check allocation node count >= 2 in stdout
     local node_count
-    node_count=$(echo "$stdout" | grep -oP 'Node count visible to this step: \K\d+' || echo 0)
-    assert_ge "$node_count" "2" "mpi step spans >= 2 nodes (got $node_count)"
+    node_count=$(echo "$stdout" | grep -oP 'Allocation node count: \K\d+' || echo 0)
+    assert_ge "$node_count" "2" "allocation spans >= 2 nodes (got $node_count)"
 
     # Verify sacct shows the allocation
     local sacct_output

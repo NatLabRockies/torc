@@ -485,8 +485,8 @@ fn test_create_submission_script_with_srun() {
         fs::read_to_string(&script_path).expect("Failed to read submission script");
 
     assert!(
-        script_content.contains("srun torc-slurm-job-runner"),
-        "Should have srun prefix when start_one_worker_per_node is true"
+        script_content.contains("srun --ntasks-per-node=1 torc-slurm-job-runner"),
+        "Should have srun prefix with --ntasks-per-node=1 when start_one_worker_per_node is true"
     );
 
     assert!(
