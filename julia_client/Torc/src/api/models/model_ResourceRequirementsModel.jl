@@ -22,7 +22,7 @@
     - num_cpus::Int64 : Number of CPUs required by a job
     - num_gpus::Int64 : Number of GPUs required by a job
     - num_nodes::Int64 : Number of nodes required by a job (allocation size for sbatch)
-    - step_nodes::Int64 : Number of nodes each srun step spans. Distinct from num_nodes (allocation size). Defaults to 1. Set to num_nodes for MPI or Julia Distributed.jl jobs. 
+    - step_nodes::Int64 : Number of nodes each srun step spans. Distinct from num_nodes (allocation size). Defaults to 1. Set to num_nodes for MPI or Julia Distributed.jl jobs.
     - memory::String : Amount of memory required by a job, e.g., 20g
     - runtime::String : Maximum runtime for a job
 """
