@@ -20,23 +20,28 @@ pub struct SinfoPartition {
 /// Additional partition info from scontrol
 #[derive(Debug, Default)]
 struct ScontrolPartitionInfo {
-    #[allow(dead_code)]
     min_nodes: Option<u32>,
-    #[allow(dead_code)]
     max_nodes: Option<u32>,
     oversubscribe: Option<String>,
-    #[allow(dead_code)]
     default_qos: Option<String>,
 }
 
-/// Get the sinfo executable path (allows for testing with fake binary)
+/// Get the sinfo executable path (allows for testing with fake binary in dev/test builds)
 fn get_sinfo_exec() -> String {
-    std::env::var("TORC_FAKE_SINFO").unwrap_or_else(|_| "sinfo".to_string())
+    if cfg!(any(test, debug_assertions)) {
+        std::env::var("TORC_FAKE_SINFO").unwrap_or_else(|_| "sinfo".to_string())
+    } else {
+        "sinfo".to_string()
+    }
 }
 
-/// Get the scontrol executable path (allows for testing with fake binary)
+/// Get the scontrol executable path (allows for testing with fake binary in dev/test builds)
 fn get_scontrol_exec() -> String {
-    std::env::var("TORC_FAKE_SCONTROL").unwrap_or_else(|_| "scontrol".to_string())
+    if cfg!(any(test, debug_assertions)) {
+        std::env::var("TORC_FAKE_SCONTROL").unwrap_or_else(|_| "scontrol".to_string())
+    } else {
+        "scontrol".to_string()
+    }
 }
 
 /// Detect if Slurm is available and return a dynamic profile
@@ -148,11 +153,15 @@ pub fn generate_dynamic_slurm_profile(
             min_memory = min_memory.min(sp.memory_mb);
             max_walltime = max_walltime.max(sp.timelimit_secs);
 
-            // Capture GPU info if present
+            // Capture GPU info if present, using minimum count across node types
             let (gp, gt) = parse_gres(&sp.gres);
-            if gp.is_some() {
-                gpus_per_node = gp;
-                gpu_type = gt;
+            if let Some(count) = gp {
+                gpus_per_node = Some(gpus_per_node.map_or(count, |prev| prev.min(count)));
+                match (&gpu_type, &gt) {
+                    (None, _) => gpu_type = gt,
+                    (Some(existing), Some(new)) if existing != new => gpu_type = None,
+                    _ => {}
+                }
             }
         }
 

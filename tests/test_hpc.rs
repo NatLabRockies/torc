@@ -3025,16 +3025,20 @@ fn test_resolve_hpc_profile_dynamic_slurm_fallback() {
 }
 
 #[rstest]
+#[serial]
 fn test_resolve_hpc_profile_no_detection_no_slurm() {
+    // Point fake executables to nonexistent paths so Slurm detection always fails
+    let mut overrides = HashMap::new();
+    overrides.insert("TORC_FAKE_SINFO", "/nonexistent/sinfo");
+    overrides.insert("TORC_FAKE_SCONTROL", "/nonexistent/scontrol");
+    let _guard = EnvGuard::new(overrides);
+
     // Empty registry, no Slurm available → should return error
     let registry = HpcProfileRegistry::new();
     let result = resolve_hpc_profile(&registry, None);
-    // This may succeed if running on a Slurm cluster, but on CI/local it should fail
-    // We can't guarantee Slurm isn't available, so just check the return type
-    if result.is_err() {
-        let err = result.unwrap_err();
-        assert!(err.contains("No HPC profile specified"));
-    }
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(err.contains("No HPC profile specified"));
 }
 
 #[rstest]

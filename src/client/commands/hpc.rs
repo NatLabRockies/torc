@@ -274,18 +274,6 @@ pub fn handle_hpc_commands(command: &HpcCommands, format: &str) {
                         profile.display_name, profile.name
                     );
                 }
-            } else if let Some(profile) = crate::client::hpc::slurm::detect_slurm_profile() {
-                if format == "json" {
-                    print_json(&profile, "detected hpc profile");
-                } else {
-                    println!(
-                        "Dynamically detected Slurm cluster: {} ({})",
-                        profile.display_name, profile.name
-                    );
-                    println!("  {} partition(s) available", profile.partitions.len());
-                    println!();
-                    println!("Tip: Run 'torc hpc generate' to save this as a reusable profile.");
-                }
             } else if format == "json" {
                 print_json(&Option::<HpcProfile>::None, "detected hpc profile");
             } else {
