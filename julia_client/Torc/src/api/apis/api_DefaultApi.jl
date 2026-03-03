@@ -4020,6 +4020,7 @@ const _returntypes_update_resource_requirements_DefaultApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ResourceRequirementsModel,
     Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
     Regex("^" * replace("404", "x"=>".") * "\$") => NotFoundErrorResponse,
+    Regex("^" * replace("422", "x"=>".") * "\$") => DefaultErrorResponse,
     Regex("^" * replace("500", "x"=>".") * "\$") => DefaultErrorResponse,
 )
 

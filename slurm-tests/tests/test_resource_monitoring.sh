@@ -30,7 +30,7 @@ run_test_resource_monitoring() {
     local results
     results=$(torc --url "$TORC_API_URL" -f json reports results "$wf_id" 2>/dev/null)
     local result_count
-    result_count=$(echo "$results" | jq 'length')
+    result_count=$(echo "$results" | jq '.results | length')
     assert_ge "$result_count" "2" "at least 2 results in reports"
 
     # Check time-series resource metrics DB exists and has data

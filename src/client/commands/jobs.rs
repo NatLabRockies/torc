@@ -136,7 +136,7 @@ EXAMPLES:
 
     # Specify resources per job
     torc jobs create-from-file 123 batch_jobs.txt \\
-        --cpus-per-job 4 --memory-per-job 8g --runtime-per-job P0DT2H
+        --cpus-per-job 4 --memory-per-job 8g --runtime-per-job PT2H
 
     # Example file format (batch_jobs.txt):
     # # Data processing jobs
@@ -172,11 +172,11 @@ EXAMPLES:
         /// Runtime per job (ISO 8601 duration format)
         ///
         /// Examples:
-        ///   P0DT1M    = 1 minute
-        ///   P0DT30M   = 30 minutes  
-        ///   P0DT2H    = 2 hours
-        ///   P1DT0H    = 1 day
-        #[arg(long, default_value = "P0DT1M")]
+        ///   PT1M      = 1 minute
+        ///   PT30M     = 30 minutes
+        ///   PT2H      = 2 hours
+        ///   P1D       = 1 day
+        #[arg(long, default_value = "PT1M")]
         runtime_per_job: String,
     },
     /// List jobs

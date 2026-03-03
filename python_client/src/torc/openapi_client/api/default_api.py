@@ -33229,6 +33229,7 @@ class DefaultApi:
             '200': "ResourceRequirementsModel",
             '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
+            '422': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -33303,6 +33304,7 @@ class DefaultApi:
             '200': "ResourceRequirementsModel",
             '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
+            '422': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -33377,6 +33379,7 @@ class DefaultApi:
             '200': "ResourceRequirementsModel",
             '403': "ForbiddenErrorResponse",
             '404': "NotFoundErrorResponse",
+            '422': "DefaultErrorResponse",
             '500': "DefaultErrorResponse",
         }
         response_data = self.api_client.call_api(

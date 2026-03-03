@@ -2878,6 +2878,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/not_found_error_response"
           description: Resource requirements not found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/default_error_response"
+          description: Unprocessable content
         "500":
           content:
             application/json:

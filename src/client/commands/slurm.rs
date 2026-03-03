@@ -1272,6 +1272,10 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
                 eprintln!("Error: Path not found: {}", path.display());
                 std::process::exit(1);
             }
+            if !path.is_dir() {
+                eprintln!("Error: Path is not a directory: {}", path.display());
+                std::process::exit(1);
+            }
             let wf_id = match workflow_id {
                 Some(id) => *id,
                 None => {
