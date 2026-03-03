@@ -78,7 +78,7 @@ fn test_resource_requirements_add_with_defaults(start_server: &ServerProcess) {
     assert_eq!(json_output.get("num_gpus").unwrap(), &json!(0));
     assert_eq!(json_output.get("num_nodes").unwrap(), &json!(1));
     assert_eq!(json_output.get("memory").unwrap(), &json!("1m"));
-    assert_eq!(json_output.get("runtime").unwrap(), &json!("P0DT1M"));
+    assert_eq!(json_output.get("runtime").unwrap(), &json!("PT1M"));
 }
 
 #[rstest]

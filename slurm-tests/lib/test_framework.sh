@@ -321,6 +321,15 @@ assert_peak_cpu_nonzero() {
     assert_gt_float "${peak_cpu:-0}" "0" "job '$job_name' peak_cpu_percent > 0 (got $peak_cpu)"
 }
 
+# assert_any_peak_cpu_nonzero WF_ID — at least one job in the workflow has peak_cpu > 0
+assert_any_peak_cpu_nonzero() {
+    local wf_id="$1"
+    local max_peak_cpu
+    max_peak_cpu=$(torc --url "$TORC_API_URL" -f json results list "$wf_id" 2>/dev/null \
+        | jq -r '[.results[].peak_cpu_percent // 0] | max // 0')
+    assert_gt_float "${max_peak_cpu:-0}" "0" "at least one job has peak_cpu_percent > 0 (max=$max_peak_cpu)"
+}
+
 # assert_peak_memory_nonzero WF_ID JOB_NAME
 assert_peak_memory_nonzero() {
     local wf_id="$1" job_name="$2"
