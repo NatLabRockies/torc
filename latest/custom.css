@@ -1,0 +1,51 @@
+/* Hide section numbers on the deepest level (actual content pages like 3.1.1, 3.1.2) */
+/* Target: chapter > section (group headers) > section (content pages) */
+ol.section ol.section > li.chapter-item strong {
+    display: none;
+}
+
+/* Increase content width to accommodate wide tables */
+.content main {
+    max-width: 1200px;
+}
+
+/* Prevent navigation arrows from overlapping content */
+.nav-chapters {
+    background: var(--bg);
+}
+
+/* Add padding to content so nav arrows don't overlap text */
+.content {
+    padding-left: 90px;
+    padding-right: 90px;
+}
+
+@media (max-width: 1600px) {
+    .content main {
+        max-width: 900px;
+    }
+}
+
+/* Table styling */
+table {
+    width: 100%;
+}
+
+table code {
+    white-space: nowrap;
+}
+
+/* Fixed-width columns for cheatsheet tables (2-column command/description format) */
+.cheatsheet table {
+    table-layout: fixed;
+}
+
+.cheatsheet table th:first-child,
+.cheatsheet table td:first-child {
+    width: 55%;
+}
+
+.cheatsheet table th:last-child,
+.cheatsheet table td:last-child {
+    width: 45%;
+}
