@@ -3064,3 +3064,151 @@ fn test_resolve_hpc_profile_slurm_special_name() {
     assert!(result.is_ok());
     assert_eq!(result.unwrap().name, "test_cluster");
 }
+
+// ============== Partition Selection (tightest-fit) Tests ==============
+
+/// Build a dynamic-style profile where "bigmem" sorts alphabetically before "standard".
+/// This reproduces the bug where `.find()` picked the first match (bigmem) instead of
+/// the smallest sufficient partition (standard).
+fn dynamic_profile_with_bigmem() -> HpcProfile {
+    HpcProfile {
+        name: "test_dynamic".to_string(),
+        display_name: "Test Dynamic Cluster".to_string(),
+        description: "Profile for testing tightest-fit partition selection".to_string(),
+        detection: vec![],
+        default_account: None,
+        charge_factor_cpu: 1.0,
+        charge_factor_gpu: 10.0,
+        metadata: HashMap::new(),
+        partitions: vec![
+            // Alphabetically first — should NOT be selected for small jobs
+            HpcPartition {
+                name: "bigmem".to_string(),
+                description: "Big memory partition".to_string(),
+                cpus_per_node: 104,
+                memory_mb: 2_000_000, // ~1953g
+                max_walltime_secs: 172800,
+                max_nodes: None,
+                max_nodes_per_user: None,
+                min_nodes: None,
+                gpus_per_node: None,
+                gpu_type: None,
+                gpu_memory_gb: None,
+                local_disk_gb: None,
+                shared: false,
+                requires_explicit_request: false,
+                default_qos: Some("p_bigmem".to_string()),
+                features: vec![],
+            },
+            // Alphabetically second — should be selected for small/medium jobs
+            HpcPartition {
+                name: "standard".to_string(),
+                description: "Standard partition".to_string(),
+                cpus_per_node: 104,
+                memory_mb: 246_064, // ~240g
+                max_walltime_secs: 172800,
+                max_nodes: None,
+                max_nodes_per_user: None,
+                min_nodes: None,
+                gpus_per_node: None,
+                gpu_type: None,
+                gpu_memory_gb: None,
+                local_disk_gb: None,
+                shared: false,
+                requires_explicit_request: false,
+                default_qos: None,
+                features: vec![],
+            },
+        ],
+    }
+}
+
+#[rstest]
+fn test_find_best_partition_prefers_smallest_memory() {
+    let profile = dynamic_profile_with_bigmem();
+
+    // A job needing 50g should land on "standard" (240g), not "bigmem" (1953g)
+    let best = profile
+        .find_best_partition(4, 50_000, 3600, None)
+        .expect("Should find a partition");
+    assert_eq!(
+        best.name, "standard",
+        "Should pick standard (240g) over bigmem (1953g) for a 50g job"
+    );
+}
+
+#[rstest]
+fn test_find_best_partition_uses_bigmem_when_needed() {
+    let profile = dynamic_profile_with_bigmem();
+
+    // A job needing 500g must go to bigmem — standard (240g) can't satisfy it
+    let best = profile
+        .find_best_partition(4, 500_000, 3600, None)
+        .expect("Should find a partition");
+    assert_eq!(
+        best.name, "bigmem",
+        "Should pick bigmem when standard can't satisfy memory requirement"
+    );
+}
+
+#[rstest]
+fn test_find_best_partition_gpu_prefers_smallest() {
+    // Profile with two GPU partitions of different sizes, alphabetically ordered
+    let profile = HpcProfile {
+        name: "test_gpu".to_string(),
+        display_name: "Test GPU Cluster".to_string(),
+        description: String::new(),
+        detection: vec![],
+        default_account: None,
+        charge_factor_cpu: 1.0,
+        charge_factor_gpu: 10.0,
+        metadata: HashMap::new(),
+        partitions: vec![
+            HpcPartition {
+                name: "gpu-a100".to_string(),
+                description: "A100 GPU partition".to_string(),
+                cpus_per_node: 64,
+                memory_mb: 500_000,
+                max_walltime_secs: 172800,
+                max_nodes: None,
+                max_nodes_per_user: None,
+                min_nodes: None,
+                gpus_per_node: Some(4),
+                gpu_type: Some("a100".to_string()),
+                gpu_memory_gb: Some(80),
+                local_disk_gb: None,
+                shared: false,
+                requires_explicit_request: false,
+                default_qos: None,
+                features: vec![],
+            },
+            HpcPartition {
+                name: "gpu-h100".to_string(),
+                description: "H100 GPU partition".to_string(),
+                cpus_per_node: 64,
+                memory_mb: 200_000,
+                max_walltime_secs: 172800,
+                max_nodes: None,
+                max_nodes_per_user: None,
+                min_nodes: None,
+                gpus_per_node: Some(4),
+                gpu_type: Some("h100".to_string()),
+                gpu_memory_gb: Some(80),
+                local_disk_gb: None,
+                shared: false,
+                requires_explicit_request: false,
+                default_qos: None,
+                features: vec![],
+            },
+        ],
+    };
+
+    // Should pick gpu-h100 (200g) over gpu-a100 (500g) for a small GPU job
+    let best = profile
+        .find_best_partition(4, 100_000, 3600, Some(1))
+        .expect("Should find a GPU partition");
+    assert_eq!(
+        best.name, "gpu-h100",
+        "Should pick the GPU partition with smallest sufficient memory"
+    );
+}
