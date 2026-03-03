@@ -25,7 +25,7 @@ run_test_timeout_detection() {
     # Slurm job runner logs are written to torc_output/ as job_runner_slurm_wf<ID>_*.log
     # Filter by workflow ID to avoid false positives from other workflows in the same run.
     local runner_log_found=false
-    for log_file in "$REPO_ROOT"/torc_output/job_runner_*wf${wf_id}_*.log; do
+    for log_file in "$REPO_ROOT"/torc_output/job_runner_*wf"${wf_id}"_*.log; do
         if [ -f "$log_file" ] && grep -q "End time reached" "$log_file" 2>/dev/null; then
             runner_log_found=true
             break
