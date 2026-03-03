@@ -170,7 +170,7 @@ impl AsyncCliCommand {
                 // Default to 1 (single-node step); set step_nodes > 1 for MPI / Julia Distributed.jl.
                 let step_nodes = rr.step_nodes.unwrap_or(1).max(1);
                 srun.arg(format!("--nodes={}", step_nodes));
-                if limit_resources {
+                if limit_resources && rr.name != "default" {
                     srun.arg(format!("--cpus-per-task={}", rr.num_cpus));
                     match memory_string_to_mb(&rr.memory) {
                         Some(mem_mb) if mem_mb > 0 => {
