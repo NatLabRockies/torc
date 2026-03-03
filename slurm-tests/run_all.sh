@@ -161,7 +161,7 @@ echo "Run directory: $RUN_DIR"
 
 # ── Cleanup trap ──────────────────────────────────────────────────────────────
 
-# shellcheck disable=SC2329  # Used via trap
+# shellcheck disable=SC2317,SC2329  # Used via trap
 cleanup() {
   echo ""
   echo "Cleaning up..."
