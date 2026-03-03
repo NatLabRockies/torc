@@ -239,6 +239,8 @@ pub struct App {
     pub results: Vec<ResultModel>,
     pub results_all: Vec<ResultModel>,
     pub results_state: TableState,
+    pub results_workflow_id: Option<i64>,
+    pub exec_time_map: std::collections::HashMap<(i64, i64, i64), f64>,
     pub scheduled_nodes: Vec<ScheduledComputeNodesModel>,
     pub scheduled_nodes_all: Vec<ScheduledComputeNodesModel>,
     pub scheduled_nodes_state: TableState,
@@ -335,6 +337,8 @@ impl App {
             results: Vec::new(),
             results_all: Vec::new(),
             results_state: TableState::default(),
+            results_workflow_id: None,
+            exec_time_map: std::collections::HashMap::new(),
             scheduled_nodes: Vec::new(),
             scheduled_nodes_all: Vec::new(),
             scheduled_nodes_state: TableState::default(),
@@ -510,7 +514,10 @@ impl App {
                         self.start_sse_connection(workflow_id);
                     }
                     DetailViewType::Results => {
-                        self.results_all = self.client.list_results(workflow_id)?;
+                        if self.results_workflow_id != Some(workflow_id) {
+                            self.results_all = self.client.list_results(workflow_id)?;
+                            self.results_workflow_id = Some(workflow_id);
+                        }
                         self.results = self.results_all.clone();
                         if !self.results.is_empty() {
                             self.results_state.select(Some(0));
@@ -531,12 +538,15 @@ impl App {
                             self.slurm_stats_state.select(Some(0));
                         }
                         // Load results for CPU% computation if not already loaded
-                        if self.results_all.is_empty()
+                        // for this workflow
+                        if self.results_workflow_id != Some(workflow_id)
                             && let Ok(r) = self.client.list_results(workflow_id)
                         {
                             self.results_all = r;
                             self.results = self.results_all.clone();
+                            self.results_workflow_id = Some(workflow_id);
                         }
+                        self.rebuild_exec_time_map();
                     }
                     DetailViewType::Dag => {
                         // Load jobs if not already loaded
@@ -551,6 +561,20 @@ impl App {
             }
         }
         Ok(())
+    }
+
+    /// Rebuild the cached exec_time_map from results_all.
+    /// Called when results are loaded or refreshed so draw_slurm_stats_table
+    /// can look up execution times without rebuilding the map every frame.
+    fn rebuild_exec_time_map(&mut self) {
+        self.exec_time_map = self
+            .results_all
+            .iter()
+            .map(|r| {
+                let attempt_id = r.attempt_id.unwrap_or(1);
+                ((r.job_id, r.run_id, attempt_id), r.exec_time_minutes)
+            })
+            .collect();
     }
 
     pub fn next_detail_view(&mut self) {
@@ -947,9 +971,11 @@ impl App {
                 if let Ok(results) = self.client.list_results(workflow_id) {
                     self.results_all = results.clone();
                     self.results = results;
+                    self.results_workflow_id = Some(workflow_id);
                     if !self.results.is_empty() {
                         self.results_state.select(Some(0));
                     }
+                    self.rebuild_exec_time_map();
                 }
             }
             // Refresh workflow list to update status

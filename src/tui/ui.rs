@@ -900,16 +900,6 @@ fn draw_slurm_stats_table(f: &mut Frame, area: Rect, app: &mut App) {
         .fg(Color::Yellow)
         .add_modifier(Modifier::BOLD);
 
-    // Build exec_time lookup for CPU% computation
-    let exec_time_map: std::collections::HashMap<(i64, i64, i64), f64> = app
-        .results_all
-        .iter()
-        .map(|r| {
-            let attempt_id = r.attempt_id.unwrap_or(1);
-            ((r.job_id, r.run_id, attempt_id), r.exec_time_minutes)
-        })
-        .collect();
-
     let header = Row::new(vec![
         "Job ID",
         "Run",
@@ -948,7 +938,7 @@ fn draw_slurm_stats_table(f: &mut Frame, area: Rect, app: &mut App) {
             .ave_cpu_seconds
             .filter(|&s| s > 0.0)
             .and_then(|ave_s| {
-                exec_time_map
+                app.exec_time_map
                     .get(&(stat.job_id, stat.run_id, stat.attempt_id))
                     .filter(|&&m| m > 0.0)
                     .map(|&m| ave_s / (m * 60.0) * 100.0)
