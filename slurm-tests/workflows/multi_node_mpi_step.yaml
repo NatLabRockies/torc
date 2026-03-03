@@ -1,0 +1,37 @@
+# Test 4: Multi-Node MPI Step
+#
+# 2-node allocation, 1 job with step_nodes=2.
+# Verifies srun --nodes=2 invoked, SLURM_STEP_NUM_NODES >= 2, sacct shows multi-node step.
+# Adapted from tests/workflows/multi_node_mpi_step_test/
+
+name: multi_node_mpi_step
+description: Test srun step spanning two nodes (step_nodes=num_nodes=2)
+project: slurm-tests
+
+resource_requirements:
+  - name: mpi_resources
+    num_cpus: 4
+    num_nodes: 2
+    step_nodes: 2
+    memory: 4g
+    runtime: PT10M
+
+jobs:
+  - name: mpi_job
+    command: bash slurm-tests/scripts/run_mpi_step.sh
+    resource_requirements: mpi_resources
+    scheduler: two_node_scheduler
+
+slurm_schedulers:
+  - name: two_node_scheduler
+    account: PLACEHOLDER_ACCOUNT
+    partition: PLACEHOLDER_PARTITION
+    nodes: 2
+    walltime: "00:15:00"
+
+actions:
+  - trigger_type: "on_workflow_start"
+    action_type: "schedule_nodes"
+    scheduler: "two_node_scheduler"
+    scheduler_type: "slurm"
+    num_allocations: 1

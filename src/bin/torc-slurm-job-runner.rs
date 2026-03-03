@@ -246,7 +246,10 @@ mod unix_main {
             }
         };
 
-        let unique_label = format!("{}_{}_{}", job_id, node_id, task_pid);
+        let unique_label = format!(
+            "wf{}_sl{}_n{}_p{}",
+            args.workflow_id, job_id, node_id, task_pid
+        );
 
         let mut job_runner = JobRunner::new(
             config.clone(),

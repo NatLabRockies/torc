@@ -8129,6 +8129,18 @@ pub struct ResourceRequirementsModel {
     #[serde(rename = "num_nodes")]
     pub num_nodes: i64,
 
+    /// Number of nodes each srun step spans.
+    ///
+    /// Distinct from `num_nodes` (which is the Slurm allocation size used by sbatch).
+    /// `step_nodes` controls `srun --nodes` for each individual job step.  Defaults to 1
+    /// (single-node step), which is correct for most workflows including multi-worker
+    /// `start_one_worker_per_node` setups.  Set to `num_nodes` for workflows where each
+    /// job is a distributed computation that spans the entire allocation (e.g. MPI or
+    /// Julia `Distributed.jl`).
+    #[serde(rename = "step_nodes")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub step_nodes: Option<i64>,
+
     /// Amount of memory required by a job, e.g., 20g
     #[serde(rename = "memory")]
     pub memory: String,
@@ -8148,6 +8160,7 @@ impl ResourceRequirementsModel {
             num_cpus: 1,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "1m".to_string(),
             runtime: "P0DT1M".to_string(),
         }
@@ -8169,6 +8182,9 @@ impl std::string::ToString for ResourceRequirementsModel {
             Some(self.num_cpus.to_string()),
             Some(self.num_gpus.to_string()),
             Some(self.num_nodes.to_string()),
+            self.step_nodes
+                .as_ref()
+                .map(|v| ["step_nodes".to_string(), v.to_string()].join(",")),
             Some(self.memory.to_string()),
             Some(self.runtime.to_string()),
         ];
@@ -8194,6 +8210,7 @@ impl std::str::FromStr for ResourceRequirementsModel {
             pub num_cpus: Vec<i64>,
             pub num_gpus: Vec<i64>,
             pub num_nodes: Vec<i64>,
+            pub step_nodes: Vec<i64>,
             pub memory: Vec<String>,
             pub runtime: Vec<String>,
         }
@@ -8233,6 +8250,9 @@ impl std::str::FromStr for ResourceRequirementsModel {
                         <i64 as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
                     ),
                     "num_nodes" => intermediate_rep.num_nodes.push(
+                        <i64 as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
+                    ),
+                    "step_nodes" => intermediate_rep.step_nodes.push(
                         <i64 as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
                     ),
                     "memory" => intermediate_rep.memory.push(
@@ -8281,6 +8301,7 @@ impl std::str::FromStr for ResourceRequirementsModel {
                 .into_iter()
                 .next()
                 .ok_or_else(|| "num_nodes missing in ResourceRequirementsModel".to_string())?,
+            step_nodes: intermediate_rep.step_nodes.into_iter().next(),
             memory: intermediate_rep
                 .memory
                 .into_iter()
@@ -9748,6 +9769,20 @@ pub struct WorkflowModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub use_pending_failed: Option<bool>,
 
+    /// When true (default), srun passes --mem and --cpus-per-task to enforce cgroup limits for
+    /// each job step when running inside a Slurm allocation. Set to false to allow jobs to exceed
+    /// their stated resource requirements (useful for exploratory workloads).
+    #[serde(rename = "limit_resources")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit_resources: Option<bool>,
+
+    /// When true (default), jobs are wrapped with srun inside Slurm allocations for cgroup
+    /// enforcement and accounting. Set to false to use direct shell execution even inside
+    /// a Slurm allocation (disables srun job steps, sacct, and sstat monitoring).
+    #[serde(rename = "use_srun")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub use_srun: Option<bool>,
+
     /// Project name or identifier for grouping workflows
     #[serde(rename = "project")]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -9781,6 +9816,8 @@ impl WorkflowModel {
             resource_monitor_config: None,
             slurm_defaults: None,
             use_pending_failed: Some(false),
+            limit_resources: Some(true),
+            use_srun: Some(true),
             project: None,
             metadata: None,
             status_id: None,
@@ -9860,6 +9897,12 @@ impl std::string::ToString for WorkflowModel {
                 ]
                 .join(",")
             }),
+            self.limit_resources.as_ref().map(|limit_resources| {
+                ["limit_resources".to_string(), limit_resources.to_string()].join(",")
+            }),
+            self.use_srun
+                .as_ref()
+                .map(|use_srun| ["use_srun".to_string(), use_srun.to_string()].join(",")),
             self.status_id
                 .as_ref()
                 .map(|status_id| ["status_id".to_string(), status_id.to_string()].join(",")),
@@ -9894,6 +9937,8 @@ impl std::str::FromStr for WorkflowModel {
             pub resource_monitor_config: Vec<String>,
             pub slurm_defaults: Vec<String>,
             pub use_pending_failed: Vec<bool>,
+            pub limit_resources: Vec<bool>,
+            pub use_srun: Vec<bool>,
             pub project: Vec<String>,
             pub metadata: Vec<String>,
             pub status_id: Vec<i64>,
@@ -9969,6 +10014,12 @@ impl std::str::FromStr for WorkflowModel {
                     "use_pending_failed" => intermediate_rep.use_pending_failed.push(
                         <bool as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
                     ),
+                    "limit_resources" => intermediate_rep.limit_resources.push(
+                        <bool as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
+                    ),
+                    "use_srun" => intermediate_rep.use_srun.push(
+                        <bool as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
+                    ),
                     "project" => intermediate_rep.project.push(
                         <String as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
                     ),
@@ -10026,6 +10077,8 @@ impl std::str::FromStr for WorkflowModel {
             resource_monitor_config: intermediate_rep.resource_monitor_config.into_iter().next(),
             slurm_defaults: intermediate_rep.slurm_defaults.into_iter().next(),
             use_pending_failed: intermediate_rep.use_pending_failed.into_iter().next(),
+            limit_resources: intermediate_rep.limit_resources.into_iter().next(),
+            use_srun: intermediate_rep.use_srun.into_iter().next(),
             project: intermediate_rep.project.into_iter().next(),
             metadata: intermediate_rep.metadata.into_iter().next(),
             status_id: intermediate_rep.status_id.into_iter().next(),
@@ -11087,4 +11140,125 @@ pub struct AccessCheckResponse {
     /// Reason for access denial
     #[serde(rename = "reason", skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, validator::Validate)]
+#[cfg_attr(feature = "conversion", derive(frunk::LabelledGeneric))]
+pub struct SlurmStatsModel {
+    #[serde(rename = "id")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<i64>,
+
+    /// Database ID for the workflow
+    #[serde(rename = "workflow_id")]
+    pub workflow_id: i64,
+
+    /// Database ID for the job
+    #[serde(rename = "job_id")]
+    pub job_id: i64,
+
+    /// ID of the workflow run
+    #[serde(rename = "run_id")]
+    pub run_id: i64,
+
+    /// Retry attempt number (starts at 1)
+    #[serde(rename = "attempt_id")]
+    pub attempt_id: i64,
+
+    /// Slurm allocation ID (from SLURM_JOB_ID env var)
+    #[serde(rename = "slurm_job_id")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slurm_job_id: Option<String>,
+
+    /// Max resident set size in bytes (from sacct MaxRSS)
+    #[serde(rename = "max_rss_bytes")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_rss_bytes: Option<i64>,
+
+    /// Max virtual memory size in bytes (from sacct MaxVMSize)
+    #[serde(rename = "max_vm_size_bytes")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_vm_size_bytes: Option<i64>,
+
+    /// Max disk read in bytes (from sacct MaxDiskRead)
+    #[serde(rename = "max_disk_read_bytes")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_disk_read_bytes: Option<i64>,
+
+    /// Max disk write in bytes (from sacct MaxDiskWrite)
+    #[serde(rename = "max_disk_write_bytes")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_disk_write_bytes: Option<i64>,
+
+    /// Average CPU time in seconds (from sacct AveCPU)
+    #[serde(rename = "ave_cpu_seconds")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ave_cpu_seconds: Option<f64>,
+
+    /// Node(s) on which the step ran (from sacct NodeList)
+    #[serde(rename = "node_list")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub node_list: Option<String>,
+}
+
+impl SlurmStatsModel {
+    pub fn new(workflow_id: i64, job_id: i64, run_id: i64, attempt_id: i64) -> SlurmStatsModel {
+        SlurmStatsModel {
+            id: None,
+            workflow_id,
+            job_id,
+            run_id,
+            attempt_id,
+            slurm_job_id: None,
+            max_rss_bytes: None,
+            max_vm_size_bytes: None,
+            max_disk_read_bytes: None,
+            max_disk_write_bytes: None,
+            ave_cpu_seconds: None,
+            node_list: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, validator::Validate)]
+#[cfg_attr(feature = "conversion", derive(frunk::LabelledGeneric))]
+pub struct ListSlurmStatsResponse {
+    #[serde(rename = "items")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub items: Option<Vec<models::SlurmStatsModel>>,
+
+    #[serde(rename = "offset")]
+    pub offset: i64,
+
+    #[serde(rename = "max_limit")]
+    pub max_limit: i64,
+
+    #[serde(rename = "count")]
+    pub count: i64,
+
+    #[serde(rename = "total_count")]
+    pub total_count: i64,
+
+    #[serde(rename = "has_more")]
+    pub has_more: bool,
+}
+
+impl ListSlurmStatsResponse {
+    #[allow(clippy::new_without_default)]
+    pub fn new(
+        offset: i64,
+        max_limit: i64,
+        count: i64,
+        total_count: i64,
+        has_more: bool,
+    ) -> ListSlurmStatsResponse {
+        ListSlurmStatsResponse {
+            items: None,
+            offset,
+            max_limit,
+            count,
+            total_count,
+            has_more,
+        }
+    }
 }

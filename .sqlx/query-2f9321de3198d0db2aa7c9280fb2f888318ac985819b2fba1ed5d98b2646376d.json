@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT jif.job_id, jif.file_id\n            FROM job_input_file jif\n            JOIN job j ON j.id = jif.job_id\n            WHERE j.workflow_id = $1\n            ORDER BY jif.job_id, jif.file_id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "job_id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "file_id",
+        "ordinal": 1,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "2f9321de3198d0db2aa7c9280fb2f888318ac985819b2fba1ed5d98b2646376d"
+}

@@ -27,6 +27,7 @@ pub mod remote;
 pub mod report_models;
 pub mod resource_monitor;
 pub mod scheduler_plan;
+pub mod slurm_utils;
 pub mod sse_client;
 pub mod utils;
 pub mod version_check;

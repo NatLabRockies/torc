@@ -317,6 +317,7 @@ fn test_generate_schedulers_basic() {
                 num_cpus: 4,
                 num_gpus: 0,
                 num_nodes: 1,
+                step_nodes: None,
                 memory: "8g".to_string(),
                 runtime: "PT1H".to_string(),
             },
@@ -325,6 +326,7 @@ fn test_generate_schedulers_basic() {
                 num_cpus: 32,
                 num_gpus: 0,
                 num_nodes: 1,
+                step_nodes: None,
                 memory: "64g".to_string(),
                 runtime: "PT4H".to_string(),
             },
@@ -413,6 +415,7 @@ fn test_generate_schedulers_with_gpus() {
             num_cpus: 64,
             num_gpus: 2,
             num_nodes: 1,
+            step_nodes: None,
             memory: "200g".to_string(),
             runtime: "PT8H".to_string(),
         }]),
@@ -463,6 +466,7 @@ fn test_generate_schedulers_no_actions() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "8g".to_string(),
             runtime: "PT1H".to_string(),
         }]),
@@ -519,6 +523,7 @@ fn test_generate_schedulers_shared_by_jobs() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "8g".to_string(),
             runtime: "PT1H".to_string(),
         }]),
@@ -604,6 +609,7 @@ fn test_generate_schedulers_existing_schedulers_no_force() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "8g".to_string(),
             runtime: "PT1H".to_string(),
         }]),
@@ -662,6 +668,7 @@ fn test_generate_schedulers_existing_schedulers_with_force() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "8g".to_string(),
             runtime: "PT1H".to_string(),
         }]),
@@ -719,6 +726,7 @@ fn test_generate_schedulers_sets_correct_account() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "8g".to_string(),
             runtime: "PT1H".to_string(),
         }]),
@@ -762,6 +770,7 @@ fn test_generate_schedulers_walltime_max_job_runtime_default() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "8g".to_string(),
             runtime: "PT12H".to_string(), // 12 hours
         }]),
@@ -804,6 +813,7 @@ fn test_generate_schedulers_walltime_max_partition_time() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "8g".to_string(),
             runtime: "PT12H".to_string(), // 12 hours
         }]),
@@ -846,6 +856,7 @@ fn test_generate_schedulers_walltime_custom_multiplier() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "8g".to_string(),
             runtime: "PT6H".to_string(), // 6 hours
         }]),
@@ -888,6 +899,7 @@ fn test_generate_schedulers_walltime_capped_at_partition_max() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "8g".to_string(),
             runtime: "P1DT12H".to_string(), // 36 hours
         }]),
@@ -938,6 +950,7 @@ fn test_generate_schedulers_walltime_uses_max_job_runtime_in_group() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "8g".to_string(),
             runtime: "PT8H".to_string(), // 8 hours - this is the max for all jobs using this RR
         }]),
@@ -980,6 +993,7 @@ fn test_generate_schedulers_walltime_zero_runtime_fallback() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "8g".to_string(),
             runtime: "PT0S".to_string(), // zero seconds
         }]),
@@ -1023,6 +1037,7 @@ fn test_generate_schedulers_walltime_multiplier_one() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "8g".to_string(),
             runtime: "PT4H".to_string(), // 4 hours
         }]),
@@ -1064,6 +1079,7 @@ fn test_generate_schedulers_sets_memory() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "128g".to_string(),
             runtime: "PT1H".to_string(),
         }]),
@@ -1127,6 +1143,7 @@ fn test_generate_schedulers_per_resource_requirement() {
                 num_cpus: 2,
                 num_gpus: 0,
                 num_nodes: 1,
+                step_nodes: None,
                 memory: "4g".to_string(),
                 runtime: "PT30M".to_string(),
             },
@@ -1135,6 +1152,7 @@ fn test_generate_schedulers_per_resource_requirement() {
                 num_cpus: 8,
                 num_gpus: 0,
                 num_nodes: 1,
+                step_nodes: None,
                 memory: "16g".to_string(),
                 runtime: "PT2H".to_string(),
             },
@@ -1225,6 +1243,7 @@ fn test_generate_schedulers_auto_calculates_allocations() {
             num_cpus: 26, // 104 / 26 = 4 jobs per node
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "10g".to_string(),
             runtime: "PT1H".to_string(),
         }]),
@@ -1286,6 +1305,7 @@ fn test_generate_schedulers_auto_calculates_with_parameters() {
             num_cpus: 52, // 104 / 52 = 2 jobs per node
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "10g".to_string(),
             runtime: "PT1H".to_string(),
         }]),
@@ -1355,6 +1375,7 @@ fn test_generate_schedulers_stage_aware_for_dependent_jobs() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "8g".to_string(),
             runtime: "PT30M".to_string(),
         }]),
@@ -1436,6 +1457,7 @@ fn test_generate_schedulers_memory_constrained_allocation() {
             num_cpus: 8, // Small CPU requirement
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "120g".to_string(), // Large memory requirement (120GB = 122,880MB)
             runtime: "PT1H".to_string(),
         }]),
@@ -1509,6 +1531,7 @@ fn test_generate_schedulers_whole_node_long_runtime() {
             num_cpus: 12,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "160g".to_string(),
             runtime: "PT20H".to_string(),
         }]),
@@ -1599,6 +1622,7 @@ fn test_generate_schedulers_cpu_vs_memory_constraint() {
             num_cpus: 52, // Half the CPUs
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "60g".to_string(), // Only 1/4 of memory
             runtime: "PT1H".to_string(),
         }]),
@@ -1887,6 +1911,7 @@ fn test_generate_schedulers_gpu_constrained_allocation() {
             num_cpus: 32, // 1/4 of node CPUs
             num_gpus: 2,  // Half the GPUs - this should be limiting
             num_nodes: 1,
+            step_nodes: None,
             memory: "90g".to_string(), // ~1/4 of node memory
             runtime: "PT1H".to_string(),
         }]),
@@ -2131,6 +2156,7 @@ fn test_workflow_spec_with_slurm_defaults() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "8g".to_string(),
             runtime: "PT1H".to_string(),
         }]),
@@ -2294,6 +2320,7 @@ fn compute_allocations(
             num_cpus,
             num_gpus,
             num_nodes,
+            step_nodes: None,
             memory: memory.to_string(),
             runtime: runtime.to_string(),
         }]),

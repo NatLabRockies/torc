@@ -120,6 +120,15 @@ pub enum CreateResultError {
     UnknownValue(serde_json::Value),
 }
 
+/// struct for typed errors of method [`create_slurm_stats`]
+#[allow(clippy::enum_variant_names)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum CreateSlurmStatsError {
+    DefaultResponse(models::ErrorResponse),
+    UnknownValue(serde_json::Value),
+}
+
 /// struct for typed errors of method [`create_scheduled_compute_node`]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -508,6 +517,14 @@ pub enum ListScheduledComputeNodesError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ListSlurmSchedulersError {
+    Status500(models::ErrorResponse),
+    UnknownValue(serde_json::Value),
+}
+
+/// struct for typed errors of method [`list_slurm_stats`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ListSlurmStatsError {
     Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
@@ -1329,6 +1346,140 @@ pub fn create_result(
     } else {
         let content = resp.text()?;
         let entity: Option<CreateResultError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent {
+            status,
+            content,
+            entity,
+        }))
+    }
+}
+
+/// Store Slurm accounting stats for a job step.
+pub fn create_slurm_stats(
+    configuration: &configuration::Configuration,
+    body: models::SlurmStatsModel,
+) -> Result<models::SlurmStatsModel, Error<CreateSlurmStatsError>> {
+    let p_body = body;
+
+    let uri_str = format!("{}/slurm_stats", configuration.base_path);
+    let mut req_builder = configuration
+        .client
+        .request(reqwest::Method::POST, &uri_str);
+
+    if let Some(ref auth) = configuration.basic_auth {
+        req_builder = req_builder.basic_auth(&auth.0, auth.1.as_ref());
+    }
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+    req_builder = req_builder.json(&p_body);
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req)?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text()?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => Err(Error::from(serde_json::Error::custom(
+                "Received `text/plain` content type response that cannot be converted to `models::SlurmStatsModel`",
+            ))),
+            ContentType::Unsupported(unknown_type) => {
+                Err(Error::from(serde_json::Error::custom(format!(
+                    "Received `{}` content type response that cannot be converted to `models::SlurmStatsModel`",
+                    unknown_type
+                ))))
+            }
+        }
+    } else {
+        let content = resp.text()?;
+        let entity: Option<CreateSlurmStatsError> = match content_type {
+            ContentType::Json => serde_json::from_str(&content)
+                .ok()
+                .map(CreateSlurmStatsError::DefaultResponse),
+            _ => None,
+        };
+        Err(Error::ResponseError(ResponseContent {
+            status,
+            content,
+            entity,
+        }))
+    }
+}
+
+/// List Slurm accounting stats, optionally filtered by workflow and job.
+pub fn list_slurm_stats(
+    configuration: &configuration::Configuration,
+    workflow_id: i64,
+    job_id: Option<i64>,
+    run_id: Option<i64>,
+    attempt_id: Option<i64>,
+    offset: Option<i64>,
+    limit: Option<i64>,
+) -> Result<models::ListSlurmStatsResponse, Error<ListSlurmStatsError>> {
+    let uri_str = format!("{}/slurm_stats", configuration.base_path);
+    let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
+
+    req_builder = req_builder.query(&[("workflow_id", &workflow_id.to_string())]);
+    if let Some(j_id) = job_id {
+        req_builder = req_builder.query(&[("job_id", &j_id.to_string())]);
+    }
+    if let Some(r_id) = run_id {
+        req_builder = req_builder.query(&[("run_id", &r_id.to_string())]);
+    }
+    if let Some(a_id) = attempt_id {
+        req_builder = req_builder.query(&[("attempt_id", &a_id.to_string())]);
+    }
+    if let Some(off) = offset {
+        req_builder = req_builder.query(&[("offset", &off.to_string())]);
+    }
+    if let Some(lim) = limit {
+        req_builder = req_builder.query(&[("limit", &lim.to_string())]);
+    }
+
+    if let Some(ref auth) = configuration.basic_auth {
+        req_builder = req_builder.basic_auth(&auth.0, auth.1.as_ref());
+    }
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req)?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text()?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => Err(Error::from(serde_json::Error::custom(
+                "Received `text/plain` content type response that cannot be converted to `models::ListSlurmStatsResponse`",
+            ))),
+            ContentType::Unsupported(unknown_type) => {
+                Err(Error::from(serde_json::Error::custom(format!(
+                    "Received `{}` content type response that cannot be converted to `models::ListSlurmStatsResponse`",
+                    unknown_type
+                ))))
+            }
+        }
+    } else {
+        let content = resp.text()?;
+        let entity: Option<ListSlurmStatsError> = serde_json::from_str(&content).ok();
         Err(Error::ResponseError(ResponseContent {
             status,
             content,

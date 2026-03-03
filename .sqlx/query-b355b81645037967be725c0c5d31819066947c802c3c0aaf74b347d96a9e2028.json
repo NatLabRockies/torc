@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT COUNT(*) as total\n            FROM slurm_stats\n            WHERE workflow_id = $1\n              AND ($2 IS NULL OR job_id = $2)\n              AND ($3 IS NULL OR run_id = $3)\n              AND ($4 IS NULL OR attempt_id = $4)\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "total",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b355b81645037967be725c0c5d31819066947c802c3c0aaf74b347d96a9e2028"
+}

@@ -70,6 +70,34 @@ pub fn memory_string_to_bytes(memory_str: &str) -> Result<i64, String> {
         .ok_or_else(|| "Memory size too large, would cause overflow".to_string())
 }
 
+/// Convert a memory string to megabytes (as u64).
+///
+/// Supports the same formats as [`memory_string_to_bytes`].
+/// Returns `None` if the string is invalid or empty.
+///
+/// # Examples
+///
+/// ```
+/// use torc::memory_utils::memory_string_to_mb;
+///
+/// assert_eq!(memory_string_to_mb("1g"), Some(1024));
+/// assert_eq!(memory_string_to_mb("512m"), Some(512));
+/// assert_eq!(memory_string_to_mb("2G"), Some(2048));
+/// assert_eq!(memory_string_to_mb("0"), Some(0));
+/// assert_eq!(memory_string_to_mb("500k"), Some(1));
+/// assert_eq!(memory_string_to_mb("bad"), None);
+/// ```
+pub fn memory_string_to_mb(memory_str: &str) -> Option<u64> {
+    const MB: i64 = 1024 * 1024;
+    memory_string_to_bytes(memory_str).ok().map(|bytes| {
+        if bytes == 0 {
+            0
+        } else {
+            (bytes / MB).max(1) as u64
+        }
+    })
+}
+
 /// Convert memory string to gigabytes (as f64).
 ///
 /// This is a convenience function that converts the result of [`memory_string_to_bytes`]

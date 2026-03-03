@@ -1,0 +1,46 @@
+# Test: No-srun Basic
+#
+# 1-node allocation with use_srun=false, 2 jobs (cpu_work, memory_work).
+# Verifies that direct shell execution (without srun wrapping) still works,
+# and that time-series resource monitoring captures CPU and memory data.
+
+name: no_srun_basic
+description: Single node with use_srun=false — direct shell execution with resource monitoring
+project: slurm-tests
+
+use_srun: false
+
+resource_monitor:
+  enabled: true
+  granularity: time_series
+  sample_interval_seconds: 2
+
+resource_requirements:
+  - name: work_resources
+    num_cpus: 2
+    num_nodes: 1
+    memory: 2g
+    runtime: PT5M
+
+jobs:
+  - name: cpu_work
+    command: bash slurm-tests/scripts/cpu_work.sh
+    resource_requirements: work_resources
+
+  - name: memory_work
+    command: bash slurm-tests/scripts/memory_work.sh
+    resource_requirements: work_resources
+
+slurm_schedulers:
+  - name: no_srun_scheduler
+    account: PLACEHOLDER_ACCOUNT
+    partition: PLACEHOLDER_PARTITION
+    nodes: 1
+    walltime: "00:15:00"
+
+actions:
+  - trigger_type: "on_workflow_start"
+    action_type: "schedule_nodes"
+    scheduler: "no_srun_scheduler"
+    scheduler_type: "slurm"
+    num_allocations: 1

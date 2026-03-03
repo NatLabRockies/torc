@@ -11,7 +11,9 @@ use crate::client::log_paths::{
     get_job_stderr_path, get_job_stdout_path, get_slurm_stderr_path, get_slurm_stdout_path,
 };
 use crate::client::sse_client::SseEvent;
-use crate::models::{FileModel, JobModel, ResultModel, ScheduledComputeNodesModel, WorkflowModel};
+use crate::models::{
+    FileModel, JobModel, ResultModel, ScheduledComputeNodesModel, SlurmStatsModel, WorkflowModel,
+};
 
 use crate::client::apis::configuration::{BasicAuth, TlsConfig};
 
@@ -29,6 +31,7 @@ pub enum DetailViewType {
     Events,
     Results,
     ScheduledNodes,
+    SlurmStats,
     Dag,
 }
 
@@ -159,6 +162,7 @@ impl DetailViewType {
             Self::Events => "⚡ Events",
             Self::Results => "✓ Results",
             Self::ScheduledNodes => "⊞ Nodes",
+            Self::SlurmStats => "⚑ Slurm Stats",
             Self::Dag => "◇ DAG",
         }
     }
@@ -170,6 +174,7 @@ impl DetailViewType {
             Self::Events,
             Self::Results,
             Self::ScheduledNodes,
+            Self::SlurmStats,
             Self::Dag,
         ]
     }
@@ -180,7 +185,8 @@ impl DetailViewType {
             Self::Files => Self::Events,
             Self::Events => Self::Results,
             Self::Results => Self::ScheduledNodes,
-            Self::ScheduledNodes => Self::Dag,
+            Self::ScheduledNodes => Self::SlurmStats,
+            Self::SlurmStats => Self::Dag,
             Self::Dag => Self::Jobs,
         }
     }
@@ -192,7 +198,8 @@ impl DetailViewType {
             Self::Events => Self::Files,
             Self::Results => Self::Events,
             Self::ScheduledNodes => Self::Results,
-            Self::Dag => Self::ScheduledNodes,
+            Self::SlurmStats => Self::ScheduledNodes,
+            Self::Dag => Self::SlurmStats,
         }
     }
 }
@@ -235,6 +242,9 @@ pub struct App {
     pub scheduled_nodes: Vec<ScheduledComputeNodesModel>,
     pub scheduled_nodes_all: Vec<ScheduledComputeNodesModel>,
     pub scheduled_nodes_state: TableState,
+    pub slurm_stats: Vec<SlurmStatsModel>,
+    pub slurm_stats_all: Vec<SlurmStatsModel>,
+    pub slurm_stats_state: TableState,
     pub dag: Option<DagLayout>,
     pub detail_view: DetailViewType,
     pub selected_workflow_id: Option<i64>,
@@ -328,6 +338,9 @@ impl App {
             scheduled_nodes: Vec::new(),
             scheduled_nodes_all: Vec::new(),
             scheduled_nodes_state: TableState::default(),
+            slurm_stats: Vec::new(),
+            slurm_stats_all: Vec::new(),
+            slurm_stats_state: TableState::default(),
             dag: None,
             detail_view: DetailViewType::Jobs,
             selected_workflow_id: None,
@@ -408,6 +421,9 @@ impl App {
                     DetailViewType::ScheduledNodes => {
                         (&mut self.scheduled_nodes_state, self.scheduled_nodes.len())
                     }
+                    DetailViewType::SlurmStats => {
+                        (&mut self.slurm_stats_state, self.slurm_stats.len())
+                    }
                     DetailViewType::Dag => return, // DAG view doesn't support table navigation
                 };
                 if len > 0 {
@@ -445,6 +461,9 @@ impl App {
                     DetailViewType::Results => (&mut self.results_state, self.results.len()),
                     DetailViewType::ScheduledNodes => {
                         (&mut self.scheduled_nodes_state, self.scheduled_nodes.len())
+                    }
+                    DetailViewType::SlurmStats => {
+                        (&mut self.slurm_stats_state, self.slurm_stats.len())
                     }
                     DetailViewType::Dag => return, // DAG view doesn't support table navigation
                 };
@@ -505,6 +524,13 @@ impl App {
                             self.scheduled_nodes_state.select(Some(0));
                         }
                     }
+                    DetailViewType::SlurmStats => {
+                        self.slurm_stats_all = self.client.list_slurm_stats(workflow_id)?;
+                        self.slurm_stats = self.slurm_stats_all.clone();
+                        if !self.slurm_stats.is_empty() {
+                            self.slurm_stats_state.select(Some(0));
+                        }
+                    }
                     DetailViewType::Dag => {
                         // Load jobs if not already loaded
                         if self.jobs_all.is_empty() {
@@ -554,6 +580,7 @@ impl App {
             DetailViewType::Events => vec!["Event Type", "Data"],
             DetailViewType::Results => vec!["Status", "Return Code"],
             DetailViewType::ScheduledNodes => vec!["Status", "Scheduler Type"],
+            DetailViewType::SlurmStats => vec!["Job ID", "Slurm Job", "Nodes"],
             DetailViewType::Dag => vec![], // DAG view doesn't support filtering
         }
     }
@@ -689,6 +716,34 @@ impl App {
                     self.scheduled_nodes_state.select(None);
                 }
             }
+            DetailViewType::SlurmStats => {
+                self.slurm_stats = self
+                    .slurm_stats_all
+                    .iter()
+                    .filter(|stat| match column.as_str() {
+                        "Job ID" => stat.job_id.to_string().contains(&value),
+                        "Slurm Job" => stat
+                            .slurm_job_id
+                            .as_deref()
+                            .unwrap_or("")
+                            .to_lowercase()
+                            .contains(&value),
+                        "Nodes" => stat
+                            .node_list
+                            .as_deref()
+                            .unwrap_or("")
+                            .to_lowercase()
+                            .contains(&value),
+                        _ => false,
+                    })
+                    .cloned()
+                    .collect();
+                if !self.slurm_stats.is_empty() {
+                    self.slurm_stats_state.select(Some(0));
+                } else {
+                    self.slurm_stats_state.select(None);
+                }
+            }
             DetailViewType::Dag => {
                 // DAG view doesn't support filtering
             }
@@ -728,6 +783,12 @@ impl App {
                 self.scheduled_nodes = self.scheduled_nodes_all.clone();
                 if !self.scheduled_nodes.is_empty() {
                     self.scheduled_nodes_state.select(Some(0));
+                }
+            }
+            DetailViewType::SlurmStats => {
+                self.slurm_stats = self.slurm_stats_all.clone();
+                if !self.slurm_stats.is_empty() {
+                    self.slurm_stats_state.select(Some(0));
                 }
             }
             DetailViewType::Dag => {

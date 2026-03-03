@@ -198,6 +198,11 @@ pub struct ResourceRequirementsSpec {
     /// Number of nodes required (defaults to 1)
     #[serde(default = "ResourceRequirementsSpec::default_num_nodes")]
     pub num_nodes: i64,
+    /// Number of nodes each srun step spans (defaults to 1).
+    /// Distinct from `num_nodes` (allocation size used by sbatch).
+    /// Set to `num_nodes` for MPI or Julia Distributed.jl jobs.
+    #[serde(default)]
+    pub step_nodes: Option<i64>,
     /// Memory requirement
     pub memory: String,
     /// Runtime limit (defaults to 1 hour)
@@ -685,6 +690,15 @@ pub struct WorkflowSpec {
     /// Use PendingFailed status for failed jobs (enables AI-assisted recovery)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub use_pending_failed: Option<bool>,
+    /// When true (default), srun passes --mem and --cpus-per-task to enforce cgroup limits
+    /// for each job step when running inside a Slurm allocation. Set to false to allow jobs
+    /// to exceed their stated resource requirements.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit_resources: Option<bool>,
+    /// When true (default), jobs are wrapped with srun inside Slurm allocations.
+    /// Set to false to use direct shell execution.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub use_srun: Option<bool>,
     /// Project name or identifier for grouping workflows
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<String>,
@@ -722,6 +736,8 @@ impl WorkflowSpec {
             resource_monitor: None,
             actions: None,
             use_pending_failed: None,
+            limit_resources: None,
+            use_srun: None,
             project: None,
             metadata: None,
         }
@@ -1118,7 +1134,7 @@ impl WorkflowSpec {
             }
         }
 
-        // Check duplicate resource_requirements names
+        // Check duplicate resource_requirements names and validate step_nodes
         if let Some(ref resource_reqs) = spec.resource_requirements {
             let mut rr_names_set = HashSet::new();
             for rr in resource_reqs {
@@ -1127,6 +1143,21 @@ impl WorkflowSpec {
                         "Duplicate resource_requirements name: '{}'",
                         rr.name
                     ));
+                }
+                // Validate step_nodes: must be > 0 and <= num_nodes
+                if let Some(step_nodes) = rr.step_nodes {
+                    if step_nodes <= 0 {
+                        errors.push(format!(
+                            "Resource requirement '{}': step_nodes must be > 0, got {}",
+                            rr.name, step_nodes
+                        ));
+                    }
+                    if step_nodes > rr.num_nodes {
+                        errors.push(format!(
+                            "Resource requirement '{}': step_nodes ({}) must be <= num_nodes ({})",
+                            rr.name, step_nodes, rr.num_nodes
+                        ));
+                    }
                 }
             }
         }
@@ -1706,6 +1737,16 @@ impl WorkflowSpec {
             workflow_model.use_pending_failed = Some(value);
         }
 
+        // Set limit_resources if present
+        if let Some(value) = spec.limit_resources {
+            workflow_model.limit_resources = Some(value);
+        }
+
+        // Set use_srun if present
+        if let Some(value) = spec.use_srun {
+            workflow_model.use_srun = Some(value);
+        }
+
         // Set project if present
         if let Some(ref value) = spec.project {
             workflow_model.project = Some(value.clone());
@@ -1815,6 +1856,24 @@ impl WorkflowSpec {
                     .into());
                 }
 
+                // Validate step_nodes: must be > 0 and <= num_nodes
+                if let Some(step_nodes) = resource_req_spec.step_nodes {
+                    if step_nodes <= 0 {
+                        return Err(format!(
+                            "Resource requirement '{}': step_nodes must be > 0, got {}",
+                            resource_req_spec.name, step_nodes
+                        )
+                        .into());
+                    }
+                    if step_nodes > resource_req_spec.num_nodes {
+                        return Err(format!(
+                            "Resource requirement '{}': step_nodes ({}) must be <= num_nodes ({})",
+                            resource_req_spec.name, step_nodes, resource_req_spec.num_nodes
+                        )
+                        .into());
+                    }
+                }
+
                 let resource_req_model = models::ResourceRequirementsModel {
                     id: None, // Server will assign ID
                     workflow_id,
@@ -1822,6 +1881,7 @@ impl WorkflowSpec {
                     num_cpus: resource_req_spec.num_cpus,
                     num_gpus: resource_req_spec.num_gpus,
                     num_nodes: resource_req_spec.num_nodes,
+                    step_nodes: resource_req_spec.step_nodes,
                     memory: resource_req_spec.memory.clone(),
                     runtime: resource_req_spec.runtime.clone(),
                 };
@@ -3416,6 +3476,16 @@ impl WorkflowSpec {
                         obj.insert("use_pending_failed".to_string(), serde_json::Value::Bool(v));
                     }
                 }
+                "limit_resources" => {
+                    if let Some(v) = node.entries().first().and_then(|e| e.value().as_bool()) {
+                        obj.insert("limit_resources".to_string(), serde_json::Value::Bool(v));
+                    }
+                }
+                "use_srun" => {
+                    if let Some(v) = node.entries().first().and_then(|e| e.value().as_bool()) {
+                        obj.insert("use_srun".to_string(), serde_json::Value::Bool(v));
+                    }
+                }
                 _ => {
                     // Ignore unknown nodes
                 }
@@ -4558,6 +4628,8 @@ job "train_lr{lr:.4f}_bs{batch_size}" {
             actions: None,
             failure_handlers: None,
             use_pending_failed: None,
+            limit_resources: None,
+            use_srun: None,
             project: None,
             metadata: None,
         };

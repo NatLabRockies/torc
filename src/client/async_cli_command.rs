@@ -26,16 +26,15 @@
 
 use crate::client::log_paths::{get_job_stderr_path, get_job_stdout_path};
 use crate::client::resource_monitor::ResourceMonitor;
-use crate::models::{JobModel, JobStatus, ResultModel};
+use crate::client::slurm_utils::{parse_slurm_cpu_time, parse_slurm_memory};
+use crate::memory_utils::memory_string_to_mb;
+use crate::models::{JobModel, JobStatus, ResourceRequirementsModel, ResultModel, SlurmStatsModel};
 use chrono::{DateTime, Utc};
-use log::{self, debug, error, info};
+use log::{self, debug, error, info, warn};
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::Path;
-use std::process::{Child, Stdio};
-
-#[cfg(unix)]
-use std::os::unix::process::ExitStatusExt;
+use std::process::{Child, Command, Stdio};
 
 const JOB_STDIO_DIR: &str = "job_stdio";
 
@@ -45,6 +44,11 @@ pub struct AsyncCliCommand {
     pub job_id: i64,
     workflow_id: Option<i64>,
     run_id: Option<i64>,
+    attempt_id: Option<i64>,
+    /// Slurm step name set when running inside an allocation (for sacct lookup).
+    step_name: Option<String>,
+    /// Slurm accounting stats collected via sacct after step completion.
+    slurm_stats: Option<SlurmStatsModel>,
     handle: Option<Child>,
     pid: Option<u32>,
     pub is_running: bool,
@@ -67,6 +71,9 @@ impl AsyncCliCommand {
             job_id,
             workflow_id: None,
             run_id: None,
+            attempt_id: None,
+            step_name: None,
+            slurm_stats: None,
             handle: None,
             pid: None,
             is_running: false,
@@ -81,6 +88,7 @@ impl AsyncCliCommand {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn start(
         &mut self,
         output_dir: &Path,
@@ -89,6 +97,9 @@ impl AsyncCliCommand {
         attempt_id: i64,
         resource_monitor: Option<&ResourceMonitor>,
         api_url: &str,
+        resource_requirements: Option<&ResourceRequirementsModel>,
+        limit_resources: bool,
+        use_srun: bool,
     ) -> Result<(), Box<dyn std::error::Error>> {
         if self.is_running {
             return Err("Job is already running".into());
@@ -112,15 +123,88 @@ impl AsyncCliCommand {
         self.stdout_fp = Some(BufWriter::new(stdout_file));
         self.stderr_fp = Some(BufWriter::new(stderr_file));
 
-        let mut cmd = crate::client::utils::shell_command();
-
         let command_str = if let Some(ref invocation_script) = self.job.invocation_script {
             format!("{} {}", invocation_script, self.job.command)
         } else {
             self.job.command.clone()
         };
+
+        let slurm_job_id = if use_srun {
+            std::env::var("SLURM_JOB_ID").ok()
+        } else {
+            None
+        };
+        let mut cmd = if let Some(slurm_job_id) = slurm_job_id {
+            // Running inside a Slurm allocation — wrap with srun so Slurm creates a
+            // per-job cgroup step, enables sacct accounting, and gives HPC admins visibility.
+            let step_name = format!(
+                "wf{}_j{}_r{}_a{}",
+                workflow_id, self.job_id, run_id, attempt_id
+            );
+            debug!(
+                "Wrapping job with srun: slurm_job_id={} step={}",
+                slurm_job_id, step_name
+            );
+            // Allow tests to substitute a fake srun binary via TORC_FAKE_SRUN.
+            let srun_binary =
+                std::env::var("TORC_FAKE_SRUN").unwrap_or_else(|_| "srun".to_string());
+            let mut srun = Command::new(&srun_binary);
+            srun.arg(format!("--jobid={}", slurm_job_id));
+            srun.arg("--ntasks=1");
+            // Without --overlap, each srun step takes exclusive ownership of its node slot
+            // within the allocation, so concurrent steps on the same node (or same allocation)
+            // queue up and retry with "Requested nodes are busy".  --overlap explicitly permits
+            // steps to share resources with other running steps in the same job allocation.
+            // Requires Slurm 21.08+.
+            srun.arg("--overlap");
+            // Disable explicit CPU affinity binding. Without this, srun's default binding
+            // algorithm may try to pin tasks to CPU IDs outside the step's allocated mask,
+            // causing "CPU binding outside of job step allocation" errors. CPU limits are
+            // still enforced via cgroups even with binding disabled.
+            srun.arg("--cpu-bind=none");
+            srun.arg(format!("--job-name={}", step_name));
+            if let Some(rr) = resource_requirements {
+                // step_nodes controls how many nodes this srun step spans.
+                // rr.num_nodes is the allocation size (sbatch --nodes); using it here would make
+                // concurrent single-node steps compete for all nodes ("Requested nodes are busy").
+                // Default to 1 (single-node step); set step_nodes > 1 for MPI / Julia Distributed.jl.
+                let step_nodes = rr.step_nodes.unwrap_or(1).max(1);
+                srun.arg(format!("--nodes={}", step_nodes));
+                if limit_resources {
+                    srun.arg(format!("--cpus-per-task={}", rr.num_cpus));
+                    match memory_string_to_mb(&rr.memory) {
+                        Some(mem_mb) if mem_mb > 0 => {
+                            srun.arg(format!("--mem={}M", mem_mb));
+                        }
+                        Some(_) => {
+                            // Sub-MB value rounded to 0; omit --mem to avoid --mem=0 which in
+                            // Slurm means "request all available memory on the node".
+                            warn!(
+                                "Memory string {:?} for job {} rounds to 0 MB; omitting --mem from srun",
+                                rr.memory, self.job_id
+                            );
+                        }
+                        None => {
+                            warn!(
+                                "Could not parse memory string {:?} for job {}; omitting --mem from srun",
+                                rr.memory, self.job_id
+                            );
+                        }
+                    }
+                }
+            }
+            // Run via bash so job.command can use shell features
+            srun.args(["bash", "-c", &command_str]);
+            self.step_name = Some(step_name);
+            srun
+        } else {
+            // Local execution — use the standard shell wrapper
+            let mut shell = crate::client::utils::shell_command();
+            shell.arg(&command_str);
+            shell
+        };
+
         let child = cmd
-            .arg(&command_str)
             .env("TORC_WORKFLOW_ID", workflow_id_str)
             .env("TORC_JOB_ID", job_id_str)
             .env("TORC_JOB_NAME", &self.job.name)
@@ -136,6 +220,7 @@ impl AsyncCliCommand {
         self.handle = Some(child);
         self.workflow_id = Some(workflow_id);
         self.run_id = Some(run_id);
+        self.attempt_id = Some(attempt_id);
         self.is_running = true;
         self.start_time = Utc::now();
         self.status = JobStatus::Running;
@@ -144,9 +229,35 @@ impl AsyncCliCommand {
             workflow_id, self.job_id, pid
         );
 
-        // Start resource monitoring if enabled
+        // Start resource monitoring if enabled.
+        // When running inside a Slurm allocation with srun, the job executes inside
+        // slurmstepd (not as a child of the srun process), so sysinfo process-tree
+        // monitoring captures only the negligible srun overhead.  Instead:
+        //   - TimeSeries mode: use sstat polling via start_monitoring_slurm().
+        //   - Summary mode: skip the monitor; sacct backfill in job_runner provides final stats.
         if let Some(monitor) = resource_monitor {
-            monitor.start_monitoring(pid, self.job_id, self.job.name.clone())?;
+            if let Some(ref step) = self.step_name {
+                if let Ok(slurm_job_id) = std::env::var("SLURM_JOB_ID") {
+                    // Discover the numeric step ID that Slurm assigned. sstat requires
+                    // numeric IDs (e.g., "1") — name-based lookup doesn't work on all
+                    // Slurm installations (notably HPE Cray EX).
+                    let numeric_step_id =
+                        crate::client::resource_monitor::discover_step_id_with_retries(
+                            &slurm_job_id,
+                            step,
+                        );
+                    monitor.start_monitoring_slurm(
+                        pid,
+                        slurm_job_id,
+                        step.clone(),
+                        numeric_step_id,
+                        self.job_id,
+                        self.job.name.clone(),
+                    )?;
+                }
+            } else {
+                monitor.start_monitoring(pid, self.job_id, self.job.name.clone())?;
+            }
         }
 
         // TODO: CPU Affinity
@@ -164,13 +275,13 @@ impl AsyncCliCommand {
                     // Process is still running
                 }
                 Some(exit_status) => {
-                    let return_code = exit_status.code().unwrap_or(-1);
+                    let return_code = exit_status_to_return_code(&exit_status);
                     let status = if return_code == 0 {
                         JobStatus::Completed
                     } else {
                         JobStatus::Failed
                     };
-                    return match self.handle_completion(return_code as i64, status) {
+                    return match self.handle_completion(return_code, status) {
                         Ok(_) => Ok(()),
                         Err(e) => Err(e),
                     };
@@ -195,10 +306,9 @@ impl AsyncCliCommand {
             .expect("A completed job must have a completion_time");
         let timestamp_str = timestamp.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
 
-        // Get resource metrics if monitoring is enabled
-        // NOTE: stop_monitoring() transfers metrics from the monitoring thread's local HashMap
-        // to the shared HashMap and returns them. Using get_metrics() won't work because
-        // metrics are only transferred when StopMonitoring command is processed.
+        // Get resource metrics if monitoring is enabled.
+        // stop_monitoring() sends a command to the monitoring thread and waits for it to
+        // return the collected metrics via a response channel.
         let (peak_mem, avg_mem, peak_cpu, avg_cpu) = if let Some(monitor) = resource_monitor {
             if let Some(pid) = self.pid {
                 if let Some(metrics) = monitor.stop_monitoring(pid) {
@@ -238,6 +348,12 @@ impl AsyncCliCommand {
         result.avg_cpu_percent = avg_cpu;
 
         result
+    }
+
+    /// Returns the Slurm accounting stats collected for this job step, if any.
+    /// Only populated when the job ran inside a Slurm allocation and sacct succeeded.
+    pub fn take_slurm_stats(&mut self) -> Option<SlurmStatsModel> {
+        self.slurm_stats.take()
     }
 
     /// Immediately kills the job process using SIGKILL.
@@ -281,7 +397,7 @@ impl AsyncCliCommand {
     /// ```ignore
     /// async_cmd.send_sigterm()?;
     /// let exit_code = async_cmd.wait_for_completion()?;
-    /// // exit_code will be negative (-15) if killed by SIGTERM on Unix
+    /// // exit_code will be 143 (128 + 15) if killed by SIGTERM on Unix
     /// ```
     #[cfg(unix)]
     pub fn send_sigterm(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -376,6 +492,41 @@ impl AsyncCliCommand {
         self.stdout_fp = None;
         self.stderr_fp = None;
         self.handle = None;
+
+        // Collect Slurm accounting stats via sacct when running inside an allocation.
+        // Note: collect_sacct_stats is synchronous and may delay this polling cycle: it sleeps
+        // 5 seconds between retry attempts (up to 6 attempts, worst-case ~25 seconds) when the
+        // Slurm accounting daemon hasn't written the step record yet.
+        if let (Ok(slurm_job_id), Some(step_name)) =
+            (std::env::var("SLURM_JOB_ID"), self.step_name.as_deref())
+        {
+            info!(
+                "Collecting sacct stats for workflow_id={} job_id={} step={}",
+                self.workflow_id.unwrap_or(0),
+                self.job_id,
+                step_name
+            );
+            if let Some(stats) = collect_sacct_stats(&slurm_job_id, step_name)
+                && let (Some(workflow_id), Some(run_id), Some(attempt_id)) =
+                    (self.workflow_id, self.run_id, self.attempt_id)
+            {
+                let mut slurm_stats =
+                    SlurmStatsModel::new(workflow_id, self.job_id, run_id, attempt_id);
+                slurm_stats.slurm_job_id = Some(slurm_job_id);
+                slurm_stats.max_rss_bytes = stats.max_rss_bytes;
+                slurm_stats.max_vm_size_bytes = stats.max_vm_size_bytes;
+                slurm_stats.max_disk_read_bytes = stats.max_disk_read_bytes;
+                slurm_stats.max_disk_write_bytes = stats.max_disk_write_bytes;
+                slurm_stats.ave_cpu_seconds = stats.ave_cpu_seconds;
+                slurm_stats.node_list = stats.node_list;
+                info!(
+                    "Sacct stats collected workflow_id={} job_id={} step={}",
+                    workflow_id, self.job_id, step_name
+                );
+                self.slurm_stats = Some(slurm_stats);
+            }
+        }
+
         let status_str = format!("{:?}", status).to_lowercase();
         info!(
             "Job process completed workflow_id={} job_id={} run_id={} return_code={} status={} exec_time_s={:.3}",
@@ -424,7 +575,7 @@ impl AsyncCliCommand {
     /// # Returns
     ///
     /// - **Positive value**: Normal exit code from the process
-    /// - **Negative value** (Unix): Signal number that killed the process (e.g., -15 for SIGTERM, -9 for SIGKILL)
+    /// - **128 + signal** (POSIX convention): Signal number that killed the process (e.g., 137 for SIGKILL, 143 for SIGTERM)
     /// - **-1**: Unknown exit status
     ///
     /// # Example
@@ -435,44 +586,223 @@ impl AsyncCliCommand {
     ///
     /// if exit_code == 0 {
     ///     println!("Job exited normally");
-    /// } else if exit_code < 0 {
-    ///     println!("Job killed by signal {}", -exit_code);
+    /// } else if exit_code > 128 {
+    ///     println!("Job killed by signal {}", exit_code - 128);
     /// } else {
     ///     println!("Job exited with error code {}", exit_code);
     /// }
     /// ```
-    pub fn wait_for_completion(&mut self) -> Result<i32, Box<dyn std::error::Error>> {
+    pub fn wait_for_completion(&mut self) -> Result<i64, Box<dyn std::error::Error>> {
         let exit_code = if let Some(ref mut child) = self.handle {
             // If we have issues with the process hanging, we could try_wait
             // with a timeout.
             let exit_status = child.wait()?;
-
-            #[cfg(unix)]
-            {
-                // On Unix, check if the process was terminated by a signal
-                if let Some(code) = exit_status.code() {
-                    code
-                } else if let Some(signal) = exit_status.signal() {
-                    // Process was killed by a signal - return negative signal number
-                    // This is a common Unix convention
-                    debug!("Job {} was terminated by signal {}", self.job_id, signal);
-                    -signal
-                } else {
-                    -1
-                }
-            }
-            #[cfg(not(unix))]
-            {
-                exit_status.code().unwrap_or(-1)
-            }
+            exit_status_to_return_code(&exit_status)
         } else {
             -1
         };
 
         // Mark as terminated with the actual exit code
-        self.handle_completion(exit_code as i64, JobStatus::Terminated)?;
+        self.handle_completion(exit_code, JobStatus::Terminated)?;
         Ok(exit_code)
     }
+}
+
+/// Slurm accounting stats collected from `sacct` after step completion.
+struct SacctStats {
+    max_rss_bytes: Option<i64>,
+    max_vm_size_bytes: Option<i64>,
+    max_disk_read_bytes: Option<i64>,
+    max_disk_write_bytes: Option<i64>,
+    ave_cpu_seconds: Option<f64>,
+    node_list: Option<String>,
+}
+
+/// Convert a `std::process::ExitStatus` to a return code.
+///
+/// On Unix, `ExitStatus::code()` returns `None` when the process was killed by a signal
+/// (e.g. OOM kill sends SIGKILL = 9, Slurm time-limit sends SIGTERM = 15). The standard
+/// shell convention encodes signal deaths as `128 + signal`, so SIGKILL → 137, which is
+/// what the recovery heuristics check for OOM detection.  Falling back to `-1` would lose
+/// this information and prevent correct OOM/timeout classification.
+fn exit_status_to_return_code(status: &std::process::ExitStatus) -> i64 {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        if let Some(code) = status.code() {
+            return code as i64;
+        }
+        // Killed by signal — encode as 128 + signal (POSIX shell convention)
+        if let Some(signal) = status.signal() {
+            return 128 + signal as i64;
+        }
+        -1
+    }
+    #[cfg(not(unix))]
+    {
+        status.code().unwrap_or(-1) as i64
+    }
+}
+
+/// Call `sacct` after a job step exits to collect Slurm accounting data.
+///
+/// `slurmdbd` often does not commit the step record immediately after the step exits, so this
+/// function retries up to `MAX_SACCT_ATTEMPTS` times with a short sleep between each attempt.
+/// Returns `None` if sacct is unavailable, returns no data for the step after all retries, or
+/// the output cannot be parsed. This is a best-effort call — failures are logged at debug level
+/// and do not affect job result reporting.
+fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats> {
+    const MAX_SACCT_ATTEMPTS: u32 = 6;
+    const SACCT_RETRY_DELAY: std::time::Duration = std::time::Duration::from_secs(5);
+
+    // Allow tests to substitute a fake sacct binary via TORC_FAKE_SACCT.
+    let sacct_binary = std::env::var("TORC_FAKE_SACCT").unwrap_or_else(|_| "sacct".to_string());
+
+    for attempt in 1..=MAX_SACCT_ATTEMPTS {
+        // slurmdbd may not have written the step record yet; wait before retries.
+        if attempt > 1 {
+            std::thread::sleep(SACCT_RETRY_DELAY);
+        }
+
+        let output = std::process::Command::new(&sacct_binary)
+            .args([
+                "-j",
+                slurm_job_id,
+                // sacct -j <jobid> already returns all step records (allocation, batch, srun
+                // steps) for the specified job without any extra flag.
+                "--format",
+                // JobName is first so we can filter by step name in code — more reliable than
+                // sacct's --name flag, which on some Slurm versions matches the allocation name
+                // rather than the step name.
+                "JobName,MaxRSS,MaxVMSize,MaxDiskRead,MaxDiskWrite,AveCPU,NodeList",
+                "-P", // pipe-separated output
+                "-n", // no header
+            ])
+            .output();
+
+        let output = match output {
+            Ok(o) => o,
+            Err(e) => {
+                debug!(
+                    "sacct not available or failed for step {}: {}",
+                    step_name, e
+                );
+                return None;
+            }
+        };
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if attempt < MAX_SACCT_ATTEMPTS {
+                debug!(
+                    "sacct returned non-zero exit code for step {} (attempt {}/{}): {}",
+                    step_name,
+                    attempt,
+                    MAX_SACCT_ATTEMPTS,
+                    stderr.trim()
+                );
+                continue;
+            } else {
+                warn!(
+                    "sacct returned non-zero exit code for step {} after {} attempts: {}",
+                    step_name,
+                    MAX_SACCT_ATTEMPTS,
+                    stderr.trim()
+                );
+                return None;
+            }
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        debug!(
+            "sacct output for step {} (attempt {}/{}): {:?}",
+            step_name,
+            attempt,
+            MAX_SACCT_ATTEMPTS,
+            stdout.as_ref()
+        );
+        // sacct returns one row per step (and one for the allocation itself).
+        // Match by JobName only — do NOT also require non-empty memory fields: clusters
+        // without cgroup memory accounting return an otherwise valid step row with empty
+        // memory columns, and filtering those out causes all retries to fail silently.
+        let line = stdout.lines().find(|l| {
+            let fields: Vec<&str> = l.split('|').collect();
+            fields.len() >= 2 && fields[0].trim() == step_name
+        });
+
+        match line {
+            Some(line) => {
+                let stats = parse_sacct_line(line, step_name);
+                // The step row can appear with node_list populated but MaxRSS/AveCPU still
+                // empty while slurmdbd is committing the accounting data asynchronously.
+                // Retry if we have no useful data yet, rather than returning empty stats.
+                let has_data = stats
+                    .as_ref()
+                    .is_some_and(|s| s.max_rss_bytes.is_some() || s.ave_cpu_seconds.is_some());
+                if has_data || attempt == MAX_SACCT_ATTEMPTS {
+                    return stats;
+                }
+                debug!(
+                    "sacct row for step {} found but data fields are empty (attempt {}/{}), retrying",
+                    step_name, attempt, MAX_SACCT_ATTEMPTS
+                );
+            }
+            None => {
+                if attempt < MAX_SACCT_ATTEMPTS {
+                    debug!(
+                        "sacct has no record for step {} yet (attempt {}/{}), retrying",
+                        step_name, attempt, MAX_SACCT_ATTEMPTS
+                    );
+                } else {
+                    warn!(
+                        "sacct has no record for step {} after {} attempts; \
+                         raw sacct output: {:?}",
+                        step_name,
+                        MAX_SACCT_ATTEMPTS,
+                        stdout.as_ref()
+                    );
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Parse a single pipe-separated `sacct` output line into a [`SacctStats`].
+///
+/// Expected format (7 fields): `JobName|MaxRSS|MaxVMSize|MaxDiskRead|MaxDiskWrite|AveCPU|NodeList`
+fn parse_sacct_line(line: &str, step_name: &str) -> Option<SacctStats> {
+    let fields: Vec<&str> = line.split('|').collect();
+    if fields.len() < 7 {
+        debug!(
+            "sacct output for step {} has fewer than 7 fields: {:?}",
+            step_name, fields
+        );
+        return None;
+    }
+
+    debug!(
+        "sacct stats for step {}: MaxRSS={} MaxVMSize={} MaxDiskRead={} MaxDiskWrite={} AveCPU={} NodeList={}",
+        step_name, fields[1], fields[2], fields[3], fields[4], fields[5], fields[6]
+    );
+
+    let node_list = {
+        let v = fields[6].trim();
+        if v.is_empty() {
+            None
+        } else {
+            Some(v.to_string())
+        }
+    };
+
+    Some(SacctStats {
+        max_rss_bytes: parse_slurm_memory(fields[1]),
+        max_vm_size_bytes: parse_slurm_memory(fields[2]),
+        max_disk_read_bytes: parse_slurm_memory(fields[3]),
+        max_disk_write_bytes: parse_slurm_memory(fields[4]),
+        ave_cpu_seconds: parse_slurm_cpu_time(fields[5]),
+        node_list,
+    })
 }
 
 impl Drop for AsyncCliCommand {

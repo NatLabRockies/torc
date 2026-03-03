@@ -14,10 +14,10 @@ automatically increases memory allocations for retry.
 
 With the default memory multiplier of 1.5x:
 
-1. **Initial**: Jobs request 10GB, try to use 30GB → OOM failure
-2. **Retry 1**: Jobs get 15GB (10 × 1.5), still not enough → OOM failure
-3. **Retry 2**: Jobs get 22GB (15 × 1.5), still not enough → OOM failure
-4. **Retry 3**: Jobs get 33GB (22 × 1.5), enough for 30GB → Success!
+1. **Initial**: Jobs request 10GB, try to use 30GB -> OOM failure
+2. **Retry 1**: Jobs get 15GB (10 x 1.5), still not enough -> OOM failure
+3. **Retry 2**: Jobs get 22GB (15 x 1.5), still not enough -> OOM failure
+4. **Retry 3**: Jobs get 33GB (22 x 1.5), enough for 30GB -> Success!
 
 ## Test Procedure
 
@@ -29,13 +29,7 @@ Replace `PLACEHOLDER_ACCOUNT` with your actual Slurm account:
 sed -i 's/PLACEHOLDER_ACCOUNT/your_account/g' workflow.yaml
 ```
 
-### 2. Make the memory script executable
-
-```bash
-chmod +x allocate_memory.sh
-```
-
-### 3. Submit the workflow
+### 2. Submit the workflow
 
 ```bash
 torc submit-slurm --account <your_account> workflow.yaml
@@ -43,13 +37,13 @@ torc submit-slurm --account <your_account> workflow.yaml
 
 Note the workflow ID from the output.
 
-### 4. Run the watcher with auto-recover
+### 3. Run the watcher with auto-recover
 
 ```bash
 torc watch <workflow_id> --recover --max-retries 5
 ```
 
-### 5. Expected output
+### 4. Expected output
 
 You should see output similar to:
 
@@ -80,8 +74,9 @@ This cycle repeats until jobs get enough memory (33GB) and succeed.
 ## Files
 
 - `workflow.yaml` - The workflow specification
-- `allocate_memory.sh` - Script that allocates specified GB of memory
 - `README.md` - This file
+
+The `allocate_memory.sh` script is located at `slurm-tests/scripts/allocate_memory.sh`.
 
 ## Verification
 
@@ -109,7 +104,7 @@ To make the test faster, you can:
    ```bash
    torc watch <workflow_id> --recover --memory-multiplier 2.0
    ```
-   With 2.0x: 10GB → 20GB → 40GB (success in 2 retries)
+   With 2.0x: 10GB -> 20GB -> 40GB (success in 2 retries)
 
 2. Start with higher initial memory in `workflow.yaml`: Change `memory: 10g` to `memory: 20g` to
    reduce the number of retries needed.

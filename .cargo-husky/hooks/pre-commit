@@ -1,7 +1,7 @@
 #!/bin/sh
 #
 # Pre-commit hook for torc project
-# Runs Rust formatting, linting, and markdown formatting
+# Runs Rust formatting, linting, markdown formatting, and shell script linting
 #
 
 set -e
@@ -14,3 +14,11 @@ cargo clippy --all --all-targets --all-features -- -D warnings
 
 echo '+dprint check'
 dprint check
+
+# Lint shell scripts if shellcheck is available
+if command -v shellcheck >/dev/null 2>&1; then
+  echo '+shellcheck slurm-tests/**/*.sh'
+  find slurm-tests -name '*.sh' -type f -exec shellcheck {} +
+else
+  echo 'shellcheck not found, skipping shell script linting'
+fi

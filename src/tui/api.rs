@@ -4,7 +4,7 @@ use crate::client::config::TorcConfig;
 use crate::client::workflow_spec::WorkflowSpec;
 use crate::models::{
     FileModel, JobDependencyModel, JobModel, JobStatus, ResultModel, ScheduledComputeNodesModel,
-    WorkflowModel,
+    SlurmStatsModel, WorkflowModel,
 };
 use anyhow::{Context, Result};
 
@@ -161,6 +161,21 @@ impl TorcClient {
             None, // limit
         )
         .context("Failed to list job dependencies")?;
+
+        Ok(response.items.unwrap_or_default())
+    }
+
+    pub fn list_slurm_stats(&self, workflow_id: i64) -> Result<Vec<SlurmStatsModel>> {
+        let response = default_api::list_slurm_stats(
+            &self.config,
+            workflow_id,
+            None, // job_id
+            None, // run_id
+            None, // attempt_id
+            None, // offset
+            None, // limit
+        )
+        .context("Failed to list Slurm stats")?;
 
         Ok(response.items.unwrap_or_default())
     }

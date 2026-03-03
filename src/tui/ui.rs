@@ -426,7 +426,8 @@ fn draw_tabs(f: &mut Frame, area: Rect, app: &App) {
         DetailViewType::Events => 2,
         DetailViewType::Results => 3,
         DetailViewType::ScheduledNodes => 4,
-        DetailViewType::Dag => 5,
+        DetailViewType::SlurmStats => 5,
+        DetailViewType::Dag => 6,
     };
 
     let tabs = Tabs::new(titles)
@@ -455,6 +456,7 @@ fn draw_detail_table(f: &mut Frame, area: Rect, app: &mut App) {
         DetailViewType::Events => draw_events_table(f, area, app),
         DetailViewType::Results => draw_results_table(f, area, app),
         DetailViewType::ScheduledNodes => draw_scheduled_nodes_table(f, area, app),
+        DetailViewType::SlurmStats => draw_slurm_stats_table(f, area, app),
         DetailViewType::Dag => draw_dag(f, area, app),
     }
 }
@@ -887,6 +889,113 @@ fn draw_scheduled_nodes_table(f: &mut Frame, area: Rect, app: &mut App) {
     .highlight_symbol("▸ ");
 
     f.render_stateful_widget(table, area, &mut app.scheduled_nodes_state);
+}
+
+fn draw_slurm_stats_table(f: &mut Frame, area: Rect, app: &mut App) {
+    let is_focused = app.focus == Focus::Details;
+    let selected_style = Style::default()
+        .add_modifier(Modifier::REVERSED)
+        .fg(Color::Cyan);
+    let header_style = Style::default()
+        .fg(Color::Yellow)
+        .add_modifier(Modifier::BOLD);
+
+    let header = Row::new(vec![
+        "Job ID",
+        "Run",
+        "Attempt",
+        "Slurm Job",
+        "Max RSS",
+        "Max VM",
+        "Ave CPU (s)",
+        "Nodes",
+    ])
+    .style(header_style)
+    .bottom_margin(1);
+
+    let rows = app.slurm_stats.iter().map(|stat| {
+        let job_id = stat.job_id.to_string();
+        let run_id = stat.run_id.to_string();
+        let attempt_id = stat.attempt_id.to_string();
+        let slurm_job_id = stat.slurm_job_id.clone().unwrap_or_else(|| "-".to_string());
+        let max_rss = stat
+            .max_rss_bytes
+            .filter(|&b| b > 0)
+            .map(format_bytes)
+            .unwrap_or_else(|| "-".to_string());
+        let max_vm = stat
+            .max_vm_size_bytes
+            .filter(|&b| b > 0)
+            .map(format_bytes)
+            .unwrap_or_else(|| "-".to_string());
+        let ave_cpu = stat
+            .ave_cpu_seconds
+            .filter(|&s| s > 0.0)
+            .map(|s| format!("{:.1}", s))
+            .unwrap_or_else(|| "-".to_string());
+        let nodes = stat.node_list.clone().unwrap_or_else(|| "-".to_string());
+
+        Row::new(vec![
+            Cell::from(job_id),
+            Cell::from(run_id),
+            Cell::from(attempt_id),
+            Cell::from(slurm_job_id),
+            Cell::from(max_rss),
+            Cell::from(max_vm),
+            Cell::from(ave_cpu),
+            Cell::from(nodes),
+        ])
+    });
+
+    let stat_count = app.slurm_stats.len();
+    let (title, border_style) = if is_focused {
+        (
+            Line::from(vec![
+                Span::styled("⚑ ", Style::default().fg(Color::Green)),
+                Span::styled(
+                    format!("Slurm Stats ({})", stat_count),
+                    Style::default().fg(Color::White),
+                ),
+            ]),
+            Style::default().fg(Color::Green),
+        )
+    } else {
+        (
+            Line::from(vec![
+                Span::styled("⚑ ", Style::default().fg(Color::Cyan)),
+                Span::styled(
+                    format!("Slurm Stats ({})", stat_count),
+                    Style::default().fg(Color::White),
+                ),
+            ]),
+            Style::default().fg(Color::DarkGray),
+        )
+    };
+
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(8),  // Job ID
+            Constraint::Length(5),  // Run
+            Constraint::Length(8),  // Attempt
+            Constraint::Length(12), // Slurm Job
+            Constraint::Length(10), // Max RSS
+            Constraint::Length(10), // Max VM
+            Constraint::Length(12), // Ave CPU (s)
+            Constraint::Min(10),    // Nodes
+        ],
+    )
+    .header(header)
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(title)
+            .border_style(border_style),
+    )
+    .row_highlight_style(selected_style)
+    .highlight_symbol("▸ ");
+
+    f.render_stateful_widget(table, area, &mut app.slurm_stats_state);
 }
 
 fn draw_filter_input(f: &mut Frame, area: Rect, app: &App) {

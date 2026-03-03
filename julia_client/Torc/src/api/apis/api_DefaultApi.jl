@@ -744,6 +744,39 @@ function create_slurm_scheduler(_api::DefaultApi, response_stream::Channel, body
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
+const _returntypes_create_slurm_stats_DefaultApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => SlurmStatsModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => NotFoundErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => DefaultErrorResponse,
+)
+
+function _oacinternal_create_slurm_stats(_api::DefaultApi, body::SlurmStatsModel; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_create_slurm_stats_DefaultApi, "/slurm_stats", [], body)
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Store Slurm accounting stats for a job step.
+
+Store Slurm accounting stats collected via sacct for a job step.
+
+Params:
+- body::SlurmStatsModel (required)
+
+Return: SlurmStatsModel, OpenAPI.Clients.ApiResponse
+"""
+function create_slurm_stats(_api::DefaultApi, body::SlurmStatsModel; _mediaType=nothing)
+    _ctx = _oacinternal_create_slurm_stats(_api, body; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function create_slurm_stats(_api::DefaultApi, response_stream::Channel, body::SlurmStatsModel; _mediaType=nothing)
+    _ctx = _oacinternal_create_slurm_stats(_api, body; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
 const _returntypes_create_user_data_DefaultApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => UserDataModel,
     Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
@@ -3264,6 +3297,46 @@ function list_slurm_schedulers(_api::DefaultApi, response_stream::Channel, workf
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
+const _returntypes_list_slurm_stats_DefaultApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => ListSlurmStatsResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => NotFoundErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => DefaultErrorResponse,
+)
+
+function _oacinternal_list_slurm_stats(_api::DefaultApi, workflow_id::Int64; job_id=nothing, offset=nothing, limit=nothing, _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_slurm_stats_DefaultApi, "/slurm_stats", [])
+    OpenAPI.Clients.set_param(_ctx.query, "workflow_id", workflow_id; style="simple", is_explode=false)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "job_id", job_id; style="simple", is_explode=false)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "offset", offset; style="form", is_explode=true)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Int64
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""List Slurm accounting stats.
+
+Retrieve Slurm accounting stats for a workflow, optionally filtered by job.
+
+Params:
+- workflow_id::Int64 (required)
+- job_id::Int64
+- offset::Int64
+- limit::Int64
+
+Return: ListSlurmStatsResponse, OpenAPI.Clients.ApiResponse
+"""
+function list_slurm_stats(_api::DefaultApi, workflow_id::Int64; job_id=nothing, offset=nothing, limit=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_list_slurm_stats(_api, workflow_id; job_id=job_id, offset=offset, limit=limit, _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function list_slurm_stats(_api::DefaultApi, response_stream::Channel, workflow_id::Int64; job_id=nothing, offset=nothing, limit=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_list_slurm_stats(_api, workflow_id; job_id=job_id, offset=offset, limit=limit, _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
 const _returntypes_list_user_data_DefaultApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ListUserDataResponse,
     Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
@@ -3947,6 +4020,7 @@ const _returntypes_update_resource_requirements_DefaultApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ResourceRequirementsModel,
     Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
     Regex("^" * replace("404", "x"=>".") * "\$") => NotFoundErrorResponse,
+    Regex("^" * replace("422", "x"=>".") * "\$") => DefaultErrorResponse,
     Regex("^" * replace("500", "x"=>".") * "\$") => DefaultErrorResponse,
 )
 
@@ -4209,6 +4283,7 @@ export create_resource_requirements
 export create_result
 export create_scheduled_compute_node
 export create_slurm_scheduler
+export create_slurm_stats
 export create_user_data
 export create_workflow
 export create_workflow_action
@@ -4277,6 +4352,7 @@ export list_resource_requirements
 export list_results
 export list_scheduled_compute_nodes
 export list_slurm_schedulers
+export list_slurm_stats
 export list_user_data
 export list_user_groups
 export list_workflow_groups

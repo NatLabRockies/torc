@@ -1,0 +1,56 @@
+# Test 1: Single-Node Basic
+#
+# 1-node allocation, 3 jobs with dependencies (a -> b -> c).
+# Verifies basic workflow lifecycle, dependency ordering, all complete with rc=0.
+
+name: single_node_basic
+description: Single node with 3 sequential jobs (a -> b -> c)
+project: slurm-tests
+
+resource_requirements:
+  - name: basic
+    num_cpus: 1
+    num_nodes: 1
+    memory: 512m
+    runtime: PT5M
+
+jobs:
+  - name: job_a
+    command: |
+      echo "Job A starting on $(hostname) at $(date)"
+      echo "SLURM_JOB_ID: ${SLURM_JOB_ID:-not set}"
+      sleep 2
+      echo "Job A complete"
+    resource_requirements: basic
+
+  - name: job_b
+    command: |
+      echo "Job B starting on $(hostname) at $(date)"
+      sleep 2
+      echo "Job B complete"
+    resource_requirements: basic
+    depends_on:
+      - job_a
+
+  - name: job_c
+    command: |
+      echo "Job C starting on $(hostname) at $(date)"
+      sleep 2
+      echo "Job C complete"
+    resource_requirements: basic
+    depends_on:
+      - job_b
+
+slurm_schedulers:
+  - name: basic_scheduler
+    account: PLACEHOLDER_ACCOUNT
+    partition: PLACEHOLDER_PARTITION
+    nodes: 1
+    walltime: "00:15:00"
+
+actions:
+  - trigger_type: "on_workflow_start"
+    action_type: "schedule_nodes"
+    scheduler: "basic_scheduler"
+    scheduler_type: "slurm"
+    num_allocations: 1

@@ -58,28 +58,29 @@ use crate::server::api_types::{
     CreateComputeNodeResponse, CreateEventResponse, CreateFailureHandlerResponse,
     CreateFileResponse, CreateJobResponse, CreateJobsResponse, CreateLocalSchedulerResponse,
     CreateRemoteWorkersResponse, CreateResourceRequirementsResponse, CreateResultResponse,
-    CreateScheduledComputeNodeResponse, CreateSlurmSchedulerResponse, CreateUserDataResponse,
-    CreateWorkflowActionResponse, CreateWorkflowResponse, DeleteAccessGroupResponse,
-    DeleteAllResourceRequirementsResponse, DeleteAllUserDataResponse, DeleteComputeNodeResponse,
-    DeleteComputeNodesResponse, DeleteEventResponse, DeleteEventsResponse,
-    DeleteFailureHandlerResponse, DeleteFileResponse, DeleteFilesResponse, DeleteJobResponse,
-    DeleteJobsResponse, DeleteLocalSchedulerResponse, DeleteLocalSchedulersResponse,
-    DeleteRemoteWorkerResponse, DeleteResourceRequirementsResponse, DeleteResultResponse,
-    DeleteResultsResponse, DeleteScheduledComputeNodeResponse, DeleteScheduledComputeNodesResponse,
-    DeleteSlurmSchedulerResponse, DeleteSlurmSchedulersResponse, DeleteUserDataResponse,
-    DeleteWorkflowResponse, GetAccessGroupResponse, GetComputeNodeResponse, GetDotGraphResponse,
-    GetEventResponse, GetFailureHandlerResponse, GetFileResponse, GetJobResponse,
-    GetLocalSchedulerResponse, GetPendingActionsResponse, GetReadyJobRequirementsResponse,
-    GetResourceRequirementsResponse, GetResultResponse, GetScheduledComputeNodeResponse,
-    GetSlurmSchedulerResponse, GetUserDataResponse, GetVersionResponse, GetWorkflowActionsResponse,
-    GetWorkflowResponse, GetWorkflowStatusResponse, InitializeJobsResponse,
-    IsWorkflowCompleteResponse, IsWorkflowUninitializedResponse, ListAccessGroupsApiResponse,
-    ListComputeNodesResponse, ListEventsResponse, ListFailureHandlersResponse, ListFilesResponse,
-    ListGroupMembersResponse, ListJobDependenciesResponse, ListJobFileRelationshipsResponse,
-    ListJobIdsResponse, ListJobUserDataRelationshipsResponse, ListJobsResponse,
-    ListLocalSchedulersResponse, ListMissingUserDataResponse, ListRemoteWorkersResponse,
-    ListRequiredExistingFilesResponse, ListResourceRequirementsResponse, ListResultsResponse,
-    ListScheduledComputeNodesResponse, ListSlurmSchedulersResponse, ListUserDataResponse,
+    CreateScheduledComputeNodeResponse, CreateSlurmSchedulerResponse, CreateSlurmStatsResponse,
+    CreateUserDataResponse, CreateWorkflowActionResponse, CreateWorkflowResponse,
+    DeleteAccessGroupResponse, DeleteAllResourceRequirementsResponse, DeleteAllUserDataResponse,
+    DeleteComputeNodeResponse, DeleteComputeNodesResponse, DeleteEventResponse,
+    DeleteEventsResponse, DeleteFailureHandlerResponse, DeleteFileResponse, DeleteFilesResponse,
+    DeleteJobResponse, DeleteJobsResponse, DeleteLocalSchedulerResponse,
+    DeleteLocalSchedulersResponse, DeleteRemoteWorkerResponse, DeleteResourceRequirementsResponse,
+    DeleteResultResponse, DeleteResultsResponse, DeleteScheduledComputeNodeResponse,
+    DeleteScheduledComputeNodesResponse, DeleteSlurmSchedulerResponse,
+    DeleteSlurmSchedulersResponse, DeleteUserDataResponse, DeleteWorkflowResponse,
+    GetAccessGroupResponse, GetComputeNodeResponse, GetDotGraphResponse, GetEventResponse,
+    GetFailureHandlerResponse, GetFileResponse, GetJobResponse, GetLocalSchedulerResponse,
+    GetPendingActionsResponse, GetReadyJobRequirementsResponse, GetResourceRequirementsResponse,
+    GetResultResponse, GetScheduledComputeNodeResponse, GetSlurmSchedulerResponse,
+    GetUserDataResponse, GetVersionResponse, GetWorkflowActionsResponse, GetWorkflowResponse,
+    GetWorkflowStatusResponse, InitializeJobsResponse, IsWorkflowCompleteResponse,
+    IsWorkflowUninitializedResponse, ListAccessGroupsApiResponse, ListComputeNodesResponse,
+    ListEventsResponse, ListFailureHandlersResponse, ListFilesResponse, ListGroupMembersResponse,
+    ListJobDependenciesResponse, ListJobFileRelationshipsResponse, ListJobIdsResponse,
+    ListJobUserDataRelationshipsResponse, ListJobsResponse, ListLocalSchedulersResponse,
+    ListMissingUserDataResponse, ListRemoteWorkersResponse, ListRequiredExistingFilesResponse,
+    ListResourceRequirementsResponse, ListResultsResponse, ListScheduledComputeNodesResponse,
+    ListSlurmSchedulersResponse, ListSlurmStatsResponse, ListUserDataResponse,
     ListUserGroupsApiResponse, ListWorkflowGroupsResponse, ListWorkflowsResponse,
     ManageStatusChangeResponse, PingResponse, ProcessChangedJobInputsResponse, ReloadAuthResponse,
     RemoveUserFromGroupResponse, RemoveWorkflowFromGroupResponse, ResetJobStatusResponse,
@@ -167,7 +168,9 @@ mod paths {
             // SSE events stream route (index 66)
             r"^/torc-service/v1/workflows/(?P<id>[^/?#]*)/events/stream$",
             // Admin reload-auth route (index 67)
-            r"^/torc-service/v1/admin/reload-auth$"
+            r"^/torc-service/v1/admin/reload-auth$",
+            // Slurm stats route (index 68)
+            r"^/torc-service/v1/slurm_stats$"
         ])
         .expect("Unable to create global regex set");
     }
@@ -519,6 +522,8 @@ regex::Regex::new(
     }
     // Admin reload-auth
     pub(crate) static ID_ADMIN_RELOAD_AUTH: usize = 67;
+    // Slurm stats
+    pub(crate) static ID_SLURM_STATS: usize = 68;
 }
 
 pub struct MakeService<T, C>
@@ -2042,6 +2047,349 @@ where
                                 "Unable to create Bad Request response due to unable to read body",
                             )),
                     }
+                }
+
+                // CreateSlurmStats - POST /slurm_stats
+                hyper::Method::POST if path.matched(paths::ID_SLURM_STATS) => {
+                    let result = body.into_raw().await;
+                    match result {
+                        Ok(body) => {
+                            let mut unused_elements: Vec<String> = vec![];
+                            let param_body: Option<models::SlurmStatsModel> = if !body.is_empty() {
+                                let deserializer =
+                                    &mut serde_json::Deserializer::from_slice(&*body);
+                                match serde_ignored::deserialize(deserializer, |path| {
+                                    warn!("Ignoring unknown field in body: {}", path);
+                                    unused_elements.push(path.to_string());
+                                }) {
+                                    Ok(param_body) => param_body,
+                                    Err(e) => {
+                                        return Ok(Response::builder()
+                                            .status(StatusCode::BAD_REQUEST)
+                                            .body(Body::from(format!(
+                                                "Couldn't parse body parameter body: {}",
+                                                e
+                                            )))
+                                            .expect("Unable to create Bad Request response"));
+                                    }
+                                }
+                            } else {
+                                None
+                            };
+                            let param_body = match param_body {
+                                Some(param_body) => param_body,
+                                None => {
+                                    return Ok(Response::builder()
+                                        .status(StatusCode::BAD_REQUEST)
+                                        .body(Body::from("Missing required body parameter body"))
+                                        .expect("Unable to create Bad Request response"));
+                                }
+                            };
+
+                            let result = api_impl.create_slurm_stats(param_body, &context).await;
+                            let mut response = Response::new(Body::empty());
+                            response.headers_mut().insert(
+                                HeaderName::from_static("x-span-id"),
+                                HeaderValue::from_str(
+                                    (&context as &dyn Has<XSpanIdString>)
+                                        .get()
+                                        .0
+                                        .clone()
+                                        .as_str(),
+                                )
+                                .expect("Unable to create X-Span-ID header value"),
+                            );
+
+                            if !unused_elements.is_empty() {
+                                response.headers_mut().insert(
+                                    HeaderName::from_static("warning"),
+                                    HeaderValue::from_str(
+                                        format!(
+                                            "Ignoring unknown fields in body: {:?}",
+                                            unused_elements
+                                        )
+                                        .as_str(),
+                                    )
+                                    .expect("Unable to create Warning header value"),
+                                );
+                            }
+
+                            match result {
+                                Ok(rsp) => match rsp {
+                                    CreateSlurmStatsResponse::SuccessfulResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(200)
+                                            .expect("Unable to turn 200 into a StatusCode");
+                                        response.headers_mut().insert(
+                                            CONTENT_TYPE,
+                                            HeaderValue::from_str("application/json")
+                                                .expect("Unable to create Content-Type header for application/json"),
+                                        );
+                                        let body_content = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body_content);
+                                    }
+                                    CreateSlurmStatsResponse::ForbiddenErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(403)
+                                            .expect("Unable to turn 403 into a StatusCode");
+                                        response.headers_mut().insert(
+                                            CONTENT_TYPE,
+                                            HeaderValue::from_str("application/json")
+                                                .expect("Unable to create Content-Type header for application/json"),
+                                        );
+                                        let body_content = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body_content);
+                                    }
+                                    CreateSlurmStatsResponse::NotFoundErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(404)
+                                            .expect("Unable to turn 404 into a StatusCode");
+                                        response.headers_mut().insert(
+                                            CONTENT_TYPE,
+                                            HeaderValue::from_str("application/json")
+                                                .expect("Unable to create Content-Type header for application/json"),
+                                        );
+                                        let body_content = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body_content);
+                                    }
+                                    CreateSlurmStatsResponse::DefaultErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(500)
+                                            .expect("Unable to turn 500 into a StatusCode");
+                                        response.headers_mut().insert(
+                                            CONTENT_TYPE,
+                                            HeaderValue::from_str("application/json")
+                                                .expect("Unable to create Content-Type header for application/json"),
+                                        );
+                                        let body_content = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body_content);
+                                    }
+                                },
+                                Err(_) => {
+                                    *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+                                    *response.body_mut() = Body::from("An internal error occurred");
+                                }
+                            }
+                            Ok(response)
+                        }
+                        Err(e) => Ok(Response::builder()
+                            .status(StatusCode::BAD_REQUEST)
+                            .body(Body::from(format!(
+                                "Couldn't read body parameter body: {}",
+                                e
+                            )))
+                            .expect("Unable to create Bad Request response")),
+                    }
+                }
+
+                // ListSlurmStats - GET /slurm_stats
+                hyper::Method::GET if path.matched(paths::ID_SLURM_STATS) => {
+                    let query_params =
+                        form_urlencoded::parse(uri.query().unwrap_or_default().as_bytes())
+                            .collect::<Vec<_>>();
+                    let param_workflow_id = query_params
+                        .iter()
+                        .filter(|e| e.0 == "workflow_id")
+                        .map(|e| e.1.clone())
+                        .next();
+                    let param_workflow_id = match param_workflow_id {
+                        Some(param_workflow_id) => {
+                            let param_workflow_id =
+                                <i64 as std::str::FromStr>::from_str(&param_workflow_id);
+                            match param_workflow_id {
+                            Ok(param_workflow_id) => Some(param_workflow_id),
+                            Err(e) => return Ok(Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body(Body::from(format!("Couldn't parse query parameter workflow_id - doesn't match schema: {}", e)))
+                                .expect("Unable to create Bad Request response for invalid query parameter workflow_id")),
+                        }
+                        }
+                        None => {
+                            return Ok(Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body(Body::from("Missing required query parameter workflow_id"))
+                                .expect(
+                                    "Unable to create Bad Request response for missing workflow_id",
+                                ));
+                        }
+                    };
+                    let param_job_id = query_params
+                        .iter()
+                        .filter(|e| e.0 == "job_id")
+                        .map(|e| e.1.clone())
+                        .next();
+                    let param_job_id = match param_job_id {
+                        Some(param_job_id) => {
+                            let param_job_id = <i64 as std::str::FromStr>::from_str(&param_job_id);
+                            match param_job_id {
+                            Ok(param_job_id) => Some(param_job_id),
+                            Err(e) => return Ok(Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body(Body::from(format!("Couldn't parse query parameter job_id - doesn't match schema: {}", e)))
+                                .expect("Unable to create Bad Request response for invalid query parameter job_id")),
+                        }
+                        }
+                        None => None,
+                    };
+                    let param_offset = query_params
+                        .iter()
+                        .filter(|e| e.0 == "offset")
+                        .map(|e| e.1.clone())
+                        .next();
+                    let param_offset = match param_offset {
+                        Some(param_offset) => {
+                            let param_offset = <i64 as std::str::FromStr>::from_str(&param_offset);
+                            match param_offset {
+                            Ok(param_offset) => param_offset,
+                            Err(e) => return Ok(Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body(Body::from(format!("Couldn't parse query parameter offset - doesn't match schema: {}", e)))
+                                .expect("Unable to create Bad Request response for invalid query parameter offset")),
+                        }
+                        }
+                        None => 0,
+                    };
+                    let param_limit = query_params
+                        .iter()
+                        .filter(|e| e.0 == "limit")
+                        .map(|e| e.1.clone())
+                        .next();
+                    let param_limit = match param_limit {
+                        Some(param_limit) => {
+                            let param_limit = <i64 as std::str::FromStr>::from_str(&param_limit);
+                            match param_limit {
+                            Ok(param_limit) => param_limit,
+                            Err(e) => return Ok(Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body(Body::from(format!("Couldn't parse query parameter limit - doesn't match schema: {}", e)))
+                                .expect("Unable to create Bad Request response for invalid query parameter limit")),
+                        }
+                        }
+                        None => 10_000,
+                    };
+
+                    let param_run_id = query_params
+                        .iter()
+                        .filter(|e| e.0 == "run_id")
+                        .map(|e| e.1.clone())
+                        .next();
+                    let param_run_id = match param_run_id {
+                        Some(param_run_id) => {
+                            let param_run_id = <i64 as std::str::FromStr>::from_str(&param_run_id);
+                            match param_run_id {
+                            Ok(param_run_id) => Some(param_run_id),
+                            Err(e) => return Ok(Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body(Body::from(format!("Couldn't parse query parameter run_id - doesn't match schema: {}", e)))
+                                .expect("Unable to create Bad Request response for invalid query parameter run_id")),
+                        }
+                        }
+                        None => None,
+                    };
+                    let param_attempt_id = query_params
+                        .iter()
+                        .filter(|e| e.0 == "attempt_id")
+                        .map(|e| e.1.clone())
+                        .next();
+                    let param_attempt_id = match param_attempt_id {
+                        Some(param_attempt_id) => {
+                            let param_attempt_id =
+                                <i64 as std::str::FromStr>::from_str(&param_attempt_id);
+                            match param_attempt_id {
+                            Ok(param_attempt_id) => Some(param_attempt_id),
+                            Err(e) => return Ok(Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body(Body::from(format!("Couldn't parse query parameter attempt_id - doesn't match schema: {}", e)))
+                                .expect("Unable to create Bad Request response for invalid query parameter attempt_id")),
+                        }
+                        }
+                        None => None,
+                    };
+
+                    // param_workflow_id is guaranteed Some by the 400 guard above.
+                    let result = api_impl
+                        .list_slurm_stats(
+                            param_workflow_id.unwrap(),
+                            param_job_id,
+                            param_run_id,
+                            param_attempt_id,
+                            Some(param_offset),
+                            Some(param_limit),
+                            &context,
+                        )
+                        .await;
+                    let mut response = Response::new(Body::empty());
+                    response.headers_mut().insert(
+                        HeaderName::from_static("x-span-id"),
+                        HeaderValue::from_str(
+                            (&context as &dyn Has<XSpanIdString>)
+                                .get()
+                                .0
+                                .clone()
+                                .as_str(),
+                        )
+                        .expect("Unable to create X-Span-ID header value"),
+                    );
+
+                    match result {
+                        Ok(rsp) => {
+                            match rsp {
+                                ListSlurmStatsResponse::SuccessfulResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(200)
+                                        .expect("Unable to turn 200 into a StatusCode");
+                                    response.headers_mut().insert(
+                                    CONTENT_TYPE,
+                                    HeaderValue::from_str("application/json")
+                                        .expect("Unable to create Content-Type header for application/json"),
+                                );
+                                    let body_content = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body_content);
+                                }
+                                ListSlurmStatsResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                    CONTENT_TYPE,
+                                    HeaderValue::from_str("application/json")
+                                        .expect("Unable to create Content-Type header for application/json"),
+                                );
+                                    let body_content = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body_content);
+                                }
+                                ListSlurmStatsResponse::NotFoundErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(404)
+                                        .expect("Unable to turn 404 into a StatusCode");
+                                    response.headers_mut().insert(
+                                    CONTENT_TYPE,
+                                    HeaderValue::from_str("application/json")
+                                        .expect("Unable to create Content-Type header for application/json"),
+                                );
+                                    let body_content = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body_content);
+                                }
+                                ListSlurmStatsResponse::DefaultErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(500)
+                                        .expect("Unable to turn 500 into a StatusCode");
+                                    response.headers_mut().insert(
+                                    CONTENT_TYPE,
+                                    HeaderValue::from_str("application/json")
+                                        .expect("Unable to create Content-Type header for application/json"),
+                                );
+                                    let body_content = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body_content);
+                                }
+                            }
+                        }
+                        Err(_) => {
+                            *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+                            *response.body_mut() = Body::from("An internal error occurred");
+                        }
+                    }
+                    Ok(response)
                 }
 
                 // CreateUserData - POST /user_data
@@ -11552,6 +11900,20 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
+                                    UpdateResourceRequirementsResponse::UnprocessableContentErrorResponse(
+                                        body,
+                                    ) => {
+                                        *response.status_mut() = StatusCode::from_u16(422)
+                                            .expect("Unable to turn 422 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
                                     UpdateResourceRequirementsResponse::DefaultErrorResponse(
                                         body,
                                     ) => {
@@ -17985,6 +18347,7 @@ where
                 }
                 _ if path.matched(paths::ID_WORKFLOWS_ID_EVENTS_STREAM) => method_not_allowed(),
                 _ if path.matched(paths::ID_ADMIN_RELOAD_AUTH) => method_not_allowed(),
+                _ if path.matched(paths::ID_SLURM_STATS) => method_not_allowed(),
                 // Serve dashboard for non-API routes, 404 otherwise
                 _ => {
                     // Try to serve dashboard assets for non-API paths
@@ -18323,6 +18686,10 @@ impl<T> RequestParser<T> for ApiRequestParser {
             hyper::Method::GET if path.matched(paths::ID_WORKFLOWS_ID_EVENTS_STREAM) => {
                 Some("SubscribeToEventsStream")
             }
+            // CreateSlurmStats - POST /slurm_stats
+            hyper::Method::POST if path.matched(paths::ID_SLURM_STATS) => Some("CreateSlurmStats"),
+            // ListSlurmStats - GET /slurm_stats
+            hyper::Method::GET if path.matched(paths::ID_SLURM_STATS) => Some("ListSlurmStats"),
             _ => None,
         }
     }

@@ -36,6 +36,18 @@ use torc::plot_resources_cmd;
 use torc::run_jobs_cmd;
 use torc::tui_runner;
 
+/// Helper to print a workflow message in the appropriate format (JSON or plain text).
+fn print_workflow_message(format: &str, workflow_id: i64, message: &str) {
+    if format == "json" {
+        println!(
+            "{}",
+            serde_json::json!({"workflow_id": workflow_id, "message": message})
+        );
+    } else {
+        println!("{}", message);
+    }
+}
+
 /// Helper function to determine if a string is a file path or workflow ID
 fn is_spec_file(arg: &str) -> bool {
     arg.ends_with(".yaml")
@@ -178,7 +190,7 @@ fn main() {
                     *skip_checks,
                 ) {
                     Ok(id) => {
-                        println!("Created workflow {}", id);
+                        print_workflow_message(&format, id, &format!("Created workflow {}", id));
                         id
                     }
                     Err(e) => {
@@ -284,7 +296,7 @@ fn main() {
                     *skip_checks,
                 ) {
                     Ok(id) => {
-                        println!("Created workflow {}", id);
+                        print_workflow_message(&format, id, &format!("Created workflow {}", id));
                         id
                     }
                     Err(e) => {
@@ -345,7 +357,11 @@ fn main() {
                         WorkflowManager::new(config.clone(), torc_config, workflow);
                     match workflow_manager.start(*ignore_missing_data) {
                         Ok(()) => {
-                            println!("Successfully submitted workflow {}", workflow_id);
+                            print_workflow_message(
+                                &format,
+                                workflow_id,
+                                &format!("Successfully submitted workflow {}", workflow_id),
+                            );
                         }
                         Err(e) => {
                             eprintln!("Error submitting workflow {}: {}", workflow_id, e);
@@ -479,7 +495,7 @@ fn main() {
                 *skip_checks,
             ) {
                 Ok(id) => {
-                    println!("Created workflow {}", id);
+                    print_workflow_message(&format, id, &format!("Created workflow {}", id));
                     id
                 }
                 Err(e) => {
@@ -495,7 +511,11 @@ fn main() {
                         WorkflowManager::new(config.clone(), torc_config, workflow);
                     match workflow_manager.start(*ignore_missing_data) {
                         Ok(()) => {
-                            println!("Successfully submitted workflow {}", workflow_id);
+                            print_workflow_message(
+                                &format,
+                                workflow_id,
+                                &format!("Successfully submitted workflow {}", workflow_id),
+                            );
                         }
                         Err(e) => {
                             eprintln!("Error submitting workflow {}: {}", workflow_id, e);

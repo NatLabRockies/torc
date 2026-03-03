@@ -17,8 +17,8 @@ git-repository-url = "https://github.com/NatLabRockies/torc"
 edit-url-template = "https://github.com/NatLabRockies/torc/edit/main/docs/{path}"
 site-url = "/torc/"
 cname = ""
-additional-css = ["custom.css", "pagetoc.css"]
-additional-js = ["mermaid.min.js", "mermaid-init.js", "pagetoc.js"]
+additional-css = ["custom.css", "pagetoc.css", "version-selector.css"]
+additional-js = ["mermaid.min.js", "mermaid-init.js", "pagetoc.js", "version-selector.js"]
 
 [output.html.print]
 enable = true

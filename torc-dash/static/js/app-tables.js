@@ -368,6 +368,49 @@ Object.assign(TorcDashboard.prototype, {
         `;
     },
 
+    renderSlurmStatsTable(stats) {
+        const controls = this.renderTableControls('slurm-stats');
+
+        if (!stats || stats.length === 0) {
+            return `${controls}<div class="placeholder-message">No Slurm stats in this workflow</div>`;
+        }
+
+        const count = `<span class="table-count">${stats.length} stat${stats.length !== 1 ? 's' : ''}</span>`;
+
+        return `
+            ${controls}
+            ${count}
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        ${this.renderSortableHeader('Job ID', 'job_id')}
+                        ${this.renderSortableHeader('Run', 'run_id')}
+                        ${this.renderSortableHeader('Attempt', 'attempt_id')}
+                        ${this.renderSortableHeader('Slurm Job', 'slurm_job_id')}
+                        ${this.renderSortableHeader('Max RSS', 'max_rss_bytes')}
+                        ${this.renderSortableHeader('Max VM', 'max_vm_size_bytes')}
+                        ${this.renderSortableHeader('Ave CPU (s)', 'ave_cpu_seconds')}
+                        <th>Nodes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${stats.map(stat => `
+                        <tr>
+                            <td><code>${stat.job_id ?? '-'}</code></td>
+                            <td>${stat.run_id ?? '-'}</td>
+                            <td>${stat.attempt_id ?? '-'}</td>
+                            <td><code>${this.escapeHtml(stat.slurm_job_id || '-')}</code></td>
+                            <td>${stat.max_rss_bytes != null && stat.max_rss_bytes > 0 ? this.formatBytes(stat.max_rss_bytes) : '-'}</td>
+                            <td>${stat.max_vm_size_bytes != null && stat.max_vm_size_bytes > 0 ? this.formatBytes(stat.max_vm_size_bytes) : '-'}</td>
+                            <td>${stat.ave_cpu_seconds != null && stat.ave_cpu_seconds > 0 ? stat.ave_cpu_seconds.toFixed(1) : '-'}</td>
+                            <td>${this.escapeHtml(stat.node_list || '-')}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    },
+
     renderResourcesTable(resources) {
         const controls = this.renderTableControls('resources');
         const count = `<span class="table-count">${resources.length} requirement${resources.length !== 1 ? 's' : ''}</span>`;

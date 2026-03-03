@@ -1,0 +1,86 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT id, workflow_id, job_id, run_id, attempt_id,\n                   slurm_job_id,\n                   max_rss_bytes, max_vm_size_bytes,\n                   max_disk_read_bytes, max_disk_write_bytes,\n                   ave_cpu_seconds, node_list\n            FROM slurm_stats\n            WHERE workflow_id = $1\n              AND ($2 IS NULL OR job_id = $2)\n              AND ($3 IS NULL OR run_id = $3)\n              AND ($4 IS NULL OR attempt_id = $4)\n            ORDER BY id\n            LIMIT $5 OFFSET $6\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "workflow_id",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "job_id",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "run_id",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "attempt_id",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "slurm_job_id",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "max_rss_bytes",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "max_vm_size_bytes",
+        "ordinal": 7,
+        "type_info": "Integer"
+      },
+      {
+        "name": "max_disk_read_bytes",
+        "ordinal": 8,
+        "type_info": "Integer"
+      },
+      {
+        "name": "max_disk_write_bytes",
+        "ordinal": 9,
+        "type_info": "Integer"
+      },
+      {
+        "name": "ave_cpu_seconds",
+        "ordinal": 10,
+        "type_info": "Float"
+      },
+      {
+        "name": "node_list",
+        "ordinal": 11,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "16ffe73dda9aa2fab156d90b42f91230acabb446007611b10e20c22bf289fdaf"
+}

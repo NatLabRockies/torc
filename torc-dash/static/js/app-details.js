@@ -265,6 +265,9 @@ Object.assign(TorcDashboard.prototype, {
                 case 'scheduled-nodes':
                     this.tableState.data = await api.listScheduledComputeNodes(workflowId);
                     break;
+                case 'slurm-stats':
+                    this.tableState.data = await api.listSlurmStats(workflowId);
+                    break;
             }
             this.tableState.filteredData = [...this.tableState.data];
             this.renderCurrentTable();
@@ -306,6 +309,9 @@ Object.assign(TorcDashboard.prototype, {
                 break;
             case 'scheduled-nodes':
                 content.innerHTML = this.renderScheduledNodesTable(filteredData);
+                break;
+            case 'slurm-stats':
+                content.innerHTML = this.renderSlurmStatsTable(filteredData);
                 break;
         }
         this.setupTableInteractions();
@@ -372,6 +378,7 @@ Object.assign(TorcDashboard.prototype, {
             'resources': 'requirement',
             'schedulers': 'scheduler',
             'compute-nodes': 'node',
+            'slurm-stats': 'stat',
         };
         return names[tabType] || 'item';
     },
@@ -469,6 +476,20 @@ Object.assign(TorcDashboard.prototype, {
                         <td>${n.memory_gb ?? '-'}</td>
                         <td>${n.num_gpus ?? '-'}</td>
                         <td>${n.is_active != null ? (n.is_active ? 'Yes' : 'No') : '-'}</td>
+                    </tr>
+                `).join('');
+
+            case 'slurm-stats':
+                return items.map(stat => `
+                    <tr>
+                        <td><code>${stat.job_id ?? '-'}</code></td>
+                        <td>${stat.run_id ?? '-'}</td>
+                        <td>${stat.attempt_id ?? '-'}</td>
+                        <td><code>${this.escapeHtml(stat.slurm_job_id || '-')}</code></td>
+                        <td>${stat.max_rss_bytes != null && stat.max_rss_bytes > 0 ? this.formatBytes(stat.max_rss_bytes) : '-'}</td>
+                        <td>${stat.max_vm_size_bytes != null && stat.max_vm_size_bytes > 0 ? this.formatBytes(stat.max_vm_size_bytes) : '-'}</td>
+                        <td>${stat.ave_cpu_seconds != null && stat.ave_cpu_seconds > 0 ? stat.ave_cpu_seconds.toFixed(1) : '-'}</td>
+                        <td>${this.escapeHtml(stat.node_list || '-')}</td>
                     </tr>
                 `).join('');
 

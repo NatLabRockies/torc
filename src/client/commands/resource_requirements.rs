@@ -48,8 +48,8 @@ pub enum ResourceRequirementsCommands {
         /// Amount of memory required (e.g., "20g")
         #[arg(short, long, default_value = "1m")]
         memory: String,
-        /// Maximum runtime in ISO 8601 duration format (e.g., "P0DT1H")
-        #[arg(short, long, default_value = "P0DT1M")]
+        /// Maximum runtime in ISO 8601 duration format (e.g., "PT1H", "PT30M")
+        #[arg(short, long, default_value = "PT1M")]
         runtime: String,
     },
     /// List resource requirements
@@ -96,7 +96,7 @@ pub enum ResourceRequirementsCommands {
         /// Amount of memory required (e.g., "20g")
         #[arg(long)]
         memory: Option<String>,
-        /// Maximum runtime (e.g., "1h", "30m")
+        /// Maximum runtime in ISO 8601 duration format (e.g., "PT1H", "PT30M")
         #[arg(long)]
         runtime: Option<String>,
     },

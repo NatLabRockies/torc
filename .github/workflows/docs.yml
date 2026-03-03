@@ -8,17 +8,17 @@ on:
       - 'docs/**'
       - '.github/workflows/docs.yml'
 
+# contents:write is required to push to the gh-pages branch directly
+# (the previous pages:write + id-token:write approach used the Pages API instead)
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: "pages"
   cancel-in-progress: false
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -35,23 +35,43 @@ jobs:
       - name: Build documentation
         run: |
           cd docs
+          # Override site-url for versioned path
+          sed -i 's|site-url = "/torc/"|site-url = "/torc/latest/"|' book.toml
           mdbook build
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
+      - name: Setup gh-pages branch
+        run: .github/scripts/gh-pages-setup.sh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v4
-        with:
-          path: 'docs/book'
+      - name: Deploy latest docs
+        run: |
+          cd gh-pages-deploy
 
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          # One-time: clean legacy Sphinx content
+          rm -rf _static _sources _images genindex.html objects.inv searchindex.js \
+                 py-modindex.html search.html .buildinfo
+
+          # Replace latest/ with new build
+          rm -rf latest
+          cp -r ../docs/book latest
+
+          # Root redirect
+          cp ../docs/redirect.html index.html
+
+          # Initialize versions.json if it doesn't exist
+          if [ ! -f versions.json ]; then
+            cat > versions.json << 'VJSON'
+          {
+            "latest_release": null,
+            "versions": [
+              {"version": "latest", "label": "latest (dev)", "path": "/torc/latest/"}
+            ]
+          }
+          VJSON
+          fi
+
+      - name: Commit and push
+        run: |
+          cd gh-pages-deploy
+          ../.github/scripts/gh-pages-commit.sh "Deploy docs from ${GITHUB_SHA::8}"

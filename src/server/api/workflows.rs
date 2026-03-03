@@ -164,6 +164,8 @@ const WORKFLOW_COLUMNS: &[&str] = &[
     "resource_monitor_config",
     "slurm_defaults",
     "use_pending_failed",
+    "limit_resources",
+    "use_srun",
     "project",
     "metadata",
     "status_id",
@@ -192,6 +194,8 @@ const ALL_WORKFLOW_COLUMNS: &[&str] = &[
     "resource_monitor_config",
     "slurm_defaults",
     "use_pending_failed",
+    "limit_resources",
+    "use_srun",
     "project",
     "metadata",
     "status_id",
@@ -279,6 +283,8 @@ impl WorkflowsApiImpl {
                 ,w.resource_monitor_config
                 ,w.slurm_defaults
                 ,w.use_pending_failed
+                ,w.limit_resources
+                ,w.use_srun
                 ,w.project
                 ,w.metadata
                 ,w.status_id
@@ -303,6 +309,8 @@ impl WorkflowsApiImpl {
                 ,resource_monitor_config
                 ,slurm_defaults
                 ,use_pending_failed
+                ,limit_resources
+                ,use_srun
                 ,project
                 ,metadata
                 ,status_id
@@ -460,6 +468,16 @@ impl WorkflowsApiImpl {
                     .ok()
                     .flatten()
                     .map(|v| v != 0),
+                limit_resources: record
+                    .try_get::<Option<i64>, _>("limit_resources")
+                    .ok()
+                    .flatten()
+                    .map(|v| v != 0),
+                use_srun: record
+                    .try_get::<Option<i64>, _>("use_srun")
+                    .ok()
+                    .flatten()
+                    .map(|v| v != 0),
                 project: record.get("project"),
                 metadata: record.get("metadata"),
                 status_id: Some(record.get("status_id")),
@@ -612,6 +630,8 @@ where
 
         // Then, create the workflow record
         let use_pending_failed_int = body.use_pending_failed.map(|v| if v { 1 } else { 0 });
+        let limit_resources_int = body.limit_resources.map(|v| if v { 1 } else { 0 });
+        let use_srun_int = body.use_srun.map(|v| if v { 1 } else { 0 });
 
         let workflow_result = match sqlx::query!(
             r#"
@@ -630,11 +650,13 @@ where
                 resource_monitor_config,
                 slurm_defaults,
                 use_pending_failed,
+                limit_resources,
+                use_srun,
                 project,
                 metadata,
                 status_id
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
             RETURNING rowid
             "#,
             body.name,
@@ -650,6 +672,8 @@ where
             body.resource_monitor_config,
             body.slurm_defaults,
             use_pending_failed_int,
+            limit_resources_int,
+            use_srun_int,
             body.project,
             body.metadata,
             status_result[0].id,
@@ -924,6 +948,8 @@ where
                     resource_monitor_config: row.resource_monitor_config,
                     slurm_defaults: row.slurm_defaults,
                     use_pending_failed: row.use_pending_failed.map(|v| v != 0),
+                    limit_resources: row.limit_resources.map(|v| v != 0),
+                    use_srun: row.use_srun.map(|v| v != 0),
                     project: row.project,
                     metadata: row.metadata,
                     status_id: Some(row.status_id),
@@ -1215,6 +1241,8 @@ where
             .compute_node_ignore_workflow_completion
             .map(|val| if val { 1 } else { 0 });
         let use_pending_failed_int = body.use_pending_failed.map(|val| if val { 1 } else { 0 });
+        let limit_resources_int = body.limit_resources.map(|val| if val { 1 } else { 0 });
+        let use_srun_int = body.use_srun.map(|val| if val { 1 } else { 0 });
 
         // Update the workflow record using COALESCE to only update non-null fields
         let result = match sqlx::query!(
@@ -1230,9 +1258,11 @@ where
                 compute_node_wait_for_healthy_database_minutes = COALESCE($7, compute_node_wait_for_healthy_database_minutes),
                 jobs_sort_method = COALESCE($8, jobs_sort_method),
                 use_pending_failed = COALESCE($9, use_pending_failed),
-                project = COALESCE($10, project),
-                metadata = COALESCE($11, metadata)
-            WHERE id = $12
+                limit_resources = COALESCE($10, limit_resources),
+                use_srun = COALESCE($11, use_srun),
+                project = COALESCE($12, project),
+                metadata = COALESCE($13, metadata)
+            WHERE id = $14
             "#,
             body.name,
             body.description,
@@ -1243,6 +1273,8 @@ where
             body.compute_node_wait_for_healthy_database_minutes,
             jobs_sort_method_str,
             use_pending_failed_int,
+            limit_resources_int,
+            use_srun_int,
             body.project,
             body.metadata,
             id
