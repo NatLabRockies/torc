@@ -182,6 +182,12 @@ EXAMPLES:
 
     # Ignore missing input data
     torc submit -i workflow.yaml
+
+    # Custom output directory and poll interval
+    torc submit -o /scratch/output -p 60 workflow.yaml
+
+    # Limit parallel jobs per worker
+    torc submit --max-parallel-jobs 4 workflow.yaml
 "
     )]
     Submit {
@@ -194,6 +200,15 @@ EXAMPLES:
         /// Skip validation checks (e.g., scheduler node requirements). Use with caution.
         #[arg(long, default_value = "false")]
         skip_checks: bool,
+        /// Maximum number of parallel jobs per worker
+        #[arg(long)]
+        max_parallel_jobs: Option<i32>,
+        /// Output directory for job logs and results
+        #[arg(short, long, default_value = "torc_output")]
+        output_dir: String,
+        /// Job completion poll interval in seconds
+        #[arg(short, long)]
+        poll_interval: Option<i32>,
     },
     /// Submit a workflow to Slurm with auto-generated schedulers
     ///
@@ -229,6 +244,12 @@ EXAMPLES:
 
     # Group by partition
     torc submit-slurm --account myproject --group-by partition workflow.yaml
+
+    # Custom output directory and poll interval
+    torc submit-slurm --account myproject -o /scratch/output -p 60 workflow.yaml
+
+    # Limit parallel jobs per worker
+    torc submit-slurm --account myproject --max-parallel-jobs 4 workflow.yaml
 "
     )]
     SubmitSlurm {
@@ -270,6 +291,15 @@ EXAMPLES:
         /// Without this flag, an error is returned if the spec already has schedulers.
         #[arg(long, default_value = "false")]
         overwrite: bool,
+        /// Maximum number of parallel jobs per worker
+        #[arg(long)]
+        max_parallel_jobs: Option<i32>,
+        /// Output directory for job logs and results
+        #[arg(short, long, default_value = "torc_output")]
+        output_dir: String,
+        /// Job completion poll interval in seconds
+        #[arg(long)]
+        poll_interval: Option<i32>,
     },
     /// Watch a workflow and automatically recover from failures
     ///

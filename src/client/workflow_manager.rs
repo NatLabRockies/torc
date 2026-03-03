@@ -163,7 +163,13 @@ impl WorkflowManager {
     }
 
     /// Start the workflow: initialize if needed and schedule nodes for on_workflow_start actions
-    pub fn start(&self, force: bool) -> Result<(), TorcError> {
+    pub fn start(
+        &self,
+        force: bool,
+        max_parallel_jobs_override: Option<i32>,
+        output_dir: &str,
+        poll_interval_override: Option<i32>,
+    ) -> Result<(), TorcError> {
         // Check if workflow is uninitialized
         match default_api::is_workflow_uninitialized(&self.config, self.workflow_id) {
             Ok(response) => {
@@ -256,10 +262,14 @@ impl WorkflowManager {
                         .get("start_one_worker_per_node")
                         .and_then(|v| v.as_bool())
                         .unwrap_or(false);
-                    let max_parallel_jobs = action_config
-                        .get("max_parallel_jobs")
-                        .and_then(|v| v.as_i64())
-                        .map(|v| v as i32);
+                    let max_parallel_jobs = max_parallel_jobs_override.or_else(|| {
+                        action_config
+                            .get("max_parallel_jobs")
+                            .and_then(|v| v.as_i64())
+                            .map(|v| v as i32)
+                    });
+                    let poll_interval = poll_interval_override
+                        .unwrap_or(self.torc_config.client.slurm.poll_interval);
 
                     match crate::client::commands::slurm::schedule_slurm_nodes(
                         &self.config,
@@ -267,8 +277,8 @@ impl WorkflowManager {
                         scheduler_id,
                         num_allocations,
                         "",
-                        "torc_output",
-                        self.torc_config.client.slurm.poll_interval,
+                        output_dir,
+                        poll_interval,
                         max_parallel_jobs,
                         start_one_worker_per_node,
                         self.torc_config.client.slurm.keep_submission_scripts,

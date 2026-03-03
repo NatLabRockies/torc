@@ -341,6 +341,18 @@ assert_peak_memory_nonzero() {
     assert_gt "${peak_mem:-0}" "0" "job '$job_name' peak_memory_bytes > 0 (got $peak_mem)"
 }
 
+# assert_peak_memory_ge WF_ID JOB_NAME THRESHOLD_BYTES
+#   Checks that peak_memory_bytes >= threshold for a specific job.
+assert_peak_memory_ge() {
+    local wf_id="$1" job_name="$2" threshold="$3"
+    local job_id peak_mem
+    job_id=$(torc --url "$TORC_API_URL" -f json jobs list "$wf_id" 2>/dev/null \
+        | jq -r ".jobs[] | select(.name == \"$job_name\") | .id")
+    peak_mem=$(torc --url "$TORC_API_URL" -f json results list "$wf_id" 2>/dev/null \
+        | jq -r "[.results[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .peak_memory_bytes // 0")
+    assert_ge "${peak_mem:-0}" "$threshold" "job '$job_name' peak_memory_bytes >= $threshold (got $peak_mem)"
+}
+
 # assert_resource_utilization_flags_violation WF_ID
 #   Checks that check-resource-utilization --include-failed reports violations.
 assert_resource_utilization_flags_violation() {

@@ -200,12 +200,18 @@ ALL_WORKFLOW_NAMES=(
   cancel_workflow
   multi_node_parallel
   multi_node_mpi_step
+  job_parallelism
   oom_detection
   resource_monitoring
   failure_recovery
   timeout_detection
   sync_status
 )
+
+# Per-workflow extra arguments for `torc submit`.
+# shellcheck disable=SC2034  # Used via ${SUBMIT_EXTRA_ARGS[...]}
+declare -A SUBMIT_EXTRA_ARGS
+SUBMIT_EXTRA_ARGS[job_parallelism]="--max-parallel-jobs 2"
 
 # Filter workflow names if --test was specified
 WORKFLOW_NAMES=()
@@ -237,7 +243,8 @@ for name in "${WORKFLOW_NAMES[@]}"; do
     "$PARTITION" \
     "$local_spec"
 
-  wf_id=$(submit_workflow "$local_spec")
+  # shellcheck disable=SC2086  # Intentional word splitting for extra submit args
+  wf_id=$(submit_workflow "$local_spec" ${SUBMIT_EXTRA_ARGS[$name]:-})
   if [ -z "$wf_id" ]; then
     echo "FATAL: Failed to submit $name"
     exit 1
@@ -353,6 +360,7 @@ run_test_if_active single_node_basic
 run_test_if_active no_srun_basic
 run_test_if_active multi_node_parallel
 run_test_if_active multi_node_mpi_step
+run_test_if_active job_parallelism
 run_test_if_active oom_detection
 run_test_if_active resource_monitoring
 run_test_if_active failure_recovery

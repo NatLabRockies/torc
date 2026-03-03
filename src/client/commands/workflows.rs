@@ -443,6 +443,12 @@ EXAMPLES:
 
     # Submit even with missing user data
     torc workflows submit 123 --force
+
+    # Custom output directory and poll interval
+    torc workflows submit 123 -o /scratch/output -p 60
+
+    # Limit parallel jobs per worker
+    torc workflows submit 123 --max-parallel-jobs 4
 "
     )]
     Submit {
@@ -452,6 +458,15 @@ EXAMPLES:
         /// If false, fail the operation if missing data is present (defaults to false)
         #[arg(long, default_value = "false")]
         force: bool,
+        /// Maximum number of parallel jobs per worker
+        #[arg(long)]
+        max_parallel_jobs: Option<i32>,
+        /// Output directory for job logs and results
+        #[arg(short, long, default_value = "torc_output")]
+        output_dir: String,
+        /// Job completion poll interval in seconds
+        #[arg(short, long)]
+        poll_interval: Option<i32>,
     },
     /// Run a workflow locally on the current node
     #[command(
@@ -2233,7 +2248,15 @@ fn handle_run(
     crate::run_jobs_cmd::run(&args);
 }
 
-fn handle_submit(config: &Configuration, workflow_id: &Option<i64>, force: bool, format: &str) {
+fn handle_submit(
+    config: &Configuration,
+    workflow_id: &Option<i64>,
+    force: bool,
+    max_parallel_jobs: Option<i32>,
+    output_dir: &str,
+    poll_interval: Option<i32>,
+    format: &str,
+) {
     let user_name = get_env_user_name();
 
     let selected_workflow_id = match workflow_id {
@@ -2287,7 +2310,7 @@ fn handle_submit(config: &Configuration, workflow_id: &Option<i64>, force: bool,
         Ok(workflow) => {
             let torc_config = TorcConfig::load().unwrap_or_default();
             let workflow_manager = WorkflowManager::new(config.clone(), torc_config, workflow);
-            match workflow_manager.start(force) {
+            match workflow_manager.start(force, max_parallel_jobs, output_dir, poll_interval) {
                 Ok(()) => {
                     if format == "json" {
                         let success_response = serde_json::json!({
@@ -3410,8 +3433,22 @@ pub fn handle_workflow_commands(config: &Configuration, command: &WorkflowComman
         } => {
             handle_archive(config, is_archived, workflow_ids, format);
         }
-        WorkflowCommands::Submit { workflow_id, force } => {
-            handle_submit(config, workflow_id, *force, format);
+        WorkflowCommands::Submit {
+            workflow_id,
+            force,
+            max_parallel_jobs,
+            output_dir,
+            poll_interval,
+        } => {
+            handle_submit(
+                config,
+                workflow_id,
+                *force,
+                *max_parallel_jobs,
+                output_dir,
+                *poll_interval,
+                format,
+            );
         }
         WorkflowCommands::Run {
             workflow_id,

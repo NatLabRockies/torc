@@ -7,15 +7,18 @@
 # Used by cancel_slurm_jobs to clean up on exit.
 SLURM_JOB_IDS=()
 
-# submit_workflow SPEC_FILE
+# submit_workflow SPEC_FILE [EXTRA_ARGS...]
 #   Submits a workflow from a spec file and prints the workflow ID.
+#   Any additional arguments are passed through to `torc submit`.
 #   Slurm job IDs from the submission are tracked in SLURM_JOB_IDS.
 submit_workflow() {
     local spec_file="$1"
+    shift
+    local extra_args=("$@")
     local stderr_file
     stderr_file=$(mktemp)
     local output
-    output=$(torc --url "$TORC_API_URL" -f json submit "$spec_file" 2>"$stderr_file") || {
+    output=$(torc --url "$TORC_API_URL" -f json submit "$spec_file" "${extra_args[@]}" 2>"$stderr_file") || {
         echo "ERROR: Failed to submit workflow from $spec_file" >&2
         echo "Output: $output" >&2
         echo "Stderr: $(cat "$stderr_file")" >&2
