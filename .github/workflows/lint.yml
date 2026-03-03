@@ -66,3 +66,7 @@ jobs:
 
       - name: Check markdown formatting
         run: ~/.dprint/bin/dprint check
+
+      - name: Run shellcheck
+        run: |
+          find . -name '*.sh' -not -path './target/*' -not -path './.venv/*' -not -path '*/\.venv/*' | xargs shellcheck
