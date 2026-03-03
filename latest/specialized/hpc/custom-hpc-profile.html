@@ -202,6 +202,21 @@ profile. This benefits everyone using that system.</p>
 </ul>
 <p>Built-in profiles are maintained by the Torc team and stay up-to-date as systems change.</p>
 </blockquote>
+<h2 id="dynamic-slurm-support-the-easiest-way"><a class="header" href="#dynamic-slurm-support-the-easiest-way">Dynamic Slurm Support (The Easiest Way)</a></h2>
+<p>Before creating a custom profile, try using Torc's <strong>Dynamic Slurm Support</strong>. Torc can automatically
+query your cluster to discover its partitions and resource limits.</p>
+<p>If you are on a Slurm system, you can use Torc immediately without any configuration:</p>
+<ol>
+<li><strong>Auto-detection</strong>: Torc automatically falls back to dynamic Slurm detection if no other profile
+matches.</li>
+<li><strong>Explicit use</strong>: You can force dynamic detection by using <code>--hpc-profile slurm</code> in any command.</li>
+</ol>
+<p>Verify it works on your system:</p>
+<pre><code class="language-bash"># Show partitions detected from your Slurm cluster
+torc hpc partitions slurm
+</code></pre>
+<p>If the detected partitions look correct, you don't need to create a custom profile! You can jump
+straight to <a href="#step-7-use-your-profile">Step 7: Use Your Profile</a> using <code>slurm</code> as the profile name.</p>
 <h2 id="when-to-create-a-custom-profile"><a class="header" href="#when-to-create-a-custom-profile">When to Create a Custom Profile</a></h2>
 <p>Create a custom profile when:</p>
 <ul>
@@ -349,13 +364,13 @@ torc hpc list
 <h2 id="step-5-test-partition-matching"><a class="header" href="#step-5-test-partition-matching">Step 5: Test Partition Matching</a></h2>
 <p>Verify that Torc correctly matches resource requirements to partitions:</p>
 <pre><code class="language-bash"># Should match 'short' partition
-torc hpc match research --cpus 8 --memory 16g --walltime 2h
+torc hpc match research --cpus 8 --memory 16g --walltime 02:00:00
 
 # Should match 'gpu' partition
-torc hpc match research --cpus 16 --memory 64g --walltime 8h --gpus 2
+torc hpc match research --cpus 16 --memory 64g --walltime 08:00:00 --gpus 2
 
 # Should match 'himem' partition
-torc hpc match research --cpus 24 --memory 512g --walltime 24h
+torc hpc match research --cpus 24 --memory 512g --walltime 24:00:00
 </code></pre>
 <h2 id="step-6-test-scheduler-generation"><a class="header" href="#step-6-test-scheduler-generation">Step 6: Test Scheduler Generation</a></h2>
 <p>Create a test workflow to verify scheduler generation:</p>
@@ -446,7 +461,7 @@ hostname
 <ol>
 <li>
 <p>Check if any partition satisfies all requirements:</p>
-<pre><code class="language-bash">torc hpc match research --cpus 32 --memory 128g --walltime 8h
+<pre><code class="language-bash">torc hpc match research --cpus 32 --memory 128g --walltime 08:00:00
 </code></pre>
 </li>
 <li>
@@ -468,7 +483,7 @@ hostname
 <p>If your HPC is used by others, please contribute it upstream:</p>
 <ol>
 <li>Fork the <a href="https://github.com/NatLabRockies/torc">Torc repository</a></li>
-<li>Add your profile to <code>src/client/hpc_profiles.rs</code></li>
+<li>Add your profile as a new module in <code>src/client/hpc/</code> (see <code>kestrel.rs</code> for an example)</li>
 <li>Add tests for your profile</li>
 <li>Submit a pull request</li>
 </ol>

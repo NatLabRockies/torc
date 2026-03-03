@@ -8465,43 +8465,58 @@ provided)</li>
 <li><code>show</code> — Show details of an HPC profile</li>
 <li><code>partitions</code> — Show partitions for an HPC profile</li>
 <li><code>match</code> — Find partitions matching resource requirements</li>
+<li><code>generate</code> — Generate an HPC profile configuration from the current Slurm cluster</li>
 </ul>
 <h2 id="torc-hpc-list"><a class="header" href="#torc-hpc-list"><code>torc hpc list</code></a></h2>
 <p>List known HPC system profiles</p>
 <p><strong>Usage:</strong> <code>torc hpc list</code></p>
 <h2 id="torc-hpc-detect"><a class="header" href="#torc-hpc-detect"><code>torc hpc detect</code></a></h2>
-<p>Detect the current HPC system</p>
+<p>Detect the current HPC system. If no built-in or custom profile matches but Slurm is available, a
+dynamic profile is generated from the current cluster.</p>
 <p><strong>Usage:</strong> <code>torc hpc detect</code></p>
 <h2 id="torc-hpc-show"><a class="header" href="#torc-hpc-show"><code>torc hpc show</code></a></h2>
 <p>Show details of an HPC profile</p>
 <p><strong>Usage:</strong> <code>torc hpc show &lt;NAME&gt;</code></p>
 <h6 id="arguments-87"><a class="header" href="#arguments-87"><strong>Arguments:</strong></a></h6>
 <ul>
-<li><code>&lt;NAME&gt;</code> — Profile name (e.g., "kestrel")</li>
+<li><code>&lt;NAME&gt;</code> — Profile name (e.g., "kestrel") or "slurm" for dynamically detected cluster</li>
 </ul>
 <h2 id="torc-hpc-partitions"><a class="header" href="#torc-hpc-partitions"><code>torc hpc partitions</code></a></h2>
 <p>Show partitions for an HPC profile</p>
 <p><strong>Usage:</strong> <code>torc hpc partitions [OPTIONS] [NAME]</code></p>
 <h6 id="arguments-88"><a class="header" href="#arguments-88"><strong>Arguments:</strong></a></h6>
 <ul>
-<li><code>&lt;NAME&gt;</code> — Profile name (e.g., "kestrel"). If not specified, tries to detect current system.</li>
+<li><code>[NAME]</code> — Profile name (e.g., "kestrel", "slurm"). If not specified, tries to detect current
+system.</li>
 </ul>
 <h6 id="options-61"><a class="header" href="#options-61"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--gpu</code> — Filter to GPU partitions only</li>
-<li><code>--cpu</code> — Filter to CPU-only partitions</li>
 <li><code>--shared</code> — Filter to shared partitions</li>
 </ul>
 <h2 id="torc-hpc-match"><a class="header" href="#torc-hpc-match"><code>torc hpc match</code></a></h2>
 <p>Find partitions matching resource requirements</p>
-<p><strong>Usage:</strong> <code>torc hpc match [OPTIONS]</code></p>
+<p><strong>Usage:</strong> <code>torc hpc match [OPTIONS] [PROFILE]</code></p>
+<h6 id="arguments-89"><a class="header" href="#arguments-89"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>[PROFILE]</code> — Profile name (if not specified, tries to detect current system)</li>
+</ul>
 <h6 id="options-62"><a class="header" href="#options-62"><strong>Options:</strong></a></h6>
 <ul>
-<li><code>--cpus &lt;CPUS&gt;</code> — Number of CPUs required. Default: <code>1</code></li>
-<li><code>--memory &lt;MEMORY&gt;</code> — Memory required (e.g., "100g", "512m", or MB as number). Default: <code>1g</code></li>
-<li><code>--walltime &lt;WALLTIME&gt;</code> — Wall time required (e.g., "4:00:00", "2-00:00:00"). Default: <code>1:00:00</code></li>
+<li><code>--cpus &lt;CPUS&gt;</code> — Number of CPUs required</li>
+<li><code>--memory &lt;MEMORY&gt;</code> — Memory required (e.g., "100g", "512m", or MB as number)</li>
+<li><code>--walltime &lt;WALLTIME&gt;</code> — Wall time required (e.g., "4:00:00", "2-00:00:00")</li>
 <li><code>--gpus &lt;GPUS&gt;</code> — Number of GPUs required</li>
-<li><code>--profile &lt;PROFILE&gt;</code> — Profile name (if not specified, tries to detect current system)</li>
+</ul>
+<h2 id="torc-hpc-generate"><a class="header" href="#torc-hpc-generate"><code>torc hpc generate</code></a></h2>
+<p>Generate an HPC profile configuration from the current Slurm cluster</p>
+<p><strong>Usage:</strong> <code>torc hpc generate [OPTIONS]</code></p>
+<h6 id="options-63"><a class="header" href="#options-63"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-n</code>, <code>--name &lt;NAME&gt;</code> — Profile name (e.g., "kestrel")</li>
+<li><code>-d</code>, <code>--display-name &lt;DISPLAY_NAME&gt;</code> — Human-readable display name</li>
+<li><code>-o</code>, <code>--output &lt;OUTPUT&gt;</code> — Output file path (prints to stdout if not specified)</li>
+<li><code>--skip-stdby</code> — Skip standby partitions (ones ending in -stdby)</li>
 </ul>
 <h2 id="torc-reports"><a class="header" href="#torc-reports"><code>torc reports</code></a></h2>
 <p>Generate reports and analytics</p>
@@ -8516,11 +8531,11 @@ specified requirements</li>
 <h2 id="torc-reports-check-resource-utilization"><a class="header" href="#torc-reports-check-resource-utilization"><code>torc reports check-resource-utilization</code></a></h2>
 <p>Check resource utilization and report jobs that exceeded their specified requirements</p>
 <p><strong>Usage:</strong> <code>torc reports check-resource-utilization [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-89"><a class="header" href="#arguments-89"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-90"><a class="header" href="#arguments-90"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID to analyze (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-63"><a class="header" href="#options-63"><strong>Options:</strong></a></h6>
+<h6 id="options-64"><a class="header" href="#options-64"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-r</code>, <code>--run-id &lt;RUN_ID&gt;</code> — Run ID to analyze (optional - analyzes latest run if not provided)</li>
 <li><code>-a</code>, <code>--all</code> — Show all jobs (default: only show jobs that exceeded requirements)</li>
@@ -8531,11 +8546,11 @@ violation (default: 1.0%)</li>
 <h2 id="torc-reports-results"><a class="header" href="#torc-reports-results"><code>torc reports results</code></a></h2>
 <p>Generate a comprehensive JSON report of job results including all log file paths</p>
 <p><strong>Usage:</strong> <code>torc reports results [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-90"><a class="header" href="#arguments-90"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-91"><a class="header" href="#arguments-91"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID to analyze (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-64"><a class="header" href="#options-64"><strong>Options:</strong></a></h6>
+<h6 id="options-65"><a class="header" href="#options-65"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory (where job logs are stored, passed in
 <code>torc run</code> and <code>torc submit</code>). Default: <code>output</code></li>
@@ -8544,7 +8559,7 @@ violation (default: 1.0%)</li>
 <h2 id="torc-reports-summary"><a class="header" href="#torc-reports-summary"><code>torc reports summary</code></a></h2>
 <p>Generate a summary of workflow results (requires workflow to be complete)</p>
 <p><strong>Usage:</strong> <code>torc reports summary [WORKFLOW_ID]</code></p>
-<h6 id="arguments-91"><a class="header" href="#arguments-91"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-92"><a class="header" href="#arguments-92"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID to summarize (optional - will prompt if not provided)</li>
 </ul>
@@ -8561,7 +8576,7 @@ violation (default: 1.0%)</li>
 <h2 id="torc-config-show"><a class="header" href="#torc-config-show"><code>torc config show</code></a></h2>
 <p>Show the effective configuration (merged from all sources)</p>
 <p><strong>Usage:</strong> <code>torc config show [OPTIONS]</code></p>
-<h6 id="options-65"><a class="header" href="#options-65"><strong>Options:</strong></a></h6>
+<h6 id="options-66"><a class="header" href="#options-66"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-f</code>, <code>--format &lt;FORMAT&gt;</code> — Output format (toml or json). Default: <code>toml</code></li>
 </ul>
@@ -8571,7 +8586,7 @@ violation (default: 1.0%)</li>
 <h2 id="torc-config-init"><a class="header" href="#torc-config-init"><code>torc config init</code></a></h2>
 <p>Initialize a configuration file with defaults</p>
 <p><strong>Usage:</strong> <code>torc config init [OPTIONS]</code></p>
-<h6 id="options-66"><a class="header" href="#options-66"><strong>Options:</strong></a></h6>
+<h6 id="options-67"><a class="header" href="#options-67"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--system</code> — Create system-wide config (/etc/torc/config.toml)</li>
 <li><code>--user</code> — Create user config (~/.config/torc/config.toml)</li>
@@ -8584,7 +8599,7 @@ violation (default: 1.0%)</li>
 <h2 id="torc-tui"><a class="header" href="#torc-tui"><code>torc tui</code></a></h2>
 <p>Interactive terminal UI for managing workflows</p>
 <p><strong>Usage:</strong> <code>torc tui [OPTIONS]</code></p>
-<h6 id="options-67"><a class="header" href="#options-67"><strong>Options:</strong></a></h6>
+<h6 id="options-68"><a class="header" href="#options-68"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--standalone</code> — Start in standalone mode: automatically start a torc-server</li>
 <li><code>--port &lt;PORT&gt;</code> — Port for the server in standalone mode. Default: <code>8080</code></li>
@@ -8593,11 +8608,11 @@ violation (default: 1.0%)</li>
 <h2 id="torc-plot-resources"><a class="header" href="#torc-plot-resources"><code>torc plot-resources</code></a></h2>
 <p>Generate interactive HTML plots from resource monitoring data</p>
 <p><strong>Usage:</strong> <code>torc plot-resources [OPTIONS] &lt;DB_PATHS&gt;...</code></p>
-<h6 id="arguments-92"><a class="header" href="#arguments-92"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-93"><a class="header" href="#arguments-93"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;DB_PATHS&gt;</code> — Path to the resource metrics database file(s)</li>
 </ul>
-<h6 id="options-68"><a class="header" href="#options-68"><strong>Options:</strong></a></h6>
+<h6 id="options-69"><a class="header" href="#options-69"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory for generated plots (default: current
 directory). Default: <code>.</code></li>
@@ -8608,7 +8623,7 @@ directory). Default: <code>.</code></li>
 <h2 id="torc-completions"><a class="header" href="#torc-completions"><code>torc completions</code></a></h2>
 <p>Generate shell completions</p>
 <p><strong>Usage:</strong> <code>torc completions &lt;SHELL&gt;</code></p>
-<h6 id="arguments-93"><a class="header" href="#arguments-93"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-94"><a class="header" href="#arguments-94"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;SHELL&gt;</code> — The shell to generate completions for. Possible values: <code>bash</code>, <code>elvish</code>, <code>fish</code>,
 <code>powershell</code>, <code>zsh</code></li>
@@ -10638,7 +10653,7 @@ curl $TORC_API_URL/health
 </code></pre>
 <h3 id="wrong-partition-selected"><a class="header" href="#wrong-partition-selected">Wrong Partition Selected</a></h3>
 <p>Use <code>torc hpc match</code> to see which partitions match your requirements:</p>
-<pre><code class="language-bash">torc hpc match kestrel --cpus 32 --memory 64g --walltime 2h --gpus 2
+<pre><code class="language-bash">torc hpc match kestrel --cpus 32 --memory 64g --walltime 02:00:00 --gpus 2
 </code></pre>
 <h2 id="see-also-16"><a class="header" href="#see-also-16">See Also</a></h2>
 <ul>
@@ -10681,7 +10696,7 @@ jobs:
     command: python process.py
     resource_requirements: standard
 </code></pre>
-<h2 id="options-69"><a class="header" href="#options-69">Options</a></h2>
+<h2 id="options-70"><a class="header" href="#options-70">Options</a></h2>
 <pre><code class="language-bash"># See all options
 torc submit-slurm --help
 </code></pre>
@@ -11490,68 +11505,62 @@ for private clusters.</p>
 ╰─────────┴──────────────┴────────────┴──────────╯
 </code></pre>
 <p>The "Detected" column shows if Torc recognizes you're currently on that system.</p>
+<h2 id="dynamic-slurm-profiles"><a class="header" href="#dynamic-slurm-profiles">Dynamic Slurm Profiles</a></h2>
+<p>For Slurm-based clusters without a built-in profile, Torc can dynamically generate a profile by
+querying the cluster itself. This means you can use Torc on almost any Slurm system without manual
+configuration.</p>
+<p>To use dynamic Slurm detection, you can:</p>
+<ol>
+<li><strong>Explicitly request it</strong>: Use <code>--hpc-profile slurm</code> in any command that requires a profile.</li>
+<li><strong>Let Torc auto-detect it</strong>: If you're on a Slurm system and haven't specified a profile or
+matched a built-in one, Torc will automatically fall back to dynamic Slurm detection.</li>
+</ol>
+<p>Dynamic profiles are generated by:</p>
+<ul>
+<li>Running <code>sinfo</code> to discover partitions, CPU/memory limits, and GRES (GPUs).</li>
+<li>Running <code>scontrol show partition</code> to find shared node settings and default QOS.</li>
+<li>Heuristically inferring GPU types if not explicitly reported by Slurm.</li>
+</ul>
 <h2 id="detecting-the-current-system"><a class="header" href="#detecting-the-current-system">Detecting the Current System</a></h2>
 <p>Torc can automatically detect which HPC system you're on:</p>
 <pre><code class="language-bash">torc hpc detect
 </code></pre>
-<p>Detection works through environment variables. For example, NLR Kestrel is detected when
-<code>NREL_CLUSTER=kestrel</code> is set.</p>
+<p>Torc uses a prioritized detection strategy:</p>
+<ol>
+<li><strong>Built-in Profiles</strong>: Matches known systems via environment variables or hostname patterns.</li>
+<li><strong>Custom Profiles</strong>: Matches your configured custom profiles.</li>
+<li><strong>Dynamic Slurm</strong>: If Slurm commands (<code>sinfo</code>) are available, generates a profile from the
+current cluster.</li>
+</ol>
 <h2 id="viewing-profile-details"><a class="header" href="#viewing-profile-details">Viewing Profile Details</a></h2>
 <p>See detailed information about a specific profile:</p>
 <pre><code class="language-bash">torc hpc show kestrel
 </code></pre>
-<p>This displays:</p>
-<ul>
-<li>Profile name and description</li>
-<li>Detection method</li>
-<li>Default account (if configured)</li>
-<li>Number of partitions</li>
-</ul>
+<p>You can also view the dynamically detected Slurm profile:</p>
+<pre><code class="language-bash">torc hpc show slurm
+</code></pre>
 <h2 id="viewing-available-partitions"><a class="header" href="#viewing-available-partitions">Viewing Available Partitions</a></h2>
 <p>List all partitions for a profile:</p>
 <pre><code class="language-bash">torc hpc partitions kestrel
 </code></pre>
-<p>Example output:</p>
-<pre><code>Partitions for kestrel:
-
-╭──────────┬─────────────┬───────────┬─────────────────┬─────────────────╮
-│ Name     │ CPUs/Node   │ Mem/Node  │ Max Walltime    │ GPUs            │
-├──────────┼─────────────┼───────────┼─────────────────┼─────────────────┤
-│ debug    │ 104         │ 240 GB    │ 1h              │ -               │
-│ short    │ 104         │ 240 GB    │ 4h              │ -               │
-│ standard │ 104         │ 240 GB    │ 48h             │ -               │
-│ gpu-h100 │ 2           │ 240 GB    │ 48h             │ 4 (H100)        │
-│ ...      │ ...         │ ...       │ ...             │ ...             │
-╰──────────┴─────────────┴───────────┴─────────────────┴─────────────────╯
+<p>For the current Slurm cluster:</p>
+<pre><code class="language-bash">torc hpc partitions slurm
 </code></pre>
 <h2 id="finding-matching-partitions"><a class="header" href="#finding-matching-partitions">Finding Matching Partitions</a></h2>
 <p>Find partitions that can satisfy specific resource requirements:</p>
-<pre><code class="language-bash">torc hpc match kestrel --cpus 32 --memory 64g --walltime 2h
+<pre><code class="language-bash">torc hpc match --cpus 32 --memory 64g --walltime 02:00:00
 </code></pre>
-<p>Options:</p>
-<ul>
-<li><code>--cpus &lt;N&gt;</code>: Required CPU cores</li>
-<li><code>--memory &lt;SIZE&gt;</code>: Required memory (e.g., <code>64g</code>, <code>512m</code>)</li>
-<li><code>--walltime &lt;DURATION&gt;</code>: Required walltime (e.g., <code>2h</code>, <code>4:00:00</code>)</li>
-<li><code>--gpus &lt;N&gt;</code>: Required GPUs (optional)</li>
-</ul>
-<p>This is useful for understanding which partitions your jobs will be assigned to.</p>
+<p>If no profile is specified, it will use the detected system (including dynamic Slurm).</p>
 <h2 id="custom-hpc-profiles"><a class="header" href="#custom-hpc-profiles">Custom HPC Profiles</a></h2>
-<p>If your HPC system doesn't have a built-in profile, you have two options:</p>
-<blockquote>
-<p><strong>Request Built-in Support</strong> (Recommended)</p>
-<p>If your HPC is widely used, please <a href="https://github.com/NatLabRockies/torc/issues">open an issue</a>
-requesting built-in support. Include:</p>
-<ul>
-<li>Your HPC system name and organization</li>
-<li>Partition names with resource limits (CPUs, memory, walltime, GPUs)</li>
-<li>Detection method (environment variable or hostname pattern)</li>
-</ul>
-<p>Built-in profiles benefit everyone using that system and are maintained by the Torc team.</p>
-</blockquote>
-<p>If you need to use your HPC immediately or have a private cluster, you can define a custom profile
-in your configuration file. See the <a href="specialized/hpc/./custom-hpc-profile.html">Custom HPC Profile Tutorial</a> for a
-complete walkthrough.</p>
+<p>If your HPC system doesn't have a built-in profile, you have three options:</p>
+<ol>
+<li><strong>Use Dynamic Slurm Detection</strong> (Easiest): Let Torc automatically discover your cluster's
+capabilities.</li>
+<li><strong>Generate and Customize a Profile</strong>: Run <code>torc hpc generate</code> to create a TOML template based on
+your cluster, then customize it in your config file.</li>
+<li><strong>Request Built-in Support</strong>: If your HPC is widely used,
+<a href="https://github.com/NatLabRockies/torc/issues">open an issue</a> requesting built-in support.</li>
+</ol>
 <h3 id="quick-example"><a class="header" href="#quick-example">Quick Example</a></h3>
 <p>Define custom profiles in your configuration file:</p>
 <pre><code class="language-toml"># ~/.config/torc/config.toml
@@ -11598,7 +11607,9 @@ See <a href="specialized/hpc/./slurm.html">Advanced Slurm Configuration</a> for 
 <p>Complete reference for HPC profile system and CLI commands.</p>
 <h2 id="overview-6"><a class="header" href="#overview-6">Overview</a></h2>
 <p>HPC profiles contain pre-configured knowledge about High-Performance Computing systems, enabling
-automatic Slurm scheduler generation based on job resource requirements.</p>
+automatic Slurm scheduler generation based on job resource requirements. Torc supports built-in
+profiles, custom profiles in your config file, and <strong>dynamic Slurm profiles</strong> generated by querying
+the current cluster.</p>
 <h2 id="cli-commands"><a class="header" href="#cli-commands">CLI Commands</a></h2>
 <h3 id="torc-hpc-list-1"><a class="header" href="#torc-hpc-list-1"><code>torc hpc list</code></a></h3>
 <p>List all available HPC profiles.</p>
@@ -11614,7 +11625,7 @@ automatic Slurm scheduler generation based on job resource requirements.</p>
 <li><strong>Name</strong>: Profile identifier used in commands</li>
 <li><strong>Display Name</strong>: Human-readable name</li>
 <li><strong>Partitions</strong>: Number of configured partitions</li>
-<li><strong>Detected</strong>: Whether current system matches this profile</li>
+<li><strong>Detected</strong>: Whether current system matches this profile (includes dynamic Slurm)</li>
 </ul>
 <hr />
 <h3 id="torc-hpc-detect-1"><a class="header" href="#torc-hpc-detect-1"><code>torc hpc detect</code></a></h3>
@@ -11626,7 +11637,8 @@ automatic Slurm scheduler generation based on job resource requirements.</p>
 <tr><td><code>-f, --format &lt;FORMAT&gt;</code></td><td>Output format: <code>table</code> or <code>json</code></td></tr>
 </tbody></table>
 </div>
-<p>Returns the detected profile name, or indicates no match.</p>
+<p>Returns the detected profile name. If no built-in or custom profile matches but Slurm is available,
+it returns a dynamic Slurm profile.</p>
 <hr />
 <h3 id="torc-hpc-show-1"><a class="header" href="#torc-hpc-show-1"><code>torc hpc show</code></a></h3>
 <p>Display detailed information about an HPC profile.</p>
@@ -11634,7 +11646,7 @@ automatic Slurm scheduler generation based on job resource requirements.</p>
 </code></pre>
 <p><strong>Arguments:</strong></p>
 <div class="table-wrapper"><table><thead><tr><th>Argument</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>&lt;PROFILE&gt;</code></td><td>Profile name (e.g., <code>kestrel</code>)</td></tr>
+<tr><td><code>&lt;PROFILE&gt;</code></td><td>Profile name (e.g., <code>kestrel</code>) or <code>slurm</code> for auto-detected</td></tr>
 </tbody></table>
 </div>
 <p><strong>Options:</strong></p>
@@ -11645,57 +11657,42 @@ automatic Slurm scheduler generation based on job resource requirements.</p>
 <hr />
 <h3 id="torc-hpc-partitions-1"><a class="header" href="#torc-hpc-partitions-1"><code>torc hpc partitions</code></a></h3>
 <p>List partitions for an HPC profile.</p>
-<pre><code class="language-bash">torc hpc partitions &lt;PROFILE&gt; [OPTIONS]
+<pre><code class="language-bash">torc hpc partitions [PROFILE] [OPTIONS]
 </code></pre>
 <p><strong>Arguments:</strong></p>
 <div class="table-wrapper"><table><thead><tr><th>Argument</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>&lt;PROFILE&gt;</code></td><td>Profile name (e.g., <code>kestrel</code>)</td></tr>
+<tr><td><code>[PROFILE]</code></td><td>Profile name (e.g., <code>kestrel</code>, <code>slurm</code>). Auto-detects if omitted</td></tr>
 </tbody></table>
 </div>
-<p><strong>Options:</strong></p>
-<div class="table-wrapper"><table><thead><tr><th>Option</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>-f, --format &lt;FORMAT&gt;</code></td><td>Output format: <code>table</code> or <code>json</code></td></tr>
-</tbody></table>
-</div>
-<p><strong>Output columns:</strong></p>
-<ul>
-<li><strong>Name</strong>: Partition name</li>
-<li><strong>CPUs/Node</strong>: CPU cores per node</li>
-<li><strong>Mem/Node</strong>: Memory per node</li>
-<li><strong>Max Walltime</strong>: Maximum job duration</li>
-<li><strong>GPUs</strong>: GPU count and type (if applicable)</li>
-<li><strong>Shared</strong>: Whether partition supports shared jobs</li>
-<li><strong>Notes</strong>: Special requirements or features</li>
-</ul>
 <hr />
 <h3 id="torc-hpc-match-1"><a class="header" href="#torc-hpc-match-1"><code>torc hpc match</code></a></h3>
 <p>Find partitions matching resource requirements.</p>
-<pre><code class="language-bash">torc hpc match &lt;PROFILE&gt; [OPTIONS]
+<pre><code class="language-bash">torc hpc match [OPTIONS] [PROFILE]
 </code></pre>
 <p><strong>Arguments:</strong></p>
 <div class="table-wrapper"><table><thead><tr><th>Argument</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>&lt;PROFILE&gt;</code></td><td>Profile name (e.g., <code>kestrel</code>)</td></tr>
+<tr><td><code>[PROFILE]</code></td><td>Profile to use (auto-detected if omitted)</td></tr>
 </tbody></table>
 </div>
 <p><strong>Options:</strong></p>
 <div class="table-wrapper"><table><thead><tr><th>Option</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>--cpus &lt;N&gt;</code></td><td>Required CPU cores</td></tr>
 <tr><td><code>--memory &lt;SIZE&gt;</code></td><td>Required memory (e.g., <code>64g</code>, <code>512m</code>)</td></tr>
-<tr><td><code>--walltime &lt;DURATION&gt;</code></td><td>Required walltime (e.g., <code>2h</code>, <code>4:00:00</code>)</td></tr>
+<tr><td><code>--walltime &lt;DURATION&gt;</code></td><td>Required walltime (e.g., <code>02:00:00</code>, <code>30:00</code>)</td></tr>
 <tr><td><code>--gpus &lt;N&gt;</code></td><td>Required GPUs</td></tr>
 <tr><td><code>-f, --format &lt;FORMAT&gt;</code></td><td>Output format: <code>table</code> or <code>json</code></td></tr>
 </tbody></table>
 </div>
 <p><strong>Memory format:</strong> <code>&lt;number&gt;&lt;unit&gt;</code> where unit is <code>k</code>, <code>m</code>, <code>g</code>, or <code>t</code> (case-insensitive).</p>
-<p><strong>Walltime formats:</strong></p>
+<p><strong>Walltime formats</strong> (Slurm-compatible):</p>
 <ul>
+<li><code>MM</code> (minutes only, e.g., <code>30</code>)</li>
+<li><code>MM:SS</code> (e.g., <code>30:00</code>)</li>
 <li><code>HH:MM:SS</code> (e.g., <code>04:00:00</code>)</li>
-<li><code>&lt;N&gt;h</code> (e.g., <code>4h</code>)</li>
-<li><code>&lt;N&gt;m</code> (e.g., <code>30m</code>)</li>
-<li><code>&lt;N&gt;s</code> (e.g., <code>3600s</code>)</li>
+<li><code>D-HH:MM:SS</code> (e.g., <code>1-00:00:00</code>)</li>
 </ul>
 <hr />
-<h3 id="torc-hpc-generate"><a class="header" href="#torc-hpc-generate"><code>torc hpc generate</code></a></h3>
+<h3 id="torc-hpc-generate-1"><a class="header" href="#torc-hpc-generate-1"><code>torc hpc generate</code></a></h3>
 <p>Generate an HPC profile configuration from the current Slurm cluster.</p>
 <pre><code class="language-bash">torc hpc generate [OPTIONS]
 </code></pre>
@@ -12155,6 +12152,21 @@ profile. This benefits everyone using that system.</p>
 </ul>
 <p>Built-in profiles are maintained by the Torc team and stay up-to-date as systems change.</p>
 </blockquote>
+<h2 id="dynamic-slurm-support-the-easiest-way"><a class="header" href="#dynamic-slurm-support-the-easiest-way">Dynamic Slurm Support (The Easiest Way)</a></h2>
+<p>Before creating a custom profile, try using Torc's <strong>Dynamic Slurm Support</strong>. Torc can automatically
+query your cluster to discover its partitions and resource limits.</p>
+<p>If you are on a Slurm system, you can use Torc immediately without any configuration:</p>
+<ol>
+<li><strong>Auto-detection</strong>: Torc automatically falls back to dynamic Slurm detection if no other profile
+matches.</li>
+<li><strong>Explicit use</strong>: You can force dynamic detection by using <code>--hpc-profile slurm</code> in any command.</li>
+</ol>
+<p>Verify it works on your system:</p>
+<pre><code class="language-bash"># Show partitions detected from your Slurm cluster
+torc hpc partitions slurm
+</code></pre>
+<p>If the detected partitions look correct, you don't need to create a custom profile! You can jump
+straight to <a href="specialized/hpc/custom-hpc-profile.html#step-7-use-your-profile">Step 7: Use Your Profile</a> using <code>slurm</code> as the profile name.</p>
 <h2 id="when-to-create-a-custom-profile"><a class="header" href="#when-to-create-a-custom-profile">When to Create a Custom Profile</a></h2>
 <p>Create a custom profile when:</p>
 <ul>
@@ -12302,13 +12314,13 @@ torc hpc list
 <h2 id="step-5-test-partition-matching"><a class="header" href="#step-5-test-partition-matching">Step 5: Test Partition Matching</a></h2>
 <p>Verify that Torc correctly matches resource requirements to partitions:</p>
 <pre><code class="language-bash"># Should match 'short' partition
-torc hpc match research --cpus 8 --memory 16g --walltime 2h
+torc hpc match research --cpus 8 --memory 16g --walltime 02:00:00
 
 # Should match 'gpu' partition
-torc hpc match research --cpus 16 --memory 64g --walltime 8h --gpus 2
+torc hpc match research --cpus 16 --memory 64g --walltime 08:00:00 --gpus 2
 
 # Should match 'himem' partition
-torc hpc match research --cpus 24 --memory 512g --walltime 24h
+torc hpc match research --cpus 24 --memory 512g --walltime 24:00:00
 </code></pre>
 <h2 id="step-6-test-scheduler-generation"><a class="header" href="#step-6-test-scheduler-generation">Step 6: Test Scheduler Generation</a></h2>
 <p>Create a test workflow to verify scheduler generation:</p>
@@ -12399,7 +12411,7 @@ hostname
 <ol>
 <li>
 <p>Check if any partition satisfies all requirements:</p>
-<pre><code class="language-bash">torc hpc match research --cpus 32 --memory 128g --walltime 8h
+<pre><code class="language-bash">torc hpc match research --cpus 32 --memory 128g --walltime 08:00:00
 </code></pre>
 </li>
 <li>
@@ -12421,7 +12433,7 @@ hostname
 <p>If your HPC is used by others, please contribute it upstream:</p>
 <ol>
 <li>Fork the <a href="https://github.com/NatLabRockies/torc">Torc repository</a></li>
-<li>Add your profile to <code>src/client/hpc_profiles.rs</code></li>
+<li>Add your profile as a new module in <code>src/client/hpc/</code> (see <code>kestrel.rs</code> for an example)</li>
 <li>Add tests for your profile</li>
 <li>Submit a pull request</li>
 </ol>
@@ -12814,7 +12826,7 @@ torc recover 42
 unexpectedly, leaving jobs stuck in "running" status. This is done automatically before checking
 preconditions.</p>
 </blockquote>
-<h3 id="options-70"><a class="header" href="#options-70">Options</a></h3>
+<h3 id="options-71"><a class="header" href="#options-71">Options</a></h3>
 <pre><code class="language-bash">torc recover &lt;workflow_id&gt; \
   --memory-multiplier 1.5 \     # Memory increase factor for OOM (default: 1.5)
   --runtime-multiplier 1.4 \    # Runtime increase factor for timeout (default: 1.4)
@@ -12850,7 +12862,7 @@ Reset 1 job(s). Slurm schedulers regenerated and submitted.
 <li>Resume monitoring</li>
 <li>Repeat until success or max retries exceeded</li>
 </ol>
-<h3 id="options-71"><a class="header" href="#options-71">Options</a></h3>
+<h3 id="options-72"><a class="header" href="#options-72">Options</a></h3>
 <pre><code class="language-bash">torc watch &lt;workflow_id&gt; \
   -r \                          # Enable automatic recovery (--recover)
   -m 3 \                        # Maximum recovery attempts (--max-retries)
@@ -13458,7 +13470,7 @@ than the stranded timeout, schedulers are submitted anyway. This prevents jobs f
 stranded indefinitely when not enough failures occur to reach the threshold.</p>
 </li>
 </ol>
-<h3 id="options-72"><a class="header" href="#options-72">Options</a></h3>
+<h3 id="options-73"><a class="header" href="#options-73">Options</a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Option</th><th>Default</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>--auto-schedule</code></td><td>false</td><td>Enable automatic scheduling for stranded jobs</td></tr>
 <tr><td><code>--auto-schedule-threshold</code></td><td>5</td><td>Minimum retry jobs before scheduling (when active)</td></tr>

@@ -1767,43 +1767,58 @@ provided)</li>
 <li><code>show</code> — Show details of an HPC profile</li>
 <li><code>partitions</code> — Show partitions for an HPC profile</li>
 <li><code>match</code> — Find partitions matching resource requirements</li>
+<li><code>generate</code> — Generate an HPC profile configuration from the current Slurm cluster</li>
 </ul>
 <h2 id="torc-hpc-list"><a class="header" href="#torc-hpc-list"><code>torc hpc list</code></a></h2>
 <p>List known HPC system profiles</p>
 <p><strong>Usage:</strong> <code>torc hpc list</code></p>
 <h2 id="torc-hpc-detect"><a class="header" href="#torc-hpc-detect"><code>torc hpc detect</code></a></h2>
-<p>Detect the current HPC system</p>
+<p>Detect the current HPC system. If no built-in or custom profile matches but Slurm is available, a
+dynamic profile is generated from the current cluster.</p>
 <p><strong>Usage:</strong> <code>torc hpc detect</code></p>
 <h2 id="torc-hpc-show"><a class="header" href="#torc-hpc-show"><code>torc hpc show</code></a></h2>
 <p>Show details of an HPC profile</p>
 <p><strong>Usage:</strong> <code>torc hpc show &lt;NAME&gt;</code></p>
 <h6 id="arguments-87"><a class="header" href="#arguments-87"><strong>Arguments:</strong></a></h6>
 <ul>
-<li><code>&lt;NAME&gt;</code> — Profile name (e.g., "kestrel")</li>
+<li><code>&lt;NAME&gt;</code> — Profile name (e.g., "kestrel") or "slurm" for dynamically detected cluster</li>
 </ul>
 <h2 id="torc-hpc-partitions"><a class="header" href="#torc-hpc-partitions"><code>torc hpc partitions</code></a></h2>
 <p>Show partitions for an HPC profile</p>
 <p><strong>Usage:</strong> <code>torc hpc partitions [OPTIONS] [NAME]</code></p>
 <h6 id="arguments-88"><a class="header" href="#arguments-88"><strong>Arguments:</strong></a></h6>
 <ul>
-<li><code>&lt;NAME&gt;</code> — Profile name (e.g., "kestrel"). If not specified, tries to detect current system.</li>
+<li><code>[NAME]</code> — Profile name (e.g., "kestrel", "slurm"). If not specified, tries to detect current
+system.</li>
 </ul>
 <h6 id="options-61"><a class="header" href="#options-61"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--gpu</code> — Filter to GPU partitions only</li>
-<li><code>--cpu</code> — Filter to CPU-only partitions</li>
 <li><code>--shared</code> — Filter to shared partitions</li>
 </ul>
 <h2 id="torc-hpc-match"><a class="header" href="#torc-hpc-match"><code>torc hpc match</code></a></h2>
 <p>Find partitions matching resource requirements</p>
-<p><strong>Usage:</strong> <code>torc hpc match [OPTIONS]</code></p>
+<p><strong>Usage:</strong> <code>torc hpc match [OPTIONS] [PROFILE]</code></p>
+<h6 id="arguments-89"><a class="header" href="#arguments-89"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>[PROFILE]</code> — Profile name (if not specified, tries to detect current system)</li>
+</ul>
 <h6 id="options-62"><a class="header" href="#options-62"><strong>Options:</strong></a></h6>
 <ul>
-<li><code>--cpus &lt;CPUS&gt;</code> — Number of CPUs required. Default: <code>1</code></li>
-<li><code>--memory &lt;MEMORY&gt;</code> — Memory required (e.g., "100g", "512m", or MB as number). Default: <code>1g</code></li>
-<li><code>--walltime &lt;WALLTIME&gt;</code> — Wall time required (e.g., "4:00:00", "2-00:00:00"). Default: <code>1:00:00</code></li>
+<li><code>--cpus &lt;CPUS&gt;</code> — Number of CPUs required</li>
+<li><code>--memory &lt;MEMORY&gt;</code> — Memory required (e.g., "100g", "512m", or MB as number)</li>
+<li><code>--walltime &lt;WALLTIME&gt;</code> — Wall time required (e.g., "4:00:00", "2-00:00:00")</li>
 <li><code>--gpus &lt;GPUS&gt;</code> — Number of GPUs required</li>
-<li><code>--profile &lt;PROFILE&gt;</code> — Profile name (if not specified, tries to detect current system)</li>
+</ul>
+<h2 id="torc-hpc-generate"><a class="header" href="#torc-hpc-generate"><code>torc hpc generate</code></a></h2>
+<p>Generate an HPC profile configuration from the current Slurm cluster</p>
+<p><strong>Usage:</strong> <code>torc hpc generate [OPTIONS]</code></p>
+<h6 id="options-63"><a class="header" href="#options-63"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-n</code>, <code>--name &lt;NAME&gt;</code> — Profile name (e.g., "kestrel")</li>
+<li><code>-d</code>, <code>--display-name &lt;DISPLAY_NAME&gt;</code> — Human-readable display name</li>
+<li><code>-o</code>, <code>--output &lt;OUTPUT&gt;</code> — Output file path (prints to stdout if not specified)</li>
+<li><code>--skip-stdby</code> — Skip standby partitions (ones ending in -stdby)</li>
 </ul>
 <h2 id="torc-reports"><a class="header" href="#torc-reports"><code>torc reports</code></a></h2>
 <p>Generate reports and analytics</p>
@@ -1818,11 +1833,11 @@ specified requirements</li>
 <h2 id="torc-reports-check-resource-utilization"><a class="header" href="#torc-reports-check-resource-utilization"><code>torc reports check-resource-utilization</code></a></h2>
 <p>Check resource utilization and report jobs that exceeded their specified requirements</p>
 <p><strong>Usage:</strong> <code>torc reports check-resource-utilization [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-89"><a class="header" href="#arguments-89"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-90"><a class="header" href="#arguments-90"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID to analyze (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-63"><a class="header" href="#options-63"><strong>Options:</strong></a></h6>
+<h6 id="options-64"><a class="header" href="#options-64"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-r</code>, <code>--run-id &lt;RUN_ID&gt;</code> — Run ID to analyze (optional - analyzes latest run if not provided)</li>
 <li><code>-a</code>, <code>--all</code> — Show all jobs (default: only show jobs that exceeded requirements)</li>
@@ -1833,11 +1848,11 @@ violation (default: 1.0%)</li>
 <h2 id="torc-reports-results"><a class="header" href="#torc-reports-results"><code>torc reports results</code></a></h2>
 <p>Generate a comprehensive JSON report of job results including all log file paths</p>
 <p><strong>Usage:</strong> <code>torc reports results [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-90"><a class="header" href="#arguments-90"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-91"><a class="header" href="#arguments-91"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID to analyze (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-64"><a class="header" href="#options-64"><strong>Options:</strong></a></h6>
+<h6 id="options-65"><a class="header" href="#options-65"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory (where job logs are stored, passed in
 <code>torc run</code> and <code>torc submit</code>). Default: <code>output</code></li>
@@ -1846,7 +1861,7 @@ violation (default: 1.0%)</li>
 <h2 id="torc-reports-summary"><a class="header" href="#torc-reports-summary"><code>torc reports summary</code></a></h2>
 <p>Generate a summary of workflow results (requires workflow to be complete)</p>
 <p><strong>Usage:</strong> <code>torc reports summary [WORKFLOW_ID]</code></p>
-<h6 id="arguments-91"><a class="header" href="#arguments-91"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-92"><a class="header" href="#arguments-92"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID to summarize (optional - will prompt if not provided)</li>
 </ul>
@@ -1863,7 +1878,7 @@ violation (default: 1.0%)</li>
 <h2 id="torc-config-show"><a class="header" href="#torc-config-show"><code>torc config show</code></a></h2>
 <p>Show the effective configuration (merged from all sources)</p>
 <p><strong>Usage:</strong> <code>torc config show [OPTIONS]</code></p>
-<h6 id="options-65"><a class="header" href="#options-65"><strong>Options:</strong></a></h6>
+<h6 id="options-66"><a class="header" href="#options-66"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-f</code>, <code>--format &lt;FORMAT&gt;</code> — Output format (toml or json). Default: <code>toml</code></li>
 </ul>
@@ -1873,7 +1888,7 @@ violation (default: 1.0%)</li>
 <h2 id="torc-config-init"><a class="header" href="#torc-config-init"><code>torc config init</code></a></h2>
 <p>Initialize a configuration file with defaults</p>
 <p><strong>Usage:</strong> <code>torc config init [OPTIONS]</code></p>
-<h6 id="options-66"><a class="header" href="#options-66"><strong>Options:</strong></a></h6>
+<h6 id="options-67"><a class="header" href="#options-67"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--system</code> — Create system-wide config (/etc/torc/config.toml)</li>
 <li><code>--user</code> — Create user config (~/.config/torc/config.toml)</li>
@@ -1886,7 +1901,7 @@ violation (default: 1.0%)</li>
 <h2 id="torc-tui"><a class="header" href="#torc-tui"><code>torc tui</code></a></h2>
 <p>Interactive terminal UI for managing workflows</p>
 <p><strong>Usage:</strong> <code>torc tui [OPTIONS]</code></p>
-<h6 id="options-67"><a class="header" href="#options-67"><strong>Options:</strong></a></h6>
+<h6 id="options-68"><a class="header" href="#options-68"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--standalone</code> — Start in standalone mode: automatically start a torc-server</li>
 <li><code>--port &lt;PORT&gt;</code> — Port for the server in standalone mode. Default: <code>8080</code></li>
@@ -1895,11 +1910,11 @@ violation (default: 1.0%)</li>
 <h2 id="torc-plot-resources"><a class="header" href="#torc-plot-resources"><code>torc plot-resources</code></a></h2>
 <p>Generate interactive HTML plots from resource monitoring data</p>
 <p><strong>Usage:</strong> <code>torc plot-resources [OPTIONS] &lt;DB_PATHS&gt;...</code></p>
-<h6 id="arguments-92"><a class="header" href="#arguments-92"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-93"><a class="header" href="#arguments-93"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;DB_PATHS&gt;</code> — Path to the resource metrics database file(s)</li>
 </ul>
-<h6 id="options-68"><a class="header" href="#options-68"><strong>Options:</strong></a></h6>
+<h6 id="options-69"><a class="header" href="#options-69"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory for generated plots (default: current
 directory). Default: <code>.</code></li>
@@ -1910,7 +1925,7 @@ directory). Default: <code>.</code></li>
 <h2 id="torc-completions"><a class="header" href="#torc-completions"><code>torc completions</code></a></h2>
 <p>Generate shell completions</p>
 <p><strong>Usage:</strong> <code>torc completions &lt;SHELL&gt;</code></p>
-<h6 id="arguments-93"><a class="header" href="#arguments-93"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-94"><a class="header" href="#arguments-94"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;SHELL&gt;</code> — The shell to generate completions for. Possible values: <code>bash</code>, <code>elvish</code>, <code>fish</code>,
 <code>powershell</code>, <code>zsh</code></li>
