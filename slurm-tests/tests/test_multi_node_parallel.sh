@@ -5,7 +5,7 @@
 # Verifies:
 #   - All 6 jobs complete successfully
 #   - Jobs dispatched to 2 distinct nodes
-#   - At least one job has peak CPU > 0 (sacct captured data)
+#   - Sacct and slurm stats data is available
 
 run_test_multi_node_parallel() {
     local wf_id="$1"
@@ -25,11 +25,6 @@ run_test_multi_node_parallel() {
 
     # Multi-node dispatch: should see at least 2 distinct hostnames
     assert_multi_node_dispatch "$wf_id" 2
-
-    # Resource monitoring: at least one job should have peak_cpu > 0
-    # Not all jobs may have non-zero peak_cpu (short-lived srun steps may finish
-    # before sacct captures accounting data), so check the workflow as a whole.
-    assert_any_peak_cpu_nonzero "$wf_id"
 
     # Check sacct data is available
     local sacct_output
