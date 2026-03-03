@@ -1,0 +1,502 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Job Checkpointing - Torc Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Distributed workflow orchestration for complex computational pipelines">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+        <link rel="stylesheet" href="../../pagetoc.css">
+        <link rel="stylesheet" href="../../version-selector.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Torc Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc/tree/v0.17.0/docs/src/specialized/fault-tolerance/checkpointing.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="how-to-checkpoint-a-job-during-wall-time-timeout"><a class="header" href="#how-to-checkpoint-a-job-during-wall-time-timeout">How to Checkpoint a Job During Wall-Time Timeout</a></h1>
+<p>When running jobs on HPC systems like Slurm, your job may be terminated when the allocated wall-time
+expires. Torc supports <strong>graceful termination</strong>, allowing jobs to save checkpoints before exiting.
+This guide explains how to configure Slurm and your jobs to handle wall-time timeouts gracefully.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>When Slurm is about to reach wall-time, it can be configured to send a SIGTERM signal to the Torc
+worker process. Torc then:</p>
+<ol>
+<li>Sends SIGTERM to jobs with <code>supports_termination: true</code></li>
+<li>Sends SIGKILL to jobs with <code>supports_termination: false</code> (or unset)</li>
+<li>Waits for all processes to exit</li>
+<li>Reports job status as <code>terminated</code> to the server</li>
+</ol>
+<p>Jobs that support termination can catch SIGTERM and perform cleanup operations like saving
+checkpoints, flushing buffers, or releasing resources.</p>
+<h2 id="enabling-graceful-termination"><a class="header" href="#enabling-graceful-termination">Enabling Graceful Termination</a></h2>
+<h3 id="configuring-slurm-to-send-a-signal-before-timeout"><a class="header" href="#configuring-slurm-to-send-a-signal-before-timeout">Configuring Slurm to Send a Signal Before Timeout</a></h3>
+<p>By default, Slurm does <strong>not</strong> send any signal before the job's end time. When the wall-time limit
+is reached, Slurm immediately terminates all processes. To receive a warning signal before timeout,
+you must explicitly configure it using the <code>--signal</code> option in the <code>extra</code> field of your Slurm
+scheduler specification:</p>
+<pre><code class="language-yaml">slurm_schedulers:
+  - name: gpu_scheduler
+    account: my_project
+    partition: gpu
+    nodes: 1
+    walltime: "04:00:00"
+    extra: "--signal=B:TERM@300"  # Send SIGTERM to batch script 300 seconds before timeout
+</code></pre>
+<p>The <code>--signal</code> option format is <code>[B:]&lt;sig_num&gt;[@sig_time]</code>:</p>
+<ul>
+<li><code>B:</code> prefix sends the signal only to the batch shell (by default, all job steps are signaled but
+not the batch shell itself)</li>
+<li><code>sig_num</code> is the signal name or number (e.g., <code>TERM</code>, <code>USR1</code>, <code>10</code>)</li>
+<li><code>sig_time</code> is seconds before the time limit to send the signal (default: 60 if not specified)</li>
+</ul>
+<p>Note: Due to Slurm's event handling resolution, the signal may be sent up to 60 seconds earlier than
+specified.</p>
+<p>To enable graceful termination for a job, set <code>supports_termination: true</code> in your job
+specification:</p>
+<h3 id="configuring-a-torc-job-to-be-terminated-gracefully"><a class="header" href="#configuring-a-torc-job-to-be-terminated-gracefully">Configuring a Torc job to be terminated gracefully</a></h3>
+<pre><code class="language-yaml">jobs:
+  - name: training_job
+    command: python train.py --checkpoint-dir /scratch/checkpoints
+    supports_termination: true
+    resource_requirements:
+      num_cpus: 4
+      memory: 16g
+      runtime: PT2H
+</code></pre>
+<h2 id="writing-a-job-that-handles-sigterm"><a class="header" href="#writing-a-job-that-handles-sigterm">Writing a Job That Handles SIGTERM</a></h2>
+<p>Your job script must catch SIGTERM and save its state. Here's a Python example:</p>
+<pre><code class="language-python">import signal
+import sys
+import pickle
+
+# Global state
+checkpoint_path = "/scratch/checkpoints/model.pkl"
+model_state = None
+
+def save_checkpoint():
+    """Save current model state to disk."""
+    print("Saving checkpoint...")
+    with open(checkpoint_path, 'wb') as f:
+        pickle.dump(model_state, f)
+    print(f"Checkpoint saved to {checkpoint_path}")
+
+def handle_sigterm(signum, frame):
+    """Handle SIGTERM by saving checkpoint and exiting."""
+    print("Received SIGTERM - saving checkpoint before exit")
+    save_checkpoint()
+    sys.exit(0)  # Exit cleanly after saving
+
+# Register the signal handler
+signal.signal(signal.SIGTERM, handle_sigterm)
+
+# Main training loop
+def train():
+    global model_state
+    for epoch in range(1000):
+        # Training logic here...
+        model_state = {"epoch": epoch, "weights": [...]}
+
+        # Optionally save periodic checkpoints
+        if epoch % 100 == 0:
+            save_checkpoint()
+
+if __name__ == "__main__":
+    train()
+</code></pre>
+<h3 id="bash-script-example"><a class="header" href="#bash-script-example">Bash Script Example</a></h3>
+<p>For shell scripts, use <code>trap</code> to catch SIGTERM:</p>
+<pre><code class="language-bash">#!/bin/bash
+
+CHECKPOINT_FILE="/scratch/checkpoints/progress.txt"
+
+# Function to save checkpoint
+save_checkpoint() {
+    echo "Saving checkpoint at iteration $ITERATION"
+    echo "$ITERATION" &gt; "$CHECKPOINT_FILE"
+}
+
+# Trap SIGTERM and save checkpoint
+trap 'save_checkpoint; exit 0' SIGTERM
+
+# Load checkpoint if exists
+if [ -f "$CHECKPOINT_FILE" ]; then
+    ITERATION=$(cat "$CHECKPOINT_FILE")
+    echo "Resuming from iteration $ITERATION"
+else
+    ITERATION=0
+fi
+
+# Main loop
+while [ $ITERATION -lt 1000 ]; do
+    # Do work...
+    ITERATION=$((ITERATION + 1))
+    sleep 1
+done
+</code></pre>
+<h3 id="complete-workflow-example"><a class="header" href="#complete-workflow-example">Complete Workflow Example</a></h3>
+<pre><code class="language-yaml">name: ml_training_workflow
+user: researcher
+
+jobs:
+  - name: preprocess
+    command: python preprocess.py
+    supports_termination: false  # Quick job, no checkpointing needed
+
+  - name: train_model
+    command: python train.py --checkpoint-dir /scratch/checkpoints
+    supports_termination: true   # Long job, needs checkpointing
+    depends_on:
+      - preprocess
+    resource_requirements:
+      num_cpus: 8
+      memory: 32g
+      num_gpus: 1
+      runtime: PT4H
+
+  - name: evaluate
+    command: python evaluate.py
+    supports_termination: true
+    depends_on:
+      - train_model
+
+slurm_schedulers:
+  - name: gpu_scheduler
+    account: my_project
+    partition: gpu
+    nodes: 1
+    walltime: "04:00:00"
+    extra: "--signal=B:TERM@300"  # Send SIGTERM to batch script 300 seconds before timeout
+
+actions:
+  - trigger_type: on_workflow_start
+    action_type: schedule_nodes
+    scheduler: gpu_scheduler
+    scheduler_type: slurm
+    num_allocations: 1
+</code></pre>
+<h2 id="restarting-after-termination"><a class="header" href="#restarting-after-termination">Restarting After Termination</a></h2>
+<p>When a job is terminated due to wall-time, it will have status <code>terminated</code>. To continue the
+workflow:</p>
+<ol>
+<li>
+<p><strong>Re-submit the workflow</strong> to allocate new compute time:</p>
+<pre><code class="language-bash">torc workflows submit $WORKFLOW_ID
+</code></pre>
+</li>
+<li>
+<p><strong>Reinitialize terminated jobs</strong> to make them ready again:</p>
+<pre><code class="language-bash">torc workflows reinitialize $WORKFLOW_ID
+</code></pre>
+</li>
+</ol>
+<p>Your job script should detect existing checkpoints and resume from where it left off.</p>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h3 id="1-verify-checkpoint-integrity"><a class="header" href="#1-verify-checkpoint-integrity">1. Verify Checkpoint Integrity</a></h3>
+<p>Add validation to ensure checkpoints are complete:</p>
+<pre><code class="language-python">def save_checkpoint():
+    temp_path = checkpoint_path + ".tmp"
+    with open(temp_path, 'wb') as f:
+        pickle.dump(model_state, f)
+    # Atomic rename ensures complete checkpoint
+    os.rename(temp_path, checkpoint_path)
+</code></pre>
+<h3 id="2-handle-multiple-termination-signals"><a class="header" href="#2-handle-multiple-termination-signals">2. Handle Multiple Termination Signals</a></h3>
+<p>Some systems send multiple signals. Ensure your handler is idempotent:</p>
+<pre><code class="language-python">checkpoint_saved = False
+
+def handle_sigterm(signum, frame):
+    global checkpoint_saved
+    if not checkpoint_saved:
+        save_checkpoint()
+        checkpoint_saved = True
+    sys.exit(0)
+</code></pre>
+<h3 id="3-test-locally"><a class="header" href="#3-test-locally">3. Test Locally</a></h3>
+<p>Test your SIGTERM handling locally before running on the cluster:</p>
+<pre><code class="language-bash"># Start your job
+python train.py &amp;
+PID=$!
+
+# Wait a bit, then send SIGTERM
+sleep 10
+kill -TERM $PID
+
+# Verify checkpoint was saved
+ls -la /scratch/checkpoints/
+</code></pre>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="job-killed-without-checkpointing"><a class="header" href="#job-killed-without-checkpointing">Job Killed Without Checkpointing</a></h3>
+<p><strong>Symptoms:</strong> Job status is <code>terminated</code> but no checkpoint was saved.</p>
+<p><strong>Causes:</strong></p>
+<ul>
+<li><code>supports_termination</code> not set to <code>true</code></li>
+<li>Signal handler not registered before training started</li>
+<li>Checkpoint save took longer than the buffer time</li>
+</ul>
+<p><strong>Solutions:</strong></p>
+<ul>
+<li>Verify <code>supports_termination: true</code> in job spec</li>
+<li>Register signal handlers early in your script</li>
+</ul>
+<h3 id="checkpoint-file-corrupted"><a class="header" href="#checkpoint-file-corrupted">Checkpoint File Corrupted</a></h3>
+<p><strong>Symptoms:</strong> Job fails to load checkpoint on restart.</p>
+<p><strong>Causes:</strong></p>
+<ul>
+<li>Job was killed during checkpoint write</li>
+<li>Disk space exhausted</li>
+</ul>
+<p><strong>Solutions:</strong></p>
+<ul>
+<li>Use atomic file operations (write to temp, then rename)</li>
+<li>Check available disk space before checkpointing</li>
+<li>Implement checkpoint validation on load</li>
+</ul>
+<h3 id="job-doesnt-receive-sigterm"><a class="header" href="#job-doesnt-receive-sigterm">Job Doesn't Receive SIGTERM</a></h3>
+<p><strong>Symptoms:</strong> Job runs until hard kill with no graceful shutdown.</p>
+<p><strong>Causes:</strong></p>
+<ul>
+<li>Job running in a subprocess that doesn't forward signals</li>
+<li>Container or wrapper script intercepting signals</li>
+</ul>
+<p><strong>Solutions:</strong></p>
+<ul>
+<li>Use <code>exec</code> in wrapper scripts to replace the shell</li>
+<li>Configure signal forwarding in containers</li>
+<li>Run the job directly without wrapper scripts</li>
+</ul>
+<h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>
+<ul>
+<li><a href="./slurm.html">Advanced Slurm Configuration</a> - Manual Slurm scheduler setup</li>
+<li><a href="./resources.html">Managing Resources</a> - Resource requirements configuration</li>
+<li><a href="./debugging.html">Debugging Workflows</a> - Troubleshooting workflow issues</li>
+<li><a href="https://slurm.schedmd.com/sbatch.html#OPT_signal">Slurm sbatch --signal option</a> - Customize which
+signal is sent and when before wall-time timeout</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../specialized/fault-tolerance/ai-assisted-recovery.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../specialized/admin/index.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../specialized/fault-tolerance/ai-assisted-recovery.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../specialized/admin/index.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../mermaid.min.js"></script>
+        <script src="../../mermaid-init.js"></script>
+        <script src="../../pagetoc.js"></script>
+        <script src="../../version-selector.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
