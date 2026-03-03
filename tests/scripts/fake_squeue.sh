@@ -80,7 +80,7 @@ IFS=',' read -ra FIELDS <<< "$FORMAT"
 # Print header if requested
 if [ "$HEADER" = true ]; then
     for i in "${!FIELDS[@]}"; do
-        if [ $i -gt 0 ]; then
+        if [ "$i" -gt 0 ]; then
             echo -n " "
         fi
         echo -n "${FIELDS[$i]^^}"
@@ -89,7 +89,8 @@ if [ "$HEADER" = true ]; then
 fi
 
 # Filter and print jobs
-while IFS='|' read -r job_id name state start end account partition qos; do
+# shellcheck disable=SC2094  # grep only reads JOBS_FILE, no write conflict
+while IFS='|' read -r job_id name state _start _end _account _partition _qos; do
     # Skip empty lines
     [ -z "$job_id" ] && continue
 
@@ -119,7 +120,7 @@ while IFS='|' read -r job_id name state start end account partition qos; do
 
     # Print requested fields
     for i in "${!FIELDS[@]}"; do
-        if [ $i -gt 0 ]; then
+        if [ "$i" -gt 0 ]; then
             echo -n " "
         fi
         field="${FIELDS[$i]}"

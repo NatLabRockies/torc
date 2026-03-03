@@ -13,7 +13,7 @@ fi
 
 # Parse arguments
 JOB_ID=""
-FORMAT="JobID,JobName%20,state,start,end,Account,Partition%15,QOS"
+_FORMAT="JobID,JobName%20,state,start,end,Account,Partition%15,QOS"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -22,7 +22,7 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --format=*)
-            FORMAT="${1#--format=}"
+            _FORMAT="${1#--format=}"
             shift
             ;;
         *)
