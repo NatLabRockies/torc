@@ -71,7 +71,7 @@ fn test_compare_versions_major_diff() {
 fn test_version_check_with_api_version_match() {
     let info = ServerInfo {
         version: "0.14.0 (abc1234)".to_string(),
-        api_version: Some("0.9.0".to_string()),
+        api_version: Some("0.10.0".to_string()),
     };
     let result = VersionCheckResult::from_server_info(&info);
     assert_eq!(result.severity, VersionMismatchSeverity::None);
@@ -83,7 +83,7 @@ fn test_version_check_with_api_version_match() {
 fn test_version_check_with_api_version_patch_diff() {
     let info = ServerInfo {
         version: "0.14.0 (abc1234)".to_string(),
-        api_version: Some("0.9.1".to_string()),
+        api_version: Some("0.10.1".to_string()),
     };
     let result = VersionCheckResult::from_server_info(&info);
     assert_eq!(result.severity, VersionMismatchSeverity::Patch);
@@ -137,7 +137,7 @@ fn test_version_check_server_newer_api_is_minor() {
     // Server has a newer minor API version — reported as Minor severity.
     let info = ServerInfo {
         version: "0.15.0 (abc1234)".to_string(),
-        api_version: Some("0.10.0".to_string()),
+        api_version: Some("0.11.0".to_string()),
     };
     let result = VersionCheckResult::from_server_info(&info);
     assert_eq!(result.severity, VersionMismatchSeverity::Minor);
@@ -148,10 +148,10 @@ fn test_version_check_server_newer_api_is_minor() {
 fn test_version_check_result_fields() {
     let info = ServerInfo {
         version: "0.14.0 (abc1234)".to_string(),
-        api_version: Some("0.9.0".to_string()),
+        api_version: Some("0.10.0".to_string()),
     };
     let result = VersionCheckResult::from_server_info(&info);
     assert_eq!(result.server_version, Some("0.14.0 (abc1234)".to_string()));
-    assert_eq!(result.server_api_version, Some("0.9.0".to_string()));
-    assert_eq!(result.client_api_version, "0.9.0");
+    assert_eq!(result.server_api_version, Some("0.10.0".to_string()));
+    assert_eq!(result.client_api_version, "0.10.0");
 }
