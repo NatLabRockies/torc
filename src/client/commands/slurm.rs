@@ -135,6 +135,8 @@ struct SlurmStatsTableRow {
     max_vm: String,
     #[tabled(rename = "Ave CPU (s)")]
     ave_cpu_seconds: String,
+    #[tabled(rename = "CPU %")]
+    cpu_percent: String,
     #[tabled(rename = "Nodes")]
     node_list: String,
 }
@@ -4073,21 +4075,61 @@ fn handle_slurm_stats(
         return;
     }
 
+    // Fetch results to compute CPU% from ave_cpu_seconds / exec_time
+    let exec_time_map = build_exec_time_map(config, workflow_id);
+
     let rows: Vec<SlurmStatsTableRow> = all_items
         .iter()
-        .map(|s| SlurmStatsTableRow {
-            job_id: s.job_id,
-            run_id: s.run_id,
-            attempt_id: s.attempt_id,
-            slurm_job_id: s.slurm_job_id.clone().unwrap_or_else(|| "-".to_string()),
-            max_rss: fmt_opt_bytes(s.max_rss_bytes),
-            max_vm: fmt_opt_bytes(s.max_vm_size_bytes),
-            ave_cpu_seconds: fmt_opt_f64(s.ave_cpu_seconds),
-            node_list: s.node_list.clone().unwrap_or_else(|| "-".to_string()),
+        .map(|s| {
+            let cpu_percent = compute_cpu_percent(s, &exec_time_map);
+            SlurmStatsTableRow {
+                job_id: s.job_id,
+                run_id: s.run_id,
+                attempt_id: s.attempt_id,
+                slurm_job_id: s.slurm_job_id.clone().unwrap_or_else(|| "-".to_string()),
+                max_rss: fmt_opt_bytes(s.max_rss_bytes),
+                max_vm: fmt_opt_bytes(s.max_vm_size_bytes),
+                ave_cpu_seconds: fmt_opt_f64(s.ave_cpu_seconds),
+                cpu_percent,
+                node_list: s.node_list.clone().unwrap_or_else(|| "-".to_string()),
+            }
         })
         .collect();
 
     display_table_with_count(&rows, "slurm stats");
+}
+
+/// Build a map of (job_id, run_id, attempt_id) -> exec_time_minutes from results.
+fn build_exec_time_map(config: &Configuration, workflow_id: i64) -> HashMap<(i64, i64, i64), f64> {
+    let params = ResultListParams::new();
+    let results = match paginate_results(config, workflow_id, params) {
+        Ok(r) => r,
+        Err(_) => return HashMap::new(),
+    };
+    let mut map = HashMap::new();
+    for r in results {
+        let attempt_id = r.attempt_id.unwrap_or(1);
+        map.insert((r.job_id, r.run_id, attempt_id), r.exec_time_minutes);
+    }
+    map
+}
+
+/// Compute CPU% from ave_cpu_seconds and exec_time_minutes.
+/// Returns formatted string like "350.2%" or "-" if data is unavailable.
+fn compute_cpu_percent(
+    stats: &models::SlurmStatsModel,
+    exec_time_map: &HashMap<(i64, i64, i64), f64>,
+) -> String {
+    let ave_cpu_s = match stats.ave_cpu_seconds {
+        Some(s) if s > 0.0 => s,
+        _ => return "-".to_string(),
+    };
+    let exec_minutes = match exec_time_map.get(&(stats.job_id, stats.run_id, stats.attempt_id)) {
+        Some(&m) if m > 0.0 => m,
+        _ => return "-".to_string(),
+    };
+    let pct = ave_cpu_s / (exec_minutes * 60.0) * 100.0;
+    format!("{:.1}%", pct)
 }
 
 #[cfg(test)]

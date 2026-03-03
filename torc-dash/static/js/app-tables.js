@@ -390,6 +390,7 @@ Object.assign(TorcDashboard.prototype, {
                         ${this.renderSortableHeader('Max RSS', 'max_rss_bytes')}
                         ${this.renderSortableHeader('Max VM', 'max_vm_size_bytes')}
                         ${this.renderSortableHeader('Ave CPU (s)', 'ave_cpu_seconds')}
+                        <th>CPU %</th>
                         <th>Nodes</th>
                     </tr>
                 </thead>
@@ -403,6 +404,7 @@ Object.assign(TorcDashboard.prototype, {
                             <td>${stat.max_rss_bytes != null && stat.max_rss_bytes > 0 ? this.formatBytes(stat.max_rss_bytes) : '-'}</td>
                             <td>${stat.max_vm_size_bytes != null && stat.max_vm_size_bytes > 0 ? this.formatBytes(stat.max_vm_size_bytes) : '-'}</td>
                             <td>${stat.ave_cpu_seconds != null && stat.ave_cpu_seconds > 0 ? stat.ave_cpu_seconds.toFixed(1) : '-'}</td>
+                            <td>${stat.cpu_percent != null ? stat.cpu_percent.toFixed(1) + '%' : '-'}</td>
                             <td>${this.escapeHtml(stat.node_list || '-')}</td>
                         </tr>
                     `).join('')}

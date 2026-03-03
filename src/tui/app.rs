@@ -530,6 +530,13 @@ impl App {
                         if !self.slurm_stats.is_empty() {
                             self.slurm_stats_state.select(Some(0));
                         }
+                        // Load results for CPU% computation if not already loaded
+                        if self.results_all.is_empty()
+                            && let Ok(r) = self.client.list_results(workflow_id)
+                        {
+                            self.results_all = r;
+                            self.results = self.results_all.clone();
+                        }
                     }
                     DetailViewType::Dag => {
                         // Load jobs if not already loaded
