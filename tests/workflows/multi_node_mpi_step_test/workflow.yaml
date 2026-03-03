@@ -1,0 +1,50 @@
+# Multi-Node MPI Step Test Workflow
+#
+# Tests that torc correctly wraps a job with `srun --nodes=2` when
+# step_nodes=2 is set, creating a true multi-node Slurm job step.
+#
+# Setup:
+#   - 2-node Slurm allocation (sbatch --nodes=2), single worker
+#   - 1 job with num_nodes=2, step_nodes=2
+#   - srun is invoked with --nodes=2 so the step spans both nodes
+#
+# Test procedure:
+# 1. From the repository root, set the Slurm account:
+#      sed -i 's/PLACEHOLDER_ACCOUNT/your_account/g' \
+#        tests/workflows/multi_node_mpi_step_test/workflow.yaml
+# 2. Submit:
+#      torc submit tests/workflows/multi_node_mpi_step_test/workflow.yaml
+# 3. Monitor:
+#      torc watch <workflow_id> --auto-schedule
+# 4. Verify (see README.md for full checklist)
+
+name: multi_node_mpi_step_test
+description: Test srun step spanning two nodes (step_nodes=num_nodes=2)
+project: testing
+
+resource_requirements:
+  - name: mpi_resources
+    num_cpus: 4
+    num_nodes: 2
+    step_nodes: 2
+    memory: 4g
+    runtime: PT10M
+
+jobs:
+  - name: mpi_job
+    command: bash tests/workflows/multi_node_mpi_step_test/run_mpi_step.sh
+    resource_requirements: mpi_resources
+    scheduler: two_node_scheduler
+
+slurm_schedulers:
+  - name: two_node_scheduler
+    account: PLACEHOLDER_ACCOUNT
+    nodes: 2
+    walltime: "00:15:00"
+
+actions:
+  - trigger_type: "on_workflow_start"
+    action_type: "schedule_nodes"
+    scheduler: "two_node_scheduler"
+    scheduler_type: "slurm"
+    num_allocations: 1
