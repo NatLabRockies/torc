@@ -16,7 +16,7 @@ start_server() {
   local htpasswd_file="${RUN_DIR}/htpasswd"
 
   # Generate a random password for test users
-  if [ -f /usr/share/dict/words ]; then
+  if [ -f /usr/share/dict/words ] && command -v shuf &>/dev/null; then
     TORC_TEST_PASSWORD=$(shuf -n3 /usr/share/dict/words | tr '\n' '-' | sed 's/-$//')
   else
     TORC_TEST_PASSWORD=$(head -c 24 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 16)

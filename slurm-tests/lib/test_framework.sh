@@ -229,7 +229,7 @@ assert_parse_logs_detect_oom() {
     local wf_id="$1" output_dir="$2"
     local parse_output
     parse_output=$(torc --url "$TORC_API_URL" slurm parse-logs "$output_dir" --workflow-id "$wf_id" 2>&1) || true
-    if echo "$parse_output" | grep -qiE "oom|out.of.memory|oom-kill|killed process|exceeded memory"; then
+    if echo "$parse_output" | grep -qiE "out.of.memory|oom-kill|oom_kill|killed process|exceeded memory|OUT_OF_MEMORY"; then
         _pass "parse-logs detected OOM for workflow $wf_id"
     else
         _fail "parse-logs did NOT detect OOM for workflow $wf_id"
@@ -242,7 +242,7 @@ assert_logs_analyze_detect_oom() {
     local wf_id="$1" output_dir="$2"
     local analyze_output
     analyze_output=$(torc --url "$TORC_API_URL" logs analyze "$output_dir" --workflow-id "$wf_id" 2>&1) || true
-    if echo "$analyze_output" | grep -qiE "oom|out.of.memory|oom-kill|killed process|exceeded memory"; then
+    if echo "$analyze_output" | grep -qiE "out.of.memory|oom-kill|oom_kill|killed process|exceeded memory|OUT_OF_MEMORY"; then
         _pass "logs analyze detected OOM for workflow $wf_id"
     else
         _fail "logs analyze did NOT detect OOM for workflow $wf_id"

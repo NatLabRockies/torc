@@ -43,7 +43,6 @@ slurm_schedulers:
   - name: oom_scheduler
     account: PLACEHOLDER_ACCOUNT
     partition: PLACEHOLDER_PARTITION
-    mem: 240G
     nodes: 1
     walltime: "00:30:00"
 
