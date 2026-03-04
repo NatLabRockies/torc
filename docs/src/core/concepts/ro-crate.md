@@ -50,10 +50,13 @@ Automatically generated File entities include:
   "name": "output.csv",
   "encodingFormat": "text/csv",
   "contentSize": 1024,
+  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "dateModified": "2024-01-01T00:00:00Z",
   "wasGeneratedBy": { "@id": "#job-42-attempt-1" }
 }
 ```
+
+File entities include SHA256 hashes for integrity verification when the file is readable.
 
 Job provenance is captured as CreateAction entities:
 
@@ -98,6 +101,64 @@ After running this workflow:
 - `input_data` will have an RO-Crate File entity (created during initialization)
 - `output_data` will have an RO-Crate File entity with `wasGeneratedBy` linking to the job
 - A CreateAction entity will describe the `process` job execution
+
+## Dataset Entities for Directories
+
+Many workflows produce directory-based outputs rather than single files—for example,
+hive-partitioned Parquet datasets with thousands of files. For these, use **Dataset entities**
+instead of File entities.
+
+### Why Datasets?
+
+- **Efficiency** — One metadata record instead of thousands of File entities
+- **Appropriate granularity** — The directory is the meaningful unit, not individual partition files
+- **Integrity verification** — Manifest-based hashing detects changes without reading all file
+  contents
+
+### Dataset Structure
+
+Dataset entities include file count, total size, and an optional hash:
+
+```json
+{
+  "@id": "output/training.parquet/",
+  "@type": "Dataset",
+  "name": "training_output",
+  "description": "Hive-partitioned training results",
+  "contentSize": 15032385536,
+  "fileCount": 2847,
+  "sha256": "a1b2c3...",
+  "hashMode": "manifest",
+  "encodingFormat": "application/vnd.apache.parquet"
+}
+```
+
+### Hash Modes
+
+Torc supports three hash modes for datasets:
+
+| Mode       | Description                               | Speed   | Detects                            |
+| ---------- | ----------------------------------------- | ------- | ---------------------------------- |
+| `manifest` | Hash of sorted (path, size, mtime) list   | Fast    | File additions, deletions, renames |
+| `content`  | SHA256 of all file contents (Merkle tree) | Slow    | Any content change                 |
+| `none`     | No hash, only file count and size         | Fastest | Nothing (stats only)               |
+
+For large datasets, `manifest` mode provides a good balance—it detects structural changes without
+the I/O cost of reading terabytes of data.
+
+### Creating Dataset Entities
+
+Use the `add-dataset` command to create a Dataset entity for a directory:
+
+```bash
+torc ro-crate add-dataset \
+  --workflow-id 123 \
+  --name training_output \
+  --path output/training.parquet/ \
+  --hash-mode manifest
+```
+
+See [How to Add RO-Crate Metadata](../how-to/ro-crate-metadata.md) for detailed usage.
 
 ## When to Use RO-Crate
 

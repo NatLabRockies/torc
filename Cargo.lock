@@ -5251,6 +5251,7 @@ dependencies = [
  "petgraph",
  "plotly",
  "ratatui",
+ "rayon",
  "regex",
  "reqwest",
  "rmcp",

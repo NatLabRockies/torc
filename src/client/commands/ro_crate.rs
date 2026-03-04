@@ -1,4 +1,5 @@
 use std::io::Read;
+use std::path::{Path, PathBuf};
 
 use crate::client::apis::configuration::Configuration;
 use crate::client::apis::default_api;
@@ -8,6 +9,8 @@ use crate::client::commands::{
     print_error, select_workflow_interactively, table_format::display_table_with_count,
 };
 use crate::models;
+use rayon::prelude::*;
+use sha2::{Digest, Sha256};
 use tabled::Tabled;
 
 #[derive(Tabled)]
@@ -94,6 +97,35 @@ pub enum RoCrateCommands {
         /// Output file path (default: stdout)
         #[arg(short, long)]
         output: Option<String>,
+    },
+    /// Add a Dataset entity for a directory
+    ///
+    /// Creates an RO-Crate Dataset entity representing a directory of files,
+    /// such as a hive-partitioned Parquet dataset. Computes file count, total
+    /// size, and optionally a manifest or content hash.
+    #[command(name = "add-dataset")]
+    AddDataset {
+        /// Workflow ID
+        #[arg()]
+        workflow_id: i64,
+        /// Logical name for the dataset (e.g., "training_output")
+        #[arg(long)]
+        name: String,
+        /// Path to the directory
+        #[arg(long)]
+        path: String,
+        /// Hash mode: "manifest" (default), "content", or "none"
+        #[arg(long, default_value = "manifest")]
+        hash_mode: String,
+        /// Optional description for the dataset
+        #[arg(long)]
+        description: Option<String>,
+        /// Optional encoding format (e.g., "application/vnd.apache.parquet")
+        #[arg(long)]
+        encoding_format: Option<String>,
+        /// Number of threads for parallel processing (default: number of CPUs)
+        #[arg(long, short = 't')]
+        threads: Option<usize>,
     },
 }
 
@@ -286,6 +318,27 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
         } => {
             handle_export(config, *workflow_id, output.as_deref(), format);
         }
+        RoCrateCommands::AddDataset {
+            workflow_id,
+            name,
+            path,
+            hash_mode,
+            description,
+            encoding_format,
+            threads,
+        } => {
+            handle_add_dataset(
+                config,
+                *workflow_id,
+                name,
+                path,
+                hash_mode,
+                description.as_deref(),
+                encoding_format.as_deref(),
+                *threads,
+                format,
+            );
+        }
     }
 }
 
@@ -393,6 +446,291 @@ fn handle_export(
         }
         None => {
             println!("{}", pretty);
+        }
+    }
+}
+
+/// Statistics about a directory for Dataset metadata.
+#[derive(Debug)]
+struct DatasetStats {
+    file_count: u64,
+    total_size_bytes: u64,
+    hash: Option<String>,
+}
+
+/// Information about a single file for parallel processing.
+struct FileInfo {
+    path: PathBuf,
+    rel_path: String,
+    size: u64,
+    mtime: f64,
+}
+
+/// Collect all file paths in a directory recursively.
+fn collect_files(dir_path: &Path) -> std::io::Result<Vec<FileInfo>> {
+    let mut files = Vec::new();
+    collect_files_recursive(dir_path, dir_path, &mut files)?;
+    Ok(files)
+}
+
+fn collect_files_recursive(
+    dir: &Path,
+    base: &Path,
+    files: &mut Vec<FileInfo>,
+) -> std::io::Result<()> {
+    if !dir.is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Path is not a directory: {}", dir.display()),
+        ));
+    }
+
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        if path.is_dir() {
+            collect_files_recursive(&path, base, files)?;
+        } else if path.is_file() {
+            let metadata = std::fs::metadata(&path)?;
+            let size = metadata.len();
+            let mtime = metadata
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs_f64())
+                .unwrap_or(0.0);
+
+            let rel_path = path
+                .strip_prefix(base)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .to_string();
+
+            files.push(FileInfo {
+                path,
+                rel_path,
+                size,
+                mtime,
+            });
+        }
+    }
+    Ok(())
+}
+
+/// Compute SHA256 hash of a single file.
+fn hash_file(path: &Path) -> std::io::Result<String> {
+    let file = std::fs::File::open(path)?;
+    let mut reader = std::io::BufReader::new(file);
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 65536]; // 64KB buffer for better I/O performance
+
+    loop {
+        let n = reader.read(&mut buffer)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buffer[..n]);
+    }
+
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+/// Compute statistics for a directory, including optional hash.
+/// Uses parallel processing when num_threads > 1.
+///
+/// Hash modes:
+/// - "manifest": Hash a sorted list of (relative_path, size, mtime) entries
+/// - "content": Hash all file contents (slow for large datasets)
+/// - "none": No hash computed
+fn compute_dataset_stats(
+    dir_path: &Path,
+    hash_mode: &str,
+    num_threads: usize,
+) -> std::io::Result<DatasetStats> {
+    // First, collect all files (single-threaded directory walk)
+    let files = collect_files(dir_path)?;
+
+    let file_count = files.len() as u64;
+    let total_size_bytes: u64 = files.iter().map(|f| f.size).sum();
+
+    let hash = match hash_mode {
+        "manifest" => {
+            // Build manifest entries (already have metadata from collection)
+            let mut manifest_entries: Vec<String> = files
+                .iter()
+                .map(|f| format!("{}|{}|{:.6}", f.rel_path, f.size, f.mtime))
+                .collect();
+
+            // Sort entries for deterministic hash
+            manifest_entries.sort();
+            let manifest = manifest_entries.join("\n");
+            let hash = Sha256::digest(manifest.as_bytes());
+            Some(format!("{:x}", hash))
+        }
+        "content" => {
+            // Hash all file contents in parallel
+            Some(compute_content_hash_parallel(&files, num_threads)?)
+        }
+        _ => None,
+    };
+
+    Ok(DatasetStats {
+        file_count,
+        total_size_bytes,
+        hash,
+    })
+}
+
+/// Compute a hash of all file contents in parallel (Merkle-tree style).
+fn compute_content_hash_parallel(
+    files: &[FileInfo],
+    num_threads: usize,
+) -> std::io::Result<String> {
+    // Configure thread pool
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(num_threads)
+        .build()
+        .map_err(|e| std::io::Error::other(e.to_string()))?;
+
+    // Hash files in parallel
+    let file_hashes: Result<Vec<(String, String)>, std::io::Error> = pool.install(|| {
+        files
+            .par_iter()
+            .map(|f| {
+                let hash = hash_file(&f.path)?;
+                Ok((f.rel_path.clone(), hash))
+            })
+            .collect()
+    });
+
+    let mut file_hashes = file_hashes?;
+
+    // Sort by path for determinism
+    file_hashes.sort_by(|a, b| a.0.cmp(&b.0));
+
+    // Combine all file hashes into a final hash
+    let mut final_hasher = Sha256::new();
+    for (path, hash) in &file_hashes {
+        final_hasher.update(format!("{}:{}\n", path, hash).as_bytes());
+    }
+
+    Ok(format!("{:x}", final_hasher.finalize()))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn handle_add_dataset(
+    config: &Configuration,
+    workflow_id: i64,
+    name: &str,
+    path: &str,
+    hash_mode: &str,
+    description: Option<&str>,
+    encoding_format: Option<&str>,
+    threads: Option<usize>,
+    format: &str,
+) {
+    // Validate hash mode
+    if !["manifest", "content", "none"].contains(&hash_mode) {
+        eprintln!(
+            "Error: Invalid hash mode '{}'. Must be one of: manifest, content, none",
+            hash_mode
+        );
+        std::process::exit(1);
+    }
+
+    let dir_path = Path::new(path);
+
+    // Check if directory exists
+    if !dir_path.exists() {
+        eprintln!("Error: Directory does not exist: {}", path);
+        std::process::exit(1);
+    }
+
+    if !dir_path.is_dir() {
+        eprintln!("Error: Path is not a directory: {}", path);
+        std::process::exit(1);
+    }
+
+    // Determine number of threads (default to number of CPUs)
+    let num_threads = threads.unwrap_or_else(|| {
+        std::thread::available_parallelism()
+            .map(|p| p.get())
+            .unwrap_or(1)
+    });
+
+    // Compute statistics
+    println!(
+        "Computing dataset statistics for: {} (using {} threads)",
+        path, num_threads
+    );
+    let stats = match compute_dataset_stats(dir_path, hash_mode, num_threads) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Error computing dataset statistics: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    println!(
+        "  Files: {}, Size: {} bytes",
+        stats.file_count, stats.total_size_bytes
+    );
+    if let Some(ref hash) = stats.hash {
+        println!("  Hash ({}): {}", hash_mode, hash);
+    }
+
+    // Ensure path ends with / for directory convention
+    let entity_id = if path.ends_with('/') {
+        path.to_string()
+    } else {
+        format!("{}/", path)
+    };
+
+    // Build the metadata JSON
+    let mut metadata = serde_json::json!({
+        "@id": entity_id,
+        "@type": "Dataset",
+        "name": name,
+        "contentSize": stats.total_size_bytes,
+        "fileCount": stats.file_count,
+        "hashMode": hash_mode
+    });
+
+    if let Some(hash) = stats.hash {
+        metadata["sha256"] = serde_json::json!(hash);
+    }
+
+    if let Some(desc) = description {
+        metadata["description"] = serde_json::json!(desc);
+    }
+
+    if let Some(enc) = encoding_format {
+        metadata["encodingFormat"] = serde_json::json!(enc);
+    }
+
+    // Create the RO-Crate entity
+    let entity = models::RoCrateEntityModel::new(
+        workflow_id,
+        entity_id.clone(),
+        "Dataset".to_string(),
+        metadata.to_string(),
+    );
+
+    match default_api::create_ro_crate_entity(config, entity) {
+        Ok(created) => {
+            if print_if_json(format, &created, "RO-Crate Dataset entity") {
+                // JSON printed
+            } else {
+                println!(
+                    "Created RO-Crate Dataset entity with ID: {}",
+                    created.id.unwrap_or(-1)
+                );
+            }
+        }
+        Err(e) => {
+            print_error("creating RO-Crate Dataset entity", &e);
+            std::process::exit(1);
         }
     }
 }

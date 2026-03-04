@@ -103,15 +103,19 @@ torc ro-crate create 123 \
 
 ### Directory entity (Hive-partitioned data)
 
-Use `Dataset` type with a trailing slash for directory-level entries. This avoids creating one
-entity per partition file:
+For directories with many files (like hive-partitioned Parquet datasets), use the `add-dataset`
+command instead of creating entities manually. This automatically computes file count, total size,
+and an integrity hash:
 
 ```bash
-torc ro-crate create 123 \
-  --entity-id "data/partitioned_table/" \
-  --type Dataset \
-  --metadata '{"name": "Partitioned Table", "encodingFormat": "application/x-parquet"}'
+torc ro-crate add-dataset 123 \
+  --name partitioned_table \
+  --path data/partitioned_table/ \
+  --hash-mode manifest \
+  --encoding-format "application/vnd.apache.parquet"
 ```
+
+See [Adding Dataset Entities](#adding-dataset-entities) below for full details.
 
 ### External software entity
 
@@ -146,6 +150,101 @@ torc ro-crate create 123 \
   --type File \
   --metadata -  < metadata.json
 ```
+
+## Adding Dataset Entities
+
+For directory-based outputs (like hive-partitioned Parquet datasets), the `add-dataset` command
+creates a Dataset entity with computed statistics and integrity hash.
+
+### Basic Usage
+
+```bash
+torc ro-crate add-dataset 123 \
+  --name training_output \
+  --path output/training.parquet/
+```
+
+This walks the directory, counts files, sums sizes, computes a manifest hash, and creates:
+
+```json
+{
+  "@id": "output/training.parquet/",
+  "@type": "Dataset",
+  "name": "training_output",
+  "contentSize": 15032385536,
+  "fileCount": 2847,
+  "sha256": "7cbcd407fae0631505a1fe289356ee07c8825e41e9441fafca44c001bd6ce75d",
+  "hashMode": "manifest"
+}
+```
+
+### Hash Modes
+
+Choose a hash mode based on your needs:
+
+```bash
+# Manifest hash (default) - fast, detects structural changes
+torc ro-crate add-dataset 123 --name output --path data/ --hash-mode manifest
+
+# Content hash - thorough but slow, detects any content change
+torc ro-crate add-dataset 123 --name output --path data/ --hash-mode content
+
+# No hash - fastest, only counts files and sizes
+torc ro-crate add-dataset 123 --name output --path data/ --hash-mode none
+```
+
+| Mode       | What it hashes                     | When to use                          |
+| ---------- | ---------------------------------- | ------------------------------------ |
+| `manifest` | Sorted list of (path, size, mtime) | Large datasets, structural integrity |
+| `content`  | All file contents (Merkle tree)    | Small datasets, content verification |
+| `none`     | Nothing                            | Very large datasets, stats only      |
+
+### Parallel Processing
+
+For large directories, use multiple threads to speed up content hashing:
+
+```bash
+# Use 8 threads for content hashing
+torc ro-crate add-dataset 123 \
+  --name training_output \
+  --path output/training.parquet/ \
+  --hash-mode content \
+  --threads 8
+```
+
+By default, the command uses all available CPU cores. The `--threads` option is most useful for
+`content` mode where file I/O is the bottleneck.
+
+### Full Example
+
+```bash
+torc ro-crate add-dataset 123 \
+  --name simulation_results \
+  --path output/results.parquet/ \
+  --hash-mode manifest \
+  --description "Hive-partitioned simulation output with 100 partitions" \
+  --encoding-format "application/vnd.apache.parquet"
+```
+
+Output:
+
+```
+Computing dataset statistics for: output/results.parquet/ (using 8 threads)
+  Files: 2847, Size: 15032385536 bytes
+  Hash (manifest): 7cbcd407fae0631505a1fe289356ee07c8825e41e9441fafca44c001bd6ce75d
+Created RO-Crate Dataset entity with ID: 42
+```
+
+### When to Use add-dataset vs create
+
+| Scenario                       | Command       |
+| ------------------------------ | ------------- |
+| Directory with many files      | `add-dataset` |
+| Need file count and total size | `add-dataset` |
+| Need integrity hash            | `add-dataset` |
+| Single file                    | `create`      |
+| External URL or software       | `create`      |
+| Custom metadata only           | `create`      |
 
 ## Listing and Viewing Entities
 
