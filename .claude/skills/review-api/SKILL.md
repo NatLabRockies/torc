@@ -17,8 +17,8 @@ Review new or modified API features for completeness and consistency.
    - Verify the macro is called before any business logic
 
 2. **Error Responses**: Proper HTTP status codes are returned
-   - 404 for not found resources
    - 403 for unauthorized access
+   - 404 for not found resources
    - 422 for validation errors
    - 500 for server errors
 
@@ -47,6 +47,9 @@ Review new or modified API features for completeness and consistency.
 7. **JSON Output**: Commands support `-f json` output format
    - Use `print_if_json()` or `print_wrapped_if_json()`
    - Ensure structured data is serializable
+
+8. **Logging**: Check that log messages that include database record IDs use a format like
+   `info!("Created workflow workflow_id={}", workflow_id);` so that parsing scripts pick them up.
 
 ## How to Review
 

@@ -32,6 +32,7 @@ The top-level container for a complete workflow definition.
 | `compute_node_ignore_workflow_completion`        | boolean                                                 | false        | Compute nodes hold allocations even after workflow completes                       |
 | `compute_node_wait_for_healthy_database_minutes` | integer                                                 | none         | Compute nodes wait this many minutes for database recovery                         |
 | `jobs_sort_method`                               | [ClaimJobsSortMethod](#claimjobssortmethod)             | `none`       | Method for sorting jobs when claiming them                                         |
+| `enable_ro_crate`                                | boolean                                                 | false        | Enable automatic [RO-Crate](../concepts/ro-crate.md) provenance tracking           |
 
 ### Examples with project and metadata
 
