@@ -207,23 +207,34 @@ pub fn build_create_action_entity(
     }
 }
 
-/// Check if an RO-Crate entity already exists for a file.
+/// Find an existing RO-Crate entity for a file.
 ///
-/// Returns true if an entity with the given file_id already exists.
-pub fn entity_exists_for_file(config: &Configuration, workflow_id: i64, file_id: i64) -> bool {
+/// Returns the entity if one with the given file_id already exists, None otherwise.
+pub fn find_entity_for_file(
+    config: &Configuration,
+    workflow_id: i64,
+    file_id: i64,
+) -> Option<RoCrateEntityModel> {
     match default_api::list_ro_crate_entities(config, workflow_id, None, None) {
         Ok(response) => {
             if let Some(entities) = response.items {
-                entities.iter().any(|e| e.file_id == Some(file_id))
+                entities.into_iter().find(|e| e.file_id == Some(file_id))
             } else {
-                false
+                None
             }
         }
         Err(e) => {
             warn!("Failed to check for existing RO-Crate entities: {}", e);
-            false
+            None
         }
     }
+}
+
+/// Check if an RO-Crate entity already exists for a file.
+///
+/// Returns true if an entity with the given file_id already exists.
+pub fn entity_exists_for_file(config: &Configuration, workflow_id: i64, file_id: i64) -> bool {
+    find_entity_for_file(config, workflow_id, file_id).is_some()
 }
 
 /// Create an RO-Crate entity for a file if one doesn't already exist.
@@ -278,7 +289,10 @@ pub fn create_ro_crate_entity_for_file(
 
 /// Create an RO-Crate entity for an output file with provenance.
 ///
-/// Creates both the File entity and links it to the job's CreateAction.
+/// Creates the File entity and links it to the job's CreateAction. If an entity
+/// already exists for this file (e.g., created during initialization), updates it
+/// to add the `wasGeneratedBy` provenance field.
+///
 /// This is a non-blocking operation - warnings are logged but errors don't fail
 /// the calling operation.
 pub fn create_ro_crate_entity_for_output_file(
@@ -297,19 +311,65 @@ pub fn create_ro_crate_entity_for_output_file(
         }
     };
 
-    // Check if entity already exists
-    if entity_exists_for_file(config, workflow_id, file_id) {
-        debug!(
-            "RO-Crate entity already exists for file_id={}, skipping",
-            file_id
-        );
+    // Check if entity already exists - if so, update it with provenance
+    if let Some(existing) = find_entity_for_file(config, workflow_id, file_id) {
+        let entity_id = match existing.id {
+            Some(id) => id,
+            None => {
+                warn!("Existing entity has no ID, cannot update");
+                return;
+            }
+        };
+
+        // Parse existing metadata and add wasGeneratedBy
+        let create_action_id = format!("#job-{}-attempt-{}", job_id, attempt_id);
+        let mut metadata: serde_json::Value = match serde_json::from_str(&existing.metadata) {
+            Ok(m) => m,
+            Err(e) => {
+                warn!("Failed to parse existing entity metadata: {}", e);
+                return;
+            }
+        };
+
+        metadata["wasGeneratedBy"] = serde_json::json!({ "@id": create_action_id });
+
+        // Update file size and hash if we have newer data
+        if let Some(size) = content_size {
+            metadata["contentSize"] = serde_json::json!(size);
+        }
+        if let Some(hash) = compute_file_sha256(&file.path) {
+            metadata["sha256"] = serde_json::json!(hash);
+        }
+
+        let updated_entity = RoCrateEntityModel {
+            id: Some(entity_id),
+            workflow_id,
+            file_id: Some(file_id),
+            entity_id: existing.entity_id,
+            entity_type: existing.entity_type,
+            metadata: metadata.to_string(),
+        };
+
+        match default_api::update_ro_crate_entity(config, entity_id, updated_entity) {
+            Ok(_) => {
+                debug!(
+                    "Updated RO-Crate entity for output file '{}' with provenance (entity_id={})",
+                    file.path, entity_id
+                );
+            }
+            Err(e) => {
+                warn!(
+                    "Failed to update RO-Crate entity for output file '{}': {}",
+                    file.path, e
+                );
+            }
+        }
         return;
     }
 
-    // Compute SHA256 hash
+    // No existing entity - create a new one with provenance
     let sha256 = compute_file_sha256(&file.path);
 
-    // Build and create the entity with provenance
     let entity = build_file_entity_with_provenance(
         workflow_id,
         file,
