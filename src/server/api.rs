@@ -144,6 +144,7 @@ pub mod resource_requirements;
 pub mod results;
 pub mod ro_crate;
 pub mod schedulers;
+pub mod slurm_stats;
 pub mod sql_query_builder;
 pub mod user_data;
 pub mod workflow_actions;
@@ -161,6 +162,7 @@ pub use resource_requirements::{ResourceRequirementsApi, ResourceRequirementsApi
 pub use results::{ResultsApi, ResultsApiImpl};
 pub use ro_crate::{RoCrateApi, RoCrateApiImpl};
 pub use schedulers::{SchedulersApi, SchedulersApiImpl};
+pub use slurm_stats::{SlurmStatsApi, SlurmStatsApiImpl};
 pub use sql_query_builder::SqlQueryBuilder;
 pub use user_data::{UserDataApi, UserDataApiImpl};
 pub use workflow_actions::{WorkflowActionsApi, WorkflowActionsApiImpl};

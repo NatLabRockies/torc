@@ -1,0 +1,38 @@
+# Test: Job-Based Parallelism
+#
+# 1-node allocation with NO resource_requirements on jobs.
+# Jobs get the auto-assigned "default" RR, so srun skips resource limit flags
+# and each job can use the full allocation's resources.
+#
+# Concurrency is controlled by --max-parallel-jobs (passed via torc submit).
+# The test submits with --max-parallel-jobs 2, so 2 of the 4 jobs run at a time.
+#
+# Each job allocates 1GB of memory to verify that:
+#   - Jobs without resource_requirements can still use substantial memory
+#   - peak_memory_bytes is tracked correctly (>= 1GB per job)
+
+name: job_parallelism
+description: Job-based parallelism — no resource requirements, controlled by --max-parallel-jobs
+project: slurm-tests
+
+# No resource_requirements section — jobs use the "default" RR
+
+jobs:
+  - name: work_{i}
+    command: bash slurm-tests/scripts/memory_1g_work.sh {i}
+    parameters:
+      i: 1:4
+
+slurm_schedulers:
+  - name: parallelism_scheduler
+    account: PLACEHOLDER_ACCOUNT
+    partition: PLACEHOLDER_PARTITION
+    nodes: 1
+    walltime: "00:15:00"
+
+actions:
+  - trigger_type: "on_workflow_start"
+    action_type: "schedule_nodes"
+    scheduler: "parallelism_scheduler"
+    scheduler_type: "slurm"
+    num_allocations: 1

@@ -1,0 +1,12 @@
+-- Add step_nodes to resource_requirements.
+--
+-- num_nodes describes the Slurm allocation size (used by sbatch --nodes).
+-- step_nodes describes how many nodes a single srun step spans (used by srun --nodes).
+--
+-- They are almost always equal but can differ when running start_one_worker_per_node:
+-- in that case num_nodes=N (allocation has N nodes) but step_nodes=1 (each job step
+-- is a single-node command).  They can also differ for multi-node MPI or Julia
+-- Distributed.jl jobs where each workflow step spans the full allocation.
+--
+-- Defaults to 1 (safe default: each step runs on a single node).
+ALTER TABLE resource_requirements ADD COLUMN step_nodes INTEGER NOT NULL DEFAULT 1;

@@ -11,9 +11,11 @@ use crate::client::log_paths::{
     get_job_stderr_path, get_job_stdout_path, get_slurm_stderr_path, get_slurm_stdout_path,
 };
 use crate::client::sse_client::SseEvent;
-use crate::models::{FileModel, JobModel, ResultModel, ScheduledComputeNodesModel, WorkflowModel};
+use crate::models::{
+    FileModel, JobModel, ResultModel, ScheduledComputeNodesModel, SlurmStatsModel, WorkflowModel,
+};
 
-use crate::client::apis::configuration::TlsConfig;
+use crate::client::apis::configuration::{BasicAuth, TlsConfig};
 
 use super::api::TorcClient;
 use super::components::{
@@ -29,6 +31,7 @@ pub enum DetailViewType {
     Events,
     Results,
     ScheduledNodes,
+    SlurmStats,
     Dag,
 }
 
@@ -159,6 +162,7 @@ impl DetailViewType {
             Self::Events => "⚡ Events",
             Self::Results => "✓ Results",
             Self::ScheduledNodes => "⊞ Nodes",
+            Self::SlurmStats => "⚑ Slurm Stats",
             Self::Dag => "◇ DAG",
         }
     }
@@ -170,6 +174,7 @@ impl DetailViewType {
             Self::Events,
             Self::Results,
             Self::ScheduledNodes,
+            Self::SlurmStats,
             Self::Dag,
         ]
     }
@@ -180,7 +185,8 @@ impl DetailViewType {
             Self::Files => Self::Events,
             Self::Events => Self::Results,
             Self::Results => Self::ScheduledNodes,
-            Self::ScheduledNodes => Self::Dag,
+            Self::ScheduledNodes => Self::SlurmStats,
+            Self::SlurmStats => Self::Dag,
             Self::Dag => Self::Jobs,
         }
     }
@@ -192,7 +198,8 @@ impl DetailViewType {
             Self::Events => Self::Files,
             Self::Results => Self::Events,
             Self::ScheduledNodes => Self::Results,
-            Self::Dag => Self::ScheduledNodes,
+            Self::SlurmStats => Self::ScheduledNodes,
+            Self::Dag => Self::SlurmStats,
         }
     }
 }
@@ -232,9 +239,14 @@ pub struct App {
     pub results: Vec<ResultModel>,
     pub results_all: Vec<ResultModel>,
     pub results_state: TableState,
+    pub results_workflow_id: Option<i64>,
+    pub exec_time_map: std::collections::HashMap<(i64, i64, i64), f64>,
     pub scheduled_nodes: Vec<ScheduledComputeNodesModel>,
     pub scheduled_nodes_all: Vec<ScheduledComputeNodesModel>,
     pub scheduled_nodes_state: TableState,
+    pub slurm_stats: Vec<SlurmStatsModel>,
+    pub slurm_stats_all: Vec<SlurmStatsModel>,
+    pub slurm_stats_state: TableState,
     pub dag: Option<DagLayout>,
     pub detail_view: DetailViewType,
     pub selected_workflow_id: Option<i64>,
@@ -269,12 +281,15 @@ pub struct App {
 
     // TLS configuration
     pub tls: TlsConfig,
+
+    // Authentication
+    pub basic_auth: Option<BasicAuth>,
 }
 
 impl App {
     #[allow(dead_code)]
     pub fn new() -> Result<Self> {
-        Self::new_with_options(false, 8080, None, None, false)
+        Self::new_with_options(false, 8080, None, None, false, None)
     }
 
     pub fn new_with_options(
@@ -283,12 +298,13 @@ impl App {
         database: Option<String>,
         tls_ca_cert: Option<String>,
         tls_insecure: bool,
+        basic_auth: Option<BasicAuth>,
     ) -> Result<Self> {
         let tls = TlsConfig {
             ca_cert_path: tls_ca_cert.as_ref().map(std::path::PathBuf::from),
             insecure: tls_insecure,
         };
-        let client = TorcClient::new_with_tls(tls.clone())?;
+        let client = TorcClient::new_with_tls(tls.clone(), basic_auth.clone())?;
 
         // In standalone mode, override the server URL to use the specified port
         let server_url = if standalone {
@@ -321,9 +337,14 @@ impl App {
             results: Vec::new(),
             results_all: Vec::new(),
             results_state: TableState::default(),
+            results_workflow_id: None,
+            exec_time_map: std::collections::HashMap::new(),
             scheduled_nodes: Vec::new(),
             scheduled_nodes_all: Vec::new(),
             scheduled_nodes_state: TableState::default(),
+            slurm_stats: Vec::new(),
+            slurm_stats_all: Vec::new(),
+            slurm_stats_state: TableState::default(),
             dag: None,
             detail_view: DetailViewType::Jobs,
             selected_workflow_id: None,
@@ -346,6 +367,7 @@ impl App {
             sse_thread: None,
             sse_workflow_id: None,
             tls,
+            basic_auth,
         };
 
         // Update client to use the correct URL
@@ -403,6 +425,9 @@ impl App {
                     DetailViewType::ScheduledNodes => {
                         (&mut self.scheduled_nodes_state, self.scheduled_nodes.len())
                     }
+                    DetailViewType::SlurmStats => {
+                        (&mut self.slurm_stats_state, self.slurm_stats.len())
+                    }
                     DetailViewType::Dag => return, // DAG view doesn't support table navigation
                 };
                 if len > 0 {
@@ -440,6 +465,9 @@ impl App {
                     DetailViewType::Results => (&mut self.results_state, self.results.len()),
                     DetailViewType::ScheduledNodes => {
                         (&mut self.scheduled_nodes_state, self.scheduled_nodes.len())
+                    }
+                    DetailViewType::SlurmStats => {
+                        (&mut self.slurm_stats_state, self.slurm_stats.len())
                     }
                     DetailViewType::Dag => return, // DAG view doesn't support table navigation
                 };
@@ -486,7 +514,10 @@ impl App {
                         self.start_sse_connection(workflow_id);
                     }
                     DetailViewType::Results => {
-                        self.results_all = self.client.list_results(workflow_id)?;
+                        if self.results_workflow_id != Some(workflow_id) {
+                            self.results_all = self.client.list_results(workflow_id)?;
+                            self.results_workflow_id = Some(workflow_id);
+                        }
                         self.results = self.results_all.clone();
                         if !self.results.is_empty() {
                             self.results_state.select(Some(0));
@@ -499,6 +530,23 @@ impl App {
                         if !self.scheduled_nodes.is_empty() {
                             self.scheduled_nodes_state.select(Some(0));
                         }
+                    }
+                    DetailViewType::SlurmStats => {
+                        self.slurm_stats_all = self.client.list_slurm_stats(workflow_id)?;
+                        self.slurm_stats = self.slurm_stats_all.clone();
+                        if !self.slurm_stats.is_empty() {
+                            self.slurm_stats_state.select(Some(0));
+                        }
+                        // Load results for CPU% computation if not already loaded
+                        // for this workflow
+                        if self.results_workflow_id != Some(workflow_id)
+                            && let Ok(r) = self.client.list_results(workflow_id)
+                        {
+                            self.results_all = r;
+                            self.results = self.results_all.clone();
+                            self.results_workflow_id = Some(workflow_id);
+                        }
+                        self.rebuild_exec_time_map();
                     }
                     DetailViewType::Dag => {
                         // Load jobs if not already loaded
@@ -513,6 +561,20 @@ impl App {
             }
         }
         Ok(())
+    }
+
+    /// Rebuild the cached exec_time_map from results_all.
+    /// Called when results are loaded or refreshed so draw_slurm_stats_table
+    /// can look up execution times without rebuilding the map every frame.
+    fn rebuild_exec_time_map(&mut self) {
+        self.exec_time_map = self
+            .results_all
+            .iter()
+            .map(|r| {
+                let attempt_id = r.attempt_id.unwrap_or(1);
+                ((r.job_id, r.run_id, attempt_id), r.exec_time_minutes)
+            })
+            .collect();
     }
 
     pub fn next_detail_view(&mut self) {
@@ -549,6 +611,7 @@ impl App {
             DetailViewType::Events => vec!["Event Type", "Data"],
             DetailViewType::Results => vec!["Status", "Return Code"],
             DetailViewType::ScheduledNodes => vec!["Status", "Scheduler Type"],
+            DetailViewType::SlurmStats => vec!["Job ID", "Slurm Job", "Nodes"],
             DetailViewType::Dag => vec![], // DAG view doesn't support filtering
         }
     }
@@ -684,6 +747,34 @@ impl App {
                     self.scheduled_nodes_state.select(None);
                 }
             }
+            DetailViewType::SlurmStats => {
+                self.slurm_stats = self
+                    .slurm_stats_all
+                    .iter()
+                    .filter(|stat| match column.as_str() {
+                        "Job ID" => stat.job_id.to_string().contains(&value),
+                        "Slurm Job" => stat
+                            .slurm_job_id
+                            .as_deref()
+                            .unwrap_or("")
+                            .to_lowercase()
+                            .contains(&value),
+                        "Nodes" => stat
+                            .node_list
+                            .as_deref()
+                            .unwrap_or("")
+                            .to_lowercase()
+                            .contains(&value),
+                        _ => false,
+                    })
+                    .cloned()
+                    .collect();
+                if !self.slurm_stats.is_empty() {
+                    self.slurm_stats_state.select(Some(0));
+                } else {
+                    self.slurm_stats_state.select(None);
+                }
+            }
             DetailViewType::Dag => {
                 // DAG view doesn't support filtering
             }
@@ -725,6 +816,12 @@ impl App {
                     self.scheduled_nodes_state.select(Some(0));
                 }
             }
+            DetailViewType::SlurmStats => {
+                self.slurm_stats = self.slurm_stats_all.clone();
+                if !self.slurm_stats.is_empty() {
+                    self.slurm_stats_state.select(Some(0));
+                }
+            }
             DetailViewType::Dag => {
                 // DAG view doesn't support filtering
             }
@@ -755,9 +852,12 @@ impl App {
             return Ok(());
         }
 
-        // Create new client with updated URL
-        self.client =
-            TorcClient::from_url_with_tls(self.server_url_input.clone(), self.tls.clone())?;
+        // Create new client with updated URL, preserving authentication
+        self.client = TorcClient::from_url_with_tls(
+            self.server_url_input.clone(),
+            self.tls.clone(),
+            self.basic_auth.clone(),
+        )?;
         self.server_url = self.server_url_input.clone();
         self.focus = Focus::Workflows;
 
@@ -871,9 +971,11 @@ impl App {
                 if let Ok(results) = self.client.list_results(workflow_id) {
                     self.results_all = results.clone();
                     self.results = results;
+                    self.results_workflow_id = Some(workflow_id);
                     if !self.results.is_empty() {
                         self.results_state.select(Some(0));
                     }
+                    self.rebuild_exec_time_map();
                 }
             }
             // Refresh workflow list to update status
@@ -905,6 +1007,7 @@ impl App {
         let mut config =
             crate::client::apis::configuration::Configuration::with_tls(self.tls.clone());
         config.base_path = self.server_url.clone();
+        config.basic_auth = self.basic_auth.clone();
 
         let result = version_check::check_version(&config);
 
@@ -2055,11 +2158,13 @@ impl App {
         // Get the base URL for SSE connection
         let base_url = self.server_url.clone();
         let tls = self.tls.clone();
+        let basic_auth = self.basic_auth.clone();
 
         // Start background thread for SSE connection
         let handle = std::thread::spawn(move || {
             let mut config = crate::client::apis::configuration::Configuration::with_tls(tls);
             config.base_path = base_url;
+            config.basic_auth = basic_auth;
 
             match crate::client::sse_client::SseConnection::connect(&config, workflow_id, None) {
                 Ok(mut connection) => {

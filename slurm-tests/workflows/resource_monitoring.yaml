@@ -1,0 +1,44 @@
+# Test 6: Resource Monitoring
+#
+# 1-node allocation with resource monitoring enabled.
+# 2 jobs: cpu_work (sustained load 30s) + memory_work (allocate 500MB for 30s).
+# Verifies peak_cpu_percent > 0 and peak_memory_bytes > 0 in reports results.
+
+name: resource_monitoring
+description: Resource monitoring validation — CPU and memory usage captured
+project: slurm-tests
+
+resource_monitor:
+  enabled: true
+  granularity: time_series
+  sample_interval_seconds: 2
+
+resource_requirements:
+  - name: work_resources
+    num_cpus: 2
+    num_nodes: 1
+    memory: 2g
+    runtime: PT5M
+
+jobs:
+  - name: cpu_work
+    command: bash slurm-tests/scripts/cpu_work.sh
+    resource_requirements: work_resources
+
+  - name: memory_work
+    command: bash slurm-tests/scripts/memory_work.sh
+    resource_requirements: work_resources
+
+slurm_schedulers:
+  - name: monitor_scheduler
+    account: PLACEHOLDER_ACCOUNT
+    partition: PLACEHOLDER_PARTITION
+    nodes: 1
+    walltime: "00:15:00"
+
+actions:
+  - trigger_type: "on_workflow_start"
+    action_type: "schedule_nodes"
+    scheduler: "monitor_scheduler"
+    scheduler_type: "slurm"
+    num_allocations: 1

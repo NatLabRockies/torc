@@ -8,6 +8,7 @@ use crossterm::{
 };
 use ratatui::{Terminal, backend::CrosstermBackend};
 
+use crate::client::apis::configuration::BasicAuth;
 use crate::client::apis::default_api;
 
 mod api;
@@ -23,9 +24,11 @@ use components::StatusMessage;
 fn check_server_connection(
     base_url: &str,
     tls: &crate::client::apis::configuration::TlsConfig,
+    basic_auth: &Option<BasicAuth>,
 ) -> bool {
     let mut config = crate::client::apis::configuration::Configuration::with_tls(tls.clone());
     config.base_path = base_url.to_string();
+    config.basic_auth = basic_auth.clone();
 
     default_api::ping(&config).is_ok()
 }
@@ -36,6 +39,7 @@ pub fn run(
     database: Option<String>,
     tls_ca_cert: Option<String>,
     tls_insecure: bool,
+    basic_auth: Option<BasicAuth>,
 ) -> Result<()> {
     env_logger::init();
 
@@ -47,14 +51,21 @@ pub fn run(
     let mut terminal = Terminal::new(backend)?;
 
     // Create app - this will work even if server is not running
-    let mut app = App::new_with_options(standalone, port, database, tls_ca_cert, tls_insecure)?;
+    let mut app = App::new_with_options(
+        standalone,
+        port,
+        database,
+        tls_ca_cert,
+        tls_insecure,
+        basic_auth,
+    )?;
 
     // In standalone mode, auto-start the server
     if standalone {
         app.start_server_standalone();
         // Give server a moment to start, then try to connect
         std::thread::sleep(std::time::Duration::from_millis(500));
-        if check_server_connection(&app.server_url, &app.tls) {
+        if check_server_connection(&app.server_url, &app.tls, &app.basic_auth) {
             app.set_status(StatusMessage::success("Server started in standalone mode"));
             let _ = app.refresh_workflows();
             // Check server version
@@ -66,7 +77,7 @@ pub fn run(
         }
     } else {
         // Check if server is running and show appropriate message
-        if check_server_connection(&app.server_url, &app.tls) {
+        if check_server_connection(&app.server_url, &app.tls, &app.basic_auth) {
             // Connected - check version
             app.check_server_version();
         } else {

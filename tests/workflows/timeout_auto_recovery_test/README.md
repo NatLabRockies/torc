@@ -15,8 +15,8 @@ increases runtime allocations for retry.
 2. `job_fast` completes in ~1 minute
 3. `job_slow` gets killed by Slurm at ~8 minutes (walltime exceeded)
 4. Watcher detects timeout and increases runtime:
-   - 5 min → 7.5 min (1.5x) - still not enough
-   - 7.5 min → 11.25 min (1.5x) - enough for 10 min job
+   - 5 min -> 7.5 min (1.5x) - still not enough
+   - 7.5 min -> 11.25 min (1.5x) - enough for 10 min job
 5. Scheduler regenerates with appropriate walltime
 6. `job_slow` retries and completes successfully
 
@@ -113,7 +113,7 @@ To make the test faster:
    ```bash
    torc watch <workflow_id> --recover --runtime-multiplier 2.5
    ```
-   With 2.5x: 5min → 12.5min (success in 1 retry)
+   With 2.5x: 5min -> 12.5min (success in 1 retry)
 
 2. Reduce the sleep time in job_slow (edit workflow.yaml): Change `sleep 60` to `sleep 30` for a
    5-minute job instead of 10.

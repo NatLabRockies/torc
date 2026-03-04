@@ -1,0 +1,59 @@
+# Multi-Node Parallel Jobs Test Workflow
+#
+# Tests that torc correctly distributes single-node jobs across multiple
+# workers when start_one_worker_per_node=true, and that sstat/sacct capture
+# per-step metrics for each job.
+#
+# Setup:
+#   - 2-node Slurm allocation (sbatch --nodes=2)
+#   - start_one_worker_per_node=true  →  one torc worker per node
+#   - 6 independent single-node jobs (no dependencies)
+#   - Jobs should run in parallel: 2 at a time, one per node
+#
+# Test procedure:
+# 1. From the repository root, set the Slurm account:
+#      sed -i 's/PLACEHOLDER_ACCOUNT/your_account/g' \
+#        tests/workflows/multi_node_parallel_jobs_test/workflow.yaml
+# 2. Submit:
+#      torc submit tests/workflows/multi_node_parallel_jobs_test/workflow.yaml
+# 3. Monitor:
+#      torc watch <workflow_id> --auto-schedule
+# 4. Verify (see README.md for full checklist)
+
+name: multi_node_parallel_jobs_test
+description: 2-node allocation with one worker per node — parallel single-node jobs
+project: testing
+
+resource_monitor:
+  enabled: true
+  granularity: TimeSeries
+  sample_interval_seconds: 2
+
+resource_requirements:
+  - name: work_resources
+    num_cpus: 2
+    num_nodes: 1
+    memory: 2g
+    runtime: PT10M
+
+jobs:
+  - name: work_{i}
+    command: bash tests/workflows/multi_node_parallel_jobs_test/work.sh {i}
+    resource_requirements: work_resources
+    scheduler: two_node_scheduler
+    parameters:
+      i: 1:6
+
+slurm_schedulers:
+  - name: two_node_scheduler
+    account: PLACEHOLDER_ACCOUNT
+    nodes: 2
+    walltime: "00:30:00"
+
+actions:
+  - trigger_type: "on_workflow_start"
+    action_type: "schedule_nodes"
+    scheduler: "two_node_scheduler"
+    scheduler_type: "slurm"
+    num_allocations: 1
+    start_one_worker_per_node: true

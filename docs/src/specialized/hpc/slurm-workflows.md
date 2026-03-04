@@ -536,7 +536,7 @@ curl $TORC_API_URL/health
 Use `torc hpc match` to see which partitions match your requirements:
 
 ```bash
-torc hpc match kestrel --cpus 32 --memory 64g --walltime 2h --gpus 2
+torc hpc match kestrel --cpus 32 --memory 64g --walltime 02:00:00 --gpus 2
 ```
 
 ## See Also

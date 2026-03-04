@@ -2522,7 +2522,11 @@ fn test_reinitialize_with_file_change_depends_on_complete_job(start_server: &Ser
     )
     .expect("Failed to complete preprocess");
 
-    // Execute work1 job
+    // Wait for work1 to be unblocked by background task, then execute
+    assert!(
+        wait_for_job_status(&config, work1_id, models::JobStatus::Ready, 5),
+        "work1 did not become ready after preprocess completed"
+    );
     default_api::manage_status_change(&config, work1_id, models::JobStatus::Running, run_id, None)
         .expect("Failed to set work1 to Running");
     fs::write(&f4_path, r#"{"work1": "output"}"#).expect("Failed to write f4");
@@ -2547,7 +2551,11 @@ fn test_reinitialize_with_file_change_depends_on_complete_job(start_server: &Ser
     )
     .expect("Failed to complete work1");
 
-    // Execute work2 job
+    // Wait for work2 to be unblocked by background task, then execute
+    assert!(
+        wait_for_job_status(&config, work2_id, models::JobStatus::Ready, 5),
+        "work2 did not become ready after preprocess completed"
+    );
     default_api::manage_status_change(&config, work2_id, models::JobStatus::Running, run_id, None)
         .expect("Failed to set work2 to Running");
     fs::write(&f5_path, r#"{"work2": "output"}"#).expect("Failed to write f5");
@@ -2599,7 +2607,11 @@ fn test_reinitialize_with_file_change_depends_on_complete_job(start_server: &Ser
     )
     .expect("Failed to complete work2");
 
-    // Execute postprocess job
+    // Wait for postprocess to be unblocked by background task, then execute
+    assert!(
+        wait_for_job_status(&config, postprocess_id, models::JobStatus::Ready, 5),
+        "postprocess did not become ready after work1 and work2 completed"
+    );
     default_api::manage_status_change(
         &config,
         postprocess_id,

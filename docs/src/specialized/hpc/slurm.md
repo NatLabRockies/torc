@@ -312,6 +312,162 @@ From a compute node:
 curl $TORC_API_URL/health
 ```
 
+## srun Job Step Wrapping
+
+When Torc detects that it is running inside a Slurm allocation (`SLURM_JOB_ID` is set in the
+environment), it automatically wraps each individual job with `srun`. This creates a dedicated Slurm
+job step for every Torc job, which provides:
+
+- **Cgroup enforcement** — Slurm enforces CPU and memory limits from the job's resource
+  requirements. Jobs that exceed their stated requirements are immediately killed.
+- **`sstat` visibility** — HPC administrators and users can inspect per-step metrics (CPU, memory,
+  wall-time) with `sstat -j <SLURM_JOB_ID>`.
+- **Scheduler awareness** — Every running Torc job appears as a named step in `squeue`, giving the
+  HPC team and users full visibility into what is actually executing.
+- **Accounting data** — After each step exits, Torc calls `sacct` to collect Slurm accounting
+  statistics and stores them with the job result (see
+  [Slurm Accounting Stats](#slurm-accounting-stats) below).
+
+### Step Naming
+
+Each `srun` step is named `wf<workflow_id>_j<job_id>_r<run_id>_a<attempt_id>`, for example
+`wf10_j42_r1_a1`. This name appears in `squeue --me` and `sacct` output, and the same component
+string is embedded in the log file prefix `job_wf<workflow_id>_j<job_id>_r<run_id>_a<attempt_id>`
+(for example, `job_wf10_j42_r1_a1.o`), so all Slurm and Torc records for a job can be easily
+correlated.
+
+### Multi-Node Jobs
+
+Two resource requirement fields control node usage:
+
+| Field        | Controls                             | Passed to        | Default |
+| ------------ | ------------------------------------ | ---------------- | ------- |
+| `num_nodes`  | Slurm allocation size                | `sbatch --nodes` | `1`     |
+| `step_nodes` | Nodes each individual job step spans | `srun --nodes`   | `1`     |
+
+For most workloads these two values are the same, but they must be set independently for the
+patterns below.
+
+**Single-node jobs (default)** — no extra configuration needed:
+
+```yaml
+resource_requirements:
+  - name: standard
+    num_cpus: 4
+    memory: 16g
+    runtime: PT2H
+    # num_nodes defaults to 1, step_nodes defaults to 1
+```
+
+**Multi-node allocation with one worker per node** (`start_one_worker_per_node: true`) — each worker
+runs single-node job steps, so `step_nodes` must stay at `1` (the default) even though `num_nodes`
+may be large:
+
+```yaml
+resource_requirements:
+  - name: standard
+    num_cpus: 8
+    memory: 64g
+    runtime: PT4H
+    num_nodes: 10   # sbatch allocates 10 nodes
+    # step_nodes: 1 is the default — each srun step uses exactly one node
+```
+
+**True multi-node job steps** (MPI, Julia `Distributed.jl`, etc.) — the job itself spans all nodes
+in its allocation, so set `step_nodes` equal to `num_nodes`:
+
+```yaml
+resource_requirements:
+  - name: mpi_job
+    num_cpus: 32
+    memory: 128g
+    runtime: PT8H
+    num_nodes: 4      # sbatch allocates 4 nodes
+    step_nodes: 4     # srun --nodes=4: each job step spans all 4 nodes
+```
+
+In this pattern, Torc passes `srun --nodes=4` when launching the job. The job command receives
+`SLURM_JOB_NODELIST`, `SLURM_NTASKS`, and the rest of the standard Slurm step environment, so MPI
+launchers (`mpirun`, `mpiexec`) and Julia `Distributed.jl` will automatically use all allocated
+nodes.
+
+> **Important**: Do not mix `start_one_worker_per_node: true` with `step_nodes > 1`. Use
+> `start_one_worker_per_node` for single-node jobs sharing a large allocation, or set
+> `step_nodes = num_nodes` for genuine multi-node tasks — but not both at once.
+
+### Resource Limit Enforcement
+
+By default (`limit_resources = true`), Torc passes `--cpus-per-task` and `--mem` to `srun` so Slurm
+enforces the cgroup limits defined in each job's resource requirements. This is the recommended
+setting for production workflows to prevent runaway jobs from impacting other users.
+
+To disable cgroup enforcement while still using `srun` (useful when exploring resource requirements
+for new jobs), set `limit_resources: false` in your workflow specification:
+
+```yaml
+name: my_workflow
+limit_resources: false
+jobs:
+  ...
+```
+
+The setting is stored per-workflow in the database, so different workflows can have different
+enforcement policies. It can also be updated via the API after a workflow is created.
+
+> **Warning**: With `limit_resources: false`, jobs can exceed their stated resource requirements. On
+> shared clusters this may affect other users. Use this setting only for exploratory workloads.
+
+### Disabling srun Wrapping
+
+By default (`use_srun = true`), Torc wraps every job command with `srun` when running inside a Slurm
+allocation. This creates a per-job cgroup step, enables `sacct` accounting, and gives HPC admins
+visibility into individual job steps.
+
+To disable srun wrapping entirely and run jobs via direct shell execution, set `use_srun: false` in
+your workflow specification:
+
+```yaml
+name: my_workflow
+use_srun: false
+jobs:
+  ...
+```
+
+When `use_srun` is false, `limit_resources` is silently ignored because there is no srun to pass
+resource flags to. Slurm accounting (`sacct`) and live monitoring (`sstat`) are also unavailable
+since jobs do not run as Slurm steps.
+
+> **Note**: `use_srun: false` is a safety valve for users who encounter compatibility issues with
+> srun wrapping. For most workflows, the default (`use_srun: true`) is recommended.
+
+### Slurm Accounting Stats
+
+After each job step exits, Torc calls `sacct` once to collect the following Slurm-native accounting
+fields and stores them in the `slurm_stats` table:
+
+| Field                  | sacct source   | Description                           |
+| ---------------------- | -------------- | ------------------------------------- |
+| `max_rss_bytes`        | `MaxRSS`       | Peak resident-set size (from cgroups) |
+| `max_vm_size_bytes`    | `MaxVMSize`    | Peak virtual memory size              |
+| `max_disk_read_bytes`  | `MaxDiskRead`  | Peak disk read bytes                  |
+| `max_disk_write_bytes` | `MaxDiskWrite` | Peak disk write bytes                 |
+| `ave_cpu_seconds`      | `AveCPU`       | Average CPU time in seconds           |
+| `node_list`            | `NodeList`     | Nodes used by the job step            |
+
+These fields complement the existing sysinfo-based metrics (`peak_memory_bytes`, `peak_cpu_percent`,
+etc.) and are available via `torc slurm stats <workflow_id>`.
+
+`sacct` data is collected on a best-effort basis. Fields are `null` when:
+
+- The job ran locally (no `SLURM_JOB_ID`)
+- `sacct` is not available on the node
+- The step was not found in the Slurm accounting database at collection time
+
+### Local Execution
+
+When running locally (no `SLURM_JOB_ID` environment variable), Torc uses its standard shell wrapper
+and the `srun` behavior is never triggered. No configuration is needed for local runs.
+
 ## See Also
 
 - [Slurm Overview](./slurm-workflows.md) — Simplified workflow approach

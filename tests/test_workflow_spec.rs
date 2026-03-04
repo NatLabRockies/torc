@@ -138,6 +138,7 @@ fn test_workflow_specification_complete_serialization() {
             num_cpus: 1,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "2g".to_string(),
             runtime: "PT30M".to_string(),
         },
@@ -146,6 +147,7 @@ fn test_workflow_specification_complete_serialization() {
             num_cpus: 8,
             num_gpus: 2,
             num_nodes: 2,
+            step_nodes: None,
             memory: "64g".to_string(),
             runtime: "PT4H".to_string(),
         },
@@ -1028,6 +1030,7 @@ fn test_workflow_specification_with_all_resource_types() {
         num_cpus: 4,
         num_gpus: 1,
         num_nodes: 1,
+        step_nodes: None,
         memory: "8g".to_string(),
         runtime: "PT1H".to_string(),
     }];
@@ -1201,6 +1204,7 @@ fn test_specification_structs_serialization() {
         num_cpus: 4,
         num_gpus: 1,
         num_nodes: 2,
+        step_nodes: None,
         memory: "8g".to_string(),
         runtime: "PT2H".to_string(),
     };
@@ -1263,6 +1267,7 @@ fn test_workflow_specification_with_new_structs() {
         num_cpus: 4,
         num_gpus: 0,
         num_nodes: 1,
+        step_nodes: None,
         memory: "16g".to_string(),
         runtime: "PT1H30M".to_string(),
     }];

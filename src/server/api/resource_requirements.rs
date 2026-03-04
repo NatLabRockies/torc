@@ -92,6 +92,7 @@ const RESOURCE_REQUIREMENTS_COLUMNS: &[&str] = &[
     "num_cpus",
     "num_gpus",
     "num_nodes",
+    "step_nodes",
     "memory",
     "runtime",
 ];
@@ -151,6 +152,34 @@ where
             }
         };
 
+        let step_nodes = body.step_nodes.unwrap_or(1);
+        if step_nodes <= 0 {
+            let error_response = models::ErrorResponse::new(serde_json::json!({
+                "message": format!("step_nodes must be > 0, got {}", step_nodes),
+                "field": "step_nodes",
+                "value": step_nodes
+            }));
+            return Ok(
+                CreateResourceRequirementsResponse::UnprocessableContentErrorResponse(
+                    error_response,
+                ),
+            );
+        }
+        if step_nodes > body.num_nodes {
+            let error_response = models::ErrorResponse::new(serde_json::json!({
+                "message": format!(
+                    "step_nodes ({}) must be <= num_nodes ({})",
+                    step_nodes, body.num_nodes
+                ),
+                "field": "step_nodes",
+                "value": step_nodes
+            }));
+            return Ok(
+                CreateResourceRequirementsResponse::UnprocessableContentErrorResponse(
+                    error_response,
+                ),
+            );
+        }
         let result = match sqlx::query!(
             r#"
             INSERT INTO resource_requirements
@@ -160,12 +189,13 @@ where
                 ,num_cpus
                 ,num_gpus
                 ,num_nodes
+                ,step_nodes
                 ,memory
                 ,runtime
                 ,memory_bytes
                 ,runtime_s
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             RETURNING rowid
         "#,
             body.workflow_id,
@@ -173,6 +203,7 @@ where
             body.num_cpus,
             body.num_gpus,
             body.num_nodes,
+            step_nodes,
             body.memory,
             body.runtime,
             memory_bytes,
@@ -251,7 +282,7 @@ where
 
         let record = match sqlx::query!(
             r#"
-                SELECT id, workflow_id, name, num_cpus, num_gpus, num_nodes, memory, runtime
+                SELECT id, workflow_id, name, num_cpus, num_gpus, num_nodes, step_nodes, memory, runtime
                 FROM resource_requirements
                 WHERE id = $1
             "#,
@@ -284,6 +315,7 @@ where
             num_cpus: record.num_cpus,
             num_gpus: record.num_gpus,
             num_nodes: record.num_nodes,
+            step_nodes: Some(record.step_nodes),
             memory: record.memory,
             runtime: record.runtime,
         };
@@ -328,7 +360,7 @@ where
         );
 
         // Build base query
-        let base_query = "SELECT id, workflow_id, name, num_cpus, num_gpus, num_nodes, memory, runtime FROM resource_requirements".to_string();
+        let base_query = "SELECT id, workflow_id, name, num_cpus, num_gpus, num_nodes, step_nodes, memory, runtime FROM resource_requirements".to_string();
 
         // Build WHERE clause conditions
         let mut where_conditions = vec!["workflow_id = ?".to_string()];
@@ -445,6 +477,7 @@ where
                 num_cpus: record.get("num_cpus"),
                 num_gpus: record.get("num_gpus"),
                 num_nodes: record.get("num_nodes"),
+                step_nodes: record.get("step_nodes"),
                 memory: record.get("memory"),
                 runtime: record.get("runtime"),
             });
@@ -535,11 +568,37 @@ where
             context.get().0.clone()
         );
 
-        let memory_bytes = memory_string_to_bytes(&body.memory)
-            .map_err(|e| ApiError(format!("Invalid memory format '{}': {}", body.memory, e)))?;
+        let memory_bytes = match memory_string_to_bytes(&body.memory) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                let error_response = models::ErrorResponse::new(serde_json::json!({
+                    "message": format!("Invalid memory format '{}': {}", body.memory, e),
+                    "field": "memory",
+                    "value": body.memory
+                }));
+                return Ok(
+                    UpdateResourceRequirementsResponse::UnprocessableContentErrorResponse(
+                        error_response,
+                    ),
+                );
+            }
+        };
 
-        let runtime_seconds = duration_string_to_seconds(&body.runtime)
-            .map_err(|e| ApiError(format!("Invalid runtime format '{}': {}", body.runtime, e)))?;
+        let runtime_seconds = match duration_string_to_seconds(&body.runtime) {
+            Ok(seconds) => seconds,
+            Err(e) => {
+                let error_response = models::ErrorResponse::new(serde_json::json!({
+                    "message": format!("Invalid runtime format '{}': {}", body.runtime, e),
+                    "field": "runtime",
+                    "value": body.runtime
+                }));
+                return Ok(
+                    UpdateResourceRequirementsResponse::UnprocessableContentErrorResponse(
+                        error_response,
+                    ),
+                );
+            }
+        };
 
         // First check if the record exists
         match self.get_resource_requirements(id, context).await? {
@@ -559,6 +618,34 @@ where
             }
         };
 
+        let step_nodes = body.step_nodes.unwrap_or(1);
+        if step_nodes <= 0 {
+            let error_response = models::ErrorResponse::new(serde_json::json!({
+                "message": format!("step_nodes must be > 0, got {}", step_nodes),
+                "field": "step_nodes",
+                "value": step_nodes
+            }));
+            return Ok(
+                UpdateResourceRequirementsResponse::UnprocessableContentErrorResponse(
+                    error_response,
+                ),
+            );
+        }
+        if step_nodes > body.num_nodes {
+            let error_response = models::ErrorResponse::new(serde_json::json!({
+                "message": format!(
+                    "step_nodes ({}) must be <= num_nodes ({})",
+                    step_nodes, body.num_nodes
+                ),
+                "field": "step_nodes",
+                "value": step_nodes
+            }));
+            return Ok(
+                UpdateResourceRequirementsResponse::UnprocessableContentErrorResponse(
+                    error_response,
+                ),
+            );
+        }
         // Update the record
         match sqlx::query!(
             r#"
@@ -568,17 +655,19 @@ where
                 num_cpus = $3,
                 num_gpus = $4,
                 num_nodes = $5,
-                memory = $6,
-                runtime = $7,
-                memory_bytes = $8,
-                runtime_s = $9
-            WHERE id = $10
+                step_nodes = $6,
+                memory = $7,
+                runtime = $8,
+                memory_bytes = $9,
+                runtime_s = $10
+            WHERE id = $11
             "#,
             body.workflow_id,
             body.name,
             body.num_cpus,
             body.num_gpus,
             body.num_nodes,
+            step_nodes,
             body.memory,
             body.runtime,
             memory_bytes,

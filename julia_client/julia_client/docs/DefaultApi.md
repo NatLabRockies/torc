@@ -25,6 +25,7 @@ Method | HTTP request | Description
 [**create_result**](DefaultApi.md#create_result) | **POST** /results | Store a job result.
 [**create_scheduled_compute_node**](DefaultApi.md#create_scheduled_compute_node) | **POST** /scheduled_compute_nodes | Store a scheduled compute node.
 [**create_slurm_scheduler**](DefaultApi.md#create_slurm_scheduler) | **POST** /slurm_schedulers | Store a Slurm compute node configuration.
+[**create_slurm_stats**](DefaultApi.md#create_slurm_stats) | **POST** /slurm_stats | Store Slurm accounting stats for a job step.
 [**create_user_data**](DefaultApi.md#create_user_data) | **POST** /user_data | Store a user data record.
 [**create_workflow**](DefaultApi.md#create_workflow) | **POST** /workflows | Store a workflow.
 [**create_workflow_action**](DefaultApi.md#create_workflow_action) | **POST** /workflows/{id}/actions | Create a workflow action.
@@ -93,6 +94,7 @@ Method | HTTP request | Description
 [**list_results**](DefaultApi.md#list_results) | **GET** /results | Retrieve all job results for one workflow.
 [**list_scheduled_compute_nodes**](DefaultApi.md#list_scheduled_compute_nodes) | **GET** /scheduled_compute_nodes | Retrieve scheduled compute node records for one workflow.
 [**list_slurm_schedulers**](DefaultApi.md#list_slurm_schedulers) | **GET** /slurm_schedulers | Retrieve a Slurm compute node configuration.
+[**list_slurm_stats**](DefaultApi.md#list_slurm_stats) | **GET** /slurm_stats | List Slurm accounting stats.
 [**list_user_data**](DefaultApi.md#list_user_data) | **GET** /user_data | Retrieve all user data records for one workflow.
 [**list_user_groups**](DefaultApi.md#list_user_groups) | **GET** /users/{user_name}/groups | List groups a user belongs to.
 [**list_workflow_groups**](DefaultApi.md#list_workflow_groups) | **GET** /workflows/{id}/access_groups | List access groups that have access to a workflow.
@@ -769,6 +771,36 @@ Name | Type | Description  | Notes
 ### Return type
 
 [**SlurmSchedulerModel**](SlurmSchedulerModel.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+# **create_slurm_stats**
+> create_slurm_stats(_api::DefaultApi, body::SlurmStatsModel; _mediaType=nothing) -> SlurmStatsModel, OpenAPI.Clients.ApiResponse <br/>
+> create_slurm_stats(_api::DefaultApi, response_stream::Channel, body::SlurmStatsModel; _mediaType=nothing) -> Channel{ SlurmStatsModel }, OpenAPI.Clients.ApiResponse
+
+Store Slurm accounting stats for a job step.
+
+Store Slurm accounting stats collected via sacct for a job step.
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **DefaultApi** | API context | 
+**body** | [**SlurmStatsModel**](SlurmStatsModel.md) | Slurm stats record. |
+
+### Return type
+
+[**SlurmStatsModel**](SlurmStatsModel.md)
 
 ### Authorization
 
@@ -3135,6 +3167,44 @@ Name | Type | Description  | Notes
 ### Return type
 
 [**ListSlurmSchedulersResponse**](ListSlurmSchedulersResponse.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+# **list_slurm_stats**
+> list_slurm_stats(_api::DefaultApi, workflow_id::Int64; job_id=nothing, offset=nothing, limit=nothing, _mediaType=nothing) -> ListSlurmStatsResponse, OpenAPI.Clients.ApiResponse <br/>
+> list_slurm_stats(_api::DefaultApi, response_stream::Channel, workflow_id::Int64; job_id=nothing, offset=nothing, limit=nothing, _mediaType=nothing) -> Channel{ ListSlurmStatsResponse }, OpenAPI.Clients.ApiResponse
+
+List Slurm accounting stats.
+
+Retrieve Slurm accounting stats for a workflow, optionally filtered by job.
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **DefaultApi** | API context | 
+**workflow_id** | **Int64** | Workflow ID |
+
+### Optional Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **job_id** | **Int64** | Return the stats for a specific job. | [default to nothing]
+ **offset** | **Int64** |  | [default to 0]
+ **limit** | **Int64** |  | [default to 10000]
+
+### Return type
+
+[**ListSlurmStatsResponse**](ListSlurmStatsResponse.md)
 
 ### Authorization
 

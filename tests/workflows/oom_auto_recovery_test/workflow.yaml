@@ -26,7 +26,7 @@ resource_requirements:
 
 jobs:
   - name: work_{i}
-    command: bash allocate_memory.sh 30
+    command: bash slurm-tests/scripts/allocate_memory.sh 30
     resource_requirements: work_resources
     parameters:
       i: 1:10

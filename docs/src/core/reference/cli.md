@@ -1499,6 +1499,7 @@ Slurm scheduler commands
 - `schedule-nodes` — Schedule compute nodes using Slurm
 - `parse-logs` — Parse Slurm log files for known error messages
 - `sacct` — Call sacct for scheduled compute nodes and display summary
+- `stats` — Show per-job Slurm accounting stats stored in the database
 - `generate` — Generate Slurm schedulers for a workflow based on job resource requirements
 - `regenerate` — Regenerate Slurm schedulers for an existing workflow based on pending jobs
 
@@ -1635,6 +1636,20 @@ Call sacct for scheduled compute nodes and display summary
 - `-o`, `--output-dir <OUTPUT_DIR>` — Output directory for sacct JSON files (only used with
   --save-json). Default: `output`
 - `--save-json` — Save full JSON output to files in addition to displaying summary. Default: `false`
+
+## `torc slurm stats`
+
+Show per-job Slurm accounting stats stored in the database
+
+**Usage:** `torc slurm stats [OPTIONS] <WORKFLOW_ID>`
+
+###### **Arguments:**
+
+- `<WORKFLOW_ID>` — Workflow ID
+
+###### **Options:**
+
+- `--job-id <JOB_ID>` — Filter by job ID
 
 ## `torc slurm generate`
 
@@ -1930,6 +1945,7 @@ HPC system profiles and partition information
 - `show` — Show details of an HPC profile
 - `partitions` — Show partitions for an HPC profile
 - `match` — Find partitions matching resource requirements
+- `generate` — Generate an HPC profile configuration from the current Slurm cluster
 
 ## `torc hpc list`
 
@@ -1939,7 +1955,8 @@ List known HPC system profiles
 
 ## `torc hpc detect`
 
-Detect the current HPC system
+Detect the current HPC system. If no built-in or custom profile matches but Slurm is available, a
+dynamic profile is generated from the current cluster.
 
 **Usage:** `torc hpc detect`
 
@@ -1951,7 +1968,7 @@ Show details of an HPC profile
 
 ###### **Arguments:**
 
-- `<NAME>` — Profile name (e.g., "kestrel")
+- `<NAME>` — Profile name (e.g., "kestrel") or "slurm" for dynamically detected cluster
 
 ## `torc hpc partitions`
 
@@ -1961,27 +1978,43 @@ Show partitions for an HPC profile
 
 ###### **Arguments:**
 
-- `<NAME>` — Profile name (e.g., "kestrel"). If not specified, tries to detect current system.
+- `[NAME]` — Profile name (e.g., "kestrel", "slurm"). If not specified, tries to detect current
+  system.
 
 ###### **Options:**
 
 - `--gpu` — Filter to GPU partitions only
-- `--cpu` — Filter to CPU-only partitions
 - `--shared` — Filter to shared partitions
 
 ## `torc hpc match`
 
 Find partitions matching resource requirements
 
-**Usage:** `torc hpc match [OPTIONS]`
+**Usage:** `torc hpc match [OPTIONS] [PROFILE]`
+
+###### **Arguments:**
+
+- `[PROFILE]` — Profile name (if not specified, tries to detect current system)
 
 ###### **Options:**
 
-- `--cpus <CPUS>` — Number of CPUs required. Default: `1`
-- `--memory <MEMORY>` — Memory required (e.g., "100g", "512m", or MB as number). Default: `1g`
-- `--walltime <WALLTIME>` — Wall time required (e.g., "4:00:00", "2-00:00:00"). Default: `1:00:00`
+- `--cpus <CPUS>` — Number of CPUs required
+- `--memory <MEMORY>` — Memory required (e.g., "100g", "512m", or MB as number)
+- `--walltime <WALLTIME>` — Wall time required (e.g., "4:00:00", "2-00:00:00")
 - `--gpus <GPUS>` — Number of GPUs required
-- `--profile <PROFILE>` — Profile name (if not specified, tries to detect current system)
+
+## `torc hpc generate`
+
+Generate an HPC profile configuration from the current Slurm cluster
+
+**Usage:** `torc hpc generate [OPTIONS]`
+
+###### **Options:**
+
+- `-n`, `--name <NAME>` — Profile name (e.g., "kestrel")
+- `-d`, `--display-name <DISPLAY_NAME>` — Human-readable display name
+- `-o`, `--output <OUTPUT>` — Output file path (prints to stdout if not specified)
+- `--skip-stdby` — Skip standby partitions (ones ending in -stdby)
 
 ## `torc reports`
 

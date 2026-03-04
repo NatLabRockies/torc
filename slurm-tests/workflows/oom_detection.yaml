@@ -1,0 +1,54 @@
+# Test 5: OOM Detection
+#
+# 1-node allocation, 1 normal job + 1 OOM job (allocates 30GB with 4GB limit).
+# Verifies OOM detection through parse-logs, logs analyze, sacct, and check-resource-utilization.
+# Adapted from tests/workflows/slurm_oom_test.yaml
+
+name: oom_detection
+description: OOM detection test — one good job, one that exceeds memory
+project: slurm-tests
+
+resource_monitor:
+  enabled: true
+  granularity: time_series
+  sample_interval_seconds: 1
+
+resource_requirements:
+  - name: normal_resources
+    num_cpus: 1
+    num_nodes: 1
+    memory: 2g
+    runtime: PT5M
+
+  - name: oom_resources
+    num_cpus: 1
+    num_nodes: 1
+    memory: 4g
+    runtime: PT10M
+
+jobs:
+  - name: normal_job
+    command: |
+      echo "Normal job on $(hostname)"
+      echo "This job should succeed."
+      sleep 5
+      echo "Normal job complete."
+    resource_requirements: normal_resources
+
+  - name: oom_job
+    command: bash slurm-tests/scripts/allocate_memory.sh 30
+    resource_requirements: oom_resources
+
+slurm_schedulers:
+  - name: oom_scheduler
+    account: PLACEHOLDER_ACCOUNT
+    partition: PLACEHOLDER_PARTITION
+    nodes: 1
+    walltime: "00:30:00"
+
+actions:
+  - trigger_type: "on_workflow_start"
+    action_type: "schedule_nodes"
+    scheduler: "oom_scheduler"
+    scheduler_type: "slurm"
+    num_allocations: 1

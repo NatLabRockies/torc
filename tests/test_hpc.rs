@@ -1,7 +1,39 @@
 //! Tests for HPC profile system and scheduler generation
 
 use rstest::rstest;
+use serial_test::serial;
 use std::collections::HashMap;
+
+/// RAII guard to restore environment variables after a test
+struct EnvGuard {
+    vars: HashMap<String, Option<String>>,
+}
+
+impl EnvGuard {
+    fn new(overrides: HashMap<&str, &str>) -> Self {
+        let mut vars = HashMap::new();
+        for (key, value) in overrides {
+            vars.insert(key.to_string(), std::env::var(key).ok());
+            unsafe {
+                std::env::set_var(key, value);
+            }
+        }
+        Self { vars }
+    }
+}
+
+impl Drop for EnvGuard {
+    fn drop(&mut self) {
+        for (key, value) in &self.vars {
+            unsafe {
+                match value {
+                    Some(v) => std::env::set_var(key, v),
+                    None => std::env::remove_var(key),
+                }
+            }
+        }
+    }
+}
 use torc::client::commands::slurm::{
     GroupByStrategy, WalltimeStrategy, generate_schedulers_for_workflow, parse_memory_mb,
     parse_walltime_secs, secs_to_walltime,
@@ -285,6 +317,7 @@ fn test_generate_schedulers_basic() {
                 num_cpus: 4,
                 num_gpus: 0,
                 num_nodes: 1,
+                step_nodes: None,
                 memory: "8g".to_string(),
                 runtime: "PT1H".to_string(),
             },
@@ -293,6 +326,7 @@ fn test_generate_schedulers_basic() {
                 num_cpus: 32,
                 num_gpus: 0,
                 num_nodes: 1,
+                step_nodes: None,
                 memory: "64g".to_string(),
                 runtime: "PT4H".to_string(),
             },
@@ -381,6 +415,7 @@ fn test_generate_schedulers_with_gpus() {
             num_cpus: 64,
             num_gpus: 2,
             num_nodes: 1,
+            step_nodes: None,
             memory: "200g".to_string(),
             runtime: "PT8H".to_string(),
         }]),
@@ -431,6 +466,7 @@ fn test_generate_schedulers_no_actions() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "8g".to_string(),
             runtime: "PT1H".to_string(),
         }]),
@@ -487,6 +523,7 @@ fn test_generate_schedulers_shared_by_jobs() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "8g".to_string(),
             runtime: "PT1H".to_string(),
         }]),
@@ -572,6 +609,7 @@ fn test_generate_schedulers_existing_schedulers_no_force() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "8g".to_string(),
             runtime: "PT1H".to_string(),
         }]),
@@ -630,6 +668,7 @@ fn test_generate_schedulers_existing_schedulers_with_force() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "8g".to_string(),
             runtime: "PT1H".to_string(),
         }]),
@@ -687,6 +726,7 @@ fn test_generate_schedulers_sets_correct_account() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "8g".to_string(),
             runtime: "PT1H".to_string(),
         }]),
@@ -730,6 +770,7 @@ fn test_generate_schedulers_walltime_max_job_runtime_default() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "8g".to_string(),
             runtime: "PT12H".to_string(), // 12 hours
         }]),
@@ -772,6 +813,7 @@ fn test_generate_schedulers_walltime_max_partition_time() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "8g".to_string(),
             runtime: "PT12H".to_string(), // 12 hours
         }]),
@@ -814,6 +856,7 @@ fn test_generate_schedulers_walltime_custom_multiplier() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "8g".to_string(),
             runtime: "PT6H".to_string(), // 6 hours
         }]),
@@ -856,6 +899,7 @@ fn test_generate_schedulers_walltime_capped_at_partition_max() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "8g".to_string(),
             runtime: "P1DT12H".to_string(), // 36 hours
         }]),
@@ -906,6 +950,7 @@ fn test_generate_schedulers_walltime_uses_max_job_runtime_in_group() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "8g".to_string(),
             runtime: "PT8H".to_string(), // 8 hours - this is the max for all jobs using this RR
         }]),
@@ -948,6 +993,7 @@ fn test_generate_schedulers_walltime_zero_runtime_fallback() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "8g".to_string(),
             runtime: "PT0S".to_string(), // zero seconds
         }]),
@@ -991,6 +1037,7 @@ fn test_generate_schedulers_walltime_multiplier_one() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "8g".to_string(),
             runtime: "PT4H".to_string(), // 4 hours
         }]),
@@ -1032,6 +1079,7 @@ fn test_generate_schedulers_sets_memory() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "128g".to_string(),
             runtime: "PT1H".to_string(),
         }]),
@@ -1095,6 +1143,7 @@ fn test_generate_schedulers_per_resource_requirement() {
                 num_cpus: 2,
                 num_gpus: 0,
                 num_nodes: 1,
+                step_nodes: None,
                 memory: "4g".to_string(),
                 runtime: "PT30M".to_string(),
             },
@@ -1103,6 +1152,7 @@ fn test_generate_schedulers_per_resource_requirement() {
                 num_cpus: 8,
                 num_gpus: 0,
                 num_nodes: 1,
+                step_nodes: None,
                 memory: "16g".to_string(),
                 runtime: "PT2H".to_string(),
             },
@@ -1193,6 +1243,7 @@ fn test_generate_schedulers_auto_calculates_allocations() {
             num_cpus: 26, // 104 / 26 = 4 jobs per node
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "10g".to_string(),
             runtime: "PT1H".to_string(),
         }]),
@@ -1254,6 +1305,7 @@ fn test_generate_schedulers_auto_calculates_with_parameters() {
             num_cpus: 52, // 104 / 52 = 2 jobs per node
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "10g".to_string(),
             runtime: "PT1H".to_string(),
         }]),
@@ -1323,6 +1375,7 @@ fn test_generate_schedulers_stage_aware_for_dependent_jobs() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "8g".to_string(),
             runtime: "PT30M".to_string(),
         }]),
@@ -1404,6 +1457,7 @@ fn test_generate_schedulers_memory_constrained_allocation() {
             num_cpus: 8, // Small CPU requirement
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "120g".to_string(), // Large memory requirement (120GB = 122,880MB)
             runtime: "PT1H".to_string(),
         }]),
@@ -1477,6 +1531,7 @@ fn test_generate_schedulers_whole_node_long_runtime() {
             num_cpus: 12,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "160g".to_string(),
             runtime: "PT20H".to_string(),
         }]),
@@ -1567,6 +1622,7 @@ fn test_generate_schedulers_cpu_vs_memory_constraint() {
             num_cpus: 52, // Half the CPUs
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "60g".to_string(), // Only 1/4 of memory
             runtime: "PT1H".to_string(),
         }]),
@@ -1605,9 +1661,90 @@ fn test_generate_schedulers_cpu_vs_memory_constraint() {
     );
 }
 
-// ============== sinfo Parsing Tests ==============
+// ============== Dynamic Slurm Profile Tests ==============
 
-use torc::client::commands::hpc::parse_sinfo_string;
+#[rstest]
+#[serial]
+fn test_detect_slurm_profile() {
+    use std::path::Path;
+    use torc::client::hpc::slurm::detect_slurm_profile;
+
+    let sinfo_path = Path::new("tests/scripts/fake_sinfo.sh")
+        .canonicalize()
+        .unwrap();
+    let scontrol_path = Path::new("tests/scripts/fake_scontrol.sh")
+        .canonicalize()
+        .unwrap();
+
+    let mut overrides = HashMap::new();
+    overrides.insert("TORC_FAKE_SINFO", sinfo_path.to_str().unwrap());
+    overrides.insert("TORC_FAKE_SCONTROL", scontrol_path.to_str().unwrap());
+    let _guard = EnvGuard::new(overrides);
+
+    let profile = detect_slurm_profile().expect("Should detect slurm profile");
+
+    assert_eq!(profile.name, "test_cluster");
+    assert!(profile.display_name.contains("Test_cluster"));
+    assert_eq!(profile.partitions.len(), 2);
+
+    let standard = profile.get_partition("standard").unwrap();
+    assert_eq!(standard.cpus_per_node, 104);
+    assert_eq!(standard.memory_mb, 246064);
+
+    let gpu = profile.get_partition("gpu").unwrap();
+    assert_eq!(gpu.gpus_per_node, Some(4));
+    assert_eq!(gpu.gpu_type, Some("h100".to_string()));
+}
+
+#[rstest]
+#[serial]
+fn test_registry_detect_dynamic_slurm() {
+    use std::path::Path;
+
+    let sinfo_path = Path::new("tests/scripts/fake_sinfo.sh")
+        .canonicalize()
+        .unwrap();
+    let scontrol_path = Path::new("tests/scripts/fake_scontrol.sh")
+        .canonicalize()
+        .unwrap();
+
+    let mut overrides = HashMap::new();
+    overrides.insert("TORC_FAKE_SINFO", sinfo_path.to_str().unwrap());
+    overrides.insert("TORC_FAKE_SCONTROL", scontrol_path.to_str().unwrap());
+    let _guard = EnvGuard::new(overrides);
+
+    let registry = HpcProfileRegistry::new();
+    let profile = registry
+        .detect()
+        .expect("Should detect dynamic slurm profile");
+
+    assert_eq!(profile.name, "test_cluster");
+}
+
+#[rstest]
+#[serial]
+fn test_registry_get_slurm() {
+    use std::path::Path;
+
+    let sinfo_path = Path::new("tests/scripts/fake_sinfo.sh")
+        .canonicalize()
+        .unwrap();
+    let scontrol_path = Path::new("tests/scripts/fake_scontrol.sh")
+        .canonicalize()
+        .unwrap();
+
+    let mut overrides = HashMap::new();
+    overrides.insert("TORC_FAKE_SINFO", sinfo_path.to_str().unwrap());
+    overrides.insert("TORC_FAKE_SCONTROL", scontrol_path.to_str().unwrap());
+    let _guard = EnvGuard::new(overrides);
+
+    let registry = HpcProfileRegistry::new();
+    let profile = registry.get("slurm").expect("Should return slurm profile");
+
+    assert_eq!(profile.name, "test_cluster");
+}
+
+use torc::client::hpc::slurm::parse_sinfo_string;
 
 /// Test parsing sinfo output from Kestrel HPC cluster
 #[rstest]
@@ -1774,6 +1911,7 @@ fn test_generate_schedulers_gpu_constrained_allocation() {
             num_cpus: 32, // 1/4 of node CPUs
             num_gpus: 2,  // Half the GPUs - this should be limiting
             num_nodes: 1,
+            step_nodes: None,
             memory: "90g".to_string(), // ~1/4 of node memory
             runtime: "PT1H".to_string(),
         }]),
@@ -2018,6 +2156,7 @@ fn test_workflow_spec_with_slurm_defaults() {
             num_cpus: 4,
             num_gpus: 0,
             num_nodes: 1,
+            step_nodes: None,
             memory: "8g".to_string(),
             runtime: "PT1H".to_string(),
         }]),
@@ -2181,6 +2320,7 @@ fn compute_allocations(
             num_cpus,
             num_gpus,
             num_nodes,
+            step_nodes: None,
             memory: memory.to_string(),
             runtime: runtime.to_string(),
         }]),
@@ -2831,4 +2971,244 @@ fn test_alloc_strategy_divergence_short_jobs() {
     assert_eq!(max_job, 25);
     // MaxPartitionTime: time_slots=24, allocs=ceil(100/96)=2
     assert_eq!(max_partition, 2);
+}
+
+// ============== resolve_hpc_profile Tests ==============
+
+use torc::client::commands::hpc::resolve_hpc_profile;
+
+#[rstest]
+fn test_resolve_hpc_profile_by_name() {
+    let mut registry = HpcProfileRegistry::new();
+    registry.register(create_test_profile(
+        "myprofile",
+        vec![create_test_partition("standard", 64, 128000, 86400, None)],
+    ));
+
+    let result = resolve_hpc_profile(&registry, Some("myprofile"));
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap().name, "myprofile");
+}
+
+#[rstest]
+fn test_resolve_hpc_profile_unknown_name() {
+    let registry = HpcProfileRegistry::new();
+    let result = resolve_hpc_profile(&registry, Some("nonexistent"));
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("Unknown HPC profile"));
+}
+
+#[rstest]
+#[serial]
+fn test_resolve_hpc_profile_dynamic_slurm_fallback() {
+    use std::path::Path;
+
+    let sinfo_path = Path::new("tests/scripts/fake_sinfo.sh")
+        .canonicalize()
+        .unwrap();
+    let scontrol_path = Path::new("tests/scripts/fake_scontrol.sh")
+        .canonicalize()
+        .unwrap();
+
+    let mut overrides = HashMap::new();
+    overrides.insert("TORC_FAKE_SINFO", sinfo_path.to_str().unwrap());
+    overrides.insert("TORC_FAKE_SCONTROL", scontrol_path.to_str().unwrap());
+    let _guard = EnvGuard::new(overrides);
+
+    // Empty registry with no built-in profiles → should fall back to dynamic Slurm
+    let registry = HpcProfileRegistry::new();
+    let result = resolve_hpc_profile(&registry, None);
+    assert!(result.is_ok());
+    let profile = result.unwrap();
+    assert_eq!(profile.name, "test_cluster");
+    assert!(!profile.partitions.is_empty());
+}
+
+#[rstest]
+#[serial]
+fn test_resolve_hpc_profile_no_detection_no_slurm() {
+    // Point fake executables to nonexistent paths so Slurm detection always fails
+    let mut overrides = HashMap::new();
+    overrides.insert("TORC_FAKE_SINFO", "/nonexistent/sinfo");
+    overrides.insert("TORC_FAKE_SCONTROL", "/nonexistent/scontrol");
+    let _guard = EnvGuard::new(overrides);
+
+    // Empty registry, no Slurm available → should return error
+    let registry = HpcProfileRegistry::new();
+    let result = resolve_hpc_profile(&registry, None);
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(err.contains("No HPC profile specified"));
+}
+
+#[rstest]
+#[serial]
+fn test_resolve_hpc_profile_slurm_special_name() {
+    use std::path::Path;
+
+    let sinfo_path = Path::new("tests/scripts/fake_sinfo.sh")
+        .canonicalize()
+        .unwrap();
+    let scontrol_path = Path::new("tests/scripts/fake_scontrol.sh")
+        .canonicalize()
+        .unwrap();
+
+    let mut overrides = HashMap::new();
+    overrides.insert("TORC_FAKE_SINFO", sinfo_path.to_str().unwrap());
+    overrides.insert("TORC_FAKE_SCONTROL", scontrol_path.to_str().unwrap());
+    let _guard = EnvGuard::new(overrides);
+
+    // Using "slurm" as profile name should trigger dynamic detection
+    let registry = HpcProfileRegistry::new();
+    let result = resolve_hpc_profile(&registry, Some("slurm"));
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap().name, "test_cluster");
+}
+
+// ============== Partition Selection (tightest-fit) Tests ==============
+
+/// Build a dynamic-style profile where "bigmem" sorts alphabetically before "standard".
+/// This reproduces the bug where `.find()` picked the first match (bigmem) instead of
+/// the smallest sufficient partition (standard).
+fn dynamic_profile_with_bigmem() -> HpcProfile {
+    HpcProfile {
+        name: "test_dynamic".to_string(),
+        display_name: "Test Dynamic Cluster".to_string(),
+        description: "Profile for testing tightest-fit partition selection".to_string(),
+        detection: vec![],
+        default_account: None,
+        charge_factor_cpu: 1.0,
+        charge_factor_gpu: 10.0,
+        metadata: HashMap::new(),
+        partitions: vec![
+            // Alphabetically first — should NOT be selected for small jobs
+            HpcPartition {
+                name: "bigmem".to_string(),
+                description: "Big memory partition".to_string(),
+                cpus_per_node: 104,
+                memory_mb: 2_000_000, // ~1953g
+                max_walltime_secs: 172800,
+                max_nodes: None,
+                max_nodes_per_user: None,
+                min_nodes: None,
+                gpus_per_node: None,
+                gpu_type: None,
+                gpu_memory_gb: None,
+                local_disk_gb: None,
+                shared: false,
+                requires_explicit_request: false,
+                default_qos: Some("p_bigmem".to_string()),
+                features: vec![],
+            },
+            // Alphabetically second — should be selected for small/medium jobs
+            HpcPartition {
+                name: "standard".to_string(),
+                description: "Standard partition".to_string(),
+                cpus_per_node: 104,
+                memory_mb: 246_064, // ~240g
+                max_walltime_secs: 172800,
+                max_nodes: None,
+                max_nodes_per_user: None,
+                min_nodes: None,
+                gpus_per_node: None,
+                gpu_type: None,
+                gpu_memory_gb: None,
+                local_disk_gb: None,
+                shared: false,
+                requires_explicit_request: false,
+                default_qos: None,
+                features: vec![],
+            },
+        ],
+    }
+}
+
+#[rstest]
+fn test_find_best_partition_prefers_smallest_memory() {
+    let profile = dynamic_profile_with_bigmem();
+
+    // A job needing 50g should land on "standard" (240g), not "bigmem" (1953g)
+    let best = profile
+        .find_best_partition(4, 50_000, 3600, None)
+        .expect("Should find a partition");
+    assert_eq!(
+        best.name, "standard",
+        "Should pick standard (240g) over bigmem (1953g) for a 50g job"
+    );
+}
+
+#[rstest]
+fn test_find_best_partition_uses_bigmem_when_needed() {
+    let profile = dynamic_profile_with_bigmem();
+
+    // A job needing 500g must go to bigmem — standard (240g) can't satisfy it
+    let best = profile
+        .find_best_partition(4, 500_000, 3600, None)
+        .expect("Should find a partition");
+    assert_eq!(
+        best.name, "bigmem",
+        "Should pick bigmem when standard can't satisfy memory requirement"
+    );
+}
+
+#[rstest]
+fn test_find_best_partition_gpu_prefers_smallest() {
+    // Profile with two GPU partitions of different sizes, alphabetically ordered
+    let profile = HpcProfile {
+        name: "test_gpu".to_string(),
+        display_name: "Test GPU Cluster".to_string(),
+        description: String::new(),
+        detection: vec![],
+        default_account: None,
+        charge_factor_cpu: 1.0,
+        charge_factor_gpu: 10.0,
+        metadata: HashMap::new(),
+        partitions: vec![
+            HpcPartition {
+                name: "gpu-a100".to_string(),
+                description: "A100 GPU partition".to_string(),
+                cpus_per_node: 64,
+                memory_mb: 500_000,
+                max_walltime_secs: 172800,
+                max_nodes: None,
+                max_nodes_per_user: None,
+                min_nodes: None,
+                gpus_per_node: Some(4),
+                gpu_type: Some("a100".to_string()),
+                gpu_memory_gb: Some(80),
+                local_disk_gb: None,
+                shared: false,
+                requires_explicit_request: false,
+                default_qos: None,
+                features: vec![],
+            },
+            HpcPartition {
+                name: "gpu-h100".to_string(),
+                description: "H100 GPU partition".to_string(),
+                cpus_per_node: 64,
+                memory_mb: 200_000,
+                max_walltime_secs: 172800,
+                max_nodes: None,
+                max_nodes_per_user: None,
+                min_nodes: None,
+                gpus_per_node: Some(4),
+                gpu_type: Some("h100".to_string()),
+                gpu_memory_gb: Some(80),
+                local_disk_gb: None,
+                shared: false,
+                requires_explicit_request: false,
+                default_qos: None,
+                features: vec![],
+            },
+        ],
+    };
+
+    // Should pick gpu-h100 (200g) over gpu-a100 (500g) for a small GPU job
+    let best = profile
+        .find_best_partition(4, 100_000, 3600, Some(1))
+        .expect("Should find a GPU partition");
+    assert_eq!(
+        best.name, "gpu-h100",
+        "Should pick the GPU partition with smallest sufficient memory"
+    );
 }

@@ -1,0 +1,54 @@
+# Test: Timeout Detection
+#
+# 1-node allocation, 1 fast job + 1 slow job that exceeds its walltime.
+# Verifies timeout detection through sacct, parse-logs, logs analyze,
+# and check-resource-utilization.
+
+name: timeout_detection
+description: Timeout detection test — one fast job, one that exceeds walltime
+project: slurm-tests
+
+resource_monitor:
+  enabled: true
+  granularity: time_series
+  sample_interval_seconds: 1
+
+resource_requirements:
+  - name: fast_resources
+    num_cpus: 1
+    num_nodes: 1
+    memory: 1g
+    runtime: PT5M
+
+  - name: slow_resources
+    num_cpus: 1
+    num_nodes: 1
+    memory: 1g
+    runtime: PT5M
+
+jobs:
+  - name: job_fast
+    command: |
+      echo "Fast job on $(hostname)"
+      echo "This job should complete quickly."
+      sleep 30
+      echo "Fast job complete."
+    resource_requirements: fast_resources
+
+  - name: job_slow
+    command: bash slurm-tests/scripts/slow_work.sh 20
+    resource_requirements: slow_resources
+
+slurm_schedulers:
+  - name: timeout_scheduler
+    account: PLACEHOLDER_ACCOUNT
+    partition: PLACEHOLDER_PARTITION
+    nodes: 1
+    walltime: "00:10:00"
+
+actions:
+  - trigger_type: "on_workflow_start"
+    action_type: "schedule_nodes"
+    scheduler: "timeout_scheduler"
+    scheduler_type: "slurm"
+    num_allocations: 1

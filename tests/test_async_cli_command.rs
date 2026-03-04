@@ -65,6 +65,9 @@ fn test_async_cli_command_start_simple_command(start_server: &ServerProcess) {
         1, // attempt_id
         None,
         "http://localhost:8080/torc-service/v1",
+        None,
+        true,
+        true,
     );
     assert!(
         result.is_ok(),
@@ -100,6 +103,9 @@ fn test_async_cli_command_start_already_running() {
             1, // attempt_id
             None,
             "http://localhost:8080/torc-service/v1",
+            None,
+            true,
+            true,
         )
         .expect("First start should succeed");
     assert!(async_cmd.is_running);
@@ -112,6 +118,9 @@ fn test_async_cli_command_start_already_running() {
         1, // attempt_id
         None,
         "http://localhost:8080/torc-service/v1",
+        None,
+        true,
+        true,
     );
     assert!(result.is_err());
     assert_eq!(result.unwrap_err().to_string(), "Job is already running");
@@ -135,6 +144,9 @@ fn test_async_cli_command_start_invalid_directory() {
         1, // attempt_id
         None,
         "http://localhost:8080/torc-service/v1",
+        None,
+        true,
+        true,
     );
     assert!(result.is_err());
 }
@@ -154,6 +166,9 @@ fn test_async_cli_command_check_status_completion() {
             1, // attempt_id
             None,
             "http://localhost:8080/torc-service/v1",
+            None,
+            true,
+            true,
         )
         .expect("Failed to start command");
     assert!(async_cmd.is_running);
@@ -195,6 +210,9 @@ fn test_async_cli_command_with_exit_code_success() {
             1, // attempt_id
             None,
             "http://localhost:8080/torc-service/v1",
+            None,
+            true,
+            true,
         )
         .expect("Failed to start command");
 
@@ -220,6 +238,9 @@ fn test_async_cli_command_with_exit_code_failure() {
             1, // attempt_id
             None,
             "http://localhost:8080/torc-service/v1",
+            None,
+            true,
+            true,
         )
         .expect("Failed to start command");
 
@@ -246,6 +267,9 @@ fn test_async_cli_command_cancel() {
             1, // attempt_id
             None,
             "http://localhost:8080/torc-service/v1",
+            None,
+            true,
+            true,
         )
         .expect("Failed to start command");
     assert!(async_cmd.is_running);
@@ -285,6 +309,9 @@ fn test_async_cli_command_terminate() {
             1, // attempt_id
             None,
             "http://localhost:8080/torc-service/v1",
+            None,
+            true,
+            true,
         )
         .expect("Failed to start command");
     assert!(async_cmd.is_running);
@@ -317,6 +344,9 @@ fn test_async_cli_command_wait_for_completion() {
             1, // attempt_id
             None,
             "http://localhost:8080/torc-service/v1",
+            None,
+            true,
+            true,
         )
         .expect("Failed to start command");
 
@@ -351,6 +381,9 @@ fn test_async_cli_command_get_result() {
             1, // attempt_id
             None,
             "http://localhost:8080/torc-service/v1",
+            None,
+            true,
+            true,
         )
         .expect("Failed to start command");
     let _ = async_cmd.wait_for_completion();
@@ -392,6 +425,9 @@ fn test_async_cli_command_with_invocation_script() {
         1, // attempt_id
         None,
         "http://localhost:8080/torc-service/v1",
+        None,
+        true,
+        true,
     );
     assert!(result.is_ok());
 
@@ -420,6 +456,9 @@ fn test_async_cli_command_environment_variables() {
             1, // attempt_id
             None,
             "http://localhost:8080/torc-service/v1",
+            None,
+            true,
+            true,
         )
         .expect("Failed to start command");
     let _ = async_cmd.wait_for_completion();
@@ -450,6 +489,9 @@ fn test_async_cli_command_stdout_stderr_separation() {
             1, // attempt_id
             None,
             "http://localhost:8080/torc-service/v1",
+            None,
+            true,
+            true,
         )
         .expect("Failed to start command");
     let _ = async_cmd.wait_for_completion();
@@ -480,6 +522,9 @@ fn test_async_cli_command_multiple_jobs_same_workflow() {
             1, // attempt_id
             None,
             "http://localhost:8080/torc-service/v1",
+            None,
+            true,
+            true,
         )
         .expect("Failed to start job 1");
 
@@ -493,6 +538,9 @@ fn test_async_cli_command_multiple_jobs_same_workflow() {
             1, // attempt_id
             None,
             "http://localhost:8080/torc-service/v1",
+            None,
+            true,
+            true,
         )
         .expect("Failed to start job 2");
 
@@ -506,6 +554,9 @@ fn test_async_cli_command_multiple_jobs_same_workflow() {
             1, // attempt_id
             None,
             "http://localhost:8080/torc-service/v1",
+            None,
+            true,
+            true,
         )
         .expect("Failed to start job 3");
 
@@ -543,6 +594,9 @@ fn test_async_cli_command_long_running_job() {
             1, // attempt_id
             None,
             "http://localhost:8080/torc-service/v1",
+            None,
+            true,
+            true,
         )
         .expect("Failed to start command");
     assert!(async_cmd.is_running);
@@ -586,6 +640,9 @@ fn test_async_cli_command_complex_shell_command() {
             1, // attempt_id
             None,
             "http://localhost:8080/torc-service/v1",
+            None,
+            true,
+            true,
         )
         .expect("Failed to start command");
     let _ = async_cmd.wait_for_completion();
@@ -619,6 +676,9 @@ fn test_async_cli_command_file_creation() {
             1, // attempt_id
             None,
             "http://localhost:8080/torc-service/v1",
+            None,
+            true,
+            true,
         )
         .expect("Failed to start command");
     let _ = async_cmd.wait_for_completion();
@@ -646,6 +706,9 @@ fn test_async_cli_command_drop_while_running() {
             1, // attempt_id
             None,
             "http://localhost:8080/torc-service/v1",
+            None,
+            true,
+            true,
         )
         .expect("Failed to start command");
     assert!(async_cmd.is_running);
@@ -675,6 +738,9 @@ fn test_async_cli_command_execution_time() {
             1, // attempt_id
             None,
             "http://localhost:8080/torc-service/v1",
+            None,
+            true,
+            true,
         )
         .expect("Failed to start command");
     let _ = async_cmd.wait_for_completion();
@@ -700,6 +766,9 @@ fn test_async_cli_command_empty_command() {
         1, // attempt_id
         None,
         "http://localhost:8080/torc-service/v1",
+        None,
+        true,
+        true,
     );
     assert!(result.is_ok());
 
@@ -722,6 +791,9 @@ fn test_async_cli_command_command_not_found() {
             1, // attempt_id
             None,
             "http://localhost:8080/torc-service/v1",
+            None,
+            true,
+            true,
         )
         .expect("Failed to start command");
     let _ = async_cmd.wait_for_completion();

@@ -25,6 +25,7 @@ const SLURM_HELP_TEMPLATE: &str = "\
 \x1b[1;32mDiagnostics:\x1b[0m
   \x1b[1;36mparse-logs\x1b[0m       Parse Slurm logs for error messages
   \x1b[1;36msacct\x1b[0m            Show Slurm accounting info for allocations
+  \x1b[1;36mstats\x1b[0m            Show per-job Slurm accounting stats stored in the database
   \x1b[1;36musage\x1b[0m            Total compute node and CPU time consumed
 {after-help}";
 use regex::Regex;
@@ -36,6 +37,7 @@ use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::LazyLock;
 
 use crate::client::apis::configuration::Configuration;
 use crate::client::apis::default_api;
@@ -115,6 +117,28 @@ impl std::fmt::Display for WalltimeStrategy {
             WalltimeStrategy::MaxPartitionTime => write!(f, "max-partition-time"),
         }
     }
+}
+
+#[derive(Tabled)]
+struct SlurmStatsTableRow {
+    #[tabled(rename = "Job ID")]
+    job_id: i64,
+    #[tabled(rename = "Run")]
+    run_id: i64,
+    #[tabled(rename = "Attempt")]
+    attempt_id: i64,
+    #[tabled(rename = "Slurm Job")]
+    slurm_job_id: String,
+    #[tabled(rename = "Max RSS")]
+    max_rss: String,
+    #[tabled(rename = "Max VM")]
+    max_vm: String,
+    #[tabled(rename = "Ave CPU (s)")]
+    ave_cpu_seconds: String,
+    #[tabled(rename = "CPU %")]
+    cpu_percent: String,
+    #[tabled(rename = "Nodes")]
+    node_list: String,
 }
 
 #[derive(Tabled)]
@@ -391,14 +415,21 @@ EXAMPLES:
         start_one_worker_per_node: bool,
     },
     /// Parse Slurm log files for known error messages
-    #[command(hide = true)]
+    #[command(
+        hide = true,
+        after_long_help = "\
+EXAMPLES:
+    torc slurm parse-logs ./torc_output --workflow-id 123
+    torc slurm parse-logs ./torc_output --workflow-id 123 --errors-only
+"
+    )]
     ParseLogs {
-        /// Workflow ID
+        /// Path to output directory containing Slurm log files
         #[arg()]
+        path: PathBuf,
+        /// Workflow ID to filter logs (required when directory contains multiple workflows)
+        #[arg(short, long)]
         workflow_id: Option<i64>,
-        /// Output directory containing Slurm log files
-        #[arg(short, long, default_value = "torc_output")]
-        output_dir: PathBuf,
         /// Only show errors (skip warnings)
         #[arg(long, default_value = "false")]
         errors_only: bool,
@@ -422,6 +453,29 @@ EXAMPLES:
         /// Save full JSON output to files in addition to displaying summary
         #[arg(long, default_value = "false")]
         save_json: bool,
+    },
+    /// Show per-job Slurm accounting stats stored in the database
+    #[command(after_long_help = "\
+EXAMPLES:
+    torc slurm stats 123
+    torc slurm stats 123 --job-id 456
+    torc slurm stats 123 --run-id 2
+    torc slurm stats 123 --run-id 1 --attempt-id 1
+    torc -f json slurm stats 123
+")]
+    Stats {
+        /// Workflow ID
+        #[arg()]
+        workflow_id: i64,
+        /// Filter by job ID
+        #[arg(long)]
+        job_id: Option<i64>,
+        /// Filter by run ID
+        #[arg(long)]
+        run_id: Option<i64>,
+        /// Filter by attempt ID
+        #[arg(long)]
+        attempt_id: Option<i64>,
     },
     /// Total compute node and CPU time consumed by Slurm allocations
     #[command(
@@ -820,7 +874,13 @@ pub fn parse_memory_mb(s: &str) -> Result<u64, String> {
     }
 }
 
-/// Parse walltime string like "4:00:00", "2-00:00:00" into seconds
+/// Parse walltime string in Slurm format into seconds.
+///
+/// Supported formats:
+/// - `MM` (minutes only, e.g., "30")
+/// - `MM:SS` (e.g., "30:00")
+/// - `HH:MM:SS` (e.g., "04:00:00")
+/// - `D-HH:MM:SS` (e.g., "1-00:00:00")
 pub fn parse_walltime_secs(s: &str) -> Result<u64, String> {
     let s = s.trim();
 
@@ -841,21 +901,21 @@ fn parse_hms(s: &str) -> Result<u64, String> {
     let parts: Vec<&str> = s.split(':').collect();
     match parts.len() {
         1 => {
-            // Just hours
-            let hours: u64 = parts[0]
+            // Just minutes (Slurm convention)
+            let mins: u64 = parts[0]
                 .parse()
-                .map_err(|_| format!("Invalid hours: {}", parts[0]))?;
-            Ok(hours * 3600)
+                .map_err(|_| format!("Invalid minutes: {}", parts[0]))?;
+            Ok(mins * 60)
         }
         2 => {
-            // HH:MM
-            let hours: u64 = parts[0]
+            // MM:SS (Slurm convention)
+            let mins: u64 = parts[0]
                 .parse()
-                .map_err(|_| format!("Invalid hours: {}", parts[0]))?;
-            let mins: u64 = parts[1]
+                .map_err(|_| format!("Invalid minutes: {}", parts[0]))?;
+            let secs: u64 = parts[1]
                 .parse()
-                .map_err(|_| format!("Invalid minutes: {}", parts[1]))?;
-            Ok(hours * 3600 + mins * 60)
+                .map_err(|_| format!("Invalid seconds: {}", parts[1]))?;
+            Ok(mins * 60 + secs)
         }
         3 => {
             // HH:MM:SS
@@ -1212,18 +1272,38 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
             }
         }
         SlurmCommands::ParseLogs {
+            path,
             workflow_id,
-            output_dir,
             errors_only,
         } => {
-            let user_name = get_env_user_name();
-            let wf_id = workflow_id.unwrap_or_else(|| {
-                select_workflow_interactively(config, &user_name).unwrap_or_else(|e| {
-                    eprintln!("Error selecting workflow: {}", e);
-                    std::process::exit(1);
-                })
-            });
-            parse_slurm_logs(config, wf_id, output_dir, *errors_only, format);
+            if !path.exists() {
+                eprintln!("Error: Path not found: {}", path.display());
+                std::process::exit(1);
+            }
+            if !path.is_dir() {
+                eprintln!("Error: Path is not a directory: {}", path.display());
+                std::process::exit(1);
+            }
+            let wf_id = match workflow_id {
+                Some(id) => *id,
+                None => {
+                    let detected = super::logs::detect_workflow_ids(path);
+                    if detected.is_empty() {
+                        eprintln!(
+                            "No workflow log files found in directory: {}",
+                            path.display()
+                        );
+                        std::process::exit(1);
+                    }
+                    if detected.len() > 1 {
+                        eprintln!("Multiple workflows detected in directory: {:?}", detected);
+                        eprintln!("Please specify a workflow ID with --workflow-id");
+                        std::process::exit(1);
+                    }
+                    detected[0]
+                }
+            };
+            parse_slurm_logs(config, wf_id, path, *errors_only, format);
         }
         SlurmCommands::Sacct {
             workflow_id,
@@ -1238,6 +1318,14 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
                 })
             });
             run_sacct_for_workflow(config, wf_id, output_dir, *save_json, format);
+        }
+        SlurmCommands::Stats {
+            workflow_id,
+            job_id,
+            run_id,
+            attempt_id,
+        } => {
+            handle_slurm_stats(config, *workflow_id, *job_id, *run_id, *attempt_id, format);
         }
         SlurmCommands::Usage { workflow_id } => {
             let user_name = get_env_user_name();
@@ -1840,12 +1928,41 @@ fn extract_node_from_line(line: &str) -> Option<String> {
 /// Returns (workflow_id, slurm_job_id) if successful
 fn extract_slurm_job_id_from_filename(filename: &str) -> Option<(i64, String)> {
     // Pattern: slurm_output_wf1234_sl12345.o or slurm_output_wf1234_sl12345.e
-    let re = Regex::new(r"slurm_output_wf(\d+)_sl(\d+)\.[oe]$").ok()?;
-    re.captures(filename).and_then(|caps| {
+    static RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"slurm_output_wf(\d+)_sl(\d+)\.[oe]$").unwrap());
+    RE.captures(filename).and_then(|caps| {
         let wf_id = caps.get(1)?.as_str().parse::<i64>().ok()?;
         let slurm_id = caps.get(2)?.as_str().to_string();
         Some((wf_id, slurm_id))
     })
+}
+
+/// Extract Torc workflow ID and job ID from filename
+/// Returns (workflow_id, job_id) if successful
+fn extract_torc_job_ids_from_filename(filename: &str) -> Option<(i64, i64)> {
+    // Pattern: job_wf123_j456_r1_a1.o or job_wf123_j456_r1_a1.e
+    static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"job_wf(\d+)_j(\d+)_").unwrap());
+    RE.captures(filename).and_then(|caps| {
+        let wf_id = caps.get(1)?.as_str().parse::<i64>().ok()?;
+        let job_id = caps.get(2)?.as_str().parse::<i64>().ok()?;
+        Some((wf_id, job_id))
+    })
+}
+
+/// Extract Slurm job ID from a log line if present
+fn extract_slurm_job_id_from_line(line: &str) -> Option<String> {
+    // Match Slurm-specific patterns:
+    //   StepId=12890812.8, JobId=12890812, slurmstepd: error: .* StepId=12890812
+    //   "Slurm job 12890812", "slurm job ID 12890812", "SLURM_JOB_ID=12890812"
+    //   "batch job 12890812" (Slurm batch wrapper messages)
+    static RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"(?i)(?:StepId=|JobId=|SLURM_JOB_ID=|(?:slurm|batch)\s+job\s+(?:ID\s+)?)(\d+)(?:\.\d+)?",
+        )
+        .unwrap()
+    });
+    RE.captures(line)
+        .and_then(|caps| caps.get(1).map(|m| m.as_str().to_string()))
 }
 
 /// Build a map of Slurm job ID -> affected Torc jobs
@@ -1990,6 +2107,68 @@ fn build_slurm_to_jobs_map(
     slurm_to_jobs
 }
 
+/// Scan a single log file for Slurm error patterns.
+/// Returns the number of errors found, or `None` if the file could not be opened.
+fn scan_file_for_slurm_errors(
+    path: &Path,
+    initial_slurm_job_id: &str,
+    compiled_patterns: &[(Regex, &SlurmErrorPattern)],
+    errors_only: bool,
+    slurm_to_jobs: &HashMap<String, Vec<AffectedJob>>,
+    all_errors: &mut Vec<SlurmLogError>,
+) -> Option<usize> {
+    let file = match fs::File::open(path) {
+        Ok(f) => f,
+        Err(e) => {
+            warn!("Could not open file {}: {}", path.display(), e);
+            return None;
+        }
+    };
+
+    let file_display = path.display().to_string();
+    let mut count = 0;
+
+    let reader = BufReader::new(file);
+    for (line_num, line_result) in reader.lines().enumerate() {
+        let line = match line_result {
+            Ok(l) => l,
+            Err(_) => continue,
+        };
+
+        for (regex, pattern) in compiled_patterns {
+            if errors_only && pattern.severity != "error" {
+                continue;
+            }
+
+            if regex.is_match(&line) {
+                let node = extract_node_from_line(&line);
+
+                // Try to refine the Slurm job ID from the line if possible
+                let mut current_slurm_id = initial_slurm_job_id.to_string();
+                if let Some(extracted_id) = extract_slurm_job_id_from_line(&line) {
+                    current_slurm_id = extracted_id;
+                }
+
+                let affected_jobs = slurm_to_jobs.get(&current_slurm_id).cloned();
+
+                all_errors.push(SlurmLogError {
+                    file: file_display.clone(),
+                    slurm_job_id: current_slurm_id,
+                    line_number: line_num + 1,
+                    line: line.trim().to_string(),
+                    pattern_description: pattern.description.clone(),
+                    severity: pattern.severity.clone(),
+                    node,
+                    affected_jobs,
+                });
+                count += 1;
+                break; // Only match one pattern per line
+            }
+        }
+    }
+    Some(count)
+}
+
 /// Parse Slurm log files for known error messages
 pub fn parse_slurm_logs(
     config: &Configuration,
@@ -2064,6 +2243,14 @@ pub fn parse_slurm_logs(
     // Build job correlation map
     let slurm_to_jobs = build_slurm_to_jobs_map(config, workflow_id);
 
+    // Build reverse map: Torc Job ID -> Slurm Job ID
+    let mut torc_job_to_slurm_id: HashMap<i64, String> = HashMap::new();
+    for (slurm_id, affected_jobs) in &slurm_to_jobs {
+        for job in affected_jobs {
+            torc_job_to_slurm_id.insert(job.job_id, slurm_id.clone());
+        }
+    }
+
     let patterns = get_slurm_error_patterns();
     let compiled_patterns: Vec<(Regex, &SlurmErrorPattern)> = patterns
         .iter()
@@ -2073,91 +2260,83 @@ pub fn parse_slurm_logs(
     let mut all_errors: Vec<SlurmLogError> = Vec::new();
     let mut scanned_files = 0;
 
-    // Find all slurm log files (*.o and *.e files matching slurm_output_*.*)
-    let entries = match fs::read_dir(output_dir) {
-        Ok(entries) => entries,
-        Err(e) => {
-            eprintln!("Error reading directory: {}", e);
-            std::process::exit(1);
-        }
-    };
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if !path.is_file() {
-            continue;
-        }
-
-        let filename = match path.file_name().and_then(|n| n.to_str()) {
-            Some(name) => name,
-            None => continue,
-        };
-
-        // Check if this is a slurm output file
-        if !filename.starts_with("slurm_output_") {
-            continue;
-        }
-
-        let (file_wf_id, slurm_job_id) = match extract_slurm_job_id_from_filename(filename) {
-            Some(ids) => ids,
-            None => continue,
-        };
-
-        // Only process log files for this workflow
-        if file_wf_id != workflow_id {
-            debug!(
-                "Skipping log file {} - workflow ID {} does not match {}",
-                filename, file_wf_id, workflow_id
-            );
-            continue;
-        }
-
-        // Only process log files for Slurm jobs belonging to this workflow
-        if !valid_slurm_job_ids.contains(&slurm_job_id) {
-            debug!(
-                "Skipping log file {} - Slurm job {} not in workflow {}",
-                filename, slurm_job_id, workflow_id
-            );
-            continue;
-        }
-
-        debug!("Scanning log file: {}", path.display());
-        scanned_files += 1;
-
-        let file = match fs::File::open(&path) {
-            Ok(f) => f,
-            Err(e) => {
-                warn!("Could not open file {}: {}", path.display(), e);
+    // Phase 1: Scan main directory for slurm_output files
+    if let Ok(entries) = fs::read_dir(output_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_file() {
                 continue;
             }
-        };
 
-        let reader = BufReader::new(file);
-        for (line_num, line_result) in reader.lines().enumerate() {
-            let line = match line_result {
-                Ok(l) => l,
-                Err(_) => continue,
+            let filename = match path.file_name().and_then(|n| n.to_str()) {
+                Some(name) => name,
+                None => continue,
             };
 
-            for (regex, pattern) in &compiled_patterns {
-                if errors_only && pattern.severity != "error" {
-                    continue;
+            // Check if this is a slurm output file
+            if filename.starts_with("slurm_output_")
+                && let Some((file_wf_id, slurm_job_id)) =
+                    extract_slurm_job_id_from_filename(filename)
+                && file_wf_id == workflow_id
+                && valid_slurm_job_ids.contains(&slurm_job_id)
+            {
+                debug!("Scanning Slurm output file: {}", path.display());
+                if scan_file_for_slurm_errors(
+                    &path,
+                    &slurm_job_id,
+                    &compiled_patterns,
+                    errors_only,
+                    &slurm_to_jobs,
+                    &mut all_errors,
+                )
+                .is_some()
+                {
+                    scanned_files += 1;
                 }
+            }
+        }
+    } else {
+        warn!("Could not read output directory: {}", output_dir.display());
+    }
 
-                if regex.is_match(&line) {
-                    let node = extract_node_from_line(&line);
-                    let affected_jobs = slurm_to_jobs.get(&slurm_job_id).cloned();
-                    all_errors.push(SlurmLogError {
-                        file: path.display().to_string(),
-                        slurm_job_id: slurm_job_id.clone(),
-                        line_number: line_num + 1,
-                        line: line.clone(),
-                        pattern_description: pattern.description.clone(),
-                        severity: pattern.severity.clone(),
-                        node,
-                        affected_jobs,
-                    });
-                    break; // Only match one pattern per line
+    // Phase 2: Scan job_stdio subdirectory for job logs
+    let job_stdio_dir = output_dir.join("job_stdio");
+    if job_stdio_dir.exists()
+        && let Ok(entries) = fs::read_dir(&job_stdio_dir)
+    {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+
+            let filename = match path.file_name().and_then(|n| n.to_str()) {
+                Some(name) => name,
+                None => continue,
+            };
+
+            // Check if this is a job log file for this workflow
+            if let Some((file_wf_id, job_id)) = extract_torc_job_ids_from_filename(filename)
+                && file_wf_id == workflow_id
+            {
+                // Find the Slurm job ID for this Torc job
+                let slurm_job_id = torc_job_to_slurm_id
+                    .get(&job_id)
+                    .cloned()
+                    .unwrap_or_else(|| "unknown".to_string());
+
+                debug!("Scanning job stdio file: {}", path.display());
+                if scan_file_for_slurm_errors(
+                    &path,
+                    &slurm_job_id,
+                    &compiled_patterns,
+                    errors_only,
+                    &slurm_to_jobs,
+                    &mut all_errors,
+                )
+                .is_some()
+                {
+                    scanned_files += 1;
                 }
             }
         }
@@ -2200,9 +2379,14 @@ pub fn parse_slurm_logs(
                 .push(err);
         }
 
-        for (job_id, errors) in errors_by_job.iter() {
-            let job_label = if job_id.is_empty() {
-                "Unknown Job".to_string()
+        // Sort job IDs for consistent output
+        let mut sorted_job_ids: Vec<_> = errors_by_job.keys().cloned().collect();
+        sorted_job_ids.sort();
+
+        for job_id in sorted_job_ids {
+            let errors = errors_by_job.get(&job_id).unwrap();
+            let job_label = if job_id == "unknown" || job_id.is_empty() {
+                "Unknown Slurm Job".to_string()
             } else {
                 format!("Slurm Job {}", job_id)
             };
@@ -2324,7 +2508,62 @@ struct SacctAllocationStats {
     max_cpu_time_secs: i64,
 }
 
+/// Extract exit code from a sacct JSON entry.
+/// Handles both `{"return_code": 0}` and `{"return_code": {"set": true, "number": 0}}`.
+fn extract_exit_code(entry: &serde_json::Value) -> String {
+    entry
+        .get("exit_code")
+        .and_then(|e| {
+            e.get("return_code").and_then(|r| {
+                // Try {set, infinite, number} wrapper first (Kestrel/HPE Cray format)
+                r.get("number")
+                    .and_then(|n| n.as_i64())
+                    .map(|n| n.to_string())
+                    // Then try direct integer
+                    .or_else(|| r.as_i64().map(|n| n.to_string()))
+            })
+        })
+        .unwrap_or("-".to_string())
+}
+
+/// Extract max RSS (peak memory) from a sacct JSON entry's tres.requested.max array.
+fn extract_max_rss(entry: &serde_json::Value) -> String {
+    entry
+        .get("tres")
+        .and_then(|t| t.get("requested"))
+        .and_then(|r| r.get("max"))
+        .and_then(|m| m.as_array())
+        .and_then(|arr| {
+            arr.iter()
+                .find(|item| item.get("type").and_then(|t| t.as_str()) == Some("mem"))
+        })
+        .and_then(|mem| mem.get("count").and_then(|c| c.as_i64()))
+        .map(|bytes| format_bytes(bytes as u64))
+        .unwrap_or("-".to_string())
+}
+
+/// Extract elapsed seconds from a sacct JSON entry's time.elapsed field.
+fn extract_elapsed_secs(entry: &serde_json::Value) -> Option<i64> {
+    entry
+        .get("time")
+        .and_then(|t| t.get("elapsed"))
+        .and_then(|e| e.as_i64())
+}
+
+/// Extract CPU time in seconds from a sacct JSON entry's time.total.seconds field.
+fn extract_cpu_time_secs(entry: &serde_json::Value) -> Option<i64> {
+    entry
+        .get("time")
+        .and_then(|t| t.get("total"))
+        .and_then(|t| t.get("seconds"))
+        .and_then(|s| s.as_i64())
+}
+
 /// Parse sacct JSON output and extract summary rows plus allocation-level stats.
+///
+/// The sacct `--json` output has one entry per allocation in `jobs`, with individual
+/// srun steps nested in a `steps` array. This function creates a row for each step
+/// so the dashboard shows per-step details rather than just the allocation summary.
 fn parse_sacct_json_to_rows(
     sacct_json: &serde_json::Value,
     slurm_job_id: &str,
@@ -2336,36 +2575,38 @@ fn parse_sacct_json_to_rows(
 
     if let Some(jobs) = sacct_json.get("jobs").and_then(|j| j.as_array()) {
         for job in jobs {
-            // Get job step name
+            // Collect allocation-level stats (walltime, nodes, CPU time)
+            if let Some(secs) = extract_elapsed_secs(job) {
+                max_elapsed_secs = max_elapsed_secs.max(secs);
+            }
+            if let Some(secs) = extract_cpu_time_secs(job) {
+                max_cpu_time_secs = max_cpu_time_secs.max(secs);
+            }
+            let alloc_nodes = job.get("nodes").and_then(|n| n.as_str()).unwrap_or("");
+            if !alloc_nodes.is_empty() {
+                max_num_nodes = max_num_nodes.max(alloc_nodes.split(',').count() as i64);
+            }
+
+            // Parse nested steps if present; otherwise fall back to allocation-level row
+            let steps = job.get("steps").and_then(|s| s.as_array());
+            if let Some(steps) = steps
+                && !steps.is_empty()
+            {
+                for step in steps {
+                    rows.push(parse_step_to_row(step, slurm_job_id));
+                }
+                continue;
+            }
+
+            // No steps array: create a row from the allocation-level entry
             let job_step = job
                 .get("name")
                 .and_then(|n| n.as_str())
                 .unwrap_or("")
                 .to_string();
-
-            // Get state - handles various sacct JSON formats
             let state = extract_state_from_job(job);
-
-            // Get exit code - handle different sacct JSON formats
-            let exit_code = job
-                .get("exit_code")
-                .and_then(|e| {
-                    // Could be {"status": "SUCCESS", "return_code": 0} or just a number
-                    if let Some(obj) = e.as_object() {
-                        obj.get("return_code")
-                            .and_then(|r| r.as_i64())
-                            .map(|r| r.to_string())
-                    } else {
-                        e.as_i64().map(|r| r.to_string())
-                    }
-                })
-                .unwrap_or("-".to_string());
-
-            // Get elapsed time - could be in different formats
-            let elapsed_secs = job
-                .get("time")
-                .and_then(|t| t.get("elapsed"))
-                .and_then(|e| e.as_i64());
+            let exit_code = extract_exit_code(job);
+            let elapsed_secs = extract_elapsed_secs(job);
             let elapsed = elapsed_secs
                 .map(format_duration_seconds)
                 .or_else(|| {
@@ -2374,64 +2615,16 @@ fn parse_sacct_json_to_rows(
                         .map(|s| s.to_string())
                 })
                 .unwrap_or("-".to_string());
-            if let Some(secs) = elapsed_secs {
-                max_elapsed_secs = max_elapsed_secs.max(secs);
-            }
-
-            // Get max RSS - handle different formats
-            let max_rss = job
-                .get("tres")
-                .and_then(|t| t.get("requested"))
-                .and_then(|r| r.get("max"))
-                .and_then(|m| m.as_array())
-                .and_then(|arr| {
-                    arr.iter()
-                        .find(|item| item.get("type").and_then(|t| t.as_str()) == Some("mem"))
-                })
-                .and_then(|mem| mem.get("count").and_then(|c| c.as_i64()))
-                .map(|bytes| format_bytes(bytes as u64))
-                .or_else(|| {
-                    job.get("steps")
-                        .and_then(|s| s.as_array())
-                        .and_then(|arr| arr.first())
-                        .and_then(|step| step.get("tres").and_then(|t| t.get("requested")))
-                        .and_then(|r| r.get("max"))
-                        .and_then(|m| m.as_array())
-                        .and_then(|arr| {
-                            arr.iter().find(|item| {
-                                item.get("type").and_then(|t| t.as_str()) == Some("mem")
-                            })
-                        })
-                        .and_then(|mem| mem.get("count").and_then(|c| c.as_i64()))
-                        .map(|bytes| format_bytes(bytes as u64))
-                })
-                .unwrap_or("-".to_string());
-
-            // Get CPU time
-            let cpu_time_secs = job
-                .get("time")
-                .and_then(|t| t.get("total"))
-                .and_then(|t| t.get("seconds"))
-                .and_then(|s| s.as_i64());
+            let max_rss = extract_max_rss(job);
+            let cpu_time_secs = extract_cpu_time_secs(job);
             let cpu_time = cpu_time_secs
                 .map(format_duration_seconds)
                 .unwrap_or("-".to_string());
-            if let Some(secs) = cpu_time_secs {
-                max_cpu_time_secs = max_cpu_time_secs.max(secs);
-            }
-
-            // Get nodes string and count
-            let nodes = job
-                .get("nodes")
-                .and_then(|n| n.as_str())
-                .unwrap_or("-")
-                .to_string();
-            let num_nodes = if nodes != "-" && !nodes.is_empty() {
-                nodes.split(',').count() as i64
+            let nodes = if alloc_nodes.is_empty() {
+                "-".to_string()
             } else {
-                0
+                alloc_nodes.to_string()
             };
-            max_num_nodes = max_num_nodes.max(num_nodes);
 
             rows.push(SacctSummaryRow {
                 slurm_job_id: slurm_job_id.to_string(),
@@ -2454,6 +2647,85 @@ fn parse_sacct_json_to_rows(
             max_cpu_time_secs,
         },
     )
+}
+
+/// Parse a single step entry from the sacct `steps` array into a summary row.
+///
+/// Step entries have slightly different field formats from allocation-level entries:
+/// - `state` is a direct array `["COMPLETED"]` rather than `{"current": [...]}`
+/// - `nodes` is an object `{"range": "node01", "count": 1}` rather than a plain string
+/// - `step.name` holds the step name (e.g., "batch", "wf103_j1160_r1_a1")
+fn parse_step_to_row(step: &serde_json::Value, slurm_job_id: &str) -> SacctSummaryRow {
+    // Step name from step.step.name or step.step.id
+    let step_name = step
+        .get("step")
+        .and_then(|s| {
+            s.get("name")
+                .and_then(|n| n.as_str())
+                .or_else(|| s.get("id").and_then(|i| i.as_str()))
+        })
+        .unwrap_or("")
+        .to_string();
+
+    // State: at step level, state can be a direct array ["COMPLETED"] or {"current": [...]}
+    let state = step
+        .get("state")
+        .and_then(|s| {
+            // Direct array format (HPE Cray/Kestrel)
+            if let Some(arr) = s.as_array() {
+                let states: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
+                if !states.is_empty() {
+                    return Some(states.join(", "));
+                }
+            }
+            // Nested {current: [...]} format
+            if let Some(current) = s.get("current")
+                && let Some(arr) = current.as_array()
+            {
+                let states: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
+                if !states.is_empty() {
+                    return Some(states.join(", "));
+                }
+            }
+            s.as_str().map(|s| s.to_string())
+        })
+        .unwrap_or("-".to_string());
+
+    let exit_code = extract_exit_code(step);
+
+    let elapsed_secs = extract_elapsed_secs(step);
+    let elapsed = elapsed_secs
+        .map(format_duration_seconds)
+        .unwrap_or("-".to_string());
+
+    let max_rss = extract_max_rss(step);
+
+    let cpu_time_secs = extract_cpu_time_secs(step);
+    let cpu_time = cpu_time_secs
+        .map(format_duration_seconds)
+        .unwrap_or("-".to_string());
+
+    // Nodes: at step level, nodes is an object with "range" or "list" field
+    let nodes = step
+        .get("nodes")
+        .and_then(|n| {
+            n.get("range")
+                .and_then(|r| r.as_str())
+                .or_else(|| n.as_str())
+        })
+        .unwrap_or("-")
+        .to_string();
+
+    SacctSummaryRow {
+        slurm_job_id: slurm_job_id.to_string(),
+        job_step: step_name,
+        state,
+        exit_code,
+        elapsed,
+        max_rss,
+        cpu_time,
+        nodes,
+    }
 }
 
 /// Format duration in seconds to human-readable format
@@ -2803,7 +3075,7 @@ fn handle_generate(
     // Generate schedulers
     let result = match generate_schedulers_for_workflow(
         &mut spec,
-        profile,
+        &profile,
         &resolved_account,
         single_allocation,
         group_by,
@@ -3303,7 +3575,7 @@ fn handle_regenerate(
     let plan = generate_scheduler_plan(
         &graph,
         &rr_name_to_model,
-        profile,
+        &profile,
         &account_to_use,
         single_allocation,
         group_by,
@@ -3735,5 +4007,148 @@ fn handle_regenerate(
             println!("To submit the allocations, run:");
             println!("  torc slurm regenerate {} --submit", workflow_id);
         }
+    }
+}
+
+fn fmt_opt_bytes(v: Option<i64>) -> String {
+    match v {
+        Some(b) if b >= 0 => format_bytes(b as u64),
+        _ => "-".to_string(),
+    }
+}
+
+fn fmt_opt_f64(v: Option<f64>) -> String {
+    match v {
+        Some(f) => format!("{:.1}", f),
+        None => "-".to_string(),
+    }
+}
+
+/// Display per-job Slurm accounting stats stored in the database.
+fn handle_slurm_stats(
+    config: &Configuration,
+    workflow_id: i64,
+    job_id: Option<i64>,
+    run_id: Option<i64>,
+    attempt_id: Option<i64>,
+    format: &str,
+) {
+    let mut all_items: Vec<models::SlurmStatsModel> = Vec::new();
+    let limit = 10_000i64;
+    let mut offset = 0i64;
+    loop {
+        match default_api::list_slurm_stats(
+            config,
+            workflow_id,
+            job_id,
+            run_id,
+            attempt_id,
+            Some(offset),
+            Some(limit),
+        ) {
+            Ok(response) => {
+                let items = response.items.unwrap_or_default();
+                if items.is_empty() {
+                    break;
+                }
+                let fetched = items.len() as i64;
+                all_items.extend(items);
+                if fetched < limit {
+                    break;
+                }
+                offset += fetched;
+            }
+            Err(e) => {
+                print_error("listing slurm stats", &e);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    if format == "json" {
+        print_json(&serde_json::json!({ "items": all_items }), "Slurm stats");
+        return;
+    }
+
+    if all_items.is_empty() {
+        println!("No Slurm stats found for workflow {}", workflow_id);
+        return;
+    }
+
+    // Fetch results to compute CPU% from ave_cpu_seconds / exec_time
+    let exec_time_map = build_exec_time_map(config, workflow_id);
+
+    let rows: Vec<SlurmStatsTableRow> = all_items
+        .iter()
+        .map(|s| {
+            let cpu_percent = compute_cpu_percent(s, &exec_time_map);
+            SlurmStatsTableRow {
+                job_id: s.job_id,
+                run_id: s.run_id,
+                attempt_id: s.attempt_id,
+                slurm_job_id: s.slurm_job_id.clone().unwrap_or_else(|| "-".to_string()),
+                max_rss: fmt_opt_bytes(s.max_rss_bytes),
+                max_vm: fmt_opt_bytes(s.max_vm_size_bytes),
+                ave_cpu_seconds: fmt_opt_f64(s.ave_cpu_seconds),
+                cpu_percent,
+                node_list: s.node_list.clone().unwrap_or_else(|| "-".to_string()),
+            }
+        })
+        .collect();
+
+    display_table_with_count(&rows, "slurm stats");
+}
+
+/// Build a map of (job_id, run_id, attempt_id) -> exec_time_minutes from results.
+fn build_exec_time_map(config: &Configuration, workflow_id: i64) -> HashMap<(i64, i64, i64), f64> {
+    let params = ResultListParams::new();
+    let results = match paginate_results(config, workflow_id, params) {
+        Ok(r) => r,
+        Err(_) => return HashMap::new(),
+    };
+    let mut map = HashMap::new();
+    for r in results {
+        let attempt_id = r.attempt_id.unwrap_or(1);
+        map.insert((r.job_id, r.run_id, attempt_id), r.exec_time_minutes);
+    }
+    map
+}
+
+/// Compute CPU% from ave_cpu_seconds and exec_time_minutes.
+/// Returns formatted string like "350.2%" or "-" if data is unavailable.
+fn compute_cpu_percent(
+    stats: &models::SlurmStatsModel,
+    exec_time_map: &HashMap<(i64, i64, i64), f64>,
+) -> String {
+    let ave_cpu_s = match stats.ave_cpu_seconds {
+        Some(s) if s > 0.0 => s,
+        _ => return "-".to_string(),
+    };
+    let exec_minutes = match exec_time_map.get(&(stats.job_id, stats.run_id, stats.attempt_id)) {
+        Some(&m) if m > 0.0 => m,
+        _ => return "-".to_string(),
+    };
+    let pct = ave_cpu_s / (exec_minutes * 60.0) * 100.0;
+    format!("{:.1}%", pct)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_walltime_secs_rejects_unit_suffixes() {
+        assert!(parse_walltime_secs("2h").is_err());
+        assert!(parse_walltime_secs("30m").is_err());
+        assert!(parse_walltime_secs("120s").is_err());
+        assert!(parse_walltime_secs("1h 30m").is_err());
+        assert!(parse_walltime_secs("abc").is_err());
+    }
+
+    #[test]
+    fn test_parse_walltime_secs_slurm() {
+        assert_eq!(parse_walltime_secs("04:30:00").unwrap(), 4 * 3600 + 30 * 60);
+        assert_eq!(parse_walltime_secs("1-00:00:00").unwrap(), 24 * 3600);
+        assert_eq!(parse_walltime_secs("30:00").unwrap(), 30 * 60);
     }
 }

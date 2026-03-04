@@ -53,7 +53,7 @@ impl HpcDetection {
 }
 
 /// A partition on an HPC system
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct HpcPartition {
     /// Partition name (as used with --partition)
     pub name: String,
@@ -181,7 +181,7 @@ impl HpcPartition {
 }
 
 /// An HPC system profile
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct HpcProfile {
     /// System identifier (e.g., "kestrel", "perlmutter")
     pub name: String,
@@ -280,16 +280,22 @@ impl HpcProfile {
         };
 
         // If GPUs requested, prefer GPU partitions that don't require explicit request
+        // Use min_by_key on memory to pick the tightest fit (smallest sufficient partition)
         if gpus.map(|g| g > 0).unwrap_or(false) {
             // First try auto-routed GPU partitions
             if let Some(gpu_partition) = candidates
                 .iter()
-                .find(|p| p.gpus_per_node.is_some() && !p.requires_explicit_request)
+                .filter(|p| p.gpus_per_node.is_some() && !p.requires_explicit_request)
+                .min_by_key(|p| p.memory_mb)
             {
                 return Some(gpu_partition);
             }
             // Fall back to any GPU partition
-            if let Some(gpu_partition) = candidates.iter().find(|p| p.gpus_per_node.is_some()) {
+            if let Some(gpu_partition) = candidates
+                .iter()
+                .filter(|p| p.gpus_per_node.is_some())
+                .min_by_key(|p| p.memory_mb)
+            {
                 return Some(gpu_partition);
             }
         }
@@ -300,7 +306,8 @@ impl HpcProfile {
             // First try auto-routed shared partitions (prefer non-GPU)
             if let Some(shared_partition) = candidates
                 .iter()
-                .find(|p| p.shared && !p.requires_explicit_request && p.gpus_per_node.is_none())
+                .filter(|p| p.shared && !p.requires_explicit_request && p.gpus_per_node.is_none())
+                .min_by_key(|p| p.memory_mb)
             {
                 return Some(shared_partition);
             }
@@ -310,18 +317,23 @@ impl HpcProfile {
         if gpus.map(|g| g == 0).unwrap_or(true)
             && let Some(cpu_partition) = candidates
                 .iter()
-                .find(|p| !p.requires_explicit_request && p.gpus_per_node.is_none())
+                .filter(|p| !p.requires_explicit_request && p.gpus_per_node.is_none())
+                .min_by_key(|p| p.memory_mb)
         {
             return Some(cpu_partition);
         }
 
         // Prefer partitions that don't require explicit request (auto-routed)
-        if let Some(auto_partition) = candidates.iter().find(|p| !p.requires_explicit_request) {
+        if let Some(auto_partition) = candidates
+            .iter()
+            .filter(|p| !p.requires_explicit_request)
+            .min_by_key(|p| p.memory_mb)
+        {
             return Some(auto_partition);
         }
 
-        // Return first matching from candidates
-        candidates.first().copied()
+        // Return partition with smallest memory from candidates
+        candidates.iter().min_by_key(|p| p.memory_mb).copied()
     }
 
     /// Get all GPU partitions
@@ -376,13 +388,23 @@ impl HpcProfileRegistry {
     }
 
     /// Get a profile by name
-    pub fn get(&self, name: &str) -> Option<&HpcProfile> {
-        self.profiles.iter().find(|p| p.name == name)
+    pub fn get(&self, name: &str) -> Option<HpcProfile> {
+        // Special case for dynamic Slurm profile
+        if name == "slurm" {
+            return super::slurm::detect_slurm_profile();
+        }
+        self.profiles.iter().find(|p| p.name == name).cloned()
     }
 
     /// Detect the current HPC system
-    pub fn detect(&self) -> Option<&HpcProfile> {
-        self.profiles.iter().find(|p| p.detect())
+    pub fn detect(&self) -> Option<HpcProfile> {
+        // First check for known built-in/custom profiles
+        if let Some(profile) = self.profiles.iter().find(|p| p.detect()) {
+            return Some(profile.clone());
+        }
+
+        // Fall back to dynamic Slurm detection if no other profile matches
+        super::slurm::detect_slurm_profile()
     }
 
     /// Get profile names

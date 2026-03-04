@@ -253,7 +253,7 @@ pub fn run(args: &Args) {
         args.num_nodes.unwrap_or(1),
     );
     let pid = 1; // TODO
-    let unique_label = format!("{}_{}_{}", hostname, workflow_id, run_id);
+    let unique_label = format!("wf{}_h{}_r{}", workflow_id, hostname, run_id);
 
     let mut compute_node_model = models::ComputeNodeModel::new(
         workflow_id,

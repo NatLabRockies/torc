@@ -1,0 +1,50 @@
+# Test: Orphan Detection (sync-status)
+#
+# 1-node allocation with 3 independent long-running sleep jobs.
+# The test framework externally kills the Slurm allocation (scancel)
+# while jobs are running, then runs `torc workflows sync-status` to
+# detect orphaned jobs and mark them as failed with return code -128.
+
+name: sync_status
+description: Orphan detection test — detect jobs orphaned by external scancel
+project: slurm-tests
+
+resource_requirements:
+  - name: sleep_resources
+    num_cpus: 1
+    num_nodes: 1
+    memory: 512m
+    runtime: PT5M
+
+jobs:
+  - name: sleep_job_1
+    command: |
+      echo "Sleep job 1 on $(hostname)"
+      sleep 1800
+    resource_requirements: sleep_resources
+
+  - name: sleep_job_2
+    command: |
+      echo "Sleep job 2 on $(hostname)"
+      sleep 1800
+    resource_requirements: sleep_resources
+
+  - name: sleep_job_3
+    command: |
+      echo "Sleep job 3 on $(hostname)"
+      sleep 1800
+    resource_requirements: sleep_resources
+
+slurm_schedulers:
+  - name: sync_scheduler
+    account: PLACEHOLDER_ACCOUNT
+    partition: PLACEHOLDER_PARTITION
+    nodes: 1
+    walltime: "00:15:00"
+
+actions:
+  - trigger_type: "on_workflow_start"
+    action_type: "schedule_nodes"
+    scheduler: "sync_scheduler"
+    scheduler_type: "slurm"
+    num_allocations: 1

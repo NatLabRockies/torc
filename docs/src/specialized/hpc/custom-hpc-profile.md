@@ -20,6 +20,27 @@ built-in support for.
 >
 > Built-in profiles are maintained by the Torc team and stay up-to-date as systems change.
 
+## Dynamic Slurm Support (The Easiest Way)
+
+Before creating a custom profile, try using Torc's **Dynamic Slurm Support**. Torc can automatically
+query your cluster to discover its partitions and resource limits.
+
+If you are on a Slurm system, you can use Torc immediately without any configuration:
+
+1. **Auto-detection**: Torc automatically falls back to dynamic Slurm detection if no other profile
+   matches.
+2. **Explicit use**: You can force dynamic detection by using `--hpc-profile slurm` in any command.
+
+Verify it works on your system:
+
+```bash
+# Show partitions detected from your Slurm cluster
+torc hpc partitions slurm
+```
+
+If the detected partitions look correct, you don't need to create a custom profile! You can jump
+straight to [Step 7: Use Your Profile](#step-7-use-your-profile) using `slurm` as the profile name.
+
 ## When to Create a Custom Profile
 
 Create a custom profile when:
@@ -211,13 +232,13 @@ Verify that Torc correctly matches resource requirements to partitions:
 
 ```bash
 # Should match 'short' partition
-torc hpc match research --cpus 8 --memory 16g --walltime 2h
+torc hpc match research --cpus 8 --memory 16g --walltime 02:00:00
 
 # Should match 'gpu' partition
-torc hpc match research --cpus 16 --memory 64g --walltime 8h --gpus 2
+torc hpc match research --cpus 16 --memory 64g --walltime 08:00:00 --gpus 2
 
 # Should match 'himem' partition
-torc hpc match research --cpus 24 --memory 512g --walltime 24h
+torc hpc match research --cpus 24 --memory 512g --walltime 24:00:00
 ```
 
 ## Step 6: Test Scheduler Generation
@@ -335,7 +356,7 @@ If `torc slurm generate` can't find a matching partition:
 
 1. Check if any partition satisfies all requirements:
    ```bash
-   torc hpc match research --cpus 32 --memory 128g --walltime 8h
+   torc hpc match research --cpus 32 --memory 128g --walltime 08:00:00
    ```
 
 2. Verify memory is specified in MB in the config (not GB)
@@ -357,7 +378,7 @@ You can also use the `TORC_CONFIG` environment variable to specify a custom path
 If your HPC is used by others, please contribute it upstream:
 
 1. Fork the [Torc repository](https://github.com/NatLabRockies/torc)
-2. Add your profile to `src/client/hpc_profiles.rs`
+2. Add your profile as a new module in `src/client/hpc/` (see `kestrel.rs` for an example)
 3. Add tests for your profile
 4. Submit a pull request
 

@@ -20,7 +20,7 @@ pub const CLIENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// - Patch: bug fix in an existing endpoint (response field fix, etc.)
 /// - Minor: new endpoint, new optional field, new query parameter
 /// - Major: removed endpoint, renamed field, changed semantics
-pub const CLIENT_API_VERSION: &str = "0.9.0";
+pub const CLIENT_API_VERSION: &str = "0.10.0";
 
 /// The git commit hash of this binary, set at compile time via build.rs.
 pub const GIT_HASH: &str = env!("GIT_HASH");
@@ -189,13 +189,13 @@ pub fn compare_versions(client_version: &str, server_version: &str) -> VersionMi
         return VersionMismatchSeverity::Major;
     }
 
-    // Check if client minor version is higher than server
-    if client.1 > server.1 {
+    // Check if minor versions differ
+    if client.1 != server.1 {
         return VersionMismatchSeverity::Minor;
     }
 
-    // Check if versions differ in minor or patch
-    if client.1 != server.1 || client.2 != server.2 {
+    // Check if versions differ in patch
+    if client.2 != server.2 {
         return VersionMismatchSeverity::Patch;
     }
 
@@ -224,9 +224,16 @@ fn format_api_version_message(
             )
         }
         VersionMismatchSeverity::Minor => {
+            let client_parsed = parse_version(client_api);
+            let server_parsed = parse_version(server_api);
+            let direction = if client_parsed > server_parsed {
+                "client is newer than server"
+            } else {
+                "server is newer than client"
+            };
             format!(
-                "API version mismatch: client API {} is newer than server API {} \
-                 (server {}) - some client features may not be supported by this server",
+                "API version mismatch: client API {} vs server API {} \
+                 (server {}) - minor version difference ({direction}), should be compatible",
                 client_api, server_api, server_version
             )
         }
@@ -322,10 +329,7 @@ pub fn check_version(config: &Configuration) -> VersionCheckResult {
 /// Returns the severity level for programmatic use.
 pub fn print_version_warning(result: &VersionCheckResult) -> VersionMismatchSeverity {
     match result.severity {
-        VersionMismatchSeverity::None => {}
-        VersionMismatchSeverity::Patch => {
-            eprintln!("Note: {}", result.message);
-        }
+        VersionMismatchSeverity::None | VersionMismatchSeverity::Patch => {}
         VersionMismatchSeverity::Minor => {
             eprintln!("Warning: {}", result.message);
         }

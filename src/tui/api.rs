@@ -1,10 +1,10 @@
-use crate::client::apis::configuration::{Configuration, TlsConfig};
+use crate::client::apis::configuration::{BasicAuth, Configuration, TlsConfig};
 use crate::client::apis::default_api;
 use crate::client::config::TorcConfig;
 use crate::client::workflow_spec::WorkflowSpec;
 use crate::models::{
     FileModel, JobDependencyModel, JobModel, JobStatus, ResultModel, ScheduledComputeNodesModel,
-    WorkflowModel,
+    SlurmStatsModel, WorkflowModel,
 };
 use anyhow::{Context, Result};
 
@@ -15,10 +15,10 @@ pub struct TorcClient {
 impl TorcClient {
     #[allow(dead_code)]
     pub fn new() -> Result<Self> {
-        Self::new_with_tls(TlsConfig::default())
+        Self::new_with_tls(TlsConfig::default(), None)
     }
 
-    pub fn new_with_tls(tls: TlsConfig) -> Result<Self> {
+    pub fn new_with_tls(tls: TlsConfig, basic_auth: Option<BasicAuth>) -> Result<Self> {
         // Load configuration from files (system, user, local) and environment variables
         // Priority: TORC_API_URL env var > config system > default
         //
@@ -32,18 +32,24 @@ impl TorcClient {
 
         let mut config = Configuration::with_tls(tls);
         config.base_path = base_url;
+        config.basic_auth = basic_auth;
 
         Ok(Self { config })
     }
 
     #[allow(dead_code)]
     pub fn from_url(base_url: String) -> Result<Self> {
-        Self::from_url_with_tls(base_url, TlsConfig::default())
+        Self::from_url_with_tls(base_url, TlsConfig::default(), None)
     }
 
-    pub fn from_url_with_tls(base_url: String, tls: TlsConfig) -> Result<Self> {
+    pub fn from_url_with_tls(
+        base_url: String,
+        tls: TlsConfig,
+        basic_auth: Option<BasicAuth>,
+    ) -> Result<Self> {
         let mut config = Configuration::with_tls(tls);
         config.base_path = base_url;
+        config.basic_auth = basic_auth;
 
         Ok(Self { config })
     }
@@ -155,6 +161,21 @@ impl TorcClient {
             None, // limit
         )
         .context("Failed to list job dependencies")?;
+
+        Ok(response.items.unwrap_or_default())
+    }
+
+    pub fn list_slurm_stats(&self, workflow_id: i64) -> Result<Vec<SlurmStatsModel>> {
+        let response = default_api::list_slurm_stats(
+            &self.config,
+            workflow_id,
+            None, // job_id
+            None, // run_id
+            None, // attempt_id
+            None, // offset
+            None, // limit
+        )
+        .context("Failed to list Slurm stats")?;
 
         Ok(response.items.unwrap_or_default())
     }

@@ -253,7 +253,7 @@ fn test_get_statuses_multiple_jobs() {
 #[serial]
 fn test_cancel_job_success() {
     cleanup_fake_slurm_state();
-    let (_, _, _, scancel) = setup_fake_slurm_commands();
+    let (_, _, _, scancel, _) = setup_fake_slurm_commands();
 
     let interface = SlurmInterface::new().expect("Failed to create SlurmInterface");
 
@@ -284,7 +284,7 @@ fn test_cancel_job_success() {
 #[serial]
 fn test_get_job_stats() {
     cleanup_fake_slurm_state();
-    let (_, _, sacct, _) = setup_fake_slurm_commands();
+    let (_, _, sacct, _, _) = setup_fake_slurm_commands();
 
     let interface = SlurmInterface::new().expect("Failed to create SlurmInterface");
 
@@ -485,8 +485,8 @@ fn test_create_submission_script_with_srun() {
         fs::read_to_string(&script_path).expect("Failed to read submission script");
 
     assert!(
-        script_content.contains("srun torc-slurm-job-runner"),
-        "Should have srun prefix when start_one_worker_per_node is true"
+        script_content.contains("srun --ntasks-per-node=1 torc-slurm-job-runner"),
+        "Should have srun prefix with --ntasks-per-node=1 when start_one_worker_per_node is true"
     );
 
     assert!(
@@ -1680,13 +1680,14 @@ fn test_cancel_workflow_with_slurm_scheduler(start_server: &ServerProcess) {
     );
 }
 
-fn setup_fake_slurm_commands() -> (PathBuf, PathBuf, PathBuf, PathBuf) {
+fn setup_fake_slurm_commands() -> (PathBuf, PathBuf, PathBuf, PathBuf, PathBuf) {
     let current_dir = env::current_dir().expect("Failed to get current directory");
 
     let sbatch = current_dir.join("tests/scripts/fake_sbatch.sh");
     let squeue = current_dir.join("tests/scripts/fake_squeue.sh");
     let sacct = current_dir.join("tests/scripts/fake_sacct.sh");
     let scancel = current_dir.join("tests/scripts/fake_scancel.sh");
+    let srun = current_dir.join("tests/scripts/fake_srun.sh");
 
     // Verify scripts exist
     assert!(sbatch.exists(), "fake_sbatch.sh not found at {:?}", sbatch);
@@ -1697,16 +1698,18 @@ fn setup_fake_slurm_commands() -> (PathBuf, PathBuf, PathBuf, PathBuf) {
         "fake_scancel.sh not found at {:?}",
         scancel
     );
+    assert!(srun.exists(), "fake_srun.sh not found at {:?}", srun);
 
     // Set environment variables to use fake commands
     unsafe {
         env::set_var("TORC_FAKE_SBATCH", sbatch.to_string_lossy().to_string());
         env::set_var("TORC_FAKE_SQUEUE", squeue.to_string_lossy().to_string());
-        env::set_var("TORC_FAKE_SACCT", squeue.to_string_lossy().to_string());
-        env::set_var("TORC_FAKE_SCANCEL", squeue.to_string_lossy().to_string());
+        env::set_var("TORC_FAKE_SACCT", sacct.to_string_lossy().to_string());
+        env::set_var("TORC_FAKE_SCANCEL", scancel.to_string_lossy().to_string());
+        env::set_var("TORC_FAKE_SRUN", srun.to_string_lossy().to_string());
     }
 
-    (sbatch, squeue, sacct, scancel)
+    (sbatch, squeue, sacct, scancel, srun)
 }
 
 fn cleanup_fake_slurm_state() {
@@ -1723,6 +1726,7 @@ fn cleanup_fake_slurm_state() {
         env::remove_var("TORC_FAKE_SBATCH");
         env::remove_var("TORC_FAKE_SCANCEL");
         env::remove_var("TORC_FAKE_SQUEUE");
+        env::remove_var("TORC_FAKE_SRUN");
         env::remove_var("TORC_FAKE_SBATCH_FAIL");
         env::remove_var("TORC_FAKE_SQUEUE_FAIL");
         env::remove_var("TORC_FAKE_SACCT_FAIL");

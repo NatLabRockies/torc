@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO slurm_stats\n            (workflow_id, job_id, run_id, attempt_id,\n             slurm_job_id,\n             max_rss_bytes, max_vm_size_bytes,\n             max_disk_read_bytes, max_disk_write_bytes,\n             ave_cpu_seconds, node_list)\n            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)\n            RETURNING rowid\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 11
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "895de99bffdb8504baabf0c65772e0bd841e70f5319255b06881aedd9c9c70e8"
+}

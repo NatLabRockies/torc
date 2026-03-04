@@ -37,6 +37,18 @@ use torc::plot_resources_cmd;
 use torc::run_jobs_cmd;
 use torc::tui_runner;
 
+/// Helper to print a workflow message in the appropriate format (JSON or plain text).
+fn print_workflow_message(format: &str, workflow_id: i64, message: &str) {
+    if format == "json" {
+        println!(
+            "{}",
+            serde_json::json!({"workflow_id": workflow_id, "message": message})
+        );
+    } else {
+        println!("{}", message);
+    }
+}
+
 /// Helper function to determine if a string is a file path or workflow ID
 fn is_spec_file(arg: &str) -> bool {
     arg.ends_with(".yaml")
@@ -179,7 +191,7 @@ fn main() {
                     *skip_checks,
                 ) {
                     Ok(id) => {
-                        println!("Created workflow {}", id);
+                        print_workflow_message(&format, id, &format!("Created workflow {}", id));
                         id
                     }
                     Err(e) => {
@@ -234,6 +246,9 @@ fn main() {
             workflow_spec_or_id,
             ignore_missing_data,
             skip_checks,
+            max_parallel_jobs,
+            output_dir,
+            poll_interval,
         } => {
             let workflow_id = if is_spec_file(workflow_spec_or_id) {
                 // Load and validate spec file
@@ -285,7 +300,7 @@ fn main() {
                     *skip_checks,
                 ) {
                     Ok(id) => {
-                        println!("Created workflow {}", id);
+                        print_workflow_message(&format, id, &format!("Created workflow {}", id));
                         id
                     }
                     Err(e) => {
@@ -344,9 +359,18 @@ fn main() {
                     let torc_config = TorcConfig::load().unwrap_or_default();
                     let workflow_manager =
                         WorkflowManager::new(config.clone(), torc_config, workflow);
-                    match workflow_manager.start(*ignore_missing_data) {
+                    match workflow_manager.start(
+                        *ignore_missing_data,
+                        *max_parallel_jobs,
+                        output_dir,
+                        *poll_interval,
+                    ) {
                         Ok(()) => {
-                            println!("Successfully submitted workflow {}", workflow_id);
+                            print_workflow_message(
+                                &format,
+                                workflow_id,
+                                &format!("Successfully submitted workflow {}", workflow_id),
+                            );
                         }
                         Err(e) => {
                             eprintln!("Error submitting workflow {}: {}", workflow_id, e);
@@ -369,6 +393,9 @@ fn main() {
             ignore_missing_data,
             skip_checks,
             overwrite,
+            max_parallel_jobs,
+            output_dir,
+            poll_interval,
         } => {
             use torc::client::commands::slurm::{
                 WalltimeStrategy, generate_schedulers_for_workflow,
@@ -410,21 +437,13 @@ fn main() {
                 &torc_config.client.hpc,
             );
 
-            let profile = if let Some(name) = hpc_profile {
-                registry.get(name)
-            } else {
-                registry.detect()
-            };
-
-            let profile = match profile {
-                Some(p) => p,
-                None => {
-                    if hpc_profile.is_some() {
-                        eprintln!("Unknown HPC profile: {}", hpc_profile.as_ref().unwrap());
-                    } else {
-                        eprintln!("No HPC profile specified and no system detected.");
-                        eprintln!("Use --hpc-profile <name> to specify a profile.");
-                    }
+            let profile = match torc::client::commands::hpc::resolve_hpc_profile(
+                &registry,
+                hpc_profile.as_deref(),
+            ) {
+                Ok(p) => p,
+                Err(msg) => {
+                    eprintln!("{}", msg);
                     std::process::exit(1);
                 }
             };
@@ -432,7 +451,7 @@ fn main() {
             // Generate schedulers
             match generate_schedulers_for_workflow(
                 &mut spec,
-                profile,
+                &profile,
                 &resolved_account,
                 *single_allocation,
                 *group_by,
@@ -488,7 +507,7 @@ fn main() {
                 *skip_checks,
             ) {
                 Ok(id) => {
-                    println!("Created workflow {}", id);
+                    print_workflow_message(&format, id, &format!("Created workflow {}", id));
                     id
                 }
                 Err(e) => {
@@ -502,9 +521,18 @@ fn main() {
                 Ok(workflow) => {
                     let workflow_manager =
                         WorkflowManager::new(config.clone(), torc_config, workflow);
-                    match workflow_manager.start(*ignore_missing_data) {
+                    match workflow_manager.start(
+                        *ignore_missing_data,
+                        *max_parallel_jobs,
+                        output_dir,
+                        *poll_interval,
+                    ) {
                         Ok(()) => {
-                            println!("Successfully submitted workflow {}", workflow_id);
+                            print_workflow_message(
+                                &format,
+                                workflow_id,
+                                &format!("Successfully submitted workflow {}", workflow_id),
+                            );
                         }
                         Err(e) => {
                             eprintln!("Error submitting workflow {}: {}", workflow_id, e);
@@ -737,7 +765,8 @@ fn main() {
             handle_config_commands(command);
         }
         Commands::Tui(args) => {
-            if let Err(e) = tui_runner::run(args) {
+            let basic_auth = config.basic_auth.clone();
+            if let Err(e) = tui_runner::run(args, basic_auth) {
                 eprintln!("Error running TUI: {}", e);
                 std::process::exit(1);
             }
