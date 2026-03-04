@@ -13,7 +13,7 @@ Name | Type | Description | Notes
 **return_code** | **Int64** | Code returned by the job. Zero is success; non-zero is a failure. | [default to nothing]
 **exec_time_minutes** | **Float64** | Job execution time in minutes | [default to nothing]
 **completion_time** | **String** | Timestamp of when the job completed. | [default to nothing]
-**status** | **Any** |  | [default to nothing]
+**status** | [***JobStatus**](JobStatus.md) | Status of the job; managed by torc. | [default to nothing]
 **peak_memory_bytes** | **Int64** | Peak memory usage in bytes | [optional] [default to nothing]
 **avg_memory_bytes** | **Int64** | Average memory usage in bytes | [optional] [default to nothing]
 **peak_cpu_percent** | **Float64** | Peak CPU usage as percentage (can exceed 100% for multi-core) | [optional] [default to nothing]

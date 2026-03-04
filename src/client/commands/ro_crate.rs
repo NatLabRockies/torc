@@ -5,6 +5,7 @@ use crate::client::apis::configuration::Configuration;
 use crate::client::apis::default_api;
 use crate::client::commands::get_env_user_name;
 use crate::client::commands::output::{print_if_json, print_wrapped_if_json};
+use crate::client::commands::pagination::{RoCrateEntityListParams, paginate_ro_crate_entities};
 use crate::client::commands::{
     print_error, select_workflow_interactively, table_format::display_table_with_count,
 };
@@ -30,9 +31,9 @@ pub enum RoCrateCommands {
     /// Create an RO-Crate entity for a workflow
     #[command(name = "create")]
     Create {
-        /// Workflow ID
+        /// Workflow ID (optional - will prompt if not provided)
         #[arg()]
-        workflow_id: i64,
+        workflow_id: Option<i64>,
         /// JSON-LD @id for this entity (e.g., "data/output.parquet")
         #[arg(long)]
         entity_id: String,
@@ -91,9 +92,9 @@ pub enum RoCrateCommands {
     },
     /// Export all RO-Crate entities as an ro-crate-metadata.json document
     Export {
-        /// Workflow ID
+        /// Workflow ID (optional - will prompt if not provided)
         #[arg()]
-        workflow_id: i64,
+        workflow_id: Option<i64>,
         /// Output file path (default: stdout)
         #[arg(short, long)]
         output: Option<String>,
@@ -105,9 +106,9 @@ pub enum RoCrateCommands {
     /// size, and optionally a manifest or content hash.
     #[command(name = "add-dataset")]
     AddDataset {
-        /// Workflow ID
+        /// Workflow ID (optional - will prompt if not provided)
         #[arg()]
-        workflow_id: i64,
+        workflow_id: Option<i64>,
         /// Logical name for the dataset (e.g., "training_output")
         #[arg(long)]
         name: String,
@@ -138,9 +139,14 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
             metadata,
             file_id,
         } => {
+            let user_name = get_env_user_name();
+            let selected_workflow_id = match workflow_id {
+                Some(id) => *id,
+                None => select_workflow_interactively(config, &user_name).unwrap(),
+            };
             let metadata_str = read_metadata_input(metadata);
             let mut entity = models::RoCrateEntityModel::new(
-                *workflow_id,
+                selected_workflow_id,
                 entity_id.clone(),
                 entity_type.clone(),
                 metadata_str,
@@ -175,14 +181,17 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
                 None => select_workflow_interactively(config, &user_name).unwrap(),
             };
 
-            match default_api::list_ro_crate_entities(
-                config,
-                selected_workflow_id,
-                Some(*offset),
-                *limit,
-            ) {
-                Ok(response) => {
-                    let entities = response.items.unwrap_or_default();
+            // Use pagination to fetch all entities (or up to limit if specified)
+            let params = if let Some(lim) = limit {
+                RoCrateEntityListParams::new()
+                    .with_offset(*offset)
+                    .with_limit(*lim)
+            } else {
+                RoCrateEntityListParams::new().with_offset(*offset)
+            };
+
+            match paginate_ro_crate_entities(config, selected_workflow_id, params) {
+                Ok(entities) => {
                     if print_wrapped_if_json(
                         format,
                         "ro_crate_entities",
@@ -316,7 +325,12 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
             workflow_id,
             output,
         } => {
-            handle_export(config, *workflow_id, output.as_deref(), format);
+            let user_name = get_env_user_name();
+            let selected_workflow_id = match workflow_id {
+                Some(id) => *id,
+                None => select_workflow_interactively(config, &user_name).unwrap(),
+            };
+            handle_export(config, selected_workflow_id, output.as_deref(), format);
         }
         RoCrateCommands::AddDataset {
             workflow_id,
@@ -327,9 +341,14 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
             encoding_format,
             threads,
         } => {
+            let user_name = get_env_user_name();
+            let selected_workflow_id = match workflow_id {
+                Some(id) => *id,
+                None => select_workflow_interactively(config, &user_name).unwrap(),
+            };
             handle_add_dataset(
                 config,
-                *workflow_id,
+                selected_workflow_id,
                 name,
                 path,
                 hash_mode,
@@ -369,14 +388,15 @@ fn handle_export(
         }
     };
 
-    // Fetch all RO-Crate entities
-    let entities = match default_api::list_ro_crate_entities(config, workflow_id, None, None) {
-        Ok(response) => response.items.unwrap_or_default(),
-        Err(e) => {
-            print_error("listing RO-Crate entities", &e);
-            std::process::exit(1);
-        }
-    };
+    // Fetch all RO-Crate entities using pagination
+    let entities =
+        match paginate_ro_crate_entities(config, workflow_id, RoCrateEntityListParams::new()) {
+            Ok(entities) => entities,
+            Err(e) => {
+                print_error("listing RO-Crate entities", &e);
+                std::process::exit(1);
+            }
+        };
 
     if format == "json" {
         // In JSON format mode, just output the raw entities list

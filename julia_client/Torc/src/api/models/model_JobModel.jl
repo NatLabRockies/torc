@@ -29,7 +29,7 @@
     - name::String : Name of the job; no requirements on uniqueness
     - command::String : CLI command to execute. Will not be executed in a shell and so must not include shell characters.
     - invocation_script::String : Wrapper script for command in case the environment needs customization.
-    - status::Any
+    - status::JobStatus : Status of job; managed by torc.
     - cancel_on_blocking_job_failure::Bool : Cancel this job if any of its blocking jobs fails.
     - supports_termination::Bool : Informs torc that the job can be terminated gracefully before a wall-time timeout.
     - depends_on_job_ids::Vector{Int64} : Database IDs of jobs that block this job
@@ -48,7 +48,7 @@ Base.@kwdef mutable struct JobModel <: OpenAPI.APIModel
     name::Union{Nothing, String} = nothing
     command::Union{Nothing, String} = nothing
     invocation_script::Union{Nothing, String} = nothing
-    status::Union{Nothing, Any} = nothing
+    status = nothing # spec type: Union{ Nothing, JobStatus }
     cancel_on_blocking_job_failure::Union{Nothing, Bool} = true
     supports_termination::Union{Nothing, Bool} = false
     depends_on_job_ids::Union{Nothing, Vector{Int64}} = nothing
@@ -68,7 +68,7 @@ Base.@kwdef mutable struct JobModel <: OpenAPI.APIModel
     end
 end # type JobModel
 
-const _property_types_JobModel = Dict{Symbol,String}(Symbol("id")=>"Int64", Symbol("workflow_id")=>"Int64", Symbol("name")=>"String", Symbol("command")=>"String", Symbol("invocation_script")=>"String", Symbol("status")=>"Any", Symbol("cancel_on_blocking_job_failure")=>"Bool", Symbol("supports_termination")=>"Bool", Symbol("depends_on_job_ids")=>"Vector{Int64}", Symbol("input_file_ids")=>"Vector{Int64}", Symbol("output_file_ids")=>"Vector{Int64}", Symbol("input_user_data_ids")=>"Vector{Int64}", Symbol("output_user_data_ids")=>"Vector{Int64}", Symbol("resource_requirements_id")=>"Int64", Symbol("scheduler_id")=>"Int64", Symbol("failure_handler_id")=>"Int64", Symbol("attempt_id")=>"Int64", )
+const _property_types_JobModel = Dict{Symbol,String}(Symbol("id")=>"Int64", Symbol("workflow_id")=>"Int64", Symbol("name")=>"String", Symbol("command")=>"String", Symbol("invocation_script")=>"String", Symbol("status")=>"JobStatus", Symbol("cancel_on_blocking_job_failure")=>"Bool", Symbol("supports_termination")=>"Bool", Symbol("depends_on_job_ids")=>"Vector{Int64}", Symbol("input_file_ids")=>"Vector{Int64}", Symbol("output_file_ids")=>"Vector{Int64}", Symbol("input_user_data_ids")=>"Vector{Int64}", Symbol("output_user_data_ids")=>"Vector{Int64}", Symbol("resource_requirements_id")=>"Int64", Symbol("scheduler_id")=>"Int64", Symbol("failure_handler_id")=>"Int64", Symbol("attempt_id")=>"Int64", )
 OpenAPI.property_type(::Type{ JobModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_JobModel[name]))}
 
 function OpenAPI.check_required(o::JobModel)

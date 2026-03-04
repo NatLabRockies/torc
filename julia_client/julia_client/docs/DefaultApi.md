@@ -23,6 +23,7 @@ Method | HTTP request | Description
 [**create_remote_workers**](DefaultApi.md#create_remote_workers) | **POST** /workflows/{id}/remote_workers | Store remote workers for a workflow.
 [**create_resource_requirements**](DefaultApi.md#create_resource_requirements) | **POST** /resource_requirements | Store one resource requirements record.
 [**create_result**](DefaultApi.md#create_result) | **POST** /results | Store a job result.
+[**create_ro_crate_entity**](DefaultApi.md#create_ro_crate_entity) | **POST** /ro_crate_entities | Create a new RO-Crate entity.
 [**create_scheduled_compute_node**](DefaultApi.md#create_scheduled_compute_node) | **POST** /scheduled_compute_nodes | Store a scheduled compute node.
 [**create_slurm_scheduler**](DefaultApi.md#create_slurm_scheduler) | **POST** /slurm_schedulers | Store a Slurm compute node configuration.
 [**create_slurm_stats**](DefaultApi.md#create_slurm_stats) | **POST** /slurm_stats | Store Slurm accounting stats for a job step.
@@ -47,6 +48,8 @@ Method | HTTP request | Description
 [**delete_resource_requirements**](DefaultApi.md#delete_resource_requirements) | **DELETE** /resource_requirements | Delete all resource requirements records for one workflow.
 [**delete_result**](DefaultApi.md#delete_result) | **DELETE** /results/{id} | Delete a job result.
 [**delete_results**](DefaultApi.md#delete_results) | **DELETE** /results | Delete all job results for one workflow.
+[**delete_ro_crate_entities**](DefaultApi.md#delete_ro_crate_entities) | **DELETE** /workflows/{id}/ro_crate_entities | Delete all RO-Crate entities for a workflow.
+[**delete_ro_crate_entity**](DefaultApi.md#delete_ro_crate_entity) | **DELETE** /ro_crate_entities/{id} | Delete an RO-Crate entity.
 [**delete_scheduled_compute_node**](DefaultApi.md#delete_scheduled_compute_node) | **DELETE** /scheduled_compute_nodes/{id} | Delete a scheduled compute node.
 [**delete_scheduled_compute_nodes**](DefaultApi.md#delete_scheduled_compute_nodes) | **DELETE** /scheduled_compute_nodes | Delete all scheduled compute node records for one workflow.
 [**delete_slurm_scheduler**](DefaultApi.md#delete_slurm_scheduler) | **DELETE** /slurm_schedulers/{id} | Delete Slurm compute node configuration.
@@ -65,6 +68,7 @@ Method | HTTP request | Description
 [**get_ready_job_requirements**](DefaultApi.md#get_ready_job_requirements) | **GET** /workflows/{id}/ready_job_requirements | Return the resource requirements for jobs with a status of ready.
 [**get_resource_requirements**](DefaultApi.md#get_resource_requirements) | **GET** /resource_requirements/{id} | Retrieve one resource requirements record.
 [**get_result**](DefaultApi.md#get_result) | **GET** /results/{id} | Retrieve a job result.
+[**get_ro_crate_entity**](DefaultApi.md#get_ro_crate_entity) | **GET** /ro_crate_entities/{id} | Get an RO-Crate entity by ID.
 [**get_scheduled_compute_node**](DefaultApi.md#get_scheduled_compute_node) | **GET** /scheduled_compute_nodes/{id} | Retrieve a scheduled compute node.
 [**get_slurm_scheduler**](DefaultApi.md#get_slurm_scheduler) | **GET** /slurm_schedulers/{id} | Retrieve a Slurm compute node configuration.
 [**get_user_data**](DefaultApi.md#get_user_data) | **GET** /user_data/{id} | Retrieve a user data record.
@@ -92,6 +96,7 @@ Method | HTTP request | Description
 [**list_required_existing_files**](DefaultApi.md#list_required_existing_files) | **GET** /workflows/{id}/required_existing_files | List files that must exist.
 [**list_resource_requirements**](DefaultApi.md#list_resource_requirements) | **GET** /resource_requirements | Retrieve all resource requirements records for one workflow.
 [**list_results**](DefaultApi.md#list_results) | **GET** /results | Retrieve all job results for one workflow.
+[**list_ro_crate_entities**](DefaultApi.md#list_ro_crate_entities) | **GET** /workflows/{id}/ro_crate_entities | List all RO-Crate entities for a workflow.
 [**list_scheduled_compute_nodes**](DefaultApi.md#list_scheduled_compute_nodes) | **GET** /scheduled_compute_nodes | Retrieve scheduled compute node records for one workflow.
 [**list_slurm_schedulers**](DefaultApi.md#list_slurm_schedulers) | **GET** /slurm_schedulers | Retrieve a Slurm compute node configuration.
 [**list_slurm_stats**](DefaultApi.md#list_slurm_stats) | **GET** /slurm_stats | List Slurm accounting stats.
@@ -115,6 +120,7 @@ Method | HTTP request | Description
 [**update_local_scheduler**](DefaultApi.md#update_local_scheduler) | **PUT** /local_schedulers/{id} | Update a local scheduler.
 [**update_resource_requirements**](DefaultApi.md#update_resource_requirements) | **PUT** /resource_requirements/{id} | Update one resource requirements record.
 [**update_result**](DefaultApi.md#update_result) | **PUT** /results/{id} | Update a job result.
+[**update_ro_crate_entity**](DefaultApi.md#update_ro_crate_entity) | **PUT** /ro_crate_entities/{id} | Update an RO-Crate entity.
 [**update_scheduled_compute_node**](DefaultApi.md#update_scheduled_compute_node) | **PUT** /scheduled_compute_nodes/{id} | Update a scheduled compute node.
 [**update_slurm_scheduler**](DefaultApi.md#update_slurm_scheduler) | **PUT** /slurm_schedulers/{id} | Update a Slurm compute node configuration.
 [**update_user_data**](DefaultApi.md#update_user_data) | **PUT** /user_data/{id} | Update a user data record.
@@ -711,6 +717,36 @@ Name | Type | Description  | Notes
 ### Return type
 
 [**ResultModel**](ResultModel.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+# **create_ro_crate_entity**
+> create_ro_crate_entity(_api::DefaultApi, body::RoCrateEntityModel; _mediaType=nothing) -> RoCrateEntityModel, OpenAPI.Clients.ApiResponse <br/>
+> create_ro_crate_entity(_api::DefaultApi, response_stream::Channel, body::RoCrateEntityModel; _mediaType=nothing) -> Channel{ RoCrateEntityModel }, OpenAPI.Clients.ApiResponse
+
+Create a new RO-Crate entity.
+
+Create a new RO-Crate entity.
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **DefaultApi** | API context | 
+**body** | [**RoCrateEntityModel**](RoCrateEntityModel.md) | RO-Crate entity to create |
+
+### Return type
+
+[**RoCrateEntityModel**](RoCrateEntityModel.md)
 
 ### Authorization
 
@@ -1554,6 +1590,78 @@ No authorization required
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
+# **delete_ro_crate_entities**
+> delete_ro_crate_entities(_api::DefaultApi, id::Int64; body=nothing, _mediaType=nothing) -> DeleteRoCrateEntities200Response, OpenAPI.Clients.ApiResponse <br/>
+> delete_ro_crate_entities(_api::DefaultApi, response_stream::Channel, id::Int64; body=nothing, _mediaType=nothing) -> Channel{ DeleteRoCrateEntities200Response }, OpenAPI.Clients.ApiResponse
+
+Delete all RO-Crate entities for a workflow.
+
+Delete all RO-Crate entities for a workflow.
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **DefaultApi** | API context | 
+**id** | **Int64** |  |
+
+### Optional Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **body** | **Any** | Optional request body (ignored) | 
+
+### Return type
+
+[**DeleteRoCrateEntities200Response**](DeleteRoCrateEntities200Response.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+# **delete_ro_crate_entity**
+> delete_ro_crate_entity(_api::DefaultApi, id::Int64; body=nothing, _mediaType=nothing) -> DeleteRoCrateEntity200Response, OpenAPI.Clients.ApiResponse <br/>
+> delete_ro_crate_entity(_api::DefaultApi, response_stream::Channel, id::Int64; body=nothing, _mediaType=nothing) -> Channel{ DeleteRoCrateEntity200Response }, OpenAPI.Clients.ApiResponse
+
+Delete an RO-Crate entity.
+
+Delete an RO-Crate entity.
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **DefaultApi** | API context | 
+**id** | **Int64** |  |
+
+### Optional Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **body** | **Any** | Optional request body (ignored) | 
+
+### Return type
+
+[**DeleteRoCrateEntity200Response**](DeleteRoCrateEntity200Response.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
 # **delete_scheduled_compute_node**
 > delete_scheduled_compute_node(_api::DefaultApi, id::Int64; body=nothing, _mediaType=nothing) -> ScheduledComputeNodesModel, OpenAPI.Clients.ApiResponse <br/>
 > delete_scheduled_compute_node(_api::DefaultApi, response_stream::Channel, id::Int64; body=nothing, _mediaType=nothing) -> Channel{ ScheduledComputeNodesModel }, OpenAPI.Clients.ApiResponse
@@ -2130,6 +2238,36 @@ Name | Type | Description  | Notes
 ### Return type
 
 [**ResultModel**](ResultModel.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+# **get_ro_crate_entity**
+> get_ro_crate_entity(_api::DefaultApi, id::Int64; _mediaType=nothing) -> RoCrateEntityModel, OpenAPI.Clients.ApiResponse <br/>
+> get_ro_crate_entity(_api::DefaultApi, response_stream::Channel, id::Int64; _mediaType=nothing) -> Channel{ RoCrateEntityModel }, OpenAPI.Clients.ApiResponse
+
+Get an RO-Crate entity by ID.
+
+Get an RO-Crate entity by ID.
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **DefaultApi** | API context | 
+**id** | **Int64** |  |
+
+### Return type
+
+[**RoCrateEntityModel**](RoCrateEntityModel.md)
 
 ### Authorization
 
@@ -3089,6 +3227,43 @@ No authorization required
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
+# **list_ro_crate_entities**
+> list_ro_crate_entities(_api::DefaultApi, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing) -> ListRoCrateEntitiesResponse, OpenAPI.Clients.ApiResponse <br/>
+> list_ro_crate_entities(_api::DefaultApi, response_stream::Channel, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing) -> Channel{ ListRoCrateEntitiesResponse }, OpenAPI.Clients.ApiResponse
+
+List all RO-Crate entities for a workflow.
+
+List all RO-Crate entities for a workflow.
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **DefaultApi** | API context | 
+**id** | **Int64** |  |
+
+### Optional Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **offset** | **Int64** |  | [default to 0]
+ **limit** | **Int64** |  | [default to 10000]
+
+### Return type
+
+[**ListRoCrateEntitiesResponse**](ListRoCrateEntitiesResponse.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
 # **list_scheduled_compute_nodes**
 > list_scheduled_compute_nodes(_api::DefaultApi, workflow_id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, scheduler_id=nothing, scheduler_config_id=nothing, status=nothing, _mediaType=nothing) -> ListScheduledComputeNodesResponse, OpenAPI.Clients.ApiResponse <br/>
 > list_scheduled_compute_nodes(_api::DefaultApi, response_stream::Channel, workflow_id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, scheduler_id=nothing, scheduler_config_id=nothing, status=nothing, _mediaType=nothing) -> Channel{ ListScheduledComputeNodesResponse }, OpenAPI.Clients.ApiResponse
@@ -3898,6 +4073,37 @@ Name | Type | Description  | Notes
 ### Return type
 
 [**ResultModel**](ResultModel.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+# **update_ro_crate_entity**
+> update_ro_crate_entity(_api::DefaultApi, id::Int64, body::RoCrateEntityModel; _mediaType=nothing) -> RoCrateEntityModel, OpenAPI.Clients.ApiResponse <br/>
+> update_ro_crate_entity(_api::DefaultApi, response_stream::Channel, id::Int64, body::RoCrateEntityModel; _mediaType=nothing) -> Channel{ RoCrateEntityModel }, OpenAPI.Clients.ApiResponse
+
+Update an RO-Crate entity.
+
+Update an RO-Crate entity.
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **DefaultApi** | API context | 
+**id** | **Int64** |  |
+**body** | [**RoCrateEntityModel**](RoCrateEntityModel.md) | Updated RO-Crate entity |
+
+### Return type
+
+[**RoCrateEntityModel**](RoCrateEntityModel.md)
 
 ### Authorization
 

@@ -40,6 +40,8 @@ __all__ = [
     "ComputeNodesResources",
     "CreateJobsResponse",
     "DefaultErrorResponse",
+    "DeleteRoCrateEntities200Response",
+    "DeleteRoCrateEntity200Response",
     "EventModel",
     "FailureHandlerModel",
     "FileModel",
@@ -69,6 +71,7 @@ __all__ = [
     "ListRequiredExistingFilesResponse",
     "ListResourceRequirementsResponse",
     "ListResultsResponse",
+    "ListRoCrateEntitiesResponse",
     "ListScheduledComputeNodesResponse",
     "ListSlurmSchedulersResponse",
     "ListSlurmStatsResponse",
@@ -83,6 +86,7 @@ __all__ = [
     "ResetJobStatusResponse",
     "ResourceRequirementsModel",
     "ResultModel",
+    "RoCrateEntityModel",
     "ScheduledComputeNodesModel",
     "SlurmSchedulerModel",
     "SlurmStatsModel",
@@ -121,6 +125,8 @@ from torc.openapi_client.models.compute_node_schedule import ComputeNodeSchedule
 from torc.openapi_client.models.compute_nodes_resources import ComputeNodesResources as ComputeNodesResources
 from torc.openapi_client.models.create_jobs_response import CreateJobsResponse as CreateJobsResponse
 from torc.openapi_client.models.default_error_response import DefaultErrorResponse as DefaultErrorResponse
+from torc.openapi_client.models.delete_ro_crate_entities200_response import DeleteRoCrateEntities200Response as DeleteRoCrateEntities200Response
+from torc.openapi_client.models.delete_ro_crate_entity200_response import DeleteRoCrateEntity200Response as DeleteRoCrateEntity200Response
 from torc.openapi_client.models.event_model import EventModel as EventModel
 from torc.openapi_client.models.failure_handler_model import FailureHandlerModel as FailureHandlerModel
 from torc.openapi_client.models.file_model import FileModel as FileModel
@@ -150,6 +156,7 @@ from torc.openapi_client.models.list_missing_user_data_response import ListMissi
 from torc.openapi_client.models.list_required_existing_files_response import ListRequiredExistingFilesResponse as ListRequiredExistingFilesResponse
 from torc.openapi_client.models.list_resource_requirements_response import ListResourceRequirementsResponse as ListResourceRequirementsResponse
 from torc.openapi_client.models.list_results_response import ListResultsResponse as ListResultsResponse
+from torc.openapi_client.models.list_ro_crate_entities_response import ListRoCrateEntitiesResponse as ListRoCrateEntitiesResponse
 from torc.openapi_client.models.list_scheduled_compute_nodes_response import ListScheduledComputeNodesResponse as ListScheduledComputeNodesResponse
 from torc.openapi_client.models.list_slurm_schedulers_response import ListSlurmSchedulersResponse as ListSlurmSchedulersResponse
 from torc.openapi_client.models.list_slurm_stats_response import ListSlurmStatsResponse as ListSlurmStatsResponse
@@ -164,6 +171,7 @@ from torc.openapi_client.models.remote_worker_model import RemoteWorkerModel as 
 from torc.openapi_client.models.reset_job_status_response import ResetJobStatusResponse as ResetJobStatusResponse
 from torc.openapi_client.models.resource_requirements_model import ResourceRequirementsModel as ResourceRequirementsModel
 from torc.openapi_client.models.result_model import ResultModel as ResultModel
+from torc.openapi_client.models.ro_crate_entity_model import RoCrateEntityModel as RoCrateEntityModel
 from torc.openapi_client.models.scheduled_compute_nodes_model import ScheduledComputeNodesModel as ScheduledComputeNodesModel
 from torc.openapi_client.models.slurm_scheduler_model import SlurmSchedulerModel as SlurmSchedulerModel
 from torc.openapi_client.models.slurm_stats_model import SlurmStatsModel as SlurmStatsModel

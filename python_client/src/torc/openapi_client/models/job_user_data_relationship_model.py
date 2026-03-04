@@ -74,6 +74,26 @@ class JobUserDataRelationshipModel(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if producer_job_id (nullable) is None
+        # and model_fields_set contains the field
+        if self.producer_job_id is None and "producer_job_id" in self.model_fields_set:
+            _dict['producer_job_id'] = None
+
+        # set to None if producer_job_name (nullable) is None
+        # and model_fields_set contains the field
+        if self.producer_job_name is None and "producer_job_name" in self.model_fields_set:
+            _dict['producer_job_name'] = None
+
+        # set to None if consumer_job_id (nullable) is None
+        # and model_fields_set contains the field
+        if self.consumer_job_id is None and "consumer_job_id" in self.model_fields_set:
+            _dict['consumer_job_id'] = None
+
+        # set to None if consumer_job_name (nullable) is None
+        # and model_fields_set contains the field
+        if self.consumer_job_name is None and "consumer_job_name" in self.model_fields_set:
+            _dict['consumer_job_name'] = None
+
         return _dict
 
     @classmethod

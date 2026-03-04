@@ -30,7 +30,7 @@
     - return_code::Int64 : Code returned by the job. Zero is success; non-zero is a failure.
     - exec_time_minutes::Float64 : Job execution time in minutes
     - completion_time::String : Timestamp of when the job completed.
-    - status::Any
+    - status::JobStatus : Status of the job; managed by torc.
     - peak_memory_bytes::Int64 : Peak memory usage in bytes
     - avg_memory_bytes::Int64 : Average memory usage in bytes
     - peak_cpu_percent::Float64 : Peak CPU usage as percentage (can exceed 100% for multi-core)
@@ -46,7 +46,7 @@ Base.@kwdef mutable struct ResultModel <: OpenAPI.APIModel
     return_code::Union{Nothing, Int64} = nothing
     exec_time_minutes::Union{Nothing, Float64} = nothing
     completion_time::Union{Nothing, String} = nothing
-    status::Union{Nothing, Any} = nothing
+    status = nothing # spec type: Union{ Nothing, JobStatus }
     peak_memory_bytes::Union{Nothing, Int64} = nothing
     avg_memory_bytes::Union{Nothing, Int64} = nothing
     peak_cpu_percent::Union{Nothing, Float64} = nothing
@@ -59,7 +59,7 @@ Base.@kwdef mutable struct ResultModel <: OpenAPI.APIModel
     end
 end # type ResultModel
 
-const _property_types_ResultModel = Dict{Symbol,String}(Symbol("id")=>"Int64", Symbol("job_id")=>"Int64", Symbol("workflow_id")=>"Int64", Symbol("run_id")=>"Int64", Symbol("attempt_id")=>"Int64", Symbol("compute_node_id")=>"Int64", Symbol("return_code")=>"Int64", Symbol("exec_time_minutes")=>"Float64", Symbol("completion_time")=>"String", Symbol("status")=>"Any", Symbol("peak_memory_bytes")=>"Int64", Symbol("avg_memory_bytes")=>"Int64", Symbol("peak_cpu_percent")=>"Float64", Symbol("avg_cpu_percent")=>"Float64", )
+const _property_types_ResultModel = Dict{Symbol,String}(Symbol("id")=>"Int64", Symbol("job_id")=>"Int64", Symbol("workflow_id")=>"Int64", Symbol("run_id")=>"Int64", Symbol("attempt_id")=>"Int64", Symbol("compute_node_id")=>"Int64", Symbol("return_code")=>"Int64", Symbol("exec_time_minutes")=>"Float64", Symbol("completion_time")=>"String", Symbol("status")=>"JobStatus", Symbol("peak_memory_bytes")=>"Int64", Symbol("avg_memory_bytes")=>"Int64", Symbol("peak_cpu_percent")=>"Float64", Symbol("avg_cpu_percent")=>"Float64", )
 OpenAPI.property_type(::Type{ ResultModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_ResultModel[name]))}
 
 function OpenAPI.check_required(o::ResultModel)

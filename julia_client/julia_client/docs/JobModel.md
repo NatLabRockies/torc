@@ -9,7 +9,7 @@ Name | Type | Description | Notes
 **name** | **String** | Name of the job; no requirements on uniqueness | [default to nothing]
 **command** | **String** | CLI command to execute. Will not be executed in a shell and so must not include shell characters. | [default to nothing]
 **invocation_script** | **String** | Wrapper script for command in case the environment needs customization. | [optional] [default to nothing]
-**status** | **Any** |  | [optional] [default to nothing]
+**status** | [***JobStatus**](JobStatus.md) | Status of job; managed by torc. | [optional] [default to nothing]
 **cancel_on_blocking_job_failure** | **Bool** | Cancel this job if any of its blocking jobs fails. | [optional] [default to true]
 **supports_termination** | **Bool** | Informs torc that the job can be terminated gracefully before a wall-time timeout. | [optional] [default to false]
 **depends_on_job_ids** | **Vector{Int64}** | Database IDs of jobs that block this job | [optional] [default to nothing]

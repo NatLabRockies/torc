@@ -678,6 +678,39 @@ function create_result(_api::DefaultApi, response_stream::Channel, body::ResultM
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
+const _returntypes_create_ro_crate_entity_DefaultApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => RoCrateEntityModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => NotFoundErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => DefaultErrorResponse,
+)
+
+function _oacinternal_create_ro_crate_entity(_api::DefaultApi, body::RoCrateEntityModel; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_create_ro_crate_entity_DefaultApi, "/ro_crate_entities", [], body)
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Create a new RO-Crate entity.
+
+Create a new RO-Crate entity.
+
+Params:
+- body::RoCrateEntityModel (required)
+
+Return: RoCrateEntityModel, OpenAPI.Clients.ApiResponse
+"""
+function create_ro_crate_entity(_api::DefaultApi, body::RoCrateEntityModel; _mediaType=nothing)
+    _ctx = _oacinternal_create_ro_crate_entity(_api, body; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function create_ro_crate_entity(_api::DefaultApi, response_stream::Channel, body::RoCrateEntityModel; _mediaType=nothing)
+    _ctx = _oacinternal_create_ro_crate_entity(_api, body; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
 const _returntypes_create_scheduled_compute_node_DefaultApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ScheduledComputeNodesModel,
     Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
@@ -1514,6 +1547,76 @@ function delete_results(_api::DefaultApi, response_stream::Channel, workflow_id:
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
+const _returntypes_delete_ro_crate_entities_DefaultApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => DeleteRoCrateEntities200Response,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => NotFoundErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => DefaultErrorResponse,
+)
+
+function _oacinternal_delete_ro_crate_entities(_api::DefaultApi, id::Int64; body=nothing, _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_delete_ro_crate_entities_DefaultApi, "/workflows/{id}/ro_crate_entities", [], body)
+    OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Delete all RO-Crate entities for a workflow.
+
+Delete all RO-Crate entities for a workflow.
+
+Params:
+- id::Int64 (required)
+- body::Any
+
+Return: DeleteRoCrateEntities200Response, OpenAPI.Clients.ApiResponse
+"""
+function delete_ro_crate_entities(_api::DefaultApi, id::Int64; body=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_delete_ro_crate_entities(_api, id; body=body, _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function delete_ro_crate_entities(_api::DefaultApi, response_stream::Channel, id::Int64; body=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_delete_ro_crate_entities(_api, id; body=body, _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
+const _returntypes_delete_ro_crate_entity_DefaultApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => DeleteRoCrateEntity200Response,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => NotFoundErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => DefaultErrorResponse,
+)
+
+function _oacinternal_delete_ro_crate_entity(_api::DefaultApi, id::Int64; body=nothing, _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_delete_ro_crate_entity_DefaultApi, "/ro_crate_entities/{id}", [], body)
+    OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Delete an RO-Crate entity.
+
+Delete an RO-Crate entity.
+
+Params:
+- id::Int64 (required)
+- body::Any
+
+Return: DeleteRoCrateEntity200Response, OpenAPI.Clients.ApiResponse
+"""
+function delete_ro_crate_entity(_api::DefaultApi, id::Int64; body=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_delete_ro_crate_entity(_api, id; body=body, _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function delete_ro_crate_entity(_api::DefaultApi, response_stream::Channel, id::Int64; body=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_delete_ro_crate_entity(_api, id; body=body, _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
 const _returntypes_delete_scheduled_compute_node_DefaultApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ScheduledComputeNodesModel,
     Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
@@ -2131,6 +2234,40 @@ end
 
 function get_result(_api::DefaultApi, response_stream::Channel, id::Int64; _mediaType=nothing)
     _ctx = _oacinternal_get_result(_api, id; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
+const _returntypes_get_ro_crate_entity_DefaultApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => RoCrateEntityModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => NotFoundErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => DefaultErrorResponse,
+)
+
+function _oacinternal_get_ro_crate_entity(_api::DefaultApi, id::Int64; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_get_ro_crate_entity_DefaultApi, "/ro_crate_entities/{id}", [])
+    OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Get an RO-Crate entity by ID.
+
+Get an RO-Crate entity by ID.
+
+Params:
+- id::Int64 (required)
+
+Return: RoCrateEntityModel, OpenAPI.Clients.ApiResponse
+"""
+function get_ro_crate_entity(_api::DefaultApi, id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_get_ro_crate_entity(_api, id; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function get_ro_crate_entity(_api::DefaultApi, response_stream::Channel, id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_get_ro_crate_entity(_api, id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
@@ -3189,6 +3326,45 @@ function list_results(_api::DefaultApi, response_stream::Channel, workflow_id::I
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
+const _returntypes_list_ro_crate_entities_DefaultApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => ListRoCrateEntitiesResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => NotFoundErrorResponse,
+    Regex("^" * replace("422", "x"=>".") * "\$") => DefaultErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => DefaultErrorResponse,
+)
+
+function _oacinternal_list_ro_crate_entities(_api::DefaultApi, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_ro_crate_entities_DefaultApi, "/workflows/{id}/ro_crate_entities", [])
+    OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "offset", offset; style="form", is_explode=true)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Int64
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""List all RO-Crate entities for a workflow.
+
+List all RO-Crate entities for a workflow.
+
+Params:
+- id::Int64 (required)
+- offset::Int64
+- limit::Int64
+
+Return: ListRoCrateEntitiesResponse, OpenAPI.Clients.ApiResponse
+"""
+function list_ro_crate_entities(_api::DefaultApi, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_list_ro_crate_entities(_api, id; offset=offset, limit=limit, _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function list_ro_crate_entities(_api::DefaultApi, response_stream::Channel, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_list_ro_crate_entities(_api, id; offset=offset, limit=limit, _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
 const _returntypes_list_scheduled_compute_nodes_DefaultApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ListScheduledComputeNodesResponse,
     Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
@@ -4087,6 +4263,41 @@ function update_result(_api::DefaultApi, response_stream::Channel, id::Int64, bo
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
+const _returntypes_update_ro_crate_entity_DefaultApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => RoCrateEntityModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => NotFoundErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => DefaultErrorResponse,
+)
+
+function _oacinternal_update_ro_crate_entity(_api::DefaultApi, id::Int64, body::RoCrateEntityModel; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "PUT", _returntypes_update_ro_crate_entity_DefaultApi, "/ro_crate_entities/{id}", [], body)
+    OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Update an RO-Crate entity.
+
+Update an RO-Crate entity.
+
+Params:
+- id::Int64 (required)
+- body::RoCrateEntityModel (required)
+
+Return: RoCrateEntityModel, OpenAPI.Clients.ApiResponse
+"""
+function update_ro_crate_entity(_api::DefaultApi, id::Int64, body::RoCrateEntityModel; _mediaType=nothing)
+    _ctx = _oacinternal_update_ro_crate_entity(_api, id, body; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function update_ro_crate_entity(_api::DefaultApi, response_stream::Channel, id::Int64, body::RoCrateEntityModel; _mediaType=nothing)
+    _ctx = _oacinternal_update_ro_crate_entity(_api, id, body; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
 const _returntypes_update_scheduled_compute_node_DefaultApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ScheduledComputeNodesModel,
     Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
@@ -4281,6 +4492,7 @@ export create_local_scheduler
 export create_remote_workers
 export create_resource_requirements
 export create_result
+export create_ro_crate_entity
 export create_scheduled_compute_node
 export create_slurm_scheduler
 export create_slurm_stats
@@ -4305,6 +4517,8 @@ export delete_resource_requirement
 export delete_resource_requirements
 export delete_result
 export delete_results
+export delete_ro_crate_entities
+export delete_ro_crate_entity
 export delete_scheduled_compute_node
 export delete_scheduled_compute_nodes
 export delete_slurm_scheduler
@@ -4323,6 +4537,7 @@ export get_pending_actions
 export get_ready_job_requirements
 export get_resource_requirements
 export get_result
+export get_ro_crate_entity
 export get_scheduled_compute_node
 export get_slurm_scheduler
 export get_user_data
@@ -4350,6 +4565,7 @@ export list_remote_workers
 export list_required_existing_files
 export list_resource_requirements
 export list_results
+export list_ro_crate_entities
 export list_scheduled_compute_nodes
 export list_slurm_schedulers
 export list_slurm_stats
@@ -4373,6 +4589,7 @@ export update_job
 export update_local_scheduler
 export update_resource_requirements
 export update_result
+export update_ro_crate_entity
 export update_scheduled_compute_node
 export update_slurm_scheduler
 export update_user_data

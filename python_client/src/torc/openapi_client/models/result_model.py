@@ -19,6 +19,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict, Field, StrictFloat, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional, Union
+from torc.openapi_client.models.job_status import JobStatus
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -35,7 +36,7 @@ class ResultModel(BaseModel):
     return_code: StrictInt = Field(description="Code returned by the job. Zero is success; non-zero is a failure.")
     exec_time_minutes: Union[StrictFloat, StrictInt] = Field(description="Job execution time in minutes")
     completion_time: StrictStr = Field(description="Timestamp of when the job completed.")
-    status: Optional[Any]
+    status: JobStatus = Field(description="Status of the job; managed by torc.")
     peak_memory_bytes: Optional[StrictInt] = Field(default=None, description="Peak memory usage in bytes")
     avg_memory_bytes: Optional[StrictInt] = Field(default=None, description="Average memory usage in bytes")
     peak_cpu_percent: Optional[Union[StrictFloat, StrictInt]] = Field(default=None, description="Peak CPU usage as percentage (can exceed 100% for multi-core)")
@@ -81,11 +82,6 @@ class ResultModel(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if status (nullable) is None
-        # and model_fields_set contains the field
-        if self.status is None and "status" in self.model_fields_set:
-            _dict['status'] = None
-
         return _dict
 
     @classmethod

@@ -6183,6 +6183,303 @@ paths:
       summary: Delete a remote worker from a workflow.
       tags: []
   # ============================================================================
+  # RO-Crate Entity endpoints for provenance metadata
+  # ============================================================================
+  /ro_crate_entities:
+    post:
+      description: Create a new RO-Crate entity.
+      operationId: create_ro_crate_entity
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ro_crate_entity_model"
+        description: RO-Crate entity to create
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ro_crate_entity_model"
+          description: Successful response
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/forbidden_error_response"
+          description: Forbidden - user does not have access to this workflow
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/not_found_error_response"
+          description: Not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/default_error_response"
+          description: Default error response
+      security: []
+      summary: Create a new RO-Crate entity.
+      tags: []
+      x-codegen-request-body-name: body
+  /ro_crate_entities/{id}:
+    get:
+      description: Get an RO-Crate entity by ID.
+      operationId: get_ro_crate_entity
+      parameters:
+        - explode: false
+          in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ro_crate_entity_model"
+          description: Successful response
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/forbidden_error_response"
+          description: Forbidden - user does not have access to this resource
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/not_found_error_response"
+          description: Not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/default_error_response"
+          description: Default error response
+      security: []
+      summary: Get an RO-Crate entity by ID.
+      tags: []
+    put:
+      description: Update an RO-Crate entity.
+      operationId: update_ro_crate_entity
+      parameters:
+        - explode: false
+          in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ro_crate_entity_model"
+        description: Updated RO-Crate entity
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ro_crate_entity_model"
+          description: Successful response
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/forbidden_error_response"
+          description: Forbidden - user does not have access to this resource
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/not_found_error_response"
+          description: Not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/default_error_response"
+          description: Default error response
+      security: []
+      summary: Update an RO-Crate entity.
+      tags: []
+      x-codegen-request-body-name: body
+    delete:
+      description: Delete an RO-Crate entity.
+      operationId: delete_ro_crate_entity
+      parameters:
+        - explode: false
+          in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+        description: Optional request body (ignored)
+        required: false
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    description: Success message
+          description: Successful response
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/forbidden_error_response"
+          description: Forbidden - user does not have access to this resource
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/not_found_error_response"
+          description: Not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/default_error_response"
+          description: Default error response
+      security: []
+      summary: Delete an RO-Crate entity.
+      tags: []
+      x-codegen-request-body-name: body
+  /workflows/{id}/ro_crate_entities:
+    get:
+      description: List all RO-Crate entities for a workflow.
+      operationId: list_ro_crate_entities
+      parameters:
+        - explode: false
+          in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          style: simple
+        - explode: true
+          in: query
+          name: offset
+          required: false
+          schema:
+            default: 0
+            type: integer
+          style: form
+        - explode: true
+          in: query
+          name: limit
+          required: false
+          schema:
+            default: 10000
+            type: integer
+          style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list_ro_crate_entities_response"
+          description: Successful response
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/forbidden_error_response"
+          description: Forbidden - user does not have access to this workflow
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/not_found_error_response"
+          description: Not found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/default_error_response"
+          description: Validation error (e.g., invalid pagination parameters)
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/default_error_response"
+          description: Default error response
+      security: []
+      summary: List all RO-Crate entities for a workflow.
+      tags: []
+    delete:
+      description: Delete all RO-Crate entities for a workflow.
+      operationId: delete_ro_crate_entities
+      parameters:
+        - explode: false
+          in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+        description: Optional request body (ignored)
+        required: false
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    description: Success message
+                  deleted_count:
+                    type: integer
+                    description: Number of RO-Crate entities deleted
+          description: Successful response
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/forbidden_error_response"
+          description: Forbidden - user does not have access to this workflow
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/not_found_error_response"
+          description: Not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/default_error_response"
+          description: Default error response
+      security: []
+      summary: Delete all RO-Crate entities for a workflow.
+      tags: []
+      x-codegen-request-body-name: body
+  # ============================================================================
   # Admin endpoints
   # ============================================================================
   /admin/reload-auth:
@@ -6335,7 +6632,7 @@ components:
         scheduler_config_id: 9
         num_nodes: 7
         compute_node_type: local
-        scheduler: "{}"
+        scheduler: {}
         start_time: start_time
         hostname: hostname
         memory_gb: 5.637376656633329
@@ -6545,8 +6842,7 @@ components:
           type: string
         status:
           description: Status of job; managed by torc.
-          schema:
-            $ref: "#/components/schemas/job_status"
+          $ref: "#/components/schemas/job_status"
         cancel_on_blocking_job_failure:
           default: true
           description: Cancel this job if any of its blocking jobs fails.
@@ -6724,8 +7020,7 @@ components:
           type: string
         status:
           description: Status of the job; managed by torc.
-          schema:
-            $ref: "#/components/schemas/job_status"
+          $ref: "#/components/schemas/job_status"
         peak_memory_bytes:
           description: Peak memory usage in bytes
           type: integer
@@ -7057,7 +7352,7 @@ components:
         code: 2
         errorNum: 3
         errorMessage: errorMessage
-        error: "{}"
+        error: {}
       properties:
         error:
           type: object
@@ -7074,7 +7369,7 @@ components:
         code: 404
         errorNum: 404
         errorMessage: errorMessage
-        error: "{}"
+        error: {}
       properties:
         error:
           type: object
@@ -7092,7 +7387,7 @@ components:
         code: 403
         errorNum: 403
         errorMessage: User does not have access to this resource
-        error: "{}"
+        error: {}
       properties:
         error:
           type: object
@@ -7471,20 +7766,24 @@ components:
           type: string
         producer_job_id:
           description: The job that produces this file (null for workflow inputs)
-          type: integer
-          nullable: true
+          type:
+            - integer
+            - "null"
         producer_job_name:
           description: The name of the job that produces this file
-          type: string
-          nullable: true
+          type:
+            - string
+            - "null"
         consumer_job_id:
           description: The job that consumes this file (null for workflow outputs)
-          type: integer
-          nullable: true
+          type:
+            - integer
+            - "null"
         consumer_job_name:
           description: The name of the job that consumes this file
-          type: string
-          nullable: true
+          type:
+            - string
+            - "null"
         workflow_id:
           description: The workflow containing the file and jobs
           type: integer
@@ -7552,20 +7851,24 @@ components:
           type: string
         producer_job_id:
           description: The job that produces this user_data (null for workflow inputs)
-          type: integer
-          nullable: true
+          type:
+            - integer
+            - "null"
         producer_job_name:
           description: The name of the job that produces this user_data
-          type: string
-          nullable: true
+          type:
+            - string
+            - "null"
         consumer_job_id:
           description: The job that consumes this user_data (null for workflow outputs)
-          type: integer
-          nullable: true
+          type:
+            - integer
+            - "null"
         consumer_job_name:
           description: The name of the job that consumes this user_data
-          type: string
-          nullable: true
+          type:
+            - string
+            - "null"
         workflow_id:
           description: The workflow containing the user_data and jobs
           type: integer
@@ -8292,5 +8595,60 @@ components:
       required:
         - job_ids
         - count
+      type: object
+    # ==========================================================================
+    # RO-Crate Entity schemas for provenance metadata
+    # ==========================================================================
+    ro_crate_entity_model:
+      description: A single RO-Crate JSON-LD entity description for provenance tracking.
+      properties:
+        id:
+          description: Database ID of this record
+          type: integer
+        workflow_id:
+          description: Database ID of the workflow this entity belongs to
+          type: integer
+        file_id:
+          description: Optional link to a file record
+          type: integer
+        entity_id:
+          description: The JSON-LD @id for this entity (e.g., "data/output.parquet", "#job-42-attempt-1")
+          type: string
+        entity_type:
+          description: The Schema.org @type (e.g., "File", "Dataset", "SoftwareApplication", "CreateAction")
+          type: string
+        metadata:
+          description: Full JSON-LD metadata object as a JSON string
+          type: string
+      required:
+        - workflow_id
+        - entity_id
+        - entity_type
+        - metadata
+      type: object
+    list_ro_crate_entities_response:
+      description: Response containing a list of RO-Crate entities
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/ro_crate_entity_model"
+          type: array
+        offset:
+          type: integer
+        max_limit:
+          type: integer
+        count:
+          type: integer
+        total_count:
+          type: integer
+        has_more:
+          type: boolean
+      required:
+        - items
+        - offset
+        - max_limit
+        - count
+        - total_count
+        - has_more
       type: object
 x-original-swagger-version: "2.0"

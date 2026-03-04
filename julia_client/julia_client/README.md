@@ -41,6 +41,7 @@ Class | Method
 *DefaultApi* | [**create_remote_workers**](docs/DefaultApi.md#create_remote_workers)<br/>**POST** /workflows/{id}/remote_workers<br/>Store remote workers for a workflow.
 *DefaultApi* | [**create_resource_requirements**](docs/DefaultApi.md#create_resource_requirements)<br/>**POST** /resource_requirements<br/>Store one resource requirements record.
 *DefaultApi* | [**create_result**](docs/DefaultApi.md#create_result)<br/>**POST** /results<br/>Store a job result.
+*DefaultApi* | [**create_ro_crate_entity**](docs/DefaultApi.md#create_ro_crate_entity)<br/>**POST** /ro_crate_entities<br/>Create a new RO-Crate entity.
 *DefaultApi* | [**create_scheduled_compute_node**](docs/DefaultApi.md#create_scheduled_compute_node)<br/>**POST** /scheduled_compute_nodes<br/>Store a scheduled compute node.
 *DefaultApi* | [**create_slurm_scheduler**](docs/DefaultApi.md#create_slurm_scheduler)<br/>**POST** /slurm_schedulers<br/>Store a Slurm compute node configuration.
 *DefaultApi* | [**create_slurm_stats**](docs/DefaultApi.md#create_slurm_stats)<br/>**POST** /slurm_stats<br/>Store Slurm accounting stats for a job step.
@@ -65,6 +66,8 @@ Class | Method
 *DefaultApi* | [**delete_resource_requirements**](docs/DefaultApi.md#delete_resource_requirements)<br/>**DELETE** /resource_requirements<br/>Delete all resource requirements records for one workflow.
 *DefaultApi* | [**delete_result**](docs/DefaultApi.md#delete_result)<br/>**DELETE** /results/{id}<br/>Delete a job result.
 *DefaultApi* | [**delete_results**](docs/DefaultApi.md#delete_results)<br/>**DELETE** /results<br/>Delete all job results for one workflow.
+*DefaultApi* | [**delete_ro_crate_entities**](docs/DefaultApi.md#delete_ro_crate_entities)<br/>**DELETE** /workflows/{id}/ro_crate_entities<br/>Delete all RO-Crate entities for a workflow.
+*DefaultApi* | [**delete_ro_crate_entity**](docs/DefaultApi.md#delete_ro_crate_entity)<br/>**DELETE** /ro_crate_entities/{id}<br/>Delete an RO-Crate entity.
 *DefaultApi* | [**delete_scheduled_compute_node**](docs/DefaultApi.md#delete_scheduled_compute_node)<br/>**DELETE** /scheduled_compute_nodes/{id}<br/>Delete a scheduled compute node.
 *DefaultApi* | [**delete_scheduled_compute_nodes**](docs/DefaultApi.md#delete_scheduled_compute_nodes)<br/>**DELETE** /scheduled_compute_nodes<br/>Delete all scheduled compute node records for one workflow.
 *DefaultApi* | [**delete_slurm_scheduler**](docs/DefaultApi.md#delete_slurm_scheduler)<br/>**DELETE** /slurm_schedulers/{id}<br/>Delete Slurm compute node configuration.
@@ -83,6 +86,7 @@ Class | Method
 *DefaultApi* | [**get_ready_job_requirements**](docs/DefaultApi.md#get_ready_job_requirements)<br/>**GET** /workflows/{id}/ready_job_requirements<br/>Return the resource requirements for jobs with a status of ready.
 *DefaultApi* | [**get_resource_requirements**](docs/DefaultApi.md#get_resource_requirements)<br/>**GET** /resource_requirements/{id}<br/>Retrieve one resource requirements record.
 *DefaultApi* | [**get_result**](docs/DefaultApi.md#get_result)<br/>**GET** /results/{id}<br/>Retrieve a job result.
+*DefaultApi* | [**get_ro_crate_entity**](docs/DefaultApi.md#get_ro_crate_entity)<br/>**GET** /ro_crate_entities/{id}<br/>Get an RO-Crate entity by ID.
 *DefaultApi* | [**get_scheduled_compute_node**](docs/DefaultApi.md#get_scheduled_compute_node)<br/>**GET** /scheduled_compute_nodes/{id}<br/>Retrieve a scheduled compute node.
 *DefaultApi* | [**get_slurm_scheduler**](docs/DefaultApi.md#get_slurm_scheduler)<br/>**GET** /slurm_schedulers/{id}<br/>Retrieve a Slurm compute node configuration.
 *DefaultApi* | [**get_user_data**](docs/DefaultApi.md#get_user_data)<br/>**GET** /user_data/{id}<br/>Retrieve a user data record.
@@ -110,6 +114,7 @@ Class | Method
 *DefaultApi* | [**list_required_existing_files**](docs/DefaultApi.md#list_required_existing_files)<br/>**GET** /workflows/{id}/required_existing_files<br/>List files that must exist.
 *DefaultApi* | [**list_resource_requirements**](docs/DefaultApi.md#list_resource_requirements)<br/>**GET** /resource_requirements<br/>Retrieve all resource requirements records for one workflow.
 *DefaultApi* | [**list_results**](docs/DefaultApi.md#list_results)<br/>**GET** /results<br/>Retrieve all job results for one workflow.
+*DefaultApi* | [**list_ro_crate_entities**](docs/DefaultApi.md#list_ro_crate_entities)<br/>**GET** /workflows/{id}/ro_crate_entities<br/>List all RO-Crate entities for a workflow.
 *DefaultApi* | [**list_scheduled_compute_nodes**](docs/DefaultApi.md#list_scheduled_compute_nodes)<br/>**GET** /scheduled_compute_nodes<br/>Retrieve scheduled compute node records for one workflow.
 *DefaultApi* | [**list_slurm_schedulers**](docs/DefaultApi.md#list_slurm_schedulers)<br/>**GET** /slurm_schedulers<br/>Retrieve a Slurm compute node configuration.
 *DefaultApi* | [**list_slurm_stats**](docs/DefaultApi.md#list_slurm_stats)<br/>**GET** /slurm_stats<br/>List Slurm accounting stats.
@@ -133,6 +138,7 @@ Class | Method
 *DefaultApi* | [**update_local_scheduler**](docs/DefaultApi.md#update_local_scheduler)<br/>**PUT** /local_schedulers/{id}<br/>Update a local scheduler.
 *DefaultApi* | [**update_resource_requirements**](docs/DefaultApi.md#update_resource_requirements)<br/>**PUT** /resource_requirements/{id}<br/>Update one resource requirements record.
 *DefaultApi* | [**update_result**](docs/DefaultApi.md#update_result)<br/>**PUT** /results/{id}<br/>Update a job result.
+*DefaultApi* | [**update_ro_crate_entity**](docs/DefaultApi.md#update_ro_crate_entity)<br/>**PUT** /ro_crate_entities/{id}<br/>Update an RO-Crate entity.
 *DefaultApi* | [**update_scheduled_compute_node**](docs/DefaultApi.md#update_scheduled_compute_node)<br/>**PUT** /scheduled_compute_nodes/{id}<br/>Update a scheduled compute node.
 *DefaultApi* | [**update_slurm_scheduler**](docs/DefaultApi.md#update_slurm_scheduler)<br/>**PUT** /slurm_schedulers/{id}<br/>Update a Slurm compute node configuration.
 *DefaultApi* | [**update_user_data**](docs/DefaultApi.md#update_user_data)<br/>**PUT** /user_data/{id}<br/>Update a user data record.
@@ -153,6 +159,8 @@ Class | Method
  - [ComputeNodesResources](docs/ComputeNodesResources.md)
  - [CreateJobsResponse](docs/CreateJobsResponse.md)
  - [DefaultErrorResponse](docs/DefaultErrorResponse.md)
+ - [DeleteRoCrateEntities200Response](docs/DeleteRoCrateEntities200Response.md)
+ - [DeleteRoCrateEntity200Response](docs/DeleteRoCrateEntity200Response.md)
  - [EventModel](docs/EventModel.md)
  - [FailureHandlerModel](docs/FailureHandlerModel.md)
  - [FileModel](docs/FileModel.md)
@@ -182,6 +190,7 @@ Class | Method
  - [ListRequiredExistingFilesResponse](docs/ListRequiredExistingFilesResponse.md)
  - [ListResourceRequirementsResponse](docs/ListResourceRequirementsResponse.md)
  - [ListResultsResponse](docs/ListResultsResponse.md)
+ - [ListRoCrateEntitiesResponse](docs/ListRoCrateEntitiesResponse.md)
  - [ListScheduledComputeNodesResponse](docs/ListScheduledComputeNodesResponse.md)
  - [ListSlurmSchedulersResponse](docs/ListSlurmSchedulersResponse.md)
  - [ListSlurmStatsResponse](docs/ListSlurmStatsResponse.md)
@@ -196,6 +205,7 @@ Class | Method
  - [ResetJobStatusResponse](docs/ResetJobStatusResponse.md)
  - [ResourceRequirementsModel](docs/ResourceRequirementsModel.md)
  - [ResultModel](docs/ResultModel.md)
+ - [RoCrateEntityModel](docs/RoCrateEntityModel.md)
  - [ScheduledComputeNodesModel](docs/ScheduledComputeNodesModel.md)
  - [SlurmSchedulerModel](docs/SlurmSchedulerModel.md)
  - [SlurmStatsModel](docs/SlurmStatsModel.md)

@@ -19,6 +19,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
+from torc.openapi_client.models.job_status import JobStatus
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -31,7 +32,7 @@ class JobModel(BaseModel):
     name: StrictStr = Field(description="Name of the job; no requirements on uniqueness")
     command: StrictStr = Field(description="CLI command to execute. Will not be executed in a shell and so must not include shell characters.")
     invocation_script: Optional[StrictStr] = Field(default=None, description="Wrapper script for command in case the environment needs customization.")
-    status: Optional[Any] = None
+    status: Optional[JobStatus] = Field(default=None, description="Status of job; managed by torc.")
     cancel_on_blocking_job_failure: Optional[StrictBool] = Field(default=True, description="Cancel this job if any of its blocking jobs fails.")
     supports_termination: Optional[StrictBool] = Field(default=False, description="Informs torc that the job can be terminated gracefully before a wall-time timeout.")
     depends_on_job_ids: Optional[List[StrictInt]] = Field(default=None, description="Database IDs of jobs that block this job")
@@ -84,11 +85,6 @@ class JobModel(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if status (nullable) is None
-        # and model_fields_set contains the field
-        if self.status is None and "status" in self.model_fields_set:
-            _dict['status'] = None
-
         return _dict
 
     @classmethod

@@ -196,7 +196,7 @@ impl RoCrateApiImpl {
             }
         }
 
-        info!(
+        debug!(
             "Created {} RO-Crate entities for input files in workflow_id={}",
             created_count, workflow_id
         );
@@ -245,7 +245,7 @@ where
             }
         };
         body.id = Some(result.id);
-        info!(
+        debug!(
             "Created RO-Crate entity with ID: {} for workflow_id={}",
             result.id, body.workflow_id
         );
@@ -439,7 +439,7 @@ where
         }
 
         body.id = Some(id);
-        info!("Updated RO-Crate entity with ID: {}", id);
+        debug!("Updated RO-Crate entity with ID: {}", id);
         Ok(UpdateRoCrateEntityResponse::SuccessfulResponse(body))
     }
 

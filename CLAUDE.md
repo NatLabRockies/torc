@@ -320,6 +320,18 @@ performance reasons.
 4. Update client API in `src/client/apis/`
 5. Add CLI command handler if needed in `src/client/commands/`
 
+**API Implementation Checklist:**
+
+- [ ] **Authorization**: Use `authorize_workflow!` or `authorize_resource!` macros in
+      `http_server.rs`
+- [ ] **Error responses**: Return 404 for not found, 422 for validation errors, 403 for forbidden
+- [ ] **OpenAPI spec**: Validate with `npx @redocly/cli lint api/openapi.yaml` - fix all errors
+  - Use `type: [integer, "null"]` instead of `nullable: true` (OpenAPI 3.1)
+  - Use direct `$ref:` without `schema:` wrapper
+  - Ensure examples match schema (use `error: {}` not `error: "{}"`)
+- [ ] **Pagination**: Add `offset` and `limit` parameters to list endpoints
+- [ ] **CLI workflow_id**: Use `Option<i64>` and call `select_workflow_interactively()` when None
+
 ### Adding a New CLI Subcommand
 
 For a new subcommand (e.g., `torc workflows correct-resources`):
