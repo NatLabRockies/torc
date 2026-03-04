@@ -224,4 +224,97 @@ impl IdMappings {
             .filter_map(|id| self.remap_job_id(*id))
             .collect()
     }
+
+    /// Remap job IDs in an RO-Crate entity's entity_id and metadata.
+    ///
+    /// This handles:
+    /// - entity_id patterns like `#job-{old_id}-attempt-{n}`
+    /// - metadata JSON containing `wasGeneratedBy: {"@id": "#job-{old_id}-attempt-{n}"}`
+    ///
+    /// Returns the updated (entity_id, metadata) tuple.
+    pub fn remap_ro_crate_job_ids(&self, entity_id: &str, metadata: &str) -> (String, String) {
+        // Pattern: #job-{job_id}-attempt-{attempt_id}
+        let job_id_pattern = regex::Regex::new(r"#job-(\d+)-attempt-(\d+)").unwrap();
+
+        // Remap entity_id if it matches the job pattern
+        let new_entity_id = job_id_pattern
+            .replace_all(entity_id, |caps: &regex::Captures| {
+                let old_job_id: i64 = caps[1].parse().unwrap_or(0);
+                let attempt_id = &caps[2];
+                if let Some(new_job_id) = self.remap_job_id(old_job_id) {
+                    format!("#job-{}-attempt-{}", new_job_id, attempt_id)
+                } else {
+                    // Keep original if no mapping found
+                    caps[0].to_string()
+                }
+            })
+            .to_string();
+
+        // Remap job IDs in metadata JSON
+        let new_metadata = job_id_pattern
+            .replace_all(metadata, |caps: &regex::Captures| {
+                let old_job_id: i64 = caps[1].parse().unwrap_or(0);
+                let attempt_id = &caps[2];
+                if let Some(new_job_id) = self.remap_job_id(old_job_id) {
+                    format!("#job-{}-attempt-{}", new_job_id, attempt_id)
+                } else {
+                    caps[0].to_string()
+                }
+            })
+            .to_string();
+
+        (new_entity_id, new_metadata)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_remap_ro_crate_job_ids_entity_id() {
+        let mut mappings = IdMappings::new();
+        mappings.jobs.insert(42, 99);
+        mappings.jobs.insert(43, 100);
+
+        // Test CreateAction entity_id remapping
+        let (new_entity_id, _) = mappings.remap_ro_crate_job_ids("#job-42-attempt-1", "{}");
+        assert_eq!(new_entity_id, "#job-99-attempt-1");
+
+        // Test with different attempt number
+        let (new_entity_id, _) = mappings.remap_ro_crate_job_ids("#job-43-attempt-3", "{}");
+        assert_eq!(new_entity_id, "#job-100-attempt-3");
+    }
+
+    #[test]
+    fn test_remap_ro_crate_job_ids_metadata() {
+        let mut mappings = IdMappings::new();
+        mappings.jobs.insert(42, 99);
+
+        // Test wasGeneratedBy in metadata
+        let metadata = r##"{"@id": "output.csv", "wasGeneratedBy": {"@id": "#job-42-attempt-1"}}"##;
+        let (_, new_metadata) = mappings.remap_ro_crate_job_ids("output.csv", metadata);
+        assert!(new_metadata.contains("#job-99-attempt-1"));
+        assert!(!new_metadata.contains("#job-42-attempt-1"));
+    }
+
+    #[test]
+    fn test_remap_ro_crate_job_ids_no_mapping() {
+        let mappings = IdMappings::new(); // Empty mappings
+
+        // Should preserve original when no mapping exists
+        let (new_entity_id, _) = mappings.remap_ro_crate_job_ids("#job-42-attempt-1", "{}");
+        assert_eq!(new_entity_id, "#job-42-attempt-1");
+    }
+
+    #[test]
+    fn test_remap_ro_crate_job_ids_non_job_entity() {
+        let mut mappings = IdMappings::new();
+        mappings.jobs.insert(42, 99);
+
+        // File entities should pass through unchanged
+        let (new_entity_id, _) =
+            mappings.remap_ro_crate_job_ids("data/output.csv", r#"{"@id": "data/output.csv"}"#);
+        assert_eq!(new_entity_id, "data/output.csv");
+    }
 }

@@ -659,3 +659,198 @@ fn test_import_id_remapping(start_server: &ServerProcess) {
         }
     }
 }
+
+/// Test that RO-Crate entities with job ID references are correctly remapped during import.
+///
+/// This tests:
+/// - CreateAction entity_id (e.g., #job-42-attempt-1) is remapped to new job ID
+/// - File entity metadata with wasGeneratedBy is remapped to new job ID
+/// - file_id references in entities are also remapped
+#[rstest]
+fn test_export_import_ro_crate_job_id_remapping(start_server: &ServerProcess) {
+    let config = &start_server.config;
+
+    // Create a workflow with a job and files
+    let workflow = WorkflowModel::new("ro_crate_remap_test".to_string(), "test_user".to_string());
+    let created_workflow =
+        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+    let workflow_id = created_workflow.id.unwrap();
+
+    // Create an output file
+    let output_file = FileModel::new(
+        workflow_id,
+        "output.csv".to_string(),
+        "data/output.csv".to_string(),
+    );
+    let created_file =
+        default_api::create_file(config, output_file).expect("Failed to create file");
+    let file_id = created_file.id.unwrap();
+
+    // Create a job
+    let job = JobModel::new(
+        workflow_id,
+        "process_data".to_string(),
+        "python process.py".to_string(),
+    );
+    let created_job = default_api::create_job(config, job).expect("Failed to create job");
+    let job_id = created_job.id.unwrap();
+
+    // Create RO-Crate entities with job ID references
+
+    // 1. CreateAction entity with job ID in entity_id
+    let create_action_entity_id = format!("#job-{}-attempt-1", job_id);
+    let create_action_metadata = serde_json::json!({
+        "@id": create_action_entity_id,
+        "@type": "CreateAction",
+        "name": "process_data",
+        "instrument": { "@id": format!("#workflow-{}", workflow_id) },
+        "result": [{ "@id": "data/output.csv" }]
+    });
+    let create_action = torc::models::RoCrateEntityModel {
+        id: None,
+        workflow_id,
+        file_id: None,
+        entity_id: create_action_entity_id.clone(),
+        entity_type: "CreateAction".to_string(),
+        metadata: create_action_metadata.to_string(),
+    };
+    default_api::create_ro_crate_entity(config, create_action)
+        .expect("Failed to create CreateAction entity");
+
+    // 2. File entity with wasGeneratedBy reference to job
+    let file_metadata = serde_json::json!({
+        "@id": "data/output.csv",
+        "@type": "File",
+        "name": "output.csv",
+        "encodingFormat": "text/csv",
+        "wasGeneratedBy": { "@id": format!("#job-{}-attempt-1", job_id) }
+    });
+    let file_entity = torc::models::RoCrateEntityModel {
+        id: None,
+        workflow_id,
+        file_id: Some(file_id),
+        entity_id: "data/output.csv".to_string(),
+        entity_type: "File".to_string(),
+        metadata: file_metadata.to_string(),
+    };
+    default_api::create_ro_crate_entity(config, file_entity).expect("Failed to create File entity");
+
+    // Export the workflow
+    let export_file = NamedTempFile::new().expect("Failed to create temp file");
+    let export_path = export_file.path().to_str().unwrap();
+
+    let args = [
+        "workflows",
+        "export",
+        &workflow_id.to_string(),
+        "-o",
+        export_path,
+    ];
+    run_cli_with_json(&args, start_server, Some("test_user")).expect("Failed to export workflow");
+
+    // Verify export contains RO-Crate entities
+    let export_content = fs::read_to_string(export_path).expect("Failed to read export file");
+    let export_json: Value =
+        serde_json::from_str(&export_content).expect("Failed to parse export JSON");
+    assert_eq!(
+        export_json["ro_crate_entities"].as_array().unwrap().len(),
+        2
+    );
+
+    // Import the workflow
+    let args = [
+        "workflows",
+        "import",
+        export_path,
+        "--name",
+        "imported_ro_crate",
+    ];
+    let import_result = run_cli_with_json(&args, start_server, Some("test_user"))
+        .expect("Failed to import workflow");
+
+    let new_workflow_id = import_result["workflow_id"].as_i64().unwrap();
+    assert_ne!(new_workflow_id, workflow_id);
+
+    // Get the new job ID
+    let jobs_response = default_api::list_jobs(
+        config,
+        new_workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list imported jobs");
+    let imported_jobs = jobs_response.items.unwrap();
+    assert_eq!(imported_jobs.len(), 1);
+    let new_job_id = imported_jobs[0].id.unwrap();
+    assert_ne!(new_job_id, job_id, "New job should have different ID");
+
+    // Get the imported RO-Crate entities
+    let entities_response =
+        default_api::list_ro_crate_entities(config, new_workflow_id, None, None)
+            .expect("Failed to list RO-Crate entities");
+    let imported_entities = entities_response.items.unwrap();
+    assert_eq!(imported_entities.len(), 2);
+
+    // Find the CreateAction entity and verify its entity_id was remapped
+    let create_action_entity = imported_entities
+        .iter()
+        .find(|e| e.entity_type == "CreateAction")
+        .expect("CreateAction entity should exist");
+
+    let expected_new_entity_id = format!("#job-{}-attempt-1", new_job_id);
+    assert_eq!(
+        create_action_entity.entity_id, expected_new_entity_id,
+        "CreateAction entity_id should be remapped to new job ID"
+    );
+
+    // Verify the CreateAction metadata also has the new job ID
+    let ca_metadata: Value = serde_json::from_str(&create_action_entity.metadata)
+        .expect("Failed to parse CreateAction metadata");
+    assert_eq!(
+        ca_metadata["@id"], expected_new_entity_id,
+        "CreateAction @id in metadata should be remapped"
+    );
+
+    // Find the File entity and verify its wasGeneratedBy was remapped
+    let file_entity = imported_entities
+        .iter()
+        .find(|e| e.entity_type == "File")
+        .expect("File entity should exist");
+
+    let file_metadata: Value =
+        serde_json::from_str(&file_entity.metadata).expect("Failed to parse File metadata");
+    assert_eq!(
+        file_metadata["wasGeneratedBy"]["@id"], expected_new_entity_id,
+        "File wasGeneratedBy should reference the new job ID"
+    );
+
+    // Verify file_id was also remapped
+    let new_files_response = default_api::list_files(
+        config,
+        new_workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list imported files");
+    let new_files = new_files_response.items.unwrap();
+    let new_file_id = new_files[0].id.unwrap();
+    assert_ne!(new_file_id, file_id, "New file should have different ID");
+    assert_eq!(
+        file_entity.file_id,
+        Some(new_file_id),
+        "File entity file_id should be remapped"
+    );
+}
