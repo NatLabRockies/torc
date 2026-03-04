@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT id, workflow_id, file_id, entity_id, entity_type, metadata\n            FROM ro_crate_entity\n            WHERE workflow_id = $1\n            ORDER BY id\n            LIMIT $2 OFFSET $3\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "workflow_id",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "file_id",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "entity_id",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "entity_type",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "metadata",
+        "ordinal": 5,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "dddb65f6f9384647b1f9f23b9ca1e109e08dbd35da8462b87ecac22ba2c28e55"
+}

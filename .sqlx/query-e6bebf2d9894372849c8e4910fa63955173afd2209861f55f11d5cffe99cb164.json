@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM ro_crate_entity WHERE workflow_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "e6bebf2d9894372849c8e4910fa63955173afd2209861f55f11d5cffe99cb164"
+}

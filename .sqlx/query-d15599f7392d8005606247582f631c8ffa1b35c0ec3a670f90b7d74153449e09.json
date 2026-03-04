@@ -102,6 +102,11 @@
         "name": "use_srun",
         "ordinal": 19,
         "type_info": "Integer"
+      },
+      {
+        "name": "enable_ro_crate",
+        "ordinal": 20,
+        "type_info": "Integer"
       }
     ],
     "parameters": {
@@ -122,6 +127,7 @@
       false,
       true,
       false,
+      true,
       true,
       true,
       true,

@@ -166,6 +166,7 @@ const WORKFLOW_COLUMNS: &[&str] = &[
     "use_pending_failed",
     "limit_resources",
     "use_srun",
+    "enable_ro_crate",
     "project",
     "metadata",
     "status_id",
@@ -196,6 +197,7 @@ const ALL_WORKFLOW_COLUMNS: &[&str] = &[
     "use_pending_failed",
     "limit_resources",
     "use_srun",
+    "enable_ro_crate",
     "project",
     "metadata",
     "status_id",
@@ -478,6 +480,11 @@ impl WorkflowsApiImpl {
                     .ok()
                     .flatten()
                     .map(|v| v != 0),
+                enable_ro_crate: record
+                    .try_get::<Option<i64>, _>("enable_ro_crate")
+                    .ok()
+                    .flatten()
+                    .map(|v| v != 0),
                 project: record.get("project"),
                 metadata: record.get("metadata"),
                 status_id: Some(record.get("status_id")),
@@ -632,6 +639,7 @@ where
         let use_pending_failed_int = body.use_pending_failed.map(|v| if v { 1 } else { 0 });
         let limit_resources_int = body.limit_resources.map(|v| if v { 1 } else { 0 });
         let use_srun_int = body.use_srun.map(|v| if v { 1 } else { 0 });
+        let enable_ro_crate_int = body.enable_ro_crate.map(|v| if v { 1 } else { 0 });
 
         let workflow_result = match sqlx::query!(
             r#"
@@ -652,11 +660,12 @@ where
                 use_pending_failed,
                 limit_resources,
                 use_srun,
+                enable_ro_crate,
                 project,
                 metadata,
                 status_id
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
             RETURNING rowid
             "#,
             body.name,
@@ -674,6 +683,7 @@ where
             use_pending_failed_int,
             limit_resources_int,
             use_srun_int,
+            enable_ro_crate_int,
             body.project,
             body.metadata,
             status_result[0].id,
@@ -950,6 +960,7 @@ where
                     use_pending_failed: row.use_pending_failed.map(|v| v != 0),
                     limit_resources: row.limit_resources.map(|v| v != 0),
                     use_srun: row.use_srun.map(|v| v != 0),
+                    enable_ro_crate: row.enable_ro_crate.map(|v| v != 0),
                     project: row.project,
                     metadata: row.metadata,
                     status_id: Some(row.status_id),
@@ -1243,6 +1254,7 @@ where
         let use_pending_failed_int = body.use_pending_failed.map(|val| if val { 1 } else { 0 });
         let limit_resources_int = body.limit_resources.map(|val| if val { 1 } else { 0 });
         let use_srun_int = body.use_srun.map(|val| if val { 1 } else { 0 });
+        let enable_ro_crate_int = body.enable_ro_crate.map(|val| if val { 1 } else { 0 });
 
         // Update the workflow record using COALESCE to only update non-null fields
         let result = match sqlx::query!(
@@ -1260,9 +1272,10 @@ where
                 use_pending_failed = COALESCE($9, use_pending_failed),
                 limit_resources = COALESCE($10, limit_resources),
                 use_srun = COALESCE($11, use_srun),
-                project = COALESCE($12, project),
-                metadata = COALESCE($13, metadata)
-            WHERE id = $14
+                enable_ro_crate = COALESCE($12, enable_ro_crate),
+                project = COALESCE($13, project),
+                metadata = COALESCE($14, metadata)
+            WHERE id = $15
             "#,
             body.name,
             body.description,
@@ -1275,6 +1288,7 @@ where
             use_pending_failed_int,
             limit_resources_int,
             use_srun_int,
+            enable_ro_crate_int,
             body.project,
             body.metadata,
             id

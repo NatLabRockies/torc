@@ -32,7 +32,7 @@ use chrono::{DateTime, Utc};
 use futures::{Stream, StreamExt, TryFutureExt, TryStreamExt, future};
 use hyper::server::conn::Http;
 use hyper::service::Service;
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use parking_lot;
 use sqlx::Row;
 use std::collections::hash_set::Union;
@@ -4160,6 +4160,31 @@ where
         // computation sees the committed job_depends_on relationships
         // Uses bulk queries (7 total) instead of per-job queries (7+ per job) for efficiency
         self.jobs_api.compute_and_store_all_input_hashes(id).await?;
+
+        // Create RO-Crate entities for input files if enable_ro_crate is set
+        // Check the workflow flag and create entities for all input files (files with st_mtime set)
+        match sqlx::query!("SELECT enable_ro_crate FROM workflow WHERE id = $1", id)
+            .fetch_optional(self.pool.as_ref())
+            .await
+        {
+            Ok(Some(row)) if row.enable_ro_crate == Some(1) => {
+                debug!(
+                    "enable_ro_crate is true for workflow {}, creating input file entities",
+                    id
+                );
+                if let Err(e) = self.ro_crate_api.create_entities_for_input_files(id).await {
+                    // Non-blocking: log warning but don't fail initialization
+                    warn!("Failed to create RO-Crate entities for input files: {}", e);
+                }
+            }
+            Ok(_) => {
+                // enable_ro_crate is false or NULL, or workflow not found - skip
+            }
+            Err(e) => {
+                // Non-blocking: log warning but don't fail initialization
+                warn!("Failed to check enable_ro_crate flag: {}", e);
+            }
+        }
 
         debug!(
             "Successfully initialized jobs for workflow {} with transaction",

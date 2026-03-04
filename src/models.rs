@@ -9908,6 +9908,12 @@ pub struct WorkflowModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub use_srun: Option<bool>,
 
+    /// When true, automatically create RO-Crate entities for workflow files.
+    /// Input files get entities during initialization; output files get entities on job completion.
+    #[serde(rename = "enable_ro_crate")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enable_ro_crate: Option<bool>,
+
     /// Project name or identifier for grouping workflows
     #[serde(rename = "project")]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -9943,6 +9949,7 @@ impl WorkflowModel {
             use_pending_failed: Some(false),
             limit_resources: Some(true),
             use_srun: Some(true),
+            enable_ro_crate: None,
             project: None,
             metadata: None,
             status_id: None,
@@ -10064,6 +10071,7 @@ impl std::str::FromStr for WorkflowModel {
             pub use_pending_failed: Vec<bool>,
             pub limit_resources: Vec<bool>,
             pub use_srun: Vec<bool>,
+            pub enable_ro_crate: Vec<bool>,
             pub project: Vec<String>,
             pub metadata: Vec<String>,
             pub status_id: Vec<i64>,
@@ -10145,6 +10153,9 @@ impl std::str::FromStr for WorkflowModel {
                     "use_srun" => intermediate_rep.use_srun.push(
                         <bool as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
                     ),
+                    "enable_ro_crate" => intermediate_rep.enable_ro_crate.push(
+                        <bool as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
+                    ),
                     "project" => intermediate_rep.project.push(
                         <String as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
                     ),
@@ -10204,6 +10215,7 @@ impl std::str::FromStr for WorkflowModel {
             use_pending_failed: intermediate_rep.use_pending_failed.into_iter().next(),
             limit_resources: intermediate_rep.limit_resources.into_iter().next(),
             use_srun: intermediate_rep.use_srun.into_iter().next(),
+            enable_ro_crate: intermediate_rep.enable_ro_crate.into_iter().next(),
             project: intermediate_rep.project.into_iter().next(),
             metadata: intermediate_rep.metadata.into_iter().next(),
             status_id: intermediate_rep.status_id.into_iter().next(),

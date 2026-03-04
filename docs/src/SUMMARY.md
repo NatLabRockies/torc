@@ -21,6 +21,7 @@
   - [Job Runners](./core/concepts/job-runners.md)
   - [Parallelization Strategies](./core/concepts/parallelization.md)
   - [Workflow Reinitialization](./core/concepts/reinitialization.md)
+  - [RO-Crate Provenance](./core/concepts/ro-crate.md)
 - [Working with Workflows](./core/workflows/index.md)
   - [Creating Workflows](./core/workflows/creating-workflows.md)
   - [Workflow Specification Formats](./core/workflows/workflow-formats.md)

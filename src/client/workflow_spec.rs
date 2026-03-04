@@ -57,7 +57,7 @@ pub struct ValidationSummary {
 #[cfg(feature = "client")]
 use kdl::{KdlDocument, KdlNode};
 
-/// File specification for JSON serialization (without workflow_id, id, and st_mtime)
+/// File specification for JSON serialization (without workflow_id and id)
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FileSpec {
@@ -65,6 +65,13 @@ pub struct FileSpec {
     pub name: String,
     /// Path to the file
     pub path: String,
+    /// File modification time as Unix timestamp (seconds since epoch).
+    /// If not specified, torc automatically checks if the file exists on disk
+    /// during workflow creation and uses its actual modification time.
+    /// This distinguishes input files (exist before workflow) from output files
+    /// (created by jobs). Used by RO-Crate for automatic entity generation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub st_mtime: Option<f64>,
     /// Optional parameters for generating multiple files
     /// Supports range notation (e.g., "1:100" or "1:100:5") and lists (e.g., "[1,5,10]")
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -86,6 +93,7 @@ impl FileSpec {
         FileSpec {
             name,
             path,
+            st_mtime: None,
             parameters: None,
             parameter_mode: None,
             use_parameters: None,
@@ -699,6 +707,10 @@ pub struct WorkflowSpec {
     /// Set to false to use direct shell execution.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub use_srun: Option<bool>,
+    /// When true, automatically create RO-Crate entities for workflow files.
+    /// Input files get entities during initialization; output files get entities on job completion.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enable_ro_crate: Option<bool>,
     /// Project name or identifier for grouping workflows
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<String>,
@@ -738,6 +750,7 @@ impl WorkflowSpec {
             use_pending_failed: None,
             limit_resources: None,
             use_srun: None,
+            enable_ro_crate: None,
             project: None,
             metadata: None,
         }
@@ -1747,6 +1760,11 @@ impl WorkflowSpec {
             workflow_model.use_srun = Some(value);
         }
 
+        // Set enable_ro_crate if present
+        if let Some(value) = spec.enable_ro_crate {
+            workflow_model.enable_ro_crate = Some(value);
+        }
+
         // Set project if present
         if let Some(ref value) = spec.project {
             workflow_model.project = Some(value.clone());
@@ -1780,12 +1798,25 @@ impl WorkflowSpec {
                     return Err(format!("Duplicate file name: {}", file_spec.name).into());
                 }
 
+                // Determine st_mtime: use spec value if provided, otherwise check filesystem
+                let st_mtime = match file_spec.st_mtime {
+                    Some(t) => Some(t), // User explicitly specified a timestamp
+                    None => {
+                        // Check if file exists on disk and get its modification time
+                        std::fs::metadata(&file_spec.path)
+                            .and_then(|m| m.modified())
+                            .ok()
+                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                            .map(|d| d.as_secs_f64())
+                    }
+                };
+
                 let file_model = models::FileModel {
                     id: None, // Server will assign ID
                     workflow_id,
                     name: file_spec.name.clone(),
                     path: file_spec.path.clone(),
-                    st_mtime: None, // Not included in specification
+                    st_mtime,
                 };
 
                 let created_file = default_api::create_file(config, file_model)
@@ -4630,6 +4661,7 @@ job "train_lr{lr:.4f}_bs{batch_size}" {
             use_pending_failed: None,
             limit_resources: None,
             use_srun: None,
+            enable_ro_crate: None,
             project: None,
             metadata: None,
         };

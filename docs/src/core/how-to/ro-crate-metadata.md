@@ -5,6 +5,62 @@ Store provenance information about simulation input/output data using
 JSON-LD metadata entities to a workflow and export them as a valid `ro-crate-metadata.json`
 document.
 
+## Automatic Entity Generation
+
+The easiest way to add RO-Crate metadata is to enable automatic generation. Set
+`enable_ro_crate: true` in your workflow specification:
+
+```yaml
+name: my_workflow
+user: researcher
+enable_ro_crate: true
+
+files:
+  - name: input_data
+    path: data/input.csv  # Must exist on disk when workflow is created
+
+  - name: output_data
+    path: data/output.csv  # Will be created by the job
+
+jobs:
+  - name: process
+    command: python process.py
+    input_files: [input_data]
+    output_files: [output_data]
+```
+
+Torc automatically detects input vs output files by checking if each file exists on disk when the
+workflow is created. Files that exist get their modification time recorded.
+
+When automatic generation is enabled:
+
+- **Input files** (files that exist on disk) get File entities created during workflow
+  initialization
+- **Output files** get File entities with provenance (`wasGeneratedBy`) created when jobs complete
+- **Jobs** get CreateAction entities linking to their output files
+
+After running the workflow, export the metadata:
+
+```bash
+torc ro-crate export 123 -o ro-crate-metadata.json
+```
+
+The exported document includes complete provenance:
+
+```json
+{
+  "@id": "data/output.csv",
+  "@type": "File",
+  "name": "output.csv",
+  "encodingFormat": "text/csv",
+  "wasGeneratedBy": { "@id": "#job-1-attempt-1" }
+}
+```
+
+## Manual Entity Creation
+
+For additional metadata (external software, custom properties), use manual commands.
+
 ## Quick Start
 
 ```bash
@@ -185,3 +241,8 @@ metadata JSON.
 
 RO-Crate entities are included in workflow exports (`torc workflows export`) and restored during
 imports (`torc workflows import`). File ID links are remapped automatically.
+
+## See Also
+
+- [RO-Crate Provenance Tracking](../concepts/ro-crate.md) — Concept overview
+- [RO-Crate Specification](https://www.researchobject.org/ro-crate/) — Official documentation

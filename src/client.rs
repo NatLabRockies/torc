@@ -14,6 +14,7 @@ pub mod async_cli_command;
 pub mod commands;
 pub mod errors;
 pub mod resource_correction;
+pub mod ro_crate_utils;
 
 // Re-export config from the top-level module for backwards compatibility
 #[cfg(feature = "config")]

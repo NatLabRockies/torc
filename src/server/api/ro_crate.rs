@@ -76,6 +76,132 @@ impl RoCrateApiImpl {
     pub fn new(context: ApiContext) -> Self {
         Self { context }
     }
+
+    /// Create RO-Crate File entities for input files of a workflow.
+    ///
+    /// Input files are identified as files with `st_mtime` set. During workflow creation,
+    /// the client auto-detects files that exist on disk and records their modification time.
+    /// Skips files that already have RO-Crate entities.
+    ///
+    /// This is called during `initialize_jobs` when `enable_ro_crate` is true.
+    pub async fn create_entities_for_input_files(&self, workflow_id: i64) -> Result<i64, ApiError> {
+        // Get all files with st_mtime set (input files)
+        let input_files = match sqlx::query!(
+            r#"
+            SELECT id, workflow_id, name, path, st_mtime
+            FROM file
+            WHERE workflow_id = $1 AND st_mtime IS NOT NULL
+            "#,
+            workflow_id
+        )
+        .fetch_all(self.context.pool.as_ref())
+        .await
+        {
+            Ok(files) => files,
+            Err(e) => {
+                return Err(super::database_error_with_msg(
+                    e,
+                    "Failed to list input files for RO-Crate",
+                ));
+            }
+        };
+
+        // Get existing RO-Crate entity file_ids to avoid duplicates
+        let existing_file_ids: std::collections::HashSet<i64> = match sqlx::query!(
+            r#"SELECT file_id FROM ro_crate_entity WHERE workflow_id = $1 AND file_id IS NOT NULL"#,
+            workflow_id
+        )
+        .fetch_all(self.context.pool.as_ref())
+        .await
+        {
+            Ok(rows) => rows.into_iter().filter_map(|r| r.file_id).collect(),
+            Err(e) => {
+                return Err(super::database_error_with_msg(
+                    e,
+                    "Failed to check existing RO-Crate entities",
+                ));
+            }
+        };
+
+        let mut created_count = 0i64;
+        for file in input_files {
+            // Skip if entity already exists for this file
+            if existing_file_ids.contains(&file.id) {
+                debug!(
+                    "RO-Crate entity already exists for file_id={}, skipping",
+                    file.id
+                );
+                continue;
+            }
+
+            // Infer MIME type from file extension
+            let mime_type = mime_guess::from_path(&file.path)
+                .first()
+                .map(|m| m.to_string())
+                .unwrap_or_else(|| "application/octet-stream".to_string());
+
+            // Get basename from path
+            let basename = std::path::Path::new(&file.path)
+                .file_name()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_else(|| file.path.clone());
+
+            // Build metadata JSON
+            let mut metadata = serde_json::json!({
+                "@id": file.path,
+                "@type": "File",
+                "name": basename,
+                "encodingFormat": mime_type
+            });
+
+            // Add dateModified if st_mtime is available
+            if let Some(st_mtime) = file.st_mtime
+                && let Some(datetime) =
+                    chrono::DateTime::<chrono::Utc>::from_timestamp(st_mtime as i64, 0)
+            {
+                metadata["dateModified"] = serde_json::json!(datetime.to_rfc3339());
+            }
+
+            // Create the entity
+            let metadata_str = metadata.to_string();
+            match sqlx::query!(
+                r#"
+                INSERT INTO ro_crate_entity (workflow_id, file_id, entity_id, entity_type, metadata)
+                VALUES ($1, $2, $3, $4, $5)
+                "#,
+                workflow_id,
+                file.id,
+                file.path,
+                "File",
+                metadata_str,
+            )
+            .execute(self.context.pool.as_ref())
+            .await
+            {
+                Ok(_) => {
+                    debug!(
+                        "Created RO-Crate entity for input file '{}' (file_id={})",
+                        file.path, file.id
+                    );
+                    created_count += 1;
+                }
+                Err(e) => {
+                    // Log warning but don't fail - RO-Crate is non-blocking
+                    log::warn!(
+                        "Failed to create RO-Crate entity for file '{}': {}",
+                        file.path,
+                        e
+                    );
+                }
+            }
+        }
+
+        info!(
+            "Created {} RO-Crate entities for input files in workflow_id={}",
+            created_count, workflow_id
+        );
+        Ok(created_count)
+    }
 }
 
 #[async_trait]

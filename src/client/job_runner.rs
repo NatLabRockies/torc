@@ -842,7 +842,9 @@ impl JobRunner {
             ));
         }
 
-        // Update st_mtime for all files
+        // Update st_mtime for all files and collect file models for RO-Crate
+        let mut updated_file_models: Vec<crate::models::FileModel> = Vec::new();
+
         for (file_id, st_mtime) in files_to_update {
             let mut file_model =
                 match self.send_with_retries(|| default_api::get_file(&self.config, file_id)) {
@@ -862,6 +864,7 @@ impl JobRunner {
             }) {
                 Ok(_) => {
                     debug!("Updated st_mtime for file_id {} to {}", file_id, st_mtime);
+                    updated_file_models.push(file_model);
                 }
                 Err(e) => {
                     error!("Failed to update st_mtime for file_id {}: {}", file_id, e);
@@ -876,7 +879,77 @@ impl JobRunner {
             job_id
         );
 
+        // Create RO-Crate entities for output files if enabled
+        self.create_ro_crate_entities_for_output_files(job_id, &updated_file_models);
+
         Ok(())
+    }
+
+    /// Create RO-Crate entities for output files if `enable_ro_crate` is enabled on the workflow.
+    ///
+    /// Creates both File entities with provenance and a CreateAction entity for the job.
+    /// This is a non-blocking operation - warnings are logged but errors don't fail the job.
+    fn create_ro_crate_entities_for_output_files(
+        &self,
+        job_id: i64,
+        output_files: &[crate::models::FileModel],
+    ) {
+        // Check if RO-Crate is enabled
+        if self.workflow.enable_ro_crate != Some(true) {
+            return;
+        }
+
+        if output_files.is_empty() {
+            return;
+        }
+
+        debug!(
+            "Creating RO-Crate entities for {} output files from job {}",
+            output_files.len(),
+            job_id
+        );
+
+        // Fetch the job model to get job name for CreateAction
+        let job = match self.send_with_retries(|| default_api::get_job(&self.config, job_id)) {
+            Ok(job) => job,
+            Err(e) => {
+                warn!(
+                    "Could not fetch job {} for RO-Crate creation: {}",
+                    job_id, e
+                );
+                return;
+            }
+        };
+
+        // Use run_id as the attempt_id for the CreateAction
+        let attempt_id = self.run_id;
+
+        // Collect output file paths for the CreateAction
+        let output_file_paths: Vec<String> = output_files.iter().map(|f| f.path.clone()).collect();
+
+        // Create CreateAction entity for the job
+        crate::client::ro_crate_utils::create_create_action_entity(
+            &self.config,
+            self.workflow_id,
+            &job,
+            attempt_id,
+            &output_file_paths,
+        );
+
+        // Create File entities for each output file with provenance
+        for file in output_files {
+            // Get file size if available
+            let content_size = std::fs::metadata(&file.path).ok().map(|m| m.len());
+
+            crate::client::ro_crate_utils::create_ro_crate_entity_for_output_file(
+                &self.config,
+                self.workflow_id,
+                file,
+                content_size,
+                job_id,
+                attempt_id,
+            );
+        }
     }
 
     fn handle_job_completion(&mut self, job_id: i64, result: ResultModel) {

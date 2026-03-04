@@ -583,9 +583,73 @@ impl WorkflowManager {
                     "Changed all uninitialized jobs to ready or blocked for workflow {}",
                     self.workflow_id
                 );
+
+                // Create RO-Crate entities for input files if enabled
+                self.create_ro_crate_entities_for_input_files();
+
                 Ok(())
             }
             Err(err) => Err(TorcError::ApiError(err.to_string())),
+        }
+    }
+
+    /// Create RO-Crate entities for input files if `enable_ro_crate` is enabled on the workflow.
+    ///
+    /// Input files are identified as files with `st_mtime` set (they exist before the workflow runs).
+    /// This is a non-blocking operation - warnings are logged but errors don't fail initialization.
+    fn create_ro_crate_entities_for_input_files(&self) {
+        // Fetch workflow to check enable_ro_crate flag
+        let workflow = match default_api::get_workflow(&self.config, self.workflow_id) {
+            Ok(workflow) => workflow,
+            Err(e) => {
+                debug!(
+                    "Could not fetch workflow {} for RO-Crate check: {}",
+                    self.workflow_id, e
+                );
+                return;
+            }
+        };
+
+        // Check if RO-Crate is enabled
+        if workflow.enable_ro_crate != Some(true) {
+            return;
+        }
+
+        info!(
+            "Creating RO-Crate entities for input files in workflow {}",
+            self.workflow_id
+        );
+
+        // Collect all files with st_mtime set (input files)
+        let params = FileListParams::new();
+        let files_iterator = iter_files(&self.config, self.workflow_id, params);
+
+        let mut input_files: Vec<FileModel> = Vec::new();
+        for file_result in files_iterator {
+            match file_result {
+                Ok(file) => {
+                    // Input files have st_mtime set
+                    if file.st_mtime.is_some() {
+                        input_files.push(file);
+                    }
+                }
+                Err(e) => {
+                    warn!("Error iterating files for RO-Crate creation: {}", e);
+                }
+            }
+        }
+
+        // Create entities for input files
+        if !input_files.is_empty() {
+            debug!(
+                "Creating RO-Crate entities for {} input files",
+                input_files.len()
+            );
+            crate::client::ro_crate_utils::create_entities_for_input_files(
+                &self.config,
+                self.workflow_id,
+                &input_files,
+            );
         }
     }
 

@@ -207,6 +207,7 @@ client = [
     "dep:shlex",
     "dep:flate2",
     "dep:tar",
+    "dep:mime_guess",
     "config",
 ]
 tui = [

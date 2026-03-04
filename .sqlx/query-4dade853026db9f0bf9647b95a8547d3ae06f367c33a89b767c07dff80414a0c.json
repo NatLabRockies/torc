@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE workflow\n            SET\n                name = COALESCE($1, name),\n                description = COALESCE($2, description),\n                user = COALESCE($3, user),\n                compute_node_expiration_buffer_seconds = COALESCE($4, compute_node_expiration_buffer_seconds),\n                compute_node_wait_for_new_jobs_seconds = COALESCE($5, compute_node_wait_for_new_jobs_seconds),\n                compute_node_ignore_workflow_completion = COALESCE($6, compute_node_ignore_workflow_completion),\n                compute_node_wait_for_healthy_database_minutes = COALESCE($7, compute_node_wait_for_healthy_database_minutes),\n                jobs_sort_method = COALESCE($8, jobs_sort_method),\n                use_pending_failed = COALESCE($9, use_pending_failed),\n                limit_resources = COALESCE($10, limit_resources),\n                use_srun = COALESCE($11, use_srun),\n                enable_ro_crate = COALESCE($12, enable_ro_crate),\n                project = COALESCE($13, project),\n                metadata = COALESCE($14, metadata)\n            WHERE id = $15\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 15
+    },
+    "nullable": []
+  },
+  "hash": "4dade853026db9f0bf9647b95a8547d3ae06f367c33a89b767c07dff80414a0c"
+}

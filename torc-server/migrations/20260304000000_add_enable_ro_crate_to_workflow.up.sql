@@ -1,0 +1,1 @@
+ALTER TABLE workflow ADD COLUMN enable_ro_crate INTEGER NULL DEFAULT NULL;

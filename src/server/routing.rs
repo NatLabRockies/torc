@@ -174,7 +174,9 @@ mod paths {
             // RO-Crate entity routes (indices 68-70)
             r"^/torc-service/v1/ro_crate_entities$",
             r"^/torc-service/v1/ro_crate_entities/(?P<id>[^/?#]*)$",
-            r"^/torc-service/v1/workflows/(?P<id>[^/?#]*)/ro_crate_entities$"
+            r"^/torc-service/v1/workflows/(?P<id>[^/?#]*)/ro_crate_entities$",
+            // Slurm stats route (index 71)
+            r"^/torc-service/v1/slurm_stats$"
         ])
         .expect("Unable to create global regex set");
     }
@@ -541,7 +543,7 @@ regex::Regex::new(
                 .expect("Unable to create regex for WORKFLOWS_ID_RO_CRATE_ENTITIES");
     }
     // Slurm stats
-    pub(crate) static ID_SLURM_STATS: usize = 68;
+    pub(crate) static ID_SLURM_STATS: usize = 71;
 }
 
 pub struct MakeService<T, C>
