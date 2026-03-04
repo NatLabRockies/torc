@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT enable_ro_crate FROM workflow WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "name": "enable_ro_crate",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "54b2e7632900ecd51f86271c2b0c08b35ce3037f13641699b51d787a562e2ea9"
+}

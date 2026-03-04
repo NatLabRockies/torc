@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT file_id FROM ro_crate_entity WHERE workflow_id = $1 AND file_id IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "name": "file_id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "c7eca691cc8613a86154286bb8c7975a89773578ac008914ba36189a619da180"
+}

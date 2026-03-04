@@ -1,0 +1,44 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT id, workflow_id, name, path, st_mtime\n            FROM file\n            WHERE workflow_id = $1 AND st_mtime IS NOT NULL\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "workflow_id",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "name",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "path",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "st_mtime",
+        "ordinal": 4,
+        "type_info": "Float"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "7b49069d8427f900aafb0763090e57128479328cf7451e081a54fac4480b74d0"
+}
