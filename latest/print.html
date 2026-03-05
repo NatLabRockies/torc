@@ -944,6 +944,7 @@ job</li>
 <li><a href="core/concepts/./job-runners.html">Job Runners</a> - Executing jobs locally and on clusters</li>
 <li><a href="core/concepts/./parallelization.html">Parallelization Strategies</a> - Running jobs in parallel</li>
 <li><a href="core/concepts/./reinitialization.html">Workflow Reinitialization</a> - Restarting workflows</li>
+<li><a href="core/concepts/./ro-crate.html">RO-Crate Provenance</a> - Automatic provenance tracking with RO-Crate</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="architecture-1"><a class="header" href="#architecture-1">Architecture</a></h1>
 <h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
@@ -2203,7 +2204,159 @@ torc workflows reset-status &lt;workflow_id&gt; --failed-only
 <tr><td>Iterative development</td><td>Yes</td><td>Depends</td></tr>
 <tr><td>Changed workflow spec</td><td>Create new workflow</td><td>Create new workflow</td></tr>
 </tbody></table>
-</div><div style="break-before: page; page-break-before: always;"></div><h1 id="working-with-workflows"><a class="header" href="#working-with-workflows">Working with Workflows</a></h1>
+</div><div style="break-before: page; page-break-before: always;"></div><h1 id="ro-crate-provenance-tracking"><a class="header" href="#ro-crate-provenance-tracking">RO-Crate Provenance Tracking</a></h1>
+<p>Torc supports <a href="https://www.researchobject.org/ro-crate/">Research Object Crate (RO-Crate)</a>, a
+community standard for packaging research data with machine-readable metadata. This enables tracking
+of data provenance—knowing which jobs produced which outputs, what inputs they consumed, and when
+the data was created.</p>
+<h2 id="what-is-ro-crate"><a class="header" href="#what-is-ro-crate">What is RO-Crate?</a></h2>
+<p>RO-Crate is a lightweight approach to packaging research data with JSON-LD metadata. It provides:</p>
+<ul>
+<li><strong>Standardized metadata format</strong> — Compatible with Schema.org and linked data tools</li>
+<li><strong>Provenance tracking</strong> — Records how data was produced and transformed</li>
+<li><strong>Interoperability</strong> — Works with repositories, archives, and other research tools</li>
+</ul>
+<h2 id="how-torc-uses-ro-crate"><a class="header" href="#how-torc-uses-ro-crate">How Torc Uses RO-Crate</a></h2>
+<p>Torc stores RO-Crate entities per workflow. Each entity describes a file, dataset, software, or
+other research object with JSON-LD properties. Entities can be:</p>
+<ol>
+<li><strong>Created automatically</strong> when <code>enable_ro_crate: true</code> is set on a workflow</li>
+<li><strong>Created manually</strong> using the <code>torc ro-crate create</code> command</li>
+<li><strong>Exported</strong> as a standard <code>ro-crate-metadata.json</code> document</li>
+</ol>
+<h2 id="automatic-entity-generation"><a class="header" href="#automatic-entity-generation">Automatic Entity Generation</a></h2>
+<p>When you enable RO-Crate on a workflow, Torc automatically creates metadata entities:</p>
+<p><strong>During workflow initialization:</strong></p>
+<ul>
+<li>File entities are created for all <strong>input files</strong> (files that exist on disk)</li>
+<li>Entities include MIME type inference, file size, and modification date</li>
+</ul>
+<p><strong>When jobs complete successfully:</strong></p>
+<ul>
+<li>File entities are created for all <strong>output files</strong></li>
+<li>CreateAction entities are created for each job (provenance)</li>
+<li>Output files are linked to their producing job via <code>wasGeneratedBy</code></li>
+</ul>
+<p>This creates a complete provenance graph linking inputs → jobs → outputs.</p>
+<h3 id="entity-structure"><a class="header" href="#entity-structure">Entity Structure</a></h3>
+<p>Automatically generated File entities include:</p>
+<pre><code class="language-json">{
+  "@id": "data/output.csv",
+  "@type": "File",
+  "name": "output.csv",
+  "encodingFormat": "text/csv",
+  "contentSize": 1024,
+  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "dateModified": "2024-01-01T00:00:00Z",
+  "wasGeneratedBy": { "@id": "#job-42-attempt-1" }
+}
+</code></pre>
+<p>File entities include SHA256 hashes for integrity verification when the file is readable.</p>
+<p>Job provenance is captured as CreateAction entities:</p>
+<pre><code class="language-json">{
+  "@id": "#job-42-attempt-1",
+  "@type": "CreateAction",
+  "name": "process_data",
+  "instrument": { "@id": "#workflow-123" },
+  "result": [{ "@id": "data/output.csv" }]
+}
+</code></pre>
+<h2 id="enabling-automatic-ro-crate"><a class="header" href="#enabling-automatic-ro-crate">Enabling Automatic RO-Crate</a></h2>
+<p>Add <code>enable_ro_crate: true</code> to your workflow specification:</p>
+<pre><code class="language-yaml">name: my_workflow
+user: researcher
+enable_ro_crate: true
+
+files:
+  - name: input_data
+    path: data/input.csv  # Must exist on disk when workflow is created
+
+  - name: output_data
+    path: data/output.csv  # Will be created by the job
+
+jobs:
+  - name: process
+    command: python process.py
+    input_files: [input_data]
+    output_files: [output_data]
+</code></pre>
+<p>Torc automatically detects input vs output files by checking if each file exists on disk when the
+workflow is created. Files that exist are marked as inputs; files that don't exist are outputs.</p>
+<p>After running this workflow:</p>
+<ul>
+<li><code>input_data</code> will have an RO-Crate File entity (created during initialization)</li>
+<li><code>output_data</code> will have an RO-Crate File entity with <code>wasGeneratedBy</code> linking to the job</li>
+<li>A CreateAction entity will describe the <code>process</code> job execution</li>
+</ul>
+<h2 id="dataset-entities-for-directories"><a class="header" href="#dataset-entities-for-directories">Dataset Entities for Directories</a></h2>
+<p>Many workflows produce directory-based outputs rather than single files—for example,
+hive-partitioned Parquet datasets with thousands of files. For these, use <strong>Dataset entities</strong>
+instead of File entities.</p>
+<h3 id="why-datasets"><a class="header" href="#why-datasets">Why Datasets?</a></h3>
+<ul>
+<li><strong>Efficiency</strong> — One metadata record instead of thousands of File entities</li>
+<li><strong>Appropriate granularity</strong> — The directory is the meaningful unit, not individual partition files</li>
+<li><strong>Integrity verification</strong> — Manifest-based hashing detects changes without reading all file
+contents</li>
+</ul>
+<h3 id="dataset-structure"><a class="header" href="#dataset-structure">Dataset Structure</a></h3>
+<p>Dataset entities include file count, total size, and an optional hash:</p>
+<pre><code class="language-json">{
+  "@id": "output/training.parquet/",
+  "@type": "Dataset",
+  "name": "training_output",
+  "description": "Hive-partitioned training results",
+  "contentSize": 15032385536,
+  "fileCount": 2847,
+  "sha256": "a1b2c3...",
+  "hashMode": "manifest",
+  "encodingFormat": "application/vnd.apache.parquet"
+}
+</code></pre>
+<h3 id="hash-modes"><a class="header" href="#hash-modes">Hash Modes</a></h3>
+<p>Torc supports three hash modes for datasets:</p>
+<div class="table-wrapper"><table><thead><tr><th>Mode</th><th>Description</th><th>Speed</th><th>Detects</th></tr></thead><tbody>
+<tr><td><code>manifest</code></td><td>Hash of sorted (path, size, mtime) list</td><td>Fast</td><td>File additions, deletions, renames</td></tr>
+<tr><td><code>content</code></td><td>SHA256 of all file contents (Merkle tree)</td><td>Slow</td><td>Any content change</td></tr>
+<tr><td><code>none</code></td><td>No hash, only file count and size</td><td>Fastest</td><td>Nothing (stats only)</td></tr>
+</tbody></table>
+</div>
+<p>For large datasets, <code>manifest</code> mode provides a good balance—it detects structural changes without
+the I/O cost of reading terabytes of data.</p>
+<h3 id="creating-dataset-entities"><a class="header" href="#creating-dataset-entities">Creating Dataset Entities</a></h3>
+<p>Use the <code>add-dataset</code> command to create a Dataset entity for a directory:</p>
+<pre><code class="language-bash">torc ro-crate add-dataset \
+  --workflow-id 123 \
+  --name training_output \
+  --path output/training.parquet/ \
+  --hash-mode manifest
+</code></pre>
+<p>See <a href="core/concepts/../how-to/ro-crate-metadata.html">How to Add RO-Crate Metadata</a> for detailed usage.</p>
+<h2 id="when-to-use-ro-crate"><a class="header" href="#when-to-use-ro-crate">When to Use RO-Crate</a></h2>
+<p>RO-Crate is valuable when you need to:</p>
+<ul>
+<li><strong>Track data lineage</strong> — Know which jobs produced each output</li>
+<li><strong>Archive workflows</strong> — Export metadata with your results for long-term storage</li>
+<li><strong>Share reproducible research</strong> — Provide machine-readable provenance to collaborators</li>
+<li><strong>Meet compliance requirements</strong> — Document data processing for audits or regulations</li>
+</ul>
+<h2 id="comparison-automatic-vs-manual"><a class="header" href="#comparison-automatic-vs-manual">Comparison: Automatic vs Manual</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Feature</th><th>Automatic (<code>enable_ro_crate</code>)</th><th>Manual (<code>torc ro-crate create</code>)</th></tr></thead><tbody>
+<tr><td>Input files</td><td>Created on initialization</td><td>Must create manually</td></tr>
+<tr><td>Output files</td><td>Created on job completion</td><td>Must create manually</td></tr>
+<tr><td>Job provenance</td><td>CreateAction entities</td><td>Must create manually</td></tr>
+<tr><td>Custom metadata</td><td>Basic (name, type, size, date)</td><td>Full control over properties</td></tr>
+<tr><td>External entities</td><td>Not created</td><td>Can add software, datasets, etc</td></tr>
+</tbody></table>
+</div>
+<p>For most workflows, enable automatic generation and add manual entities only for external references
+(software versions, related datasets, etc.).</p>
+<h2 id="see-also-2"><a class="header" href="#see-also-2">See Also</a></h2>
+<ul>
+<li><a href="core/concepts/../how-to/ro-crate-metadata.html">How to Add RO-Crate Metadata</a> — Step-by-step guide</li>
+<li><a href="https://www.researchobject.org/ro-crate/">RO-Crate Specification</a> — Official documentation</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="working-with-workflows"><a class="header" href="#working-with-workflows">Working with Workflows</a></h1>
 <p>This section covers how to create, configure, and manage workflows.</p>
 <h2 id="creating-and-formatting"><a class="header" href="#creating-and-formatting">Creating and Formatting</a></h2>
 <ul>
@@ -2951,7 +3104,7 @@ torc workflows execution-plan examples/subgraphs/subgraphs_workflow.yaml
 <li>Stages align with your expected execution order</li>
 <li>Slurm allocations are timed appropriately</li>
 </ul>
-<h2 id="see-also-2"><a class="header" href="#see-also-2">See Also</a></h2>
+<h2 id="see-also-3"><a class="header" href="#see-also-3">See Also</a></h2>
 <ul>
 <li><a href="core/workflows/../monitoring/dashboard.html">Web Dashboard</a> — Full dashboard documentation</li>
 <li><a href="core/workflows/../../specialized/hpc/slurm-workflows.html">Slurm Overview</a> — Understanding Slurm integration</li>
@@ -3330,6 +3483,7 @@ management in active projects where historical data is valuable but visual clutt
 <li><a href="core/how-to/./check-resource-utilization.html">Check Resource Utilization</a> - Monitoring resource usage</li>
 <li><a href="core/how-to/./view-resource-plots.html">View Resource Plots</a> - Visualizing resource metrics</li>
 <li><a href="core/how-to/./parameterize-with-files.html">Parameterize Jobs with Files</a> - Using file-based parameters</li>
+<li><a href="core/how-to/./ro-crate-metadata.html">Add RO-Crate Metadata</a> - Storing provenance with RO-Crate</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="how-to-track-workflow-status"><a class="header" href="#how-to-track-workflow-status">How to Track Workflow Status</a></h1>
 <p>Monitor a running workflow's progress using the CLI, TUI, or dashboard.</p>
@@ -3378,7 +3532,7 @@ torc jobs list &lt;workflow_id&gt; --status failed
     echo "Workflow complete"
 fi
 </code></pre>
-<h2 id="see-also-3"><a class="header" href="#see-also-3">See Also</a></h2>
+<h2 id="see-also-4"><a class="header" href="#see-also-4">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/../monitoring/tui.html">Terminal UI (TUI)</a> — Interactive monitoring</li>
 <li><a href="core/how-to/../monitoring/dashboard.html">Web Dashboard</a> — Visual workflow management</li>
@@ -3418,7 +3572,7 @@ torc workflows run &lt;workflow_id&gt;
 torc workflows submit &lt;workflow_id&gt;
 </code></pre>
 <p>Jobs that completed before cancellation remain completed.</p>
-<h2 id="see-also-4"><a class="header" href="#see-also-4">See Also</a></h2>
+<h2 id="see-also-5"><a class="header" href="#see-also-5">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/./track-workflow-status.html">Track Workflow Status</a> — Monitor workflow progress</li>
 <li><a href="core/how-to/../concepts/reinitialization.html">Workflow Reinitialization</a> — Resume after issues</li>
@@ -3479,7 +3633,7 @@ torc reports results &lt;workflow_id&gt; --job-id &lt;failed_job_id&gt;
 <li><strong>Dashboard</strong> — The web dashboard displays job logs when you click on a job. See
 <a href="core/how-to/../monitoring/dashboard.html">Web Dashboard</a>.</li>
 </ul>
-<h2 id="see-also-5"><a class="header" href="#see-also-5">See Also</a></h2>
+<h2 id="see-also-6"><a class="header" href="#see-also-6">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/../monitoring/working-with-logs.html">Working with Logs</a> — Log configuration and management</li>
 <li><a href="core/how-to/./debug-failed-job.html">Debug a Failed Job</a> — Full debugging workflow</li>
@@ -3548,7 +3702,7 @@ torc workflows reset-status --failed --reinitialize &lt;workflow_id&gt;
 torc workflows run &lt;workflow_id&gt;
 torc submit-slurm &lt;workflow_id&gt;
 </code></pre>
-<h2 id="see-also-6"><a class="header" href="#see-also-6">See Also</a></h2>
+<h2 id="see-also-7"><a class="header" href="#see-also-7">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/./view-job-logs.html">View Job Logs</a> — Finding log files</li>
 <li><a href="core/how-to/./check-resource-utilization.html">Check Resource Utilization</a> — Resource analysis</li>
@@ -3601,7 +3755,7 @@ source ~/.config/torc/credentials
 <li><strong>Never pass <code>--password</code> on the command line</strong> — it appears in shell history and process lists</li>
 <li><strong>Do not commit</strong> <code>~/.config/torc/credentials</code> or any file containing passwords to version control</li>
 </ul>
-<h2 id="see-also-7"><a class="header" href="#see-also-7">See Also</a></h2>
+<h2 id="see-also-8"><a class="header" href="#see-also-8">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/../reference/environment-variables.html">Environment Variables</a> — All Torc environment variables</li>
 <li><a href="core/how-to/../reference/cli.html">CLI Reference</a> — Global <code>--username</code> and <code>--password</code> flags</li>
@@ -3706,7 +3860,7 @@ under-reported peak usage.</p>
 <li>Runtime: Add 15-30% above actual duration</li>
 <li>CPU: Round up to accommodate peak percentage (e.g., 501% CPU → 6 cores)</li>
 </ul>
-<h2 id="see-also-8"><a class="header" href="#see-also-8">See Also</a></h2>
+<h2 id="see-also-9"><a class="header" href="#see-also-9">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/../monitoring/resource-monitoring.html">Resource Monitoring</a> — Enable and configure monitoring</li>
 <li><a href="core/how-to/../reference/resources.html">Resource Requirements Reference</a> — Specification format</li>
@@ -3750,7 +3904,7 @@ FROM job_resource_samples
 WHERE job_id = 1
 ORDER BY timestamp;
 </code></pre>
-<h2 id="see-also-9"><a class="header" href="#see-also-9">See Also</a></h2>
+<h2 id="see-also-10"><a class="header" href="#see-also-10">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/../monitoring/resource-monitoring.html">Resource Monitoring</a> — Configuration options</li>
 <li><a href="core/how-to/../reference/resource-monitoring.html">Resource Monitoring Database</a> — Database schema reference</li>
@@ -3816,11 +3970,271 @@ jobs:
       year: "2020:2024"
 </code></pre>
 <p>Creates 20 jobs (4 regions × 5 years).</p>
-<h2 id="see-also-10"><a class="header" href="#see-also-10">See Also</a></h2>
+<h2 id="see-also-11"><a class="header" href="#see-also-11">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/../tutorials/simple-params.html">Simple Parameterization</a> — Basic parameter tutorial</li>
 <li><a href="core/how-to/../tutorials/advanced-params.html">Advanced Parameterization</a> — Multi-dimensional sweeps</li>
 <li><a href="core/how-to/../reference/parameterization.html">Job Parameterization Reference</a> — Complete syntax</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="how-to-add-ro-crate-metadata"><a class="header" href="#how-to-add-ro-crate-metadata">How to Add RO-Crate Metadata</a></h1>
+<p>Store provenance information about simulation input/output data using
+<a href="https://www.researchobject.org/ro-crate/">Research Object Crates (RO-Crate)</a>. Torc lets you attach
+JSON-LD metadata entities to a workflow and export them as a valid <code>ro-crate-metadata.json</code>
+document.</p>
+<h2 id="automatic-entity-generation-1"><a class="header" href="#automatic-entity-generation-1">Automatic Entity Generation</a></h2>
+<p>The easiest way to add RO-Crate metadata is to enable automatic generation. Set
+<code>enable_ro_crate: true</code> in your workflow specification:</p>
+<pre><code class="language-yaml">name: my_workflow
+user: researcher
+enable_ro_crate: true
+
+files:
+  - name: input_data
+    path: data/input.csv  # Must exist on disk when workflow is created
+
+  - name: output_data
+    path: data/output.csv  # Will be created by the job
+
+jobs:
+  - name: process
+    command: python process.py
+    input_files: [input_data]
+    output_files: [output_data]
+</code></pre>
+<p>Torc automatically detects input vs output files by checking if each file exists on disk when the
+workflow is created. Files that exist get their modification time recorded.</p>
+<p>When automatic generation is enabled:</p>
+<ul>
+<li><strong>Input files</strong> (files that exist on disk) get File entities created during workflow
+initialization</li>
+<li><strong>Output files</strong> get File entities with provenance (<code>wasGeneratedBy</code>) created when jobs complete</li>
+<li><strong>Jobs</strong> get CreateAction entities linking to their output files</li>
+</ul>
+<p>After running the workflow, export the metadata:</p>
+<pre><code class="language-bash">torc ro-crate export 123 -o ro-crate-metadata.json
+</code></pre>
+<p>The exported document includes complete provenance:</p>
+<pre><code class="language-json">{
+  "@id": "data/output.csv",
+  "@type": "File",
+  "name": "output.csv",
+  "encodingFormat": "text/csv",
+  "wasGeneratedBy": { "@id": "#job-1-attempt-1" }
+}
+</code></pre>
+<h2 id="manual-entity-creation"><a class="header" href="#manual-entity-creation">Manual Entity Creation</a></h2>
+<p>For additional metadata (external software, custom properties), use manual commands.</p>
+<h2 id="quick-start-1"><a class="header" href="#quick-start-1">Quick Start</a></h2>
+<pre><code class="language-bash"># Add an entity describing an output file
+torc ro-crate create 123 \
+  --entity-id "data/output.parquet" \
+  --type File \
+  --metadata '{"name": "Simulation Output", "encodingFormat": "application/x-parquet"}'
+
+# Export all entities as an RO-Crate metadata document
+torc ro-crate export 123 -o ro-crate-metadata.json
+</code></pre>
+<h2 id="core-concepts-1"><a class="header" href="#core-concepts-1">Core Concepts</a></h2>
+<p>Each RO-Crate entity has:</p>
+<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>entity_id</code></td><td>The JSON-LD <code>@id</code> (e.g., <code>"data/output.parquet"</code>, a URL)</td></tr>
+<tr><td><code>type</code></td><td>The Schema.org <code>@type</code> (e.g., <code>"File"</code>, <code>"Dataset"</code>, <code>"SoftwareApplication"</code>)</td></tr>
+<tr><td><code>metadata</code></td><td>A JSON string containing additional JSON-LD properties</td></tr>
+<tr><td><code>file_id</code></td><td>Optional link to a Torc file record</td></tr>
+</tbody></table>
+</div>
+<p>Entities are stored per-workflow. The <code>export</code> command assembles them into a complete RO-Crate
+document with the required metadata descriptor and root dataset.</p>
+<h2 id="creating-entities"><a class="header" href="#creating-entities">Creating Entities</a></h2>
+<h3 id="file-entity"><a class="header" href="#file-entity">File entity</a></h3>
+<p>Describe a single output file:</p>
+<pre><code class="language-bash">torc ro-crate create 123 \
+  --entity-id "results/summary.csv" \
+  --type File \
+  --metadata '{"name": "Summary", "encodingFormat": "text/csv"}'
+</code></pre>
+<h3 id="directory-entity-hive-partitioned-data"><a class="header" href="#directory-entity-hive-partitioned-data">Directory entity (Hive-partitioned data)</a></h3>
+<p>For directories with many files (like hive-partitioned Parquet datasets), use the <code>add-dataset</code>
+command instead of creating entities manually. This automatically computes file count, total size,
+and an integrity hash:</p>
+<pre><code class="language-bash">torc ro-crate add-dataset 123 \
+  --name partitioned_table \
+  --path data/partitioned_table/ \
+  --hash-mode manifest \
+  --encoding-format "application/vnd.apache.parquet"
+</code></pre>
+<p>See <a href="core/how-to/ro-crate-metadata.html#adding-dataset-entities">Adding Dataset Entities</a> below for full details.</p>
+<h3 id="external-software-entity"><a class="header" href="#external-software-entity">External software entity</a></h3>
+<p>Record which software produced the data (no <code>--file-id</code> needed):</p>
+<pre><code class="language-bash">torc ro-crate create 123 \
+  --entity-id "https://example.com/simulation/v2.1" \
+  --type SoftwareApplication \
+  --metadata '{"name": "My Simulation", "version": "2.1.0"}'
+</code></pre>
+<h3 id="link-to-a-torc-file-record"><a class="header" href="#link-to-a-torc-file-record">Link to a Torc file record</a></h3>
+<p>If the entity corresponds to a Torc file, link them with <code>--file-id</code>:</p>
+<pre><code class="language-bash">torc ro-crate create 123 \
+  --entity-id "output.csv" \
+  --type File \
+  --file-id 42 \
+  --metadata '{"name": "Output CSV"}'
+</code></pre>
+<h3 id="read-metadata-from-stdin"><a class="header" href="#read-metadata-from-stdin">Read metadata from stdin</a></h3>
+<p>For large metadata objects, pipe from a file:</p>
+<pre><code class="language-bash">torc ro-crate create 123 \
+  --entity-id "data/model.h5" \
+  --type File \
+  --metadata -  &lt; metadata.json
+</code></pre>
+<h2 id="adding-dataset-entities"><a class="header" href="#adding-dataset-entities">Adding Dataset Entities</a></h2>
+<p>For directory-based outputs (like hive-partitioned Parquet datasets), the <code>add-dataset</code> command
+creates a Dataset entity with computed statistics and integrity hash.</p>
+<h3 id="basic-usage-2"><a class="header" href="#basic-usage-2">Basic Usage</a></h3>
+<pre><code class="language-bash">torc ro-crate add-dataset 123 \
+  --name training_output \
+  --path output/training.parquet/
+</code></pre>
+<p>This walks the directory, counts files, sums sizes, computes a manifest hash, and creates:</p>
+<pre><code class="language-json">{
+  "@id": "output/training.parquet/",
+  "@type": "Dataset",
+  "name": "training_output",
+  "contentSize": 15032385536,
+  "fileCount": 2847,
+  "sha256": "7cbcd407fae0631505a1fe289356ee07c8825e41e9441fafca44c001bd6ce75d",
+  "hashMode": "manifest"
+}
+</code></pre>
+<h3 id="hash-modes-1"><a class="header" href="#hash-modes-1">Hash Modes</a></h3>
+<p>Choose a hash mode based on your needs:</p>
+<pre><code class="language-bash"># Manifest hash (default) - fast, detects structural changes
+torc ro-crate add-dataset 123 --name output --path data/ --hash-mode manifest
+
+# Content hash - thorough but slow, detects any content change
+torc ro-crate add-dataset 123 --name output --path data/ --hash-mode content
+
+# No hash - fastest, only counts files and sizes
+torc ro-crate add-dataset 123 --name output --path data/ --hash-mode none
+</code></pre>
+<div class="table-wrapper"><table><thead><tr><th>Mode</th><th>What it hashes</th><th>When to use</th></tr></thead><tbody>
+<tr><td><code>manifest</code></td><td>Sorted list of (path, size, mtime)</td><td>Large datasets, structural integrity</td></tr>
+<tr><td><code>content</code></td><td>All file contents (Merkle tree)</td><td>Small datasets, content verification</td></tr>
+<tr><td><code>none</code></td><td>Nothing</td><td>Very large datasets, stats only</td></tr>
+</tbody></table>
+</div>
+<h3 id="parallel-processing"><a class="header" href="#parallel-processing">Parallel Processing</a></h3>
+<p>For large directories, use multiple threads to speed up content hashing:</p>
+<pre><code class="language-bash"># Use 8 threads for content hashing
+torc ro-crate add-dataset 123 \
+  --name training_output \
+  --path output/training.parquet/ \
+  --hash-mode content \
+  --threads 8
+</code></pre>
+<p>By default, the command uses all available CPU cores. The <code>--threads</code> option is most useful for
+<code>content</code> mode where file I/O is the bottleneck.</p>
+<h3 id="full-example"><a class="header" href="#full-example">Full Example</a></h3>
+<pre><code class="language-bash">torc ro-crate add-dataset 123 \
+  --name simulation_results \
+  --path output/results.parquet/ \
+  --hash-mode manifest \
+  --description "Hive-partitioned simulation output with 100 partitions" \
+  --encoding-format "application/vnd.apache.parquet"
+</code></pre>
+<p>Output:</p>
+<pre><code>Computing dataset statistics for: output/results.parquet/ (using 8 threads)
+  Files: 2847, Size: 15032385536 bytes
+  Hash (manifest): 7cbcd407fae0631505a1fe289356ee07c8825e41e9441fafca44c001bd6ce75d
+Created RO-Crate Dataset entity with ID: 42
+</code></pre>
+<h3 id="when-to-use-add-dataset-vs-create"><a class="header" href="#when-to-use-add-dataset-vs-create">When to Use add-dataset vs create</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Scenario</th><th>Command</th></tr></thead><tbody>
+<tr><td>Directory with many files</td><td><code>add-dataset</code></td></tr>
+<tr><td>Need file count and total size</td><td><code>add-dataset</code></td></tr>
+<tr><td>Need integrity hash</td><td><code>add-dataset</code></td></tr>
+<tr><td>Single file</td><td><code>create</code></td></tr>
+<tr><td>External URL or software</td><td><code>create</code></td></tr>
+<tr><td>Custom metadata only</td><td><code>create</code></td></tr>
+</tbody></table>
+</div>
+<h2 id="listing-and-viewing-entities"><a class="header" href="#listing-and-viewing-entities">Listing and Viewing Entities</a></h2>
+<pre><code class="language-bash"># List all entities for a workflow
+torc ro-crate list 123
+
+# Get a specific entity with full metadata
+torc ro-crate get 1
+
+# JSON output for scripting
+torc -f json ro-crate list 123
+</code></pre>
+<h2 id="updating-entities"><a class="header" href="#updating-entities">Updating Entities</a></h2>
+<p>Update individual fields of an existing entity:</p>
+<pre><code class="language-bash"># Change the type
+torc ro-crate update 1 --type Dataset
+
+# Update metadata
+torc ro-crate update 1 --metadata '{"name": "Updated Name"}'
+
+# Unlink from a file (set file_id to 0)
+torc ro-crate update 1 --file-id 0
+</code></pre>
+<h2 id="deleting-entities"><a class="header" href="#deleting-entities">Deleting Entities</a></h2>
+<pre><code class="language-bash"># Delete a single entity
+torc ro-crate delete 1
+</code></pre>
+<p>Entities are also automatically deleted when their parent workflow is deleted (cascade delete).</p>
+<h2 id="exporting-an-ro-crate-document"><a class="header" href="#exporting-an-ro-crate-document">Exporting an RO-Crate Document</a></h2>
+<p>The <code>export</code> command assembles all entities into a valid
+<a href="https://w3id.org/ro/crate/1.1">RO-Crate 1.1</a> metadata document:</p>
+<pre><code class="language-bash"># Write to file
+torc ro-crate export 123 -o ro-crate-metadata.json
+
+# Write to stdout
+torc ro-crate export 123
+</code></pre>
+<p>The exported document has this structure:</p>
+<pre><code class="language-json">{
+  "@context": "https://w3id.org/ro/crate/1.1/context",
+  "@graph": [
+    {
+      "@id": "ro-crate-metadata.json",
+      "@type": "CreativeWork",
+      "about": {"@id": "./"},
+      "conformsTo": {"@id": "https://w3id.org/ro/crate/1.1"}
+    },
+    {
+      "@id": "./",
+      "@type": "Dataset",
+      "name": "my_workflow",
+      "hasPart": [
+        {"@id": "data/output.parquet"},
+        {"@id": "https://example.com/simulation/v2.1"}
+      ]
+    },
+    {
+      "@id": "data/output.parquet",
+      "@type": "File",
+      "name": "Simulation Output",
+      "encodingFormat": "application/x-parquet"
+    },
+    {
+      "@id": "https://example.com/simulation/v2.1",
+      "@type": "SoftwareApplication",
+      "name": "My Simulation",
+      "version": "2.1.0"
+    }
+  ]
+}
+</code></pre>
+<p>The <code>@id</code> and <code>@type</code> fields are always set from the entity record, overriding any values in the
+metadata JSON.</p>
+<h2 id="workflow-exportimport"><a class="header" href="#workflow-exportimport">Workflow Export/Import</a></h2>
+<p>RO-Crate entities are included in workflow exports (<code>torc workflows export</code>) and restored during
+imports (<code>torc workflows import</code>). File ID links are remapped automatically.</p>
+<h2 id="see-also-12"><a class="header" href="#see-also-12">See Also</a></h2>
+<ul>
+<li><a href="core/how-to/../concepts/ro-crate.html">RO-Crate Provenance Tracking</a> — Concept overview</li>
+<li><a href="https://www.researchobject.org/ro-crate/">RO-Crate Specification</a> — Official documentation</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="tutorials"><a class="header" href="#tutorials">Tutorials</a></h1>
 <p>Hands-on tutorials to learn Torc by example.</p>
@@ -5653,7 +6067,7 @@ configuration</li>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="terminal-user-interface-tui"><a class="header" href="#terminal-user-interface-tui">Terminal User Interface (TUI)</a></h1>
 <p>The Torc TUI provides a full-featured terminal interface for managing workflows, designed for HPC
 users working in terminal-over-SSH environments.</p>
-<h2 id="quick-start-1"><a class="header" href="#quick-start-1">Quick Start</a></h2>
+<h2 id="quick-start-2"><a class="header" href="#quick-start-2">Quick Start</a></h2>
 <pre><code class="language-bash"># Option 1: Connect to an existing server
 torc-server run &amp;   # Start server in background
 torc tui            # Launch the TUI
@@ -6158,7 +6572,7 @@ associated log file paths</li>
 </ul>
 <p>The <code>reports results</code> command consolidates all this information into a single JSON report, making it
 easy to locate and examine relevant log files for debugging.</p>
-<h2 id="quick-start-2"><a class="header" href="#quick-start-2">Quick Start</a></h2>
+<h2 id="quick-start-3"><a class="header" href="#quick-start-3">Quick Start</a></h2>
 <p>View the job return codes in a table:</p>
 <pre><code class="language-bash">torc results list &lt;workflow_id&gt;
 </code></pre>
@@ -6637,7 +7051,7 @@ torc reports results &lt;workflow_id&gt; --output-dir &lt;correct_path&gt;
 <li><strong><code>torc-dash</code></strong>: Launch web interface with interactive Debugging tab</li>
 <li><strong><code>torc tui</code></strong>: Launch terminal UI for workflow monitoring</li>
 </ul>
-<h2 id="see-also-11"><a class="header" href="#see-also-11">See Also</a></h2>
+<h2 id="see-also-13"><a class="header" href="#see-also-13">See Also</a></h2>
 <ul>
 <li><a href="core/monitoring/working-with-logs.html">Working with Logs</a> — Bundling and analyzing logs</li>
 <li><a href="core/monitoring/debugging-slurm.html">Debugging Slurm Workflows</a> — Slurm-specific debugging tools</li>
@@ -6791,7 +7205,7 @@ torc logs analyze wf&lt;id&gt;/
 <li><strong><code>torc slurm parse-logs</code></strong>: Parse Slurm logs for error patterns (Slurm-specific)</li>
 <li><strong><code>torc slurm sacct</code></strong>: Collect Slurm accounting data</li>
 </ul>
-<h2 id="see-also-12"><a class="header" href="#see-also-12">See Also</a></h2>
+<h2 id="see-also-14"><a class="header" href="#see-also-14">See Also</a></h2>
 <ul>
 <li><a href="core/monitoring/debugging.html">Debugging Workflows</a> — General debugging workflow and log file details</li>
 <li><a href="core/monitoring/debugging-slurm.html">Debugging Slurm Workflows</a> — Slurm-specific debugging tools</li>
@@ -6814,7 +7228,7 @@ all common commands. Keep it handy!</p>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><div class="cheatsheet">
 <h1 id="torc-cli-cheat-sheet"><a class="header" href="#torc-cli-cheat-sheet">Torc CLI Cheat Sheet</a></h1>
-<h2 id="quick-start-3"><a class="header" href="#quick-start-3">Quick Start</a></h2>
+<h2 id="quick-start-4"><a class="header" href="#quick-start-4">Quick Start</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>torc workflows create &lt;spec&gt;</code></td><td>Create from spec file</td></tr>
 <tr><td><code>torc run &lt;spec.yaml&gt;</code></td><td>Create workflow from spec and run locally</td></tr>
@@ -7110,7 +7524,7 @@ torc watch 123 --auto-schedule \
     --auto-schedule-cooldown 3600 \
     --auto-schedule-stranded-timeout 14400
 </code></pre>
-<h3 id="see-also-13"><a class="header" href="#see-also-13">See Also</a></h3>
+<h3 id="see-also-15"><a class="header" href="#see-also-15">See Also</a></h3>
 <ul>
 <li><a href="core/reference/cli.html#torc-recover"><code>torc recover</code></a> — One-shot recovery (no continuous monitoring)</li>
 <li><a href="core/reference/../../specialized/fault-tolerance/automatic-recovery.html">Automatic Failure Recovery</a> — Detailed
@@ -7165,7 +7579,7 @@ torc recover 123 --retry-unknown
 # With custom recovery hook for domain-specific fixes
 torc recover 123 --recovery-hook 'bash fix-cluster.sh'
 </code></pre>
-<h3 id="see-also-14"><a class="header" href="#see-also-14">See Also</a></h3>
+<h3 id="see-also-16"><a class="header" href="#see-also-16">See Also</a></h3>
 <ul>
 <li><a href="core/reference/cli.html#torc-watch"><code>torc watch --recover</code></a> — Continuous monitoring with automatic recovery</li>
 <li><a href="core/reference/../../specialized/fault-tolerance/automatic-recovery.html">Automatic Failure Recovery</a> — Detailed
@@ -8660,6 +9074,7 @@ written in YAML, JSON, JSON5, or KDL formats.</p>
 <tr><td><code>compute_node_ignore_workflow_completion</code></td><td>boolean</td><td>false</td><td>Compute nodes hold allocations even after workflow completes</td></tr>
 <tr><td><code>compute_node_wait_for_healthy_database_minutes</code></td><td>integer</td><td>none</td><td>Compute nodes wait this many minutes for database recovery</td></tr>
 <tr><td><code>jobs_sort_method</code></td><td><a href="core/reference/workflow-spec.html#claimjobssortmethod">ClaimJobsSortMethod</a></td><td><code>none</code></td><td>Method for sorting jobs when claiming them</td></tr>
+<tr><td><code>enable_ro_crate</code></td><td>boolean</td><td>false</td><td>Enable automatic <a href="core/reference/../concepts/ro-crate.html">RO-Crate</a> provenance tracking</td></tr>
 </tbody></table>
 </div>
 <h3 id="examples-with-project-and-metadata"><a class="header" href="#examples-with-project-and-metadata">Examples with project and metadata</a></h3>
@@ -8997,7 +9412,7 @@ parameter ranges.</p>
 <h2 id="shared-workflow-level-parameters"><a class="header" href="#shared-workflow-level-parameters">Shared (Workflow-Level) Parameters</a></h2>
 <p>Define parameters once at the workflow level and reuse them across multiple jobs and files using
 <code>use_parameters</code>:</p>
-<h3 id="basic-usage-2"><a class="header" href="#basic-usage-2">Basic Usage</a></h3>
+<h3 id="basic-usage-3"><a class="header" href="#basic-usage-3">Basic Usage</a></h3>
 <pre><code class="language-yaml">name: hyperparameter_sweep
 parameters:
   lr: "[0.0001,0.001,0.01]"
@@ -10011,7 +10426,7 @@ standalone = false
 server_port = 0
 completion_check_interval_secs = 5
 </code></pre>
-<h2 id="see-also-15"><a class="header" href="#see-also-15">See Also</a></h2>
+<h2 id="see-also-17"><a class="header" href="#see-also-17">See Also</a></h2>
 <ul>
 <li><a href="core/reference/../../specialized/admin/configuration-files.html">Configuration Files How-To</a></li>
 <li><a href="core/reference/../../specialized/tools/configuration.html">Configuration Tutorial</a></li>
@@ -10655,7 +11070,7 @@ curl $TORC_API_URL/health
 <p>Use <code>torc hpc match</code> to see which partitions match your requirements:</p>
 <pre><code class="language-bash">torc hpc match kestrel --cpus 32 --memory 64g --walltime 02:00:00 --gpus 2
 </code></pre>
-<h2 id="see-also-16"><a class="header" href="#see-also-16">See Also</a></h2>
+<h2 id="see-also-18"><a class="header" href="#see-also-18">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/../../core/workflows/visualizing-workflows.html">Visualizing Workflow Structure</a> — Execution plans
 and DAG visualization</li>
@@ -10666,7 +11081,7 @@ and DAG visualization</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="submitting-slurm-workflows"><a class="header" href="#submitting-slurm-workflows">Submitting Slurm Workflows</a></h1>
 <p>Submit a workflow specification to a Slurm-based HPC system with automatic scheduler generation.</p>
-<h2 id="quick-start-4"><a class="header" href="#quick-start-4">Quick Start</a></h2>
+<h2 id="quick-start-5"><a class="header" href="#quick-start-5">Quick Start</a></h2>
 <pre><code class="language-bash">torc submit-slurm --account &lt;your-account&gt; workflow.yaml
 </code></pre>
 <p>Torc will:</p>
@@ -10700,7 +11115,7 @@ jobs:
 <pre><code class="language-bash"># See all options
 torc submit-slurm --help
 </code></pre>
-<h2 id="see-also-17"><a class="header" href="#see-also-17">See Also</a></h2>
+<h2 id="see-also-19"><a class="header" href="#see-also-19">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/../../specialized/hpc/slurm-workflows.html">Slurm Overview</a> — Full Slurm integration guide</li>
 <li><a href="specialized/hpc/../../specialized/hpc/hpc-profiles.html">HPC Profiles</a> — Available HPC system configurations</li>
@@ -11087,7 +11502,7 @@ etc.) and are available via <code>torc slurm stats &lt;workflow_id&gt;</code>.</
 <h3 id="local-execution-1"><a class="header" href="#local-execution-1">Local Execution</a></h3>
 <p>When running locally (no <code>SLURM_JOB_ID</code> environment variable), Torc uses its standard shell wrapper
 and the <code>srun</code> behavior is never triggered. No configuration is needed for local runs.</p>
-<h2 id="see-also-18"><a class="header" href="#see-also-18">See Also</a></h2>
+<h2 id="see-also-20"><a class="header" href="#see-also-20">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/./slurm-workflows.html">Slurm Overview</a> — Simplified workflow approach</li>
 <li><a href="specialized/hpc/./hpc-profiles.html">HPC Profiles</a> — Automatic partition matching</li>
@@ -11472,7 +11887,7 @@ when:</p>
 <li><strong><code>torc-dash</code></strong>: Launch web interface with Slurm log viewing</li>
 <li><strong><code>torc tui</code></strong>: Launch terminal UI with Slurm log viewing</li>
 </ul>
-<h2 id="see-also-19"><a class="header" href="#see-also-19">See Also</a></h2>
+<h2 id="see-also-21"><a class="header" href="#see-also-21">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/debugging.html">Debugging Workflows</a> — General debugging tools and workflows</li>
 <li><a href="specialized/hpc/working-with-logs.html">Working with Logs</a> — Bundling and analyzing logs</li>
@@ -11595,7 +12010,7 @@ See <a href="specialized/hpc/./slurm.html">Advanced Slurm Configuration</a> for 
 <li><code>torc submit-slurm</code> - Submit workflows with auto-generated schedulers</li>
 <li><code>torc workflows create-slurm</code> - Create workflows with auto-generated schedulers</li>
 </ul>
-<h2 id="see-also-20"><a class="header" href="#see-also-20">See Also</a></h2>
+<h2 id="see-also-22"><a class="header" href="#see-also-22">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/./slurm.html">Advanced Slurm Configuration</a></li>
 <li><a href="specialized/hpc/./custom-hpc-profile.html">Custom HPC Profile Tutorial</a></li>
@@ -11931,7 +12346,7 @@ default_account = "my_default_account"
 </div>
 <p>Generated walltime uses <code>HH:MM:SS</code> format (e.g., <code>04:00:00</code>).</p>
 <hr />
-<h2 id="see-also-21"><a class="header" href="#see-also-21">See Also</a></h2>
+<h2 id="see-also-23"><a class="header" href="#see-also-23">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/./hpc-profiles.html">Working with HPC Profiles</a></li>
 <li><a href="specialized/hpc/./custom-hpc-profile.html">Custom HPC Profile Tutorial</a></li>
@@ -12127,7 +12542,7 @@ pgrep -f torc-server
 # Check server logs
 tail -100 /scratch/$USER/torc/logs/torc-server*.log
 </code></pre>
-<h2 id="see-also-22"><a class="header" href="#see-also-22">See Also</a></h2>
+<h2 id="see-also-24"><a class="header" href="#see-also-24">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/../../core/reference/configuration.html">Configuration Reference</a></li>
 <li><a href="specialized/hpc/./hpc-profiles-reference.html">HPC Profiles Reference</a></li>
@@ -12439,7 +12854,7 @@ hostname
 </ol>
 <p>Or simply <a href="https://github.com/NatLabRockies/torc/issues">open an issue</a> with your partition
 information and we'll add it for you.</p>
-<h2 id="see-also-23"><a class="header" href="#see-also-23">See Also</a></h2>
+<h2 id="see-also-25"><a class="header" href="#see-also-25">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/./hpc-profiles.html">Working with HPC Profiles</a> - General HPC profile usage</li>
 <li><a href="specialized/hpc/./hpc-profiles-reference.html">HPC Profiles Reference</a> - Complete configuration options</li>
@@ -13209,7 +13624,7 @@ for more details.</p>
 <li>Update jobs with new scheduler reference</li>
 <li>Submit allocations via sbatch</li>
 </ol>
-<h2 id="see-also-24"><a class="header" href="#see-also-24">See Also</a></h2>
+<h2 id="see-also-26"><a class="header" href="#see-also-26">See Also</a></h2>
 <ul>
 <li><a href="specialized/fault-tolerance/./failure-handlers.html">Configurable Failure Handlers</a> - Per-job retry with exit-code-specific
 recovery</li>
@@ -13241,7 +13656,7 @@ define:</p>
 <li><strong>Recovery scripts</strong>: Optional scripts to run before retry</li>
 <li><strong>Max retries</strong>: How many times to retry per exit code</li>
 </ul>
-<h2 id="quick-start-5"><a class="header" href="#quick-start-5">Quick Start</a></h2>
+<h2 id="quick-start-6"><a class="header" href="#quick-start-6">Quick Start</a></h2>
 <p>Try the runnable demo:</p>
 <pre><code class="language-bash">torc run examples/yaml/failure_handler_demo.yaml
 </code></pre>
@@ -13755,7 +14170,7 @@ mechanisms.</p>
 <p>When a job fails without a matching failure handler rule, it enters the <code>pending_failed</code> status
 instead of <code>failed</code>. This prevents immediate downstream job cancellation and gives the AI agent time
 to classify the error.</p>
-<h2 id="quick-start-6"><a class="header" href="#quick-start-6">Quick Start</a></h2>
+<h2 id="quick-start-7"><a class="header" href="#quick-start-7">Quick Start</a></h2>
 <h3 id="option-a-automatic-ai-agent-invocation-recommended"><a class="header" href="#option-a-automatic-ai-agent-invocation-recommended">Option A: Automatic AI Agent Invocation (Recommended)</a></h3>
 <p>Use the <code>--ai-recovery</code> flag to automatically invoke the Claude CLI for classification:</p>
 <pre><code class="language-bash"># One-shot recovery with AI classification
@@ -14273,7 +14688,7 @@ ls -la /scratch/checkpoints/
 <li>Configure signal forwarding in containers</li>
 <li>Run the job directly without wrapper scripts</li>
 </ul>
-<h2 id="see-also-25"><a class="header" href="#see-also-25">See Also</a></h2>
+<h2 id="see-also-27"><a class="header" href="#see-also-27">See Also</a></h2>
 <ul>
 <li><a href="specialized/fault-tolerance/./slurm.html">Advanced Slurm Configuration</a> - Manual Slurm scheduler setup</li>
 <li><a href="specialized/fault-tolerance/./resources.html">Managing Resources</a> - Resource requirements configuration</li>
@@ -14335,7 +14750,7 @@ sudo torc-server service start
 <li>For <strong>HPC login nodes/development/testing</strong>: Use <code>torc-server run</code></li>
 <li>For <strong>production servers/standalone computers</strong>: Use <code>torc-server service install</code></li>
 </ul>
-<h2 id="quick-start-7"><a class="header" href="#quick-start-7">Quick Start</a></h2>
+<h2 id="quick-start-8"><a class="header" href="#quick-start-8">Quick Start</a></h2>
 <h3 id="user-service-development"><a class="header" href="#user-service-development">User Service (Development)</a></h3>
 <p>For development, install as a user service (no root required):</p>
 <pre><code class="language-bash"># Install with automatic defaults (logs to ~/.torc/logs, db at ~/.torc/torc.db)
@@ -14632,7 +15047,7 @@ working:</p>
 </ol>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="using-configuration-files"><a class="header" href="#using-configuration-files">Using Configuration Files</a></h1>
 <p>This guide shows how to set up and use configuration files for Torc components.</p>
-<h2 id="quick-start-8"><a class="header" href="#quick-start-8">Quick Start</a></h2>
+<h2 id="quick-start-9"><a class="header" href="#quick-start-9">Quick Start</a></h2>
 <p>Create a user configuration file:</p>
 <pre><code class="language-bash">torc config init --user
 </code></pre>
@@ -15256,7 +15671,7 @@ check that the proxy is configured and the URL is correct.</p>
 <li><strong>Format:</strong> PEM-encoded (Base64 ASCII, begins with <code>-----BEGIN CERTIFICATE-----</code>)</li>
 <li><strong>Type:</strong> CA certificate (not the server's leaf certificate)</li>
 </ul>
-<h2 id="see-also-26"><a class="header" href="#see-also-26">See Also</a></h2>
+<h2 id="see-also-28"><a class="header" href="#see-also-28">See Also</a></h2>
 <ul>
 <li><a href="specialized/admin/./authentication.html">Authentication</a> — Setting up user authentication</li>
 <li><a href="specialized/admin/./security.html">Security Reference</a> — Security best practices and threat model</li>
@@ -17448,7 +17863,7 @@ remains in Torc's database.</p>
 <li>Check that jobs have actually run (logs are created at runtime)</li>
 </ul>
 <hr />
-<h2 id="see-also-27"><a class="header" href="#see-also-27">See Also</a></h2>
+<h2 id="see-also-29"><a class="header" href="#see-also-29">See Also</a></h2>
 <ul>
 <li><a href="specialized/tools/./ai-assistant.html">AI-Assisted Workflow Management Tutorial</a></li>
 <li><a href="specialized/tools/../../core/reference/configuration.html">Configuration Reference</a></li>
