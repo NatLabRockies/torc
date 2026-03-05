@@ -234,8 +234,14 @@ fn handle_service_action(action: ServiceAction) -> Result<()> {
                 threads: config.threads,
                 auth_file: config.auth_file,
                 require_auth: config.require_auth,
+                credential_cache_ttl_secs: config.credential_cache_ttl_secs,
+                enforce_access_control: config.enforce_access_control,
                 log_level: config.log_level,
                 json_logs: config.json_logs,
+                https: config.https,
+                tls_cert: config.tls_cert,
+                tls_key: config.tls_key,
+                admin_users: config.admin_users,
                 completion_check_interval_secs: config.completion_check_interval_secs,
             };
             (service::ServiceCommand::Install, user, Some(svc_config))

@@ -31,8 +31,14 @@ pub struct ServiceConfig {
     pub threads: u32,
     pub auth_file: Option<String>,
     pub require_auth: bool,
+    pub credential_cache_ttl_secs: u64,
+    pub enforce_access_control: bool,
     pub log_level: String,
     pub json_logs: bool,
+    pub https: bool,
+    pub tls_cert: Option<String>,
+    pub tls_key: Option<String>,
+    pub admin_users: Vec<String>,
     pub completion_check_interval_secs: Option<f64>,
 }
 
@@ -52,8 +58,14 @@ impl ServiceConfig {
             threads: 4,
             auth_file: None,
             require_auth: false,
+            credential_cache_ttl_secs: 60,
+            enforce_access_control: false,
             log_level: "info".to_string(),
             json_logs: false,
+            https: false,
+            tls_cert: None,
+            tls_key: None,
+            admin_users: Vec::new(),
             completion_check_interval_secs: None, // Will use DEFAULT_SERVICE_INTERVAL_SECS
         }
     }
@@ -73,8 +85,14 @@ impl ServiceConfig {
             threads: 4,
             auth_file: None,
             require_auth: false,
+            credential_cache_ttl_secs: 60,
+            enforce_access_control: false,
             log_level: "info".to_string(),
             json_logs: false,
+            https: false,
+            tls_cert: None,
+            tls_key: None,
+            admin_users: Vec::new(),
             completion_check_interval_secs: None, // Will use DEFAULT_SERVICE_INTERVAL_SECS
         }
     }
@@ -96,6 +114,8 @@ impl ServiceConfig {
             log_dir: user_config.log_dir.clone().or(defaults.log_dir),
             database: user_config.database.clone().or(defaults.database),
             auth_file: user_config.auth_file.clone(),
+            tls_cert: user_config.tls_cert.clone(),
+            tls_key: user_config.tls_key.clone(),
             completion_check_interval_secs: user_config.completion_check_interval_secs,
             // Non-Option fields: fall back to service defaults when clap defaults are detected
             host: if user_config.host != "0.0.0.0" {
@@ -118,9 +138,23 @@ impl ServiceConfig {
             } else {
                 defaults.log_level
             },
+            credential_cache_ttl_secs: if user_config.credential_cache_ttl_secs != 60 {
+                user_config.credential_cache_ttl_secs
+            } else {
+                defaults.credential_cache_ttl_secs
+            },
             // Boolean fields: true if either user or defaults enable it
             require_auth: user_config.require_auth || defaults.require_auth,
+            enforce_access_control: user_config.enforce_access_control
+                || defaults.enforce_access_control,
             json_logs: user_config.json_logs || defaults.json_logs,
+            https: user_config.https || defaults.https,
+            // Vec fields: use user config if non-empty
+            admin_users: if user_config.admin_users.is_empty() {
+                defaults.admin_users
+            } else {
+                user_config.admin_users.clone()
+            },
         }
     }
 }
@@ -204,6 +238,34 @@ pub fn install_service(config: &ServiceConfig, user_level: bool) -> Result<()> {
         args.push("--require-auth".into());
     }
 
+    if config.credential_cache_ttl_secs != 60 {
+        args.push("--credential-cache-ttl-secs".into());
+        args.push(config.credential_cache_ttl_secs.to_string().into());
+    }
+
+    if config.enforce_access_control {
+        args.push("--enforce-access-control".into());
+    }
+
+    if config.https {
+        args.push("--https".into());
+    }
+
+    if let Some(ref tls_cert) = config.tls_cert {
+        args.push("--tls-cert".into());
+        args.push(tls_cert.into());
+    }
+
+    if let Some(ref tls_key) = config.tls_key {
+        args.push("--tls-key".into());
+        args.push(tls_key.into());
+    }
+
+    for admin_user in &config.admin_users {
+        args.push("--admin-user".into());
+        args.push(admin_user.into());
+    }
+
     let interval = config
         .completion_check_interval_secs
         .unwrap_or(ServiceConfig::DEFAULT_SERVICE_INTERVAL_SECS);
@@ -241,8 +303,17 @@ pub fn install_service(config: &ServiceConfig, user_level: bool) -> Result<()> {
         println!("  Database: {}", database);
     }
     println!("  Listen address: {}:{}", config.host, config.port);
+    println!("  HTTPS: {}", config.https);
     println!("  Worker threads: {}", config.threads);
     println!("  Log level: {}", config.log_level);
+    println!("  Require auth: {}", config.require_auth);
+    println!(
+        "  Enforce access control: {}",
+        config.enforce_access_control
+    );
+    if !config.admin_users.is_empty() {
+        println!("  Admin users: {}", config.admin_users.join(", "));
+    }
     println!();
     println!("To start the service, run:");
     if user_level {
