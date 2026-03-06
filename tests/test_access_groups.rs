@@ -1647,6 +1647,125 @@ fn test_workflows_list_all_users_with_access_control(
     );
 }
 
+/// Test that admin users can see ALL workflows with `--all-users`, regardless of ownership
+/// or group membership. This verifies the admin bypass in get_accessible_workflow_ids().
+#[rstest]
+fn test_admin_can_list_all_workflows(
+    start_server_with_access_control: &AccessControlServerProcess,
+) {
+    let admin_config = &start_server_with_access_control.config;
+    let password = "correct horse battery staple";
+
+    // Create configs for non-admin users (not in the --admin-user list)
+    let user_x_config = config_with_auth(admin_config, "admin-test-user-x");
+    let user_y_config = config_with_auth(admin_config, "admin-test-user-y");
+    let user_z_config = config_with_auth(admin_config, "admin-test-user-z");
+
+    let counter = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+
+    // Create workflow X owned by "admin-test-user-x"
+    let wf_x = create_workflow_with_user(
+        &user_x_config,
+        &format!("admin-list-test-wf-x-{}", counter),
+        "admin-test-user-x",
+    );
+    let wf_x_id = wf_x.id.unwrap();
+
+    // Create workflow Y owned by "admin-test-user-y"
+    let wf_y = create_workflow_with_user(
+        &user_y_config,
+        &format!("admin-list-test-wf-y-{}", counter),
+        "admin-test-user-y",
+    );
+    let wf_y_id = wf_y.id.unwrap();
+
+    // Create workflow Z owned by "admin-test-user-z" (no groups, no sharing)
+    let wf_z = create_workflow_with_user(
+        &user_z_config,
+        &format!("admin-list-test-wf-z-{}", counter),
+        "admin-test-user-z",
+    );
+    let wf_z_id = wf_z.id.unwrap();
+
+    // Admin user "owner" should see ALL workflows with --all-users
+    // "owner" is configured as an admin user via --admin-user flag in server startup
+    // (We use "owner" instead of "alice" because alice is used as a regular ML team member in other tests)
+    let output = run_cli_command_with_auth(
+        &["--format", "json", "workflows", "list", "--all-users"],
+        start_server_with_access_control,
+        "owner",
+        password,
+    )
+    .expect("Failed to run workflows list --all-users as admin owner");
+
+    let json_output: serde_json::Value =
+        serde_json::from_str(&output).expect("Failed to parse JSON output");
+    let workflows_array = json_output
+        .get("workflows")
+        .and_then(|w| w.as_array())
+        .expect("Expected JSON object with 'workflows' array");
+
+    let found_ids: Vec<i64> = workflows_array
+        .iter()
+        .filter_map(|w| w.get("id").and_then(|id| id.as_i64()))
+        .collect();
+
+    // Admin should see all three workflows
+    assert!(
+        found_ids.contains(&wf_x_id),
+        "Admin should see workflow X (owned by user-x), found_ids={:?}",
+        found_ids
+    );
+    assert!(
+        found_ids.contains(&wf_y_id),
+        "Admin should see workflow Y (owned by user-y), found_ids={:?}",
+        found_ids
+    );
+    assert!(
+        found_ids.contains(&wf_z_id),
+        "Admin should see workflow Z (owned by user-z), found_ids={:?}",
+        found_ids
+    );
+
+    // Verify a non-admin user cannot see workflows they don't own/have access to
+    let user_x_output = run_cli_command_with_auth(
+        &["--format", "json", "workflows", "list", "--all-users"],
+        start_server_with_access_control,
+        "admin-test-user-x",
+        password,
+    )
+    .expect("Failed to run workflows list --all-users as user-x");
+
+    let user_x_json: serde_json::Value =
+        serde_json::from_str(&user_x_output).expect("Failed to parse JSON output");
+    let user_x_workflows = user_x_json
+        .get("workflows")
+        .and_then(|w| w.as_array())
+        .expect("Expected JSON object with 'workflows' array");
+
+    let user_x_found_ids: Vec<i64> = user_x_workflows
+        .iter()
+        .filter_map(|w| w.get("id").and_then(|id| id.as_i64()))
+        .collect();
+
+    // Non-admin user-x should only see their own workflow
+    assert!(
+        user_x_found_ids.contains(&wf_x_id),
+        "user-x should see their own workflow X, found_ids={:?}",
+        user_x_found_ids
+    );
+    assert!(
+        !user_x_found_ids.contains(&wf_y_id),
+        "user-x should NOT see workflow Y (no access), found_ids={:?}",
+        user_x_found_ids
+    );
+    assert!(
+        !user_x_found_ids.contains(&wf_z_id),
+        "user-x should NOT see workflow Z (no access), found_ids={:?}",
+        user_x_found_ids
+    );
+}
+
 // ============================================================================
 // Resource-level access control tests (check_resource_access paths)
 // ============================================================================

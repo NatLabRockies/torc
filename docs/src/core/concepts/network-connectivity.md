@@ -229,7 +229,6 @@ torc-server run --host 0.0.0.0 --port 8080 \
 
 ```bash
 export TORC_API_URL="http://torc-server.example.com:8080/torc-service/v1"
-export TORC_USERNAME="myusername"
 export TORC_PASSWORD="mypassword"
 ```
 

@@ -45,12 +45,6 @@ mkdir -p ~/.config/torc
 chmod 600 ~/.config/torc/credentials
 ```
 
-If your username on the server differs from your system `$USER`, also add it:
-
-```bash
-echo 'export TORC_USERNAME="alice"' >> ~/.config/torc/credentials
-```
-
 **Source the file from your shell configuration** so it loads automatically. Add this line to
 `~/.bashrc` or `~/.zshrc`:
 

@@ -14,7 +14,7 @@ fn get_exe_path(name: &str) -> String {
 #[serial]
 fn test_reload_auth_success() {
     let server = common::start_server_with_required_auth();
-    let admin_config = server.config_for_user("alice");
+    let admin_config = server.config_for_user("owner");
 
     let result = default_api::reload_auth(&admin_config);
     assert!(result.is_ok(), "reload_auth should succeed for admin");
@@ -47,7 +47,7 @@ fn test_reload_auth_forbidden() {
 #[serial]
 fn test_reload_auth_new_user_can_authenticate() {
     let server = common::start_server_with_required_auth();
-    let admin_config = server.config_for_user("alice");
+    let admin_config = server.config_for_user("owner");
     let htpasswd_path = server.htpasswd_path();
 
     // Add a new user "eve" to the htpasswd file
@@ -87,7 +87,7 @@ fn test_reload_auth_new_user_can_authenticate() {
 #[serial]
 fn test_reload_auth_removed_user_rejected() {
     let server = common::start_server_with_required_auth();
-    let admin_config = server.config_for_user("alice");
+    let admin_config = server.config_for_user("owner");
     let htpasswd_path = server.htpasswd_path();
 
     // Verify "carol" can authenticate currently
@@ -137,7 +137,7 @@ fn test_reload_auth_removed_user_rejected() {
 #[serial]
 fn test_reload_auth_clears_credential_cache() {
     let server = common::start_server_with_required_auth();
-    let admin_config = server.config_for_user("alice");
+    let admin_config = server.config_for_user("owner");
     let htpasswd_path = server.htpasswd_path();
 
     // Ensure bob has original password (may have been changed by a previous test)

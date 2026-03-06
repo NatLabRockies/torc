@@ -123,7 +123,16 @@ impl AuthorizationService {
             return AccessCheckResult::Allowed;
         }
 
-        // 4. Check if user has group-based access
+        // 4. Check if user is a system administrator
+        if self.is_admin(username).await {
+            debug!(
+                "User '{}' is admin, granting access to workflow {}",
+                username, workflow_id
+            );
+            return AccessCheckResult::Allowed;
+        }
+
+        // 5. Check if user has group-based access
         let has_group_access: bool = match sqlx::query(
             r#"
             SELECT EXISTS(
@@ -297,6 +306,15 @@ impl AuthorizationService {
             }
         };
 
+        // Admins can see all workflows
+        if self.is_admin(username).await {
+            debug!(
+                "User '{}' is admin, returning None for accessible_workflow_ids",
+                username
+            );
+            return Ok(None);
+        }
+
         // Get all workflows the user owns OR has group access to
         let records = match sqlx::query(
             r#"
@@ -352,6 +370,34 @@ impl AuthorizationService {
         self.enforce_access_control
     }
 
+    /// Check if a user is a system administrator (internal helper)
+    ///
+    /// Returns true if the user is a member of the "admin" group (is_system = 1)
+    async fn is_admin(&self, username: &str) -> bool {
+        let result = match sqlx::query(
+            r#"
+            SELECT EXISTS(
+                SELECT 1
+                FROM user_group_membership ugm
+                INNER JOIN access_group ag ON ugm.group_id = ag.id
+                WHERE ugm.user_name = $1 AND ag.is_system = 1 AND ag.name = 'admin'
+            ) as is_admin
+            "#,
+        )
+        .bind(username)
+        .fetch_one(self.pool.as_ref())
+        .await
+        {
+            Ok(row) => row.get::<i32, _>("is_admin") == 1,
+            Err(e) => {
+                warn!("Database error checking admin status: {}", e);
+                false
+            }
+        };
+        debug!("is_admin check for '{}': {}", username, result);
+        result
+    }
+
     /// Check if a user is a system administrator
     ///
     /// A user is an admin if they are a member of the "admin" group (is_system = 1)
@@ -369,28 +415,7 @@ impl AuthorizationService {
             }
         };
 
-        let is_admin: bool = match sqlx::query(
-            r#"
-            SELECT EXISTS(
-                SELECT 1
-                FROM user_group_membership ugm
-                INNER JOIN access_group ag ON ugm.group_id = ag.id
-                WHERE ugm.user_name = $1 AND ag.is_system = 1 AND ag.name = 'admin'
-            ) as is_admin
-            "#,
-        )
-        .bind(username)
-        .fetch_one(self.pool.as_ref())
-        .await
-        {
-            Ok(row) => row.get::<i32, _>("is_admin") == 1,
-            Err(e) => {
-                warn!("Database error checking admin status: {}", e);
-                return AccessCheckResult::InternalError("Database error".to_string());
-            }
-        };
-
-        if is_admin {
+        if self.is_admin(username).await {
             debug!("User '{}' is a system administrator", username);
             AccessCheckResult::Allowed
         } else {

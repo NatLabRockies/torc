@@ -1510,11 +1510,9 @@ fn start_process_with_access_control_impl(
         .arg("--enforce-access-control") // Enable access control enforcement
         .arg("--auth-file")
         .arg(&htpasswd_path)
-        // Add admin users (all test users get admin access for now to test other functionality)
-        .arg("--admin-user")
-        .arg("alice")
-        .arg("--admin-user")
-        .arg("bob")
+        // Add admin users - these can see all workflows
+        // Note: alice and bob are NOT admins because they're used as regular team members
+        // in group-based access control tests
         .arg("--admin-user")
         .arg("owner")
         .arg("--admin-user")
@@ -1553,9 +1551,10 @@ fn start_process_with_access_control_impl(
     );
     let mut config = Configuration::new();
     config.base_path = get_server_url(port);
-    // Set up basic auth as "alice" (one of the admin users)
+    // Set up basic auth as "owner" (one of the admin users)
+    // Note: alice and bob are NOT admins - they're used as regular team members in tests
     config.basic_auth = Some((
-        "alice".to_string(),
+        "owner".to_string(),
         Some("correct horse battery staple".to_string()),
     ));
     AccessControlServerProcess {
@@ -1577,14 +1576,16 @@ fn start_process_with_access_control_impl(
 /// truly rejected rather than treated as anonymous.
 ///
 /// Test users (all with password "correct horse battery staple"):
-/// - alice, bob (admin users)
-/// - carol, dave (non-admin users)
+/// - alice, bob (regular team members, NOT admins)
+/// - carol, dave (regular team members)
+/// - owner, api_owner, etc. (admin users)
 #[fixture]
 #[once]
 pub fn start_server_with_required_auth() -> AccessControlServerProcess {
     let _ = env_logger::try_init();
 
-    let test_users = ["alice", "bob", "carol", "dave"];
+    // Include "owner" who is an admin user for tests that need admin access
+    let test_users = ["alice", "bob", "carol", "dave", "owner"];
     let htpasswd_file = create_htpasswd_file(&test_users);
     eprintln!(
         "Created htpasswd file with {} users (require-auth mode)",
@@ -1655,6 +1656,10 @@ pub fn start_server_with_access_control() -> AccessControlServerProcess {
         "nf_user",
         "file_owner",
         "grp_res_owner",
+        // Admin list test users (non-admin users)
+        "admin-test-user-x",
+        "admin-test-user-y",
+        "admin-test-user-z",
     ];
 
     let htpasswd_file = create_htpasswd_file(&test_users);
