@@ -11399,3 +11399,277 @@ impl ListSlurmStatsResponse {
         }
     }
 }
+
+// ============================================================================
+// DATASET MODELS
+// ============================================================================
+// Issue: #184 - Datasets: First-Class Directory Outputs
+
+/// Status of a dataset in its lifecycle
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum DatasetStatus {
+    /// Contributors still running
+    #[default]
+    Pending,
+    /// Claimed by a runner, computing hash
+    Finalizing,
+    /// Hash computed, ready for RO-Crate
+    Finalized,
+}
+
+impl std::fmt::Display for DatasetStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DatasetStatus::Pending => write!(f, "pending"),
+            DatasetStatus::Finalizing => write!(f, "finalizing"),
+            DatasetStatus::Finalized => write!(f, "finalized"),
+        }
+    }
+}
+
+impl std::str::FromStr for DatasetStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "pending" => Ok(DatasetStatus::Pending),
+            "finalizing" => Ok(DatasetStatus::Finalizing),
+            "finalized" => Ok(DatasetStatus::Finalized),
+            _ => Err(format!("Invalid dataset status: {}", s)),
+        }
+    }
+}
+
+/// Hash mode for dataset integrity verification
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum HashMode {
+    /// Hash sorted (path, size, mtime) tuples - fast, metadata only
+    #[default]
+    Manifest,
+    /// SHA256 of all file contents - thorough but slow
+    Content,
+    /// No hash, just count/size - fastest
+    None,
+}
+
+impl std::fmt::Display for HashMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HashMode::Manifest => write!(f, "manifest"),
+            HashMode::Content => write!(f, "content"),
+            HashMode::None => write!(f, "none"),
+        }
+    }
+}
+
+impl std::str::FromStr for HashMode {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "manifest" => Ok(HashMode::Manifest),
+            "content" => Ok(HashMode::Content),
+            "none" => Ok(HashMode::None),
+            _ => Err(format!("Invalid hash mode: {}", s)),
+        }
+    }
+}
+
+/// A dataset represents a directory-based output artifact.
+///
+/// Unlike files, datasets:
+/// - Have multiple contributing jobs (fan-in pattern)
+/// - Are "complete" when all contributors finish
+/// - Use manifest-based hashing for integrity verification
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, validator::Validate)]
+#[cfg_attr(feature = "conversion", derive(frunk::LabelledGeneric))]
+pub struct DatasetModel {
+    #[serde(rename = "id")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<i64>,
+
+    /// Database ID of the workflow this dataset belongs to
+    #[serde(rename = "workflow_id")]
+    pub workflow_id: i64,
+
+    /// User-defined name of the dataset
+    #[serde(rename = "name")]
+    pub name: String,
+
+    /// Path to the dataset directory
+    #[serde(rename = "path")]
+    pub path: String,
+
+    /// Optional description of the dataset
+    #[serde(rename = "description")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+
+    /// Hash mode for integrity verification
+    #[serde(rename = "hash_mode")]
+    pub hash_mode: HashMode,
+
+    /// Current status of the dataset
+    #[serde(rename = "status")]
+    pub status: DatasetStatus,
+
+    /// ID of compute node that claimed this dataset for finalization
+    #[serde(rename = "claimed_by_node_id")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub claimed_by_node_id: Option<i64>,
+
+    /// Timestamp when the dataset was claimed for finalization
+    #[serde(rename = "claimed_at")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub claimed_at: Option<f64>,
+
+    /// Number of files in the dataset (computed on finalization)
+    #[serde(rename = "file_count")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_count: Option<i64>,
+
+    /// Total size in bytes of all files (computed on finalization)
+    #[serde(rename = "total_size_bytes")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_size_bytes: Option<i64>,
+
+    /// Hash of the dataset manifest (computed on finalization)
+    #[serde(rename = "manifest_hash")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub manifest_hash: Option<String>,
+
+    /// Timestamp when the dataset was finalized
+    #[serde(rename = "finalized_at")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finalized_at: Option<f64>,
+}
+
+impl DatasetModel {
+    #[allow(clippy::new_without_default)]
+    pub fn new(workflow_id: i64, name: String, path: String) -> DatasetModel {
+        DatasetModel {
+            id: None,
+            workflow_id,
+            name,
+            path,
+            description: None,
+            hash_mode: HashMode::Manifest,
+            status: DatasetStatus::Pending,
+            claimed_by_node_id: None,
+            claimed_at: None,
+            file_count: None,
+            total_size_bytes: None,
+            manifest_hash: None,
+            finalized_at: None,
+        }
+    }
+}
+
+/// Response for listing datasets
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, validator::Validate)]
+#[cfg_attr(feature = "conversion", derive(frunk::LabelledGeneric))]
+pub struct ListDatasetsResponse {
+    #[serde(rename = "items")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub items: Option<Vec<models::DatasetModel>>,
+
+    #[serde(rename = "offset")]
+    pub offset: i64,
+
+    #[serde(rename = "max_limit")]
+    pub max_limit: i64,
+
+    #[serde(rename = "count")]
+    pub count: i64,
+
+    #[serde(rename = "total_count")]
+    pub total_count: i64,
+
+    #[serde(rename = "has_more")]
+    pub has_more: bool,
+}
+
+impl ListDatasetsResponse {
+    #[allow(clippy::new_without_default)]
+    pub fn new(
+        offset: i64,
+        max_limit: i64,
+        count: i64,
+        total_count: i64,
+        has_more: bool,
+    ) -> ListDatasetsResponse {
+        ListDatasetsResponse {
+            items: None,
+            offset,
+            max_limit,
+            count,
+            total_count,
+            has_more,
+        }
+    }
+}
+
+/// Task for finalizing a dataset, returned in complete_job response
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct DatasetFinalizationTask {
+    /// ID of the dataset to finalize
+    #[serde(rename = "dataset_id")]
+    pub dataset_id: i64,
+
+    /// Name of the dataset
+    #[serde(rename = "name")]
+    pub name: String,
+
+    /// Path to the dataset directory
+    #[serde(rename = "path")]
+    pub path: String,
+
+    /// Hash mode for computing integrity hash
+    #[serde(rename = "hash_mode")]
+    pub hash_mode: HashMode,
+}
+
+/// Request body for finalizing a dataset
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct DatasetFinalizationRequest {
+    /// Number of files in the dataset
+    #[serde(rename = "file_count")]
+    pub file_count: i64,
+
+    /// Total size in bytes
+    #[serde(rename = "total_size_bytes")]
+    pub total_size_bytes: i64,
+
+    /// Computed hash (null if hash_mode is 'none')
+    #[serde(rename = "manifest_hash")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub manifest_hash: Option<String>,
+}
+
+/// Junction model for job-dataset output relationships
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct JobDatasetOutputModel {
+    #[serde(rename = "job_id")]
+    pub job_id: i64,
+
+    #[serde(rename = "dataset_id")]
+    pub dataset_id: i64,
+
+    #[serde(rename = "workflow_id")]
+    pub workflow_id: i64,
+}
+
+/// Junction model for job-dataset input relationships
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct JobDatasetInputModel {
+    #[serde(rename = "job_id")]
+    pub job_id: i64,
+
+    #[serde(rename = "dataset_id")]
+    pub dataset_id: i64,
+
+    #[serde(rename = "workflow_id")]
+    pub workflow_id: i64,
+}

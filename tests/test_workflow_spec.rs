@@ -1350,6 +1350,10 @@ fn test_json_field_name_compatibility() {
         parameter_mode: None,
         use_parameters: None,
         failure_handler: None,
+        input_datasets: None,
+        input_dataset_regexes: None,
+        output_datasets: None,
+        output_dataset_regexes: None,
     };
 
     let json = serde_json::to_value(&job).expect("Failed to serialize to JSON value");

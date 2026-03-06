@@ -135,6 +135,7 @@ impl PaginationInfo {
 // Re-export submodules
 pub mod access_groups;
 pub mod compute_nodes;
+pub mod datasets;
 pub mod events;
 pub mod failure_handlers;
 pub mod files;
@@ -153,6 +154,7 @@ pub mod workflows;
 // Re-export API traits and implementations
 pub use access_groups::AccessGroupsApiImpl;
 pub use compute_nodes::{ComputeNodesApi, ComputeNodesApiImpl};
+pub use datasets::{DatasetsApi, DatasetsApiImpl};
 pub use events::{EventsApi, EventsApiImpl};
 pub use failure_handlers::{FailureHandlersApi, FailureHandlersApiImpl};
 pub use files::{FilesApi, FilesApiImpl};

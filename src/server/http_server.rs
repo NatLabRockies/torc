@@ -6,6 +6,7 @@
 use crate::models;
 use crate::server::api::AccessGroupsApiImpl;
 use crate::server::api::ComputeNodesApi;
+use crate::server::api::DatasetsApi;
 use crate::server::api::EventsApi;
 use crate::server::api::FailureHandlersApi;
 use crate::server::api::FailureHandlersApiImpl;
@@ -874,6 +875,7 @@ pub struct Server<C> {
     credential_cache: crate::server::auth::SharedCredentialCache,
     access_groups_api: AccessGroupsApiImpl,
     compute_nodes_api: ComputeNodesApiImpl,
+    datasets_api: DatasetsApiImpl,
     events_api: EventsApiImpl,
     failure_handlers_api: FailureHandlersApiImpl,
     files_api: FilesApiImpl,
@@ -918,6 +920,7 @@ impl<C> Server<C> {
             credential_cache,
             access_groups_api: AccessGroupsApiImpl::new(api_context.clone()),
             compute_nodes_api: ComputeNodesApiImpl::new(api_context.clone()),
+            datasets_api: DatasetsApiImpl::new(api_context.clone()),
             events_api: EventsApiImpl::new(api_context.clone()),
             failure_handlers_api: FailureHandlersApiImpl::new(api_context.clone()),
             files_api: FilesApiImpl::new(api_context.clone()),
@@ -2495,7 +2498,7 @@ use swagger::ApiError;
 
 // Import the API implementations from torc library
 use crate::server::api::{
-    ApiContext, ComputeNodesApiImpl, EventsApiImpl, FilesApiImpl, JobsApiImpl,
+    ApiContext, ComputeNodesApiImpl, DatasetsApiImpl, EventsApiImpl, FilesApiImpl, JobsApiImpl,
     RemoteWorkersApiImpl, ResourceRequirementsApiImpl, ResultsApiImpl, SchedulersApiImpl,
     SlurmStatsApiImpl, UserDataApiImpl, WorkflowActionsApiImpl, WorkflowsApiImpl,
 };
@@ -2627,6 +2630,121 @@ where
     ) -> Result<CreateFileResponse, ApiError> {
         authorize_workflow!(self, file.workflow_id, context, CreateFileResponse);
         self.files_api.create_file(file, context).await
+    }
+
+    /// Store a dataset.
+    async fn create_dataset(
+        &self,
+        body: models::DatasetModel,
+        context: &C,
+    ) -> Result<CreateDatasetResponse, ApiError> {
+        authorize_workflow!(self, body.workflow_id, context, CreateDatasetResponse);
+        self.datasets_api.create_dataset(body, context).await
+    }
+
+    /// Retrieve a dataset.
+    async fn get_dataset(&self, id: i64, context: &C) -> Result<GetDatasetResponse, ApiError> {
+        authorize_resource!(self, id, "dataset", context, GetDatasetResponse);
+        self.datasets_api.get_dataset(id, context).await
+    }
+
+    /// List datasets for a workflow.
+    async fn list_datasets(
+        &self,
+        workflow_id: i64,
+        offset: i64,
+        limit: i64,
+        status: Option<String>,
+        context: &C,
+    ) -> Result<ListDatasetsResponse, ApiError> {
+        authorize_workflow!(self, workflow_id, context, ListDatasetsResponse);
+        self.datasets_api
+            .list_datasets(workflow_id, offset, limit, status, context)
+            .await
+    }
+
+    /// Update a dataset.
+    async fn update_dataset(
+        &self,
+        id: i64,
+        body: models::DatasetModel,
+        context: &C,
+    ) -> Result<UpdateDatasetResponse, ApiError> {
+        authorize_resource!(self, id, "dataset", context, UpdateDatasetResponse);
+        self.datasets_api.update_dataset(id, body, context).await
+    }
+
+    /// Delete a dataset.
+    async fn delete_dataset(
+        &self,
+        id: i64,
+        context: &C,
+    ) -> Result<DeleteDatasetResponse, ApiError> {
+        authorize_resource!(self, id, "dataset", context, DeleteDatasetResponse);
+        self.datasets_api.delete_dataset(id, context).await
+    }
+
+    /// Delete all datasets for a workflow.
+    async fn delete_datasets(
+        &self,
+        workflow_id: i64,
+        context: &C,
+    ) -> Result<DeleteDatasetsResponse, ApiError> {
+        authorize_workflow!(self, workflow_id, context, DeleteDatasetsResponse);
+        self.datasets_api
+            .delete_datasets(workflow_id, context)
+            .await
+    }
+
+    /// Finalize a dataset (compute hash and mark complete).
+    async fn finalize_dataset(
+        &self,
+        id: i64,
+        body: models::DatasetFinalizationRequest,
+        context: &C,
+    ) -> Result<FinalizeDatasetResponse, ApiError> {
+        authorize_resource!(self, id, "dataset", context, FinalizeDatasetResponse);
+        self.datasets_api.finalize_dataset(id, body, context).await
+    }
+
+    /// Create a job-dataset output relationship.
+    async fn create_job_dataset_output(
+        &self,
+        job_id: i64,
+        dataset_id: i64,
+        workflow_id: i64,
+        context: &C,
+    ) -> Result<CreateJobDatasetOutputResponse, ApiError> {
+        authorize_resource!(
+            self,
+            dataset_id,
+            "dataset",
+            context,
+            CreateJobDatasetOutputResponse
+        );
+        self.datasets_api
+            .create_job_dataset_output(job_id, dataset_id, workflow_id, context)
+            .await
+    }
+
+    /// Create a job-dataset input relationship.
+    async fn create_job_dataset_input(
+        &self,
+        job_id: i64,
+        dataset_id: i64,
+        workflow_id: i64,
+        context: &C,
+    ) -> Result<CreateJobDatasetInputResponse, ApiError> {
+        authorize_resource!(
+            self,
+            dataset_id,
+            "dataset",
+            context,
+            CreateJobDatasetInputResponse
+        );
+        self.datasets_api
+            .create_job_dataset_input(job_id, dataset_id, workflow_id, context)
+            .await
     }
 
     /// Store a job.

@@ -587,6 +587,127 @@ pub enum ListFilesResponse {
     DefaultErrorResponse(models::ErrorResponse),
 }
 
+// ============================================================================
+// DATASET API RESPONSE TYPES
+// ============================================================================
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
+pub enum CreateDatasetResponse {
+    /// Successful response
+    SuccessfulResponse(models::DatasetModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
+pub enum GetDatasetResponse {
+    /// Successful response
+    SuccessfulResponse(models::DatasetModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
+pub enum ListDatasetsResponse {
+    /// Successful response
+    SuccessfulResponse(models::ListDatasetsResponse),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
+pub enum UpdateDatasetResponse {
+    /// Successful response
+    SuccessfulResponse(models::DatasetModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
+pub enum DeleteDatasetResponse {
+    /// Successful response
+    SuccessfulResponse(models::DatasetModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
+pub enum DeleteDatasetsResponse {
+    /// Successful response
+    SuccessfulResponse(serde_json::Value),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
+pub enum FinalizeDatasetResponse {
+    /// Successful response
+    SuccessfulResponse(models::DatasetModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
+pub enum CreateJobDatasetOutputResponse {
+    /// Successful response
+    SuccessfulResponse(models::JobDatasetOutputModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
+pub enum CreateJobDatasetInputResponse {
+    /// Successful response
+    SuccessfulResponse(models::JobDatasetInputModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[must_use]
 pub enum ListJobsResponse {
@@ -1688,6 +1809,71 @@ pub trait Api<C: Send + Sync> {
         context: &C,
     ) -> Result<CreateFileResponse, ApiError>;
 
+    /// Store a dataset.
+    async fn create_dataset(
+        &self,
+        body: models::DatasetModel,
+        context: &C,
+    ) -> Result<CreateDatasetResponse, ApiError>;
+
+    /// Retrieve a dataset.
+    async fn get_dataset(&self, id: i64, context: &C) -> Result<GetDatasetResponse, ApiError>;
+
+    /// List datasets for a workflow.
+    async fn list_datasets(
+        &self,
+        workflow_id: i64,
+        offset: i64,
+        limit: i64,
+        status: Option<String>,
+        context: &C,
+    ) -> Result<ListDatasetsResponse, ApiError>;
+
+    /// Update a dataset.
+    async fn update_dataset(
+        &self,
+        id: i64,
+        body: models::DatasetModel,
+        context: &C,
+    ) -> Result<UpdateDatasetResponse, ApiError>;
+
+    /// Delete a dataset.
+    async fn delete_dataset(&self, id: i64, context: &C)
+    -> Result<DeleteDatasetResponse, ApiError>;
+
+    /// Delete all datasets for a workflow.
+    async fn delete_datasets(
+        &self,
+        workflow_id: i64,
+        context: &C,
+    ) -> Result<DeleteDatasetsResponse, ApiError>;
+
+    /// Finalize a dataset (compute hash and mark complete).
+    async fn finalize_dataset(
+        &self,
+        id: i64,
+        body: models::DatasetFinalizationRequest,
+        context: &C,
+    ) -> Result<FinalizeDatasetResponse, ApiError>;
+
+    /// Create a job-dataset output relationship.
+    async fn create_job_dataset_output(
+        &self,
+        job_id: i64,
+        dataset_id: i64,
+        workflow_id: i64,
+        context: &C,
+    ) -> Result<CreateJobDatasetOutputResponse, ApiError>;
+
+    /// Create a job-dataset input relationship.
+    async fn create_job_dataset_input(
+        &self,
+        job_id: i64,
+        dataset_id: i64,
+        workflow_id: i64,
+        context: &C,
+    ) -> Result<CreateJobDatasetInputResponse, ApiError>;
+
     /// Store a job.
     async fn create_job(
         &self,
@@ -2723,6 +2909,60 @@ pub trait ApiNoContext<C: Send + Sync> {
     /// Store a file.
     async fn create_file(&self, body: models::FileModel) -> Result<CreateFileResponse, ApiError>;
 
+    /// Store a dataset.
+    async fn create_dataset(
+        &self,
+        body: models::DatasetModel,
+    ) -> Result<CreateDatasetResponse, ApiError>;
+
+    /// Retrieve a dataset.
+    async fn get_dataset(&self, id: i64) -> Result<GetDatasetResponse, ApiError>;
+
+    /// List datasets for a workflow.
+    async fn list_datasets(
+        &self,
+        workflow_id: i64,
+        offset: i64,
+        limit: i64,
+        status: Option<String>,
+    ) -> Result<ListDatasetsResponse, ApiError>;
+
+    /// Update a dataset.
+    async fn update_dataset(
+        &self,
+        id: i64,
+        body: models::DatasetModel,
+    ) -> Result<UpdateDatasetResponse, ApiError>;
+
+    /// Delete a dataset.
+    async fn delete_dataset(&self, id: i64) -> Result<DeleteDatasetResponse, ApiError>;
+
+    /// Delete all datasets for a workflow.
+    async fn delete_datasets(&self, workflow_id: i64) -> Result<DeleteDatasetsResponse, ApiError>;
+
+    /// Finalize a dataset (compute hash and mark complete).
+    async fn finalize_dataset(
+        &self,
+        id: i64,
+        body: models::DatasetFinalizationRequest,
+    ) -> Result<FinalizeDatasetResponse, ApiError>;
+
+    /// Create a job-dataset output relationship.
+    async fn create_job_dataset_output(
+        &self,
+        job_id: i64,
+        dataset_id: i64,
+        workflow_id: i64,
+    ) -> Result<CreateJobDatasetOutputResponse, ApiError>;
+
+    /// Create a job-dataset input relationship.
+    async fn create_job_dataset_input(
+        &self,
+        job_id: i64,
+        dataset_id: i64,
+        workflow_id: i64,
+    ) -> Result<CreateJobDatasetInputResponse, ApiError>;
+
     /// Store a job.
     async fn create_job(&self, body: models::JobModel) -> Result<CreateJobResponse, ApiError>;
 
@@ -3519,6 +3759,93 @@ impl<T: Api<C> + Send + Sync, C: Clone + Send + Sync> ApiNoContext<C> for Contex
     async fn create_file(&self, body: models::FileModel) -> Result<CreateFileResponse, ApiError> {
         let context = self.context().clone();
         self.api().create_file(body, &context).await
+    }
+
+    /// Store a dataset.
+    async fn create_dataset(
+        &self,
+        body: models::DatasetModel,
+    ) -> Result<CreateDatasetResponse, ApiError> {
+        let context = self.context().clone();
+        self.api().create_dataset(body, &context).await
+    }
+
+    /// Retrieve a dataset.
+    async fn get_dataset(&self, id: i64) -> Result<GetDatasetResponse, ApiError> {
+        let context = self.context().clone();
+        self.api().get_dataset(id, &context).await
+    }
+
+    /// List datasets for a workflow.
+    async fn list_datasets(
+        &self,
+        workflow_id: i64,
+        offset: i64,
+        limit: i64,
+        status: Option<String>,
+    ) -> Result<ListDatasetsResponse, ApiError> {
+        let context = self.context().clone();
+        self.api()
+            .list_datasets(workflow_id, offset, limit, status, &context)
+            .await
+    }
+
+    /// Update a dataset.
+    async fn update_dataset(
+        &self,
+        id: i64,
+        body: models::DatasetModel,
+    ) -> Result<UpdateDatasetResponse, ApiError> {
+        let context = self.context().clone();
+        self.api().update_dataset(id, body, &context).await
+    }
+
+    /// Delete a dataset.
+    async fn delete_dataset(&self, id: i64) -> Result<DeleteDatasetResponse, ApiError> {
+        let context = self.context().clone();
+        self.api().delete_dataset(id, &context).await
+    }
+
+    /// Delete all datasets for a workflow.
+    async fn delete_datasets(&self, workflow_id: i64) -> Result<DeleteDatasetsResponse, ApiError> {
+        let context = self.context().clone();
+        self.api().delete_datasets(workflow_id, &context).await
+    }
+
+    /// Finalize a dataset (compute hash and mark complete).
+    async fn finalize_dataset(
+        &self,
+        id: i64,
+        body: models::DatasetFinalizationRequest,
+    ) -> Result<FinalizeDatasetResponse, ApiError> {
+        let context = self.context().clone();
+        self.api().finalize_dataset(id, body, &context).await
+    }
+
+    /// Create a job-dataset output relationship.
+    async fn create_job_dataset_output(
+        &self,
+        job_id: i64,
+        dataset_id: i64,
+        workflow_id: i64,
+    ) -> Result<CreateJobDatasetOutputResponse, ApiError> {
+        let context = self.context().clone();
+        self.api()
+            .create_job_dataset_output(job_id, dataset_id, workflow_id, &context)
+            .await
+    }
+
+    /// Create a job-dataset input relationship.
+    async fn create_job_dataset_input(
+        &self,
+        job_id: i64,
+        dataset_id: i64,
+        workflow_id: i64,
+    ) -> Result<CreateJobDatasetInputResponse, ApiError> {
+        let context = self.context().clone();
+        self.api()
+            .create_job_dataset_input(job_id, dataset_id, workflow_id, &context)
+            .await
     }
 
     /// Store a job.

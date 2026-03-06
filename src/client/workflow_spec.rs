@@ -140,6 +140,44 @@ impl FileSpec {
     }
 }
 
+/// Dataset specification for directory-based outputs
+///
+/// Datasets represent directories that contain multiple files, typically produced
+/// by multiple jobs (fan-in pattern). Unlike files, datasets:
+/// - Have multiple contributing jobs
+/// - Are "complete" when all contributors finish
+/// - Use manifest-based hashing for integrity verification
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DatasetSpec {
+    /// Name of the dataset (used in ${datasets.input.NAME} references)
+    pub name: String,
+    /// Path to the dataset directory
+    pub path: String,
+    /// Optional description of the dataset
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Hash mode for integrity verification: "manifest" (default), "content", or "none"
+    /// - manifest: Hash sorted (path, size, mtime) tuples - fast, metadata only
+    /// - content: SHA256 of all file contents - thorough but slow
+    /// - none: No hash, just count/size - fastest
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hash_mode: Option<String>,
+}
+
+impl DatasetSpec {
+    /// Create a new DatasetSpec with only required fields
+    #[allow(dead_code)]
+    pub fn new(name: String, path: String) -> DatasetSpec {
+        DatasetSpec {
+            name,
+            path,
+            description: None,
+            hash_mode: None,
+        }
+    }
+}
+
 /// User data specification for JSON serialization (without workflow_id and id)
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -447,6 +485,19 @@ pub struct JobSpec {
     /// Regex patterns for output data produced by this job
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_user_data_regexes: Option<Vec<String>>,
+    /// Names of input datasets required by this job (exact matches)
+    /// Job will be blocked until all jobs that output to these datasets complete
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_datasets: Option<Vec<String>>,
+    /// Regex patterns for input datasets required by this job
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_dataset_regexes: Option<Vec<String>>,
+    /// Names of output datasets this job contributes to (exact matches)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_datasets: Option<Vec<String>>,
+    /// Regex patterns for output datasets this job contributes to
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_dataset_regexes: Option<Vec<String>>,
     /// Name of the scheduler to use for this job
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scheduler: Option<String>,
@@ -487,6 +538,10 @@ impl JobSpec {
             input_user_data_regexes: None,
             output_user_data: None,
             output_user_data_regexes: None,
+            input_datasets: None,
+            input_dataset_regexes: None,
+            output_datasets: None,
+            output_dataset_regexes: None,
             scheduler: None,
             parameters: None,
             parameter_mode: None,
@@ -631,6 +686,43 @@ impl JobSpec {
                 );
             }
 
+            // Substitute parameters in dataset name vectors
+            if let Some(ref names) = self.input_datasets {
+                new_spec.input_datasets = Some(
+                    names
+                        .iter()
+                        .map(|n| substitute_parameters(n, &combo))
+                        .collect(),
+                );
+            }
+
+            if let Some(ref names) = self.output_datasets {
+                new_spec.output_datasets = Some(
+                    names
+                        .iter()
+                        .map(|n| substitute_parameters(n, &combo))
+                        .collect(),
+                );
+            }
+
+            if let Some(ref regexes) = self.input_dataset_regexes {
+                new_spec.input_dataset_regexes = Some(
+                    regexes
+                        .iter()
+                        .map(|r| substitute_parameters(r, &combo))
+                        .collect(),
+                );
+            }
+
+            if let Some(ref regexes) = self.output_dataset_regexes {
+                new_spec.output_dataset_regexes = Some(
+                    regexes
+                        .iter()
+                        .map(|r| substitute_parameters(r, &combo))
+                        .collect(),
+                );
+            }
+
             expanded.push(new_spec);
         }
 
@@ -674,6 +766,12 @@ pub struct WorkflowSpec {
     /// Files associated with this workflow
     #[serde(skip_serializing_if = "Option::is_none")]
     pub files: Option<Vec<FileSpec>>,
+    /// Datasets (directory-based outputs) associated with this workflow
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub datasets: Option<Vec<DatasetSpec>>,
+    /// Default hash mode for datasets: "manifest" (default), "content", or "none"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_hash_mode: Option<String>,
     /// User data associated with this workflow
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user_data: Option<Vec<UserDataSpec>>,
@@ -740,6 +838,8 @@ impl WorkflowSpec {
             jobs_sort_method: None,
             jobs,
             files: None,
+            datasets: None,
+            default_hash_mode: None,
             user_data: None,
             resource_requirements: None,
             failure_handlers: None,
@@ -1636,6 +1736,14 @@ impl WorkflowSpec {
             }
         };
 
+        let dataset_name_to_id = match Self::create_datasets(config, workflow_id, &spec) {
+            Ok(mapping) => mapping,
+            Err(e) => {
+                rollback(workflow_id);
+                return Err(e);
+            }
+        };
+
         let resource_req_name_to_id =
             match Self::create_resource_requirements(config, workflow_id, &spec) {
                 Ok(mapping) => mapping,
@@ -1670,6 +1778,7 @@ impl WorkflowSpec {
             &spec,
             &file_name_to_id,
             &user_data_name_to_id,
+            &dataset_name_to_id,
             &resource_req_name_to_id,
             &slurm_scheduler_to_id,
             &failure_handler_name_to_id,
@@ -1866,6 +1975,70 @@ impl WorkflowSpec {
         }
 
         Ok(user_data_name_to_id)
+    }
+
+    /// Create DatasetModels and build name-to-id mapping
+    fn create_datasets(
+        config: &Configuration,
+        workflow_id: i64,
+        spec: &WorkflowSpec,
+    ) -> Result<HashMap<String, i64>, Box<dyn std::error::Error>> {
+        let mut dataset_name_to_id = HashMap::new();
+
+        if let Some(datasets) = &spec.datasets {
+            for dataset_spec in datasets {
+                // Check for duplicate names
+                if dataset_name_to_id.contains_key(&dataset_spec.name) {
+                    return Err(format!("Duplicate dataset name: {}", dataset_spec.name).into());
+                }
+
+                // Determine hash_mode: use spec value if provided, otherwise use workflow default
+                let hash_mode_str = dataset_spec
+                    .hash_mode
+                    .clone()
+                    .or_else(|| spec.default_hash_mode.clone())
+                    .unwrap_or_else(|| "manifest".to_string());
+
+                let hash_mode = match hash_mode_str.to_lowercase().as_str() {
+                    "manifest" => models::HashMode::Manifest,
+                    "content" => models::HashMode::Content,
+                    "none" => models::HashMode::None,
+                    other => {
+                        return Err(format!(
+                            "Invalid hash_mode '{}' for dataset '{}'. Valid values: manifest, content, none",
+                            other, dataset_spec.name
+                        )
+                        .into())
+                    }
+                };
+
+                let dataset_model = models::DatasetModel {
+                    id: None, // Server will assign ID
+                    workflow_id,
+                    name: dataset_spec.name.clone(),
+                    path: dataset_spec.path.clone(),
+                    description: dataset_spec.description.clone(),
+                    hash_mode,
+                    status: models::DatasetStatus::Pending,
+                    claimed_by_node_id: None,
+                    claimed_at: None,
+                    file_count: None,
+                    total_size_bytes: None,
+                    manifest_hash: None,
+                    finalized_at: None,
+                };
+
+                let created_dataset =
+                    default_api::create_dataset(config, dataset_model).map_err(|e| {
+                        format!("Failed to create dataset {}: {:?}", dataset_spec.name, e)
+                    })?;
+
+                let dataset_id = created_dataset.id.ok_or("Created dataset missing ID")?;
+                dataset_name_to_id.insert(dataset_spec.name.clone(), dataset_id);
+            }
+        }
+
+        Ok(dataset_name_to_id)
     }
 
     /// Create ResourceRequirementsModels and build name-to-id mapping
@@ -2257,12 +2430,14 @@ impl WorkflowSpec {
     /// Create JobModels with proper ID mapping using bulk API in batches of 10000
     /// Jobs are created in dependency order with depends_on_job_ids set during initial creation
     #[allow(clippy::type_complexity, clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     fn create_jobs(
         config: &Configuration,
         workflow_id: i64,
         spec: &WorkflowSpec,
         file_name_to_id: &HashMap<String, i64>,
         user_data_name_to_id: &HashMap<String, i64>,
+        dataset_name_to_id: &HashMap<String, i64>,
         resource_req_name_to_id: &HashMap<String, i64>,
         slurm_scheduler_to_id: &HashMap<String, i64>,
         failure_handler_name_to_id: &HashMap<String, i64>,
@@ -2499,11 +2674,71 @@ impl WorkflowSpec {
                     let job_id = created_job.id.ok_or("Created job missing ID")?;
                     job_name_to_id.insert(job_spec.name.clone(), job_id);
                     created_jobs.insert(job_spec.name.clone(), created_job.clone());
+
+                    // Create dataset relationships for this job
+                    Self::create_job_dataset_relationships(
+                        config,
+                        workflow_id,
+                        job_id,
+                        job_spec,
+                        dataset_name_to_id,
+                    )?;
                 }
             }
         }
 
         Ok((job_name_to_id, created_jobs))
+    }
+
+    /// Create job-dataset input and output relationships for a job
+    fn create_job_dataset_relationships(
+        config: &Configuration,
+        workflow_id: i64,
+        job_id: i64,
+        job_spec: &JobSpec,
+        dataset_name_to_id: &HashMap<String, i64>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // Resolve input dataset names and regexes to IDs
+        let input_dataset_ids = Self::resolve_names_and_regexes(
+            &job_spec.input_datasets,
+            &job_spec.input_dataset_regexes,
+            dataset_name_to_id,
+            "Input dataset",
+            &job_spec.name,
+        )?;
+
+        // Create input dataset relationships
+        for dataset_id in &input_dataset_ids {
+            default_api::create_job_dataset_input(config, job_id, *dataset_id, workflow_id)
+                .map_err(|e| {
+                    format!(
+                        "Failed to create input dataset relationship for job '{}': {:?}",
+                        job_spec.name, e
+                    )
+                })?;
+        }
+
+        // Resolve output dataset names and regexes to IDs
+        let output_dataset_ids = Self::resolve_names_and_regexes(
+            &job_spec.output_datasets,
+            &job_spec.output_dataset_regexes,
+            dataset_name_to_id,
+            "Output dataset",
+            &job_spec.name,
+        )?;
+
+        // Create output dataset relationships
+        for dataset_id in &output_dataset_ids {
+            default_api::create_job_dataset_output(config, job_id, *dataset_id, workflow_id)
+                .map_err(|e| {
+                    format!(
+                        "Failed to create output dataset relationship for job '{}': {:?}",
+                        job_spec.name, e
+                    )
+                })?;
+        }
+
+        Ok(())
     }
 
     /// Convert a byte offset to (line, column) for error reporting
@@ -4027,12 +4262,22 @@ impl WorkflowSpec {
     /// - ${files.output.NAME} - output file (automatically adds to output_files)
     /// - ${user_data.input.NAME} - input user data (automatically adds to input_user_data)
     /// - ${user_data.output.NAME} - output user data (automatically adds to output_user_data)
+    /// - ${datasets.input.NAME} - input dataset (automatically adds to input_datasets)
+    /// - ${datasets.output.NAME} - output dataset (automatically adds to output_datasets)
     pub fn substitute_variables(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         // Build file name to path mapping
         let mut file_name_to_path = HashMap::new();
         if let Some(files) = &self.files {
             for file_spec in files {
                 file_name_to_path.insert(file_spec.name.clone(), file_spec.path.clone());
+            }
+        }
+
+        // Build dataset name to path mapping
+        let mut dataset_name_to_path = HashMap::new();
+        if let Some(datasets) = &self.datasets {
+            for dataset_spec in datasets {
+                dataset_name_to_path.insert(dataset_spec.name.clone(), dataset_spec.path.clone());
             }
         }
 
@@ -4050,101 +4295,85 @@ impl WorkflowSpec {
 
         // Substitute variables in each job and extract dependencies
         for job in &mut self.jobs {
-            let (new_command, input_files, output_files, input_user_data, output_user_data) =
-                Self::substitute_and_extract(
-                    &job.command,
-                    &file_name_to_path,
-                    &user_data_name_to_data,
-                )?;
-            job.command = new_command;
+            let deps = Self::substitute_and_extract(
+                &job.command,
+                &file_name_to_path,
+                &dataset_name_to_path,
+                &user_data_name_to_data,
+            )?;
+            job.command = deps.substituted;
 
             // Set input/output file names from extracted dependencies
-            if !input_files.is_empty() {
-                job.input_files = Some(input_files);
+            if !deps.input_files.is_empty() {
+                job.input_files = Some(deps.input_files);
             }
-            if !output_files.is_empty() {
-                job.output_files = Some(output_files);
+            if !deps.output_files.is_empty() {
+                job.output_files = Some(deps.output_files);
             }
-            if !input_user_data.is_empty() {
-                job.input_user_data = Some(input_user_data);
+            if !deps.input_user_data.is_empty() {
+                job.input_user_data = Some(deps.input_user_data);
             }
-            if !output_user_data.is_empty() {
-                job.output_user_data = Some(output_user_data);
+            if !deps.output_user_data.is_empty() {
+                job.output_user_data = Some(deps.output_user_data);
+            }
+            if !deps.input_datasets.is_empty() {
+                job.input_datasets = Some(deps.input_datasets);
+            }
+            if !deps.output_datasets.is_empty() {
+                job.output_datasets = Some(deps.output_datasets);
             }
 
             // Process invocation script if present
             if let Some(script) = &job.invocation_script {
-                let (
-                    new_script,
-                    script_input_files,
-                    script_output_files,
-                    script_input_user_data,
-                    script_output_user_data,
-                ) = Self::substitute_and_extract(
+                let script_deps = Self::substitute_and_extract(
                     script,
                     &file_name_to_path,
+                    &dataset_name_to_path,
                     &user_data_name_to_data,
                 )?;
-                job.invocation_script = Some(new_script);
+                job.invocation_script = Some(script_deps.substituted);
 
                 // Merge dependencies from invocation script
-                if !script_input_files.is_empty() {
-                    let mut combined = job.input_files.clone().unwrap_or_default();
-                    combined.extend(script_input_files);
-                    combined.sort();
-                    combined.dedup();
-                    job.input_files = Some(combined);
-                }
-                if !script_output_files.is_empty() {
-                    let mut combined = job.output_files.clone().unwrap_or_default();
-                    combined.extend(script_output_files);
-                    combined.sort();
-                    combined.dedup();
-                    job.output_files = Some(combined);
-                }
-                if !script_input_user_data.is_empty() {
-                    let mut combined = job.input_user_data.clone().unwrap_or_default();
-                    combined.extend(script_input_user_data);
-                    combined.sort();
-                    combined.dedup();
-                    job.input_user_data = Some(combined);
-                }
-                if !script_output_user_data.is_empty() {
-                    let mut combined = job.output_user_data.clone().unwrap_or_default();
-                    combined.extend(script_output_user_data);
-                    combined.sort();
-                    combined.dedup();
-                    job.output_user_data = Some(combined);
-                }
+                Self::merge_vec_option(&mut job.input_files, script_deps.input_files);
+                Self::merge_vec_option(&mut job.output_files, script_deps.output_files);
+                Self::merge_vec_option(&mut job.input_user_data, script_deps.input_user_data);
+                Self::merge_vec_option(&mut job.output_user_data, script_deps.output_user_data);
+                Self::merge_vec_option(&mut job.input_datasets, script_deps.input_datasets);
+                Self::merge_vec_option(&mut job.output_datasets, script_deps.output_datasets);
             }
         }
 
         Ok(())
     }
 
+    /// Helper to merge a vec into an Option<Vec>, deduplicating
+    fn merge_vec_option(target: &mut Option<Vec<String>>, source: Vec<String>) {
+        if source.is_empty() {
+            return;
+        }
+        let mut combined = target.take().unwrap_or_default();
+        combined.extend(source);
+        combined.sort();
+        combined.dedup();
+        *target = Some(combined);
+    }
+
     /// Substitute variables and extract input/output dependencies
-    /// Returns: (substituted_string, input_files, output_files, input_user_data, output_user_data)
-    #[allow(clippy::type_complexity)]
     fn substitute_and_extract(
         input: &str,
         file_name_to_path: &HashMap<String, String>,
+        dataset_name_to_path: &HashMap<String, String>,
         user_data_name_to_data: &HashMap<String, serde_json::Value>,
-    ) -> Result<
-        (String, Vec<String>, Vec<String>, Vec<String>, Vec<String>),
-        Box<dyn std::error::Error>,
-    > {
+    ) -> Result<ExtractedDependencies, Box<dyn std::error::Error>> {
         let mut result = input.to_string();
-        let mut input_files = Vec::new();
-        let mut output_files = Vec::new();
-        let mut input_user_data = Vec::new();
-        let mut output_user_data = Vec::new();
+        let mut deps = ExtractedDependencies::default();
 
         // Extract and replace ${files.input.NAME}
         for (name, path) in file_name_to_path {
             let input_pattern = format!("${{files.input.{}}}", name);
             if result.contains(&input_pattern) {
                 result = result.replace(&input_pattern, path);
-                input_files.push(name.clone());
+                deps.input_files.push(name.clone());
             }
         }
 
@@ -4153,7 +4382,25 @@ impl WorkflowSpec {
             let output_pattern = format!("${{files.output.{}}}", name);
             if result.contains(&output_pattern) {
                 result = result.replace(&output_pattern, path);
-                output_files.push(name.clone());
+                deps.output_files.push(name.clone());
+            }
+        }
+
+        // Extract and replace ${datasets.input.NAME}
+        for (name, path) in dataset_name_to_path {
+            let input_pattern = format!("${{datasets.input.{}}}", name);
+            if result.contains(&input_pattern) {
+                result = result.replace(&input_pattern, path);
+                deps.input_datasets.push(name.clone());
+            }
+        }
+
+        // Extract and replace ${datasets.output.NAME}
+        for (name, path) in dataset_name_to_path {
+            let output_pattern = format!("${{datasets.output.{}}}", name);
+            if result.contains(&output_pattern) {
+                result = result.replace(&output_pattern, path);
+                deps.output_datasets.push(name.clone());
             }
         }
 
@@ -4163,7 +4410,7 @@ impl WorkflowSpec {
             if result.contains(&input_pattern) {
                 let data_str = serde_json::to_string(data)?;
                 result = result.replace(&input_pattern, &data_str);
-                input_user_data.push(name.clone());
+                deps.input_user_data.push(name.clone());
             }
         }
 
@@ -4173,18 +4420,25 @@ impl WorkflowSpec {
             if result.contains(&output_pattern) {
                 let data_str = serde_json::to_string(data)?;
                 result = result.replace(&output_pattern, &data_str);
-                output_user_data.push(name.clone());
+                deps.output_user_data.push(name.clone());
             }
         }
 
-        Ok((
-            result,
-            input_files,
-            output_files,
-            input_user_data,
-            output_user_data,
-        ))
+        deps.substituted = result;
+        Ok(deps)
     }
+}
+
+/// Extracted dependencies from variable substitution
+#[derive(Default)]
+struct ExtractedDependencies {
+    substituted: String,
+    input_files: Vec<String>,
+    output_files: Vec<String>,
+    input_user_data: Vec<String>,
+    output_user_data: Vec<String>,
+    input_datasets: Vec<String>,
+    output_datasets: Vec<String>,
 }
 
 #[cfg(test)]
@@ -4640,6 +4894,10 @@ job "train_lr{lr:.4f}_bs{batch_size}" {
                 parameter_mode: None,
                 use_parameters: None,
                 failure_handler: None,
+                input_datasets: None,
+                input_dataset_regexes: None,
+                output_datasets: None,
+                output_dataset_regexes: None,
             }],
             files: Some(vec![{
                 let mut file =
@@ -4652,6 +4910,8 @@ job "train_lr{lr:.4f}_bs{batch_size}" {
                 file
             }]),
             user_data: None,
+            datasets: None,
+            default_hash_mode: None,
             resource_requirements: None,
             slurm_schedulers: None,
             slurm_defaults: None,
