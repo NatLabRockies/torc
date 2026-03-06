@@ -219,6 +219,7 @@ impl AuthorizationService {
     /// the character validation is bypassed.
     const VALID_RESOURCE_TABLES: &'static [&'static str] = &[
         "compute_node",
+        "dataset",
         "event",
         "failure_handler",
         "file",
