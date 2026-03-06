@@ -422,9 +422,9 @@ listed below.</p>
 <h3 id="nlr-kestrel"><a class="header" href="#nlr-kestrel">NLR Kestrel</a></h3>
 <p><strong>Pre-installed binaries</strong> are available at:</p>
 <pre><code>/scratch/dthom/torc/
-├── 0.19.1/
+├── 0.19.2/
 ├── ...
-└── latest -&gt; 0.19.1  (symlink to current version)
+└── latest -&gt; 0.19.2  (symlink to current version)
 </code></pre>
 <blockquote>
 <p><strong>Recommended</strong>: Use the <code>latest</code> directory. Torc maintains backwards compatibility, so you'll
@@ -1170,7 +1170,6 @@ torc-server run --host 0.0.0.0 --port 8080 \
 </code></pre>
 <p><strong>Client configuration (all users):</strong></p>
 <pre><code class="language-bash">export TORC_API_URL="http://torc-server.example.com:8080/torc-service/v1"
-export TORC_USERNAME="myusername"
 export TORC_PASSWORD="mypassword"
 </code></pre>
 <hr />
@@ -3737,9 +3736,6 @@ history:</p>
   printf 'export TORC_PASSWORD="%s"\n' "$_pw"
 ) &gt; ~/.config/torc/credentials
 chmod 600 ~/.config/torc/credentials
-</code></pre>
-<p>If your username on the server differs from your system <code>$USER</code>, also add it:</p>
-<pre><code class="language-bash">echo 'export TORC_USERNAME="alice"' &gt;&gt; ~/.config/torc/credentials
 </code></pre>
 <p><strong>Source the file from your shell configuration</strong> so it loads automatically. Add this line to
 <code>~/.bashrc</code> or <code>~/.zshrc</code>:</p>

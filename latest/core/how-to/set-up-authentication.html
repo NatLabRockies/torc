@@ -214,9 +214,6 @@ history:</p>
 ) &gt; ~/.config/torc/credentials
 chmod 600 ~/.config/torc/credentials
 </code></pre>
-<p>If your username on the server differs from your system <code>$USER</code>, also add it:</p>
-<pre><code class="language-bash">echo 'export TORC_USERNAME="alice"' &gt;&gt; ~/.config/torc/credentials
-</code></pre>
 <p><strong>Source the file from your shell configuration</strong> so it loads automatically. Add this line to
 <code>~/.bashrc</code> or <code>~/.zshrc</code>:</p>
 <pre><code class="language-bash">echo '[ -f ~/.config/torc/credentials ] &amp;&amp; source ~/.config/torc/credentials' &gt;&gt; ~/.bashrc
