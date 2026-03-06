@@ -476,9 +476,9 @@ fn test_jobs_complete_command_json(start_server: &ServerProcess) {
     .expect("Failed to complete job");
 
     // Verify the completed job
-    assert_eq!(completed_job.id.unwrap(), job_id);
-    assert_eq!(completed_job.name, "test_complete_job");
-    assert_eq!(completed_job.status.unwrap(), JobStatus::Completed);
+    assert_eq!(completed_job.job.id.unwrap(), job_id);
+    assert_eq!(completed_job.job.name, "test_complete_job");
+    assert_eq!(completed_job.job.status.unwrap(), JobStatus::Completed);
 }
 
 #[rstest]
@@ -532,7 +532,7 @@ fn test_jobs_complete_with_different_statuses(start_server: &ServerProcess) {
         )
         .unwrap_or_else(|_| panic!("Failed to complete job with status {}", status));
 
-        assert_eq!(completed_job.status.unwrap(), *status);
+        assert_eq!(completed_job.job.status.unwrap(), *status);
     }
 }
 
@@ -588,7 +588,7 @@ fn test_jobs_complete_return_codes(start_server: &ServerProcess) {
         )
         .unwrap_or_else(|_| panic!("Failed to complete job with return code {}", return_code));
 
-        assert_eq!(completed_job.status.unwrap(), expected_status);
+        assert_eq!(completed_job.job.status.unwrap(), expected_status);
     }
 }
 

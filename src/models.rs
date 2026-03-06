@@ -11648,6 +11648,19 @@ pub struct DatasetFinalizationRequest {
     pub manifest_hash: Option<String>,
 }
 
+/// Result from complete_job endpoint, wrapping job and optional dataset finalization tasks
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct CompleteJobResult {
+    /// The completed job
+    #[serde(rename = "job")]
+    pub job: JobModel,
+
+    /// Dataset finalization tasks to perform (if this job was the last contributor)
+    #[serde(rename = "finalization_tasks")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finalization_tasks: Option<Vec<DatasetFinalizationTask>>,
+}
+
 /// Junction model for job-dataset output relationships
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct JobDatasetOutputModel {

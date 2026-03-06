@@ -1590,8 +1590,8 @@ pub enum StartJobResponse {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[must_use]
 pub enum CompleteJobResponse {
-    /// Successful response
-    SuccessfulResponse(models::JobModel),
+    /// Successful response with job and optional dataset finalization tasks
+    SuccessfulResponse(models::CompleteJobResult),
     /// Forbidden - user does not have access
     ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response

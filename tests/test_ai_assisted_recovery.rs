@@ -77,7 +77,7 @@ fn test_pending_failed_status(start_server: &ServerProcess) {
             .expect("Failed to complete job");
 
     // Verify job is in pending_failed status
-    assert_eq!(completed_job.status, Some(JobStatus::PendingFailed));
+    assert_eq!(completed_job.job.status, Some(JobStatus::PendingFailed));
 
     // Fetch the job again to confirm status
     let fetched_job = default_api::get_job(config, job_id).expect("Failed to get job");

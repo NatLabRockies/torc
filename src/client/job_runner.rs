@@ -79,7 +79,8 @@ use crate::client::utils;
 use crate::config::TorcConfig;
 use crate::memory_utils::memory_string_to_gb;
 use crate::models::{
-    ClaimJobsSortMethod, ComputeNodesResources, JobStatus, ResourceRequirementsModel, ResultModel,
+    ClaimJobsSortMethod, ComputeNodesResources, DatasetFinalizationRequest,
+    DatasetFinalizationTask, HashMode, JobStatus, ResourceRequirementsModel, ResultModel,
     SlurmStatsModel, WorkflowModel,
 };
 
@@ -1050,11 +1051,19 @@ impl JobRunner {
                 final_result.clone(),
             )
         }) {
-            Ok(_) => {
+            Ok(result) => {
                 info!(
                     "Job completed workflow_id={} job_id={} run_id={} status={}",
                     self.workflow_id, job_id, final_result.run_id, status_str
                 );
+
+                // Process dataset finalization tasks if any
+                if let Some(tasks) = result.finalization_tasks
+                    && !tasks.is_empty()
+                {
+                    self.process_finalization_tasks(tasks);
+                }
+
                 // Store Slurm accounting stats if collected (best-effort, non-blocking).
                 // slurm_stats was taken at the top of handle_job_completion so we could backfill
                 // resource fields into the result before reporting to the server.
@@ -1142,6 +1151,186 @@ impl JobRunner {
             )
             .into())
         }
+    }
+
+    /// Process dataset finalization tasks after job completion.
+    ///
+    /// For each dataset that needs finalization:
+    /// 1. Walk the dataset directory to count files and compute total size
+    /// 2. Compute hash based on hash_mode (manifest, content, or none)
+    /// 3. Call the finalize_dataset API to record the results
+    fn process_finalization_tasks(&self, tasks: Vec<DatasetFinalizationTask>) {
+        for task in tasks {
+            info!(
+                "Finalizing dataset workflow_id={} dataset_id={} name={} path={} hash_mode={:?}",
+                self.workflow_id, task.dataset_id, task.name, task.path, task.hash_mode
+            );
+
+            // Walk the directory to gather stats
+            let path = Path::new(&task.path);
+            let (file_count, total_size_bytes, manifest_hash) =
+                match self.compute_dataset_stats(path, &task.hash_mode) {
+                    Ok(stats) => stats,
+                    Err(e) => {
+                        error!(
+                            "Failed to compute dataset stats for {} ({}): {}",
+                            task.name, task.path, e
+                        );
+                        // Continue with other tasks - this one will remain in 'finalizing' state
+                        continue;
+                    }
+                };
+
+            // Call the finalize API
+            let request = DatasetFinalizationRequest {
+                file_count,
+                total_size_bytes,
+                manifest_hash,
+            };
+
+            match self.send_with_retries(|| {
+                default_api::finalize_dataset(&self.config, task.dataset_id, request.clone())
+            }) {
+                Ok(dataset) => {
+                    info!(
+                        "Dataset finalized workflow_id={} dataset_id={} name={} file_count={} total_size_bytes={} hash={:?}",
+                        self.workflow_id,
+                        task.dataset_id,
+                        task.name,
+                        dataset.file_count.unwrap_or(0),
+                        dataset.total_size_bytes.unwrap_or(0),
+                        dataset.manifest_hash
+                    );
+                }
+                Err(e) => {
+                    error!(
+                        "Failed to finalize dataset {} ({}): {}",
+                        task.name, task.path, e
+                    );
+                    // Continue with other tasks
+                }
+            }
+        }
+    }
+
+    /// Compute file count, total size, and optional hash for a dataset directory.
+    fn compute_dataset_stats(
+        &self,
+        path: &Path,
+        hash_mode: &HashMode,
+    ) -> Result<(i64, i64, Option<String>), Box<dyn std::error::Error>> {
+        use sha2::{Digest, Sha256};
+        use std::io::Read;
+
+        if !path.exists() {
+            return Err(format!("Dataset path does not exist: {}", path.display()).into());
+        }
+
+        if !path.is_dir() {
+            return Err(format!("Dataset path is not a directory: {}", path.display()).into());
+        }
+
+        let mut file_count: i64 = 0;
+        let mut total_size_bytes: i64 = 0;
+        let mut manifest_entries: Vec<String> = Vec::new();
+        let mut content_hasher = Sha256::new();
+
+        // Walk the directory recursively
+        fn walk_dir(
+            dir: &Path,
+            base: &Path,
+            file_count: &mut i64,
+            total_size_bytes: &mut i64,
+            manifest_entries: &mut Vec<String>,
+            content_hasher: &mut sha2::Sha256,
+            hash_mode: &HashMode,
+        ) -> Result<(), Box<dyn std::error::Error>> {
+            for entry in fs::read_dir(dir)? {
+                let entry = entry?;
+                let path = entry.path();
+                let metadata = entry.metadata()?;
+
+                if metadata.is_dir() {
+                    walk_dir(
+                        &path,
+                        base,
+                        file_count,
+                        total_size_bytes,
+                        manifest_entries,
+                        content_hasher,
+                        hash_mode,
+                    )?;
+                } else if metadata.is_file() {
+                    *file_count += 1;
+                    let size = metadata.len() as i64;
+                    *total_size_bytes += size;
+
+                    // Compute relative path for manifest
+                    let rel_path = path
+                        .strip_prefix(base)
+                        .map(|p| p.to_string_lossy().to_string())
+                        .unwrap_or_else(|_| path.to_string_lossy().to_string());
+
+                    match hash_mode {
+                        HashMode::Manifest => {
+                            // Hash of (path, size, mtime)
+                            let mtime = metadata
+                                .modified()
+                                .map(|t| {
+                                    t.duration_since(std::time::UNIX_EPOCH)
+                                        .map(|d| d.as_secs())
+                                        .unwrap_or(0)
+                                })
+                                .unwrap_or(0);
+                            manifest_entries.push(format!("{}:{}:{}", rel_path, size, mtime));
+                        }
+                        HashMode::Content => {
+                            // Read file content and add to hash
+                            let mut file = fs::File::open(&path)?;
+                            let mut buffer = [0u8; 8192];
+                            loop {
+                                let bytes_read = file.read(&mut buffer)?;
+                                if bytes_read == 0 {
+                                    break;
+                                }
+                                content_hasher.update(&buffer[..bytes_read]);
+                            }
+                        }
+                        HashMode::None => {
+                            // No hashing needed
+                        }
+                    }
+                }
+            }
+            Ok(())
+        }
+
+        walk_dir(
+            path,
+            path,
+            &mut file_count,
+            &mut total_size_bytes,
+            &mut manifest_entries,
+            &mut content_hasher,
+            hash_mode,
+        )?;
+
+        let manifest_hash = match hash_mode {
+            HashMode::Manifest => {
+                // Sort entries for deterministic hash
+                manifest_entries.sort();
+                let manifest_content = manifest_entries.join("\n");
+                let hash = Sha256::digest(manifest_content.as_bytes());
+                Some(format!("{:x}", hash))
+            }
+            HashMode::Content => {
+                let hash = content_hasher.finalize();
+                Some(format!("{:x}", hash))
+            }
+            HashMode::None => None,
+        };
+
+        Ok((file_count, total_size_bytes, manifest_hash))
     }
 
     /// Try to recover and retry a failed job based on its failure handler rules.

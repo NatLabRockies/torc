@@ -1254,6 +1254,162 @@ impl<C> Server<C> {
         }
     }
 
+    /// Claim datasets for finalization after a job completes.
+    ///
+    /// When a job completes, this checks if any datasets it contributes to are now
+    /// ready for finalization (all contributing jobs complete). Uses atomic UPDATE
+    /// with WHERE clause to prevent race conditions between concurrent completions.
+    ///
+    /// Returns finalization tasks for any datasets this node should finalize.
+    async fn claim_datasets_for_finalization(
+        &self,
+        job_id: i64,
+        workflow_id: i64,
+        compute_node_id: Option<i64>,
+    ) -> Result<Vec<models::DatasetFinalizationTask>, ApiError> {
+        // Step 1: Check if workflow uses datasets (early exit optimization)
+        let has_datasets: i64 = match sqlx::query_scalar!(
+            r#"SELECT has_datasets as "has_datasets!" FROM workflow WHERE id = ?"#,
+            workflow_id
+        )
+        .fetch_optional(self.pool.as_ref())
+        .await
+        {
+            Ok(Some(val)) => val,
+            Ok(None) => return Ok(vec![]), // Workflow not found, no finalization needed
+            Err(e) => {
+                error!(
+                    "Failed to check has_datasets for workflow {}: {}",
+                    workflow_id, e
+                );
+                return Err(ApiError("Database error".to_string()));
+            }
+        };
+
+        if has_datasets == 0 {
+            return Ok(vec![]);
+        }
+
+        // Step 2: Find datasets where this job is an output contributor that are still pending
+        let completed_status = models::JobStatus::Completed.to_int();
+        let datasets: Vec<_> = match sqlx::query!(
+            r#"
+            SELECT DISTINCT d.id, d.name, d.path, d.hash_mode
+            FROM dataset d
+            JOIN job_dataset_output jdo ON jdo.dataset_id = d.id
+            WHERE jdo.job_id = ?
+              AND d.workflow_id = ?
+              AND d.status = 'pending'
+            "#,
+            job_id,
+            workflow_id
+        )
+        .fetch_all(self.pool.as_ref())
+        .await
+        {
+            Ok(rows) => rows,
+            Err(e) => {
+                error!(
+                    "Failed to find datasets for job {} in workflow {}: {}",
+                    job_id, workflow_id, e
+                );
+                return Err(ApiError("Database error".to_string()));
+            }
+        };
+
+        if datasets.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let mut finalization_tasks = Vec::new();
+        let now = chrono::Utc::now().timestamp_millis() as f64 / 1000.0;
+
+        // Step 3: For each dataset, check if all contributors are complete and atomically claim
+        for dataset in datasets {
+            // Check if all contributing jobs are complete
+            let incomplete_count: i64 = match sqlx::query_scalar!(
+                r#"
+                SELECT COUNT(*) as "count!"
+                FROM job_dataset_output jdo
+                JOIN job j ON j.id = jdo.job_id
+                WHERE jdo.dataset_id = ?
+                  AND j.status != ?
+                "#,
+                dataset.id,
+                completed_status
+            )
+            .fetch_one(self.pool.as_ref())
+            .await
+            {
+                Ok(count) => count,
+                Err(e) => {
+                    error!(
+                        "Failed to check contributor status for dataset {}: {}",
+                        dataset.id, e
+                    );
+                    continue; // Skip this dataset, don't fail the whole operation
+                }
+            };
+
+            if incomplete_count > 0 {
+                debug!(
+                    "Dataset {} has {} incomplete contributors, skipping finalization",
+                    dataset.id, incomplete_count
+                );
+                continue;
+            }
+
+            // Atomically claim the dataset for finalization
+            // The WHERE clause ensures only one node wins the race
+            let result = sqlx::query!(
+                r#"
+                UPDATE dataset
+                SET status = 'finalizing',
+                    claimed_by_node_id = ?,
+                    claimed_at = ?
+                WHERE id = ?
+                  AND status = 'pending'
+                "#,
+                compute_node_id,
+                now,
+                dataset.id
+            )
+            .execute(self.pool.as_ref())
+            .await;
+
+            match result {
+                Ok(query_result) if query_result.rows_affected() > 0 => {
+                    debug!(
+                        "Claimed dataset {} for finalization by node {:?}",
+                        dataset.id, compute_node_id
+                    );
+
+                    let hash_mode = models::HashMode::from_str(&dataset.hash_mode)
+                        .unwrap_or(models::HashMode::Manifest);
+
+                    finalization_tasks.push(models::DatasetFinalizationTask {
+                        dataset_id: dataset.id,
+                        name: dataset.name,
+                        path: dataset.path,
+                        hash_mode,
+                    });
+                }
+                Ok(_) => {
+                    debug!("Dataset {} was already claimed by another node", dataset.id);
+                }
+                Err(e) => {
+                    error!(
+                        "Failed to claim dataset {} for finalization: {}",
+                        dataset.id, e
+                    );
+                    // Continue with other datasets
+                }
+            }
+        }
+
+        Ok(finalization_tasks)
+    }
+
     /// Get the default resource requirements ID for a workflow
     async fn get_default_resource_requirements_id<Ctx>(
         &self,
@@ -5947,10 +6103,44 @@ where
             }
         }
 
-        Ok(CompleteJobResponse::SuccessfulResponse(job))
+        // Check for datasets that need finalization (only for successful completion)
+        let finalization_tasks = if status == models::JobStatus::Completed {
+            match self
+                .claim_datasets_for_finalization(id, workflow_id, None)
+                .await
+            {
+                Ok(tasks) => {
+                    if !tasks.is_empty() {
+                        debug!(
+                            "Job {} completion triggers finalization of {} dataset(s)",
+                            id,
+                            tasks.len()
+                        );
+                    }
+                    if tasks.is_empty() { None } else { Some(tasks) }
+                }
+                Err(e) => {
+                    // Log but don't fail the completion - finalization can be retried
+                    error!(
+                        "Failed to claim datasets for finalization after job {} completion: {}",
+                        id, e
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        Ok(CompleteJobResponse::SuccessfulResponse(
+            models::CompleteJobResult {
+                job,
+                finalization_tasks,
+            },
+        ))
     }
 
-    /// Retry a failed job by resetting it to ready status and incrementing attempt_id.
+    /// Retry a failed job by resetting it to retry status and incrementing attempt_id.
     async fn retry_job(
         &self,
         id: i64,

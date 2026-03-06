@@ -1245,6 +1245,68 @@ pub fn create_dataset(
     }
 }
 
+/// Finalize a dataset after all contributing jobs complete.
+/// Computes hash (if configured) and marks the dataset as finalized.
+pub fn finalize_dataset(
+    configuration: &configuration::Configuration,
+    id: i64,
+    body: models::DatasetFinalizationRequest,
+) -> Result<models::DatasetModel, Error<FinalizeDatasetError>> {
+    let p_id = id;
+    let p_body = body;
+
+    let uri_str = format!(
+        "{}/datasets/{id}/finalize",
+        configuration.base_path,
+        id = p_id
+    );
+    let mut req_builder = configuration
+        .client
+        .request(reqwest::Method::POST, &uri_str);
+
+    if let Some(ref auth) = configuration.basic_auth {
+        req_builder = req_builder.basic_auth(&auth.0, auth.1.as_ref());
+    }
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+    req_builder = req_builder.json(&p_body);
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req)?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text()?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => Err(Error::from(serde_json::Error::custom(
+                "Received `text/plain` content type response that cannot be converted to `models::DatasetModel`",
+            ))),
+            ContentType::Unsupported(unknown_type) => {
+                Err(Error::from(serde_json::Error::custom(format!(
+                    "Received `{unknown_type}` content type response that cannot be converted to `models::DatasetModel`"
+                ))))
+            }
+        }
+    } else {
+        let content = resp.text()?;
+        let entity: Option<FinalizeDatasetError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent {
+            status,
+            content,
+            entity,
+        }))
+    }
+}
+
 /// Create a job-dataset output relationship.
 pub fn create_job_dataset_output(
     configuration: &configuration::Configuration,
@@ -2076,13 +2138,14 @@ pub fn cancel_workflow(
 }
 
 /// Complete a job, connect it to a result, and manage side effects.
+/// Returns the completed job along with any dataset finalization tasks.
 pub fn complete_job(
     configuration: &configuration::Configuration,
     id: i64,
     status: models::JobStatus,
     run_id: i64,
     body: models::ResultModel,
-) -> Result<models::JobModel, Error<CompleteJobError>> {
+) -> Result<models::CompleteJobResult, Error<CompleteJobError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_id = id;
     let p_status = status;
@@ -2124,11 +2187,11 @@ pub fn complete_job(
         match content_type {
             ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
             ContentType::Text => Err(Error::from(serde_json::Error::custom(
-                "Received `text/plain` content type response that cannot be converted to `models::JobModel`",
+                "Received `text/plain` content type response that cannot be converted to `models::CompleteJobResult`",
             ))),
             ContentType::Unsupported(unknown_type) => {
                 Err(Error::from(serde_json::Error::custom(format!(
-                    "Received `{unknown_type}` content type response that cannot be converted to `models::JobModel`"
+                    "Received `{unknown_type}` content type response that cannot be converted to `models::CompleteJobResult`"
                 ))))
             }
         }
