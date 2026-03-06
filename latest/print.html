@@ -422,9 +422,9 @@ listed below.</p>
 <h3 id="nlr-kestrel"><a class="header" href="#nlr-kestrel">NLR Kestrel</a></h3>
 <p><strong>Pre-installed binaries</strong> are available at:</p>
 <pre><code>/scratch/dthom/torc/
-├── 0.19.0/
+├── 0.19.1/
 ├── ...
-└── latest -&gt; 0.19.0  (symlink to current version)
+└── latest -&gt; 0.19.1  (symlink to current version)
 </code></pre>
 <blockquote>
 <p><strong>Recommended</strong>: Use the <code>latest</code> directory. Torc maintains backwards compatibility, so you'll
@@ -7066,8 +7066,8 @@ torc reports results &lt;workflow_id&gt; --output-dir &lt;correct_path&gt;
 <h2 id="log-file-overview"><a class="header" href="#log-file-overview">Log File Overview</a></h2>
 <p>Torc generates several types of log files during workflow execution:</p>
 <div class="table-wrapper"><table><thead><tr><th>Log Type</th><th>Path Pattern</th><th>Contents</th></tr></thead><tbody>
-<tr><td>Job stdout</td><td><code>output/job_stdio/job_wf&lt;id&gt;_j&lt;job&gt;_r&lt;run&gt;.o</code></td><td>Standard output from job commands</td></tr>
-<tr><td>Job stderr</td><td><code>output/job_stdio/job_wf&lt;id&gt;_j&lt;job&gt;_r&lt;run&gt;.e</code></td><td>Error output, stack traces</td></tr>
+<tr><td>Job stdout</td><td><code>output/job_stdio/job_wf&lt;id&gt;_j&lt;job&gt;_r&lt;run&gt;_a&lt;attempt&gt;.o</code></td><td>Standard output from job commands</td></tr>
+<tr><td>Job stderr</td><td><code>output/job_stdio/job_wf&lt;id&gt;_j&lt;job&gt;_r&lt;run&gt;_a&lt;attempt&gt;.e</code></td><td>Error output, stack traces</td></tr>
 <tr><td>Job runner</td><td><code>output/job_runner_*.log</code></td><td>Torc job runner internal logs</td></tr>
 <tr><td>Slurm stdout</td><td><code>output/slurm_output_wf&lt;id&gt;_sl&lt;slurm_id&gt;.o</code></td><td>Slurm job allocation output</td></tr>
 <tr><td>Slurm stderr</td><td><code>output/slurm_output_wf&lt;id&gt;_sl&lt;slurm_id&gt;.e</code></td><td>Slurm-specific errors</td></tr>

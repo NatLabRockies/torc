@@ -2,11 +2,27 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="refresh" content="0; url=latest/">
-  <link rel="canonical" href="https://natlabrockies.github.io/torc/latest/">
   <title>Redirecting to Torc Documentation</title>
+  <script>
+    // Redirect to the latest release, falling back to dev if no releases exist
+    fetch('versions.json')
+      .then(r => r.json())
+      .then(data => {
+        const target = data.latest_release
+          ? data.latest_release + '/'
+          : 'latest/';
+        window.location.replace(target);
+      })
+      .catch(() => {
+        // Fallback if versions.json doesn't exist or fails to load
+        window.location.replace('latest/');
+      });
+  </script>
+  <noscript>
+    <meta http-equiv="refresh" content="0; url=latest/">
+  </noscript>
 </head>
 <body>
-  <p>Redirecting to <a href="latest/">latest documentation</a>...</p>
+  <p>Redirecting to <a href="latest/">documentation</a>...</p>
 </body>
 </html>
