@@ -377,6 +377,39 @@ function create_compute_node(_api::DefaultApi, response_stream::Channel, body::C
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
+const _returntypes_create_dataset_DefaultApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => DatasetModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => NotFoundErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => DefaultErrorResponse,
+)
+
+function _oacinternal_create_dataset(_api::DefaultApi, body::DatasetModel; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_create_dataset_DefaultApi, "/datasets", [], body)
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Create a dataset.
+
+Create a dataset for a workflow.
+
+Params:
+- body::DatasetModel (required)
+
+Return: DatasetModel, OpenAPI.Clients.ApiResponse
+"""
+function create_dataset(_api::DefaultApi, body::DatasetModel; _mediaType=nothing)
+    _ctx = _oacinternal_create_dataset(_api, body; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function create_dataset(_api::DefaultApi, response_stream::Channel, body::DatasetModel; _mediaType=nothing)
+    _ctx = _oacinternal_create_dataset(_api, body; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
 const _returntypes_create_event_DefaultApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => EventModel,
     Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
@@ -506,6 +539,84 @@ end
 
 function create_job(_api::DefaultApi, response_stream::Channel, body::JobModel; _mediaType=nothing)
     _ctx = _oacinternal_create_job(_api, body; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
+const _returntypes_create_job_dataset_input_DefaultApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => Any,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => NotFoundErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => DefaultErrorResponse,
+)
+
+function _oacinternal_create_job_dataset_input(_api::DefaultApi, job_id::Int64, dataset_id::Int64, workflow_id::Int64; body=nothing, _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_create_job_dataset_input_DefaultApi, "/jobs/{job_id}/dataset_input/{dataset_id}", [], body)
+    OpenAPI.Clients.set_param(_ctx.path, "job_id", job_id)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.path, "dataset_id", dataset_id)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "workflow_id", workflow_id; style="simple", is_explode=false)  # type Int64
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Create job-dataset input relationship.
+
+Create a job-dataset input relationship (job reads from dataset).
+
+Params:
+- job_id::Int64 (required)
+- dataset_id::Int64 (required)
+- workflow_id::Int64 (required)
+- body::Any
+
+Return: Any, OpenAPI.Clients.ApiResponse
+"""
+function create_job_dataset_input(_api::DefaultApi, job_id::Int64, dataset_id::Int64, workflow_id::Int64; body=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_create_job_dataset_input(_api, job_id, dataset_id, workflow_id; body=body, _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function create_job_dataset_input(_api::DefaultApi, response_stream::Channel, job_id::Int64, dataset_id::Int64, workflow_id::Int64; body=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_create_job_dataset_input(_api, job_id, dataset_id, workflow_id; body=body, _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
+const _returntypes_create_job_dataset_output_DefaultApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => Any,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => NotFoundErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => DefaultErrorResponse,
+)
+
+function _oacinternal_create_job_dataset_output(_api::DefaultApi, job_id::Int64, dataset_id::Int64, workflow_id::Int64; body=nothing, _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_create_job_dataset_output_DefaultApi, "/jobs/{job_id}/dataset_output/{dataset_id}", [], body)
+    OpenAPI.Clients.set_param(_ctx.path, "job_id", job_id)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.path, "dataset_id", dataset_id)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "workflow_id", workflow_id; style="simple", is_explode=false)  # type Int64
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Create job-dataset output relationship.
+
+Create a job-dataset output relationship (job writes to dataset).
+
+Params:
+- job_id::Int64 (required)
+- dataset_id::Int64 (required)
+- workflow_id::Int64 (required)
+- body::Any
+
+Return: Any, OpenAPI.Clients.ApiResponse
+"""
+function create_job_dataset_output(_api::DefaultApi, job_id::Int64, dataset_id::Int64, workflow_id::Int64; body=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_create_job_dataset_output(_api, job_id, dataset_id, workflow_id; body=body, _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function create_job_dataset_output(_api::DefaultApi, response_stream::Channel, job_id::Int64, dataset_id::Int64, workflow_id::Int64; body=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_create_job_dataset_output(_api, job_id, dataset_id, workflow_id; body=body, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
@@ -1053,6 +1164,76 @@ end
 
 function delete_compute_nodes(_api::DefaultApi, response_stream::Channel, workflow_id::Int64; body=nothing, _mediaType=nothing)
     _ctx = _oacinternal_delete_compute_nodes(_api, workflow_id; body=body, _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
+const _returntypes_delete_dataset_DefaultApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => DatasetModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => NotFoundErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => DefaultErrorResponse,
+)
+
+function _oacinternal_delete_dataset(_api::DefaultApi, id::Int64; body=nothing, _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_delete_dataset_DefaultApi, "/datasets/{id}", [], body)
+    OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Delete a dataset.
+
+Delete a dataset.
+
+Params:
+- id::Int64 (required)
+- body::Any
+
+Return: DatasetModel, OpenAPI.Clients.ApiResponse
+"""
+function delete_dataset(_api::DefaultApi, id::Int64; body=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_delete_dataset(_api, id; body=body, _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function delete_dataset(_api::DefaultApi, response_stream::Channel, id::Int64; body=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_delete_dataset(_api, id; body=body, _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
+const _returntypes_delete_datasets_DefaultApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => Any,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => NotFoundErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => DefaultErrorResponse,
+)
+
+function _oacinternal_delete_datasets(_api::DefaultApi, workflow_id::Int64; body=nothing, _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_delete_datasets_DefaultApi, "/datasets", [], body)
+    OpenAPI.Clients.set_param(_ctx.query, "workflow_id", workflow_id; style="simple", is_explode=false)  # type Int64
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Delete all datasets for a workflow.
+
+Delete all datasets for a workflow.
+
+Params:
+- workflow_id::Int64 (required)
+- body::Any
+
+Return: Any, OpenAPI.Clients.ApiResponse
+"""
+function delete_datasets(_api::DefaultApi, workflow_id::Int64; body=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_delete_datasets(_api, workflow_id; body=body, _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function delete_datasets(_api::DefaultApi, response_stream::Channel, workflow_id::Int64; body=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_delete_datasets(_api, workflow_id; body=body, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
@@ -1827,6 +2008,41 @@ function delete_workflow(_api::DefaultApi, response_stream::Channel, id::Int64; 
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
+const _returntypes_finalize_dataset_DefaultApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => DatasetModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => NotFoundErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => DefaultErrorResponse,
+)
+
+function _oacinternal_finalize_dataset(_api::DefaultApi, id::Int64, body::DatasetFinalizationRequest; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_finalize_dataset_DefaultApi, "/datasets/{id}/finalize", [], body)
+    OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Finalize a dataset.
+
+Finalize a dataset after all contributing jobs complete. Sets file count, total size, and optional hash.
+
+Params:
+- id::Int64 (required)
+- body::DatasetFinalizationRequest (required)
+
+Return: DatasetModel, OpenAPI.Clients.ApiResponse
+"""
+function finalize_dataset(_api::DefaultApi, id::Int64, body::DatasetFinalizationRequest; _mediaType=nothing)
+    _ctx = _oacinternal_finalize_dataset(_api, id, body; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function finalize_dataset(_api::DefaultApi, response_stream::Channel, id::Int64, body::DatasetFinalizationRequest; _mediaType=nothing)
+    _ctx = _oacinternal_finalize_dataset(_api, id, body; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
 const _returntypes_get_access_group_DefaultApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => AccessGroupModel,
     Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
@@ -1892,6 +2108,40 @@ end
 
 function get_compute_node(_api::DefaultApi, response_stream::Channel, id::Int64; _mediaType=nothing)
     _ctx = _oacinternal_get_compute_node(_api, id; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
+const _returntypes_get_dataset_DefaultApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => DatasetModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => NotFoundErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => DefaultErrorResponse,
+)
+
+function _oacinternal_get_dataset(_api::DefaultApi, id::Int64; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_get_dataset_DefaultApi, "/datasets/{id}", [])
+    OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Retrieve a dataset.
+
+Retrieve a dataset by ID.
+
+Params:
+- id::Int64 (required)
+
+Return: DatasetModel, OpenAPI.Clients.ApiResponse
+"""
+function get_dataset(_api::DefaultApi, id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_get_dataset(_api, id; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function get_dataset(_api::DefaultApi, response_stream::Channel, id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_get_dataset(_api, id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
@@ -2693,6 +2943,46 @@ end
 
 function list_compute_nodes(_api::DefaultApi, response_stream::Channel, workflow_id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, hostname=nothing, is_active=nothing, scheduled_compute_node_id=nothing, _mediaType=nothing)
     _ctx = _oacinternal_list_compute_nodes(_api, workflow_id; offset=offset, limit=limit, sort_by=sort_by, reverse_sort=reverse_sort, hostname=hostname, is_active=is_active, scheduled_compute_node_id=scheduled_compute_node_id, _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
+const _returntypes_list_datasets_DefaultApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => ListDatasetsResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => NotFoundErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => DefaultErrorResponse,
+)
+
+function _oacinternal_list_datasets(_api::DefaultApi, workflow_id::Int64; offset=nothing, limit=nothing, status=nothing, _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_datasets_DefaultApi, "/datasets", [])
+    OpenAPI.Clients.set_param(_ctx.query, "workflow_id", workflow_id; style="simple", is_explode=false)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "offset", offset; style="form", is_explode=true)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "status", status; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""List datasets for a workflow.
+
+List all datasets for a workflow.
+
+Params:
+- workflow_id::Int64 (required)
+- offset::Int64
+- limit::Int64
+- status::String
+
+Return: ListDatasetsResponse, OpenAPI.Clients.ApiResponse
+"""
+function list_datasets(_api::DefaultApi, workflow_id::Int64; offset=nothing, limit=nothing, status=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_list_datasets(_api, workflow_id; offset=offset, limit=limit, status=status, _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function list_datasets(_api::DefaultApi, response_stream::Channel, workflow_id::Int64; offset=nothing, limit=nothing, status=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_list_datasets(_api, workflow_id; offset=offset, limit=limit, status=status, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
@@ -4052,6 +4342,41 @@ function update_compute_node(_api::DefaultApi, response_stream::Channel, id::Int
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
+const _returntypes_update_dataset_DefaultApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => DatasetModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => NotFoundErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => DefaultErrorResponse,
+)
+
+function _oacinternal_update_dataset(_api::DefaultApi, id::Int64, body::DatasetModel; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "PUT", _returntypes_update_dataset_DefaultApi, "/datasets/{id}", [], body)
+    OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Update a dataset.
+
+Update a dataset.
+
+Params:
+- id::Int64 (required)
+- body::DatasetModel (required)
+
+Return: DatasetModel, OpenAPI.Clients.ApiResponse
+"""
+function update_dataset(_api::DefaultApi, id::Int64, body::DatasetModel; _mediaType=nothing)
+    _ctx = _oacinternal_update_dataset(_api, id, body; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function update_dataset(_api::DefaultApi, response_stream::Channel, id::Int64, body::DatasetModel; _mediaType=nothing)
+    _ctx = _oacinternal_update_dataset(_api, id, body; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
 const _returntypes_update_event_DefaultApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => EventModel,
     Regex("^" * replace("403", "x"=>".") * "\$") => ForbiddenErrorResponse,
@@ -4483,10 +4808,13 @@ export claim_next_jobs
 export complete_job
 export create_access_group
 export create_compute_node
+export create_dataset
 export create_event
 export create_failure_handler
 export create_file
 export create_job
+export create_job_dataset_input
+export create_job_dataset_output
 export create_jobs
 export create_local_scheduler
 export create_remote_workers
@@ -4503,6 +4831,8 @@ export delete_access_group
 export delete_all_user_data
 export delete_compute_node
 export delete_compute_nodes
+export delete_dataset
+export delete_datasets
 export delete_event
 export delete_events
 export delete_failure_handler
@@ -4525,8 +4855,10 @@ export delete_slurm_scheduler
 export delete_slurm_schedulers
 export delete_user_data
 export delete_workflow
+export finalize_dataset
 export get_access_group
 export get_compute_node
+export get_dataset
 export get_event
 export get_failure_handler
 export get_file
@@ -4550,6 +4882,7 @@ export is_workflow_complete
 export is_workflow_uninitialized
 export list_access_groups
 export list_compute_nodes
+export list_datasets
 export list_events
 export list_failure_handlers
 export list_files
@@ -4583,6 +4916,7 @@ export reset_workflow_status
 export retry_job
 export start_job
 export update_compute_node
+export update_dataset
 export update_event
 export update_file
 export update_job

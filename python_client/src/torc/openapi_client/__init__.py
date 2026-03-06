@@ -39,6 +39,8 @@ __all__ = [
     "ComputeNodeSchedule",
     "ComputeNodesResources",
     "CreateJobsResponse",
+    "DatasetFinalizationRequest",
+    "DatasetModel",
     "DefaultErrorResponse",
     "DeleteRoCrateEntities200Response",
     "DeleteRoCrateEntity200Response",
@@ -58,6 +60,7 @@ __all__ = [
     "JobsSortMethod",
     "ListAccessGroupsResponse",
     "ListComputeNodesResponse",
+    "ListDatasetsResponse",
     "ListEventsResponse",
     "ListFailureHandlersResponse",
     "ListFilesResponse",
@@ -124,6 +127,8 @@ from torc.openapi_client.models.compute_node_model import ComputeNodeModel as Co
 from torc.openapi_client.models.compute_node_schedule import ComputeNodeSchedule as ComputeNodeSchedule
 from torc.openapi_client.models.compute_nodes_resources import ComputeNodesResources as ComputeNodesResources
 from torc.openapi_client.models.create_jobs_response import CreateJobsResponse as CreateJobsResponse
+from torc.openapi_client.models.dataset_finalization_request import DatasetFinalizationRequest as DatasetFinalizationRequest
+from torc.openapi_client.models.dataset_model import DatasetModel as DatasetModel
 from torc.openapi_client.models.default_error_response import DefaultErrorResponse as DefaultErrorResponse
 from torc.openapi_client.models.delete_ro_crate_entities200_response import DeleteRoCrateEntities200Response as DeleteRoCrateEntities200Response
 from torc.openapi_client.models.delete_ro_crate_entity200_response import DeleteRoCrateEntity200Response as DeleteRoCrateEntity200Response
@@ -143,6 +148,7 @@ from torc.openapi_client.models.jobs_model import JobsModel as JobsModel
 from torc.openapi_client.models.jobs_sort_method import JobsSortMethod as JobsSortMethod
 from torc.openapi_client.models.list_access_groups_response import ListAccessGroupsResponse as ListAccessGroupsResponse
 from torc.openapi_client.models.list_compute_nodes_response import ListComputeNodesResponse as ListComputeNodesResponse
+from torc.openapi_client.models.list_datasets_response import ListDatasetsResponse as ListDatasetsResponse
 from torc.openapi_client.models.list_events_response import ListEventsResponse as ListEventsResponse
 from torc.openapi_client.models.list_failure_handlers_response import ListFailureHandlersResponse as ListFailureHandlersResponse
 from torc.openapi_client.models.list_files_response import ListFilesResponse as ListFilesResponse

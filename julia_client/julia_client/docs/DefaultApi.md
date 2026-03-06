@@ -14,10 +14,13 @@ Method | HTTP request | Description
 [**complete_job**](DefaultApi.md#complete_job) | **POST** /jobs/{id}/complete_job/{status}/{run_id} | Complete a job, connect it to a result, and manage side effects.
 [**create_access_group**](DefaultApi.md#create_access_group) | **POST** /access_groups | Create a new access group.
 [**create_compute_node**](DefaultApi.md#create_compute_node) | **POST** /compute_nodes | Store a compute node.
+[**create_dataset**](DefaultApi.md#create_dataset) | **POST** /datasets | Create a dataset.
 [**create_event**](DefaultApi.md#create_event) | **POST** /events | Store an event.
 [**create_failure_handler**](DefaultApi.md#create_failure_handler) | **POST** /failure_handlers | Create a failure handler.
 [**create_file**](DefaultApi.md#create_file) | **POST** /files | Store a file.
 [**create_job**](DefaultApi.md#create_job) | **POST** /jobs | Store a job.
+[**create_job_dataset_input**](DefaultApi.md#create_job_dataset_input) | **POST** /jobs/{job_id}/dataset_input/{dataset_id} | Create job-dataset input relationship.
+[**create_job_dataset_output**](DefaultApi.md#create_job_dataset_output) | **POST** /jobs/{job_id}/dataset_output/{dataset_id} | Create job-dataset output relationship.
 [**create_jobs**](DefaultApi.md#create_jobs) | **POST** /bulk_jobs | Create jobs in bulk. Recommended max job count of 10,000.
 [**create_local_scheduler**](DefaultApi.md#create_local_scheduler) | **POST** /local_schedulers | Store a local scheduler.
 [**create_remote_workers**](DefaultApi.md#create_remote_workers) | **POST** /workflows/{id}/remote_workers | Store remote workers for a workflow.
@@ -34,6 +37,8 @@ Method | HTTP request | Description
 [**delete_all_user_data**](DefaultApi.md#delete_all_user_data) | **DELETE** /user_data | Delete all user data records for one workflow.
 [**delete_compute_node**](DefaultApi.md#delete_compute_node) | **DELETE** /compute_nodes/{id} | Delete a compute node.
 [**delete_compute_nodes**](DefaultApi.md#delete_compute_nodes) | **DELETE** /compute_nodes | Delete all compute node records for one workflow.
+[**delete_dataset**](DefaultApi.md#delete_dataset) | **DELETE** /datasets/{id} | Delete a dataset.
+[**delete_datasets**](DefaultApi.md#delete_datasets) | **DELETE** /datasets | Delete all datasets for a workflow.
 [**delete_event**](DefaultApi.md#delete_event) | **DELETE** /events/{id} | Delete an event.
 [**delete_events**](DefaultApi.md#delete_events) | **DELETE** /events | Delete all events for one workflow.
 [**delete_failure_handler**](DefaultApi.md#delete_failure_handler) | **DELETE** /failure_handlers/{id} | Delete a failure handler.
@@ -56,8 +61,10 @@ Method | HTTP request | Description
 [**delete_slurm_schedulers**](DefaultApi.md#delete_slurm_schedulers) | **DELETE** /slurm_schedulers | Retrieve all Slurm compute node configurations for one workflow.
 [**delete_user_data**](DefaultApi.md#delete_user_data) | **DELETE** /user_data/{id} | Delete a user data record.
 [**delete_workflow**](DefaultApi.md#delete_workflow) | **DELETE** /workflows/{id} | Delete a workflow.
+[**finalize_dataset**](DefaultApi.md#finalize_dataset) | **POST** /datasets/{id}/finalize | Finalize a dataset.
 [**get_access_group**](DefaultApi.md#get_access_group) | **GET** /access_groups/{id} | Get an access group by ID.
 [**get_compute_node**](DefaultApi.md#get_compute_node) | **GET** /compute_nodes/{id} | Retrieve a compute node by ID.
+[**get_dataset**](DefaultApi.md#get_dataset) | **GET** /datasets/{id} | Retrieve a dataset.
 [**get_event**](DefaultApi.md#get_event) | **GET** /events/{id} | Retrieve an event by ID.
 [**get_failure_handler**](DefaultApi.md#get_failure_handler) | **GET** /failure_handlers/{id} | Get a failure handler by ID.
 [**get_file**](DefaultApi.md#get_file) | **GET** /files/{id} | Retrieve a file.
@@ -81,6 +88,7 @@ Method | HTTP request | Description
 [**is_workflow_uninitialized**](DefaultApi.md#is_workflow_uninitialized) | **GET** /workflows/{id}/is_uninitialized | Return true if all jobs in the workflow are uninitialized or disabled.
 [**list_access_groups**](DefaultApi.md#list_access_groups) | **GET** /access_groups | List all access groups.
 [**list_compute_nodes**](DefaultApi.md#list_compute_nodes) | **GET** /compute_nodes | Retrieve all compute node records for one workflow.
+[**list_datasets**](DefaultApi.md#list_datasets) | **GET** /datasets | List datasets for a workflow.
 [**list_events**](DefaultApi.md#list_events) | **GET** /events | Retrieve all events for one workflow.
 [**list_failure_handlers**](DefaultApi.md#list_failure_handlers) | **GET** /workflows/{id}/failure_handlers | List failure handlers for a workflow.
 [**list_files**](DefaultApi.md#list_files) | **GET** /files | Retrieve all files for one workflow.
@@ -114,6 +122,7 @@ Method | HTTP request | Description
 [**retry_job**](DefaultApi.md#retry_job) | **POST** /jobs/{id}/retry/{run_id} | Retry a failed job.
 [**start_job**](DefaultApi.md#start_job) | **PUT** /jobs/{id}/start_job/{run_id}/{compute_node_id} | Start a job and manage side effects.
 [**update_compute_node**](DefaultApi.md#update_compute_node) | **PUT** /compute_nodes/{id} | Update a compute node.
+[**update_dataset**](DefaultApi.md#update_dataset) | **PUT** /datasets/{id} | Update a dataset.
 [**update_event**](DefaultApi.md#update_event) | **PUT** /events/{id} | Update an event.
 [**update_file**](DefaultApi.md#update_file) | **PUT** /files/{id} | Update a file.
 [**update_job**](DefaultApi.md#update_job) | **PUT** /jobs/{id} | Update a job.
@@ -458,6 +467,36 @@ No authorization required
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
+# **create_dataset**
+> create_dataset(_api::DefaultApi, body::DatasetModel; _mediaType=nothing) -> DatasetModel, OpenAPI.Clients.ApiResponse <br/>
+> create_dataset(_api::DefaultApi, response_stream::Channel, body::DatasetModel; _mediaType=nothing) -> Channel{ DatasetModel }, OpenAPI.Clients.ApiResponse
+
+Create a dataset.
+
+Create a dataset for a workflow.
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **DefaultApi** | API context | 
+**body** | [**DatasetModel**](DatasetModel.md) | Dataset to create |
+
+### Return type
+
+[**DatasetModel**](DatasetModel.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
 # **create_event**
 > create_event(_api::DefaultApi, body::EventModel; _mediaType=nothing) -> EventModel, OpenAPI.Clients.ApiResponse <br/>
 > create_event(_api::DefaultApi, response_stream::Channel, body::EventModel; _mediaType=nothing) -> Channel{ EventModel }, OpenAPI.Clients.ApiResponse
@@ -566,6 +605,82 @@ Name | Type | Description  | Notes
 ### Return type
 
 [**JobModel**](JobModel.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+# **create_job_dataset_input**
+> create_job_dataset_input(_api::DefaultApi, job_id::Int64, dataset_id::Int64, workflow_id::Int64; body=nothing, _mediaType=nothing) -> Any, OpenAPI.Clients.ApiResponse <br/>
+> create_job_dataset_input(_api::DefaultApi, response_stream::Channel, job_id::Int64, dataset_id::Int64, workflow_id::Int64; body=nothing, _mediaType=nothing) -> Channel{ Any }, OpenAPI.Clients.ApiResponse
+
+Create job-dataset input relationship.
+
+Create a job-dataset input relationship (job reads from dataset).
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **DefaultApi** | API context | 
+**job_id** | **Int64** | ID of the job |
+**dataset_id** | **Int64** | ID of the dataset |
+**workflow_id** | **Int64** | Workflow ID for authorization |
+
+### Optional Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **body** | **Any** |  | 
+
+### Return type
+
+**Any**
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+# **create_job_dataset_output**
+> create_job_dataset_output(_api::DefaultApi, job_id::Int64, dataset_id::Int64, workflow_id::Int64; body=nothing, _mediaType=nothing) -> Any, OpenAPI.Clients.ApiResponse <br/>
+> create_job_dataset_output(_api::DefaultApi, response_stream::Channel, job_id::Int64, dataset_id::Int64, workflow_id::Int64; body=nothing, _mediaType=nothing) -> Channel{ Any }, OpenAPI.Clients.ApiResponse
+
+Create job-dataset output relationship.
+
+Create a job-dataset output relationship (job writes to dataset).
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **DefaultApi** | API context | 
+**job_id** | **Int64** | ID of the job |
+**dataset_id** | **Int64** | ID of the dataset |
+**workflow_id** | **Int64** | Workflow ID for authorization |
+
+### Optional Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **body** | **Any** |  | 
+
+### Return type
+
+**Any**
 
 ### Authorization
 
@@ -1062,6 +1177,78 @@ No authorization required
 Delete all compute node records for one workflow.
 
 Delete all compute node records for one workflow.
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **DefaultApi** | API context | 
+**workflow_id** | **Int64** | Workflow ID |
+
+### Optional Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **body** | **Any** |  | 
+
+### Return type
+
+**Any**
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+# **delete_dataset**
+> delete_dataset(_api::DefaultApi, id::Int64; body=nothing, _mediaType=nothing) -> DatasetModel, OpenAPI.Clients.ApiResponse <br/>
+> delete_dataset(_api::DefaultApi, response_stream::Channel, id::Int64; body=nothing, _mediaType=nothing) -> Channel{ DatasetModel }, OpenAPI.Clients.ApiResponse
+
+Delete a dataset.
+
+Delete a dataset.
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **DefaultApi** | API context | 
+**id** | **Int64** | ID of the dataset |
+
+### Optional Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **body** | **Any** |  | 
+
+### Return type
+
+[**DatasetModel**](DatasetModel.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+# **delete_datasets**
+> delete_datasets(_api::DefaultApi, workflow_id::Int64; body=nothing, _mediaType=nothing) -> Any, OpenAPI.Clients.ApiResponse <br/>
+> delete_datasets(_api::DefaultApi, response_stream::Channel, workflow_id::Int64; body=nothing, _mediaType=nothing) -> Channel{ Any }, OpenAPI.Clients.ApiResponse
+
+Delete all datasets for a workflow.
+
+Delete all datasets for a workflow.
 
 ### Required Parameters
 
@@ -1878,6 +2065,37 @@ No authorization required
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
+# **finalize_dataset**
+> finalize_dataset(_api::DefaultApi, id::Int64, body::DatasetFinalizationRequest; _mediaType=nothing) -> DatasetModel, OpenAPI.Clients.ApiResponse <br/>
+> finalize_dataset(_api::DefaultApi, response_stream::Channel, id::Int64, body::DatasetFinalizationRequest; _mediaType=nothing) -> Channel{ DatasetModel }, OpenAPI.Clients.ApiResponse
+
+Finalize a dataset.
+
+Finalize a dataset after all contributing jobs complete. Sets file count, total size, and optional hash.
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **DefaultApi** | API context | 
+**id** | **Int64** | ID of the dataset |
+**body** | [**DatasetFinalizationRequest**](DatasetFinalizationRequest.md) | Finalization data (file count, size, hash) |
+
+### Return type
+
+[**DatasetModel**](DatasetModel.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
 # **get_access_group**
 > get_access_group(_api::DefaultApi, id::Int64; _mediaType=nothing) -> AccessGroupModel, OpenAPI.Clients.ApiResponse <br/>
 > get_access_group(_api::DefaultApi, response_stream::Channel, id::Int64; _mediaType=nothing) -> Channel{ AccessGroupModel }, OpenAPI.Clients.ApiResponse
@@ -1926,6 +2144,36 @@ Name | Type | Description  | Notes
 ### Return type
 
 [**ComputeNodeModel**](ComputeNodeModel.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+# **get_dataset**
+> get_dataset(_api::DefaultApi, id::Int64; _mediaType=nothing) -> DatasetModel, OpenAPI.Clients.ApiResponse <br/>
+> get_dataset(_api::DefaultApi, response_stream::Channel, id::Int64; _mediaType=nothing) -> Channel{ DatasetModel }, OpenAPI.Clients.ApiResponse
+
+Retrieve a dataset.
+
+Retrieve a dataset by ID.
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **DefaultApi** | API context | 
+**id** | **Int64** | ID of the dataset |
+
+### Return type
+
+[**DatasetModel**](DatasetModel.md)
 
 ### Authorization
 
@@ -2650,6 +2898,44 @@ Name | Type | Description  | Notes
 ### Return type
 
 [**ListComputeNodesResponse**](ListComputeNodesResponse.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+# **list_datasets**
+> list_datasets(_api::DefaultApi, workflow_id::Int64; offset=nothing, limit=nothing, status=nothing, _mediaType=nothing) -> ListDatasetsResponse, OpenAPI.Clients.ApiResponse <br/>
+> list_datasets(_api::DefaultApi, response_stream::Channel, workflow_id::Int64; offset=nothing, limit=nothing, status=nothing, _mediaType=nothing) -> Channel{ ListDatasetsResponse }, OpenAPI.Clients.ApiResponse
+
+List datasets for a workflow.
+
+List all datasets for a workflow.
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **DefaultApi** | API context | 
+**workflow_id** | **Int64** | Workflow ID |
+
+### Optional Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **offset** | **Int64** |  | [default to 0]
+ **limit** | **Int64** |  | [default to 1000]
+ **status** | **String** | Filter by status (pending, finalizing, finalized) | [default to nothing]
+
+### Return type
+
+[**ListDatasetsResponse**](ListDatasetsResponse.md)
 
 ### Authorization
 
@@ -3887,6 +4173,37 @@ Name | Type | Description  | Notes
 ### Return type
 
 [**ComputeNodeModel**](ComputeNodeModel.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+# **update_dataset**
+> update_dataset(_api::DefaultApi, id::Int64, body::DatasetModel; _mediaType=nothing) -> DatasetModel, OpenAPI.Clients.ApiResponse <br/>
+> update_dataset(_api::DefaultApi, response_stream::Channel, id::Int64, body::DatasetModel; _mediaType=nothing) -> Channel{ DatasetModel }, OpenAPI.Clients.ApiResponse
+
+Update a dataset.
+
+Update a dataset.
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **DefaultApi** | API context | 
+**id** | **Int64** | ID of the dataset |
+**body** | [**DatasetModel**](DatasetModel.md) | Dataset to update |
+
+### Return type
+
+[**DatasetModel**](DatasetModel.md)
 
 ### Authorization
 

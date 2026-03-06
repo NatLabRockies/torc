@@ -23,6 +23,8 @@ from torc.openapi_client.models.compute_node_model import ComputeNodeModel
 from torc.openapi_client.models.compute_node_schedule import ComputeNodeSchedule
 from torc.openapi_client.models.compute_nodes_resources import ComputeNodesResources
 from torc.openapi_client.models.create_jobs_response import CreateJobsResponse
+from torc.openapi_client.models.dataset_finalization_request import DatasetFinalizationRequest
+from torc.openapi_client.models.dataset_model import DatasetModel
 from torc.openapi_client.models.default_error_response import DefaultErrorResponse
 from torc.openapi_client.models.delete_ro_crate_entities200_response import DeleteRoCrateEntities200Response
 from torc.openapi_client.models.delete_ro_crate_entity200_response import DeleteRoCrateEntity200Response
@@ -42,6 +44,7 @@ from torc.openapi_client.models.jobs_model import JobsModel
 from torc.openapi_client.models.jobs_sort_method import JobsSortMethod
 from torc.openapi_client.models.list_access_groups_response import ListAccessGroupsResponse
 from torc.openapi_client.models.list_compute_nodes_response import ListComputeNodesResponse
+from torc.openapi_client.models.list_datasets_response import ListDatasetsResponse
 from torc.openapi_client.models.list_events_response import ListEventsResponse
 from torc.openapi_client.models.list_failure_handlers_response import ListFailureHandlersResponse
 from torc.openapi_client.models.list_files_response import ListFilesResponse

@@ -32,10 +32,13 @@ Class | Method
 *DefaultApi* | [**complete_job**](docs/DefaultApi.md#complete_job)<br/>**POST** /jobs/{id}/complete_job/{status}/{run_id}<br/>Complete a job, connect it to a result, and manage side effects.
 *DefaultApi* | [**create_access_group**](docs/DefaultApi.md#create_access_group)<br/>**POST** /access_groups<br/>Create a new access group.
 *DefaultApi* | [**create_compute_node**](docs/DefaultApi.md#create_compute_node)<br/>**POST** /compute_nodes<br/>Store a compute node.
+*DefaultApi* | [**create_dataset**](docs/DefaultApi.md#create_dataset)<br/>**POST** /datasets<br/>Create a dataset.
 *DefaultApi* | [**create_event**](docs/DefaultApi.md#create_event)<br/>**POST** /events<br/>Store an event.
 *DefaultApi* | [**create_failure_handler**](docs/DefaultApi.md#create_failure_handler)<br/>**POST** /failure_handlers<br/>Create a failure handler.
 *DefaultApi* | [**create_file**](docs/DefaultApi.md#create_file)<br/>**POST** /files<br/>Store a file.
 *DefaultApi* | [**create_job**](docs/DefaultApi.md#create_job)<br/>**POST** /jobs<br/>Store a job.
+*DefaultApi* | [**create_job_dataset_input**](docs/DefaultApi.md#create_job_dataset_input)<br/>**POST** /jobs/{job_id}/dataset_input/{dataset_id}<br/>Create job-dataset input relationship.
+*DefaultApi* | [**create_job_dataset_output**](docs/DefaultApi.md#create_job_dataset_output)<br/>**POST** /jobs/{job_id}/dataset_output/{dataset_id}<br/>Create job-dataset output relationship.
 *DefaultApi* | [**create_jobs**](docs/DefaultApi.md#create_jobs)<br/>**POST** /bulk_jobs<br/>Create jobs in bulk. Recommended max job count of 10,000.
 *DefaultApi* | [**create_local_scheduler**](docs/DefaultApi.md#create_local_scheduler)<br/>**POST** /local_schedulers<br/>Store a local scheduler.
 *DefaultApi* | [**create_remote_workers**](docs/DefaultApi.md#create_remote_workers)<br/>**POST** /workflows/{id}/remote_workers<br/>Store remote workers for a workflow.
@@ -52,6 +55,8 @@ Class | Method
 *DefaultApi* | [**delete_all_user_data**](docs/DefaultApi.md#delete_all_user_data)<br/>**DELETE** /user_data<br/>Delete all user data records for one workflow.
 *DefaultApi* | [**delete_compute_node**](docs/DefaultApi.md#delete_compute_node)<br/>**DELETE** /compute_nodes/{id}<br/>Delete a compute node.
 *DefaultApi* | [**delete_compute_nodes**](docs/DefaultApi.md#delete_compute_nodes)<br/>**DELETE** /compute_nodes<br/>Delete all compute node records for one workflow.
+*DefaultApi* | [**delete_dataset**](docs/DefaultApi.md#delete_dataset)<br/>**DELETE** /datasets/{id}<br/>Delete a dataset.
+*DefaultApi* | [**delete_datasets**](docs/DefaultApi.md#delete_datasets)<br/>**DELETE** /datasets<br/>Delete all datasets for a workflow.
 *DefaultApi* | [**delete_event**](docs/DefaultApi.md#delete_event)<br/>**DELETE** /events/{id}<br/>Delete an event.
 *DefaultApi* | [**delete_events**](docs/DefaultApi.md#delete_events)<br/>**DELETE** /events<br/>Delete all events for one workflow.
 *DefaultApi* | [**delete_failure_handler**](docs/DefaultApi.md#delete_failure_handler)<br/>**DELETE** /failure_handlers/{id}<br/>Delete a failure handler.
@@ -74,8 +79,10 @@ Class | Method
 *DefaultApi* | [**delete_slurm_schedulers**](docs/DefaultApi.md#delete_slurm_schedulers)<br/>**DELETE** /slurm_schedulers<br/>Retrieve all Slurm compute node configurations for one workflow.
 *DefaultApi* | [**delete_user_data**](docs/DefaultApi.md#delete_user_data)<br/>**DELETE** /user_data/{id}<br/>Delete a user data record.
 *DefaultApi* | [**delete_workflow**](docs/DefaultApi.md#delete_workflow)<br/>**DELETE** /workflows/{id}<br/>Delete a workflow.
+*DefaultApi* | [**finalize_dataset**](docs/DefaultApi.md#finalize_dataset)<br/>**POST** /datasets/{id}/finalize<br/>Finalize a dataset.
 *DefaultApi* | [**get_access_group**](docs/DefaultApi.md#get_access_group)<br/>**GET** /access_groups/{id}<br/>Get an access group by ID.
 *DefaultApi* | [**get_compute_node**](docs/DefaultApi.md#get_compute_node)<br/>**GET** /compute_nodes/{id}<br/>Retrieve a compute node by ID.
+*DefaultApi* | [**get_dataset**](docs/DefaultApi.md#get_dataset)<br/>**GET** /datasets/{id}<br/>Retrieve a dataset.
 *DefaultApi* | [**get_event**](docs/DefaultApi.md#get_event)<br/>**GET** /events/{id}<br/>Retrieve an event by ID.
 *DefaultApi* | [**get_failure_handler**](docs/DefaultApi.md#get_failure_handler)<br/>**GET** /failure_handlers/{id}<br/>Get a failure handler by ID.
 *DefaultApi* | [**get_file**](docs/DefaultApi.md#get_file)<br/>**GET** /files/{id}<br/>Retrieve a file.
@@ -99,6 +106,7 @@ Class | Method
 *DefaultApi* | [**is_workflow_uninitialized**](docs/DefaultApi.md#is_workflow_uninitialized)<br/>**GET** /workflows/{id}/is_uninitialized<br/>Return true if all jobs in the workflow are uninitialized or disabled.
 *DefaultApi* | [**list_access_groups**](docs/DefaultApi.md#list_access_groups)<br/>**GET** /access_groups<br/>List all access groups.
 *DefaultApi* | [**list_compute_nodes**](docs/DefaultApi.md#list_compute_nodes)<br/>**GET** /compute_nodes<br/>Retrieve all compute node records for one workflow.
+*DefaultApi* | [**list_datasets**](docs/DefaultApi.md#list_datasets)<br/>**GET** /datasets<br/>List datasets for a workflow.
 *DefaultApi* | [**list_events**](docs/DefaultApi.md#list_events)<br/>**GET** /events<br/>Retrieve all events for one workflow.
 *DefaultApi* | [**list_failure_handlers**](docs/DefaultApi.md#list_failure_handlers)<br/>**GET** /workflows/{id}/failure_handlers<br/>List failure handlers for a workflow.
 *DefaultApi* | [**list_files**](docs/DefaultApi.md#list_files)<br/>**GET** /files<br/>Retrieve all files for one workflow.
@@ -132,6 +140,7 @@ Class | Method
 *DefaultApi* | [**retry_job**](docs/DefaultApi.md#retry_job)<br/>**POST** /jobs/{id}/retry/{run_id}<br/>Retry a failed job.
 *DefaultApi* | [**start_job**](docs/DefaultApi.md#start_job)<br/>**PUT** /jobs/{id}/start_job/{run_id}/{compute_node_id}<br/>Start a job and manage side effects.
 *DefaultApi* | [**update_compute_node**](docs/DefaultApi.md#update_compute_node)<br/>**PUT** /compute_nodes/{id}<br/>Update a compute node.
+*DefaultApi* | [**update_dataset**](docs/DefaultApi.md#update_dataset)<br/>**PUT** /datasets/{id}<br/>Update a dataset.
 *DefaultApi* | [**update_event**](docs/DefaultApi.md#update_event)<br/>**PUT** /events/{id}<br/>Update an event.
 *DefaultApi* | [**update_file**](docs/DefaultApi.md#update_file)<br/>**PUT** /files/{id}<br/>Update a file.
 *DefaultApi* | [**update_job**](docs/DefaultApi.md#update_job)<br/>**PUT** /jobs/{id}<br/>Update a job.
@@ -158,6 +167,8 @@ Class | Method
  - [ComputeNodeSchedule](docs/ComputeNodeSchedule.md)
  - [ComputeNodesResources](docs/ComputeNodesResources.md)
  - [CreateJobsResponse](docs/CreateJobsResponse.md)
+ - [DatasetFinalizationRequest](docs/DatasetFinalizationRequest.md)
+ - [DatasetModel](docs/DatasetModel.md)
  - [DefaultErrorResponse](docs/DefaultErrorResponse.md)
  - [DeleteRoCrateEntities200Response](docs/DeleteRoCrateEntities200Response.md)
  - [DeleteRoCrateEntity200Response](docs/DeleteRoCrateEntity200Response.md)
@@ -177,6 +188,7 @@ Class | Method
  - [JobsSortMethod](docs/JobsSortMethod.md)
  - [ListAccessGroupsResponse](docs/ListAccessGroupsResponse.md)
  - [ListComputeNodesResponse](docs/ListComputeNodesResponse.md)
+ - [ListDatasetsResponse](docs/ListDatasetsResponse.md)
  - [ListEventsResponse](docs/ListEventsResponse.md)
  - [ListFailureHandlersResponse](docs/ListFailureHandlersResponse.md)
  - [ListFilesResponse](docs/ListFilesResponse.md)
