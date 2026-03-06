@@ -7,6 +7,7 @@ use torc::client::commands::access_groups::handle_access_group_commands;
 use torc::client::commands::admin::handle_admin_commands;
 use torc::client::commands::compute_nodes::handle_compute_node_commands;
 use torc::client::commands::config::handle_config_commands;
+use torc::client::commands::datasets::handle_datasets;
 use torc::client::commands::events::handle_event_commands;
 use torc::client::commands::failure_handlers::handle_failure_handler_commands;
 use torc::client::commands::files::handle_file_commands;
@@ -712,6 +713,12 @@ fn main() {
         }
         Commands::Files { command } => {
             handle_file_commands(&config, command, &format);
+        }
+        Commands::Datasets { command } => {
+            if let Err(e) = handle_datasets(&config, command, format == "json") {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
         }
         Commands::Jobs { command } => {
             handle_job_commands(&config, command, &format);

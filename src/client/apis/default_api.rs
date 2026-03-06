@@ -1245,6 +1245,126 @@ pub fn create_dataset(
     }
 }
 
+/// Get a dataset by ID.
+pub fn get_dataset(
+    configuration: &configuration::Configuration,
+    id: i64,
+) -> Result<models::DatasetModel, Error<GetDatasetError>> {
+    let p_id = id;
+
+    let uri_str = format!("{}/datasets/{id}", configuration.base_path, id = p_id);
+    let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
+
+    if let Some(ref auth) = configuration.basic_auth {
+        req_builder = req_builder.basic_auth(&auth.0, auth.1.as_ref());
+    }
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req)?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text()?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => Err(Error::from(serde_json::Error::custom(
+                "Received `text/plain` content type response that cannot be converted to `models::DatasetModel`",
+            ))),
+            ContentType::Unsupported(unknown_type) => {
+                Err(Error::from(serde_json::Error::custom(format!(
+                    "Received `{unknown_type}` content type response that cannot be converted to `models::DatasetModel`"
+                ))))
+            }
+        }
+    } else {
+        let content = resp.text()?;
+        let entity: Option<GetDatasetError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent {
+            status,
+            content,
+            entity,
+        }))
+    }
+}
+
+/// List datasets for a workflow.
+pub fn list_datasets(
+    configuration: &configuration::Configuration,
+    workflow_id: i64,
+    offset: i64,
+    limit: i64,
+    status: Option<String>,
+) -> Result<models::ListDatasetsResponse, Error<ListDatasetsError>> {
+    let p_workflow_id = workflow_id;
+    let p_offset = offset;
+    let p_limit = limit;
+    let p_status = status;
+
+    let uri_str = format!(
+        "{}/workflows/{workflow_id}/datasets?offset={offset}&limit={limit}",
+        configuration.base_path,
+        workflow_id = p_workflow_id,
+        offset = p_offset,
+        limit = p_limit
+    );
+    let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
+
+    if let Some(status_val) = &p_status {
+        req_builder = req_builder.query(&[("status", status_val)]);
+    }
+
+    if let Some(ref auth) = configuration.basic_auth {
+        req_builder = req_builder.basic_auth(&auth.0, auth.1.as_ref());
+    }
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req)?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text()?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => Err(Error::from(serde_json::Error::custom(
+                "Received `text/plain` content type response that cannot be converted to `models::ListDatasetsResponse`",
+            ))),
+            ContentType::Unsupported(unknown_type) => {
+                Err(Error::from(serde_json::Error::custom(format!(
+                    "Received `{unknown_type}` content type response that cannot be converted to `models::ListDatasetsResponse`"
+                ))))
+            }
+        }
+    } else {
+        let content = resp.text()?;
+        let entity: Option<ListDatasetsError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent {
+            status,
+            content,
+            entity,
+        }))
+    }
+}
+
 /// Finalize a dataset after all contributing jobs complete.
 /// Computes hash (if configured) and marks the dataset as finalized.
 pub fn finalize_dataset(

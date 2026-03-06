@@ -10,6 +10,7 @@ use crate::client::commands::access_groups::AccessGroupCommands;
 use crate::client::commands::admin::AdminCommands;
 use crate::client::commands::compute_nodes::ComputeNodeCommands;
 use crate::client::commands::config::ConfigCommands;
+use crate::client::commands::datasets::DatasetCommands;
 use crate::client::commands::events::EventCommands;
 use crate::client::commands::failure_handlers::FailureHandlerCommands;
 use crate::client::commands::files::FileCommands;
@@ -53,6 +54,7 @@ const HELP_TEMPLATE: &str = "\
   \x1b[1;36mworkflows\x1b[0m                Workflow management commands
   \x1b[1;36mjobs\x1b[0m                     Job management commands
   \x1b[1;36mfiles\x1b[0m                    File management commands
+  \x1b[1;36mdatasets\x1b[0m                 Dataset management (directory outputs)
   \x1b[1;36muser-data\x1b[0m                User data management commands
   \x1b[1;36mevents\x1b[0m                   Event management commands
   \x1b[1;36mresource-requirements\x1b[0m    Resource requirements management
@@ -663,6 +665,11 @@ EXAMPLES:
     Files {
         #[command(subcommand)]
         command: FileCommands,
+    },
+    /// Dataset management commands (first-class directory outputs)
+    Datasets {
+        #[command(subcommand)]
+        command: DatasetCommands,
     },
     /// User data management commands
     #[command(hide = true)]
