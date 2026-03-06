@@ -69,7 +69,8 @@ impl AuthorizationService {
     /// Access is granted if:
     /// 1. Access control is not enforced (backward compatibility mode)
     /// 2. The user is the owner of the workflow
-    /// 3. The user belongs to a group that has access to the workflow
+    /// 3. The user is a system administrator
+    /// 4. The user belongs to a group that has access to the workflow
     pub async fn check_workflow_access(
         &self,
         auth: &Option<Authorization>,
@@ -124,12 +125,18 @@ impl AuthorizationService {
         }
 
         // 4. Check if user is a system administrator
-        if self.is_admin(username).await {
-            debug!(
-                "User '{}' is admin, granting access to workflow {}",
-                username, workflow_id
-            );
-            return AccessCheckResult::Allowed;
+        match self.is_admin(username).await {
+            Ok(true) => {
+                debug!(
+                    "User '{}' is admin, granting access to workflow {}",
+                    username, workflow_id
+                );
+                return AccessCheckResult::Allowed;
+            }
+            Ok(false) => {} // Not admin, continue to group check
+            Err(e) => {
+                return AccessCheckResult::InternalError(e);
+            }
         }
 
         // 5. Check if user has group-based access
@@ -307,12 +314,18 @@ impl AuthorizationService {
         };
 
         // Admins can see all workflows
-        if self.is_admin(username).await {
-            debug!(
-                "User '{}' is admin, returning None for accessible_workflow_ids",
-                username
-            );
-            return Ok(None);
+        match self.is_admin(username).await {
+            Ok(true) => {
+                debug!(
+                    "User '{}' is admin, returning None for accessible_workflow_ids",
+                    username
+                );
+                return Ok(None);
+            }
+            Ok(false) => {} // Not admin, continue to filtered list
+            Err(e) => {
+                return Err(e);
+            }
         }
 
         // Get all workflows the user owns OR has group access to
@@ -372,8 +385,9 @@ impl AuthorizationService {
 
     /// Check if a user is a system administrator (internal helper)
     ///
-    /// Returns true if the user is a member of the "admin" group (is_system = 1)
-    async fn is_admin(&self, username: &str) -> bool {
+    /// Returns Ok(true) if the user is a member of the "admin" group (is_system = 1),
+    /// Ok(false) if not, or Err on database errors.
+    async fn is_admin(&self, username: &str) -> Result<bool, String> {
         let result = match sqlx::query(
             r#"
             SELECT EXISTS(
@@ -391,11 +405,11 @@ impl AuthorizationService {
             Ok(row) => row.get::<i32, _>("is_admin") == 1,
             Err(e) => {
                 warn!("Database error checking admin status: {}", e);
-                false
+                return Err(format!("Database error checking admin status: {}", e));
             }
         };
         debug!("is_admin check for '{}': {}", username, result);
-        result
+        Ok(result)
     }
 
     /// Check if a user is a system administrator
@@ -415,12 +429,19 @@ impl AuthorizationService {
             }
         };
 
-        if self.is_admin(username).await {
-            debug!("User '{}' is a system administrator", username);
-            AccessCheckResult::Allowed
-        } else {
-            debug!("User '{}' is not a system administrator", username);
-            AccessCheckResult::Denied(format!("User '{}' is not a system administrator", username))
+        match self.is_admin(username).await {
+            Ok(true) => {
+                debug!("User '{}' is a system administrator", username);
+                AccessCheckResult::Allowed
+            }
+            Ok(false) => {
+                debug!("User '{}' is not a system administrator", username);
+                AccessCheckResult::Denied(format!(
+                    "User '{}' is not a system administrator",
+                    username
+                ))
+            }
+            Err(e) => AccessCheckResult::InternalError(e),
         }
     }
 
