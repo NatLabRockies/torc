@@ -422,9 +422,9 @@ listed below.</p>
 <h3 id="nlr-kestrel"><a class="header" href="#nlr-kestrel">NLR Kestrel</a></h3>
 <p><strong>Pre-installed binaries</strong> are available at:</p>
 <pre><code>/scratch/dthom/torc/
-├── 0.18.0/
+├── 0.19.0/
 ├── ...
-└── latest -&gt; 0.18.0  (symlink to current version)
+└── latest -&gt; 0.19.0  (symlink to current version)
 </code></pre>
 <blockquote>
 <p><strong>Recommended</strong>: Use the <code>latest</code> directory. Torc maintains backwards compatibility, so you'll
@@ -7167,7 +7167,7 @@ Analyzing: output/
 
 Files with detected errors:
 
-  output/job_stdio/job_wf123_j456_r1.e
+  output/job_stdio/job_wf123_j456_r1_a1.e
     Line 42: MemoryError: Unable to allocate 8.00 GiB
     Severity: critical
     Type: Python Memory Error
@@ -11527,8 +11527,8 @@ failures, node problems, and system-level errors.</p>
 <p>For jobs executed via Slurm scheduler (<code>compute_node_type: "slurm"</code>), the debug report includes
 these additional log paths:</p>
 <pre><code class="language-json">{
-  "job_stdout": "torc_output/job_stdio/job_wf1_j456_r1.o",
-  "job_stderr": "torc_output/job_stdio/job_wf1_j456_r1.e",
+  "job_stdout": "torc_output/job_stdio/job_wf1_j456_r1_a1.o",
+  "job_stderr": "torc_output/job_stdio/job_wf1_j456_r1_a1.e",
   "job_runner_log": "torc_output/job_runner_slurm_wf1_sl12345_n0_pid67890.log",
   "slurm_stdout": "torc_output/slurm_output_wf1_sl12345.o",
   "slurm_stderr": "torc_output/slurm_output_wf1_sl12345.e",
