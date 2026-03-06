@@ -223,12 +223,13 @@ where
 
         let result = match sqlx::query!(
             r#"
-            INSERT INTO ro_crate_entity (workflow_id, file_id, entity_id, entity_type, metadata)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO ro_crate_entity (workflow_id, file_id, dataset_id, entity_id, entity_type, metadata)
+            VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING id
             "#,
             body.workflow_id,
             body.file_id,
+            body.dataset_id,
             body.entity_id,
             body.entity_type,
             body.metadata,
@@ -266,7 +267,7 @@ where
 
         let record = match sqlx::query!(
             r#"
-            SELECT id, workflow_id, file_id, entity_id, entity_type, metadata
+            SELECT id, workflow_id, file_id, dataset_id, entity_id, entity_type, metadata
             FROM ro_crate_entity
             WHERE id = $1
             "#,
@@ -296,6 +297,7 @@ where
             id: Some(record.id),
             workflow_id: record.workflow_id,
             file_id: record.file_id,
+            dataset_id: record.dataset_id,
             entity_id: record.entity_id,
             entity_type: record.entity_type,
             metadata: record.metadata,
@@ -324,7 +326,7 @@ where
 
         let records = match sqlx::query!(
             r#"
-            SELECT id, workflow_id, file_id, entity_id, entity_type, metadata
+            SELECT id, workflow_id, file_id, dataset_id, entity_id, entity_type, metadata
             FROM ro_crate_entity
             WHERE workflow_id = $1
             ORDER BY id
@@ -352,6 +354,7 @@ where
                 id: Some(record.id),
                 workflow_id: record.workflow_id,
                 file_id: record.file_id,
+                dataset_id: record.dataset_id,
                 entity_id: record.entity_id,
                 entity_type: record.entity_type,
                 metadata: record.metadata,
@@ -408,10 +411,11 @@ where
         let result = match sqlx::query!(
             r#"
             UPDATE ro_crate_entity
-            SET file_id = $1, entity_id = $2, entity_type = $3, metadata = $4
-            WHERE id = $5
+            SET file_id = $1, dataset_id = $2, entity_id = $3, entity_type = $4, metadata = $5
+            WHERE id = $6
             "#,
             body.file_id,
+            body.dataset_id,
             body.entity_id,
             body.entity_type,
             body.metadata,

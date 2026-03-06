@@ -1185,7 +1185,7 @@ impl JobRunner {
             let request = DatasetFinalizationRequest {
                 file_count,
                 total_size_bytes,
-                manifest_hash,
+                manifest_hash: manifest_hash.clone(),
             };
 
             match self.send_with_retries(|| {
@@ -1201,6 +1201,28 @@ impl JobRunner {
                         dataset.total_size_bytes.unwrap_or(0),
                         dataset.manifest_hash
                     );
+
+                    // Create RO-Crate entity for the dataset if enabled
+                    if self.workflow.enable_ro_crate == Some(true) {
+                        let hash_mode_str = match task.hash_mode {
+                            HashMode::Manifest => "manifest",
+                            HashMode::Content => "content",
+                            HashMode::None => "none",
+                        };
+                        crate::client::ro_crate_utils::create_ro_crate_entity_for_dataset(
+                            &self.config,
+                            self.workflow_id,
+                            task.dataset_id,
+                            &task.name,
+                            &task.path,
+                            dataset.description.as_deref(),
+                            file_count,
+                            total_size_bytes,
+                            manifest_hash.as_deref(),
+                            hash_mode_str,
+                            &[], // Producer job IDs not available in finalization task
+                        );
+                    }
                 }
                 Err(e) => {
                     error!(

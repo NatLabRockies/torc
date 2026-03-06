@@ -100,6 +100,7 @@ pub fn build_file_entity(
         id: None,
         workflow_id,
         file_id: file.id,
+        dataset_id: None,
         entity_id: file_path.clone(),
         entity_type: "File".to_string(),
         metadata: metadata.to_string(),
@@ -161,6 +162,7 @@ pub fn build_file_entity_with_provenance(
         id: None,
         workflow_id,
         file_id: file.id,
+        dataset_id: None,
         entity_id: file_path.clone(),
         entity_type: "File".to_string(),
         metadata: metadata.to_string(),
@@ -201,9 +203,132 @@ pub fn build_create_action_entity(
         id: None,
         workflow_id,
         file_id: None,
+        dataset_id: None,
         entity_id: action_id,
         entity_type: "CreateAction".to_string(),
         metadata: metadata.to_string(),
+    }
+}
+
+/// Build an RO-Crate Dataset entity for a finalized dataset.
+///
+/// Creates a JSON-LD entity with:
+/// - `@id`: dataset path (ending with /)
+/// - `@type`: "Dataset"
+/// - `name`: dataset name
+/// - `description`: optional dataset description
+/// - `contentSize`: total size in bytes
+/// - `fileCount`: number of files in the dataset
+/// - `sha256`: manifest or content hash (if computed)
+/// - `hashMode`: the hash mode used ("manifest", "content", or "none")
+/// - `wasGeneratedBy`: references to producer job CreateAction entities
+#[allow(clippy::too_many_arguments)]
+pub fn build_dataset_entity(
+    workflow_id: i64,
+    dataset_id: i64,
+    name: &str,
+    path: &str,
+    description: Option<&str>,
+    file_count: i64,
+    total_size_bytes: i64,
+    manifest_hash: Option<&str>,
+    hash_mode: &str,
+    producer_job_ids: &[(i64, i64)], // Vec of (job_id, attempt_id)
+) -> RoCrateEntityModel {
+    // Ensure path ends with / for directories
+    let entity_path = if path.ends_with('/') {
+        path.to_string()
+    } else {
+        format!("{}/", path)
+    };
+
+    // Build wasGeneratedBy references
+    let was_generated_by: Vec<serde_json::Value> = producer_job_ids
+        .iter()
+        .map(|(job_id, attempt_id)| {
+            serde_json::json!({ "@id": format!("#job-{}-attempt-{}", job_id, attempt_id) })
+        })
+        .collect();
+
+    // Build metadata JSON
+    let mut metadata = serde_json::json!({
+        "@id": entity_path,
+        "@type": "Dataset",
+        "name": name,
+        "contentSize": total_size_bytes,
+        "fileCount": file_count,
+        "hashMode": hash_mode
+    });
+
+    // Add optional fields
+    if let Some(desc) = description {
+        metadata["description"] = serde_json::json!(desc);
+    }
+
+    if let Some(hash) = manifest_hash {
+        metadata["sha256"] = serde_json::json!(hash);
+    }
+
+    if !was_generated_by.is_empty() {
+        metadata["wasGeneratedBy"] = serde_json::json!(was_generated_by);
+    }
+
+    RoCrateEntityModel {
+        id: None,
+        workflow_id,
+        file_id: None,
+        dataset_id: Some(dataset_id),
+        entity_id: entity_path,
+        entity_type: "Dataset".to_string(),
+        metadata: metadata.to_string(),
+    }
+}
+
+/// Create an RO-Crate entity for a finalized dataset.
+///
+/// This is a non-blocking operation - warnings are logged but errors don't fail
+/// the calling operation.
+#[allow(clippy::too_many_arguments)]
+pub fn create_ro_crate_entity_for_dataset(
+    config: &Configuration,
+    workflow_id: i64,
+    dataset_id: i64,
+    name: &str,
+    path: &str,
+    description: Option<&str>,
+    file_count: i64,
+    total_size_bytes: i64,
+    manifest_hash: Option<&str>,
+    hash_mode: &str,
+    producer_job_ids: &[(i64, i64)],
+) {
+    let entity = build_dataset_entity(
+        workflow_id,
+        dataset_id,
+        name,
+        path,
+        description,
+        file_count,
+        total_size_bytes,
+        manifest_hash,
+        hash_mode,
+        producer_job_ids,
+    );
+
+    match default_api::create_ro_crate_entity(config, entity) {
+        Ok(created) => {
+            debug!(
+                "Created RO-Crate entity for dataset '{}' (entity_id={})",
+                name,
+                created.id.unwrap_or(0)
+            );
+        }
+        Err(e) => {
+            warn!(
+                "Failed to create RO-Crate entity for dataset '{}': {}",
+                name, e
+            );
+        }
     }
 }
 
@@ -345,6 +470,7 @@ pub fn create_ro_crate_entity_for_output_file(
             id: Some(entity_id),
             workflow_id,
             file_id: Some(file_id),
+            dataset_id: None,
             entity_id: existing.entity_id,
             entity_type: existing.entity_type,
             metadata: metadata.to_string(),
@@ -587,6 +713,7 @@ mod tests {
             id: None,
             workflow_id: 1,
             file_id: None,
+            dataset_id: None,
             entity_id: "data/output.parquet".to_string(),
             entity_type: "File".to_string(),
             metadata: r#"{"name":"Test"}"#.to_string(),
@@ -666,5 +793,81 @@ mod tests {
         let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
         assert_eq!(metadata["sha256"], "deadbeef");
         assert_eq!(metadata["wasGeneratedBy"]["@id"], "#job-42-attempt-1");
+    }
+
+    #[test]
+    fn test_build_dataset_entity_basic() {
+        let entity = build_dataset_entity(
+            100,                      // workflow_id
+            42,                       // dataset_id
+            "training_output",        // name
+            "output/training",        // path
+            Some("Training results"), // description
+            150,                      // file_count
+            1024000,                  // total_size_bytes
+            Some("abc123"),           // manifest_hash
+            "manifest",               // hash_mode
+            &[],                      // producer_job_ids (empty)
+        );
+
+        assert_eq!(entity.workflow_id, 100);
+        assert_eq!(entity.dataset_id, Some(42));
+        assert_eq!(entity.entity_type, "Dataset");
+        assert_eq!(entity.entity_id, "output/training/"); // Should have trailing /
+        assert!(entity.file_id.is_none());
+
+        let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
+        assert_eq!(metadata["@id"], "output/training/");
+        assert_eq!(metadata["@type"], "Dataset");
+        assert_eq!(metadata["name"], "training_output");
+        assert_eq!(metadata["description"], "Training results");
+        assert_eq!(metadata["contentSize"], 1024000);
+        assert_eq!(metadata["fileCount"], 150);
+        assert_eq!(metadata["sha256"], "abc123");
+        assert_eq!(metadata["hashMode"], "manifest");
+    }
+
+    #[test]
+    fn test_build_dataset_entity_with_producers() {
+        let producer_jobs = vec![(10, 1), (20, 1), (30, 2)]; // (job_id, attempt_id)
+
+        let entity = build_dataset_entity(
+            100,
+            42,
+            "aggregated_output",
+            "output/aggregated/",
+            None, // no description
+            50,
+            512000,
+            None, // no hash
+            "none",
+            &producer_jobs,
+        );
+
+        let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
+        assert_eq!(metadata["@type"], "Dataset");
+        assert_eq!(metadata["hashMode"], "none");
+        assert!(metadata.get("sha256").is_none()); // No hash when hash_mode is none
+        assert!(metadata.get("description").is_none()); // No description
+
+        // Check wasGeneratedBy references
+        let was_generated_by = metadata["wasGeneratedBy"].as_array().unwrap();
+        assert_eq!(was_generated_by.len(), 3);
+        assert_eq!(was_generated_by[0]["@id"], "#job-10-attempt-1");
+        assert_eq!(was_generated_by[1]["@id"], "#job-20-attempt-1");
+        assert_eq!(was_generated_by[2]["@id"], "#job-30-attempt-2");
+    }
+
+    #[test]
+    fn test_build_dataset_entity_trailing_slash() {
+        // Path without trailing slash should get one added
+        let entity =
+            build_dataset_entity(1, 1, "test", "output/data", None, 0, 0, None, "none", &[]);
+        assert_eq!(entity.entity_id, "output/data/");
+
+        // Path with trailing slash should stay as is
+        let entity =
+            build_dataset_entity(1, 1, "test", "output/data/", None, 0, 0, None, "none", &[]);
+        assert_eq!(entity.entity_id, "output/data/");
     }
 }

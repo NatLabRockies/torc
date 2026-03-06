@@ -293,6 +293,7 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
                 file_id: file_id
                     .map(|fid| if fid == 0 { None } else { Some(fid) })
                     .unwrap_or(existing.file_id),
+                dataset_id: existing.dataset_id,
                 entity_id: entity_id.clone().unwrap_or(existing.entity_id),
                 entity_type: entity_type.clone().unwrap_or(existing.entity_type),
                 metadata: updated_metadata,

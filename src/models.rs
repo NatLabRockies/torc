@@ -2042,6 +2042,11 @@ pub struct RoCrateEntityModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file_id: Option<i64>,
 
+    /// Optional link to a dataset record.
+    #[serde(rename = "dataset_id")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dataset_id: Option<i64>,
+
     /// The JSON-LD @id for this entity (e.g., "data/output.parquet").
     #[serde(rename = "entity_id")]
     pub entity_id: String,
@@ -2067,6 +2072,7 @@ impl RoCrateEntityModel {
             id: None,
             workflow_id,
             file_id: None,
+            dataset_id: None,
             entity_id,
             entity_type,
             metadata,

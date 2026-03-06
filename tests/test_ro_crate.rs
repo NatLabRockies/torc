@@ -23,6 +23,7 @@ fn test_ro_crate_crud(start_server: &ServerProcess) {
         id: None,
         workflow_id,
         file_id: None,
+        dataset_id: None,
         entity_id: "data/output.parquet".to_string(),
         entity_type: "File".to_string(),
         metadata: serde_json::to_string(&metadata).unwrap(),
@@ -89,6 +90,7 @@ fn test_ro_crate_with_file_id(start_server: &ServerProcess) {
         id: None,
         workflow_id,
         file_id: Some(file_id),
+        dataset_id: None,
         entity_id: "output.csv".to_string(),
         entity_type: "File".to_string(),
         metadata: json!({"name": "Output CSV"}).to_string(),
@@ -111,6 +113,7 @@ fn test_ro_crate_external_entity(start_server: &ServerProcess) {
         id: None,
         workflow_id,
         file_id: None,
+        dataset_id: None,
         entity_id: "https://example.com/software/v1.0".to_string(),
         entity_type: "SoftwareApplication".to_string(),
         metadata: json!({
