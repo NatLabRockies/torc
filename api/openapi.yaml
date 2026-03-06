@@ -1248,6 +1248,473 @@ paths:
       summary: Update an event.
       tags: []
       x-codegen-request-body-name: body
+  # ============================================================================
+  # Datasets endpoints - first-class directory outputs
+  # ============================================================================
+  /datasets:
+    post:
+      description: Create a dataset for a workflow.
+      operationId: create_dataset
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/dataset_model"
+        description: Dataset to create
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/dataset_model"
+          description: Successful response
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/forbidden_error_response"
+          description: Forbidden - user does not have access to this workflow
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/not_found_error_response"
+          description: Workflow not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/default_error_response"
+          description: Default error response
+      security: []
+      summary: Create a dataset.
+      tags: []
+      x-codegen-request-body-name: body
+    get:
+      description: List all datasets for a workflow.
+      operationId: list_datasets
+      parameters:
+      - description: Workflow ID
+        explode: false
+        in: query
+        name: workflow_id
+        required: true
+        schema:
+          type: integer
+        style: simple
+      - explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          default: 0
+          type: integer
+        style: form
+      - explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          default: 1000
+          type: integer
+        style: form
+      - description: Filter by status (pending, finalizing, finalized)
+        explode: true
+        in: query
+        name: status
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list_datasets_response"
+          description: Successful response
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/forbidden_error_response"
+          description: Forbidden - user does not have access to this workflow
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/not_found_error_response"
+          description: Workflow not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/default_error_response"
+          description: Default error response
+      security: []
+      summary: List datasets for a workflow.
+      tags: []
+    delete:
+      description: Delete all datasets for a workflow.
+      operationId: delete_datasets
+      parameters:
+      - description: Workflow ID
+        explode: false
+        in: query
+        name: workflow_id
+        required: true
+        schema:
+          type: integer
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+        required: false
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Successful response
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/forbidden_error_response"
+          description: Forbidden - user does not have access to this workflow
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/not_found_error_response"
+          description: Workflow not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/default_error_response"
+          description: Default error response
+      security: []
+      summary: Delete all datasets for a workflow.
+      tags: []
+      x-codegen-request-body-name: body
+  /datasets/{id}:
+    get:
+      description: Retrieve a dataset by ID.
+      operationId: get_dataset
+      parameters:
+      - description: ID of the dataset
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: integer
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/dataset_model"
+          description: Successful response
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/forbidden_error_response"
+          description: Forbidden - user does not have access to this resource
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/not_found_error_response"
+          description: Dataset not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/default_error_response"
+          description: Default error response
+      security: []
+      summary: Retrieve a dataset.
+      tags: []
+    put:
+      description: Update a dataset.
+      operationId: update_dataset
+      parameters:
+      - description: ID of the dataset
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: integer
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/dataset_model"
+        description: Dataset to update
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/dataset_model"
+          description: Successful response
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/forbidden_error_response"
+          description: Forbidden - user does not have access to this resource
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/not_found_error_response"
+          description: Dataset not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/default_error_response"
+          description: Default error response
+      security: []
+      summary: Update a dataset.
+      tags: []
+      x-codegen-request-body-name: body
+    delete:
+      description: Delete a dataset.
+      operationId: delete_dataset
+      parameters:
+      - description: ID of the dataset
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: integer
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+        required: false
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/dataset_model"
+          description: Successful response
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/forbidden_error_response"
+          description: Forbidden - user does not have access to this resource
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/not_found_error_response"
+          description: Dataset not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/default_error_response"
+          description: Default error response
+      security: []
+      summary: Delete a dataset.
+      tags: []
+      x-codegen-request-body-name: body
+  /datasets/{id}/finalize:
+    post:
+      description: Finalize a dataset after all contributing jobs complete. Sets file count, total size, and optional hash.
+      operationId: finalize_dataset
+      parameters:
+      - description: ID of the dataset
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: integer
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/dataset_finalization_request"
+        description: Finalization data (file count, size, hash)
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/dataset_model"
+          description: Successful response
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/forbidden_error_response"
+          description: Forbidden - user does not have access to this resource
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/not_found_error_response"
+          description: Dataset not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/default_error_response"
+          description: Default error response
+      security: []
+      summary: Finalize a dataset.
+      tags: []
+      x-codegen-request-body-name: body
+  /jobs/{job_id}/dataset_output/{dataset_id}:
+    post:
+      description: Create a job-dataset output relationship (job writes to dataset).
+      operationId: create_job_dataset_output
+      parameters:
+      - description: ID of the job
+        explode: false
+        in: path
+        name: job_id
+        required: true
+        schema:
+          type: integer
+        style: simple
+      - description: ID of the dataset
+        explode: false
+        in: path
+        name: dataset_id
+        required: true
+        schema:
+          type: integer
+        style: simple
+      - description: Workflow ID for authorization
+        explode: false
+        in: query
+        name: workflow_id
+        required: true
+        schema:
+          type: integer
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+        required: false
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Successful response
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/forbidden_error_response"
+          description: Forbidden - user does not have access to this resource
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/not_found_error_response"
+          description: Job or dataset not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/default_error_response"
+          description: Default error response
+      security: []
+      summary: Create job-dataset output relationship.
+      tags: []
+      x-codegen-request-body-name: body
+  /jobs/{job_id}/dataset_input/{dataset_id}:
+    post:
+      description: Create a job-dataset input relationship (job reads from dataset).
+      operationId: create_job_dataset_input
+      parameters:
+      - description: ID of the job
+        explode: false
+        in: path
+        name: job_id
+        required: true
+        schema:
+          type: integer
+        style: simple
+      - description: ID of the dataset
+        explode: false
+        in: path
+        name: dataset_id
+        required: true
+        schema:
+          type: integer
+        style: simple
+      - description: Workflow ID for authorization
+        explode: false
+        in: query
+        name: workflow_id
+        required: true
+        schema:
+          type: integer
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+        required: false
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Successful response
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/forbidden_error_response"
+          description: Forbidden - user does not have access to this resource
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/not_found_error_response"
+          description: Job or dataset not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/default_error_response"
+          description: Default error response
+      security: []
+      summary: Create job-dataset input relationship.
+      tags: []
+      x-codegen-request-body-name: body
   /files:
     post:
       description: Store a file.
@@ -6798,6 +7265,120 @@ components:
       - name
       - path
       - workflow_id
+    dataset_model:
+      description: Data model for datasets (first-class directory outputs).
+      example:
+        id: 1
+        workflow_id: 42
+        name: training_output
+        path: output/training.parquet/
+        description: Partitioned training results
+        hash_mode: manifest
+        status: pending
+        file_count: null
+        total_size_bytes: null
+        manifest_hash: null
+      properties:
+        id:
+          type: integer
+        workflow_id:
+          description: Database ID of the workflow this dataset belongs to.
+          type: integer
+        name:
+          description: User-defined name of the dataset.
+          type: string
+        path:
+          description: Path to the dataset directory.
+          type: string
+        description:
+          description: Optional description of the dataset.
+          type: [string, "null"]
+        hash_mode:
+          description: Hash mode for integrity verification (manifest, content, none).
+          type: string
+          enum: [manifest, content, none]
+          default: manifest
+        status:
+          description: Dataset status (pending, finalizing, finalized).
+          type: string
+          enum: [pending, finalizing, finalized]
+          default: pending
+        claimed_by_node_id:
+          description: ID of the compute node that claimed this dataset for finalization.
+          type: [integer, "null"]
+        claimed_at:
+          description: Unix timestamp when the dataset was claimed.
+          type: [number, "null"]
+        file_count:
+          description: Number of files in the dataset (set after finalization).
+          type: [integer, "null"]
+        total_size_bytes:
+          description: Total size of all files in bytes (set after finalization).
+          type: [integer, "null"]
+        manifest_hash:
+          description: Hash of the dataset contents (set after finalization).
+          type: [string, "null"]
+        finalized_at:
+          description: Unix timestamp when the dataset was finalized.
+          type: [number, "null"]
+      required:
+        - name
+        - path
+        - workflow_id
+      type: object
+    dataset_finalization_request:
+      description: Request body for finalizing a dataset.
+      example:
+        file_count: 100
+        total_size_bytes: 1048576
+        manifest_hash: abc123def456
+      properties:
+        file_count:
+          description: Number of files in the dataset.
+          type: integer
+        total_size_bytes:
+          description: Total size of all files in bytes.
+          type: integer
+        manifest_hash:
+          description: Hash of the dataset contents (optional based on hash_mode).
+          type: [string, "null"]
+      required:
+        - file_count
+        - total_size_bytes
+      type: object
+    list_datasets_response:
+      description: Response for listing datasets.
+      example:
+        max_limit: 1000
+        total_count: 5
+        count: 5
+        offset: 0
+        has_more: false
+        items:
+          - id: 1
+            workflow_id: 42
+            name: training_output
+            path: output/training.parquet/
+            status: finalized
+            hash_mode: manifest
+            file_count: 100
+            total_size_bytes: 1048576
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/dataset_model"
+          type: array
+        offset:
+          type: integer
+        count:
+          type: integer
+        total_count:
+          type: integer
+        max_limit:
+          type: integer
+        has_more:
+          type: boolean
+      type: object
     job_model:
       example:
         output_user_data:
