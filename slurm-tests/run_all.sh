@@ -206,6 +206,7 @@ ALL_WORKFLOW_NAMES=(
   failure_recovery
   timeout_detection
   sync_status
+  datasets
 )
 
 # Per-workflow extra arguments for `torc submit`.
@@ -367,6 +368,7 @@ run_test_if_active failure_recovery
 run_test_if_active timeout_detection
 run_test_if_active cancel_workflow
 run_test_if_active sync_status
+run_test_if_active datasets
 
 # ── Report ────────────────────────────────────────────────────────────────────
 

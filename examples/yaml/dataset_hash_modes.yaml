@@ -1,0 +1,79 @@
+# Dataset Hash Modes Example
+# Demonstrates the three available hash modes for datasets:
+# - manifest: Fast integrity checking based on file metadata
+# - content: Thorough integrity checking by hashing file contents
+# - none: Skip integrity checking (stats only)
+
+name: dataset_hash_modes_example
+description: Demonstrates different hash modes for datasets
+
+datasets:
+  # Manifest mode (default) - fast, hashes path/size/mtime tuples
+  - name: intermediate_data
+    path: scratch/intermediate/
+    hash_mode: manifest
+    description: Intermediate data - manifest mode for fast integrity checks
+
+  # Content mode - slow but thorough, hashes all file contents
+  - name: critical_output
+    path: output/critical/
+    hash_mode: content
+    description: Critical output requiring full content verification
+
+  # No hash - fastest, only tracks file count and total size
+  - name: debug_logs
+    path: logs/debug/
+    hash_mode: none
+    description: Debug logs - no integrity verification needed
+
+jobs:
+  - name: generate_intermediate
+    command: |
+      mkdir -p scratch/intermediate/
+      for i in $(seq 1 10); do
+        echo "Intermediate chunk $i" > scratch/intermediate/chunk_$i.dat
+      done
+      echo "Generated 10 intermediate chunks"
+    output_datasets:
+      - intermediate_data
+    resource_requirements: small
+
+  - name: process_to_critical
+    command: |
+      mkdir -p output/critical/
+      cat scratch/intermediate/*.dat > output/critical/aggregated.dat
+      sha256sum output/critical/aggregated.dat > output/critical/checksum.txt
+      echo "Processed intermediate data to critical output"
+    input_datasets:
+      - intermediate_data
+    output_datasets:
+      - critical_output
+    resource_requirements: small
+
+  - name: generate_logs
+    command: |
+      mkdir -p logs/debug/
+      echo "Debug log entry: $(date)" > logs/debug/run.log
+      echo "Processing details..." >> logs/debug/run.log
+    output_datasets:
+      - debug_logs
+    resource_requirements: small
+
+  - name: final_report
+    command: |
+      echo "=== Final Report ==="
+      echo "Critical output checksum:"
+      cat output/critical/checksum.txt
+      echo ""
+      echo "Debug log entries:"
+      cat logs/debug/run.log
+    input_datasets:
+      - critical_output
+      - debug_logs
+    resource_requirements: small
+
+resource_requirements:
+  - name: small
+    num_cpus: 1
+    memory: 256m
+    runtime: PT5M

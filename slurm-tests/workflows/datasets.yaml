@@ -1,0 +1,68 @@
+# Test: Datasets Fan-In Pattern
+#
+# Verifies dataset functionality:
+#   - Multiple producer jobs writing to a shared dataset
+#   - Consumer job waiting for all producers via input_datasets
+#   - Dataset finalization after all producers complete
+
+name: datasets_fanin
+description: Test datasets with fan-in pattern (3 producers, 1 consumer)
+project: slurm-tests
+
+datasets:
+  - name: shared_output
+    path: output/partitions/
+    hash_mode: manifest
+    description: Combined output from worker jobs
+
+resource_requirements:
+  - name: basic
+    num_cpus: 1
+    num_nodes: 1
+    memory: 512m
+    runtime: PT5M
+
+jobs:
+  # Three parallel producer jobs, each writing to the shared dataset
+  - name: producer_{i}
+    command: |
+      echo "Producer {i} starting on $(hostname) at $(date)"
+      mkdir -p output/partitions/
+      echo "Data from producer {i}: $(date +%s)" > output/partitions/part_{i}.txt
+      echo "Producer {i} complete"
+    parameters:
+      i: "0:2"
+    output_datasets:
+      - shared_output
+    resource_requirements: basic
+
+  # Consumer job that waits for all producers via dataset dependency
+  - name: consumer
+    command: |
+      echo "Consumer starting on $(hostname) at $(date)"
+      echo "Reading from output/partitions/:"
+      ls -la output/partitions/
+      echo ""
+      echo "Contents:"
+      cat output/partitions/*.txt
+      echo ""
+      file_count=$(ls output/partitions/*.txt 2>/dev/null | wc -l)
+      echo "Found $file_count partition files"
+      echo "Consumer complete"
+    input_datasets:
+      - shared_output
+    resource_requirements: basic
+
+slurm_schedulers:
+  - name: basic_scheduler
+    account: PLACEHOLDER_ACCOUNT
+    partition: PLACEHOLDER_PARTITION
+    nodes: 1
+    walltime: "00:15:00"
+
+actions:
+  - trigger_type: "on_workflow_start"
+    action_type: "schedule_nodes"
+    scheduler: "basic_scheduler"
+    scheduler_type: "slurm"
+    num_allocations: 1

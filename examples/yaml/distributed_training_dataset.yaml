@@ -1,0 +1,116 @@
+# Distributed Training with Datasets
+# A realistic ML training workflow where multiple training workers write
+# checkpoints to a shared dataset, followed by aggregation.
+
+name: distributed_training
+description: Distributed training with dataset-based checkpoints and aggregation
+
+datasets:
+  - name: training_checkpoints
+    path: output/checkpoints/
+    hash_mode: manifest
+    description: Training checkpoints from all workers
+
+  - name: evaluation_results
+    path: output/evaluation/
+    hash_mode: content
+    description: Final evaluation results with verified integrity
+
+jobs:
+  # Data preprocessing (single job)
+  - name: preprocess
+    command: |
+      mkdir -p data/processed/
+      echo "Preprocessing training data..."
+      # Simulate preprocessing
+      for split in train valid test; do
+        echo "Processed $split split at $(date)" > data/processed/$split.txt
+      done
+      echo "Preprocessing complete"
+    resource_requirements: cpu_medium
+
+  # Distributed training workers (parameterized)
+  - name: train_worker_{i}
+    command: |
+      mkdir -p output/checkpoints/worker_{i}/
+      echo "Worker {i} training on GPU..."
+      # Simulate training epochs
+      for epoch in 1 2 3; do
+        echo "Worker {i} epoch $epoch: loss=0.$((RANDOM % 100))" \
+          > output/checkpoints/worker_{i}/epoch_$epoch.json
+        sleep 1
+      done
+      echo "Worker {i} training complete"
+    parameters:
+      i: "0:3"
+    depends_on:
+      - preprocess
+    output_datasets:
+      - training_checkpoints
+    resource_requirements: gpu_worker
+
+  # Model aggregation (waits for all workers via dataset dependency)
+  - name: aggregate_models
+    command: |
+      echo "Aggregating checkpoints from all workers..."
+      mkdir -p output/aggregated/
+      # Count checkpoints
+      checkpoint_count=$(find output/checkpoints/ -name "*.json" | wc -l)
+      echo "Found $checkpoint_count checkpoint files"
+      # Simulate federated averaging
+      echo "Aggregated model from $checkpoint_count checkpoints" \
+        > output/aggregated/final_model.pt
+      echo "Aggregation complete"
+    input_datasets:
+      - training_checkpoints
+    resource_requirements: cpu_medium
+
+  # Final evaluation
+  - name: evaluate
+    command: |
+      mkdir -p output/evaluation/
+      echo "Evaluating aggregated model..."
+      # Simulate evaluation metrics
+      cat > output/evaluation/metrics.json << 'METRICS'
+      {
+        "accuracy": 0.95,
+        "f1_score": 0.93,
+        "precision": 0.94,
+        "recall": 0.92
+      }
+      METRICS
+      echo "Evaluation complete"
+    depends_on:
+      - aggregate_models
+    output_datasets:
+      - evaluation_results
+    resource_requirements: gpu_worker
+
+  # Generate final report (waits for evaluation dataset)
+  - name: generate_report
+    command: |
+      echo "=== Training Report ==="
+      echo "Evaluation metrics:"
+      cat output/evaluation/metrics.json
+      echo ""
+      echo "Training completed successfully!"
+    input_datasets:
+      - evaluation_results
+    resource_requirements: cpu_small
+
+resource_requirements:
+  - name: cpu_small
+    num_cpus: 1
+    memory: 1g
+    runtime: PT5M
+
+  - name: cpu_medium
+    num_cpus: 4
+    memory: 8g
+    runtime: PT30M
+
+  - name: gpu_worker
+    num_cpus: 4
+    num_gpus: 1
+    memory: 16g
+    runtime: PT2H

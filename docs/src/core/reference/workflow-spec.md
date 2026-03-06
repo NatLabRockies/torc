@@ -18,6 +18,7 @@ The top-level container for a complete workflow definition.
 | `jobs`                                           | [[JobSpec](#jobspec)]                                   | _required_   | Jobs that make up this workflow                                                    |
 | `files`                                          | [[FileSpec](#filespec)]                                 | none         | Files associated with this workflow                                                |
 | `user_data`                                      | [[UserDataSpec](#userdataspec)]                         | none         | User data associated with this workflow                                            |
+| `datasets`                                       | [[DatasetSpec](#datasetspec)]                           | none         | Datasets (directory outputs) for fan-in patterns                                   |
 | `resource_requirements`                          | [[ResourceRequirementsSpec](#resourcerequirementsspec)] | none         | Resource requirements available for this workflow                                  |
 | `failure_handlers`                               | [[FailureHandlerSpec](#failurehandlerspec)]             | none         | Failure handlers available for this workflow                                       |
 | `slurm_schedulers`                               | [[SlurmSchedulerSpec](#slurmschedulerspec)]             | none         | Slurm schedulers available for this workflow                                       |
@@ -96,6 +97,8 @@ Defines a single computational task within a workflow.
 | `input_user_data_regexes`        | [string]              | none        | Regex patterns for input user data                                     |
 | `output_user_data`               | [string]              | none        | User data names this job produces (exact matches)                      |
 | `output_user_data_regexes`       | [string]              | none        | Regex patterns for output user data                                    |
+| `input_datasets`                 | [string]              | none        | Dataset names this job reads (blocks until all producers complete)     |
+| `output_datasets`                | [string]              | none        | Dataset names this job produces (marks job as dataset contributor)     |
 | `parameters`                     | map\<string, string\> | none        | Local parameters for generating multiple jobs                          |
 | `parameter_mode`                 | string                | `"product"` | How to combine parameters: `"product"` (Cartesian) or `"zip"`          |
 | `use_parameters`                 | [string]              | none        | Workflow parameter names to use for this job                           |
@@ -121,6 +124,50 @@ Arbitrary JSON data that can establish dependencies between jobs.
 | `name`         | string  | none    | Name of the user data (used for referencing in jobs) |
 | `data`         | JSON    | none    | The data content as a JSON value                     |
 | `is_ephemeral` | boolean | false   | Whether the user data is ephemeral                   |
+
+## DatasetSpec
+
+Defines directory-based outputs with fan-in dependency support. Multiple jobs can contribute to a
+single dataset, and consumer jobs wait for all contributors to complete. See
+[Datasets](../concepts/datasets.md) for details.
+
+| Name          | Type   | Default      | Description                                                 |
+| ------------- | ------ | ------------ | ----------------------------------------------------------- |
+| `name`        | string | _required_   | Name of the dataset (used for referencing in jobs)          |
+| `path`        | string | _required_   | Directory path for the dataset                              |
+| `description` | string | none         | Human-readable description                                  |
+| `hash_mode`   | string | `"manifest"` | Integrity hash mode: `"manifest"`, `"content"`, or `"none"` |
+
+### Hash Modes
+
+| Mode       | Description                             | Speed   | Use Case                        |
+| ---------- | --------------------------------------- | ------- | ------------------------------- |
+| `manifest` | Hash of sorted (path, size, mtime) list | Fast    | Detect file additions/deletions |
+| `content`  | SHA256 of all file contents             | Slow    | Verify exact content integrity  |
+| `none`     | No hash, only file count and total size | Fastest | When integrity check not needed |
+
+### Example
+
+```yaml
+datasets:
+  - name: training_output
+    path: output/training.parquet/
+    hash_mode: manifest
+    description: "Hive-partitioned training results"
+
+jobs:
+  - name: train_chunk_{i}
+    command: python train.py --partition {i}
+    parameters:
+      i: "0:99"
+    output_datasets:
+      - training_output
+
+  - name: aggregate
+    command: python aggregate.py
+    input_datasets:
+      - training_output
+```
 
 ## ResourceRequirementsSpec
 

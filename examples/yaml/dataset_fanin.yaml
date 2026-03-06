@@ -1,0 +1,42 @@
+# Dataset Fan-In Example
+# Demonstrates multiple producer jobs writing to a shared dataset,
+# with a consumer job waiting for all producers to complete.
+
+name: dataset_fanin_example
+description: Fan-in pattern where 5 workers write to a shared dataset
+
+datasets:
+  - name: partitioned_output
+    path: output/partitions/
+    hash_mode: manifest
+    description: Combined output from all worker jobs
+
+jobs:
+  # Five parallel worker jobs, each producing a partition
+  - name: worker_{i}
+    command: |
+      mkdir -p output/partitions/
+      echo "Result from worker {i}: $(date)" > output/partitions/part_{i}.txt
+      echo "Worker {i} completed"
+    parameters:
+      i: "0:4"
+    output_datasets:
+      - partitioned_output
+    resource_requirements: small
+
+  # Consumer job that waits for all workers to complete
+  - name: combine
+    command: |
+      echo "Combining $(ls output/partitions/*.txt | wc -l) partition files..."
+      cat output/partitions/*.txt > output/combined.txt
+      echo "Combined output:"
+      cat output/combined.txt
+    input_datasets:
+      - partitioned_output
+    resource_requirements: small
+
+resource_requirements:
+  - name: small
+    num_cpus: 1
+    memory: 512m
+    runtime: PT5M
