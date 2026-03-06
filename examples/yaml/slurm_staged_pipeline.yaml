@@ -1,6 +1,5 @@
 name: "slurm_staged_pipeline"
 description: "Multi-stage Slurm pipeline with automated scheduling and resource monitoring"
-user: "pipeline_user"
 
 # Define three Slurm schedulers for different pipeline stages
 slurm_schedulers:

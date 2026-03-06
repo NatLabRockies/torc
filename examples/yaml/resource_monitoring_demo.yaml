@@ -10,7 +10,6 @@
 # 5. Check results with resource metrics: torc results list <workflow_id>
 
 name: resource_monitoring_demo
-user: demo_user
 description: Demonstrates resource monitoring with CPU and memory intensive Python jobs
 
 # Default Slurm parameters applied to all schedulers
@@ -23,7 +22,7 @@ slurm_defaults:
 resource_monitor:
   enabled: true
   granularity: "time_series"  # Options: "summary" or "time_series"
-  sample_interval_seconds: 2   # Sample every 2 seconds
+  sample_interval_seconds: 5   # Sample every 5 seconds
   generate_plots: false         # Not yet implemented
 
 # Three independent jobs that run concurrently

@@ -694,3 +694,47 @@ fn test_prepare_next_jobs_zero_limit(start_server: &ServerProcess) {
         "Should return empty array when limit is 0"
     );
 }
+
+/// Test that claim_next_jobs returns invocation_script when set on a job
+#[rstest]
+fn test_claim_next_jobs_returns_invocation_script(start_server: &ServerProcess) {
+    let config = &start_server.config;
+
+    // Create workflow
+    let workflow = models::WorkflowModel::new(
+        "invocation_script_test".to_string(),
+        "test_user".to_string(),
+    );
+    let created_workflow =
+        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+    let workflow_id = created_workflow.id.unwrap();
+
+    // Create a job with invocation_script set
+    let invocation_script = "#!/bin/bash\nset -e\nexport MY_VAR=test\n".to_string();
+    let mut job = models::JobModel::new(
+        workflow_id,
+        "job_with_invocation_script".to_string(),
+        "echo hello".to_string(),
+    );
+    job.invocation_script = Some(invocation_script.clone());
+
+    let _created_job = default_api::create_job(config, job).expect("Failed to create job");
+
+    // Initialize jobs
+    default_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to initialize jobs");
+
+    // Claim the job
+    let result = default_api::claim_next_jobs(config, workflow_id, Some(1), None)
+        .expect("claim_next_jobs should succeed");
+
+    let returned_jobs = result.jobs.expect("Server must return jobs array");
+    assert_eq!(returned_jobs.len(), 1, "Should return exactly 1 job");
+
+    let returned_job = &returned_jobs[0];
+    assert_eq!(
+        returned_job.invocation_script,
+        Some(invocation_script),
+        "invocation_script should be returned by claim_next_jobs"
+    );
+}

@@ -3,7 +3,6 @@
 # Compare this file to hundred_jobs_workflow.yaml - same result, 90% less code!
 
 name: hundred_jobs_parameterized
-user: testuser
 description: A workflow with 100 independent jobs using parameterization
 
 # Job definitions - ONE job specification expands to 100 jobs

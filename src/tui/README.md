@@ -190,7 +190,7 @@ Press `l` to view logs:
 │   4  Epoch 4/100: loss=0.352                                     │
 │   ...                                                            │
 ├──────────────────────────────────────────────────────────────────┤
-│ Path: output/job_stdio/job_wf1_j2_r1.o                           │
+│ Path: output/job_stdio/job_wf1_j2_r1_a1.o                        │
 │ q: close | /: search | n/N: next/prev | g/G: top/bottom | y: path│
 └──────────────────────────────────────────────────────────────────┘
 ```

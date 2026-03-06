@@ -30,7 +30,6 @@
 #     report.html
 
 name: ro_crate_demo
-user: researcher
 description: Data processing workflow with RO-Crate provenance tracking
 
 # Enable automatic RO-Crate entity generation

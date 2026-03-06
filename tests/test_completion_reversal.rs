@@ -39,6 +39,7 @@ fn test_completion_reversal_resets_downstream_jobs(start_server: &ServerProcess)
         "echo 'job2 success'".to_string(),
     );
     job2.depends_on_job_ids = Some(vec![job1_id]);
+    job2.cancel_on_blocking_job_failure = Some(false);
     let created_job2 = default_api::create_job(config, job2).expect("Failed to create job2");
     let job2_id = created_job2.id.unwrap();
 
@@ -49,6 +50,7 @@ fn test_completion_reversal_resets_downstream_jobs(start_server: &ServerProcess)
         "echo 'job3 success'".to_string(),
     );
     job3.depends_on_job_ids = Some(vec![job2_id]);
+    job3.cancel_on_blocking_job_failure = Some(false);
     let created_job3 = default_api::create_job(config, job3).expect("Failed to create job3");
     let job3_id = created_job3.id.unwrap();
 

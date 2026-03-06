@@ -1,5 +1,4 @@
 name: "Simple Workflow with Actions"
-user: "demo"
 description: "Demonstrates scheduler actions for different workflow stages"
 
 jobs:

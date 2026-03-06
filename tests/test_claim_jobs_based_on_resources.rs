@@ -8,7 +8,8 @@ use common::{
     ServerProcess, create_custom_resources_workflow, create_dependency_chain_workflow,
     create_diverse_jobs_workflow, create_gpu_workflow, create_high_cpu_workflow,
     create_high_memory_workflow, create_many_jobs_workflow, create_maximum_resources_workflow,
-    create_minimal_resources_workflow, create_multi_node_workflow, start_server,
+    create_minimal_resources_workflow, create_multi_node_workflow,
+    create_test_resource_requirements, start_server,
 };
 use rstest::rstest;
 
@@ -1784,5 +1785,64 @@ fn test_prepare_jobs_concurrent_allocation(start_server: &ServerProcess) {
         "Found {} jobs allocated to multiple threads: {:?}",
         duplicates.len(),
         duplicates
+    );
+}
+
+/// Test that claim_jobs_based_on_resources returns invocation_script when set on a job
+#[rstest]
+fn test_claim_jobs_based_on_resources_returns_invocation_script(start_server: &ServerProcess) {
+    let config = &start_server.config;
+
+    // Create workflow
+    let workflow = models::WorkflowModel::new(
+        "invocation_script_resource_test".to_string(),
+        "test_user".to_string(),
+    );
+    let created_workflow =
+        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+    let workflow_id = created_workflow.id.unwrap();
+
+    // Create resource requirements
+    let resource_req = create_test_resource_requirements(
+        config,
+        workflow_id,
+        "test_rr",
+        1,        // num_cpus
+        0,        // num_gpus
+        1,        // num_nodes
+        "1g",     // memory
+        "P0DT1H", // runtime
+    );
+
+    // Create a job with invocation_script set
+    let invocation_script = "#!/bin/bash\nset -e\nexport MY_VAR=test\n".to_string();
+    let mut job = models::JobModel::new(
+        workflow_id,
+        "job_with_invocation_script".to_string(),
+        "echo hello".to_string(),
+    );
+    job.invocation_script = Some(invocation_script.clone());
+    job.resource_requirements_id = Some(resource_req.id.unwrap());
+
+    let _created_job = default_api::create_job(config, job).expect("Failed to create job");
+
+    // Initialize jobs
+    default_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to initialize jobs");
+
+    // Claim the job with sufficient resources
+    let resources = models::ComputeNodesResources::new(1, 1.0, 0, 1);
+    let result =
+        default_api::claim_jobs_based_on_resources(config, workflow_id, &resources, 10, None, None)
+            .expect("claim_jobs_based_on_resources should succeed");
+
+    let returned_jobs = result.jobs.expect("Server must return jobs array");
+    assert_eq!(returned_jobs.len(), 1, "Should return exactly 1 job");
+
+    let returned_job = &returned_jobs[0];
+    assert_eq!(
+        returned_job.invocation_script,
+        Some(invocation_script),
+        "invocation_script should be returned by claim_jobs_based_on_resources"
     );
 }

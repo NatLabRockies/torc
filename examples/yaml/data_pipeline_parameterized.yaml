@@ -3,7 +3,6 @@
 # Processes data from multiple sources through multiple stages
 
 name: data_pipeline
-user: datauser
 description: Multi-stage data processing pipeline for multiple datasets
 
 jobs:

@@ -57,9 +57,10 @@ Object.assign(TorcDashboard.prototype, {
             results.forEach(r => {
                 if (!resultMap[r.job_id]) resultMap[r.job_id] = [];
                 // Construct stdout/stderr file paths based on naming convention:
-                // {output_dir}/job_stdio/job_wf{workflow_id}_j{job_id}_r{run_id}.o (stdout)
-                // {output_dir}/job_stdio/job_wf{workflow_id}_j{job_id}_r{run_id}.e (stderr)
-                const stdioBase = `${this.debugOutputDir}/job_stdio/job_wf${r.workflow_id}_j${r.job_id}_r${r.run_id}`;
+                // {output_dir}/job_stdio/job_wf{workflow_id}_j{job_id}_r{run_id}_a{attempt_id}.o (stdout)
+                // {output_dir}/job_stdio/job_wf{workflow_id}_j{job_id}_r{run_id}_a{attempt_id}.e (stderr)
+                const attemptId = r.attempt_id ?? 1;
+                const stdioBase = `${this.debugOutputDir}/job_stdio/job_wf${r.workflow_id}_j${r.job_id}_r${r.run_id}_a${attemptId}`;
                 resultMap[r.job_id].push({
                     ...r,
                     stdoutPath: `${stdioBase}.o`,

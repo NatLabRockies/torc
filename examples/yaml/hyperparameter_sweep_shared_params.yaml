@@ -5,7 +5,6 @@
 # Compare this to hyperparameter_sweep.yaml - same result, but parameters defined only once!
 
 name: hyperparameter_sweep_shared_params
-user: mluser
 description: Grid search over learning rate, batch size, and optimizer (using shared parameters)
 
 # Workflow-level shared parameters - defined once, used by multiple jobs and files

@@ -3,7 +3,6 @@
 # Runs simulations across temperature and pressure ranges
 
 name: simulation_sweep
-user: scientist
 description: Molecular dynamics simulations across temperature and pressure ranges
 
 jobs:

@@ -128,7 +128,7 @@ Analyzing: output/
 
 Files with detected errors:
 
-  output/job_stdio/job_wf123_j456_r1.e
+  output/job_stdio/job_wf123_j456_r1_a1.e
     Line 42: MemoryError: Unable to allocate 8.00 GiB
     Severity: critical
     Type: Python Memory Error

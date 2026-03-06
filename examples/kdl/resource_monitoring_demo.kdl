@@ -16,7 +16,7 @@ slurm_defaults {
 resource_monitor {
     enabled #true
     granularity "time_series"
-    sample_interval_seconds 2
+    sample_interval_seconds 5
     generate_plots #false
 }
 

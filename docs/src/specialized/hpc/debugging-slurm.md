@@ -24,8 +24,8 @@ these additional log paths:
 
 ```json
 {
-  "job_stdout": "torc_output/job_stdio/job_wf1_j456_r1.o",
-  "job_stderr": "torc_output/job_stdio/job_wf1_j456_r1.e",
+  "job_stdout": "torc_output/job_stdio/job_wf1_j456_r1_a1.o",
+  "job_stderr": "torc_output/job_stdio/job_wf1_j456_r1_a1.e",
   "job_runner_log": "torc_output/job_runner_slurm_wf1_sl12345_n0_pid67890.log",
   "slurm_stdout": "torc_output/slurm_output_wf1_sl12345.o",
   "slurm_stderr": "torc_output/slurm_output_wf1_sl12345.e",

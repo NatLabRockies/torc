@@ -1331,6 +1331,7 @@ fn test_slurm_delete_config(start_server: &ServerProcess) {
 }
 
 #[rstest]
+#[serial]
 fn test_slurm_run_jobs(start_server: &ServerProcess) {
     let config = &start_server.config;
     // Create a temporary directory for job output

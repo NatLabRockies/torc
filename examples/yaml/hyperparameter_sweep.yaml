@@ -3,7 +3,6 @@
 # This creates 3 * 3 * 2 = 18 training jobs with different hyperparameter combinations
 
 name: hyperparameter_sweep
-user: mluser
 description: Grid search over learning rate, batch size, and optimizer
 
 # Prepare datasets (one-time setup jobs)

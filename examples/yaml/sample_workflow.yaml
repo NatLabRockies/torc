@@ -2,7 +2,6 @@
 # This demonstrates a complete workflow specification in YAML format
 
 name: sample_data_processing_workflow
-user: testuser
 description: A sample workflow that demonstrates data processing with multiple jobs
 
 # Job definitions - these define the computational tasks

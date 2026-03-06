@@ -58,8 +58,16 @@ fn test_bundle_creates_tarball() {
         "job_runner_wf42_hostname_r1.log",
         "INFO: Job runner started\nINFO: Processing jobs\n",
     );
-    create_log_file(&output_dir, "job_stdio/job_wf42_j1_r1.o", "Job 1 output\n");
-    create_log_file(&output_dir, "job_stdio/job_wf42_j1_r1.e", "Job 1 stderr\n");
+    create_log_file(
+        &output_dir,
+        "job_stdio/job_wf42_j1_r1_a1.o",
+        "Job 1 output\n",
+    );
+    create_log_file(
+        &output_dir,
+        "job_stdio/job_wf42_j1_r1_a1.e",
+        "Job 1 stderr\n",
+    );
     create_log_file(&output_dir, "slurm_output_wf42_sl12345.o", "Slurm stdout\n");
     create_log_file(&output_dir, "slurm_output_wf42_sl12345.e", "Slurm stderr\n");
 
@@ -251,7 +259,7 @@ fn test_analyze_bundle_detects_segfault() {
     // Create log file with segfault
     create_log_file(
         &output_dir,
-        "job_stdio/job_wf42_j1_r1.e",
+        "job_stdio/job_wf42_j1_r1_a1.e",
         "Processing data...\nSegmentation fault (core dumped)\n",
     );
 
@@ -279,7 +287,7 @@ fn test_analyze_bundle_detects_python_exception() {
     // Create log file with Python traceback
     create_log_file(
         &output_dir,
-        "job_stdio/job_wf42_j1_r1.e",
+        "job_stdio/job_wf42_j1_r1_a1.e",
         r#"Running script...
 Traceback (most recent call last):
   File "script.py", line 10, in <module>
@@ -351,7 +359,7 @@ fn test_analyze_bundle_no_errors() {
     );
     create_log_file(
         &output_dir,
-        "job_stdio/job_wf42_j1_r1.o",
+        "job_stdio/job_wf42_j1_r1_a1.o",
         "Processing complete.\nResults saved to output.csv\n",
     );
 
@@ -594,8 +602,8 @@ fn test_analyze_reports_file_count() {
     create_log_file(&output_dir, "job_runner_wf42_hostname_r1.log", "Log 1\n");
     create_log_file(&output_dir, "slurm_output_wf42_sl12345.o", "Log 2\n");
     create_log_file(&output_dir, "slurm_output_wf42_sl12345.e", "Log 3\n");
-    create_log_file(&output_dir, "job_stdio/job_wf42_j1_r1.o", "Log 4\n");
-    create_log_file(&output_dir, "job_stdio/job_wf42_j1_r1.e", "Log 5\n");
+    create_log_file(&output_dir, "job_stdio/job_wf42_j1_r1_a1.o", "Log 4\n");
+    create_log_file(&output_dir, "job_stdio/job_wf42_j1_r1_a1.e", "Log 5\n");
 
     let bundle_path = temp_dir.path().join("wf42.tar.gz");
     create_test_bundle(&output_dir, &bundle_path, 42);

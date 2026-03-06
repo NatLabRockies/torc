@@ -13,7 +13,9 @@ fi
 
 # Parse arguments
 JOB_ID=""
-_FORMAT="JobID,JobName%20,state,start,end,Account,Partition%15,QOS"
+_FORMAT=""
+PIPE_SEPARATED=false
+NO_HEADER=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -25,11 +27,44 @@ while [[ $# -gt 0 ]]; do
             _FORMAT="${1#--format=}"
             shift
             ;;
+        --format)
+            _FORMAT="$2"
+            shift 2
+            ;;
+        -P)
+            PIPE_SEPARATED=true
+            shift
+            ;;
+        -n)
+            NO_HEADER=true
+            shift
+            ;;
         *)
             shift
             ;;
     esac
 done
+
+# Pipe-separated, no-header mode (used by collect_sacct_stats in async_cli_command.rs)
+# Format: JobName,MaxRSS,MaxVMSize,MaxDiskRead,MaxDiskWrite,AveCPU,NodeList
+if $PIPE_SEPARATED && $NO_HEADER; then
+    # Return fake step records for any wf*_j*_r*_a* step names the runner asks about.
+    # The runner queries by slurm_job_id and filters by step_name in code.
+    # We return a batch step plus generic srun step records with mock accounting data.
+    # Generate a wide range of workflow/job IDs to cover any test scenario.
+    echo "batch|1024K|2048K|100M|50M|00:00:01|node001"
+    for wf in $(seq 1 20); do
+        for j in $(seq 1 20); do
+            echo "wf${wf}_j${j}_r1_a1|512K|1024K|50M|25M|00:00:01|node001"
+        done
+    done
+    exit 0
+fi
+
+# Default format for standard header-based output
+if [ -z "$_FORMAT" ]; then
+    _FORMAT="JobID,JobName%20,state,start,end,Account,Partition%15,QOS"
+fi
 
 # The sacct output has a specific format:
 # Line 1: Header with column names
