@@ -1096,6 +1096,41 @@ impl<C> Server<C> {
         }
     }
 
+    /// Add depends-on associations based on dataset dependencies.
+    /// If job A outputs to dataset X and job B inputs from dataset X, then job B depends on job A.
+    /// This handles the "fan-in" pattern where multiple jobs contribute to a single dataset.
+    async fn add_depends_on_associations_from_datasets<'e, E>(
+        &self,
+        executor: E,
+        workflow_id: i64,
+    ) -> Result<(), ApiError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+    {
+        match sqlx::query!(
+            r#"INSERT OR IGNORE INTO job_depends_on (job_id, depends_on_job_id, workflow_id)
+            SELECT
+                i.job_id AS job_id
+                ,o.job_id AS depends_on_job_id
+                ,$1 AS workflow_id
+            FROM job_dataset_input i
+            JOIN job_dataset_output o ON i.dataset_id = o.dataset_id
+            WHERE i.workflow_id = $1
+              AND i.job_id != o.job_id
+            "#,
+            workflow_id
+        )
+        .execute(executor)
+        .await
+        {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                error!("Database error adding dataset dependencies: {}", e);
+                Err(ApiError("Database error".to_string()))
+            }
+        }
+    }
+
     /// Ensure that all jobs downstream of an uninitialized job are also uninitialized.
     async fn uninitialize_blocked_jobs<'e, E>(
         &self,
@@ -4188,6 +4223,16 @@ where
                 "Failed to add depends-on associations from user_data: {}",
                 e
             );
+            let _ = tx.rollback().await;
+            return Err(e);
+        }
+
+        // Step 1c: Add depends-on associations from datasets (fan-in pattern)
+        if let Err(e) = self
+            .add_depends_on_associations_from_datasets(&mut *tx, id)
+            .await
+        {
+            error!("Failed to add depends-on associations from datasets: {}", e);
             let _ = tx.rollback().await;
             return Err(e);
         }
