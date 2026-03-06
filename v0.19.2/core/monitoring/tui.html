@@ -1,0 +1,451 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Terminal UI (TUI) - Torc Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Distributed workflow orchestration for complex computational pipelines">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+        <link rel="stylesheet" href="../../pagetoc.css">
+        <link rel="stylesheet" href="../../version-selector.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Torc Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc/tree/v0.19.2/docs/src/core/monitoring/tui.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="terminal-user-interface-tui"><a class="header" href="#terminal-user-interface-tui">Terminal User Interface (TUI)</a></h1>
+<p>The Torc TUI provides a full-featured terminal interface for managing workflows, designed for HPC
+users working in terminal-over-SSH environments.</p>
+<h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
+<pre><code class="language-bash"># Option 1: Connect to an existing server
+torc-server run &amp;   # Start server in background
+torc tui            # Launch the TUI
+
+# Option 2: Standalone mode (auto-starts server)
+torc tui --standalone
+
+# Option 3: Start TUI without server (manual connection)
+torc tui            # Shows warning, use 'S' to start server
+</code></pre>
+<h3 id="standalone-mode"><a class="header" href="#standalone-mode">Standalone Mode</a></h3>
+<p>Use <code>--standalone</code> for single-machine development or testing:</p>
+<pre><code class="language-bash"># Basic standalone mode
+torc tui --standalone
+
+# Custom port
+torc tui --standalone --port 8090
+
+# Custom database location
+torc tui --standalone --database /path/to/workflows.db
+</code></pre>
+<p>In standalone mode, the TUI automatically starts a <code>torc-server</code> process with the specified
+configuration.</p>
+<h2 id="features"><a class="header" href="#features">Features</a></h2>
+<ul>
+<li><strong>Workflow Management</strong>: Create, initialize, run, submit, cancel, reset, and delete workflows</li>
+<li><strong>Job Management</strong>: View details, logs, cancel, terminate, or retry jobs</li>
+<li><strong>Real-time Monitoring</strong>: Auto-refresh, manual refresh, color-coded status</li>
+<li><strong>Live Event Streaming</strong>: Server-Sent Events (SSE) for real-time job and compute node events</li>
+<li><strong>Server Management</strong>: Start/stop torc-server directly from the TUI</li>
+<li><strong>File Viewing</strong>: Preview workflow files with search and navigation</li>
+<li><strong>DAG Visualization</strong>: Text-based dependency graph</li>
+</ul>
+<h2 id="interface-overview"><a class="header" href="#interface-overview">Interface Overview</a></h2>
+<p>When the TUI starts, you'll see:</p>
+<pre><code>┌─ Torc Management Console ────────────────────────────────────────┐
+│ ?: help | n: new | i: init | I: reinit | R: reset | x: run ...  │
+└──────────────────────────────────────────────────────────────────┘
+┌─ Server ─────────────────────────────────────────────────────────┐
+│ http://localhost:8080/torc-service/v1  S: start | K: stop | O: output │
+└──────────────────────────────────────────────────────────────────┘
+┌─ User Filter ────────────────────────────────────────────────────┐
+│ Current: yourname  (press 'w' to change, 'a' for all users)     │
+└──────────────────────────────────────────────────────────────────┘
+┌─ Workflows [FOCUSED] ────────────────────────────────────────────┐
+│ &gt;&gt; 1  | my-workflow    | yourname | Example workflow            │
+│    2  | data-pipeline  | yourname | Data processing pipeline    │
+└──────────────────────────────────────────────────────────────────┘
+</code></pre>
+<h2 id="basic-navigation"><a class="header" href="#basic-navigation">Basic Navigation</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Key</th><th>Action</th></tr></thead><tbody>
+<tr><td><code>↑</code> / <code>↓</code></td><td>Move up/down in the current table</td></tr>
+<tr><td><code>←</code> / <code>→</code></td><td>Switch focus between Workflows and Details panes</td></tr>
+<tr><td><code>Tab</code></td><td>Switch between detail tabs (Jobs → Files → Events → Results → DAG)</td></tr>
+<tr><td><code>Enter</code></td><td>Load details for selected workflow</td></tr>
+<tr><td><code>q</code></td><td>Quit (or close popup/dialog)</td></tr>
+<tr><td><code>?</code></td><td>Show help popup with all keybindings</td></tr>
+</tbody></table>
+</div>
+<h2 id="workflow-actions"><a class="header" href="#workflow-actions">Workflow Actions</a></h2>
+<p>Select a workflow and use these keys:</p>
+<div class="table-wrapper"><table><thead><tr><th>Key</th><th>Action</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>n</code></td><td>New</td><td>Create workflow from spec file</td></tr>
+<tr><td><code>i</code></td><td>Initialize</td><td>Set up job dependencies, mark ready jobs</td></tr>
+<tr><td><code>I</code></td><td>Re-initialize</td><td>Reset and re-initialize (prompts if output files exist)</td></tr>
+<tr><td><code>R</code></td><td>Reset</td><td>Reset all job statuses</td></tr>
+<tr><td><code>x</code></td><td>Run</td><td>Run workflow locally (shows real-time output)</td></tr>
+<tr><td><code>s</code></td><td>Submit</td><td>Submit to HPC scheduler (Slurm)</td></tr>
+<tr><td><code>C</code></td><td>Cancel</td><td>Cancel running workflow</td></tr>
+<tr><td><code>d</code></td><td>Delete</td><td>Delete workflow (destructive!)</td></tr>
+</tbody></table>
+</div>
+<p>All destructive actions show a confirmation dialog.</p>
+<h3 id="handling-existing-output-files"><a class="header" href="#handling-existing-output-files">Handling Existing Output Files</a></h3>
+<p>When initializing or re-initializing a workflow, if existing output files are detected, the TUI will
+show a confirmation dialog listing the files that will be deleted. Press <code>y</code> to proceed with
+<code>--force</code> or <code>n</code> to cancel.</p>
+<h2 id="job-management"><a class="header" href="#job-management">Job Management</a></h2>
+<p>Navigate to the Jobs tab (<code>→</code> then <code>Tab</code> if needed) to manage individual jobs:</p>
+<div class="table-wrapper"><table><thead><tr><th>Key</th><th>Action</th></tr></thead><tbody>
+<tr><td><code>Enter</code></td><td>View job details</td></tr>
+<tr><td><code>l</code></td><td>View job logs (stdout/stderr)</td></tr>
+<tr><td><code>c</code></td><td>Cancel job</td></tr>
+<tr><td><code>t</code></td><td>Terminate job</td></tr>
+<tr><td><code>y</code></td><td>Retry failed job</td></tr>
+<tr><td><code>f</code></td><td>Filter jobs by column</td></tr>
+</tbody></table>
+</div>
+<h3 id="job-status-colors"><a class="header" href="#job-status-colors">Job Status Colors</a></h3>
+<ul>
+<li><strong>Green</strong>: Completed</li>
+<li><strong>Yellow</strong>: Running</li>
+<li><strong>Red</strong>: Failed</li>
+<li><strong>Magenta</strong>: Canceled/Terminated</li>
+<li><strong>Blue</strong>: Pending/Scheduled</li>
+<li><strong>Cyan</strong>: Ready</li>
+<li><strong>Gray</strong>: Blocked</li>
+</ul>
+<h2 id="log-viewer"><a class="header" href="#log-viewer">Log Viewer</a></h2>
+<p>Press <code>l</code> on a job to view its logs:</p>
+<div class="table-wrapper"><table><thead><tr><th>Key</th><th>Action</th></tr></thead><tbody>
+<tr><td><code>Tab</code></td><td>Switch between stdout and stderr</td></tr>
+<tr><td><code>↑</code> / <code>↓</code></td><td>Scroll one line</td></tr>
+<tr><td><code>PgUp</code> / <code>PgDn</code></td><td>Scroll 20 lines</td></tr>
+<tr><td><code>g</code> / <code>G</code></td><td>Jump to top / bottom</td></tr>
+<tr><td><code>/</code></td><td>Start search</td></tr>
+<tr><td><code>n</code> / <code>N</code></td><td>Next / previous search match</td></tr>
+<tr><td><code>q</code></td><td>Close log viewer</td></tr>
+</tbody></table>
+</div>
+<h2 id="file-viewer"><a class="header" href="#file-viewer">File Viewer</a></h2>
+<p>Navigate to the Files tab and press <code>Enter</code> on a file to view its contents. The file viewer
+supports:</p>
+<ul>
+<li>Files up to 1MB</li>
+<li>Binary files show a hex dump preview</li>
+<li>Same navigation keys as the log viewer</li>
+</ul>
+<h2 id="events-tab-sse-live-streaming"><a class="header" href="#events-tab-sse-live-streaming">Events Tab (SSE Live Streaming)</a></h2>
+<p>The Events tab shows real-time events from the server using Server-Sent Events (SSE). When you
+select a workflow and navigate to the Events tab, the TUI establishes a live connection to receive
+events as they occur.</p>
+<p><strong>Event types displayed:</strong></p>
+<ul>
+<li><code>job_started</code> / <code>job_completed</code> / <code>job_failed</code> - Job lifecycle events</li>
+<li><code>compute_node_started</code> / <code>compute_node_stopped</code> - Worker node lifecycle</li>
+<li><code>workflow_started</code> / <code>workflow_reinitialized</code> - Workflow initialization events</li>
+<li><code>scheduler_node_created</code> - Slurm scheduler events</li>
+</ul>
+<p><strong>Features:</strong></p>
+<ul>
+<li>Events appear instantly without polling</li>
+<li>Newest events shown at the top</li>
+<li>Filter by Event Type or Data content using <code>f</code></li>
+<li>Title shows "[SSE Live]" indicator when connected</li>
+</ul>
+<h2 id="server-management"><a class="header" href="#server-management">Server Management</a></h2>
+<p>The TUI can start and manage a <code>torc-server</code> instance:</p>
+<div class="table-wrapper"><table><thead><tr><th>Key</th><th>Action</th></tr></thead><tbody>
+<tr><td><code>S</code></td><td>Start torc-server</td></tr>
+<tr><td><code>K</code></td><td>Stop/Kill server</td></tr>
+<tr><td><code>O</code></td><td>Show server output</td></tr>
+</tbody></table>
+</div>
+<p>The server status indicator in the connection bar shows:</p>
+<ul>
+<li><code>●</code> (green): Server is running (managed by TUI)</li>
+<li><code>○</code> (yellow): Server was started but has stopped</li>
+<li>No indicator: External server (not managed by TUI)</li>
+</ul>
+<h2 id="connection-settings"><a class="header" href="#connection-settings">Connection Settings</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Key</th><th>Action</th></tr></thead><tbody>
+<tr><td><code>u</code></td><td>Change server URL</td></tr>
+<tr><td><code>w</code></td><td>Change user filter</td></tr>
+<tr><td><code>a</code></td><td>Toggle show all users</td></tr>
+</tbody></table>
+</div>
+<h2 id="auto-refresh"><a class="header" href="#auto-refresh">Auto-Refresh</a></h2>
+<p>Press <code>A</code> to toggle auto-refresh (30-second interval). When enabled, the workflow list and details
+refresh automatically.</p>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<p>The TUI respects Torc's layered configuration system:</p>
+<ol>
+<li>Interactive changes in TUI (press <code>u</code> to change server URL)</li>
+<li>Environment variables (<code>TORC_CLIENT__API_URL</code>)</li>
+<li>Local config file (<code>./torc.toml</code>)</li>
+<li>User config file (<code>~/.config/torc/config.toml</code>)</li>
+<li>System config file (<code>/etc/torc/config.toml</code>)</li>
+<li>Default values</li>
+</ol>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="could-not-connect-to-server"><a class="header" href="#could-not-connect-to-server">"Could not connect to server"</a></h3>
+<ol>
+<li>Ensure the Torc server is running: <code>torc-server run</code></li>
+<li>Check the server URL: press <code>u</code> to update if needed</li>
+<li>Verify network connectivity</li>
+</ol>
+<h3 id="no-log-content-available"><a class="header" href="#no-log-content-available">"No log content available"</a></h3>
+<p>Logs may not be available if:</p>
+<ul>
+<li>The job hasn't run yet</li>
+<li>You're on a different machine than where jobs ran</li>
+<li>The output directory is in a different location</li>
+</ul>
+<h3 id="screen-rendering-issues"><a class="header" href="#screen-rendering-issues">Screen rendering issues</a></h3>
+<ul>
+<li>Ensure your terminal supports UTF-8 and 256 colors</li>
+<li>Try resizing your terminal window</li>
+<li>Press <code>r</code> to force a refresh</li>
+</ul>
+<h2 id="tui-vs-web-dashboard"><a class="header" href="#tui-vs-web-dashboard">TUI vs Web Dashboard</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Feature</th><th>TUI (<code>torc tui</code>)</th><th>Web (<code>torc-dash</code>)</th></tr></thead><tbody>
+<tr><td>Environment</td><td>Terminal/SSH</td><td>Web browser</td></tr>
+<tr><td>Startup</td><td>Instant</td><td>~2 seconds</td></tr>
+<tr><td>Dependencies</td><td>None (single binary)</td><td>None (single binary)</td></tr>
+<tr><td>Workflow actions</td><td>Yes</td><td>Yes</td></tr>
+<tr><td>Job actions</td><td>Yes</td><td>Yes</td></tr>
+<tr><td>Log viewing</td><td>Yes</td><td>Yes</td></tr>
+<tr><td>DAG visualization</td><td>Text-based</td><td>Interactive graph</td></tr>
+<tr><td>Resource plots</td><td>Planned</td><td>Yes</td></tr>
+</tbody></table>
+</div>
+<p><strong>Choose the TUI for</strong>: SSH sessions, HPC environments, quick operations, low-bandwidth connections.</p>
+<p><strong>Choose torc-dash for</strong>: Rich visualizations, resource plots, team dashboards.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../core/monitoring/dashboard.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../core/monitoring/workflow-reports.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../core/monitoring/dashboard.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../core/monitoring/workflow-reports.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../mermaid.min.js"></script>
+        <script src="../../mermaid-init.js"></script>
+        <script src="../../pagetoc.js"></script>
+        <script src="../../version-selector.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
