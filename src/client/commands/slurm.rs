@@ -2509,21 +2509,37 @@ struct SacctAllocationStats {
 }
 
 /// Extract exit code from a sacct JSON entry.
+/// Returns `"return_code:signal"` format (e.g. `"0:9"` for OOM kill via SIGKILL).
 /// Handles both `{"return_code": 0}` and `{"return_code": {"set": true, "number": 0}}`.
 fn extract_exit_code(entry: &serde_json::Value) -> String {
-    entry
-        .get("exit_code")
-        .and_then(|e| {
-            e.get("return_code").and_then(|r| {
-                // Try {set, infinite, number} wrapper first (Kestrel/HPE Cray format)
-                r.get("number")
+    let exit_code = match entry.get("exit_code") {
+        Some(e) => e,
+        None => return "-".to_string(),
+    };
+
+    let return_code = exit_code
+        .get("return_code")
+        .and_then(|r| {
+            r.get("number")
+                .and_then(|n| n.as_i64())
+                .or_else(|| r.as_i64())
+        })
+        .unwrap_or(0);
+
+    let signal = exit_code
+        .get("signal")
+        .and_then(|s| {
+            s.get("id").and_then(|id| {
+                // Try {set, infinite, number} wrapper first (HPE Cray/Kestrel format)
+                id.get("number")
                     .and_then(|n| n.as_i64())
-                    .map(|n| n.to_string())
                     // Then try direct integer
-                    .or_else(|| r.as_i64().map(|n| n.to_string()))
+                    .or_else(|| id.as_i64())
             })
         })
-        .unwrap_or("-".to_string())
+        .unwrap_or(0);
+
+    format!("{}:{}", return_code, signal)
 }
 
 /// Extract max RSS (peak memory) from a sacct JSON entry's tres.requested.max array.

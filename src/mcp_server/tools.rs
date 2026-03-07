@@ -1,6 +1,9 @@
 //! Tool implementations for the Torc MCP server.
 
-use rmcp::{Error as McpError, model::CallToolResult};
+use rmcp::{
+    Error as McpError,
+    model::{CallToolResult, RawResource, Resource, ResourceContents},
+};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -2005,4 +2008,626 @@ pub fn regroup_job_resources(
     Ok(CallToolResult::success(vec![rmcp::model::Content::text(
         serde_json::to_string_pretty(&response).unwrap_or_default(),
     )]))
+}
+
+// --- Documentation and Examples Tools ---
+
+/// Base URL for fetching content from GitHub.
+const GITHUB_RAW_BASE: &str = "https://raw.githubusercontent.com/NatLabRockies/torc/main";
+
+/// Example descriptions keyed by base name.
+fn example_descriptions() -> Vec<(&'static str, &'static str)> {
+    vec![
+        (
+            "sample_workflow",
+            "Complete example with files, user_data, resource requirements, jobs, and Slurm schedulers",
+        ),
+        (
+            "diamond_workflow",
+            "Classic diamond dependency pattern (fan-out and fan-in) using file-based dependencies",
+        ),
+        (
+            "hundred_jobs_parameterized",
+            "Generates 100 parallel jobs using parameter ranges",
+        ),
+        (
+            "data_pipeline_parameterized",
+            "Multi-dataset pipeline with parameter sweeps and fan-in aggregation",
+        ),
+        (
+            "hyperparameter_sweep",
+            "ML hyperparameter grid search (learning rate × batch size × optimizer)",
+        ),
+        (
+            "hyperparameter_sweep_shared_params",
+            "Hyperparameter sweep using shared workflow-level parameters",
+        ),
+        (
+            "simulation_sweep",
+            "Parameter sweep for scientific simulations",
+        ),
+        (
+            "multi_stage_barrier_pattern",
+            "Multi-stage workflow using barrier jobs (1000+ jobs per stage)",
+        ),
+        (
+            "workflow_actions_simple",
+            "Basic workflow with on_workflow_start and on_workflow_complete actions",
+        ),
+        (
+            "workflow_actions_simple_slurm",
+            "Multi-stage Slurm workflow with automated node scheduling per stage",
+        ),
+        (
+            "workflow_actions_data_pipeline",
+            "Data pipeline with automated resource management via actions",
+        ),
+        (
+            "workflow_actions_ml_training",
+            "ML training with dynamic GPU allocation using on_jobs_ready actions",
+        ),
+        (
+            "slurm_staged_pipeline",
+            "Multi-stage Slurm pipeline with automated scheduling and resource monitoring",
+        ),
+        (
+            "resource_monitoring_demo",
+            "Demonstrates CPU and memory monitoring with time-series data collection",
+        ),
+        (
+            "failure_handler_simulation",
+            "Demonstrates failure handler rules for automatic retry on specific exit codes",
+        ),
+        (
+            "failure_handler_demo",
+            "Simple failure handler demo with retry logic",
+        ),
+        (
+            "simple_retry",
+            "Minimal example of automatic job retry on failure",
+        ),
+        (
+            "zip_parameter_mode",
+            "Demonstrates zip parameter mode (parallel iteration vs Cartesian product)",
+        ),
+    ]
+}
+
+/// Topic-to-file mapping for documentation.
+fn doc_topic_mapping() -> Vec<(&'static str, &'static str, &'static str)> {
+    vec![
+        // (topic, relative path from docs/src, description)
+        (
+            "workflow-spec",
+            "core/reference/workflow-spec.md",
+            "Complete workflow specification reference",
+        ),
+        (
+            "dependencies",
+            "core/concepts/dependencies.md",
+            "Job dependency types (explicit, file-based, user_data)",
+        ),
+        (
+            "parameterization",
+            "core/reference/parameterization.md",
+            "Parameter sweeps, ranges, format specifiers",
+        ),
+        (
+            "slurm",
+            "specialized/hpc/slurm.md",
+            "Slurm HPC integration and scheduler configuration",
+        ),
+        (
+            "job-states",
+            "core/concepts/job-states.md",
+            "Job status lifecycle and transitions",
+        ),
+        (
+            "actions",
+            "specialized/design/workflow-actions.md",
+            "Workflow actions (triggers, schedule_nodes, run_commands)",
+        ),
+        (
+            "failure-handlers",
+            "specialized/fault-tolerance/failure-handlers.md",
+            "Automatic retry rules for exit codes",
+        ),
+        (
+            "recovery",
+            "specialized/fault-tolerance/automatic-recovery.md",
+            "Automated workflow recovery (OOM, timeout)",
+        ),
+        (
+            "ai-recovery",
+            "specialized/fault-tolerance/ai-assisted-recovery.md",
+            "AI-assisted failure classification",
+        ),
+        (
+            "resource-monitoring",
+            "core/reference/resource-monitoring.md",
+            "CPU/memory monitoring configuration",
+        ),
+        ("cli", "core/reference/cli.md", "CLI command reference"),
+        (
+            "cli-cheatsheet",
+            "core/reference/cli-cheatsheet.md",
+            "CLI quick reference cheatsheet",
+        ),
+        (
+            "quick-start",
+            "getting-started/quick-start.md",
+            "Getting started guide",
+        ),
+        (
+            "quick-start-local",
+            "getting-started/quick-start-local.md",
+            "Quick start for local execution",
+        ),
+        (
+            "quick-start-hpc",
+            "getting-started/quick-start-hpc.md",
+            "Quick start for HPC/Slurm",
+        ),
+        (
+            "architecture",
+            "core/concepts/architecture.md",
+            "System architecture overview",
+        ),
+        (
+            "checkpointing",
+            "specialized/fault-tolerance/checkpointing.md",
+            "Job checkpointing support",
+        ),
+        (
+            "hpc-profiles",
+            "specialized/hpc/hpc-profiles.md",
+            "HPC profile configuration",
+        ),
+        (
+            "hpc-profiles-reference",
+            "specialized/hpc/hpc-profiles-reference.md",
+            "HPC profiles reference",
+        ),
+        (
+            "workflow-formats",
+            "core/workflows/workflow-formats.md",
+            "YAML, JSON, JSON5, KDL format comparison",
+        ),
+        (
+            "workflow-definition",
+            "core/concepts/workflow-definition.md",
+            "Workflow definition concepts",
+        ),
+        (
+            "parallelization",
+            "core/concepts/parallelization.md",
+            "Job parallelization strategies",
+        ),
+        (
+            "job-runners",
+            "core/concepts/job-runners.md",
+            "Job runner types and configuration",
+        ),
+        (
+            "reinitialization",
+            "core/concepts/reinitialization.md",
+            "Workflow reinitialization",
+        ),
+        (
+            "resources",
+            "core/reference/resources.md",
+            "Resource requirements reference",
+        ),
+        (
+            "configuration",
+            "core/reference/configuration.md",
+            "Configuration reference",
+        ),
+        (
+            "environment-variables",
+            "core/reference/environment-variables.md",
+            "Environment variable reference",
+        ),
+        (
+            "debug-failed-job",
+            "core/how-to/debug-failed-job.md",
+            "How to debug a failed job",
+        ),
+        (
+            "rerun-failed-jobs",
+            "core/how-to/rerun-failed-jobs.md",
+            "How to rerun failed jobs",
+        ),
+        (
+            "cancel-workflow",
+            "core/how-to/cancel-workflow.md",
+            "How to cancel a workflow",
+        ),
+        (
+            "slurm-workflows",
+            "specialized/hpc/slurm-workflows.md",
+            "Slurm workflow patterns",
+        ),
+        (
+            "tutorials",
+            "core/tutorials/index.md",
+            "List of available tutorials",
+        ),
+        (
+            "tutorial-diamond",
+            "core/tutorials/diamond.md",
+            "Tutorial: diamond workflow pattern",
+        ),
+        (
+            "tutorial-simple-params",
+            "core/tutorials/simple-params.md",
+            "Tutorial: simple parameterization",
+        ),
+        (
+            "tutorial-advanced-params",
+            "core/tutorials/advanced-params.md",
+            "Tutorial: advanced parameterization",
+        ),
+        (
+            "tutorial-many-jobs",
+            "core/tutorials/many-jobs.md",
+            "Tutorial: many jobs workflow",
+        ),
+        (
+            "tutorial-user-data",
+            "core/tutorials/user-data.md",
+            "Tutorial: user data dependencies",
+        ),
+        (
+            "tutorial-multi-stage",
+            "core/tutorials/multi-stage-barrier.md",
+            "Tutorial: multi-stage barrier pattern",
+        ),
+    ]
+}
+
+/// Read a file from local disk if available, otherwise fetch from GitHub.
+fn read_content(local_dir: Option<&Path>, rel_path: &str) -> Result<String, McpError> {
+    // Try local filesystem first
+    if let Some(dir) = local_dir {
+        let path = dir.join(rel_path);
+        if path.exists() {
+            return fs::read_to_string(&path)
+                .map_err(|e| internal_error(format!("Failed to read local file: {}", e)));
+        }
+    }
+
+    // Fall back to GitHub
+    fetch_from_github(rel_path)
+}
+
+/// Fetch a file from the GitHub repository.
+fn fetch_from_github(rel_path: &str) -> Result<String, McpError> {
+    let url = format!("{}/{}", GITHUB_RAW_BASE, rel_path);
+    let response = reqwest::blocking::get(&url)
+        .map_err(|e| internal_error(format!("Failed to fetch from GitHub: {}", e)))?;
+
+    if !response.status().is_success() {
+        return Err(internal_error(format!(
+            "GitHub returned {} for {}",
+            response.status(),
+            url
+        )));
+    }
+
+    response
+        .text()
+        .map_err(|e| internal_error(format!("Failed to read response body: {}", e)))
+}
+
+/// Try to read an example file, checking local disk then GitHub.
+/// Returns (content, format_ext) on success.
+fn read_example_content(
+    local_dir: Option<&Path>,
+    name: &str,
+    format: &str,
+) -> Result<(String, String), McpError> {
+    let search_order: Vec<(&str, &[&str])> = match format {
+        "yaml" | "yml" => vec![
+            ("yaml", &["yaml", "yml"][..]),
+            ("json", &["json5", "json"][..]),
+            ("kdl", &["kdl"][..]),
+        ],
+        "json" | "json5" => vec![
+            ("json", &["json5", "json"][..]),
+            ("yaml", &["yaml", "yml"][..]),
+            ("kdl", &["kdl"][..]),
+        ],
+        "kdl" => vec![
+            ("kdl", &["kdl"][..]),
+            ("yaml", &["yaml", "yml"][..]),
+            ("json", &["json5", "json"][..]),
+        ],
+        _ => vec![
+            ("yaml", &["yaml", "yml"][..]),
+            ("json", &["json5", "json"][..]),
+            ("kdl", &["kdl"][..]),
+        ],
+    };
+
+    let subdirs = ["yaml", "json", "kdl", "subgraphs"];
+
+    // Try local filesystem first
+    if let Some(dir) = local_dir {
+        for (_, exts) in &search_order {
+            for ext in *exts {
+                for subdir in &subdirs {
+                    let path = dir.join(subdir).join(format!("{}.{}", name, ext));
+                    if path.exists() {
+                        let content = fs::read_to_string(&path).map_err(|e| {
+                            internal_error(format!("Failed to read example file: {}", e))
+                        })?;
+                        return Ok((content, ext.to_string()));
+                    }
+                }
+            }
+        }
+    }
+
+    // Fall back to GitHub
+    for (_, exts) in &search_order {
+        for ext in *exts {
+            for subdir in &subdirs {
+                let rel_path = format!("examples/{}/{}.{}", subdir, name, ext);
+                let url = format!("{}/{}", GITHUB_RAW_BASE, rel_path);
+                if let Ok(response) = reqwest::blocking::get(&url)
+                    && response.status().is_success()
+                    && let Ok(content) = response.text()
+                {
+                    return Ok((content, ext.to_string()));
+                }
+            }
+        }
+    }
+
+    Err(invalid_params(&format!(
+        "Example '{}' not found locally or on GitHub. Use list_examples to see available examples.",
+        name
+    )))
+}
+
+/// List available example workflow specifications.
+pub fn list_examples(examples_dir: Option<&Path>) -> Result<CallToolResult, McpError> {
+    let descriptions = example_descriptions();
+
+    let mut examples = Vec::new();
+    for (name, description) in &descriptions {
+        let mut formats = Vec::new();
+        if let Some(dir) = examples_dir {
+            for (fmt, subdir, exts) in &[
+                ("yaml", "yaml", &["yaml", "yml"][..]),
+                ("json", "json", &["json5", "json"][..]),
+                ("kdl", "kdl", &["kdl"][..]),
+            ] {
+                for ext in *exts {
+                    let path = dir.join(subdir).join(format!("{}.{}", name, ext));
+                    if path.exists() {
+                        formats.push(*fmt);
+                        break;
+                    }
+                }
+            }
+        }
+
+        examples.push(serde_json::json!({
+            "name": name,
+            "description": description,
+            "formats": formats,
+        }));
+    }
+
+    let response = serde_json::json!({
+        "examples": examples,
+        "total": examples.len(),
+        "source": if examples_dir.is_some() { "local" } else { "github" },
+        "hint": "Use get_example with a name to retrieve the full specification",
+    });
+
+    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
+        serde_json::to_string_pretty(&response).unwrap_or_default(),
+    )]))
+}
+
+/// Get a specific example workflow specification.
+pub fn get_example(
+    examples_dir: Option<&Path>,
+    name: &str,
+    format: &str,
+) -> Result<CallToolResult, McpError> {
+    let (content, ext) = read_example_content(examples_dir, name, format)?;
+
+    let description = example_descriptions()
+        .iter()
+        .find(|(n, _)| *n == name)
+        .map(|(_, d)| *d)
+        .unwrap_or("Example workflow specification");
+
+    let response = serde_json::json!({
+        "name": name,
+        "description": description,
+        "format": ext,
+        "content": content,
+    });
+
+    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
+        serde_json::to_string_pretty(&response).unwrap_or_default(),
+    )]))
+}
+
+/// Get documentation on a specific topic.
+pub fn get_docs(docs_dir: Option<&Path>, topic: &str) -> Result<CallToolResult, McpError> {
+    let mapping = doc_topic_mapping();
+
+    // Find matching topic (case-insensitive)
+    let topic_lower = topic.to_lowercase();
+    let matched = mapping
+        .iter()
+        .find(|(t, _, _)| t.to_lowercase() == topic_lower);
+
+    if let Some((topic_name, rel_path, description)) = matched {
+        let docs_rel_path = format!("docs/src/{}", rel_path);
+        let content = read_content(docs_dir, &docs_rel_path).or_else(|_| {
+            // If local read failed with docs_dir pointing at docs/src/, try rel_path directly
+            if let Some(dir) = docs_dir {
+                let path = dir.join(rel_path);
+                if path.exists() {
+                    return fs::read_to_string(&path)
+                        .map_err(|e| internal_error(format!("Failed to read doc: {}", e)));
+                }
+            }
+            // Try GitHub with the full docs/src/ prefix
+            fetch_from_github(&docs_rel_path)
+        })?;
+
+        let response = serde_json::json!({
+            "topic": topic_name,
+            "description": description,
+            "content": content,
+        });
+
+        return Ok(CallToolResult::success(vec![rmcp::model::Content::text(
+            serde_json::to_string_pretty(&response).unwrap_or_default(),
+        )]));
+    }
+
+    // Partial/fuzzy match - find topics containing the search term
+    let partial: Vec<_> = mapping
+        .iter()
+        .filter(|(t, _, d)| {
+            t.to_lowercase().contains(&topic_lower) || d.to_lowercase().contains(&topic_lower)
+        })
+        .collect();
+
+    if !partial.is_empty() {
+        let suggestions: Vec<_> = partial
+            .iter()
+            .map(|(t, _, d)| serde_json::json!({"topic": t, "description": d}))
+            .collect();
+
+        let response = serde_json::json!({
+            "error": format!("Topic '{}' not found. Did you mean one of these?", topic),
+            "suggestions": suggestions,
+        });
+
+        return Ok(CallToolResult::success(vec![rmcp::model::Content::text(
+            serde_json::to_string_pretty(&response).unwrap_or_default(),
+        )]));
+    }
+
+    // No match at all - list all topics
+    let all_topics: Vec<_> = mapping
+        .iter()
+        .map(|(t, _, d)| serde_json::json!({"topic": t, "description": d}))
+        .collect();
+
+    let response = serde_json::json!({
+        "error": format!("Topic '{}' not found.", topic),
+        "available_topics": all_topics,
+    });
+
+    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
+        serde_json::to_string_pretty(&response).unwrap_or_default(),
+    )]))
+}
+
+// --- MCP Resources ---
+
+/// List all available MCP resources (docs + examples).
+/// Resources are always listed since they can be fetched from GitHub.
+pub fn list_mcp_resources(docs_dir: Option<&Path>, examples_dir: Option<&Path>) -> Vec<Resource> {
+    let mut resources = Vec::new();
+
+    // Add documentation resources (always listed — fetched from GitHub if not local)
+    for (topic, rel_path, description) in doc_topic_mapping() {
+        let size = docs_dir
+            .and_then(|dir| fs::metadata(dir.join(rel_path)).ok())
+            .map(|m| m.len() as u32);
+        resources.push(Resource::new(
+            RawResource {
+                uri: format!("torc://docs/{}", topic),
+                name: format!("docs/{}", topic),
+                description: Some(description.to_string()),
+                mime_type: Some("text/markdown".to_string()),
+                size,
+            },
+            None,
+        ));
+    }
+
+    // Add example resources (always listed — fetched from GitHub if not local)
+    for (name, description) in example_descriptions() {
+        let size = examples_dir.and_then(|dir| {
+            // Check common paths for size
+            for (subdir, ext) in &[("yaml", "yaml"), ("json", "json5"), ("kdl", "kdl")] {
+                let path = dir.join(subdir).join(format!("{}.{}", name, ext));
+                if let Ok(m) = fs::metadata(&path) {
+                    return Some(m.len() as u32);
+                }
+            }
+            None
+        });
+        resources.push(Resource::new(
+            RawResource {
+                uri: format!("torc://examples/{}", name),
+                name: format!("examples/{}", name),
+                description: Some(description.to_string()),
+                mime_type: Some("text/plain".to_string()),
+                size,
+            },
+            None,
+        ));
+    }
+
+    resources
+}
+
+/// Read an MCP resource by URI.
+pub fn read_mcp_resource(
+    docs_dir: Option<&Path>,
+    examples_dir: Option<&Path>,
+    uri: &str,
+) -> Result<ResourceContents, McpError> {
+    if let Some(topic) = uri.strip_prefix("torc://docs/") {
+        let mapping = doc_topic_mapping();
+        let (_, rel_path, _) = mapping
+            .iter()
+            .find(|(t, _, _)| *t == topic)
+            .ok_or_else(|| invalid_params(&format!("Unknown docs topic: {}", topic)))?;
+
+        // Try local first, fall back to GitHub
+        let content = read_content(docs_dir, &format!("docs/src/{}", rel_path)).or_else(|_| {
+            if let Some(dir) = docs_dir {
+                let path = dir.join(rel_path);
+                if path.exists() {
+                    return fs::read_to_string(&path)
+                        .map_err(|e| internal_error(format!("Failed to read doc: {}", e)));
+                }
+            }
+            fetch_from_github(&format!("docs/src/{}", rel_path))
+        })?;
+
+        Ok(ResourceContents::TextResourceContents {
+            uri: uri.to_string(),
+            mime_type: Some("text/markdown".to_string()),
+            text: content,
+        })
+    } else if let Some(name) = uri.strip_prefix("torc://examples/") {
+        let (content, _) = read_example_content(examples_dir, name, "yaml")?;
+
+        Ok(ResourceContents::TextResourceContents {
+            uri: uri.to_string(),
+            mime_type: Some("text/plain".to_string()),
+            text: content,
+        })
+    } else {
+        Err(invalid_params(&format!(
+            "Unknown resource URI scheme: {}",
+            uri
+        )))
+    }
 }

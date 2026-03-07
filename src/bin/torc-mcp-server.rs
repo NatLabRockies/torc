@@ -55,6 +55,14 @@ struct Args {
     /// Skip TLS certificate verification (for testing only)
     #[arg(long, env = "TORC_TLS_INSECURE")]
     tls_insecure: bool,
+
+    /// Directory containing Torc documentation (docs/src/)
+    #[arg(long, env = "TORC_DOCS_DIR")]
+    docs_dir: Option<PathBuf>,
+
+    /// Directory containing example workflow specifications
+    #[arg(long, env = "TORC_EXAMPLES_DIR")]
+    examples_dir: Option<PathBuf>,
 }
 
 fn main() -> Result<()> {
@@ -97,7 +105,9 @@ fn main() -> Result<()> {
         )
     } else {
         TorcMcpServer::new_with_tls(args.api_url, args.output_dir, tls)
-    };
+    }
+    .with_docs_dir(args.docs_dir)
+    .with_examples_dir(args.examples_dir);
 
     // Build runtime and run the async portion
     // Use multi-threaded runtime to properly support spawn_blocking for the

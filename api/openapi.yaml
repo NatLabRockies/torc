@@ -7215,13 +7215,13 @@ components:
           type: string
 
         compute_node_expiration_buffer_seconds:
-          default: 180
+          default: 120
           description: "Inform all compute nodes to shut down this number of seconds\
             \ before the expiration time. This allows torc to send SIGTERM to all\
             \ job processes and set all statuses to terminated. Increase the time\
             \ in cases where the job processes handle SIGTERM and need more time to\
             \ gracefully shut down. Set the value to 0 to maximize the time given\
-            \ to jobs. If not set, take the database's default value of 90 seconds."
+            \ to jobs. If not set, take the database's default value of 120 seconds."
           type: integer
         compute_node_wait_for_new_jobs_seconds:
           default: 90

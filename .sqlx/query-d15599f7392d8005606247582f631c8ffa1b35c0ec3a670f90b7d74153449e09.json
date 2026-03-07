@@ -107,6 +107,16 @@
         "name": "enable_ro_crate",
         "ordinal": 20,
         "type_info": "Integer"
+      },
+      {
+        "name": "has_datasets",
+        "ordinal": 21,
+        "type_info": "Integer"
+      },
+      {
+        "name": "srun_termination_signal",
+        "ordinal": 22,
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -133,6 +143,8 @@
       true,
       true,
       true,
+      true,
+      false,
       true
     ]
   },

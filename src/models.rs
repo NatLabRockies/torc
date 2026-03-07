@@ -9927,6 +9927,13 @@ pub struct WorkflowModel {
     #[serde(rename = "status_id")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status_id: Option<i64>,
+
+    /// Signal specification for srun steps, passed as `srun --signal=<value>`.
+    /// Format: `<signal>@<seconds>` (e.g., `TERM@120` sends SIGTERM 120 seconds before
+    /// the step time limit). This allows jobs to checkpoint before being killed.
+    #[serde(rename = "srun_termination_signal")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub srun_termination_signal: Option<String>,
 }
 
 impl WorkflowModel {
@@ -9953,6 +9960,7 @@ impl WorkflowModel {
             project: None,
             metadata: None,
             status_id: None,
+            srun_termination_signal: None,
         }
     }
 }
@@ -10038,6 +10046,9 @@ impl std::string::ToString for WorkflowModel {
             self.status_id
                 .as_ref()
                 .map(|status_id| ["status_id".to_string(), status_id.to_string()].join(",")),
+            self.srun_termination_signal
+                .as_ref()
+                .map(|v| ["srun_termination_signal".to_string(), v.to_string()].join(",")),
         ];
 
         params.into_iter().flatten().collect::<Vec<_>>().join(",")
@@ -10075,6 +10086,7 @@ impl std::str::FromStr for WorkflowModel {
             pub project: Vec<String>,
             pub metadata: Vec<String>,
             pub status_id: Vec<i64>,
+            pub srun_termination_signal: Vec<String>,
         }
 
         let mut intermediate_rep = IntermediateRep::default();
@@ -10144,6 +10156,9 @@ impl std::str::FromStr for WorkflowModel {
                     "status_id" => intermediate_rep.status_id.push(
                         <i64 as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
                     ),
+                    "srun_termination_signal" => intermediate_rep
+                        .srun_termination_signal
+                        .push(val.to_string()),
                     "use_pending_failed" => intermediate_rep.use_pending_failed.push(
                         <bool as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
                     ),
@@ -10219,6 +10234,7 @@ impl std::str::FromStr for WorkflowModel {
             project: intermediate_rep.project.into_iter().next(),
             metadata: intermediate_rep.metadata.into_iter().next(),
             status_id: intermediate_rep.status_id.into_iter().next(),
+            srun_termination_signal: intermediate_rep.srun_termination_signal.into_iter().next(),
         })
     }
 }

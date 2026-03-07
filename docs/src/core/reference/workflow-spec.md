@@ -27,12 +27,12 @@ The top-level container for a complete workflow definition.
 | `use_pending_failed`                             | boolean                                                 | false        | Use PendingFailed status for failed jobs (enables AI-assisted recovery)            |
 | `limit_resources`                                | boolean                                                 | true         | Enforce cgroup limits via srun `--mem`/`--cpus-per-task` in Slurm                  |
 | `use_srun`                                       | boolean                                                 | true         | Wrap jobs with srun inside Slurm allocations for accounting and cgroup enforcement |
-| `compute_node_expiration_buffer_seconds`         | integer                                                 | none         | Shut down compute nodes this many seconds before expiration                        |
 | `compute_node_wait_for_new_jobs_seconds`         | integer                                                 | none         | Compute nodes wait for new jobs this long before exiting                           |
 | `compute_node_ignore_workflow_completion`        | boolean                                                 | false        | Compute nodes hold allocations even after workflow completes                       |
 | `compute_node_wait_for_healthy_database_minutes` | integer                                                 | none         | Compute nodes wait this many minutes for database recovery                         |
 | `jobs_sort_method`                               | [ClaimJobsSortMethod](#claimjobssortmethod)             | `none`       | Method for sorting jobs when claiming them                                         |
 | `enable_ro_crate`                                | boolean                                                 | false        | Enable automatic [RO-Crate](../concepts/ro-crate.md) provenance tracking           |
+| `srun_termination_signal`                        | string                                                  | none         | Signal spec for `srun --signal=<value>` (e.g. `TERM@120`)                          |
 
 ### Examples with project and metadata
 
@@ -85,7 +85,6 @@ Defines a single computational task within a workflow.
 | `failure_handler`                | string                | none        | Name of a [FailureHandlerSpec](#failurehandlerspec) to use             |
 | `scheduler`                      | string                | none        | Name of the scheduler to use for this job                              |
 | `cancel_on_blocking_job_failure` | boolean               | false       | Cancel this job if a blocking job fails                                |
-| `supports_termination`           | boolean               | false       | Whether this job supports graceful termination                         |
 | `depends_on`                     | [string]              | none        | Job names that must complete before this job runs (exact matches)      |
 | `depends_on_regexes`             | [string]              | none        | Regex patterns for job dependencies                                    |
 | `input_files`                    | [string]              | none        | File names this job reads (exact matches)                              |

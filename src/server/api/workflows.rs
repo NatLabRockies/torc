@@ -170,6 +170,7 @@ const WORKFLOW_COLUMNS: &[&str] = &[
     "project",
     "metadata",
     "status_id",
+    "srun_termination_signal",
 ];
 
 const WORKFLOW_STATUS_COLUMNS: &[&str] = &[
@@ -201,6 +202,7 @@ const ALL_WORKFLOW_COLUMNS: &[&str] = &[
     "project",
     "metadata",
     "status_id",
+    "srun_termination_signal",
     "run_id",
     "is_archived",
     "is_canceled",
@@ -290,6 +292,7 @@ impl WorkflowsApiImpl {
                 ,w.project
                 ,w.metadata
                 ,w.status_id
+                ,w.srun_termination_signal
             FROM workflow w
             INNER JOIN workflow_status ws ON w.status_id = ws.id
             "
@@ -316,6 +319,7 @@ impl WorkflowsApiImpl {
                 ,project
                 ,metadata
                 ,status_id
+                ,srun_termination_signal
             FROM workflow
             "
             .to_string()
@@ -488,6 +492,7 @@ impl WorkflowsApiImpl {
                 project: record.get("project"),
                 metadata: record.get("metadata"),
                 status_id: Some(record.get("status_id")),
+                srun_termination_signal: record.get("srun_termination_signal"),
             });
         }
 
@@ -663,9 +668,10 @@ where
                 enable_ro_crate,
                 project,
                 metadata,
-                status_id
+                status_id,
+                srun_termination_signal
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
             RETURNING rowid
             "#,
             body.name,
@@ -687,6 +693,7 @@ where
             body.project,
             body.metadata,
             status_result[0].id,
+            body.srun_termination_signal,
         )
         .fetch_all(&mut *tx)
         .await
@@ -964,6 +971,7 @@ where
                     project: row.project,
                     metadata: row.metadata,
                     status_id: Some(row.status_id),
+                    srun_termination_signal: row.srun_termination_signal,
                 },
             )),
             Ok(None) => {
@@ -1274,8 +1282,9 @@ where
                 use_srun = COALESCE($11, use_srun),
                 enable_ro_crate = COALESCE($12, enable_ro_crate),
                 project = COALESCE($13, project),
-                metadata = COALESCE($14, metadata)
-            WHERE id = $15
+                metadata = COALESCE($14, metadata),
+                srun_termination_signal = COALESCE($15, srun_termination_signal)
+            WHERE id = $16
             "#,
             body.name,
             body.description,
@@ -1291,6 +1300,7 @@ where
             enable_ro_crate_int,
             body.project,
             body.metadata,
+            body.srun_termination_signal,
             id
         )
         .execute(self.context.pool.as_ref())

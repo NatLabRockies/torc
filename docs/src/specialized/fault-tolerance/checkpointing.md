@@ -1,66 +1,37 @@
 # How to Checkpoint a Job During Wall-Time Timeout
 
-When running jobs on HPC systems like Slurm, your job may be terminated when the allocated wall-time
-expires. Torc supports **graceful termination**, allowing jobs to save checkpoints before exiting.
-This guide explains how to configure Slurm and your jobs to handle wall-time timeouts gracefully.
+When running jobs on HPC systems like Slurm, your job may be terminated when it exceeds its
+configured runtime. Torc supports **graceful termination**, allowing jobs to save checkpoints before
+exiting. This guide explains how to configure your jobs to handle wall-time timeouts gracefully.
 
 ## Overview
 
-When Slurm is about to reach wall-time, it can be configured to send a SIGTERM signal to the Torc
-worker process. Torc then:
+Torc wraps each job with `srun --time=<remaining_minutes>`, where `remaining_minutes` is the time
+left in the Slurm allocation. This ensures Slurm enforces a per-step walltime and produces a clean
+`TIMEOUT` state when time runs out. When a job exceeds its step time limit:
 
-1. Sends SIGTERM to jobs with `supports_termination: true`
-2. Sends SIGKILL to jobs with `supports_termination: false` (or unset)
-3. Waits for all processes to exit
-4. Reports job status as `terminated` to the server
+1. Slurm sends **SIGTERM** to the job process
+2. The job has `KillWait` seconds (typically 30s, configured in `slurm.conf`) to save state
+3. After the grace period, Slurm sends **SIGKILL** to force termination
+4. Torc detects the `TIMEOUT` state via sacct and reports return code 152
 
-Jobs that support termination can catch SIGTERM and perform cleanup operations like saving
+Jobs that handle SIGTERM can catch the signal and perform cleanup operations like saving
 checkpoints, flushing buffers, or releasing resources.
 
-## Enabling Graceful Termination
+### Early Warning with `srun_termination_signal`
 
-### Configuring Slurm to Send a Signal Before Timeout
-
-By default, Slurm does **not** send any signal before the job's end time. When the wall-time limit
-is reached, Slurm immediately terminates all processes. To receive a warning signal before timeout,
-you must explicitly configure it using the `--signal` option in the `extra` field of your Slurm
-scheduler specification:
+By default, jobs only get `KillWait` seconds (typically 30s) between SIGTERM and SIGKILL. For jobs
+that need more time to checkpoint (e.g., saving a large model to disk), set
+`srun_termination_signal` in your workflow spec:
 
 ```yaml
-slurm_schedulers:
-  - name: gpu_scheduler
-    account: my_project
-    partition: gpu
-    nodes: 1
-    walltime: "04:00:00"
-    extra: "--signal=B:TERM@300"  # Send SIGTERM to batch script 300 seconds before timeout
+name: my_workflow
+srun_termination_signal: "TERM@120"
 ```
 
-The `--signal` option format is `[B:]<sig_num>[@sig_time]`:
-
-- `B:` prefix sends the signal only to the batch shell (by default, all job steps are signaled but
-  not the batch shell itself)
-- `sig_num` is the signal name or number (e.g., `TERM`, `USR1`, `10`)
-- `sig_time` is seconds before the time limit to send the signal (default: 60 if not specified)
-
-Note: Due to Slurm's event handling resolution, the signal may be sent up to 60 seconds earlier than
-specified.
-
-To enable graceful termination for a job, set `supports_termination: true` in your job
-specification:
-
-### Configuring a Torc job to be terminated gracefully
-
-```yaml
-jobs:
-  - name: training_job
-    command: python train.py --checkpoint-dir /scratch/checkpoints
-    supports_termination: true
-    resource_requirements:
-      num_cpus: 4
-      memory: 16g
-      runtime: PT2H
-```
+This passes `srun --signal=TERM@120`, which sends SIGTERM **120 seconds before** the step time
+limit. The job then has 120 seconds to save its checkpoint before the normal SIGTERM/SIGKILL
+sequence at the time limit.
 
 ## Writing a Job That Handles SIGTERM
 
@@ -145,15 +116,14 @@ done
 ```yaml
 name: ml_training_workflow
 user: researcher
+srun_termination_signal: "TERM@120"
 
 jobs:
   - name: preprocess
     command: python preprocess.py
-    supports_termination: false  # Quick job, no checkpointing needed
 
   - name: train_model
     command: python train.py --checkpoint-dir /scratch/checkpoints
-    supports_termination: true   # Long job, needs checkpointing
     depends_on:
       - preprocess
     resource_requirements:
@@ -164,7 +134,6 @@ jobs:
 
   - name: evaluate
     command: python evaluate.py
-    supports_termination: true
     depends_on:
       - train_model
 
@@ -174,7 +143,6 @@ slurm_schedulers:
     partition: gpu
     nodes: 1
     walltime: "04:00:00"
-    extra: "--signal=B:TERM@300"  # Send SIGTERM to batch script 300 seconds before timeout
 
 actions:
   - trigger_type: on_workflow_start
@@ -183,6 +151,9 @@ actions:
     scheduler_type: slurm
     num_allocations: 1
 ```
+
+With `srun_termination_signal: "TERM@120"`, Slurm sends SIGTERM 120 seconds before the allocation
+ends, giving `train_model` time to save a checkpoint before the hard kill.
 
 ## Restarting After Termination
 
@@ -256,14 +227,13 @@ ls -la /scratch/checkpoints/
 
 **Causes:**
 
-- `supports_termination` not set to `true`
 - Signal handler not registered before training started
-- Checkpoint save took longer than the buffer time
+- Checkpoint save took longer than the `KillWait` grace period
 
 **Solutions:**
 
-- Verify `supports_termination: true` in job spec
 - Register signal handlers early in your script
+- Ask your Slurm admin to increase `KillWait` if needed
 
 ### Checkpoint File Corrupted
 
@@ -300,5 +270,3 @@ ls -la /scratch/checkpoints/
 - [Advanced Slurm Configuration](./slurm.md) - Manual Slurm scheduler setup
 - [Managing Resources](./resources.md) - Resource requirements configuration
 - [Debugging Workflows](./debugging.md) - Troubleshooting workflow issues
-- [Slurm sbatch --signal option](https://slurm.schedmd.com/sbatch.html#OPT_signal) - Customize which
-  signal is sent and when before wall-time timeout

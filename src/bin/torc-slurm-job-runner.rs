@@ -8,11 +8,10 @@ fn main() {
 
 #[cfg(unix)]
 mod unix_main {
-    use chrono::Duration;
     use chrono::Local;
     use clap::{Parser, builder::styling};
     use env_logger::Builder;
-    use log::{LevelFilter, debug, error, info};
+    use log::{LevelFilter, debug, error, info, warn};
     use signal_hook::consts::SIGTERM;
     use signal_hook::iterator::Signals;
     use std::fs::File;
@@ -192,11 +191,13 @@ mod unix_main {
             }
         };
 
-        let expiration_buffer_seconds = workflow
-            .compute_node_expiration_buffer_seconds
-            .unwrap_or(180)
-            .max(120);
-        info!("Expiration buffer seconds: {}", expiration_buffer_seconds);
+        if workflow.compute_node_expiration_buffer_seconds.is_some() {
+            warn!(
+                "compute_node_expiration_buffer_seconds is deprecated and will be ignored. \
+                 Slurm now manages job termination signals via srun --time. \
+                 Configure Slurm's KillWait parameter instead."
+            );
+        }
 
         let job_end_time = match slurm_interface.get_job_end_time() {
             Ok(end_time) => end_time,
@@ -205,9 +206,7 @@ mod unix_main {
                 std::process::exit(1);
             }
         };
-
-        let effective_end_time = job_end_time - Duration::seconds(expiration_buffer_seconds);
-        info!("Effective end time (with buffer): {}", effective_end_time);
+        info!("Slurm job end time: {}", job_end_time);
 
         // All compute nodes get the scheduled compute node
         let scheduled_compute_node =
@@ -260,7 +259,7 @@ mod unix_main {
             args.poll_interval as f64,
             args.max_parallel_jobs.map(|x| x as i64),
             None, // time_limit
-            Some(effective_end_time),
+            Some(job_end_time),
             resources,
             scheduler_config_id,
             None, // log_prefix

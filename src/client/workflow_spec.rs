@@ -717,6 +717,11 @@ pub struct WorkflowSpec {
     /// Arbitrary metadata as JSON string
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<String>,
+    /// Signal specification for srun steps, passed as `srun --signal=<value>`.
+    /// Format: `<signal>@<seconds>` (e.g., `TERM@120` sends SIGTERM 120 seconds before
+    /// the step time limit). This allows jobs to checkpoint before being killed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub srun_termination_signal: Option<String>,
 }
 
 impl WorkflowSpec {
@@ -753,6 +758,7 @@ impl WorkflowSpec {
             enable_ro_crate: None,
             project: None,
             metadata: None,
+            srun_termination_signal: None,
         }
     }
 
@@ -1709,8 +1715,11 @@ impl WorkflowSpec {
         workflow_model.description = spec.description.clone();
 
         // Set compute node configuration fields if present
-        if let Some(value) = spec.compute_node_expiration_buffer_seconds {
-            workflow_model.compute_node_expiration_buffer_seconds = Some(value);
+        if spec.compute_node_expiration_buffer_seconds.is_some() {
+            log::warn!(
+                "compute_node_expiration_buffer_seconds is deprecated and will be ignored. \
+                 Slurm manages job termination signals via srun --time."
+            );
         }
         if let Some(value) = spec.compute_node_wait_for_new_jobs_seconds {
             workflow_model.compute_node_wait_for_new_jobs_seconds = Some(value);
@@ -1773,6 +1782,11 @@ impl WorkflowSpec {
         // Set metadata if present
         if let Some(ref value) = spec.metadata {
             workflow_model.metadata = Some(value.clone());
+        }
+
+        // Set srun_termination_signal if present
+        if let Some(ref value) = spec.srun_termination_signal {
+            workflow_model.srun_termination_signal = Some(value.clone());
         }
 
         let created_workflow = default_api::create_workflow(config, workflow_model)
@@ -2352,11 +2366,9 @@ impl WorkflowSpec {
                     job_model.cancel_on_blocking_job_failure =
                         job_spec.cancel_on_blocking_job_failure;
                 }
-                // Only override supports_termination if explicitly set in spec
-                // (JobModel::new() defaults to Some(false))
-                if job_spec.supports_termination.is_some() {
-                    job_model.supports_termination = job_spec.supports_termination;
-                }
+                // supports_termination is deprecated — Slurm manages termination
+                // signals via srun --time and KillWait. Accept the field silently
+                // to avoid breaking existing specs.
 
                 // Map file names and regexes to IDs
                 let input_file_ids = Self::resolve_names_and_regexes(
@@ -3517,6 +3529,14 @@ impl WorkflowSpec {
                         obj.insert("use_srun".to_string(), serde_json::Value::Bool(v));
                     }
                 }
+                "srun_termination_signal" => {
+                    if let Some(v) = node.entries().first().and_then(|e| e.value().as_string()) {
+                        obj.insert(
+                            "srun_termination_signal".to_string(),
+                            serde_json::Value::String(v.to_string()),
+                        );
+                    }
+                }
                 _ => {
                     // Ignore unknown nodes
                 }
@@ -4664,6 +4684,7 @@ job "train_lr{lr:.4f}_bs{batch_size}" {
             enable_ro_crate: None,
             project: None,
             metadata: None,
+            srun_termination_signal: None,
         };
 
         spec.expand_parameters()

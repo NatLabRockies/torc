@@ -100,6 +100,8 @@ impl AsyncCliCommand {
         resource_requirements: Option<&ResourceRequirementsModel>,
         limit_resources: bool,
         use_srun: bool,
+        end_time: Option<DateTime<Utc>>,
+        srun_termination_signal: Option<&str>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         if self.is_running {
             return Err("Job is already running".into());
@@ -192,6 +194,20 @@ impl AsyncCliCommand {
                         }
                     }
                 }
+            }
+            // Set per-step walltime from the remaining allocation time so Slurm
+            // kills the step with State=TIMEOUT (and return code 152) instead of
+            // letting it run until the allocation walltime expires (which produces
+            // State=CANCELLED, indistinguishable from OOM). srun --time accepts minutes.
+            if let Some(end) = end_time {
+                let remaining_secs = (end - Utc::now()).num_seconds().max(1);
+                let remaining_minutes = (remaining_secs + 59) / 60;
+                srun.arg(format!("--time={}", remaining_minutes));
+            }
+            // Pass --signal to give jobs advance warning before timeout.
+            // Format: "<signal>@<seconds>" e.g. "TERM@120"
+            if let Some(signal_spec) = srun_termination_signal {
+                srun.arg(format!("--signal={}", signal_spec));
             }
             // Run via bash so job.command can use shell features
             srun.args(["bash", "-c", &command_str]);
@@ -510,6 +526,28 @@ impl AsyncCliCommand {
                 && let (Some(workflow_id), Some(run_id), Some(attempt_id)) =
                     (self.workflow_id, self.run_id, self.attempt_id)
             {
+                // Override the return code based on sacct State.
+                // When Slurm's cgroup OOM-kills a step, srun exits with code 1
+                // and sacct ExitCode is 0:125 — neither produces the conventional
+                // 137 (128+SIGKILL) that recovery heuristics check. The sacct State
+                // field reliably reports OUT_OF_MEMORY / TIMEOUT.
+                if let Some(ref state) = stats.state {
+                    let override_rc = match state.as_str() {
+                        "OUT_OF_MEMORY" => Some(137i64), // 128 + SIGKILL
+                        "TIMEOUT" => Some(152i64),       // 128 + SIGXCPU
+                        _ => None,
+                    };
+                    if let Some(sacct_rc) = override_rc {
+                        info!(
+                            "Overriding srun return_code {} with {} (sacct State={}) for \
+                             workflow_id={} job_id={} step={}",
+                            return_code, sacct_rc, state, workflow_id, self.job_id, step_name
+                        );
+                        self.return_code = Some(sacct_rc);
+                        self.status = JobStatus::Failed;
+                    }
+                }
+
                 let mut slurm_stats =
                     SlurmStatsModel::new(workflow_id, self.job_id, run_id, attempt_id);
                 slurm_stats.slurm_job_id = Some(slurm_job_id);
@@ -527,14 +565,15 @@ impl AsyncCliCommand {
             }
         }
 
-        let status_str = format!("{:?}", status).to_lowercase();
+        let final_rc = self.return_code.unwrap_or(return_code);
+        let final_status = format!("{:?}", self.status).to_lowercase();
         info!(
             "Job process completed workflow_id={} job_id={} run_id={} return_code={} status={} exec_time_s={:.3}",
             self.workflow_id.unwrap_or(0),
             self.job_id,
             self.run_id.unwrap_or(0),
-            return_code,
-            status_str,
+            final_rc,
+            final_status,
             self.exec_time_s
         );
         Ok(())
@@ -616,6 +655,11 @@ struct SacctStats {
     max_disk_write_bytes: Option<i64>,
     ave_cpu_seconds: Option<f64>,
     node_list: Option<String>,
+    /// Slurm step state (e.g. "COMPLETED", "OUT_OF_MEMORY", "TIMEOUT", "FAILED").
+    /// When Slurm's cgroup OOM-kills a step, the ExitCode is often `0:0` and `srun`
+    /// exits with code 1, losing the OOM signal. The State field is the reliable way
+    /// to detect OOM kills and timeouts.
+    state: Option<String>,
 }
 
 /// Convert a `std::process::ExitStatus` to a return code.
@@ -674,7 +718,7 @@ fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats
                 // JobName is first so we can filter by step name in code — more reliable than
                 // sacct's --name flag, which on some Slurm versions matches the allocation name
                 // rather than the step name.
-                "JobName,MaxRSS,MaxVMSize,MaxDiskRead,MaxDiskWrite,AveCPU,NodeList",
+                "JobName,MaxRSS,MaxVMSize,MaxDiskRead,MaxDiskWrite,AveCPU,NodeList,State",
                 "-P", // pipe-separated output
                 "-n", // no header
             ])
@@ -770,7 +814,7 @@ fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats
 
 /// Parse a single pipe-separated `sacct` output line into a [`SacctStats`].
 ///
-/// Expected format (7 fields): `JobName|MaxRSS|MaxVMSize|MaxDiskRead|MaxDiskWrite|AveCPU|NodeList`
+/// Expected format (8 fields): `JobName|MaxRSS|MaxVMSize|MaxDiskRead|MaxDiskWrite|AveCPU|NodeList|State`
 fn parse_sacct_line(line: &str, step_name: &str) -> Option<SacctStats> {
     let fields: Vec<&str> = line.split('|').collect();
     if fields.len() < 7 {
@@ -782,8 +826,15 @@ fn parse_sacct_line(line: &str, step_name: &str) -> Option<SacctStats> {
     }
 
     debug!(
-        "sacct stats for step {}: MaxRSS={} MaxVMSize={} MaxDiskRead={} MaxDiskWrite={} AveCPU={} NodeList={}",
-        step_name, fields[1], fields[2], fields[3], fields[4], fields[5], fields[6]
+        "sacct stats for step {}: MaxRSS={} MaxVMSize={} MaxDiskRead={} MaxDiskWrite={} AveCPU={} NodeList={} State={}",
+        step_name,
+        fields[1],
+        fields[2],
+        fields[3],
+        fields[4],
+        fields[5],
+        fields[6],
+        fields.get(7).unwrap_or(&"")
     );
 
     let node_list = {
@@ -795,6 +846,15 @@ fn parse_sacct_line(line: &str, step_name: &str) -> Option<SacctStats> {
         }
     };
 
+    let state = fields.get(7).and_then(|s| {
+        let s = s.trim();
+        if s.is_empty() {
+            None
+        } else {
+            Some(s.to_string())
+        }
+    });
+
     Some(SacctStats {
         max_rss_bytes: parse_slurm_memory(fields[1]),
         max_vm_size_bytes: parse_slurm_memory(fields[2]),
@@ -802,6 +862,7 @@ fn parse_sacct_line(line: &str, step_name: &str) -> Option<SacctStats> {
         max_disk_write_bytes: parse_slurm_memory(fields[4]),
         ave_cpu_seconds: parse_slurm_cpu_time(fields[5]),
         node_list,
+        state,
     })
 }
 

@@ -14,51 +14,15 @@
 //!    handler that sets the termination flag via [`JobRunner::get_termination_flag()`].
 //!
 //! 2. **Graceful Shutdown**: When the flag is set, the main loop detects it and calls
-//!    [`JobRunner::terminate_jobs()`], which:
-//!    - Sends SIGTERM to jobs with `supports_termination = true`, allowing them to clean up
-//!    - Sends SIGKILL to jobs with `supports_termination = false` (immediate termination)
-//!    - Waits for all processes to exit and collects their exit codes
-//!    - Sets job status to `JobStatus::Terminated`
+//!    [`JobRunner::terminate_jobs()`], which sends SIGTERM to all running jobs, waits for
+//!    them to exit, and sets job status to `JobStatus::Terminated`.
 //!
-//! # Example: Signal Handler Registration
+//! # Per-Step Timeout via srun
 //!
-//! ```ignore
-//! use signal_hook::consts::SIGTERM;
-//! use signal_hook::iterator::Signals;
-//! use std::sync::atomic::Ordering;
-//! use std::thread;
-//!
-//! let mut job_runner = JobRunner::new(/* ... */);
-//!
-//! // Get the termination flag to share with the signal handler
-//! let termination_flag = job_runner.get_termination_flag();
-//!
-//! // Register SIGTERM handler in a background thread
-//! let mut signals = Signals::new([SIGTERM]).expect("Failed to register signals");
-//! thread::spawn(move || {
-//!     for sig in signals.forever() {
-//!         if sig == SIGTERM {
-//!             termination_flag.store(true, Ordering::SeqCst);
-//!             break;
-//!         }
-//!     }
-//! });
-//!
-//! // Run the job runner - it will check the flag in its main loop
-//! job_runner.run_worker()?;
-//! ```
-//!
-//! # Job Termination Behavior
-//!
-//! Jobs can opt-in to graceful termination by setting `supports_termination = true` in their
-//! job specification. This is useful for jobs that need to:
-//! - Save checkpoints before exiting
-//! - Clean up temporary files
-//! - Flush output buffers
-//! - Release external resources (database connections, locks, etc.)
-//!
-//! Jobs without this flag (or with `supports_termination = false`) will be killed immediately
-//! with SIGKILL, which doesn't allow cleanup but ensures rapid shutdown.
+//! When running under Slurm, each job step is launched with `srun --time=<runtime>`, which
+//! enforces the job's configured runtime at the Slurm level. Slurm sends SIGTERM when the
+//! step hits its time limit, then SIGKILL after `KillWait` seconds (typically 30s). This
+//! means all jobs get a graceful termination window regardless of configuration.
 
 use chrono::{DateTime, Utc};
 use log::{self, debug, error, info, warn};
@@ -200,7 +164,6 @@ impl JobRunner {
         let running_jobs: HashMap<i64, AsyncCliCommand> = HashMap::new();
         let torc_config = TorcConfig::load().unwrap_or_default();
         let rules = ComputeNodeRules::new(
-            workflow.compute_node_expiration_buffer_seconds,
             workflow.compute_node_wait_for_new_jobs_seconds,
             workflow.compute_node_ignore_workflow_completion,
             workflow.compute_node_wait_for_healthy_database_minutes,
@@ -357,7 +320,7 @@ impl JobRunner {
             .into_string()
             .expect("Hostname is not valid UTF-8");
         let end_time = if let Some(end_time) = self.end_time {
-            end_time.timestamp() - self.rules.compute_node_expiration_buffer_seconds
+            end_time.timestamp()
         } else {
             i64::MAX
         };
@@ -629,18 +592,11 @@ impl JobRunner {
     ///    - All terminated jobs are set to `JobStatus::Terminated`
     ///    - Results include execution time and resource metrics (if monitoring is enabled)
     ///
-    /// # Job Termination Behavior
+    /// Sends SIGTERM to all running jobs and waits for them to exit.
     ///
-    /// Jobs can opt-in to graceful termination by setting `supports_termination: true` in the
-    /// job specification. This is useful for jobs that need to save checkpoints or clean up
-    /// resources before exiting. Jobs without this flag are killed immediately to ensure
-    /// rapid shutdown when the compute node is about to expire.
-    ///
-    /// # Note
-    ///
-    /// This method is called automatically by `run_worker()` when:
+    /// Called automatically by `run_worker()` when:
     /// - The termination flag is set (typically by a SIGTERM signal handler)
-    /// - The compute node's end time is approaching
+    /// - The compute node's end time is reached
     fn terminate_jobs(&mut self) {
         if self.running_jobs.is_empty() {
             debug!("No running jobs to terminate");
@@ -653,32 +609,19 @@ impl JobRunner {
             self.running_jobs.len()
         );
 
-        // First pass: send termination signal to all jobs
-        // Jobs that support termination get SIGTERM, others get killed immediately
+        // Send SIGTERM to all running jobs for graceful termination.
+        // When running under srun, Slurm's KillWait controls the grace period before
+        // SIGKILL. The deprecated supports_termination field is no longer consulted.
         for (job_id, async_job) in self.running_jobs.iter_mut() {
-            let supports_termination = async_job.job.supports_termination.unwrap_or(false);
-            if supports_termination {
-                info!(
-                    "Job SIGTERM workflow_id={} job_id={} supports_termination=true",
-                    self.workflow_id, job_id
+            info!(
+                "Job SIGTERM workflow_id={} job_id={}",
+                self.workflow_id, job_id
+            );
+            if let Err(e) = async_job.terminate() {
+                warn!(
+                    "Job SIGTERM failed workflow_id={} job_id={} error={}",
+                    self.workflow_id, job_id, e
                 );
-                if let Err(e) = async_job.terminate() {
-                    warn!(
-                        "Job SIGTERM failed workflow_id={} job_id={} error={}",
-                        self.workflow_id, job_id, e
-                    );
-                }
-            } else {
-                info!(
-                    "Job SIGKILL workflow_id={} job_id={} supports_termination=false",
-                    self.workflow_id, job_id
-                );
-                if let Err(e) = async_job.cancel() {
-                    warn!(
-                        "Job SIGKILL failed workflow_id={} job_id={} error={}",
-                        self.workflow_id, job_id, e
-                    );
-                }
             }
         }
 
@@ -1279,16 +1222,24 @@ impl JobRunner {
     }
 
     /// Update the time_limit in resources based on remaining time until end_time.
-    /// This ensures the server only returns jobs whose runtime fits within the remaining allocation time.
+    /// This ensures the server only returns jobs whose runtime fits within the remaining
+    /// allocation time. A startup grace period is added so that a job with runtime=PT1H
+    /// can be claimed on a 1-hour allocation even if the runner started 1-2 minutes late.
+    /// This is safe because srun --time enforces the actual per-step walltime.
+    const STARTUP_GRACE_PERIOD_SECONDS: u64 = 120;
+
     fn update_remaining_time_limit(&mut self) {
         if let Some(end_time) = self.end_time {
             let now = Utc::now();
             if end_time > now {
-                let remaining_seconds = (end_time - now).num_seconds() as u64;
+                let remaining_seconds =
+                    (end_time - now).num_seconds() as u64 + Self::STARTUP_GRACE_PERIOD_SECONDS;
                 let time_limit = format_duration_iso8601(remaining_seconds);
                 debug!(
-                    "Updating time_limit to {} ({} seconds remaining)",
-                    time_limit, remaining_seconds
+                    "Updating time_limit to {} ({} seconds remaining + {}s grace period)",
+                    time_limit,
+                    (end_time - now).num_seconds(),
+                    Self::STARTUP_GRACE_PERIOD_SECONDS
                 );
                 self.resources.time_limit = Some(time_limit);
             } else {
@@ -1385,6 +1336,8 @@ impl JobRunner {
                         Some(&job_rr),
                         self.workflow.limit_resources.unwrap_or(true),
                         self.workflow.use_srun.unwrap_or(true),
+                        self.end_time,
+                        self.workflow.srun_termination_signal.as_deref(),
                     ) {
                         Ok(()) => {
                             info!(
@@ -1527,6 +1480,8 @@ impl JobRunner {
                         Some(&job_rr),
                         self.workflow.limit_resources.unwrap_or(true),
                         self.workflow.use_srun.unwrap_or(true),
+                        self.end_time,
+                        self.workflow.srun_termination_signal.as_deref(),
                     ) {
                         Ok(()) => {
                             info!(
@@ -1951,8 +1906,6 @@ impl JobRunner {
 
 #[derive(Debug)]
 struct ComputeNodeRules {
-    /// Inform all compute nodes to shut down this number of seconds before the expiration time. This allows torc to send SIGTERM to all job processes and set all statuses to terminated. Increase the time in cases where the job processes handle SIGTERM and need more time to gracefully shut down. Set the value to 0 to maximize the time given to jobs. If not set, take the database's default value of 60 seconds.
-    pub compute_node_expiration_buffer_seconds: i64,
     /// Inform all compute nodes to wait for new jobs for this time period before exiting.
     /// Does not apply if the workflow is complete.
     ///
@@ -1975,7 +1928,6 @@ struct ComputeNodeRules {
 
 impl ComputeNodeRules {
     pub fn new(
-        compute_node_expiration_buffer_seconds: Option<i64>,
         compute_node_wait_for_new_jobs_seconds: Option<i64>,
         compute_node_ignore_workflow_completion: Option<bool>,
         compute_node_wait_for_healthy_database_minutes: Option<i64>,
@@ -1983,8 +1935,6 @@ impl ComputeNodeRules {
         jobs_sort_method: Option<ClaimJobsSortMethod>,
     ) -> Self {
         ComputeNodeRules {
-            compute_node_expiration_buffer_seconds: compute_node_expiration_buffer_seconds
-                .unwrap_or(60),
             compute_node_wait_for_new_jobs_seconds: compute_node_wait_for_new_jobs_seconds
                 .unwrap_or(90) as u64,
             compute_node_ignore_workflow_completion: compute_node_ignore_workflow_completion

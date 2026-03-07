@@ -1,8 +1,11 @@
 //! MCP server implementation for Torc.
 
 use rmcp::{
-    Error as McpError, ServerHandler,
-    model::{CallToolResult, Implementation, ProtocolVersion, ServerCapabilities, ServerInfo},
+    Error as McpError, RoleServer, ServerHandler,
+    model::{
+        CallToolResult, Implementation, PaginatedRequestParam, ProtocolVersion, ReadResourceResult,
+        ServerCapabilities, ServerInfo,
+    },
     schemars, tool,
 };
 use serde::Deserialize;
@@ -17,6 +20,8 @@ use super::tools;
 pub struct TorcMcpServer {
     config: Configuration,
     output_dir: PathBuf,
+    docs_dir: Option<PathBuf>,
+    examples_dir: Option<PathBuf>,
 }
 
 impl TorcMcpServer {
@@ -30,7 +35,12 @@ impl TorcMcpServer {
         let mut config = Configuration::with_tls(tls);
         config.base_path = api_url;
 
-        Self { config, output_dir }
+        Self {
+            config,
+            output_dir,
+            docs_dir: None,
+            examples_dir: None,
+        }
     }
 
     /// Create a new TorcMcpServer with authentication.
@@ -64,7 +74,24 @@ impl TorcMcpServer {
             config.basic_auth = Some((user, Some(pass)));
         }
 
-        Self { config, output_dir }
+        Self {
+            config,
+            output_dir,
+            docs_dir: None,
+            examples_dir: None,
+        }
+    }
+
+    /// Set the documentation directory.
+    pub fn with_docs_dir(mut self, docs_dir: Option<PathBuf>) -> Self {
+        self.docs_dir = docs_dir;
+        self
+    }
+
+    /// Set the examples directory.
+    pub fn with_examples_dir(mut self, examples_dir: Option<PathBuf>) -> Self {
+        self.examples_dir = examples_dir;
+        self
     }
 }
 
@@ -291,6 +318,34 @@ pub struct AnalyzeResourceUsageParams {
         If false (default), include all jobs with results."
     )]
     pub completed_only: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct GetExampleParams {
+    #[schemars(
+        description = "Name of the example to retrieve (e.g., 'diamond_workflow', 'hyperparameter_sweep')"
+    )]
+    pub name: String,
+    #[schemars(
+        description = "Preferred format: 'yaml' (default), 'json', or 'kdl'. Falls back to available format."
+    )]
+    pub format: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct GetDocsParams {
+    #[schemars(description = "Documentation topic to retrieve. Topics: \
+        'workflow-spec' (spec reference), 'dependencies' (job dependency types), \
+        'parameterization' (parameter sweeps), 'slurm' (HPC/Slurm setup), \
+        'job-states' (status lifecycle), 'actions' (workflow actions), \
+        'failure-handlers' (error recovery rules), 'recovery' (automated recovery), \
+        'ai-recovery' (AI-assisted failure classification), \
+        'resource-monitoring' (CPU/memory monitoring), 'cli' (CLI reference), \
+        'quick-start' (getting started), 'architecture' (system design), \
+        'checkpointing' (job checkpointing), 'hpc-profiles' (HPC profile config), \
+        'workflow-formats' (YAML/JSON/KDL formats), \
+        'tutorials' (list of available tutorials)")]
+    pub topic: String,
 }
 
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
@@ -905,6 +960,81 @@ NOTES:
         .await
         .map_err(|e| McpError::internal_error(format!("Task join error: {}", e), None))?
     }
+
+    /// List available example workflow specifications.
+    #[tool(
+        description = "List available example workflow specifications with descriptions. \
+        Use this to discover example workflows that can be retrieved with get_example. \
+        Examples cover common patterns: diamond (fan-out/fan-in), parameterized jobs, \
+        hyperparameter sweeps, Slurm pipelines, workflow actions, failure handlers, and more."
+    )]
+    async fn list_examples(&self) -> Result<CallToolResult, McpError> {
+        let examples_dir = self.examples_dir.clone();
+        tokio::task::spawn_blocking(move || tools::list_examples(examples_dir.as_deref()))
+            .await
+            .map_err(|e| McpError::internal_error(format!("Task join error: {}", e), None))?
+    }
+
+    /// Get an example workflow specification.
+    #[tool(
+        description = "Retrieve a complete example workflow specification by name. \
+        Use list_examples first to see available examples. \
+        Returns the full spec content that can be adapted for new workflows. \
+        Prefer YAML format for parameterized workflows (KDL doesn't support parameters)."
+    )]
+    async fn get_example(
+        &self,
+        #[tool(aggr)] params: GetExampleParams,
+    ) -> Result<CallToolResult, McpError> {
+        let examples_dir = self.examples_dir.clone();
+        let name = params.name;
+        let format = params.format.unwrap_or_else(|| "yaml".to_string());
+        tokio::task::spawn_blocking(move || {
+            tools::get_example(examples_dir.as_deref(), &name, &format)
+        })
+        .await
+        .map_err(|e| McpError::internal_error(format!("Task join error: {}", e), None))?
+    }
+
+    /// Get Torc documentation on a topic.
+    #[tool(description = r#"Retrieve Torc documentation on a specific topic.
+
+Use this to understand Torc concepts before creating or debugging workflows.
+
+KEY TOPICS:
+- "workflow-spec" - Complete workflow specification reference (all fields, types, defaults)
+- "dependencies" - How job dependencies work (explicit, file-based, user_data)
+- "parameterization" - Parameter sweeps, ranges, format specifiers, Cartesian products
+- "slurm" - Slurm HPC integration, schedulers, accounts, partitions
+- "job-states" - Job status lifecycle (uninitialized → ready → running → completed/failed)
+- "actions" - Workflow actions (on_workflow_start, on_jobs_ready, schedule_nodes)
+- "failure-handlers" - Automatic retry rules for specific exit codes
+- "recovery" - Automated workflow recovery (OOM, timeout diagnosis)
+- "ai-recovery" - AI-assisted failure classification (pending_failed status)
+- "resource-monitoring" - CPU/memory monitoring, time-series collection
+- "cli" - CLI command reference
+- "quick-start" - Getting started guide
+- "architecture" - System architecture overview
+- "checkpointing" - Job checkpointing support
+- "hpc-profiles" - HPC profile configuration for different clusters
+- "workflow-formats" - YAML, JSON, JSON5, KDL format comparison
+- "tutorials" - List of available tutorials
+
+WHEN TO USE:
+- Before creating a workflow: check "workflow-spec" and "parameterization"
+- Before Slurm submission: check "slurm" and "hpc-profiles"
+- To understand dependencies: check "dependencies"
+- To set up error handling: check "failure-handlers" and "recovery""#)]
+    async fn get_docs(
+        &self,
+        #[tool(aggr)] params: GetDocsParams,
+    ) -> Result<CallToolResult, McpError> {
+        let docs_dir = self.docs_dir.clone();
+        let topic = params.topic;
+        tokio::task::spawn_blocking(move || tools::get_docs(docs_dir.as_deref(), &topic))
+            .await
+            .map_err(|e| McpError::internal_error(format!("Task join error: {}", e), None))?
+    }
 }
 
 #[tool(tool_box)]
@@ -912,7 +1042,10 @@ impl ServerHandler for TorcMcpServer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
             protocol_version: ProtocolVersion::V_2024_11_05,
-            capabilities: ServerCapabilities::builder().enable_tools().build(),
+            capabilities: ServerCapabilities::builder()
+                .enable_tools()
+                .enable_resources()
+                .build(),
             server_info: Implementation::from_build_env(),
             instructions: Some(
                 "Torc MCP Server - Manage computational workflows.\n\n\
@@ -920,6 +1053,10 @@ impl ServerHandler for TorcMcpServer {
                  - When user asks to 'create a workflow', save a spec FILE (action=save_spec_file)\n\
                  - AI-generated specs have placeholder commands - users must customize before running\n\
                  - Only use action=create_workflow when user explicitly says 'run' or 'submit'\n\n\
+                 DOCUMENTATION & EXAMPLES:\n\
+                 - Use get_docs to retrieve documentation on any topic before creating workflows\n\
+                 - Use list_examples + get_example to find and adapt example workflow specs\n\
+                 - Resources are also available at torc://docs/{topic} and torc://examples/{name}\n\n\
                  FILE-BASED DEPENDENCIES:\n\
                  1. Add a 'files' section defining each file with name, path, st_mtime\n\
                  2. Add 'input_files' to jobs that read files (exact names)\n\
@@ -930,9 +1067,53 @@ impl ServerHandler for TorcMcpServer {
                  list_failed_jobs, get_job_logs, analyze_workflow_logs (scan all logs for errors), \
                  check_resource_utilization, update_job_resources, \
                  analyze_resource_usage (per-job resource data for cluster analysis), \
-                 regroup_job_resources (reassign jobs to new resource groups)."
+                 regroup_job_resources (reassign jobs to new resource groups), \
+                 get_docs (documentation), list_examples + get_example (example workflows)."
                     .to_string(),
             ),
+        }
+    }
+
+    fn list_resources(
+        &self,
+        _request: PaginatedRequestParam,
+        _context: rmcp::service::RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<rmcp::model::ListResourcesResult, McpError>> + Send + '_
+    {
+        let docs_dir = self.docs_dir.clone();
+        let examples_dir = self.examples_dir.clone();
+        async move {
+            let resources = tokio::task::spawn_blocking(move || {
+                tools::list_mcp_resources(docs_dir.as_deref(), examples_dir.as_deref())
+            })
+            .await
+            .map_err(|e| McpError::internal_error(format!("Task join error: {}", e), None))?;
+
+            Ok(rmcp::model::ListResourcesResult {
+                resources,
+                next_cursor: None,
+            })
+        }
+    }
+
+    fn read_resource(
+        &self,
+        request: rmcp::model::ReadResourceRequestParam,
+        _context: rmcp::service::RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<ReadResourceResult, McpError>> + Send + '_ {
+        let docs_dir = self.docs_dir.clone();
+        let examples_dir = self.examples_dir.clone();
+        let uri = request.uri;
+        async move {
+            let contents = tokio::task::spawn_blocking(move || {
+                tools::read_mcp_resource(docs_dir.as_deref(), examples_dir.as_deref(), &uri)
+            })
+            .await
+            .map_err(|e| McpError::internal_error(format!("Task join error: {}", e), None))??;
+
+            Ok(ReadResourceResult {
+                contents: vec![contents],
+            })
         }
     }
 }

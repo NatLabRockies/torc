@@ -12,29 +12,39 @@ API.
 
 The AI assistant has access to these Torc operations:
 
-| Tool                         | Description                                              |
-| ---------------------------- | -------------------------------------------------------- |
-| `get_workflow_status`        | Get workflow info with job counts by status              |
-| `get_job_details`            | Get detailed job info including resource requirements    |
-| `get_job_logs`               | Read stdout/stderr from job log files                    |
-| `list_failed_jobs`           | List all failed jobs in a workflow                       |
-| `list_jobs_by_status`        | Filter jobs by status                                    |
-| `check_resource_utilization` | Analyze resource usage and detect OOM/timeout issues     |
-| `update_job_resources`       | Modify job resource requirements                         |
-| `analyze_resource_usage`     | Per-job resource data grouped by RR for cluster analysis |
-| `regroup_job_resources`      | Create new RR groups and reassign jobs (dry_run support) |
-| `restart_jobs`               | Reset and restart failed jobs                            |
-| `resubmit_workflow`          | Regenerate Slurm schedulers and submit new allocations   |
-| `cancel_jobs`                | Cancel specific jobs                                     |
-| `create_workflow_from_spec`  | Create a workflow from JSON specification                |
+| Tool                            | Description                                              |
+| ------------------------------- | -------------------------------------------------------- |
+| `create_workflow`               | Create a workflow from JSON specification                |
+| `get_execution_plan`            | Preview execution DAG before or after creating           |
+| `get_workflow_status`           | Get workflow info with job counts by status              |
+| `get_workflow_summary`          | Get completion summary with execution time               |
+| `get_job_details`               | Get detailed job info including resource requirements    |
+| `get_job_logs`                  | Read stdout/stderr from job log files                    |
+| `list_failed_jobs`              | List all failed jobs in a workflow                       |
+| `list_jobs_by_status`           | Filter jobs by status                                    |
+| `list_results`                  | List job results with filtering and sorting              |
+| `analyze_workflow_logs`         | Scan all logs for error patterns (OOM, timeout, etc.)    |
+| `check_resource_utilization`    | Analyze resource usage and detect OOM/timeout issues     |
+| `update_job_resources`          | Modify job resource requirements                         |
+| `analyze_resource_usage`        | Per-job resource data grouped by RR for cluster analysis |
+| `regroup_job_resources`         | Create new RR groups and reassign jobs (dry_run support) |
+| `recover_workflow`              | Automated recovery from OOM/timeout failures             |
+| `list_pending_failed_jobs`      | List jobs awaiting AI-assisted classification            |
+| `classify_and_resolve_failures` | Classify failures as transient or permanent              |
+| `get_slurm_sacct`               | Get Slurm accounting data for a workflow                 |
+| `get_docs`                      | Retrieve Torc documentation by topic                     |
+| `list_examples`                 | List available example workflow specifications           |
+| `get_example`                   | Retrieve a complete example workflow spec                |
 
 ## Environment Variables
 
-| Variable          | Description                            | Default                                 |
-| ----------------- | -------------------------------------- | --------------------------------------- |
-| `TORC_API_URL`    | Torc server URL                        | `http://localhost:8080/torc-service/v1` |
-| `TORC_OUTPUT_DIR` | Directory containing job logs          | `output`                                |
-| `TORC_PASSWORD`   | Password for authentication (optional) | —                                       |
+| Variable            | Description                            | Default                                 |
+| ------------------- | -------------------------------------- | --------------------------------------- |
+| `TORC_API_URL`      | Torc server URL                        | `http://localhost:8080/torc-service/v1` |
+| `TORC_OUTPUT_DIR`   | Directory containing job logs          | `torc_output`                           |
+| `TORC_PASSWORD`     | Password for authentication (optional) | —                                       |
+| `TORC_DOCS_DIR`     | Local path to `docs/src/` (optional)   | fetched from GitHub                     |
+| `TORC_EXAMPLES_DIR` | Local path to `examples/` (optional)   | fetched from GitHub                     |
 
 ---
 
@@ -87,6 +97,10 @@ Create or edit `.mcp.json` in your project root:
   }
 }
 ```
+
+> **Note:** Documentation and examples are fetched from GitHub automatically. Set `TORC_DOCS_DIR`
+> and `TORC_EXAMPLES_DIR` only if you want to use local files instead (e.g., for offline use or
+> development).
 
 ### Environment Variable Expansion
 
