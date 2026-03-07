@@ -878,3 +878,63 @@ impl Drop for AsyncCliCommand {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_sacct_line_with_state() {
+        let line = "step1|1024K|2048K|512K|256K|00:01:30|node01|COMPLETED";
+        let stats = parse_sacct_line(line, "step1").unwrap();
+        assert_eq!(stats.state, Some("COMPLETED".to_string()));
+        assert_eq!(stats.max_rss_bytes, Some(1024 * 1024));
+        assert_eq!(stats.node_list, Some("node01".to_string()));
+    }
+
+    #[test]
+    fn test_parse_sacct_line_out_of_memory_state() {
+        let line = "step1|0|0|0|0|00:00:00|node01|OUT_OF_MEMORY";
+        let stats = parse_sacct_line(line, "step1").unwrap();
+        assert_eq!(stats.state, Some("OUT_OF_MEMORY".to_string()));
+    }
+
+    #[test]
+    fn test_parse_sacct_line_timeout_state() {
+        let line = "step1|512K|1024K|0|0|00:05:00|node01|TIMEOUT";
+        let stats = parse_sacct_line(line, "step1").unwrap();
+        assert_eq!(stats.state, Some("TIMEOUT".to_string()));
+    }
+
+    #[test]
+    fn test_parse_sacct_line_missing_state_field() {
+        // Only 7 fields (no State column) — should still parse successfully
+        let line = "step1|1024K|2048K|512K|256K|00:01:30|node01";
+        let stats = parse_sacct_line(line, "step1").unwrap();
+        assert_eq!(stats.state, None);
+        assert_eq!(stats.max_rss_bytes, Some(1024 * 1024));
+    }
+
+    #[test]
+    fn test_parse_sacct_line_empty_state() {
+        let line = "step1|1024K|2048K|512K|256K|00:01:30|node01|";
+        let stats = parse_sacct_line(line, "step1").unwrap();
+        assert_eq!(stats.state, None);
+    }
+
+    #[test]
+    fn test_parse_sacct_line_step_name_is_for_logging_only() {
+        // parse_sacct_line doesn't filter by step name — the caller (collect_sacct_stats) does.
+        // The step_name parameter is only used for debug log messages.
+        let line = "other_step|1024K|2048K|512K|256K|00:01:30|node01|COMPLETED";
+        let stats = parse_sacct_line(line, "step1");
+        assert!(stats.is_some());
+    }
+
+    #[test]
+    fn test_parse_sacct_line_too_few_fields() {
+        let line = "step1|1024K|2048K";
+        let stats = parse_sacct_line(line, "step1");
+        assert!(stats.is_none());
+    }
+}

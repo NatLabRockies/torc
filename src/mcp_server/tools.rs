@@ -2013,6 +2013,9 @@ pub fn regroup_job_resources(
 // --- Documentation and Examples Tools ---
 
 /// Base URL for fetching content from GitHub.
+/// When local `docs_dir` / `examples_dir` are not configured (or the file is missing locally),
+/// the MCP tools fall back to fetching documentation and example files from this URL.
+/// This means `get_docs`, `get_example`, and MCP resource reads may make network requests.
 const GITHUB_RAW_BASE: &str = "https://raw.githubusercontent.com/NatLabRockies/torc/main";
 
 /// Example descriptions keyed by base name.

@@ -6849,8 +6849,10 @@ components:
           type: boolean
         supports_termination:
           default: false
-          description: Informs torc that the job can be terminated gracefully before
-            a wall-time timeout.
+          deprecated: true
+          description: "Deprecated: Slurm now manages termination signals via srun\
+            \ --time and KillWait, so all jobs receive graceful SIGTERM. This field\
+            \ is accepted but ignored."
           type: boolean
         depends_on_job_ids:
           description: Database IDs of jobs that block this job
@@ -7191,6 +7193,7 @@ components:
         compute_node_min_time_for_new_jobs_seconds: 300
         worker_startup_script: worker_startup_script
         worker_completion_script: worker_completion_script
+        srun_termination_signal: "TERM@120"
         compute_node_expiration_buffer_seconds: 6
       properties:
         id:
@@ -7216,12 +7219,10 @@ components:
 
         compute_node_expiration_buffer_seconds:
           default: 120
-          description: "Inform all compute nodes to shut down this number of seconds\
-            \ before the expiration time. This allows torc to send SIGTERM to all\
-            \ job processes and set all statuses to terminated. Increase the time\
-            \ in cases where the job processes handle SIGTERM and need more time to\
-            \ gracefully shut down. Set the value to 0 to maximize the time given\
-            \ to jobs. If not set, take the database's default value of 120 seconds."
+          deprecated: true
+          description: "Deprecated: Slurm now manages job termination signals via\
+            \ srun --time and KillWait. This field is accepted but ignored. Previously\
+            \ informed compute nodes to shut down this many seconds before expiration."
           type: integer
         compute_node_wait_for_new_jobs_seconds:
           default: 90
@@ -7263,6 +7264,12 @@ components:
           type: boolean
         status_id:
           type: integer
+        srun_termination_signal:
+          description: "Signal specification for srun steps, passed as srun --signal=<value>.\
+            \ Format: <signal>@<seconds> (e.g., TERM@120 sends SIGTERM 120 seconds\
+            \ before the step time limit). This allows jobs to checkpoint before being\
+            \ killed."
+          type: string
       required:
       - name
       - user
