@@ -385,12 +385,17 @@ fn test_auto_ro_crate_disabled_by_default(start_server: &ServerProcess) {
     // Initialize the workflow
     default_api::initialize_jobs(config, workflow_id, Some(false), Some(false), None).unwrap();
 
-    // Verify NO RO-Crate entities were created
+    // Verify no file-based RO-Crate entities were created (only the SoftwareApplication for torc-server)
     let entities = default_api::list_ro_crate_entities(config, workflow_id, None, None).unwrap();
+    let items = entities.items.unwrap_or_default();
+    let file_entities: Vec<_> = items
+        .iter()
+        .filter(|e| e.entity_type != "SoftwareApplication")
+        .collect();
     assert_eq!(
-        entities.items.unwrap_or_default().len(),
+        file_entities.len(),
         0,
-        "No RO-Crate entities should be created when enable_ro_crate is not set"
+        "No file RO-Crate entities should be created when enable_ro_crate is not set"
     );
 }
 
