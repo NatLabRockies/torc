@@ -85,7 +85,7 @@ flowchart LR
     SRUN --> JN
     SRUN --> ND
 
-    ND -.- N1["Default: 1 node<br/>Override via step_nodes"]:::note
+    ND -.- N1["Only when step_nodes > 1<br/>Omitted for single-node steps"]:::note
     CB -.- N2["Default on; disable with<br/>enable_cpu_bind: true"]:::note
     TIME -.- N4["Remaining allocation time<br/>rounded down to minutes"]:::note
     SIG -.- N5["Early warning signal<br/>e.g. TERM@120"]:::note
@@ -102,7 +102,7 @@ flowchart LR
 | `--ntasks=1`      | One task per workflow job                                                     |
 | `--cpu-bind=none` | Disables CPU affinity binding (default; omitted when `enable_cpu_bind: true`) |
 | `--job-name`      | Sets the step name for sacct/sstat lookup                                     |
-| `--nodes`         | Number of nodes for this step (from `step_nodes`, default 1)                  |
+| `--nodes`         | Number of nodes (only when `step_nodes > 1`; omitted for single-node steps)   |
 | `--cpus-per-task` | CPU cgroup limit (only when `limit_resources=true`)                           |
 | `--mem`           | Memory cgroup limit in MB (only when `limit_resources=true`)                  |
 | `--time`          | Per-step walltime from remaining allocation time (see below)                  |

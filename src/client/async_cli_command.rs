@@ -159,12 +159,14 @@ impl AsyncCliCommand {
             }
             srun.arg(format!("--job-name={}", step_name));
             if let Some(rr) = resource_requirements {
-                // step_nodes controls how many nodes this srun step spans.
-                // rr.num_nodes is the allocation size (sbatch --nodes); using it here would make
-                // concurrent single-node steps compete for all nodes ("Requested nodes are busy").
-                // Default to 1 (single-node step); set step_nodes > 1 for MPI / Julia Distributed.jl.
+                // Only pass --nodes when step_nodes > 1 (multi-node MPI / Julia Distributed.jl).
+                // Omitting --nodes for single-node steps lets srun allocate CPUs/memory from any
+                // available node without claiming the node exclusively, allowing concurrent steps
+                // to share nodes.
                 let step_nodes = rr.step_nodes.unwrap_or(1).max(1);
-                srun.arg(format!("--nodes={}", step_nodes));
+                if step_nodes > 1 {
+                    srun.arg(format!("--nodes={}", step_nodes));
+                }
                 if limit_resources && rr.name != "default" {
                     srun.arg(format!("--cpus-per-task={}", rr.num_cpus));
                     match memory_string_to_mb(&rr.memory) {
