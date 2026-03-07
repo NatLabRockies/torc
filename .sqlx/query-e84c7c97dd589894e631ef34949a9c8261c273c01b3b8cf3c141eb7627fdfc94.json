@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO workflow\n            (\n                name,\n                description,\n                user,\n                timestamp,\n                compute_node_expiration_buffer_seconds,\n                compute_node_wait_for_new_jobs_seconds,\n                compute_node_ignore_workflow_completion,\n                compute_node_wait_for_healthy_database_minutes,\n                compute_node_min_time_for_new_jobs_seconds,\n                jobs_sort_method,\n                resource_monitor_config,\n                slurm_defaults,\n                use_pending_failed,\n                limit_resources,\n                use_srun,\n                enable_ro_crate,\n                project,\n                metadata,\n                status_id,\n                srun_termination_signal,\n                enable_cpu_bind\n            )\n            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)\n            RETURNING rowid\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 21
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e84c7c97dd589894e631ef34949a9c8261c273c01b3b8cf3c141eb7627fdfc94"
+}

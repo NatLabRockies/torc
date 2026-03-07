@@ -33,6 +33,7 @@ The top-level container for a complete workflow definition.
 | `jobs_sort_method`                               | [ClaimJobsSortMethod](#claimjobssortmethod)             | `none`       | Method for sorting jobs when claiming them                                         |
 | `enable_ro_crate`                                | boolean                                                 | false        | Enable automatic [RO-Crate](../concepts/ro-crate.md) provenance tracking           |
 | `srun_termination_signal`                        | string                                                  | none         | Signal spec for `srun --signal=<value>` (e.g. `TERM@120`)                          |
+| `enable_cpu_bind`                                | boolean                                                 | false        | Allow Slurm to bind tasks to CPU cores (default: disabled via `--cpu-bind=none`)   |
 
 ### Examples with project and metadata
 

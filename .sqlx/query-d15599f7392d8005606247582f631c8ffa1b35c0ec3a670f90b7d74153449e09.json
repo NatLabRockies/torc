@@ -109,14 +109,14 @@
         "type_info": "Integer"
       },
       {
-        "name": "has_datasets",
+        "name": "srun_termination_signal",
         "ordinal": 21,
-        "type_info": "Integer"
+        "type_info": "Text"
       },
       {
-        "name": "srun_termination_signal",
+        "name": "enable_cpu_bind",
         "ordinal": 22,
-        "type_info": "Text"
+        "type_info": "Integer"
       }
     ],
     "parameters": {
@@ -144,7 +144,7 @@
       true,
       true,
       true,
-      false,
+      true,
       true
     ]
   },
