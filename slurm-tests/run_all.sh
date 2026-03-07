@@ -184,17 +184,15 @@ echo "TORC_API_URL=$TORC_API_URL"
 
 # ── Prepare and submit workflows ─────────────────────────────────────────────
 
-echo ""
-echo "═══════════════════════════════════════════════════════════════"
-echo "  SUBMITTING WORKFLOWS"
-echo "═══════════════════════════════════════════════════════════════"
-
 PREP_DIR="$RUN_DIR/prepared_workflows"
 mkdir -p "$PREP_DIR"
 
-# All available workflow names
-# cancel_workflow is placed early so it gets a Slurm allocation before the pre-poll timeout.
-ALL_WORKFLOW_NAMES=(
+# All available workflow names, split into two batches to avoid exceeding
+# Slurm's limit on outstanding jobs. Batch 1 is submitted first, polled to
+# completion, then batch 2 is submitted and polled.
+# cancel_workflow is in batch 1 because it requires pre-poll actions.
+# sync_status is in batch 2 (also requires pre-poll actions, handled there).
+BATCH1_NAMES=(
   single_node_basic
   no_srun_basic
   cancel_workflow
@@ -205,6 +203,9 @@ ALL_WORKFLOW_NAMES=(
   resource_monitoring
   failure_recovery
   timeout_detection
+)
+
+BATCH2_NAMES=(
   srun_termination_signal
   sync_status
 )
@@ -214,7 +215,9 @@ ALL_WORKFLOW_NAMES=(
 declare -A SUBMIT_EXTRA_ARGS
 SUBMIT_EXTRA_ARGS[job_parallelism]="--max-parallel-jobs 2"
 
-# Filter workflow names if --test was specified
+# Build combined list and apply --test filter
+ALL_WORKFLOW_NAMES=("${BATCH1_NAMES[@]}" "${BATCH2_NAMES[@]}")
+
 WORKFLOW_NAMES=()
 for name in "${ALL_WORKFLOW_NAMES[@]}"; do
   if [ -z "$TEST_FILTER" ] || [[ "$name" == *"$TEST_FILTER"* ]]; then
@@ -234,112 +237,181 @@ declare -A WF_IDS
 
 cd "$REPO_ROOT"
 
-for name in "${WORKFLOW_NAMES[@]}"; do
-  echo ""
-  echo "Submitting: $name"
-  local_spec="$PREP_DIR/${name}.yaml"
-  prepare_workflow_spec \
-    "$SCRIPT_DIR/workflows/${name}.yaml" \
-    "$ACCOUNT" \
-    "$PARTITION" \
-    "$local_spec"
+# submit_batch NAMES...
+#   Submits all named workflows and records their IDs in WF_IDS.
+submit_batch() {
+  local names=("$@")
+  for name in "${names[@]}"; do
+    # Skip if not in the filtered list
+    local found=false
+    for wn in "${WORKFLOW_NAMES[@]}"; do
+      if [ "$wn" = "$name" ]; then found=true; break; fi
+    done
+    if ! $found; then continue; fi
 
-  # shellcheck disable=SC2086  # Intentional word splitting for extra submit args
-  wf_id=$(submit_workflow "$local_spec" ${SUBMIT_EXTRA_ARGS[$name]:-})
-  if [ -z "$wf_id" ]; then
-    echo "FATAL: Failed to submit $name"
-    exit 1
+    echo ""
+    echo "Submitting: $name"
+    local local_spec="$PREP_DIR/${name}.yaml"
+    prepare_workflow_spec \
+      "$SCRIPT_DIR/workflows/${name}.yaml" \
+      "$ACCOUNT" \
+      "$PARTITION" \
+      "$local_spec"
+
+    local wf_id
+    # shellcheck disable=SC2086  # Intentional word splitting for extra submit args
+    wf_id=$(submit_workflow "$local_spec" ${SUBMIT_EXTRA_ARGS[$name]:-})
+    if [ -z "$wf_id" ]; then
+      echo "FATAL: Failed to submit $name"
+      exit 1
+    fi
+    WF_IDS[$name]=$wf_id
+    echo "  -> workflow_id=$wf_id"
+  done
+}
+
+# collect_batch_ids NAMES...
+#   Prints workflow IDs for the given names (only those that were submitted).
+collect_batch_ids() {
+  local names=("$@")
+  for name in "${names[@]}"; do
+    if [ -n "${WF_IDS[$name]+x}" ]; then
+      echo "${WF_IDS[$name]}"
+    fi
+  done
+}
+
+# run_pre_poll_actions
+#   Performs pre-poll actions for workflows that need intervention while running.
+run_pre_poll_actions() {
+  # Use longer timeout for pre-poll actions — on busy clusters, Slurm
+  # allocations can queue for several minutes.
+  local PRE_POLL_TIMEOUT=600
+
+  if [ -n "${WF_IDS[cancel_workflow]+x}" ]; then
+    echo ""
+    echo "Pre-poll: cancel_workflow — waiting for jobs to start running..."
+    # Wait for jobs to reach running, but cancel regardless of whether they do.
+    # On busy clusters the Slurm allocation may still be queued.
+    wait_for_job_status "${WF_IDS[cancel_workflow]}" "running" "$PRE_POLL_TIMEOUT" || \
+      echo "  NOTE: Jobs not yet running — canceling workflow anyway."
+    echo "  Canceling workflow ${WF_IDS[cancel_workflow]}..."
+    torc --url "$TORC_API_URL" -f json workflows cancel "${WF_IDS[cancel_workflow]}" \
+      > "$RUN_DIR/cancel_workflow_output.json" 2>"$RUN_DIR/cancel_workflow_stderr.log"
+    echo "  Cancel output saved to $RUN_DIR/cancel_workflow_output.json"
   fi
-  WF_IDS[$name]=$wf_id
-  echo "  -> workflow_id=$wf_id"
-done
+
+  if [ -n "${WF_IDS[sync_status]+x}" ]; then
+    echo ""
+    echo "Pre-poll: sync_status — waiting for jobs to start running..."
+    if wait_for_job_status "${WF_IDS[sync_status]}" "running" "$PRE_POLL_TIMEOUT"; then
+      # Query Slurm job IDs for this workflow from the API
+      local sync_slurm_ids
+      sync_slurm_ids=$(torc --url "$TORC_API_URL" -f json scheduled-compute-nodes list \
+        "${WF_IDS[sync_status]}" 2>/dev/null \
+        | jq -r '.scheduled_compute_nodes[].scheduler_id' 2>/dev/null | tr '\n' ' ')
+      if [ -n "$sync_slurm_ids" ]; then
+        echo "  Externally killing Slurm allocation(s): $sync_slurm_ids"
+        # shellcheck disable=SC2086  # Intentional word splitting for multiple Slurm IDs
+        scancel $sync_slurm_ids 2>/dev/null || true
+        echo "  Waiting 15s for Slurm to fully terminate the allocation..."
+        sleep 15
+      else
+        echo "  WARNING: No Slurm job IDs found for sync_status workflow."
+      fi
+      echo "  Running sync-status to detect orphaned jobs..."
+      torc --url "$TORC_API_URL" -f json workflows sync-status "${WF_IDS[sync_status]}" \
+        > "$RUN_DIR/sync_status_output.json" 2>"$RUN_DIR/sync_status_stderr.log"
+      echo "  sync-status output saved to $RUN_DIR/sync_status_output.json"
+      # Cancel workflow so ready/blocked jobs don't prevent poll_all_workflows from completing
+      torc --url "$TORC_API_URL" workflows cancel "${WF_IDS[sync_status]}" > /dev/null 2>&1 || true
+    else
+      echo "  WARNING: Timed out waiting for sync_status jobs to start running."
+      echo "  sync_status test requires running jobs — marking as skipped."
+      echo '{"skipped": true, "reason": "jobs never reached running status"}' \
+        > "$RUN_DIR/sync_status_output.json"
+      # Cancel the workflow so it doesn't block polling
+      torc --url "$TORC_API_URL" workflows cancel "${WF_IDS[sync_status]}" > /dev/null 2>&1 || true
+    fi
+  fi
+}
+
+# ── Batch 1: submit, pre-poll actions, wait ──────────────────────────────────
 
 echo ""
-echo "All workflows submitted:"
-for name in "${WORKFLOW_NAMES[@]}"; do
-  echo "  $name: ${WF_IDS[$name]}"
-done
+echo "═══════════════════════════════════════════════════════════════"
+echo "  BATCH 1: SUBMITTING WORKFLOWS (up to 10)"
+echo "═══════════════════════════════════════════════════════════════"
 
-# Save workflow IDs for reference
-for name in "${WORKFLOW_NAMES[@]}"; do
-  echo "${WF_IDS[$name]} $name"
-done >"$RUN_DIR/workflow_ids.txt"
-
-# ── Validate server is still alive ───────────────────────────────────────────
+submit_batch "${BATCH1_NAMES[@]}"
 
 if ! is_server_alive; then
-  echo "FATAL: Server died after submission phase. Check $RUN_DIR/server.log"
+  echo "FATAL: Server died after batch 1 submission. Check $RUN_DIR/server.log"
   exit 1
 fi
 
-# ── Pre-poll actions ──────────────────────────────────────────────────────────
-# Some tests require actions while jobs are actively running (e.g., canceling
-# the workflow or externally killing the Slurm allocation). We wait for jobs
-# to reach "running" status, then perform the action before polling.
-
-# Use longer timeout for pre-poll actions — on busy clusters, Slurm
-# allocations can queue for several minutes.
-PRE_POLL_TIMEOUT=600
-
-if [ -n "${WF_IDS[cancel_workflow]+x}" ]; then
-  echo ""
-  echo "Pre-poll: cancel_workflow — waiting for jobs to start running..."
-  # Wait for jobs to reach running, but cancel regardless of whether they do.
-  # On busy clusters the Slurm allocation may still be queued.
-  wait_for_job_status "${WF_IDS[cancel_workflow]}" "running" "$PRE_POLL_TIMEOUT" || \
-    echo "  NOTE: Jobs not yet running — canceling workflow anyway."
-  echo "  Canceling workflow ${WF_IDS[cancel_workflow]}..."
-  torc --url "$TORC_API_URL" -f json workflows cancel "${WF_IDS[cancel_workflow]}" \
-    > "$RUN_DIR/cancel_workflow_output.json" 2>"$RUN_DIR/cancel_workflow_stderr.log"
-  echo "  Cancel output saved to $RUN_DIR/cancel_workflow_output.json"
-fi
-
-if [ -n "${WF_IDS[sync_status]+x}" ]; then
-  echo ""
-  echo "Pre-poll: sync_status — waiting for jobs to start running..."
-  if wait_for_job_status "${WF_IDS[sync_status]}" "running" "$PRE_POLL_TIMEOUT"; then
-    # Query Slurm job IDs for this workflow from the API
-    sync_slurm_ids=$(torc --url "$TORC_API_URL" -f json scheduled-compute-nodes list \
-      "${WF_IDS[sync_status]}" 2>/dev/null \
-      | jq -r '.scheduled_compute_nodes[].scheduler_id' 2>/dev/null | tr '\n' ' ')
-    if [ -n "$sync_slurm_ids" ]; then
-      echo "  Externally killing Slurm allocation(s): $sync_slurm_ids"
-      # shellcheck disable=SC2086  # Intentional word splitting for multiple Slurm IDs
-      scancel $sync_slurm_ids 2>/dev/null || true
-      echo "  Waiting 15s for Slurm to fully terminate the allocation..."
-      sleep 15
-    else
-      echo "  WARNING: No Slurm job IDs found for sync_status workflow."
-    fi
-    echo "  Running sync-status to detect orphaned jobs..."
-    torc --url "$TORC_API_URL" -f json workflows sync-status "${WF_IDS[sync_status]}" \
-      > "$RUN_DIR/sync_status_output.json" 2>"$RUN_DIR/sync_status_stderr.log"
-    echo "  sync-status output saved to $RUN_DIR/sync_status_output.json"
-    # Cancel workflow so ready/blocked jobs don't prevent poll_all_workflows from completing
-    torc --url "$TORC_API_URL" workflows cancel "${WF_IDS[sync_status]}" > /dev/null 2>&1 || true
-  else
-    echo "  WARNING: Timed out waiting for sync_status jobs to start running."
-    echo "  sync_status test requires running jobs — marking as skipped."
-    echo '{"skipped": true, "reason": "jobs never reached running status"}' \
-      > "$RUN_DIR/sync_status_output.json"
-    # Cancel the workflow so it doesn't block polling
-    torc --url "$TORC_API_URL" workflows cancel "${WF_IDS[sync_status]}" > /dev/null 2>&1 || true
-  fi
-fi
-
-# ── Poll until all complete ───────────────────────────────────────────────────
+run_pre_poll_actions
 
 echo ""
 echo "═══════════════════════════════════════════════════════════════"
-echo "  WAITING FOR WORKFLOWS TO COMPLETE"
+echo "  BATCH 1: WAITING FOR WORKFLOWS TO COMPLETE"
 echo "═══════════════════════════════════════════════════════════════"
 
-ALL_IDS=()
-for name in "${WORKFLOW_NAMES[@]}"; do
-  ALL_IDS+=("${WF_IDS[$name]}")
+BATCH1_IDS=()
+while IFS= read -r id; do
+  BATCH1_IDS+=("$id")
+done < <(collect_batch_ids "${BATCH1_NAMES[@]}")
+
+if [ ${#BATCH1_IDS[@]} -gt 0 ]; then
+  poll_all_workflows "$TIMEOUT_SECONDS" "${BATCH1_IDS[@]}" || true
+fi
+
+# ── Batch 2: submit, pre-poll actions, wait ──────────────────────────────────
+
+# Check if any batch 2 workflows passed the filter
+BATCH2_FILTERED=()
+for name in "${BATCH2_NAMES[@]}"; do
+  for wn in "${WORKFLOW_NAMES[@]}"; do
+    if [ "$wn" = "$name" ]; then BATCH2_FILTERED+=("$name"); break; fi
+  done
 done
 
-poll_all_workflows "$TIMEOUT_SECONDS" "${ALL_IDS[@]}" || true
+if [ ${#BATCH2_FILTERED[@]} -gt 0 ]; then
+  echo ""
+  echo "═══════════════════════════════════════════════════════════════"
+  echo "  BATCH 2: SUBMITTING WORKFLOWS (remaining)"
+  echo "═══════════════════════════════════════════════════════════════"
+
+  submit_batch "${BATCH2_NAMES[@]}"
+
+  if ! is_server_alive; then
+    echo "FATAL: Server died after batch 2 submission. Check $RUN_DIR/server.log"
+    exit 1
+  fi
+
+  run_pre_poll_actions
+
+  echo ""
+  echo "═══════════════════════════════════════════════════════════════"
+  echo "  BATCH 2: WAITING FOR WORKFLOWS TO COMPLETE"
+  echo "═══════════════════════════════════════════════════════════════"
+
+  BATCH2_IDS=()
+  while IFS= read -r id; do
+    BATCH2_IDS+=("$id")
+  done < <(collect_batch_ids "${BATCH2_NAMES[@]}")
+
+  if [ ${#BATCH2_IDS[@]} -gt 0 ]; then
+    poll_all_workflows "$TIMEOUT_SECONDS" "${BATCH2_IDS[@]}" || true
+  fi
+fi
+
+# Save workflow IDs for reference
+for name in "${WORKFLOW_NAMES[@]}"; do
+  if [ -n "${WF_IDS[$name]+x}" ]; then
+    echo "${WF_IDS[$name]} $name"
+  fi
+done >"$RUN_DIR/workflow_ids.txt"
 
 # ── Run verifications ─────────────────────────────────────────────────────────
 
