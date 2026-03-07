@@ -370,6 +370,7 @@ impl HelpPopup {
         )]));
         lines.push(Line::from(""));
         lines.push(Self::key_line("u", "Change server URL"));
+        lines.push(Self::key_line("o", "Change output directory"));
         lines.push(Self::key_line("w", "Change user filter"));
         lines.push(Self::key_line("a", "Toggle show all users"));
 

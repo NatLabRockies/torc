@@ -16,6 +16,7 @@ use crate::models::{
 };
 
 use crate::client::apis::configuration::{BasicAuth, TlsConfig};
+use crate::client::config::TorcConfig;
 
 use super::api::TorcClient;
 use super::components::{
@@ -211,6 +212,7 @@ pub enum Focus {
     FilterInput,
     ServerUrlInput,
     WorkflowPathInput,
+    OutputDirInput,
     Popup,
 }
 
@@ -284,6 +286,10 @@ pub struct App {
 
     // Authentication
     pub basic_auth: Option<BasicAuth>,
+
+    // Output directory for log files
+    pub output_dir: PathBuf,
+    pub output_dir_input: String,
 }
 
 impl App {
@@ -312,6 +318,9 @@ impl App {
         } else {
             client.get_base_url().to_string()
         };
+
+        // Load output directory from config
+        let output_dir = TorcConfig::load().unwrap_or_default().client.run.output_dir;
 
         // Get current user from environment
         let current_user = std::env::var("USER")
@@ -368,6 +377,8 @@ impl App {
             sse_workflow_id: None,
             tls,
             basic_auth,
+            output_dir,
+            output_dir_input: String::new(),
         };
 
         // Update client to use the correct URL
@@ -402,6 +413,7 @@ impl App {
             Focus::FilterInput => Focus::FilterInput,
             Focus::ServerUrlInput => Focus::ServerUrlInput,
             Focus::WorkflowPathInput => Focus::WorkflowPathInput,
+            Focus::OutputDirInput => Focus::OutputDirInput,
             Focus::Popup => Focus::Popup,
         };
     }
@@ -443,6 +455,7 @@ impl App {
             Focus::FilterInput
             | Focus::ServerUrlInput
             | Focus::WorkflowPathInput
+            | Focus::OutputDirInput
             | Focus::Popup => {}
         }
     }
@@ -481,6 +494,7 @@ impl App {
             Focus::FilterInput
             | Focus::ServerUrlInput
             | Focus::WorkflowPathInput
+            | Focus::OutputDirInput
             | Focus::Popup => {}
         }
     }
@@ -865,6 +879,48 @@ impl App {
         self.refresh_workflows()?;
 
         Ok(())
+    }
+
+    // === Output Directory Input ===
+
+    pub fn start_output_dir_input(&mut self) {
+        self.focus = Focus::OutputDirInput;
+        self.output_dir_input = self.output_dir.display().to_string();
+    }
+
+    pub fn cancel_output_dir_input(&mut self) {
+        self.focus = Focus::Workflows;
+        self.output_dir_input.clear();
+    }
+
+    pub fn add_output_dir_char(&mut self, c: char) {
+        self.output_dir_input.push(c);
+    }
+
+    pub fn remove_output_dir_char(&mut self) {
+        self.output_dir_input.pop();
+    }
+
+    pub fn apply_output_dir(&mut self) {
+        if self.output_dir_input.is_empty() {
+            self.cancel_output_dir_input();
+            return;
+        }
+
+        // Expand ~ to home directory
+        let path = if self.output_dir_input.starts_with("~/") {
+            let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+            PathBuf::from(format!("{}{}", home, &self.output_dir_input[1..]))
+        } else {
+            PathBuf::from(&self.output_dir_input)
+        };
+
+        self.output_dir = path;
+        self.focus = Focus::Workflows;
+        self.set_status(StatusMessage::success(&format!(
+            "Output directory set to: {}",
+            self.output_dir.display()
+        )));
     }
 
     pub fn get_current_user_display(&self) -> String {
@@ -1699,19 +1755,18 @@ impl App {
                 .max_by_key(|r| (r.run_id, r.attempt_id.unwrap_or(1)))
             {
                 // Construct log paths using the standard path pattern
-                // Default output directory is "torc_output" in the current working directory
-                let output_dir = PathBuf::from("torc_output");
+                let output_dir = &self.output_dir;
 
                 let attempt_id = result.attempt_id.unwrap_or(1);
                 let stdout_path = get_job_stdout_path(
-                    &output_dir,
+                    output_dir,
                     workflow_id,
                     viewer.job_id,
                     result.run_id,
                     attempt_id,
                 );
                 let stderr_path = get_job_stderr_path(
-                    &output_dir,
+                    output_dir,
                     workflow_id,
                     viewer.job_id,
                     result.run_id,
@@ -1791,12 +1846,11 @@ impl App {
     }
 
     fn load_slurm_logs(&self, viewer: &mut LogViewer, scheduler_id: &str) -> Result<()> {
-        // Default output directory is "torc_output" in the current working directory
-        let output_dir = PathBuf::from("torc_output");
+        let output_dir = &self.output_dir;
 
         let workflow_id = self.selected_workflow_id.unwrap_or(0);
-        let stdout_path = get_slurm_stdout_path(&output_dir, workflow_id, scheduler_id);
-        let stderr_path = get_slurm_stderr_path(&output_dir, workflow_id, scheduler_id);
+        let stdout_path = get_slurm_stdout_path(output_dir, workflow_id, scheduler_id);
+        let stderr_path = get_slurm_stderr_path(output_dir, workflow_id, scheduler_id);
 
         viewer.stdout_path = Some(stdout_path.clone());
         viewer.stderr_path = Some(stderr_path.clone());

@@ -62,7 +62,8 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     // Split the bottom section for detail table and input widgets
     let needs_input = app.focus == Focus::FilterInput
         || app.focus == Focus::ServerUrlInput
-        || app.focus == Focus::WorkflowPathInput;
+        || app.focus == Focus::WorkflowPathInput
+        || app.focus == Focus::OutputDirInput;
 
     let detail_chunks = if needs_input {
         Layout::default()
@@ -84,6 +85,8 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         draw_server_url_input(f, detail_chunks[1], app);
     } else if app.focus == Focus::WorkflowPathInput {
         draw_workflow_path_input(f, detail_chunks[1], app);
+    } else if app.focus == Focus::OutputDirInput {
+        draw_output_dir_input(f, detail_chunks[1], app);
     }
 
     // Draw popups on top of everything
@@ -141,6 +144,15 @@ fn draw_help(f: &mut Frame, area: Rect, app: &App) {
             Span::raw(": enter path to workflow spec file | "),
             Span::styled("Enter", Style::default().fg(Color::Yellow)),
             Span::raw(": create | "),
+            Span::styled("Esc", Style::default().fg(Color::Yellow)),
+            Span::raw(": cancel"),
+        ])]
+    } else if app.focus == Focus::OutputDirInput {
+        vec![Line::from(vec![
+            Span::styled("Type", Style::default().fg(Color::Yellow)),
+            Span::raw(": enter output directory path | "),
+            Span::styled("Enter", Style::default().fg(Color::Yellow)),
+            Span::raw(": apply | "),
             Span::styled("Esc", Style::default().fg(Color::Yellow)),
             Span::raw(": cancel"),
         ])]
@@ -1099,6 +1111,31 @@ fn draw_workflow_path_input(f: &mut Frame, area: Rect, app: &App) {
     let block = Block::default()
         .borders(Borders::ALL)
         .title("Create Workflow")
+        .border_style(Style::default().fg(Color::Green));
+
+    let paragraph = ratatui::widgets::Paragraph::new(text)
+        .block(block)
+        .style(Style::default().fg(Color::White));
+
+    f.render_widget(paragraph, area);
+}
+
+fn draw_output_dir_input(f: &mut Frame, area: Rect, app: &App) {
+    let text = vec![Line::from(vec![
+        Span::styled("Output directory: ", Style::default().fg(Color::White)),
+        Span::styled(&app.output_dir_input, Style::default().fg(Color::Cyan)),
+        Span::styled("_", Style::default().fg(Color::White)),
+        Span::styled(" | ", Style::default().fg(Color::DarkGray)),
+        Span::styled("Enter", Style::default().fg(Color::Yellow)),
+        Span::styled(": apply | ", Style::default().fg(Color::White)),
+        Span::styled("Esc", Style::default().fg(Color::Yellow)),
+        Span::styled(": cancel", Style::default().fg(Color::White)),
+        Span::styled(" (supports ~/)", Style::default().fg(Color::DarkGray)),
+    ])];
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title("Change Output Directory")
         .border_style(Style::default().fg(Color::Green));
 
     let paragraph = ratatui::widgets::Paragraph::new(text)

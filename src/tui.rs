@@ -467,6 +467,15 @@ where
                     KeyCode::Char(c) => app.add_workflow_path_char(c),
                     _ => {}
                 },
+                Focus::OutputDirInput => match key.code {
+                    KeyCode::Esc => app.cancel_output_dir_input(),
+                    KeyCode::Enter => {
+                        app.apply_output_dir();
+                    }
+                    KeyCode::Backspace => app.remove_output_dir_char(),
+                    KeyCode::Char(c) => app.add_output_dir_char(c),
+                    _ => {}
+                },
                 Focus::Popup => {
                     // Handled above
                 }
@@ -508,6 +517,9 @@ where
                     }
                     KeyCode::Char('u') => {
                         app.start_server_url_input();
+                    }
+                    KeyCode::Char('o') => {
+                        app.start_output_dir_input();
                     }
                     KeyCode::Char('a') => {
                         app.toggle_show_all_users()?;
