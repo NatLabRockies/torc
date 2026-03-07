@@ -158,15 +158,13 @@ impl AsyncCliCommand {
                 srun.arg("--cpu-bind=none");
             }
             srun.arg(format!("--job-name={}", step_name));
+            // --exact tells srun to use exactly the requested CPUs/memory without
+            // claiming the entire node exclusively. This allows concurrent single-node
+            // steps to share nodes in multi-node allocations.
+            srun.arg("--exact");
             if let Some(rr) = resource_requirements {
-                // Only pass --nodes when step_nodes > 1 (multi-node MPI / Julia Distributed.jl).
-                // Omitting --nodes for single-node steps lets srun allocate CPUs/memory from any
-                // available node without claiming the node exclusively, allowing concurrent steps
-                // to share nodes.
                 let step_nodes = rr.step_nodes.unwrap_or(1).max(1);
-                if step_nodes > 1 {
-                    srun.arg(format!("--nodes={}", step_nodes));
-                }
+                srun.arg(format!("--nodes={}", step_nodes));
                 if limit_resources && rr.name != "default" {
                     srun.arg(format!("--cpus-per-task={}", rr.num_cpus));
                     match memory_string_to_mb(&rr.memory) {

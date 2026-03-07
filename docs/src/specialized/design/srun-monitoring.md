@@ -71,6 +71,7 @@ flowchart LR
     SRUN[srun]:::flag
     JOBID["--jobid=SLURM_JOB_ID"]:::flag
     NT["--ntasks=1"]:::flag
+    EX["--exact"]:::flag
     CB["--cpu-bind=none"]:::flag
     JN["--job-name=step_name"]:::flag
     ND["--nodes=step_nodes"]:::flag
@@ -81,11 +82,13 @@ flowchart LR
 
     SRUN --> JOBID
     SRUN --> NT
+    SRUN --> EX
     SRUN --> CB
     SRUN --> JN
     SRUN --> ND
 
-    ND -.- N1["Only when step_nodes > 1<br/>Omitted for single-node steps"]:::note
+    EX -.- N0["Use exact resources,<br/>don't claim entire node"]:::note
+    ND -.- N1["Default: 1 node<br/>Override via step_nodes"]:::note
     CB -.- N2["Default on; disable with<br/>enable_cpu_bind: true"]:::note
     TIME -.- N4["Remaining allocation time<br/>rounded down to minutes"]:::note
     SIG -.- N5["Early warning signal<br/>e.g. TERM@120"]:::note
@@ -100,9 +103,10 @@ flowchart LR
 | ----------------- | ----------------------------------------------------------------------------- |
 | `--jobid`         | Binds step to the parent Slurm allocation                                     |
 | `--ntasks=1`      | One task per workflow job                                                     |
+| `--exact`         | Use exactly the requested resources; don't claim the entire node exclusively  |
 | `--cpu-bind=none` | Disables CPU affinity binding (default; omitted when `enable_cpu_bind: true`) |
 | `--job-name`      | Sets the step name for sacct/sstat lookup                                     |
-| `--nodes`         | Number of nodes (only when `step_nodes > 1`; omitted for single-node steps)   |
+| `--nodes`         | Number of nodes for this step (from `step_nodes`, default 1)                  |
 | `--cpus-per-task` | CPU cgroup limit (only when `limit_resources=true`)                           |
 | `--mem`           | Memory cgroup limit in MB (only when `limit_resources=true`)                  |
 | `--time`          | Per-step walltime from remaining allocation time (see below)                  |
