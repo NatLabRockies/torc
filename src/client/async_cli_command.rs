@@ -132,7 +132,12 @@ impl AsyncCliCommand {
             self.job.command.clone()
         };
 
-        let slurm_job_id = if use_srun {
+        // Skip srun wrapping when already inside an srun step (SLURM_STEP_ID set).
+        // This happens with start_one_worker_per_node where the outer
+        // `srun --ntasks-per-node=1` owns the node. Nested srun cannot allocate
+        // resources within the outer step. The outer srun provides node isolation;
+        // torc's resource monitor still tracks per-job metrics.
+        let slurm_job_id = if use_srun && std::env::var("SLURM_STEP_ID").is_err() {
             std::env::var("SLURM_JOB_ID").ok()
         } else {
             None
@@ -159,8 +164,8 @@ impl AsyncCliCommand {
             }
             srun.arg(format!("--job-name={}", step_name));
             // --exact tells srun to use exactly the requested CPUs/memory without
-            // claiming the entire node exclusively. This allows concurrent single-node
-            // steps to share nodes in multi-node allocations.
+            // claiming the entire node exclusively. This allows concurrent steps
+            // to share nodes in multi-node allocations.
             srun.arg("--exact");
             if let Some(rr) = resource_requirements {
                 let step_nodes = rr.step_nodes.unwrap_or(1).max(1);
