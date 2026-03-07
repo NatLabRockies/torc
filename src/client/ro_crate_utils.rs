@@ -446,6 +446,160 @@ pub fn create_entities_for_input_files(
     }
 }
 
+/// Binary info for creating SoftwareApplication RO-Crate entities.
+struct BinaryInfo {
+    name: &'static str,
+    path: String,
+    version: String,
+    sha256: Option<String>,
+    file_size: Option<u64>,
+}
+
+/// Detect a binary: resolve its path, version, hash, and size.
+/// Returns None if the binary is not found.
+///
+/// Looks for the binary in the same directory as the current executable first,
+/// then falls back to searching PATH.
+fn detect_binary(name: &'static str) -> Option<BinaryInfo> {
+    // First, look in the same directory as the current executable
+    let path = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join(name)))
+        .filter(|p| p.is_file())
+        .or_else(|| {
+            // Fall back to searching PATH
+            std::env::var_os("PATH").and_then(|paths| {
+                std::env::split_paths(&paths)
+                    .map(|dir| dir.join(name))
+                    .find(|p| p.is_file())
+            })
+        });
+
+    let path = match path {
+        Some(p) => p,
+        None => {
+            debug!("Binary '{}' not found", name);
+            return None;
+        }
+    };
+
+    let path_str = path.display().to_string();
+
+    // Get version by running --version
+    let version = match std::process::Command::new(&path).arg("--version").output() {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            // Parse version: typically "name X.Y.Z" or just "X.Y.Z"
+            stdout.lines().next().unwrap_or("").trim().to_string()
+        }
+        Err(e) => {
+            debug!("Could not get version for '{}': {}", name, e);
+            "unknown".to_string()
+        }
+    };
+
+    let sha256 = compute_file_sha256(&path_str);
+    let file_size = std::fs::metadata(&path).ok().map(|m| m.len());
+
+    Some(BinaryInfo {
+        name,
+        path: path_str,
+        version,
+        sha256,
+        file_size,
+    })
+}
+
+/// Build a SoftwareApplication RO-Crate entity for a binary.
+fn build_software_entity(workflow_id: i64, info: &BinaryInfo) -> RoCrateEntityModel {
+    let entity_id = format!("#software-{}", info.name);
+
+    let mut metadata = serde_json::json!({
+        "@id": entity_id,
+        "@type": "SoftwareApplication",
+        "name": info.name,
+        "version": info.version,
+        "url": info.path,
+    });
+
+    if let Some(size) = info.file_size {
+        metadata["contentSize"] = serde_json::json!(size);
+    }
+
+    if let Some(ref hash) = info.sha256 {
+        metadata["sha256"] = serde_json::json!(hash);
+    }
+
+    RoCrateEntityModel {
+        id: None,
+        workflow_id,
+        file_id: None,
+        entity_id,
+        entity_type: "SoftwareApplication".to_string(),
+        metadata: metadata.to_string(),
+    }
+}
+
+/// Create RO-Crate SoftwareApplication entities for torc binaries.
+///
+/// Attempts to create entities for `torc` and `torc-slurm-job-runner`.
+/// Binaries that are not found on the system are silently skipped.
+/// The `torc-server` entity is created server-side (see `RoCrateApiImpl`).
+///
+/// This is called during workflow initialization regardless of `enable_ro_crate`.
+pub fn create_software_entities(config: &Configuration, workflow_id: i64) {
+    let binary_names: Vec<&str> = vec!["torc", "torc-slurm-job-runner"];
+
+    // Check existing entities to avoid duplicates
+    let existing_ids: std::collections::HashSet<String> =
+        match default_api::list_ro_crate_entities(config, workflow_id, None, None) {
+            Ok(response) => response
+                .items
+                .unwrap_or_default()
+                .into_iter()
+                .map(|e| e.entity_id)
+                .collect(),
+            Err(e) => {
+                warn!(
+                    "Failed to list existing RO-Crate entities for workflow {}: {}",
+                    workflow_id, e
+                );
+                std::collections::HashSet::new()
+            }
+        };
+
+    for name in binary_names {
+        let entity_id = format!("#software-{}", name);
+        if existing_ids.contains(&entity_id) {
+            debug!(
+                "SoftwareApplication entity '{}' already exists, skipping",
+                entity_id
+            );
+            continue;
+        }
+
+        if let Some(info) = detect_binary(name) {
+            let entity = build_software_entity(workflow_id, &info);
+            match default_api::create_ro_crate_entity(config, entity) {
+                Ok(created) => {
+                    debug!(
+                        "Created SoftwareApplication entity for '{}' version='{}' (entity_id={})",
+                        name,
+                        info.version,
+                        created.id.unwrap_or(0)
+                    );
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to create SoftwareApplication entity for '{}': {}",
+                        name, e
+                    );
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -666,5 +820,67 @@ mod tests {
         let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
         assert_eq!(metadata["sha256"], "deadbeef");
         assert_eq!(metadata["wasGeneratedBy"]["@id"], "#job-42-attempt-1");
+    }
+
+    #[test]
+    fn test_build_software_entity() {
+        let info = BinaryInfo {
+            name: "torc",
+            path: "/usr/local/bin/torc".to_string(),
+            version: "torc 0.19.2".to_string(),
+            sha256: Some("abc123".to_string()),
+            file_size: Some(50_000_000),
+        };
+
+        let entity = build_software_entity(100, &info);
+
+        assert_eq!(entity.workflow_id, 100);
+        assert_eq!(entity.file_id, None);
+        assert_eq!(entity.entity_id, "#software-torc");
+        assert_eq!(entity.entity_type, "SoftwareApplication");
+
+        let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
+        assert_eq!(metadata["@id"], "#software-torc");
+        assert_eq!(metadata["@type"], "SoftwareApplication");
+        assert_eq!(metadata["name"], "torc");
+        assert_eq!(metadata["version"], "torc 0.19.2");
+        assert_eq!(metadata["url"], "/usr/local/bin/torc");
+        assert_eq!(metadata["contentSize"], 50_000_000);
+        assert_eq!(metadata["sha256"], "abc123");
+    }
+
+    #[test]
+    fn test_build_software_entity_without_optional_fields() {
+        let info = BinaryInfo {
+            name: "torc-server",
+            path: "/usr/local/bin/torc-server".to_string(),
+            version: "unknown".to_string(),
+            sha256: None,
+            file_size: None,
+        };
+
+        let entity = build_software_entity(42, &info);
+
+        assert_eq!(entity.entity_id, "#software-torc-server");
+        assert_eq!(entity.entity_type, "SoftwareApplication");
+
+        let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
+        assert_eq!(metadata["name"], "torc-server");
+        assert!(metadata.get("contentSize").is_none());
+        assert!(metadata.get("sha256").is_none());
+    }
+
+    #[test]
+    fn test_detect_binary_finds_current_exe() {
+        // The current test binary should be findable
+        let exe = std::env::current_exe().unwrap();
+        let exe_name = exe.file_name().unwrap().to_str().unwrap();
+
+        let info = detect_binary(Box::leak(exe_name.to_string().into_boxed_str()));
+        // This may or may not succeed depending on the test runner name,
+        // but it shouldn't panic
+        if let Some(info) = info {
+            assert!(!info.path.is_empty());
+        }
     }
 }

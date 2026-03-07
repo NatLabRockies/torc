@@ -20,7 +20,10 @@ echo "Running on $(hostname)"
 echo "PID=$$"
 echo "SIGTERM handler registered."
 
-# Sleep in a loop so the trap can fire between iterations
+# Use background sleep + wait so that SIGTERM interrupts the wait immediately.
+# A foreground `sleep 10` blocks signal delivery until it completes, but
+# `wait` is interrupted by trapped signals, letting the loop check the flag
+# right away.
 for i in $(seq 1 60); do
     if [ "$sigterm_received" = true ]; then
         echo "Performing graceful shutdown..."
@@ -30,7 +33,8 @@ for i in $(seq 1 60); do
         exit 0
     fi
     echo "Heartbeat $i at $(date)"
-    sleep 10
+    sleep 10 &
+    wait $!
 done
 
 echo "Job completed normally (should not reach here in this test)."

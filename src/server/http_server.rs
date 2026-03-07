@@ -4186,6 +4186,11 @@ where
             }
         }
 
+        // Always create SoftwareApplication entity for torc-server
+        if let Err(e) = self.ro_crate_api.create_server_software_entity(id).await {
+            warn!("Failed to create torc-server software entity: {}", e);
+        }
+
         debug!(
             "Successfully initialized jobs for workflow {} with transaction",
             id

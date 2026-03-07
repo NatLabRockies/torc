@@ -587,6 +587,12 @@ impl WorkflowManager {
                 // Create RO-Crate entities for input files if enabled
                 self.create_ro_crate_entities_for_input_files();
 
+                // Always create SoftwareApplication entities for torc binaries
+                crate::client::ro_crate_utils::create_software_entities(
+                    &self.config,
+                    self.workflow_id,
+                );
+
                 Ok(())
             }
             Err(err) => Err(TorcError::ApiError(err.to_string())),

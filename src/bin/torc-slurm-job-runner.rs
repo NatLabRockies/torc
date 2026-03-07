@@ -37,6 +37,7 @@ mod unix_main {
 
     #[derive(Parser, Debug)]
     #[command(name = "torc-slurm-job-runner")]
+    #[command(version)]
     #[command(about = "Slurm job runner for Torc workflows", long_about = None)]
     #[command(styles = STYLES)]
     struct Args {

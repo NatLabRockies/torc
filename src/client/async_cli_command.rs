@@ -532,20 +532,29 @@ impl AsyncCliCommand {
                 // and sacct ExitCode is 0:125 — neither produces the conventional
                 // 137 (128+SIGKILL) that recovery heuristics check. The sacct State
                 // field reliably reports OUT_OF_MEMORY / TIMEOUT.
+                //
+                // TIMEOUT is only overridden when the process did not exit cleanly
+                // (return_code != 0). When the process handled SIGTERM (from
+                // --signal) and exited 0, we keep the successful result even though
+                // sacct may report State=TIMEOUT for the step.
+                //
+                // TIMEOUT maps to Terminated (system-initiated kill due to walltime)
+                // rather than Failed (job error), matching the old behaviour where
+                // the runner would send SIGTERM before the allocation expired.
                 if let Some(ref state) = stats.state {
                     let override_rc = match state.as_str() {
-                        "OUT_OF_MEMORY" => Some(137i64), // 128 + SIGKILL
-                        "TIMEOUT" => Some(152i64),       // 128 + SIGXCPU
+                        "OUT_OF_MEMORY" => Some((137i64, JobStatus::Failed)),
+                        "TIMEOUT" if return_code != 0 => Some((152i64, JobStatus::Terminated)),
                         _ => None,
                     };
-                    if let Some(sacct_rc) = override_rc {
+                    if let Some((sacct_rc, sacct_status)) = override_rc {
                         info!(
                             "Overriding srun return_code {} with {} (sacct State={}) for \
                              workflow_id={} job_id={} step={}",
                             return_code, sacct_rc, state, workflow_id, self.job_id, step_name
                         );
                         self.return_code = Some(sacct_rc);
-                        self.status = JobStatus::Failed;
+                        self.status = sacct_status;
                     }
                 }
 
@@ -904,6 +913,13 @@ mod tests {
         let line = "step1|512K|1024K|0|0|00:05:00|node01|TIMEOUT";
         let stats = parse_sacct_line(line, "step1").unwrap();
         assert_eq!(stats.state, Some("TIMEOUT".to_string()));
+    }
+
+    #[test]
+    fn test_parse_sacct_line_failed_state() {
+        let line = "step1|512K|1024K|0|0|00:05:00|node01|FAILED";
+        let stats = parse_sacct_line(line, "step1").unwrap();
+        assert_eq!(stats.state, Some("FAILED".to_string()));
     }
 
     #[test]

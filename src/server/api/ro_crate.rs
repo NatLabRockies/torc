@@ -13,6 +13,9 @@ use crate::server::api_types::{
 
 use crate::models;
 
+use sha2::{Digest, Sha256};
+use std::io::Read as IoRead;
+
 use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, database_error_with_msg};
 
 /// Trait defining RO-Crate entity-related API operations
@@ -64,6 +67,22 @@ pub trait RoCrateApi<C> {
         body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteRoCrateEntitiesResponse, ApiError>;
+}
+
+/// Compute the SHA256 hash of a file, returning the hex string or None on error.
+fn compute_file_sha256(path: &str) -> Option<String> {
+    let file = std::fs::File::open(path).ok()?;
+    let mut reader = std::io::BufReader::new(file);
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 8192];
+    loop {
+        match reader.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(n) => hasher.update(&buffer[..n]),
+            Err(_) => return None,
+        }
+    }
+    Some(format!("{:x}", hasher.finalize()))
 }
 
 /// Implementation of RO-Crate entity API for the server
@@ -201,6 +220,90 @@ impl RoCrateApiImpl {
             created_count, workflow_id
         );
         Ok(created_count)
+    }
+
+    /// Create a SoftwareApplication RO-Crate entity for the torc-server binary.
+    ///
+    /// Records the server's version, binary path, and SHA256 hash. Skips if an
+    /// entity with `#software-torc-server` already exists for this workflow.
+    ///
+    /// Called during `initialize_jobs` regardless of `enable_ro_crate`.
+    pub async fn create_server_software_entity(&self, workflow_id: i64) -> Result<(), ApiError> {
+        let entity_id = "#software-torc-server";
+
+        // Check if entity already exists
+        let exists = sqlx::query_scalar!(
+            "SELECT COUNT(*) FROM ro_crate_entity WHERE workflow_id = $1 AND entity_id = $2",
+            workflow_id,
+            entity_id,
+        )
+        .fetch_one(self.context.pool.as_ref())
+        .await
+        .map_err(|e| database_error_with_msg(e, "Failed to check existing software entity"))?;
+
+        if exists > 0 {
+            debug!(
+                "SoftwareApplication entity '{}' already exists for workflow_id={}, skipping",
+                entity_id, workflow_id
+            );
+            return Ok(());
+        }
+
+        let version = env!("CARGO_PKG_VERSION");
+        let exe_path = std::env::current_exe()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|_| "unknown".to_string());
+
+        // Compute SHA256 of the server binary
+        let sha256 = compute_file_sha256(&exe_path);
+
+        let mut metadata = serde_json::json!({
+            "@id": entity_id,
+            "@type": "SoftwareApplication",
+            "name": "torc-server",
+            "version": version,
+            "url": exe_path,
+        });
+
+        if let Some(hash) = sha256 {
+            metadata["sha256"] = serde_json::json!(hash);
+        }
+
+        if let Ok(meta) = std::fs::metadata(&exe_path) {
+            metadata["contentSize"] = serde_json::json!(meta.len());
+        }
+
+        let metadata_str = metadata.to_string();
+        let entity_type = "SoftwareApplication";
+
+        match sqlx::query!(
+            r#"
+            INSERT INTO ro_crate_entity (workflow_id, file_id, entity_id, entity_type, metadata)
+            VALUES ($1, NULL, $2, $3, $4)
+            "#,
+            workflow_id,
+            entity_id,
+            entity_type,
+            metadata_str,
+        )
+        .execute(self.context.pool.as_ref())
+        .await
+        {
+            Ok(_) => {
+                debug!(
+                    "Created SoftwareApplication entity for torc-server version={} (workflow_id={})",
+                    version, workflow_id
+                );
+            }
+            Err(e) => {
+                log::warn!(
+                    "Failed to create SoftwareApplication entity for torc-server: {}",
+                    e
+                );
+            }
+        }
+
+        Ok(())
     }
 }
 
