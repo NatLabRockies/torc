@@ -10,7 +10,6 @@ jobs:
     command: wget https://example.com/data.csv -O input_data.csv
     invocation_script: null
     cancel_on_blocking_job_failure: false
-    supports_termination: true
     resource_requirements: small_job
     depends_on: null  # This job has no dependencies
     input_files: null
@@ -29,7 +28,6 @@ jobs:
       set -e
       export PYTHONPATH=/opt/validation:$PYTHONPATH
     cancel_on_blocking_job_failure: true
-    supports_termination: true
     resource_requirements: small_job
     depends_on:
       - data_download  # Wait for download to complete
@@ -48,7 +46,6 @@ jobs:
     command: python analyze_data.py validated_data.csv --output results.json
     invocation_script: null
     cancel_on_blocking_job_failure: true
-    supports_termination: false  # Analysis job cannot be safely terminated
     resource_requirements: large_job  # Requires more resources
     depends_on:
       - data_validation  # Wait for validation

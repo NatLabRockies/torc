@@ -31,7 +31,7 @@
     - invocation_script::String : Wrapper script for command in case the environment needs customization.
     - status::JobStatus : Status of job; managed by torc.
     - cancel_on_blocking_job_failure::Bool : Cancel this job if any of its blocking jobs fails.
-    - supports_termination::Bool : Informs torc that the job can be terminated gracefully before a wall-time timeout.
+    - supports_termination::Bool : Deprecated: Slurm now manages termination signals via srun --time and KillWait, so all jobs receive graceful SIGTERM. This field is accepted but ignored.
     - depends_on_job_ids::Vector{Int64} : Database IDs of jobs that block this job
     - input_file_ids::Vector{Int64} : Database IDs of files that this job needs
     - output_file_ids::Vector{Int64} : Database IDs of files that this job produces

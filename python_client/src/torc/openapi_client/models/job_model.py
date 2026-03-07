@@ -34,7 +34,7 @@ class JobModel(BaseModel):
     invocation_script: Optional[StrictStr] = Field(default=None, description="Wrapper script for command in case the environment needs customization.")
     status: Optional[JobStatus] = Field(default=None, description="Status of job; managed by torc.")
     cancel_on_blocking_job_failure: Optional[StrictBool] = Field(default=True, description="Cancel this job if any of its blocking jobs fails.")
-    supports_termination: Optional[StrictBool] = Field(default=False, description="Informs torc that the job can be terminated gracefully before a wall-time timeout.")
+    supports_termination: Optional[StrictBool] = Field(default=False, description="Deprecated: Slurm now manages termination signals via srun --time and KillWait, so all jobs receive graceful SIGTERM. This field is accepted but ignored.")
     depends_on_job_ids: Optional[List[StrictInt]] = Field(default=None, description="Database IDs of jobs that block this job")
     input_file_ids: Optional[List[StrictInt]] = Field(default=None, description="Database IDs of files that this job needs")
     output_file_ids: Optional[List[StrictInt]] = Field(default=None, description="Database IDs of files that this job produces")

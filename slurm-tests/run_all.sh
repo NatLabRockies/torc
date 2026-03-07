@@ -205,6 +205,7 @@ ALL_WORKFLOW_NAMES=(
   resource_monitoring
   failure_recovery
   timeout_detection
+  srun_termination_signal
   sync_status
 )
 
@@ -365,6 +366,7 @@ run_test_if_active oom_detection
 run_test_if_active resource_monitoring
 run_test_if_active failure_recovery
 run_test_if_active timeout_detection
+run_test_if_active srun_termination_signal
 run_test_if_active cancel_workflow
 run_test_if_active sync_status
 

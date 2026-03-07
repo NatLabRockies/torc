@@ -75,7 +75,6 @@ slurm_scheduler "gpu_scheduler" {
 job "data_download" {
     command "wget https://example.com/data.csv -O ${files.output.raw_data}"
     cancel_on_blocking_job_failure #false
-    supports_termination #true
     resource_requirements "small_job"
     output_file "raw_data"
     output_user_data "download_metadata"
@@ -86,7 +85,6 @@ job "data_validation" {
     command "python ${files.input.validation_script} ${files.input.raw_data}"
     invocation_script "#!/bin/bash\\nset -e\\nexport PYTHONPATH=/opt/validation:$PYTHONPATH"
     cancel_on_blocking_job_failure #true
-    supports_termination #true
     resource_requirements "small_job"
     depends_on_job "data_download"
     input_file "raw_data"
@@ -100,7 +98,6 @@ job "data_validation" {
 job "data_analysis" {
     command "python ${files.input.analysis_script} ${files.input.validated_data} --output ${files.output.analysis_results}"
     cancel_on_blocking_job_failure #true
-    supports_termination #false
     resource_requirements "large_job"
     depends_on_job "data_validation"
     input_file "validated_data"

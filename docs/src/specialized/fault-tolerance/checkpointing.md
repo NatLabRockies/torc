@@ -1,272 +1,262 @@
-# How to Checkpoint a Job During Wall-Time Timeout
+# Tutorial: Graceful Job Termination on HPC
 
-When running jobs on HPC systems like Slurm, your job may be terminated when it exceeds its
-configured runtime. Torc supports **graceful termination**, allowing jobs to save checkpoints before
-exiting. This guide explains how to configure your jobs to handle wall-time timeouts gracefully.
+This tutorial teaches you how to configure Torc workflows so that long-running jobs receive an early
+warning signal before Slurm kills them, giving them time to save progress and exit cleanly.
 
-## Overview
+## Learning Objectives
 
-Torc wraps each job with `srun --time=<remaining_minutes>`, where `remaining_minutes` is the time
-left in the Slurm allocation. This ensures Slurm enforces a per-step walltime and produces a clean
-`TIMEOUT` state when time runs out. When a job exceeds its step time limit:
+By the end of this tutorial, you will:
 
-1. Slurm sends **SIGTERM** to the job process
-2. The job has `KillWait` seconds (typically 30s, configured in `slurm.conf`) to save state
-3. After the grace period, Slurm sends **SIGKILL** to force termination
-4. Torc detects the `TIMEOUT` state via sacct and reports return code 152
+- Understand how `srun_termination_signal` delivers early SIGTERM to running jobs
+- Write a Python job that catches SIGTERM and shuts down gracefully
+- Use the shutdown-flag pattern to stop a long-running loop cleanly
+- Configure a complete Torc workflow with early termination support
 
-Jobs that handle SIGTERM can catch the signal and perform cleanup operations like saving
-checkpoints, flushing buffers, or releasing resources.
+## Prerequisites
 
-### Early Warning with `srun_termination_signal`
+- Torc server running
+- Access to a Slurm cluster
+- Basic familiarity with submitting Torc workflows (see
+  [Quick Start (HPC/Slurm)](../../getting-started/quick-start-hpc.md))
 
-By default, jobs only get `KillWait` seconds (typically 30s) between SIGTERM and SIGKILL. For jobs
-that need more time to checkpoint (e.g., saving a large model to disk), set
-`srun_termination_signal` in your workflow spec:
+## Background: Why Graceful Termination Matters
 
-```yaml
-name: my_workflow
-srun_termination_signal: "TERM@120"
+On HPC systems, jobs have a fixed wall-time. When time runs out, Slurm kills the process immediately
+with SIGKILL. Any unsaved work—training progress, partial results, intermediate state—is lost.
+
+Torc's `srun_termination_signal` feature tells Slurm to send a catchable signal (SIGTERM) **before**
+the hard kill. Your job can trap that signal, finish the current iteration, save a checkpoint, and
+exit cleanly.
+
+### Timeline of Events
+
+```mermaid
+graph LR
+    A["Job starts"] -->|normal execution| B["SIGTERM"]
+    B -->|"120 seconds"| C["Step timeout"]
+
+    style A fill:#4a9eff,color:#fff
+    style B fill:#e8a735,color:#fff
+    style C fill:#d9534f,color:#fff
 ```
 
-This passes `srun --signal=TERM@120`, which sends SIGTERM **120 seconds before** the step time
-limit. The job then has 120 seconds to save its checkpoint before the normal SIGTERM/SIGKILL
-sequence at the time limit.
+With `srun_termination_signal: "TERM@120"`, your job gets 120 seconds of warning before the srun
+step's time limit expires.
 
-## Writing a Job That Handles SIGTERM
+## Step 1: Write the Python Job
 
-Your job script must catch SIGTERM and save its state. Here's a Python example:
+Save this as `simulate.py`:
 
 ```python
+#!/usr/bin/env python3
+"""Long-running simulation that handles SIGTERM for graceful shutdown."""
+
+import json
+import os
 import signal
 import sys
-import pickle
+import time
 
-# Global state
-checkpoint_path = "/scratch/checkpoints/model.pkl"
-model_state = None
+# --- Shutdown flag -----------------------------------------------------------
+# The SIGTERM handler sets this flag. The main loop checks it on every
+# iteration and breaks out when it becomes True.
+shutdown_requested = False
 
-def save_checkpoint():
-    """Save current model state to disk."""
-    print("Saving checkpoint...")
-    with open(checkpoint_path, 'wb') as f:
-        pickle.dump(model_state, f)
-    print(f"Checkpoint saved to {checkpoint_path}")
 
 def handle_sigterm(signum, frame):
-    """Handle SIGTERM by saving checkpoint and exiting."""
-    print("Received SIGTERM - saving checkpoint before exit")
-    save_checkpoint()
-    sys.exit(0)  # Exit cleanly after saving
+    """Set the shutdown flag when SIGTERM is received."""
+    global shutdown_requested
+    print(f"SIGTERM received (signal {signum}). Will stop after current iteration.")
+    shutdown_requested = True
 
-# Register the signal handler
+
+# Register the handler BEFORE doing any work.
 signal.signal(signal.SIGTERM, handle_sigterm)
 
-# Main training loop
-def train():
-    global model_state
-    for epoch in range(1000):
-        # Training logic here...
-        model_state = {"epoch": epoch, "weights": [...]}
+# --- Checkpoint helpers ------------------------------------------------------
+CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", "checkpoint.json")
 
-        # Optionally save periodic checkpoints
-        if epoch % 100 == 0:
-            save_checkpoint()
+
+def load_checkpoint():
+    """Load the last saved iteration, or start from 0."""
+    if os.path.exists(CHECKPOINT_PATH):
+        with open(CHECKPOINT_PATH) as f:
+            data = json.load(f)
+        print(f"Resumed from checkpoint at iteration {data['iteration']}")
+        return data["iteration"], data["accumulator"]
+    return 0, 0.0
+
+
+def save_checkpoint(iteration, accumulator):
+    """Atomically save progress to disk."""
+    tmp = CHECKPOINT_PATH + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump({"iteration": iteration, "accumulator": accumulator}, f)
+    os.replace(tmp, CHECKPOINT_PATH)  # atomic on POSIX
+    print(f"Checkpoint saved at iteration {iteration}")
+
+
+# --- Main loop ---------------------------------------------------------------
+def main():
+    iteration, accumulator = load_checkpoint()
+    total_iterations = 100_000
+
+    print(f"Starting simulation from iteration {iteration}")
+    while iteration < total_iterations:
+        # Check the shutdown flag at the top of every iteration.
+        if shutdown_requested:
+            print("Shutdown flag is set. Saving checkpoint and exiting.")
+            save_checkpoint(iteration, accumulator)
+            sys.exit(0)
+
+        # Simulate one unit of work.
+        accumulator += iteration * 0.001
+        iteration += 1
+
+        # Periodic progress and checkpoint.
+        if iteration % 1000 == 0:
+            print(f"Iteration {iteration}/{total_iterations}  accumulator={accumulator:.4f}")
+            save_checkpoint(iteration, accumulator)
+
+        time.sleep(0.01)  # simulate compute time
+
+    print(f"Simulation complete. Final accumulator={accumulator:.4f}")
+    save_checkpoint(iteration, accumulator)
+
 
 if __name__ == "__main__":
-    train()
+    main()
 ```
 
-### Bash Script Example
+### Key Design Points
 
-For shell scripts, use `trap` to catch SIGTERM:
+1. **Global shutdown flag.** The signal handler only sets `shutdown_requested = True`. It does no
+   I/O and no cleanup—signal handlers should be minimal.
 
-```bash
-#!/bin/bash
+2. **Loop checks the flag.** Every iteration starts with `if shutdown_requested:`. This guarantees
+   the current iteration finishes before the job starts saving state.
 
-CHECKPOINT_FILE="/scratch/checkpoints/progress.txt"
+3. **Atomic checkpoint.** Writing to a `.tmp` file and calling `os.replace()` prevents a corrupted
+   checkpoint if the process is killed during the write.
 
-# Function to save checkpoint
-save_checkpoint() {
-    echo "Saving checkpoint at iteration $ITERATION"
-    echo "$ITERATION" > "$CHECKPOINT_FILE"
-}
+4. **Handler registered early.** `signal.signal(signal.SIGTERM, handle_sigterm)` runs before the
+   main loop so the handler is active from the start.
 
-# Trap SIGTERM and save checkpoint
-trap 'save_checkpoint; exit 0' SIGTERM
+## Step 2: Create the Workflow Specification
 
-# Load checkpoint if exists
-if [ -f "$CHECKPOINT_FILE" ]; then
-    ITERATION=$(cat "$CHECKPOINT_FILE")
-    echo "Resuming from iteration $ITERATION"
-else
-    ITERATION=0
-fi
-
-# Main loop
-while [ $ITERATION -lt 1000 ]; do
-    # Do work...
-    ITERATION=$((ITERATION + 1))
-    sleep 1
-done
-```
-
-### Complete Workflow Example
+Save as `graceful_termination.yaml`:
 
 ```yaml
-name: ml_training_workflow
-user: researcher
+name: graceful_termination_demo
+description: Demonstrates early SIGTERM with srun_termination_signal
 srun_termination_signal: "TERM@120"
 
+resource_requirements:
+  - name: sim_resources
+    num_cpus: 2
+    num_nodes: 1
+    memory: 4g
+    runtime: PT2H
+
 jobs:
-  - name: preprocess
-    command: python preprocess.py
-
-  - name: train_model
-    command: python train.py --checkpoint-dir /scratch/checkpoints
-    depends_on:
-      - preprocess
-    resource_requirements:
-      num_cpus: 8
-      memory: 32g
-      num_gpus: 1
-      runtime: PT4H
-
-  - name: evaluate
-    command: python evaluate.py
-    depends_on:
-      - train_model
+  - name: simulate
+    command: python3 simulate.py
+    resource_requirements: sim_resources
 
 slurm_schedulers:
-  - name: gpu_scheduler
+  - name: scheduler
     account: my_project
-    partition: gpu
+    partition: standard
     nodes: 1
-    walltime: "04:00:00"
+    walltime: "02:00:00"
 
 actions:
   - trigger_type: on_workflow_start
     action_type: schedule_nodes
-    scheduler: gpu_scheduler
+    scheduler: scheduler
     scheduler_type: slurm
     num_allocations: 1
 ```
 
-With `srun_termination_signal: "TERM@120"`, Slurm sends SIGTERM 120 seconds before the allocation
-ends, giving `train_model` time to save a checkpoint before the hard kill.
+The `srun_termination_signal: "TERM@120"` is set at the **workflow level**. Torc passes it to every
+`srun` invocation as `srun --signal=TERM@120`.
 
-## Restarting After Termination
-
-When a job is terminated due to wall-time, it will have status `terminated`. To continue the
-workflow:
-
-1. **Re-submit the workflow** to allocate new compute time:
-   ```bash
-   torc workflows submit $WORKFLOW_ID
-   ```
-
-2. **Reinitialize terminated jobs** to make them ready again:
-   ```bash
-   torc workflows reinitialize $WORKFLOW_ID
-   ```
-
-Your job script should detect existing checkpoints and resume from where it left off.
-
-## Best Practices
-
-### 1. Verify Checkpoint Integrity
-
-Add validation to ensure checkpoints are complete:
-
-```python
-def save_checkpoint():
-    temp_path = checkpoint_path + ".tmp"
-    with open(temp_path, 'wb') as f:
-        pickle.dump(model_state, f)
-    # Atomic rename ensures complete checkpoint
-    os.rename(temp_path, checkpoint_path)
-```
-
-### 2. Handle Multiple Termination Signals
-
-Some systems send multiple signals. Ensure your handler is idempotent:
-
-```python
-checkpoint_saved = False
-
-def handle_sigterm(signum, frame):
-    global checkpoint_saved
-    if not checkpoint_saved:
-        save_checkpoint()
-        checkpoint_saved = True
-    sys.exit(0)
-```
-
-### 3. Test Locally
-
-Test your SIGTERM handling locally before running on the cluster:
+## Step 3: Submit and Run
 
 ```bash
-# Start your job
-python train.py &
-PID=$!
-
-# Wait a bit, then send SIGTERM
-sleep 10
-kill -TERM $PID
-
-# Verify checkpoint was saved
-ls -la /scratch/checkpoints/
+torc submit-slurm --account my_project graceful_termination.yaml
 ```
 
-## Troubleshooting
+Or, if you already have schedulers configured in the spec:
 
-### Job Killed Without Checkpointing
+```bash
+torc submit graceful_termination.yaml
+```
 
-**Symptoms:** Job status is `terminated` but no checkpoint was saved.
+## Step 4: Observe the Behavior
 
-**Causes:**
+Monitor the workflow:
 
-- Signal handler not registered before training started
-- Checkpoint save took longer than the `KillWait` grace period
+```bash
+torc tui
+```
 
-**Solutions:**
+When the srun step nears its time limit, you will see in the job's stdout:
 
-- Register signal handlers early in your script
-- Ask your Slurm admin to increase `KillWait` if needed
+```
+Iteration 47000/100000  accumulator=1104.4530
+SIGTERM received (signal 15). Will stop after current iteration.
+Shutdown flag is set. Saving checkpoint and exiting.
+Checkpoint saved at iteration 47001
+```
 
-### Checkpoint File Corrupted
+The job exits with code 0, so Torc marks it as **completed** rather than terminated or failed.
 
-**Symptoms:** Job fails to load checkpoint on restart.
+## Step 5: Resume from Checkpoint
 
-**Causes:**
+If the simulation didn't finish all iterations, re-submit the workflow. The job will load the
+checkpoint and continue:
 
-- Job was killed during checkpoint write
-- Disk space exhausted
+```bash
+torc workflows reinitialize $WORKFLOW_ID
+torc workflows submit $WORKFLOW_ID
+```
 
-**Solutions:**
+The next run picks up where it left off:
 
-- Use atomic file operations (write to temp, then rename)
-- Check available disk space before checkpointing
-- Implement checkpoint validation on load
+```
+Resumed from checkpoint at iteration 47001
+Starting simulation from iteration 47001
+Iteration 48000/100000  accumulator=1151.4530
+...
+```
 
-### Job Doesn't Receive SIGTERM
+## How It Works Under the Hood
 
-**Symptoms:** Job runs until hard kill with no graceful shutdown.
+1. **`srun_termination_signal: "TERM@120"`** is stored on the workflow record in the Torc database.
 
-**Causes:**
+2. When the job runner launches a job inside a Slurm allocation, it builds an `srun` command that
+   includes `--signal=TERM@120`.
 
-- Job running in a subprocess that doesn't forward signals
-- Container or wrapper script intercepting signals
+3. Slurm's step manager sends SIGTERM to the job's process group 120 seconds before `--time`
+   expires.
 
-**Solutions:**
+4. Python's signal handler sets `shutdown_requested = True`.
 
-- Use `exec` in wrapper scripts to replace the shell
-- Configure signal forwarding in containers
-- Run the job directly without wrapper scripts
+5. The main loop sees the flag, saves the checkpoint, and calls `sys.exit(0)`.
 
-## See Also
+6. Because the exit code is 0, Torc treats this as a successful completion.
 
-- [Advanced Slurm Configuration](./slurm.md) - Manual Slurm scheduler setup
-- [Managing Resources](./resources.md) - Resource requirements configuration
-- [Debugging Workflows](./debugging.md) - Troubleshooting workflow issues
+## What You Learned
+
+In this tutorial, you learned:
+
+- How to set `srun_termination_signal` in a workflow spec for early warning before timeout
+- The shutdown-flag pattern: signal handler sets a flag, main loop checks it each iteration
+- How to write atomic checkpoints that survive unexpected kills
+- How to resume a job from a checkpoint after re-submission
+
+## Next Steps
+
+- [Automatic Failure Recovery](./automatic-recovery.md) — Configure Torc to automatically retry or
+  recover failed jobs

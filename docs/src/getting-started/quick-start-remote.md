@@ -24,20 +24,6 @@ torc-server run --database torc.db --port 8080
 > that can reach this host. For networks with untrusted users, see
 > [Authentication](../specialized/admin/authentication.md) to secure your server.
 
-## Create a Worker File
-
-Create a file listing the remote machines. Each line contains one machine in the format
-`[user@]hostname[:port]`:
-
-```text
-# workers.txt
-worker1.example.com
-alice@worker2.example.com
-admin@192.168.1.10:2222
-```
-
-Lines starting with `#` are comments. Empty lines are ignored.
-
 ## Create a Workflow
 
 Save this as `workflow.yaml`:
@@ -63,12 +49,26 @@ torc workflows create workflow.yaml
 
 Note the workflow ID in the output.
 
-## Run Workers on Remote Machines
+## Add Remote Workers
 
-Start workers on all remote machines. Each worker will poll for available jobs and execute them:
+Add remote machines as workers. Each address uses the format `[user@]hostname[:port]`:
 
 ```console
-torc remote run --workers workers.txt <workflow-id> --poll-interval 5
+torc remote add-workers <workflow-id> user@host1 user@host2 user@host3
+```
+
+Or add workers from a file (one address per line, `#` for comments):
+
+```console
+torc remote add-workers-from-file workers.txt <workflow-id>
+```
+
+## Run Workers on Remote Machines
+
+Start workers on all registered remote machines via SSH:
+
+```console
+torc remote run <workflow-id>
 ```
 
 This will:

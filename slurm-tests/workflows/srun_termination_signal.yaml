@@ -1,0 +1,37 @@
+# Test: srun Termination Signal
+#
+# 1-node allocation with srun_termination_signal set to "TERM@120".
+# The job registers a SIGTERM handler and sleeps long enough to receive
+# the signal 120 seconds before the srun step times out.
+# Verifies that the user job receives SIGTERM and can perform graceful shutdown.
+
+name: srun_termination_signal
+description: Verify srun_termination_signal delivers SIGTERM to user job before timeout
+project: slurm-tests
+srun_termination_signal: "TERM@120"
+
+resource_requirements:
+  - name: signal_resources
+    num_cpus: 1
+    num_nodes: 1
+    memory: 512m
+    runtime: PT10M
+
+jobs:
+  - name: sigterm_job
+    command: bash slurm-tests/scripts/handle_sigterm.sh
+    resource_requirements: signal_resources
+
+slurm_schedulers:
+  - name: signal_scheduler
+    account: PLACEHOLDER_ACCOUNT
+    partition: PLACEHOLDER_PARTITION
+    nodes: 1
+    walltime: "00:10:00"
+
+actions:
+  - trigger_type: "on_workflow_start"
+    action_type: "schedule_nodes"
+    scheduler: "signal_scheduler"
+    scheduler_type: "slurm"
+    num_allocations: 1
