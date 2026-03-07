@@ -7270,6 +7270,12 @@ components:
             \ before the step time limit). This allows jobs to checkpoint before being\
             \ killed."
           type: string
+        enable_cpu_bind:
+          default: false
+          description: "When true, allow Slurm to bind tasks to specific CPU cores.\
+            \ By default (false), srun passes --cpu-bind=none to disable binding,\
+            \ which prevents CPU binding errors on some cluster configurations."
+          type: boolean
       required:
       - name
       - user

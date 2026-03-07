@@ -9934,6 +9934,13 @@ pub struct WorkflowModel {
     #[serde(rename = "srun_termination_signal")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub srun_termination_signal: Option<String>,
+
+    /// When true, allow Slurm to bind tasks to specific CPU cores. By default (false),
+    /// srun passes `--cpu-bind=none` to disable binding, which prevents
+    /// "CPU binding outside of job step allocation" errors on some cluster configurations.
+    #[serde(rename = "enable_cpu_bind")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enable_cpu_bind: Option<bool>,
 }
 
 impl WorkflowModel {
@@ -9961,6 +9968,7 @@ impl WorkflowModel {
             metadata: None,
             status_id: None,
             srun_termination_signal: None,
+            enable_cpu_bind: None,
         }
     }
 }
@@ -10049,6 +10057,9 @@ impl std::string::ToString for WorkflowModel {
             self.srun_termination_signal
                 .as_ref()
                 .map(|v| ["srun_termination_signal".to_string(), v.to_string()].join(",")),
+            self.enable_cpu_bind
+                .as_ref()
+                .map(|v| ["enable_cpu_bind".to_string(), v.to_string()].join(",")),
         ];
 
         params.into_iter().flatten().collect::<Vec<_>>().join(",")
@@ -10087,6 +10098,7 @@ impl std::str::FromStr for WorkflowModel {
             pub metadata: Vec<String>,
             pub status_id: Vec<i64>,
             pub srun_termination_signal: Vec<String>,
+            pub enable_cpu_bind: Vec<bool>,
         }
 
         let mut intermediate_rep = IntermediateRep::default();
@@ -10177,6 +10189,9 @@ impl std::str::FromStr for WorkflowModel {
                     "metadata" => intermediate_rep.metadata.push(
                         <String as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
                     ),
+                    "enable_cpu_bind" => intermediate_rep.enable_cpu_bind.push(
+                        <bool as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
+                    ),
                     _ => {
                         return std::result::Result::Err(
                             "Unexpected key while parsing WorkflowModel".to_string(),
@@ -10235,6 +10250,7 @@ impl std::str::FromStr for WorkflowModel {
             metadata: intermediate_rep.metadata.into_iter().next(),
             status_id: intermediate_rep.status_id.into_iter().next(),
             srun_termination_signal: intermediate_rep.srun_termination_signal.into_iter().next(),
+            enable_cpu_bind: intermediate_rep.enable_cpu_bind.into_iter().next(),
         })
     }
 }

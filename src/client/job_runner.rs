@@ -1336,6 +1336,7 @@ impl JobRunner {
                         Some(&job_rr),
                         self.workflow.limit_resources.unwrap_or(true),
                         self.workflow.use_srun.unwrap_or(true),
+                        self.workflow.enable_cpu_bind.unwrap_or(false),
                         self.end_time,
                         self.workflow.srun_termination_signal.as_deref(),
                     ) {
@@ -1480,6 +1481,7 @@ impl JobRunner {
                         Some(&job_rr),
                         self.workflow.limit_resources.unwrap_or(true),
                         self.workflow.use_srun.unwrap_or(true),
+                        self.workflow.enable_cpu_bind.unwrap_or(false),
                         self.end_time,
                         self.workflow.srun_termination_signal.as_deref(),
                     ) {

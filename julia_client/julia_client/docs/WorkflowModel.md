@@ -22,6 +22,7 @@ Name | Type | Description | Notes
 **use_pending_failed** | **Bool** | Use PendingFailed status for failed jobs (enables AI-assisted recovery) | [optional] [default to false]
 **status_id** | **Int64** |  | [optional] [default to nothing]
 **srun_termination_signal** | **String** | Signal specification for srun steps, passed as srun --signal&#x3D;&lt;value&gt;. Format: &lt;signal&gt;@&lt;seconds&gt; (e.g., TERM@120 sends SIGTERM 120 seconds before the step time limit). This allows jobs to checkpoint before being killed. | [optional] [default to nothing]
+**enable_cpu_bind** | **Bool** | When true, allow Slurm to bind tasks to specific CPU cores. By default (false), srun passes --cpu-bind&#x3D;none to disable binding, which prevents CPU binding errors on some cluster configurations. | [optional] [default to false]
 
 
 [[Back to Model list]](../README.md#models) [[Back to API list]](../README.md#api-endpoints) [[Back to README]](../README.md)

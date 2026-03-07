@@ -542,13 +542,18 @@ fn build_software_entity(workflow_id: i64, info: &BinaryInfo) -> RoCrateEntityMo
 
 /// Create RO-Crate SoftwareApplication entities for torc binaries.
 ///
-/// Attempts to create entities for `torc` and `torc-slurm-job-runner`.
+/// Attempts to create entities for `torc` and (on Linux) `torc-slurm-job-runner`.
 /// Binaries that are not found on the system are silently skipped.
 /// The `torc-server` entity is created server-side (see `RoCrateApiImpl`).
 ///
 /// This is called during workflow initialization regardless of `enable_ro_crate`.
 pub fn create_software_entities(config: &Configuration, workflow_id: i64) {
-    let binary_names: Vec<&str> = vec!["torc", "torc-slurm-job-runner"];
+    let mut binary_names: Vec<&str> = vec!["torc"];
+
+    // torc-slurm-job-runner is only available on Linux
+    if cfg!(target_os = "linux") {
+        binary_names.push("torc-slurm-job-runner");
+    }
 
     // Check existing entities to avoid duplicates
     let existing_ids: std::collections::HashSet<String> =

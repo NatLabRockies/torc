@@ -100,6 +100,7 @@ impl AsyncCliCommand {
         resource_requirements: Option<&ResourceRequirementsModel>,
         limit_resources: bool,
         use_srun: bool,
+        enable_cpu_bind: bool,
         end_time: Option<DateTime<Utc>>,
         srun_termination_signal: Option<&str>,
     ) -> Result<(), Box<dyn std::error::Error>> {
@@ -153,17 +154,9 @@ impl AsyncCliCommand {
             let mut srun = Command::new(&srun_binary);
             srun.arg(format!("--jobid={}", slurm_job_id));
             srun.arg("--ntasks=1");
-            // Without --overlap, each srun step takes exclusive ownership of its node slot
-            // within the allocation, so concurrent steps on the same node (or same allocation)
-            // queue up and retry with "Requested nodes are busy".  --overlap explicitly permits
-            // steps to share resources with other running steps in the same job allocation.
-            // Requires Slurm 21.08+.
-            srun.arg("--overlap");
-            // Disable explicit CPU affinity binding. Without this, srun's default binding
-            // algorithm may try to pin tasks to CPU IDs outside the step's allocated mask,
-            // causing "CPU binding outside of job step allocation" errors. CPU limits are
-            // still enforced via cgroups even with binding disabled.
-            srun.arg("--cpu-bind=none");
+            if !enable_cpu_bind {
+                srun.arg("--cpu-bind=none");
+            }
             srun.arg(format!("--job-name={}", step_name));
             if let Some(rr) = resource_requirements {
                 // step_nodes controls how many nodes this srun step spans.

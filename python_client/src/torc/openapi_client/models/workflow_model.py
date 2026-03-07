@@ -45,7 +45,8 @@ class WorkflowModel(BaseModel):
     use_pending_failed: Optional[StrictBool] = Field(default=False, description="Use PendingFailed status for failed jobs (enables AI-assisted recovery)")
     status_id: Optional[StrictInt] = None
     srun_termination_signal: Optional[StrictStr] = Field(default=None, description="Signal specification for srun steps, passed as srun --signal=<value>. Format: <signal>@<seconds> (e.g., TERM@120 sends SIGTERM 120 seconds before the step time limit). This allows jobs to checkpoint before being killed.")
-    __properties: ClassVar[List[str]] = ["id", "name", "user", "description", "timestamp", "project", "metadata", "compute_node_expiration_buffer_seconds", "compute_node_wait_for_new_jobs_seconds", "compute_node_ignore_workflow_completion", "compute_node_wait_for_healthy_database_minutes", "compute_node_min_time_for_new_jobs_seconds", "jobs_sort_method", "resource_monitor_config", "slurm_defaults", "use_pending_failed", "status_id", "srun_termination_signal"]
+    enable_cpu_bind: Optional[StrictBool] = Field(default=False, description="When true, allow Slurm to bind tasks to specific CPU cores. By default (false), srun passes --cpu-bind=none to disable binding, which prevents CPU binding errors on some cluster configurations.")
+    __properties: ClassVar[List[str]] = ["id", "name", "user", "description", "timestamp", "project", "metadata", "compute_node_expiration_buffer_seconds", "compute_node_wait_for_new_jobs_seconds", "compute_node_ignore_workflow_completion", "compute_node_wait_for_healthy_database_minutes", "compute_node_min_time_for_new_jobs_seconds", "jobs_sort_method", "resource_monitor_config", "slurm_defaults", "use_pending_failed", "status_id", "srun_termination_signal", "enable_cpu_bind"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -115,7 +116,8 @@ class WorkflowModel(BaseModel):
             "slurm_defaults": obj.get("slurm_defaults"),
             "use_pending_failed": obj.get("use_pending_failed") if obj.get("use_pending_failed") is not None else False,
             "status_id": obj.get("status_id"),
-            "srun_termination_signal": obj.get("srun_termination_signal")
+            "srun_termination_signal": obj.get("srun_termination_signal"),
+            "enable_cpu_bind": obj.get("enable_cpu_bind") if obj.get("enable_cpu_bind") is not None else False
         })
         return _obj
 

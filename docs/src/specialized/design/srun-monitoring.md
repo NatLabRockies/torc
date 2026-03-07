@@ -71,7 +71,6 @@ flowchart LR
     SRUN[srun]:::flag
     JOBID["--jobid=SLURM_JOB_ID"]:::flag
     NT["--ntasks=1"]:::flag
-    OV["--overlap"]:::flag
     CB["--cpu-bind=none"]:::flag
     JN["--job-name=step_name"]:::flag
     ND["--nodes=step_nodes"]:::flag
@@ -82,14 +81,12 @@ flowchart LR
 
     SRUN --> JOBID
     SRUN --> NT
-    SRUN --> OV
     SRUN --> CB
     SRUN --> JN
     SRUN --> ND
 
     ND -.- N1["Default: 1 node<br/>Override via step_nodes"]:::note
-    OV -.- N2["Allows concurrent steps<br/>on same node"]:::note
-    CB -.- N3["Prevents CPU affinity<br/>binding errors"]:::note
+    CB -.- N2["Default on; disable with<br/>enable_cpu_bind: true"]:::note
     TIME -.- N4["Remaining allocation time<br/>rounded down to minutes"]:::note
     SIG -.- N5["Early warning signal<br/>e.g. TERM@120"]:::note
 
@@ -99,18 +96,17 @@ flowchart LR
     SRUN --> SIG
 ```
 
-| Argument          | Purpose                                                              |
-| ----------------- | -------------------------------------------------------------------- |
-| `--jobid`         | Binds step to the parent Slurm allocation                            |
-| `--ntasks=1`      | One task per workflow job                                            |
-| `--overlap`       | Permits concurrent steps to share node resources (Slurm 21.08+)      |
-| `--cpu-bind=none` | Prevents CPU affinity errors when step mask doesn't match allocation |
-| `--job-name`      | Sets the step name for sacct/sstat lookup                            |
-| `--nodes`         | Number of nodes for this step (from `step_nodes`, default 1)         |
-| `--cpus-per-task` | CPU cgroup limit (only when `limit_resources=true`)                  |
-| `--mem`           | Memory cgroup limit in MB (only when `limit_resources=true`)         |
-| `--time`          | Per-step walltime from remaining allocation time (see below)         |
-| `--signal`        | Early warning signal before step timeout (see below)                 |
+| Argument          | Purpose                                                                       |
+| ----------------- | ----------------------------------------------------------------------------- |
+| `--jobid`         | Binds step to the parent Slurm allocation                                     |
+| `--ntasks=1`      | One task per workflow job                                                     |
+| `--cpu-bind=none` | Disables CPU affinity binding (default; omitted when `enable_cpu_bind: true`) |
+| `--job-name`      | Sets the step name for sacct/sstat lookup                                     |
+| `--nodes`         | Number of nodes for this step (from `step_nodes`, default 1)                  |
+| `--cpus-per-task` | CPU cgroup limit (only when `limit_resources=true`)                           |
+| `--mem`           | Memory cgroup limit in MB (only when `limit_resources=true`)                  |
+| `--time`          | Per-step walltime from remaining allocation time (see below)                  |
+| `--signal`        | Early warning signal before step timeout (see below)                          |
 
 ### The `step_nodes` Field
 

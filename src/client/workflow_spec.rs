@@ -722,6 +722,10 @@ pub struct WorkflowSpec {
     /// the step time limit). This allows jobs to checkpoint before being killed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub srun_termination_signal: Option<String>,
+    /// When true, allow Slurm to bind tasks to specific CPU cores. By default (false),
+    /// srun passes `--cpu-bind=none` to disable binding.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enable_cpu_bind: Option<bool>,
 }
 
 impl WorkflowSpec {
@@ -759,6 +763,7 @@ impl WorkflowSpec {
             project: None,
             metadata: None,
             srun_termination_signal: None,
+            enable_cpu_bind: None,
         }
     }
 
@@ -1787,6 +1792,11 @@ impl WorkflowSpec {
         // Set srun_termination_signal if present
         if let Some(ref value) = spec.srun_termination_signal {
             workflow_model.srun_termination_signal = Some(value.clone());
+        }
+
+        // Set enable_cpu_bind if present
+        if let Some(value) = spec.enable_cpu_bind {
+            workflow_model.enable_cpu_bind = Some(value);
         }
 
         let created_workflow = default_api::create_workflow(config, workflow_model)
@@ -3537,6 +3547,11 @@ impl WorkflowSpec {
                         );
                     }
                 }
+                "enable_cpu_bind" => {
+                    if let Some(v) = node.entries().first().and_then(|e| e.value().as_bool()) {
+                        obj.insert("enable_cpu_bind".to_string(), serde_json::Value::Bool(v));
+                    }
+                }
                 _ => {
                     // Ignore unknown nodes
                 }
@@ -4685,6 +4700,7 @@ job "train_lr{lr:.4f}_bs{batch_size}" {
             project: None,
             metadata: None,
             srun_termination_signal: None,
+            enable_cpu_bind: None,
         };
 
         spec.expand_parameters()

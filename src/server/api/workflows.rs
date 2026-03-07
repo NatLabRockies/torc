@@ -171,6 +171,7 @@ const WORKFLOW_COLUMNS: &[&str] = &[
     "metadata",
     "status_id",
     "srun_termination_signal",
+    "enable_cpu_bind",
 ];
 
 const WORKFLOW_STATUS_COLUMNS: &[&str] = &[
@@ -203,6 +204,7 @@ const ALL_WORKFLOW_COLUMNS: &[&str] = &[
     "metadata",
     "status_id",
     "srun_termination_signal",
+    "enable_cpu_bind",
     "run_id",
     "is_archived",
     "is_canceled",
@@ -293,6 +295,7 @@ impl WorkflowsApiImpl {
                 ,w.metadata
                 ,w.status_id
                 ,w.srun_termination_signal
+                ,w.enable_cpu_bind
             FROM workflow w
             INNER JOIN workflow_status ws ON w.status_id = ws.id
             "
@@ -320,6 +323,7 @@ impl WorkflowsApiImpl {
                 ,metadata
                 ,status_id
                 ,srun_termination_signal
+                ,enable_cpu_bind
             FROM workflow
             "
             .to_string()
@@ -493,6 +497,11 @@ impl WorkflowsApiImpl {
                 metadata: record.get("metadata"),
                 status_id: Some(record.get("status_id")),
                 srun_termination_signal: record.get("srun_termination_signal"),
+                enable_cpu_bind: record
+                    .try_get::<Option<i64>, _>("enable_cpu_bind")
+                    .ok()
+                    .flatten()
+                    .map(|v| v != 0),
             });
         }
 
@@ -645,6 +654,7 @@ where
         let limit_resources_int = body.limit_resources.map(|v| if v { 1 } else { 0 });
         let use_srun_int = body.use_srun.map(|v| if v { 1 } else { 0 });
         let enable_ro_crate_int = body.enable_ro_crate.map(|v| if v { 1 } else { 0 });
+        let enable_cpu_bind_int = body.enable_cpu_bind.map(|v| if v { 1 } else { 0 });
 
         let workflow_result = match sqlx::query!(
             r#"
@@ -669,9 +679,10 @@ where
                 project,
                 metadata,
                 status_id,
-                srun_termination_signal
+                srun_termination_signal,
+                enable_cpu_bind
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
             RETURNING rowid
             "#,
             body.name,
@@ -694,6 +705,7 @@ where
             body.metadata,
             status_result[0].id,
             body.srun_termination_signal,
+            enable_cpu_bind_int,
         )
         .fetch_all(&mut *tx)
         .await
@@ -972,6 +984,7 @@ where
                     metadata: row.metadata,
                     status_id: Some(row.status_id),
                     srun_termination_signal: row.srun_termination_signal,
+                    enable_cpu_bind: row.enable_cpu_bind.map(|v| v != 0),
                 },
             )),
             Ok(None) => {
@@ -1263,6 +1276,7 @@ where
         let limit_resources_int = body.limit_resources.map(|val| if val { 1 } else { 0 });
         let use_srun_int = body.use_srun.map(|val| if val { 1 } else { 0 });
         let enable_ro_crate_int = body.enable_ro_crate.map(|val| if val { 1 } else { 0 });
+        let enable_cpu_bind_int = body.enable_cpu_bind.map(|val| if val { 1 } else { 0 });
 
         // Update the workflow record using COALESCE to only update non-null fields
         let result = match sqlx::query!(
@@ -1283,8 +1297,9 @@ where
                 enable_ro_crate = COALESCE($12, enable_ro_crate),
                 project = COALESCE($13, project),
                 metadata = COALESCE($14, metadata),
-                srun_termination_signal = COALESCE($15, srun_termination_signal)
-            WHERE id = $16
+                srun_termination_signal = COALESCE($15, srun_termination_signal),
+                enable_cpu_bind = COALESCE($16, enable_cpu_bind)
+            WHERE id = $17
             "#,
             body.name,
             body.description,
@@ -1301,6 +1316,7 @@ where
             body.project,
             body.metadata,
             body.srun_termination_signal,
+            enable_cpu_bind_int,
             id
         )
         .execute(self.context.pool.as_ref())

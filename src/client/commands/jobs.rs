@@ -10,7 +10,7 @@ use crate::client::commands::{
     output::{print_if_json, print_json, print_json_wrapped},
     pagination::{self, JobListParams},
     print_error, select_workflow_interactively,
-    table_format::display_table_with_count,
+    table_format::{display_table_excluding, display_table_with_count},
 };
 use crate::models;
 use tabled::Tabled;
@@ -198,6 +198,12 @@ EXAMPLES:
 
     # Paginate results
     torc jobs list 123 --limit 100 --offset 0
+
+    # Hide the command column
+    torc jobs list 123 -x command
+
+    # Hide multiple columns
+    torc jobs list 123 -x command -x name
 ")]
     List {
         /// List jobs for this workflow (optional - will prompt if not provided)
@@ -224,6 +230,9 @@ EXAMPLES:
         /// Include job relationships (depends_on_job_ids, input/output file/user_data IDs) - slower but more complete
         #[arg(long)]
         include_relationships: bool,
+        /// Exclude columns from table output (case-insensitive, can be repeated)
+        #[arg(short = 'x', long = "exclude")]
+        exclude_columns: Vec<String>,
     },
     /// Get a specific job by ID
     #[command(after_long_help = "\
@@ -434,6 +443,7 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
             sort_by,
             reverse_sort,
             include_relationships,
+            exclude_columns,
         } => {
             let user_name = get_env_user_name();
             let selected_workflow_id = match workflow_id {
@@ -500,7 +510,11 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                                 command: job.command.clone(),
                             })
                             .collect();
-                        display_table_with_count(&rows, "jobs");
+                        if exclude_columns.is_empty() {
+                            display_table_with_count(&rows, "jobs");
+                        } else {
+                            display_table_excluding(&rows, exclude_columns, "jobs");
+                        }
                     }
                 }
                 Err(e) => {

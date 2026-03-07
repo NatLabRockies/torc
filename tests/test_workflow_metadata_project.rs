@@ -32,6 +32,7 @@ fn test_create_workflow_with_project_and_metadata(start_server: &ServerProcess) 
         metadata: Some(r#"{"key":"value","num":42}"#.to_string()),
         status_id: None,
         srun_termination_signal: None,
+        enable_cpu_bind: None,
     };
 
     // Create the workflow
@@ -74,6 +75,7 @@ fn test_create_workflow_without_fields_then_update(start_server: &ServerProcess)
         metadata: None,
         status_id: None,
         srun_termination_signal: None,
+        enable_cpu_bind: None,
     };
 
     let created =
@@ -124,6 +126,7 @@ fn test_create_workflow_with_fields_then_change(start_server: &ServerProcess) {
         metadata: Some(r#"{"version":"1.0"}"#.to_string()),
         status_id: None,
         srun_termination_signal: None,
+        enable_cpu_bind: None,
     };
 
     let created =
@@ -177,6 +180,7 @@ fn test_partial_update_preserves_fields(start_server: &ServerProcess) {
         metadata: Some(r#"{"key":"value"}"#.to_string()),
         status_id: None,
         srun_termination_signal: None,
+        enable_cpu_bind: None,
     };
 
     let created =

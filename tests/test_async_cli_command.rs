@@ -68,6 +68,7 @@ fn test_async_cli_command_start_simple_command(start_server: &ServerProcess) {
         None,
         true,
         true,
+        false,
         None,
         None,
     );
@@ -108,6 +109,7 @@ fn test_async_cli_command_start_already_running() {
             None,
             true,
             true,
+            false,
             None,
             None,
         )
@@ -125,6 +127,7 @@ fn test_async_cli_command_start_already_running() {
         None,
         true,
         true,
+        false,
         None,
         None,
     );
@@ -153,6 +156,7 @@ fn test_async_cli_command_start_invalid_directory() {
         None,
         true,
         true,
+        false,
         None,
         None,
     );
@@ -177,6 +181,7 @@ fn test_async_cli_command_check_status_completion() {
             None,
             true,
             true,
+            false,
             None,
             None,
         )
@@ -223,6 +228,7 @@ fn test_async_cli_command_with_exit_code_success() {
             None,
             true,
             true,
+            false,
             None,
             None,
         )
@@ -253,6 +259,7 @@ fn test_async_cli_command_with_exit_code_failure() {
             None,
             true,
             true,
+            false,
             None,
             None,
         )
@@ -284,6 +291,7 @@ fn test_async_cli_command_cancel() {
             None,
             true,
             true,
+            false,
             None,
             None,
         )
@@ -328,6 +336,7 @@ fn test_async_cli_command_terminate() {
             None,
             true,
             true,
+            false,
             None,
             None,
         )
@@ -365,6 +374,7 @@ fn test_async_cli_command_wait_for_completion() {
             None,
             true,
             true,
+            false,
             None,
             None,
         )
@@ -404,6 +414,7 @@ fn test_async_cli_command_get_result() {
             None,
             true,
             true,
+            false,
             None,
             None,
         )
@@ -450,6 +461,7 @@ fn test_async_cli_command_with_invocation_script() {
         None,
         true,
         true,
+        false,
         None,
         None,
     );
@@ -483,6 +495,7 @@ fn test_async_cli_command_environment_variables() {
             None,
             true,
             true,
+            false,
             None,
             None,
         )
@@ -518,6 +531,7 @@ fn test_async_cli_command_stdout_stderr_separation() {
             None,
             true,
             true,
+            false,
             None,
             None,
         )
@@ -553,6 +567,7 @@ fn test_async_cli_command_multiple_jobs_same_workflow() {
             None,
             true,
             true,
+            false,
             None,
             None,
         )
@@ -571,6 +586,7 @@ fn test_async_cli_command_multiple_jobs_same_workflow() {
             None,
             true,
             true,
+            false,
             None,
             None,
         )
@@ -589,6 +605,7 @@ fn test_async_cli_command_multiple_jobs_same_workflow() {
             None,
             true,
             true,
+            false,
             None,
             None,
         )
@@ -631,6 +648,7 @@ fn test_async_cli_command_long_running_job() {
             None,
             true,
             true,
+            false,
             None,
             None,
         )
@@ -679,6 +697,7 @@ fn test_async_cli_command_complex_shell_command() {
             None,
             true,
             true,
+            false,
             None,
             None,
         )
@@ -717,6 +736,7 @@ fn test_async_cli_command_file_creation() {
             None,
             true,
             true,
+            false,
             None,
             None,
         )
@@ -749,6 +769,7 @@ fn test_async_cli_command_drop_while_running() {
             None,
             true,
             true,
+            false,
             None,
             None,
         )
@@ -783,6 +804,7 @@ fn test_async_cli_command_execution_time() {
             None,
             true,
             true,
+            false,
             None,
             None,
         )
@@ -813,6 +835,7 @@ fn test_async_cli_command_empty_command() {
         None,
         true,
         true,
+        false,
         None,
         None,
     );
@@ -840,6 +863,7 @@ fn test_async_cli_command_command_not_found() {
             None,
             true,
             true,
+            false,
             None,
             None,
         )
