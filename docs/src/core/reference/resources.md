@@ -52,11 +52,11 @@ These two fields are independent and serve different purposes in Slurm workflows
 
 For most jobs both values are `1`. They differ in two patterns:
 
-| Pattern                                                  | `num_nodes` | `step_nodes` | Description                                                         |
-| -------------------------------------------------------- | ----------- | ------------ | ------------------------------------------------------------------- |
-| Single-node jobs (default)                               | `1`         | `1`          | Each job runs on one node                                           |
-| Multi-node allocation, one worker per node               | `N`         | `1`          | N workers share a large allocation, each job still runs on one node |
-| True multi-node job steps (MPI / Julia `Distributed.jl`) | `N`         | `N`          | Each job spans all N nodes                                          |
+| Pattern                                                  | `num_nodes` | `step_nodes` | Description                                                      |
+| -------------------------------------------------------- | ----------- | ------------ | ---------------------------------------------------------------- |
+| Single-node jobs (default)                               | `1`         | `1`          | Each job runs on one node                                        |
+| Multi-node allocation, single-node jobs                  | `N`         | `1`          | One worker manages all nodes; each job runs on one node via srun |
+| True multi-node job steps (MPI / Julia `Distributed.jl`) | `N`         | `N`          | Each job spans all N nodes                                       |
 
 See [srun Job Step Wrapping](../specialized/hpc/slurm.md#srun-job-step-wrapping) for details.
 

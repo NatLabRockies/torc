@@ -208,7 +208,7 @@ Defines conditional actions triggered by workflow or job state changes.
 | `scheduler`                 | string   | none       | For `schedule_nodes`: scheduler name                                                                      |
 | `scheduler_type`            | string   | none       | For `schedule_nodes`: scheduler type (`"slurm"`, `"local"`)                                               |
 | `num_allocations`           | integer  | none       | For `schedule_nodes`: number of node allocations                                                          |
-| `start_one_worker_per_node` | boolean  | none       | For `schedule_nodes`: start one worker per allocated node                                                 |
+| `start_one_worker_per_node` | boolean  | none       | For `schedule_nodes`: enable multi-node mode (worker reports total resources across all nodes)            |
 | `max_parallel_jobs`         | integer  | none       | For `schedule_nodes`: maximum parallel jobs                                                               |
 | `persistent`                | boolean  | false      | Whether the action persists and can be claimed by multiple workers                                        |
 

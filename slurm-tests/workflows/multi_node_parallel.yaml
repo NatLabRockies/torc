@@ -22,7 +22,7 @@ resource_requirements:
 
 jobs:
   - name: stress_{i}
-    command: stress-ng --cpu 5 --timeout 30 --metrics-brief
+    command: bash -c 'echo "Running on $(hostname)"; stress-ng --cpu 5 --timeout 30 --metrics-brief'
     resource_requirements: work_resources
     scheduler: two_node_scheduler
     parameters:
