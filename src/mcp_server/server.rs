@@ -402,10 +402,20 @@ ACTIONS:
 - "save_spec_file" - DEFAULT: Save spec to a .json file for user to review/edit before running
 - "create_workflow" - ONLY when user explicitly wants to run/submit immediately
 
+BEFORE CREATING THE SPEC - ask the user:
+- "Will you run this on a Slurm HPC cluster or locally?" (if not already clear from context)
+- If Slurm: ask for the Slurm account/allocation name, then use workflow_type="slurm"
+- If local: use workflow_type="local"
+This determines the workflow_type AND the CLI commands you suggest afterward.
+
 AFTER SAVING A SPEC FILE - tell users:
 1. Edit the spec to replace placeholder commands with actual scripts/commands
 2. Ensure input files exist at the specified paths
-3. Run with: "torc run <file>" (local) or "torc submit <file>" (Slurm - schedulers are already in the spec)
+3. How to run depends on the workflow_type:
+   - LOCAL workflows: "torc run <file>"
+   - SLURM workflows (spec saved with workflow_type="slurm"):
+     - "torc submit <file>" (uses schedulers already generated in the spec)
+     - Or create and submit separately: "torc workflows create-slurm --account <acct> <file>" then "torc workflows submit <id>"
 IMPORTANT: Do NOT fabricate CLI commands or options. Only use the exact commands shown above.
 
 WORKFLOW_TYPE: "local" or "slurm" (slurm requires account)
@@ -966,7 +976,9 @@ NOTES:
         description = "List available example workflow specifications with descriptions. \
         Use this to discover example workflows that can be retrieved with get_example. \
         Examples cover common patterns: diamond (fan-out/fan-in), parameterized jobs, \
-        hyperparameter sweeps, Slurm pipelines, workflow actions, failure handlers, and more."
+        hyperparameter sweeps, Slurm pipelines, workflow actions, failure handlers, and more. \
+        For the graceful job termination / checkpointing pattern (catching SIGTERM, saving \
+        checkpoints, resuming from where you left off), use get_docs with topic='checkpointing'."
     )]
     async fn list_examples(&self) -> Result<CallToolResult, McpError> {
         let examples_dir = self.examples_dir.clone();
@@ -1015,7 +1027,7 @@ KEY TOPICS:
 - "cli" - CLI command reference
 - "quick-start" - Getting started guide
 - "architecture" - System architecture overview
-- "checkpointing" - Job checkpointing support
+- "checkpointing" - Graceful job termination on HPC: catching SIGTERM, saving checkpoints, resuming from where you left off (srun_termination_signal, shutdown-flag pattern)
 - "hpc-profiles" - HPC profile configuration for different clusters
 - "workflow-formats" - YAML, JSON, JSON5, KDL format comparison
 - "tutorials" - List of available tutorials
@@ -1024,7 +1036,8 @@ WHEN TO USE:
 - Before creating a workflow: check "workflow-spec" and "parameterization"
 - Before Slurm submission: check "slurm" and "hpc-profiles"
 - To understand dependencies: check "dependencies"
-- To set up error handling: check "failure-handlers" and "recovery""#)]
+- To set up error handling: check "failure-handlers" and "recovery"
+- When user asks about workflow patterns or long-running jobs: check "checkpointing""#)]
     async fn get_docs(
         &self,
         #[tool(aggr)] params: GetDocsParams,
@@ -1052,10 +1065,13 @@ impl ServerHandler for TorcMcpServer {
                  WORKFLOW CREATION - SAVE FILES BY DEFAULT:\n\
                  - When user asks to 'create a workflow', save a spec FILE (action=save_spec_file)\n\
                  - AI-generated specs have placeholder commands - users must customize before running\n\
-                 - Only use action=create_workflow when user explicitly says 'run' or 'submit'\n\n\
+                 - Only use action=create_workflow when user explicitly says 'run' or 'submit'\n\
+                 - IMPORTANT: Ask the user whether they will run on Slurm or locally before creating \
+                 the workflow. This determines the workflow_type and the CLI commands to suggest.\n\n\
                  DOCUMENTATION & EXAMPLES:\n\
                  - Use get_docs to retrieve documentation on any topic before creating workflows\n\
                  - Use list_examples + get_example to find and adapt example workflow specs\n\
+                 - For the checkpointing/graceful termination pattern, use get_docs with topic='checkpointing'\n\
                  - Resources are also available at torc://docs/{topic} and torc://examples/{name}\n\n\
                  FILE-BASED DEPENDENCIES:\n\
                  1. Add a 'files' section defining each file with name, path, st_mtime\n\
