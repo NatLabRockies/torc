@@ -18,13 +18,13 @@ resource_requirements:
     num_cpus: 1
     num_nodes: 1
     memory: 2g
-    runtime: PT5M
+    runtime: PT2M
 
   - name: oom_resources
     num_cpus: 1
     num_nodes: 1
     memory: 4g
-    runtime: PT10M
+    runtime: PT3M
 
 jobs:
   - name: normal_job
@@ -44,7 +44,7 @@ slurm_schedulers:
     account: PLACEHOLDER_ACCOUNT
     partition: PLACEHOLDER_PARTITION
     nodes: 1
-    walltime: "00:30:00"
+    walltime: "00:10:00"
 
 actions:
   - trigger_type: "on_workflow_start"

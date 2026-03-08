@@ -20,17 +20,17 @@ resource_requirements:
   - name: preprocess_resources
     num_cpus: 1
     memory: 512m
-    runtime: PT5M
+    runtime: PT2M
 
   - name: work_resources
     num_cpus: 2
     memory: 1g
-    runtime: PT10M
+    runtime: PT3M
 
   - name: postprocess_resources
     num_cpus: 1
     memory: 512m
-    runtime: PT5M
+    runtime: PT2M
 
 jobs:
   - name: preprocess
@@ -106,7 +106,7 @@ slurm_schedulers:
   - name: job_scheduler
     account: PLACEHOLDER_ACCOUNT
     partition: PLACEHOLDER_PARTITION
-    walltime: "01:00:00"
+    walltime: "00:10:00"
     nodes: 1
 
 actions:

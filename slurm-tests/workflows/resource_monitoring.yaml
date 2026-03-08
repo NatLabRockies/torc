@@ -18,7 +18,7 @@ resource_requirements:
     num_cpus: 2
     num_nodes: 1
     memory: 2g
-    runtime: PT5M
+    runtime: PT2M
 
 jobs:
   - name: cpu_work
@@ -34,7 +34,7 @@ slurm_schedulers:
     account: PLACEHOLDER_ACCOUNT
     partition: PLACEHOLDER_PARTITION
     nodes: 1
-    walltime: "00:15:00"
+    walltime: "00:05:00"
 
 actions:
   - trigger_type: "on_workflow_start"

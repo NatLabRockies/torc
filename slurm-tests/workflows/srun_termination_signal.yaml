@@ -8,14 +8,15 @@
 name: srun_termination_signal
 description: Verify srun_termination_signal delivers SIGTERM to user job before timeout
 project: slurm-tests
-srun_termination_signal: "TERM@120"
+slurm_config:
+  srun_termination_signal: "TERM@120"
 
 resource_requirements:
   - name: signal_resources
     num_cpus: 1
     num_nodes: 1
     memory: 512m
-    runtime: PT10M
+    runtime: PT5M
 
 jobs:
   - name: sigterm_job
@@ -27,7 +28,7 @@ slurm_schedulers:
     account: PLACEHOLDER_ACCOUNT
     partition: PLACEHOLDER_PARTITION
     nodes: 1
-    walltime: "00:10:00"
+    walltime: "00:06:00"
 
 actions:
   - trigger_type: "on_workflow_start"

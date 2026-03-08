@@ -14,7 +14,7 @@ resource_requirements:
     num_nodes: 2
     step_nodes: 2
     memory: 4g
-    runtime: PT10M
+    runtime: PT5M
 
 jobs:
   - name: mpi_job
@@ -27,7 +27,7 @@ slurm_schedulers:
     account: PLACEHOLDER_ACCOUNT
     partition: PLACEHOLDER_PARTITION
     nodes: 2
-    walltime: "00:15:00"
+    walltime: "00:10:00"
 
 actions:
   - trigger_type: "on_workflow_start"

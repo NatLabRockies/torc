@@ -7,6 +7,8 @@
 name: multi_node_parallel
 description: 2-node allocation — 5 jobs x 5 CPUs via stress-ng
 project: slurm-tests
+slurm_config:
+  enable_cpu_bind: true
 
 resource_monitor:
   enabled: true
@@ -18,7 +20,7 @@ resource_requirements:
     num_cpus: 5
     num_nodes: 1
     memory: 2g
-    runtime: PT10M
+    runtime: PT3M
 
 jobs:
   - name: stress_{i}
@@ -33,7 +35,7 @@ slurm_schedulers:
     account: PLACEHOLDER_ACCOUNT
     partition: PLACEHOLDER_PARTITION
     nodes: 2
-    walltime: "00:30:00"
+    walltime: "00:10:00"
 
 actions:
   - trigger_type: "on_workflow_start"
