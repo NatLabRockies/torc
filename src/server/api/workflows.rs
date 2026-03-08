@@ -633,7 +633,8 @@ where
             .map(|m| m.to_string())
             .unwrap_or_else(|| "gpus_runtime_memory".to_string());
 
-        let compute_node_expiration_buffer_seconds = body.compute_node_expiration_buffer_seconds;
+        let compute_node_expiration_buffer_seconds =
+            body.compute_node_expiration_buffer_seconds.unwrap_or(180);
         // Default must be >= completion_check_interval_secs + job_completion_poll_interval
         // to avoid workers exiting before dependent jobs are unblocked.
         let compute_node_wait_for_new_jobs_seconds =

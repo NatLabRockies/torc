@@ -192,7 +192,10 @@ mod unix_main {
             }
         };
 
-        if workflow.compute_node_expiration_buffer_seconds.is_some() {
+        if workflow
+            .compute_node_expiration_buffer_seconds
+            .is_some_and(|v| v != 180)
+        {
             warn!(
                 "compute_node_expiration_buffer_seconds is deprecated and will be ignored. \
                  Slurm now manages job termination signals via srun --time. \

@@ -1637,8 +1637,17 @@ pub fn create_node_resources(
 
     let num_gpus = interface.get_num_gpus() as i64;
     let num_nodes = interface.get_num_nodes() as i64;
+
+    // For multi-node allocations, a single worker manages all nodes.
+    // Multiply per-node resources by num_nodes so the job runner knows the
+    // total resources available across the allocation. Each job's srun --exact
+    // handles placement on the correct node.
+    let total_cpus = num_cpus * num_nodes;
+    let total_memory_gb = memory_gb * num_nodes as f64;
+    let total_gpus = num_gpus * num_nodes;
+
     let mut resources =
-        models::ComputeNodesResources::new(num_cpus, memory_gb, num_gpus, num_nodes);
+        models::ComputeNodesResources::new(total_cpus, total_memory_gb, total_gpus, num_nodes);
     resources.scheduler_config_id = scheduler_config_id;
     resources
 }
