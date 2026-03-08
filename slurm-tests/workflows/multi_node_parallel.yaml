@@ -1,11 +1,11 @@
-# Test 2: Multi-Node Parallel
+# Test: Multi-Node Parallel CPU Stress
 #
-# 2-node allocation with start_one_worker_per_node=true, 6 parallel independent jobs.
-# Verifies jobs dispatch to 2 nodes, concurrent execution, sstat/sacct capture.
-# Adapted from tests/workflows/multi_node_parallel_jobs_test/
+# 2-node allocation with start_one_worker_per_node=true, 5 parallel jobs.
+# Each job uses stress-ng to exercise 5 CPUs for 30 seconds.
+# Verifies that all 5 jobs get full CPU access across 2 nodes.
 
 name: multi_node_parallel
-description: 2-node allocation with one worker per node — parallel single-node jobs
+description: 2-node allocation with one worker per node — 5 jobs x 5 CPUs via stress-ng
 project: slurm-tests
 
 resource_monitor:
@@ -15,18 +15,18 @@ resource_monitor:
 
 resource_requirements:
   - name: work_resources
-    num_cpus: 2
+    num_cpus: 5
     num_nodes: 1
     memory: 2g
     runtime: PT10M
 
 jobs:
-  - name: work_{i}
-    command: bash slurm-tests/scripts/work.sh {i}
+  - name: stress_{i}
+    command: stress-ng --cpu 5 --timeout 30 --metrics-brief
     resource_requirements: work_resources
     scheduler: two_node_scheduler
     parameters:
-      i: 1:6
+      i: 1:5
 
 slurm_schedulers:
   - name: two_node_scheduler

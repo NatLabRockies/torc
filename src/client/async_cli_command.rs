@@ -132,16 +132,14 @@ impl AsyncCliCommand {
             self.job.command.clone()
         };
 
-        // Skip srun wrapping when already inside an srun step (SLURM_STEP_ID set).
-        // This happens with start_one_worker_per_node where the outer
-        // `srun --ntasks-per-node=1` owns the node. Nested srun cannot allocate
-        // resources within the outer step. The outer srun provides node isolation;
-        // torc's resource monitor still tracks per-job metrics.
-        let slurm_job_id = if use_srun && std::env::var("SLURM_STEP_ID").is_err() {
+        let slurm_job_id = if use_srun {
             std::env::var("SLURM_JOB_ID").ok()
         } else {
             None
         };
+        // When running inside an outer srun step (start_one_worker_per_node),
+        // inner srun needs --overlap --cpu-bind=none instead of --exact.
+        let nested_srun = std::env::var("SLURM_STEP_ID").is_ok();
         let mut cmd = if let Some(slurm_job_id) = slurm_job_id {
             // Running inside a Slurm allocation — wrap with srun so Slurm creates a
             // per-job cgroup step, enables sacct accounting, and gives HPC admins visibility.
@@ -157,16 +155,27 @@ impl AsyncCliCommand {
             let srun_binary =
                 std::env::var("TORC_FAKE_SRUN").unwrap_or_else(|_| "srun".to_string());
             let mut srun = Command::new(&srun_binary);
+            // Clear inherited Slurm env vars that override CLI args.
+            // SLURM_NNODES from an outer srun step overrides --nodes=1.
+            srun.env_remove("SLURM_NNODES");
             srun.arg(format!("--jobid={}", slurm_job_id));
             srun.arg("--ntasks=1");
-            if !enable_cpu_bind {
+            if nested_srun {
+                // Inside an outer srun step (start_one_worker_per_node): use --overlap
+                // to share resources with the outer step, and always disable CPU binding
+                // to avoid "CPU binding outside of job step allocation" errors.
+                srun.arg("--overlap");
                 srun.arg("--cpu-bind=none");
+            } else {
+                if !enable_cpu_bind {
+                    srun.arg("--cpu-bind=none");
+                }
+                // --exact tells srun to use exactly the requested CPUs/memory without
+                // claiming the entire node exclusively. This allows concurrent steps
+                // to share nodes in multi-node allocations.
+                srun.arg("--exact");
             }
             srun.arg(format!("--job-name={}", step_name));
-            // --exact tells srun to use exactly the requested CPUs/memory without
-            // claiming the entire node exclusively. This allows concurrent steps
-            // to share nodes in multi-node allocations.
-            srun.arg("--exact");
             if let Some(rr) = resource_requirements {
                 let step_nodes = rr.step_nodes.unwrap_or(1).max(1);
                 srun.arg(format!("--nodes={}", step_nodes));
