@@ -84,6 +84,61 @@ mod unix_main {
         password: Option<String>,
     }
 
+    fn workflow_has_multi_node_jobs(
+        config: &Configuration,
+        workflow_id: i64,
+        wait_for_healthy_database_minutes: u64,
+    ) -> bool {
+        let mut offset = 0i64;
+        loop {
+            let response = match utils::send_with_retries(
+                config,
+                || {
+                    default_api::list_resource_requirements(
+                        config,
+                        workflow_id,
+                        None,
+                        Some(offset),
+                        Some(100),
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                    )
+                },
+                wait_for_healthy_database_minutes,
+            ) {
+                Ok(response) => response,
+                Err(e) => {
+                    warn!(
+                        "Could not inspect workflow resource requirements for multi-node jobs: {}. \
+                         Disabling per-node placement to avoid over-allocation.",
+                        e
+                    );
+                    return true;
+                }
+            };
+
+            let items = response.items.unwrap_or_default();
+
+            if items
+                .iter()
+                .any(|rr| rr.num_nodes > 1 || rr.step_nodes.unwrap_or(1) > 1)
+            {
+                return true;
+            }
+
+            if !response.has_more || items.is_empty() {
+                return false;
+            }
+            offset += items.len() as i64;
+        }
+    }
+
     pub fn main() {
         let args = Args::parse();
 
@@ -246,7 +301,14 @@ mod unix_main {
         // reports accurate per-node availability instead of dividing
         // remaining total by num_nodes (which gives incorrect values when
         // jobs are unevenly distributed across nodes).
-        let node_tracker = if num_nodes > 1 {
+        let has_multi_node_jobs = num_nodes > 1
+            && workflow_has_multi_node_jobs(
+                &config,
+                args.workflow_id,
+                args.wait_for_healthy_database_minutes,
+            );
+
+        let node_tracker = if num_nodes > 1 && !has_multi_node_jobs {
             match slurm_interface.list_active_nodes(&job_id) {
                 Ok(node_names) => {
                     info!(
@@ -269,6 +331,12 @@ mod unix_main {
                     None
                 }
             }
+        } else if has_multi_node_jobs {
+            info!(
+                "Workflow has multi-node jobs; using aggregate resource tracking. \
+                 Multi-node jobs reserve whole nodes exclusively."
+            );
+            None
         } else {
             None
         };

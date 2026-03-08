@@ -120,8 +120,8 @@ defaults to 1 and is distinct from `num_nodes` (the allocation size for `sbatch 
 - **Single-node jobs** (default): `step_nodes=1` -- each job runs on one node
 - **Multi-node jobs** (MPI, Julia Distributed.jl): `step_nodes=N` -- step spans N nodes
 
-Setting `step_nodes` equal to `num_nodes` would make concurrent steps compete for all nodes in the
-allocation, causing "Requested nodes are busy" errors.
+When `step_nodes > 1`, Torc treats the job as consuming whole nodes exclusively for the lifetime of
+the step. This avoids ambiguous partial-node accounting for MPI and other true multi-node jobs.
 
 ### The `limit_resources` Flag
 

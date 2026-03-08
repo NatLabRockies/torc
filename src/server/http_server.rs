@@ -6104,6 +6104,16 @@ where
             let job_cpus: i64 = row.get("num_cpus");
             let job_gpus: i64 = row.get("num_gpus");
             let job_nodes: i64 = row.get("num_nodes");
+            let (claimed_memory_bytes, claimed_cpus, claimed_gpus) = if job_nodes > 1 {
+                let nodes = resources.num_nodes.max(1);
+                (
+                    (memory_bytes / nodes) * job_nodes,
+                    (resources.num_cpus / nodes) * job_nodes,
+                    (resources.num_gpus / nodes) * job_nodes,
+                )
+            } else {
+                (job_memory, job_cpus, job_gpus)
+            };
 
             // Check if this job would exceed resource limits
             // For multi-node jobs (num_nodes > 1), check if we have enough dedicated nodes
@@ -6114,15 +6124,15 @@ where
                 false // Single-node jobs don't count against node limit
             };
 
-            if consumed_memory_bytes + job_memory <= memory_bytes
-                && consumed_cpus + job_cpus <= resources.num_cpus
-                && consumed_gpus + job_gpus <= resources.num_gpus
+            if consumed_memory_bytes + claimed_memory_bytes <= memory_bytes
+                && consumed_cpus + claimed_cpus <= resources.num_cpus
+                && consumed_gpus + claimed_gpus <= resources.num_gpus
                 && !would_exceed_nodes
             {
                 // Add this job to the selection
-                consumed_memory_bytes += job_memory;
-                consumed_cpus += job_cpus;
-                consumed_gpus += job_gpus;
+                consumed_memory_bytes += claimed_memory_bytes;
+                consumed_cpus += claimed_cpus;
+                consumed_gpus += claimed_gpus;
                 // Only increment consumed_nodes for multi-node jobs
                 if job_nodes > 1 {
                     consumed_nodes += job_nodes;
@@ -6183,11 +6193,11 @@ where
                 debug!(
                     "Skipping job {} - would exceed resource limits (memory: {}/{}, cpus: {}/{}, gpus: {}/{}){}",
                     row.get::<i64, _>("job_id"),
-                    consumed_memory_bytes + job_memory,
+                    consumed_memory_bytes + claimed_memory_bytes,
                     memory_bytes,
-                    consumed_cpus + job_cpus,
+                    consumed_cpus + claimed_cpus,
                     resources.num_cpus,
-                    consumed_gpus + job_gpus,
+                    consumed_gpus + claimed_gpus,
                     resources.num_gpus,
                     node_limit_reason
                 );

@@ -18,9 +18,10 @@ nodes are in the allocation.
 **Use when**: You have many independent jobs that each fit on one node, and you want them to run in
 parallel across multiple nodes for throughput.
 
-**How it works**: Torc requests a multi-node Slurm allocation (e.g., 4 nodes). A worker on each node
-polls the server for ready jobs. Each job runs on exactly one node via `srun --exact --nodes=1`.
-Slurm handles node placement. With N nodes, up to N single-node jobs run concurrently.
+**How it works**: Torc requests a multi-node Slurm allocation (e.g., 4 nodes). One worker manages
+the allocation and places each single-node job onto one node via `srun --nodes=1`. Single-node jobs
+may share a node as long as CPU, memory, and GPU limits allow. With N nodes, Torc can spread work
+across the allocation for throughput.
 
 **Example**: 100 independent analysis jobs, each needing 8 CPUs and 32 GB, across a 4-node
 allocation:
@@ -65,7 +66,9 @@ jobs concurrently (64 / 8 = 8). Across 4 nodes, that means up to 32 jobs running
 **Use when**: A single job needs to span multiple nodes — for example, MPI applications, distributed
 deep learning, or Julia `Distributed.jl`.
 
-**How it works**: You set `step_nodes` equal to the number of nodes the job needs. Torc passes
+**How it works**: You set `step_nodes` equal to the number of nodes the job needs. Torc treats that
+job as an exclusive whole-node reservation: if a job needs 4 nodes, those 4 nodes are reserved for
+that step and are not shared with other jobs until the step completes. Torc passes
 `srun --nodes=<step_nodes>` when launching the job, so the process spans multiple nodes within the
 allocation. The job receives the standard Slurm step environment (`SLURM_JOB_NODELIST`,
 `SLURM_NTASKS`, etc.), so MPI launchers and distributed frameworks work automatically.
@@ -116,6 +119,16 @@ to the job are 128 CPUs and 512 GB.
 | Goal is throughput (many jobs in parallel)?   | Yes                          | No                          |
 | Goal is scaling one job across nodes?         | No                           | Yes                         |
 | `step_nodes` setting                          | `1` (default)                | Same as `num_nodes`         |
+
+## Whole-Node Reservation Rule
+
+Torc uses this scheduling rule inside a multi-node Slurm allocation:
+
+- Single-node jobs (`num_nodes=1`, `step_nodes=1`) may share a node.
+- Multi-node jobs (`num_nodes>1` or `step_nodes>1`) reserve whole nodes exclusively.
+
+This is intentionally conservative. Torc does not try to pack other work onto nodes that are part of
+an active multi-node step.
 
 ## Allocation Strategy: One Large vs. Many Small
 
@@ -176,8 +189,11 @@ to express per workflow stage.
 
 ## Mixing Both Patterns
 
-A workflow can combine both patterns. For example, single-node preprocessing jobs followed by a
-multi-node MPI training step:
+A workflow can combine both patterns, but the cleanest approach is to use separate stages or
+separate allocations. Once a true multi-node step starts, Torc reserves whole nodes for it
+exclusively.
+
+For example, single-node preprocessing jobs followed by a multi-node MPI training step:
 
 ```yaml
 name: preprocess_then_train

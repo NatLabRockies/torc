@@ -1358,24 +1358,63 @@ impl JobRunner {
         per_node
     }
 
+    fn reserved_node_count(rr: &ResourceRequirementsModel) -> i64 {
+        rr.num_nodes.max(rr.step_nodes.unwrap_or(1)).max(1)
+    }
+
+    fn is_multi_node_job(rr: &ResourceRequirementsModel) -> bool {
+        Self::reserved_node_count(rr) > 1
+    }
+
+    fn allocation_per_node_capacity(&self) -> (i64, f64, i64) {
+        let num_nodes = self.orig_resources.num_nodes.max(1);
+        (
+            self.orig_resources.num_cpus / num_nodes,
+            self.orig_resources.memory_gb / num_nodes as f64,
+            self.orig_resources.num_gpus / num_nodes,
+        )
+    }
+
     fn decrement_resources(&mut self, rr: &ResourceRequirementsModel) {
-        let job_memory_gb = memory_string_to_gb(&rr.memory);
-        self.resources.memory_gb -= job_memory_gb;
-        self.resources.num_cpus -= rr.num_cpus;
-        self.resources.num_gpus -= rr.num_gpus;
+        if Self::is_multi_node_job(rr) {
+            let reserved_nodes = Self::reserved_node_count(rr);
+            let (cpus_per_node, memory_gb_per_node, gpus_per_node) =
+                self.allocation_per_node_capacity();
+            self.resources.memory_gb -= memory_gb_per_node * reserved_nodes as f64;
+            self.resources.num_cpus -= cpus_per_node * reserved_nodes;
+            self.resources.num_gpus -= gpus_per_node * reserved_nodes;
+            self.resources.num_nodes -= reserved_nodes;
+        } else {
+            let job_memory_gb = memory_string_to_gb(&rr.memory);
+            self.resources.memory_gb -= job_memory_gb;
+            self.resources.num_cpus -= rr.num_cpus;
+            self.resources.num_gpus -= rr.num_gpus;
+        }
         assert!(self.resources.memory_gb >= 0.0);
         assert!(self.resources.num_cpus >= 0);
         assert!(self.resources.num_gpus >= 0);
+        assert!(self.resources.num_nodes >= 0);
     }
 
     fn increment_resources(&mut self, rr: &ResourceRequirementsModel) {
-        let job_memory_gb = memory_string_to_gb(&rr.memory);
-        self.resources.memory_gb += job_memory_gb;
-        self.resources.num_cpus += rr.num_cpus;
-        self.resources.num_gpus += rr.num_gpus;
+        if Self::is_multi_node_job(rr) {
+            let reserved_nodes = Self::reserved_node_count(rr);
+            let (cpus_per_node, memory_gb_per_node, gpus_per_node) =
+                self.allocation_per_node_capacity();
+            self.resources.memory_gb += memory_gb_per_node * reserved_nodes as f64;
+            self.resources.num_cpus += cpus_per_node * reserved_nodes;
+            self.resources.num_gpus += gpus_per_node * reserved_nodes;
+            self.resources.num_nodes += reserved_nodes;
+        } else {
+            let job_memory_gb = memory_string_to_gb(&rr.memory);
+            self.resources.memory_gb += job_memory_gb;
+            self.resources.num_cpus += rr.num_cpus;
+            self.resources.num_gpus += rr.num_gpus;
+        }
         assert!(self.resources.memory_gb <= self.orig_resources.memory_gb);
         assert!(self.resources.num_cpus <= self.orig_resources.num_cpus);
         assert!(self.resources.num_gpus <= self.orig_resources.num_gpus);
+        assert!(self.resources.num_nodes <= self.orig_resources.num_nodes);
     }
 
     /// Increment per-node resources when a job completes. Called alongside
@@ -1399,6 +1438,9 @@ impl JobRunner {
         node_name: &str,
         rr: &ResourceRequirementsModel,
     ) {
+        if Self::is_multi_node_job(rr) {
+            return;
+        }
         if let Some(ref mut tracker) = self.node_tracker {
             let job_memory_gb = memory_string_to_gb(&rr.memory);
             tracker.decrement(node_name, rr.num_cpus, job_memory_gb, rr.num_gpus);
@@ -2259,6 +2301,7 @@ fn expand_slurm_nodelist(compact: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client::apis::configuration::Configuration;
     use crate::models::{JobStatus, ResultModel, SlurmStatsModel};
 
     fn make_result(
@@ -2289,6 +2332,29 @@ mod tests {
         s.max_rss_bytes = max_rss_bytes;
         s.ave_cpu_seconds = ave_cpu_seconds;
         s
+    }
+
+    fn make_runner(resources: ComputeNodesResources) -> JobRunner {
+        let mut workflow = WorkflowModel::new("test".to_string(), "user".to_string());
+        workflow.id = Some(1);
+        JobRunner::new(
+            Configuration::default(),
+            workflow,
+            1,
+            1,
+            PathBuf::from("/tmp"),
+            1.0,
+            None,
+            None,
+            None,
+            resources,
+            None,
+            None,
+            None,
+            false,
+            "test".to_string(),
+            None,
+        )
     }
 
     #[test]
@@ -2445,5 +2511,54 @@ mod tests {
         // No brackets = single node, no scontrol call needed
         let nodes = expand_slurm_nodelist("compute-node-5");
         assert_eq!(nodes, vec!["compute-node-5"]);
+    }
+
+    #[test]
+    fn test_multi_node_job_reserves_full_nodes() {
+        let resources = ComputeNodesResources::new(64, 256.0, 4, 4);
+        let mut runner = make_runner(resources);
+        let rr = ResourceRequirementsModel {
+            id: Some(1),
+            workflow_id: 1,
+            name: "mpi".to_string(),
+            num_cpus: 16,
+            num_gpus: 0,
+            num_nodes: 2,
+            step_nodes: Some(2),
+            memory: "64g".to_string(),
+            runtime: "PT1H".to_string(),
+        };
+
+        runner.decrement_resources(&rr);
+
+        assert_eq!(runner.resources.num_nodes, 2);
+        assert_eq!(runner.resources.num_cpus, 32);
+        assert!((runner.resources.memory_gb - 128.0).abs() < 0.01);
+        assert_eq!(runner.resources.num_gpus, 2);
+    }
+
+    #[test]
+    fn test_multi_node_job_release_restores_full_nodes() {
+        let resources = ComputeNodesResources::new(64, 256.0, 4, 4);
+        let mut runner = make_runner(resources.clone());
+        let rr = ResourceRequirementsModel {
+            id: Some(1),
+            workflow_id: 1,
+            name: "mpi".to_string(),
+            num_cpus: 16,
+            num_gpus: 0,
+            num_nodes: 2,
+            step_nodes: Some(2),
+            memory: "64g".to_string(),
+            runtime: "PT1H".to_string(),
+        };
+
+        runner.decrement_resources(&rr);
+        runner.increment_resources(&rr);
+
+        assert_eq!(runner.resources.num_nodes, resources.num_nodes);
+        assert_eq!(runner.resources.num_cpus, resources.num_cpus);
+        assert!((runner.resources.memory_gb - resources.memory_gb).abs() < 0.01);
+        assert_eq!(runner.resources.num_gpus, resources.num_gpus);
     }
 }
