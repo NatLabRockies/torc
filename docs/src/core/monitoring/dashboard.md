@@ -80,6 +80,13 @@ Options:
       --server-port <PORT>    Server port in standalone mode (0 = auto-detect) [default: 0]
       --database <PATH>       Database path for standalone server
       --completion-check-interval-secs <SECS>  Server polling interval [default: 5]
+      --anthropic-api-key           Anthropic API key [env: ANTHROPIC_API_KEY]
+      --anthropic-foundry-api-key  Foundry API key [env: ANTHROPIC_FOUNDRY_API_KEY]
+      --anthropic-foundry-resource Foundry resource [env: ANTHROPIC_FOUNDRY_RESOURCE]
+      --anthropic-base-url         Override API base URL [env: ANTHROPIC_BASE_URL]
+      --anthropic-auth-header      Override auth header name [env: ANTHROPIC_AUTH_HEADER]
+      --torc-mcp-server-bin        Path to torc-mcp-server [default: torc-mcp-server]
+      --anthropic-model            Claude model [default: claude-sonnet-4-20250514]
 ```
 
 ## Features
@@ -170,6 +177,93 @@ Visualize CPU and memory usage over time:
 4. Click "Generate Plots" for interactive Plotly charts
 
 Requires workflows run with `granularity: "time_series"` in `resource_monitor` config.
+
+### AI Chat Tab
+
+The AI Chat tab provides an AI assistant powered by Claude that can interact with your workflows
+using natural language. The assistant uses the Torc MCP server to access workflow data, job logs,
+and management tools.
+
+**Setup:**
+
+The AI Chat tab requires an API key so the dashboard can call Claude directly. There are two
+supported API backends:
+
+_Option 1: Direct Anthropic API_
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+torc-dash
+```
+
+_Option 2: Microsoft Azure AI Foundry_
+
+If you access Claude through Azure AI Foundry, set the Foundry-specific variables instead:
+
+```bash
+export ANTHROPIC_FOUNDRY_API_KEY="your-foundry-key"
+export ANTHROPIC_FOUNDRY_RESOURCE="your-resource-name"
+torc-dash
+```
+
+The dashboard constructs the Foundry endpoint automatically:
+`https://{resource}.services.ai.azure.com/anthropic/v1/messages`
+
+When both direct and Foundry keys are set, Foundry takes precedence.
+
+You also need the `torc-mcp-server` binary in your PATH (built alongside `torc-dash` when using
+`--all-features` or `--features mcp-server`). If installed elsewhere, specify its location:
+
+```bash
+torc-dash --torc-mcp-server-bin /path/to/torc-mcp-server
+```
+
+**Don't have an API key?**
+
+If you use Claude through a subscription (Claude Pro/Max) or GitHub Copilot through an enterprise
+account, those credentials cannot be used with the dashboard's built-in chat. However, you can still
+get AI-assisted workflow management by connecting `torc-mcp-server` directly to your AI tool:
+
+- **Claude Code** (Pro/Max/Team/Enterprise): Add `torc-mcp-server` as an MCP server -- see
+  [AI-Assisted Workflow Management](../../specialized/tools/ai-assistant.md#quick-setup-claude-code)
+- **VS Code + Copilot** (enterprise): Add `torc-mcp-server` to `.vscode/mcp.json` -- see
+  [AI-Assisted Workflow Management](../../specialized/tools/ai-assistant.md#quick-setup-vs-code--copilot)
+
+These approaches use the AI provider's own authentication and give you the same Torc tools in your
+terminal or editor instead of the dashboard.
+
+**Usage:**
+
+- Type questions in natural language and press Enter (or click Send)
+- The assistant automatically uses MCP tools to query real data from your Torc server
+- If you have a workflow selected, the assistant uses it as the default context
+- Tool calls are shown as collapsible sections so you can see what data the AI accessed
+- Click "Clear" to reset the conversation
+
+**Example questions:**
+
+- "Help me create a workflow"
+- "Show me the failed jobs and their error logs"
+- "Check resource utilization for workflow 42"
+- "Recover the failed jobs with 2x memory"
+- "Create a workflow with 10 parallel jobs"
+
+**Configuration:**
+
+| Setting                      | Default                    | Description                      |
+| ---------------------------- | -------------------------- | -------------------------------- |
+| `ANTHROPIC_API_KEY`          | (none)                     | API key for direct Anthropic API |
+| `ANTHROPIC_FOUNDRY_API_KEY`  | (none)                     | API key for Azure AI Foundry     |
+| `ANTHROPIC_FOUNDRY_RESOURCE` | (none)                     | Foundry resource name            |
+| `--anthropic-model`          | `claude-sonnet-4-20250514` | Claude model to use              |
+| `--torc-mcp-server-bin`      | `torc-mcp-server`          | Path to MCP server binary        |
+
+At least one of `ANTHROPIC_API_KEY` or `ANTHROPIC_FOUNDRY_API_KEY` (with
+`ANTHROPIC_FOUNDRY_RESOURCE`) must be set. If neither is configured, the AI Chat tab appears
+disabled in the sidebar.
+
+> **Note:** The API key is kept server-side and never sent to the browser. All AI requests are
+> proxied through the `torc-dash` backend.
 
 ### Configuration Tab
 
@@ -264,6 +358,7 @@ Settings are saved to browser local storage.
 - **Embedded static assets** (HTML, CSS, JavaScript)
 - **API proxy** to forward requests to torc-server
 - **CLI integration** for workflow operations
+- **MCP client** that spawns `torc-mcp-server` as a subprocess for AI Chat
 
 The frontend uses vanilla JavaScript with:
 

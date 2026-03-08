@@ -45,6 +45,10 @@
                     <span class="nav-icon">&#128200;</span>
                     Resource Plots
                 </li>
+                <li class="nav-item" data-tab="chat">
+                    <span class="nav-icon">&#128172;</span>
+                    AI Chat
+                </li>
                 <li class="nav-item" data-tab="config">
                     <span class="nav-icon">&#9881;</span>
                     Configuration
@@ -467,6 +471,29 @@
                         <div id="server-info" class="info-box">
                             <p>Click "Test Connection" to fetch server information</p>
                         </div>
+                    </div>
+                </div>
+            </div>
+            <!-- AI Chat Tab -->
+            <div class="tab-content" id="tab-chat">
+                <div class="chat-container">
+                    <div class="chat-header">
+                        <h2>AI Chat <span class="badge-experimental">Experimental</span></h2>
+                        <div class="header-actions">
+                            <button class="btn btn-secondary btn-sm" id="chat-clear-btn">Clear</button>
+                        </div>
+                    </div>
+                    <div class="chat-messages" id="chat-messages">
+                        <div class="chat-welcome">
+                            <p><strong>Torc AI Assistant</strong></p>
+                            <p>Ask questions about your workflows, job status, logs, and more.</p>
+                            <p class="chat-examples">Try: "Help me create a workflow" or "Show me the failed jobs"</p>
+                        </div>
+                    </div>
+                    <div class="chat-input-area">
+                        <textarea id="chat-input" class="chat-input" placeholder="Ask about your workflows..." aria-label="Chat message input" rows="1"></textarea>
+                        <button class="btn btn-primary" id="chat-send-btn">Send</button>
+                        <button class="btn btn-danger" id="chat-stop-btn" style="display:none">Stop</button>
                     </div>
                 </div>
             </div>
@@ -983,6 +1010,8 @@
     <script src="/static/js/app-debugging.js"></script>
     <script src="/static/js/app-resources.js"></script>
     <script src="/static/js/app-config.js"></script>
+    <script src="/static/js/marked.min.js"></script>
+    <script src="/static/js/app-chat.js"></script>
     <script src="/static/js/app-modals.js"></script>
     <script src="/static/js/app-job-details.js"></script>
     <script src="/static/js/app-wizard.js"></script>

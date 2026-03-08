@@ -10,7 +10,7 @@ use axum::{
     Json, Router,
     body::Body,
     extract::{Path, State},
-    http::{Request, StatusCode, header},
+    http::{HeaderMap, Request, StatusCode, header},
     response::{
         Html, IntoResponse, Response,
         sse::{Event, KeepAlive, Sse},
@@ -18,17 +18,18 @@ use axum::{
     routing::{get, post},
 };
 use clap::Parser;
+use rmcp::{ServiceExt, model::CallToolRequestParam, transport::child_process::TokioChildProcess};
 use rust_embed::Embed;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::path::Path as FsPath;
 use std::process::Command as StdCommand;
 use std::sync::Arc;
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::Mutex;
 use torc::config::TorcConfig;
 use torc::network_utils::find_available_port;
-use tower_http::cors::{Any, CorsLayer};
 use tracing::{error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -48,6 +49,14 @@ struct ManagedServer {
     output_lines: Vec<String>,
 }
 
+/// MCP client connection to torc-mcp-server subprocess
+struct McpClient {
+    /// The peer handle for sending requests to the MCP server
+    peer: rmcp::service::Peer<rmcp::service::RoleClient>,
+    /// Cached tool definitions from the MCP server
+    tools: Vec<rmcp::model::Tool>,
+}
+
 /// Application state shared across handlers
 struct AppState {
     /// URL of the torc-server API
@@ -58,8 +67,20 @@ struct AppState {
     torc_bin: String,
     /// Path to the torc-server binary
     torc_server_bin: String,
+    /// Path to the torc-mcp-server binary
+    torc_mcp_server_bin: String,
     /// Managed server process (if started by torc-dash)
     managed_server: Mutex<ManagedServer>,
+    /// Anthropic API key for AI chat (resolved from direct or Foundry config)
+    anthropic_api_key: Option<String>,
+    /// Base URL for Claude API (e.g. "https://api.anthropic.com/v1" or Foundry URL)
+    anthropic_base_url: String,
+    /// Auth header name ("x-api-key" for both direct and Foundry)
+    anthropic_auth_header: String,
+    /// MCP client connection (lazily initialized)
+    mcp_client: Mutex<Option<McpClient>>,
+    /// Model to use for AI chat
+    anthropic_model: String,
 }
 
 /// CLI arguments
@@ -125,6 +146,40 @@ struct Cli {
     /// Skip TLS certificate verification (for testing only)
     #[arg(long, env = "TORC_TLS_INSECURE")]
     tls_insecure: bool,
+
+    /// Anthropic API key for AI chat feature (direct API access)
+    #[arg(long, env = "ANTHROPIC_API_KEY")]
+    anthropic_api_key: Option<String>,
+
+    /// Anthropic API key for AI chat via Microsoft Azure AI Foundry
+    #[arg(long, env = "ANTHROPIC_FOUNDRY_API_KEY")]
+    anthropic_foundry_api_key: Option<String>,
+
+    /// Azure AI Foundry resource name (e.g. "my-resource").
+    /// Constructs the base URL: https://{resource}.services.ai.azure.com/anthropic/v1
+    #[arg(long, env = "ANTHROPIC_FOUNDRY_RESOURCE")]
+    anthropic_foundry_resource: Option<String>,
+
+    /// Override the Claude API base URL (e.g. "https://my-proxy.example.com/v1").
+    /// The /messages path is appended automatically. Overrides any auto-detected URL.
+    #[arg(long, env = "ANTHROPIC_BASE_URL")]
+    anthropic_base_url: Option<String>,
+
+    /// Override the auth header name (default: "x-api-key")
+    #[arg(long, env = "ANTHROPIC_AUTH_HEADER")]
+    anthropic_auth_header: Option<String>,
+
+    /// Path to torc-mcp-server binary
+    #[arg(long, default_value = "torc-mcp-server", env = "TORC_MCP_SERVER_BIN")]
+    torc_mcp_server_bin: String,
+
+    /// Model to use for AI chat (default: claude-sonnet-4-20250514)
+    #[arg(
+        long,
+        default_value = "claude-sonnet-4-20250514",
+        env = "ANTHROPIC_MODEL"
+    )]
+    anthropic_model: String,
 }
 
 #[tokio::main]
@@ -274,6 +329,7 @@ async fn main() -> Result<()> {
             Ok(mut child) => {
                 let pid = child.id();
                 info!("Started torc-server with PID {:?}", pid);
+                let mut port_reported = false;
 
                 // Read stdout to find the actual port
                 if let Some(stdout) = child.stdout.take() {
@@ -303,6 +359,7 @@ async fn main() -> Result<()> {
                                     && let Ok(port) = port_str.trim().parse::<u16>()
                                 {
                                     actual_server_port = port;
+                                    port_reported = true;
                                     info!("Server reported actual port: {}", actual_server_port);
                                     break;
                                 }
@@ -318,6 +375,33 @@ async fn main() -> Result<()> {
                             }
                         }
                     }
+                }
+
+                if server_port == 0 && !port_reported {
+                    let mut stderr_output = String::new();
+                    if let Some(mut stderr) = child.stderr.take() {
+                        let _ = stderr.read_to_string(&mut stderr_output).await;
+                    }
+
+                    if let Ok(Some(status)) = child.try_wait() {
+                        let stderr_output = stderr_output.trim();
+                        let details = if stderr_output.is_empty() {
+                            format!("torc-server exited with status {}", status)
+                        } else {
+                            format!(
+                                "torc-server exited with status {}: {}",
+                                status, stderr_output
+                            )
+                        };
+                        return Err(anyhow::anyhow!(
+                            "Managed server failed to start before reporting a port: {}",
+                            details
+                        ));
+                    }
+
+                    return Err(anyhow::anyhow!(
+                        "Managed server did not report an assigned port within 10 seconds"
+                    ));
                 }
 
                 ManagedServer {
@@ -370,12 +454,62 @@ async fn main() -> Result<()> {
         .build_async_client()
         .expect("Failed to build HTTP client with TLS config");
 
+    // Resolve Anthropic API configuration: Foundry takes precedence over direct API
+    let (resolved_api_key, mut anthropic_base_url, mut anthropic_auth_header) =
+        if let (Some(foundry_key), Some(foundry_resource)) = (
+            cli.anthropic_foundry_api_key.as_ref(),
+            cli.anthropic_foundry_resource.as_ref(),
+        ) {
+            info!(
+                "AI Chat: using Azure AI Foundry (resource={})",
+                foundry_resource
+            );
+            (
+                Some(foundry_key.clone()),
+                format!(
+                    "https://{}.services.ai.azure.com/anthropic/v1",
+                    foundry_resource
+                ),
+                "x-api-key".to_string(),
+            )
+        } else if let Some(ref api_key) = cli.anthropic_api_key {
+            info!("AI Chat: using direct Anthropic API");
+            (
+                Some(api_key.clone()),
+                "https://api.anthropic.com/v1".to_string(),
+                "x-api-key".to_string(),
+            )
+        } else {
+            info!("AI Chat: disabled (no API key configured)");
+            (
+                None,
+                "https://api.anthropic.com/v1".to_string(),
+                "x-api-key".to_string(),
+            )
+        };
+
+    // Allow explicit overrides for base URL and auth header
+    if let Some(ref url_override) = cli.anthropic_base_url {
+        info!("AI Chat: base URL overridden to {}", url_override);
+        anthropic_base_url = url_override.clone();
+    }
+    if let Some(ref header_override) = cli.anthropic_auth_header {
+        info!("AI Chat: auth header overridden to {}", header_override);
+        anthropic_auth_header = header_override.clone();
+    }
+
     let state = Arc::new(AppState {
         api_url: final_api_url,
         client: http_client,
         torc_bin,
         torc_server_bin: torc_server_bin.clone(),
+        torc_mcp_server_bin: cli.torc_mcp_server_bin.clone(),
         managed_server: Mutex::new(managed_server),
+        anthropic_api_key: resolved_api_key,
+        anthropic_base_url,
+        anthropic_auth_header,
+        mcp_client: Mutex::new(None),
+        anthropic_model: cli.anthropic_model.clone(),
     });
 
     // Build router
@@ -422,6 +556,9 @@ async fn main() -> Result<()> {
         .route("/api/server/start", post(server_start_handler))
         .route("/api/server/stop", post(server_stop_handler))
         .route("/api/server/status", get(server_status_handler))
+        // AI Chat endpoints
+        .route("/api/chat", post(chat_handler))
+        .route("/api/chat/status", get(chat_status_handler))
         // Version endpoint
         .route("/api/version", get(version_handler))
         // User endpoint
@@ -434,12 +571,6 @@ async fn main() -> Result<()> {
                 .put(proxy_handler)
                 .patch(proxy_handler)
                 .delete(proxy_handler),
-        )
-        .layer(
-            CorsLayer::new()
-                .allow_origin(Any)
-                .allow_methods(Any)
-                .allow_headers(Any),
         )
         .with_state(state);
 
@@ -2708,6 +2839,399 @@ async fn user_handler() -> impl IntoResponse {
 }
 
 /// Execute a torc CLI command
+// ============== AI Chat Handlers ==============
+
+#[derive(Deserialize)]
+struct ChatRequest {
+    messages: Vec<ChatMessage>,
+    #[serde(default)]
+    workflow_id: Option<i64>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+struct ChatMessage {
+    role: String,
+    content: ChatContent,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(untagged)]
+enum ChatContent {
+    Text(String),
+    Blocks(Vec<serde_json::Value>),
+}
+
+#[derive(Serialize)]
+struct ChatStatusResponse {
+    available: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<String>,
+}
+
+async fn chat_status_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let available = state.anthropic_api_key.is_some();
+    let reason = if !available {
+        Some(
+            "No API key configured. Set ANTHROPIC_API_KEY or \
+             ANTHROPIC_FOUNDRY_API_KEY + ANTHROPIC_FOUNDRY_RESOURCE"
+                .to_string(),
+        )
+    } else {
+        None
+    };
+
+    Json(ChatStatusResponse { available, reason })
+}
+
+/// Ensure the MCP client is connected, spawning the subprocess if needed.
+/// Returns a clone of the peer handle and cached tools.
+async fn ensure_mcp_client(
+    state: &AppState,
+) -> Result<(
+    rmcp::service::Peer<rmcp::service::RoleClient>,
+    Vec<rmcp::model::Tool>,
+)> {
+    let mut guard = state.mcp_client.lock().await;
+
+    if let Some(ref client) = *guard {
+        return Ok((client.peer.clone(), client.tools.clone()));
+    }
+
+    info!(
+        "Spawning torc-mcp-server: {} --api-url {}",
+        state.torc_mcp_server_bin, state.api_url
+    );
+
+    let child_process = TokioChildProcess::new(
+        tokio::process::Command::new(&state.torc_mcp_server_bin)
+            .arg("--api-url")
+            .arg(&state.api_url)
+            .stderr(std::process::Stdio::inherit()),
+    )
+    .map_err(|e| anyhow::anyhow!("Failed to spawn torc-mcp-server: {}", e))?;
+
+    // Connect as MCP client
+    let running_service: rmcp::service::RunningService<rmcp::service::RoleClient, _> = ()
+        .serve(child_process)
+        .await
+        .map_err(|e| anyhow::anyhow!("MCP handshake failed: {}", e))?;
+
+    let peer = running_service.peer().clone();
+
+    // Discover all tools
+    let tools = peer
+        .list_all_tools()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to list MCP tools: {}", e))?;
+
+    info!("MCP client connected, discovered {} tools", tools.len());
+
+    *guard = Some(McpClient {
+        peer: peer.clone(),
+        tools: tools.clone(),
+    });
+
+    Ok((peer, tools))
+}
+
+/// Convert MCP tools to Claude API tool format.
+fn mcp_tools_to_claude_tools(tools: &[rmcp::model::Tool]) -> Vec<serde_json::Value> {
+    tools
+        .iter()
+        .map(|tool| {
+            serde_json::json!({
+                "name": tool.name.as_ref(),
+                "description": tool.description.as_ref(),
+                "input_schema": tool.schema_as_json_value(),
+            })
+        })
+        .collect()
+}
+
+/// The system prompt for the AI chat assistant.
+fn chat_system_prompt(workflow_id: Option<i64>) -> String {
+    let mut prompt = String::from(
+        "You are an AI assistant for the Torc workflow orchestration system. \
+         You help users manage, monitor, debug, and recover computational workflows. \
+         You have access to tools that let you interact with the Torc server.\n\n\
+         When a user asks about workflows or jobs, use the available tools to get real data \
+         rather than speculating. Be concise and helpful.\n\n\
+         When showing job or workflow data, format it clearly. \
+         If a tool returns an error, explain what went wrong and suggest alternatives.",
+    );
+
+    if let Some(wf_id) = workflow_id {
+        prompt.push_str(&format!(
+            "\n\nThe user is currently viewing workflow {}. \
+             Use this workflow_id by default when calling tools, unless they specify a different one.",
+            wf_id
+        ));
+    }
+
+    prompt
+}
+
+/// Extract text from MCP CallToolResult content.
+fn extract_tool_result_text(result: &rmcp::model::CallToolResult) -> String {
+    result
+        .content
+        .iter()
+        .filter_map(|c| c.as_text().map(|t| t.text.clone()))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn validate_same_origin(headers: &HeaderMap) -> Result<(), StatusCode> {
+    let origin = match headers.get(header::ORIGIN).and_then(|v| v.to_str().ok()) {
+        Some(origin) => origin,
+        None => return Ok(()),
+    };
+
+    let host = headers
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .ok_or(StatusCode::FORBIDDEN)?;
+
+    let expected_http = format!("http://{}", host);
+    let expected_https = format!("https://{}", host);
+
+    if origin == expected_http || origin == expected_https {
+        Ok(())
+    } else {
+        Err(StatusCode::FORBIDDEN)
+    }
+}
+
+/// Chat endpoint: streams SSE events as the AI processes the conversation.
+async fn chat_handler(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<ChatRequest>,
+) -> impl IntoResponse {
+    validate_same_origin(&headers)
+        .map_err(|status| (status, "Cross-origin requests are not allowed"))?;
+
+    let api_key = match &state.anthropic_api_key {
+        Some(key) => key.clone(),
+        None => {
+            return Err((StatusCode::SERVICE_UNAVAILABLE, "No API key configured"));
+        }
+    };
+
+    let model = state.anthropic_model.clone();
+    let messages_url = format!("{}/messages", state.anthropic_base_url);
+    let auth_header = state.anthropic_auth_header.clone();
+    let workflow_id = req.workflow_id;
+    let initial_messages = req.messages;
+
+    // Get MCP client and tools
+    let (peer, tools) = match ensure_mcp_client(&state).await {
+        Ok(result) => result,
+        Err(e) => {
+            // Reset the client so next request retries
+            *state.mcp_client.lock().await = None;
+            error!("MCP client error: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to connect to MCP server",
+            ));
+        }
+    };
+
+    let claude_tools = mcp_tools_to_claude_tools(&tools);
+    let system_prompt = chat_system_prompt(workflow_id);
+    let http_client = state.client.clone();
+
+    let stream = async_stream::stream! {
+        // Build the messages for the API
+        let mut messages: Vec<serde_json::Value> = initial_messages
+            .iter()
+            .map(|m| {
+                serde_json::json!({
+                    "role": m.role,
+                    "content": m.content,
+                })
+            })
+            .collect();
+
+        let max_tool_rounds = 20;
+        let mut round = 0;
+
+        loop {
+            if round >= max_tool_rounds {
+                yield Ok::<_, std::convert::Infallible>(Event::default()
+                    .event("error")
+                    .data("Maximum tool call rounds reached"));
+                break;
+            }
+            round += 1;
+
+            // Build Claude API request
+            let api_body = serde_json::json!({
+                "model": model,
+                "max_tokens": 8192,
+                "system": system_prompt,
+                "messages": messages,
+                "tools": claude_tools,
+            });
+
+            // Non-streaming request to Claude API (simpler and more reliable)
+            let response = match http_client
+                .post(&messages_url)
+                .header(&auth_header, &api_key)
+                .header("anthropic-version", "2023-06-01")
+                .header("content-type", "application/json")
+                .json(&api_body)
+                .send()
+                .await
+            {
+                Ok(resp) => resp,
+                Err(e) => {
+                    yield Ok(Event::default()
+                        .event("error")
+                        .data(format!("API request failed: {}", e)));
+                    break;
+                }
+            };
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                yield Ok(Event::default()
+                    .event("error")
+                    .data(format!("Claude API error ({}): {}", status, body)));
+                break;
+            }
+
+            let resp_json: serde_json::Value = match response.json().await {
+                Ok(json) => json,
+                Err(e) => {
+                    yield Ok(Event::default()
+                        .event("error")
+                        .data(format!("Failed to parse API response: {}", e)));
+                    break;
+                }
+            };
+
+            let stop_reason = resp_json["stop_reason"].as_str().unwrap_or("end_turn");
+            let content_blocks = resp_json["content"].as_array().cloned().unwrap_or_default();
+
+            // Process content blocks: send text to frontend, collect tool calls
+            let mut text_parts = Vec::new();
+            let mut tool_uses = Vec::new();
+
+            for block in &content_blocks {
+                match block["type"].as_str() {
+                    Some("text") => {
+                        if let Some(text) = block["text"].as_str() {
+                            let text_owned = text.to_string();
+                            // JSON-encode so newlines stay on one SSE data: line
+                            let json_text = serde_json::to_string(&text_owned)
+                                .unwrap_or_else(|_| format!("\"{}\"", text_owned));
+                            yield Ok(Event::default()
+                                .event("text")
+                                .data(json_text));
+                            text_parts.push(text_owned);
+                        }
+                    }
+                    Some("tool_use") => {
+                        tool_uses.push(block.clone());
+                        // Notify frontend about tool call
+                        yield Ok(Event::default()
+                            .event("tool_use")
+                            .data(serde_json::json!({
+                                "id": block["id"],
+                                "name": block["name"],
+                                "input": block["input"],
+                            }).to_string()));
+                    }
+                    _ => {}
+                }
+            }
+
+            if stop_reason != "tool_use" || tool_uses.is_empty() {
+                // Done - no more tool calls
+                yield Ok(Event::default()
+                    .event("done")
+                    .data(""));
+                break;
+            }
+
+            // Execute tool calls via MCP and build tool results
+            let mut tool_results = Vec::new();
+
+            for tool_use in &tool_uses {
+                let tool_name = tool_use["name"].as_str().unwrap_or("");
+                let tool_id = tool_use["id"].as_str().unwrap_or("");
+                let tool_input = tool_use["input"].as_object();
+
+                let arguments = tool_input.cloned();
+
+                match peer
+                    .call_tool(CallToolRequestParam {
+                        name: Cow::Owned(tool_name.to_string()),
+                        arguments,
+                    })
+                    .await
+                {
+                    Ok(result) => {
+                        let result_text = extract_tool_result_text(&result);
+                        let is_error = result.is_error.unwrap_or(false);
+
+                        // Notify frontend about tool result
+                        yield Ok(Event::default()
+                            .event("tool_result")
+                            .data(serde_json::json!({
+                                "id": tool_id,
+                                "name": tool_name,
+                                "result": result_text,
+                                "is_error": is_error,
+                            }).to_string()));
+
+                        tool_results.push(serde_json::json!({
+                            "type": "tool_result",
+                            "tool_use_id": tool_id,
+                            "content": result_text,
+                            "is_error": is_error,
+                        }));
+                    }
+                    Err(e) => {
+                        let error_msg = format!("Tool call failed: {}", e);
+
+                        yield Ok(Event::default()
+                            .event("tool_result")
+                            .data(serde_json::json!({
+                                "id": tool_id,
+                                "name": tool_name,
+                                "result": error_msg,
+                                "is_error": true,
+                            }).to_string()));
+
+                        tool_results.push(serde_json::json!({
+                            "type": "tool_result",
+                            "tool_use_id": tool_id,
+                            "content": error_msg,
+                            "is_error": true,
+                        }));
+                    }
+                }
+            }
+
+            // Append assistant message and tool results to conversation
+            messages.push(serde_json::json!({
+                "role": "assistant",
+                "content": content_blocks,
+            }));
+            messages.push(serde_json::json!({
+                "role": "user",
+                "content": tool_results,
+            }));
+        }
+    };
+
+    Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
+}
+
 async fn run_torc_command(torc_bin: &str, args: &[&str], api_url: &str) -> CliResponse {
     info!("Running: {} {}", torc_bin, args.join(" "));
 
