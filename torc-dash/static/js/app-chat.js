@@ -226,7 +226,7 @@ Object.assign(TorcDashboard.prototype, {
         const content = document.createElement('div');
         content.className = 'chat-message-content';
 
-        const textSpan = document.createElement('span');
+        const textSpan = document.createElement('div');
         textSpan.className = 'chat-text-content';
 
         content.appendChild(textSpan);
@@ -332,7 +332,22 @@ Object.assign(TorcDashboard.prototype, {
             const sanitized = text.replace(/<\/?[a-zA-Z][^>]*>/g, (match) => {
                 return match.replace(/</g, '&lt;').replace(/>/g, '&gt;');
             });
-            return marked.parse(sanitized, { breaks: true });
+            const renderer = new marked.Renderer();
+            const baseLinkRenderer = renderer.link.bind(renderer);
+            renderer.link = function (href, title, text) {
+                if (href && /^\s*javascript\s*:/i.test(href)) {
+                    return text || '';
+                }
+                return baseLinkRenderer(href, title, text);
+            };
+            const baseImageRenderer = renderer.image.bind(renderer);
+            renderer.image = function (href, title, text) {
+                if (href && /^\s*javascript\s*:/i.test(href)) {
+                    return text || '';
+                }
+                return baseImageRenderer(href, title, text);
+            };
+            return marked.parse(sanitized, { breaks: true, renderer });
         }
         // Fallback: escape HTML and preserve line breaks
         return text
