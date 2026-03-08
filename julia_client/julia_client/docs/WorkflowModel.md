@@ -21,8 +21,7 @@ Name | Type | Description | Notes
 **slurm_defaults** | **String** | Default Slurm parameters to apply to all schedulers as JSON string | [optional] [default to nothing]
 **use_pending_failed** | **Bool** | Use PendingFailed status for failed jobs (enables AI-assisted recovery) | [optional] [default to false]
 **status_id** | **Int64** |  | [optional] [default to nothing]
-**srun_termination_signal** | **String** | Signal specification for srun steps, passed as srun --signal&#x3D;&lt;value&gt;. Format: &lt;signal&gt;@&lt;seconds&gt; (e.g., TERM@120 sends SIGTERM 120 seconds before the step time limit). This allows jobs to checkpoint before being killed. | [optional] [default to nothing]
-**enable_cpu_bind** | **Bool** | When true, allow Slurm to bind tasks to specific CPU cores. By default (false), srun passes --cpu-bind&#x3D;none to disable binding, which prevents CPU binding errors on some cluster configurations. | [optional] [default to false]
+**slurm_config** | **String** | JSON-encoded blob of Slurm configuration options for the workflow. May include fields such as limit_resources, use_srun, srun_termination_signal, and enable_cpu_bind. Stored as a JSON string to allow flexible, forward-compatible configuration. | [optional] [default to nothing]
 
 
 [[Back to Model list]](../README.md#models) [[Back to API list]](../README.md#api-endpoints) [[Back to README]](../README.md)

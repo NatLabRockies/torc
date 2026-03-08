@@ -204,12 +204,15 @@ impl AsyncCliCommand {
             // Set per-step walltime from the remaining allocation time so Slurm
             // kills the step with State=TIMEOUT (and return code 152) instead of
             // letting it run until the allocation walltime expires (which produces
-            // State=CANCELLED). We round DOWN to ensure srun's timeout fires before
-            // the allocation expires. Minimum 1 minute.
+            // State=CANCELLED). Integer division rounds down so the step timeout
+            // fires before the allocation expires. Floor of 1 minute because
+            // --time=0 means unlimited in Slurm. In practice, the job runner's
+            // compute_node_min_time_for_new_jobs_seconds (default 300s) prevents
+            // starting jobs with little time remaining.
             if let Some(end) = end_time {
-                let remaining_secs = (end - Utc::now()).num_seconds().max(60);
-                let remaining_minutes = remaining_secs / 60;
-                srun.arg(format!("--time={}", remaining_minutes.max(1)));
+                let remaining_secs = (end - Utc::now()).num_seconds();
+                let remaining_minutes = (remaining_secs / 60).max(1);
+                srun.arg(format!("--time={}", remaining_minutes));
             }
             // Pass --signal to give jobs advance warning before timeout.
             // Format: "<signal>@<seconds>" e.g. "TERM@120"

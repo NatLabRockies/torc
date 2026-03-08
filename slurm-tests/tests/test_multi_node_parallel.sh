@@ -3,7 +3,7 @@
 # Test 2: multi_node_parallel
 #
 # Verifies:
-#   - All 5 stress-ng jobs complete successfully
+#   - All 40 stress-ng jobs complete successfully
 #   - Jobs dispatched to 2 distinct nodes
 #   - Each job uses ~5 CPUs (peak CPU ~500%)
 #   - Sacct and slurm stats data is available
@@ -17,9 +17,9 @@ run_test_multi_node_parallel() {
 
     # Basic completion
     assert_workflow_complete "$wf_id"
-    assert_all_jobs_completed "$wf_id" 5
+    assert_all_jobs_completed "$wf_id" 40
 
-    # Return codes for all jobs
+    # Return codes for a sample of jobs
     for i in $(seq 1 5); do
         assert_return_code "$wf_id" "stress_$i" "0"
     done

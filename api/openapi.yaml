@@ -7193,7 +7193,6 @@ components:
         compute_node_min_time_for_new_jobs_seconds: 300
         worker_startup_script: worker_startup_script
         worker_completion_script: worker_completion_script
-        srun_termination_signal: "TERM@120"
         slurm_config: '{"limit_resources":true,"use_srun":true,"srun_termination_signal":"TERM@120","enable_cpu_bind":false}'
       properties:
         id:
@@ -7263,18 +7262,6 @@ components:
           type: boolean
         status_id:
           type: integer
-        srun_termination_signal:
-          description: "Signal specification for srun steps, passed as srun --signal=<value>.\
-            \ Format: <signal>@<seconds> (e.g., TERM@120 sends SIGTERM 120 seconds\
-            \ before the step time limit). This allows jobs to checkpoint before being\
-            \ killed."
-          type: string
-        enable_cpu_bind:
-          default: false
-          description: "When true, allow Slurm to bind tasks to specific CPU cores.\
-            \ By default (false), srun passes --cpu-bind=none to disable binding,\
-            \ which prevents CPU binding errors on some cluster configurations."
-          type: boolean
         slurm_config:
           description: "JSON-encoded blob of Slurm configuration options for the\
             \ workflow. May include fields such as limit_resources, use_srun,\
