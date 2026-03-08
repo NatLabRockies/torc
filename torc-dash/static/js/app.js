@@ -94,6 +94,7 @@ class TorcDashboard {
         this.setupDebuggingTab();
         this.setupResourcePlotsTab();
         this.setupSettingsTab();
+        this.setupChatTab();
         this.setupModal();
         this.setupExecutionPlanModal();
         this.setupInitConfirmModal();

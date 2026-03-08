@@ -105,7 +105,7 @@ hyper-openssl = "0.9"
 openssl = "0.10"
 
 # MCP server
-rmcp = { version = "0.1", features = ["server", "macros", "transport-io"] }
+rmcp = { version = "0.1", features = ["server", "client", "macros", "transport-io", "transport-child-process"] }
 schemars = "1.0"
 
 # Dashboard-specific
@@ -265,6 +265,7 @@ dash = [
     "dep:tokio",
     "dep:anyhow",
     "dep:tracing",
+    "dep:rmcp",
 ]
 slurm-runner = [
     "client",
