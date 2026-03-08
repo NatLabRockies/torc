@@ -484,20 +484,21 @@ fn test_create_submission_script_with_srun() {
     let script_content =
         fs::read_to_string(&script_path).expect("Failed to read submission script");
 
+    // start_one_worker_per_node no longer wraps with outer srun; the single worker
+    // manages all nodes and uses srun --exact for each job.
     assert!(
-        script_content.contains("srun --ntasks-per-node=1 torc-slurm-job-runner"),
-        "Should have srun prefix with --ntasks-per-node=1 when start_one_worker_per_node is true"
+        !script_content.contains("srun --ntasks-per-node=1"),
+        "Should NOT have outer srun wrapper (single worker manages all nodes)"
     );
 
     assert!(
         script_content.contains("unset SLURM_MEM_PER_CPU SLURM_MEM_PER_GPU"),
-        "Should unset conflicting Slurm memory variables before srun"
+        "Should unset conflicting Slurm memory variables"
     );
 
-    // SLURM_MEM_PER_NODE should NOT be unset since torc-slurm-job-runner needs it
     assert!(
-        !script_content.contains("SLURM_MEM_PER_NODE"),
-        "Should NOT unset SLURM_MEM_PER_NODE as it's needed by torc-slurm-job-runner"
+        script_content.contains("torc-slurm-job-runner"),
+        "Should run torc-slurm-job-runner directly"
     );
 
     let _ = fs::remove_file(&script_path);
