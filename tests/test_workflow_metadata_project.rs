@@ -33,6 +33,7 @@ fn test_create_workflow_with_project_and_metadata(start_server: &ServerProcess) 
         status_id: None,
         srun_termination_signal: None,
         enable_cpu_bind: None,
+        slurm_config: None,
     };
 
     // Create the workflow
@@ -76,6 +77,7 @@ fn test_create_workflow_without_fields_then_update(start_server: &ServerProcess)
         status_id: None,
         srun_termination_signal: None,
         enable_cpu_bind: None,
+        slurm_config: None,
     };
 
     let created =
@@ -127,6 +129,7 @@ fn test_create_workflow_with_fields_then_change(start_server: &ServerProcess) {
         status_id: None,
         srun_termination_signal: None,
         enable_cpu_bind: None,
+        slurm_config: None,
     };
 
     let created =
@@ -181,6 +184,7 @@ fn test_partial_update_preserves_fields(start_server: &ServerProcess) {
         status_id: None,
         srun_termination_signal: None,
         enable_cpu_bind: None,
+        slurm_config: None,
     };
 
     let created =

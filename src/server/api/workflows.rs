@@ -296,6 +296,7 @@ impl WorkflowsApiImpl {
                 ,w.status_id
                 ,w.srun_termination_signal
                 ,w.enable_cpu_bind
+                ,w.slurm_config
             FROM workflow w
             INNER JOIN workflow_status ws ON w.status_id = ws.id
             "
@@ -324,6 +325,7 @@ impl WorkflowsApiImpl {
                 ,status_id
                 ,srun_termination_signal
                 ,enable_cpu_bind
+                ,slurm_config
             FROM workflow
             "
             .to_string()
@@ -502,6 +504,10 @@ impl WorkflowsApiImpl {
                     .ok()
                     .flatten()
                     .map(|v| v != 0),
+                slurm_config: record
+                    .try_get::<Option<String>, _>("slurm_config")
+                    .ok()
+                    .flatten(),
             });
         }
 
@@ -680,9 +686,10 @@ where
                 metadata,
                 status_id,
                 srun_termination_signal,
-                enable_cpu_bind
+                enable_cpu_bind,
+                slurm_config
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
             RETURNING rowid
             "#,
             body.name,
@@ -706,6 +713,7 @@ where
             status_result[0].id,
             body.srun_termination_signal,
             enable_cpu_bind_int,
+            body.slurm_config,
         )
         .fetch_all(&mut *tx)
         .await
@@ -985,6 +993,7 @@ where
                     status_id: Some(row.status_id),
                     srun_termination_signal: row.srun_termination_signal,
                     enable_cpu_bind: row.enable_cpu_bind.map(|v| v != 0),
+                    slurm_config: row.slurm_config,
                 },
             )),
             Ok(None) => {
@@ -1298,8 +1307,9 @@ where
                 project = COALESCE($13, project),
                 metadata = COALESCE($14, metadata),
                 srun_termination_signal = COALESCE($15, srun_termination_signal),
-                enable_cpu_bind = COALESCE($16, enable_cpu_bind)
-            WHERE id = $17
+                enable_cpu_bind = COALESCE($16, enable_cpu_bind),
+                slurm_config = COALESCE($17, slurm_config)
+            WHERE id = $18
             "#,
             body.name,
             body.description,
@@ -1317,6 +1327,7 @@ where
             body.metadata,
             body.srun_termination_signal,
             enable_cpu_bind_int,
+            body.slurm_config,
             id
         )
         .execute(self.context.pool.as_ref())

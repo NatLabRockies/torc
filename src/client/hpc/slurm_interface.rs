@@ -212,7 +212,6 @@ impl HpcInterface for SlurmInterface {
         max_parallel_jobs: Option<i32>,
         filename: &Path,
         config: &HashMap<String, String>,
-        start_one_worker_per_node: bool,
         tls_ca_cert: Option<&str>,
         tls_insecure: bool,
     ) -> Result<()> {
@@ -279,7 +278,6 @@ impl HpcInterface for SlurmInterface {
         // with the --mem directive (which sets SLURM_MEM_PER_NODE).
         // SLURM_MEM_PER_NODE is needed by torc-slurm-job-runner to report resources.
         script.push_str("unset SLURM_MEM_PER_CPU SLURM_MEM_PER_GPU\n");
-        let _ = start_one_worker_per_node; // handled by resource detection
         script.push_str(&command);
         script.push('\n');
 

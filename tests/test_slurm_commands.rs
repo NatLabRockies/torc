@@ -346,7 +346,6 @@ fn test_create_submission_script() {
         None,
         &script_path,
         &config,
-        false,
         None,
         false,
     );
@@ -424,7 +423,6 @@ fn test_create_submission_script_with_extra() {
         Some(4),
         &script_path,
         &config,
-        false,
         None,
         false,
     );
@@ -470,7 +468,6 @@ fn test_create_submission_script_with_srun() {
         None,
         &script_path,
         &config,
-        true, // start_one_worker_per_node
         None,
         false,
     );
@@ -484,8 +481,8 @@ fn test_create_submission_script_with_srun() {
     let script_content =
         fs::read_to_string(&script_path).expect("Failed to read submission script");
 
-    // start_one_worker_per_node no longer wraps with outer srun; the single worker
-    // manages all nodes and uses srun --exact for each job.
+    // Multi-node allocations use a single worker that manages all nodes
+    // and uses srun --exact for each job.
     assert!(
         !script_content.contains("srun --ntasks-per-node=1"),
         "Should NOT have outer srun wrapper (single worker manages all nodes)"

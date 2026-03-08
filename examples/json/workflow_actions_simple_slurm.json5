@@ -89,7 +89,6 @@
       "scheduler": "process_scheduler",
       "scheduler_type": "slurm",
       "num_allocations": 2,
-      "start_one_worker_per_node": true
     },
     {
       "trigger_type": "on_jobs_ready",

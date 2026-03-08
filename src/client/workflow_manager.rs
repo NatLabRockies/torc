@@ -258,10 +258,6 @@ impl WorkflowManager {
                         .get("num_allocations")
                         .and_then(|v| v.as_i64())
                         .unwrap_or(1) as i32;
-                    let start_one_worker_per_node = action_config
-                        .get("start_one_worker_per_node")
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(false);
                     let max_parallel_jobs = max_parallel_jobs_override.or_else(|| {
                         action_config
                             .get("max_parallel_jobs")
@@ -280,7 +276,6 @@ impl WorkflowManager {
                         output_dir,
                         poll_interval,
                         max_parallel_jobs,
-                        start_one_worker_per_node,
                         self.torc_config.client.slurm.keep_submission_scripts,
                     ) {
                         Ok(()) => {

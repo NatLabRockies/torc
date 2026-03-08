@@ -94,11 +94,8 @@ fn validate_action_config(
                 return Err("'num_allocations' must be an integer".to_string());
             }
 
-            if let Some(start_one_worker_per_node) = config_obj.get("start_one_worker_per_node")
-                && !start_one_worker_per_node.is_boolean()
-            {
-                return Err("'start_one_worker_per_node' must be a boolean".to_string());
-            }
+            // start_one_worker_per_node is deprecated and ignored but still allowed
+            // for backward compatibility with existing action configs.
 
             if let Some(max_parallel_jobs) = config_obj.get("max_parallel_jobs")
                 && !max_parallel_jobs.is_i64()

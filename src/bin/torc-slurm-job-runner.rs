@@ -227,8 +227,23 @@ mod unix_main {
             .as_ref()
             .map(|node| node.scheduler_config_id);
 
-        let resources =
+        let per_node_resources =
             create_node_resources(&slurm_interface, scheduler_config_id, args.is_subtask);
+
+        // Multiply per-node values by num_nodes to get total allocation capacity.
+        // The job runner uses total capacity for its resource pool tracking
+        // (decrement on job start, increment on completion). When claiming jobs
+        // from the server, it converts back to per-node for correct comparison.
+        let num_nodes = per_node_resources.num_nodes;
+        let mut resources = torc::models::ComputeNodesResources::new(
+            per_node_resources.num_cpus * num_nodes,
+            per_node_resources.memory_gb * num_nodes as f64,
+            per_node_resources.num_gpus * num_nodes,
+            num_nodes,
+        );
+        resources.scheduler_config_id = per_node_resources.scheduler_config_id;
+        resources.time_limit = per_node_resources.time_limit;
+
         let job_id_int: i64 = job_id.parse().unwrap_or(0);
         let scheduler = serde_json::json!({
             "scheduler_id": scheduler_id,

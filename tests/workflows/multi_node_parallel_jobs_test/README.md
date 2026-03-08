@@ -1,12 +1,12 @@
 # Multi-Node Parallel Jobs Test
 
-Tests that torc correctly starts one worker per node (`start_one_worker_per_node=true`) and that
-single-node jobs are dispatched in parallel across both workers. Also verifies that sstat CPU
-metrics and sacct accounting data are correctly captured for each srun step.
+Tests that torc correctly starts workers across multiple nodes and that single-node jobs are
+dispatched in parallel across both workers. Also verifies that sstat CPU metrics and sacct
+accounting data are correctly captured for each srun step.
 
 ## Workflow Description
 
-- **Allocation**: 2 nodes via `sbatch --nodes=2`, with `start_one_worker_per_node=true`
+- **Allocation**: 2 nodes via `sbatch --nodes=2`
 - **Workers**: 2 torc workers — one on each node
 - **Jobs**: 6 independent single-node work jobs (`work_1` through `work_6`)
 - **Expected concurrency**: 2 jobs running simultaneously (one per worker), completing in ~3 waves
@@ -59,8 +59,7 @@ For example:
 ...
 ```
 
-If all jobs show the **same hostname** or strictly sequential start times, parallelism is broken —
-check that `start_one_worker_per_node` is being read from the action config.
+If all jobs show the **same hostname** or strictly sequential start times, parallelism is broken.
 
 ### 5. Verify sacct per-step data
 
@@ -117,8 +116,8 @@ srun step naming is working and administrators can track individual jobs.
 
 ## Troubleshooting
 
-**All jobs show the same hostname**: `start_one_worker_per_node` is not being read from
-`action_config`. Check `src/client/job_runner.rs` for the field that enables per-node workers.
+**All jobs show the same hostname**: Check that the Slurm allocation has multiple nodes and that
+torc is configured to spawn workers on each node.
 
 **`peak_cpu_percent` is 0.0% for all jobs**: sstat polling is not working. Possible causes:
 
@@ -130,5 +129,5 @@ srun step naming is working and administrators can track individual jobs.
 - `sacct -j $SLURM_JOB_ID` returns output from compute nodes
 - The step names match the pattern `wf<id>_j<id>_r<id>_a<id>`
 
-**Workflow total time ≥ 6 × job_time**: Jobs are running sequentially on a single worker. Confirm
-the Slurm allocation requested 2 nodes and `start_one_worker_per_node: true` is in the action.
+**Workflow total time >= 6 x job_time**: Jobs are running sequentially on a single worker. Confirm
+the Slurm allocation requested 2 nodes.

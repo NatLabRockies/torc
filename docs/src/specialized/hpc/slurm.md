@@ -168,7 +168,6 @@ actions:
     scheduler: work_scheduler
     scheduler_type: slurm
     num_allocations: 1
-    start_one_worker_per_node: true
 ```
 
 **When to use:**
@@ -223,7 +222,6 @@ actions:
     scheduler: compute_sched
     scheduler_type: slurm
     num_allocations: 1
-    start_one_worker_per_node: true
 
   # Postprocessing allocated when those jobs are ready
   - trigger_type: on_jobs_ready
@@ -317,6 +315,8 @@ correlated.
 
 ### Multi-Node Jobs
 
+> For a comprehensive guide to multi-node patterns, see [Multi-Node Jobs](./multi-node-jobs.md).
+
 Two resource requirement fields control node usage:
 
 | Field        | Controls                             | Passed to        | Default |
@@ -338,9 +338,8 @@ resource_requirements:
     # num_nodes defaults to 1, step_nodes defaults to 1
 ```
 
-**Multi-node allocation with single-node jobs** (`start_one_worker_per_node: true`) — a single
-worker manages all nodes. Each job runs on one node via `srun --exact --nodes=1`, with Slurm
-handling node placement:
+**Multi-node allocation with single-node jobs** — a single worker manages all nodes. Each job runs
+on one node via `srun --exact --nodes=1`, with Slurm handling node placement:
 
 ```yaml
 resource_requirements:

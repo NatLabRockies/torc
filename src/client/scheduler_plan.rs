@@ -183,8 +183,6 @@ pub struct PlannedAction {
     pub job_name_patterns: Option<Vec<String>>,
     /// Number of allocations to submit
     pub num_allocations: i64,
-    /// Whether to start one worker per node
-    pub start_one_worker_per_node: bool,
     /// Whether this is a recovery action (ephemeral, deleted on reinitialize)
     pub is_recovery: bool,
 }
@@ -470,8 +468,6 @@ fn process_scheduler_group<RR: ResourceRequirements>(
 
     // Create action if requested
     let action = if add_actions {
-        let start_one_worker_per_node = nodes_per_alloc > 1;
-
         // For jobs with dependencies, we need to specify which jobs trigger the action.
         // Use job_names (exact names) instead of job_name_patterns (regexes) because
         // after parameter expansion, each job has an exact name and using regexes
@@ -488,7 +484,6 @@ fn process_scheduler_group<RR: ResourceRequirements>(
             job_names,
             job_name_patterns,
             num_allocations,
-            start_one_worker_per_node,
             is_recovery,
         })
     } else {
@@ -839,8 +834,6 @@ fn generate_plan_grouped_by_partition<RR: ResourceRequirements>(
 
         // Create action if requested
         if add_actions {
-            let start_one_worker_per_node = nodes_per_alloc > 1;
-
             let (trigger_type, job_names, job_name_patterns) = if pg.has_dependencies {
                 ("on_jobs_ready", Some(pg.job_names.clone()), None)
             } else {
@@ -853,7 +846,6 @@ fn generate_plan_grouped_by_partition<RR: ResourceRequirements>(
                 job_names,
                 job_name_patterns,
                 num_allocations,
-                start_one_worker_per_node,
                 is_recovery,
             });
         }
@@ -943,26 +935,18 @@ pub fn apply_plan_to_spec(plan: &SchedulerPlan, spec: &mut WorkflowSpec) {
     let actions: Vec<WorkflowActionSpec> = plan
         .actions
         .iter()
-        .map(|pa| {
-            let start_one_worker_per_node = if pa.start_one_worker_per_node {
-                Some(true)
-            } else {
-                None
-            };
-
-            WorkflowActionSpec {
-                trigger_type: pa.trigger_type.clone(),
-                action_type: "schedule_nodes".to_string(),
-                jobs: pa.job_names.clone(),
-                job_name_regexes: pa.job_name_patterns.clone(),
-                commands: None,
-                scheduler: Some(pa.scheduler_name.clone()),
-                scheduler_type: Some("slurm".to_string()),
-                num_allocations: Some(pa.num_allocations),
-                start_one_worker_per_node,
-                max_parallel_jobs: None,
-                persistent: None,
-            }
+        .map(|pa| WorkflowActionSpec {
+            trigger_type: pa.trigger_type.clone(),
+            action_type: "schedule_nodes".to_string(),
+            jobs: pa.job_names.clone(),
+            job_name_regexes: pa.job_name_patterns.clone(),
+            commands: None,
+            scheduler: Some(pa.scheduler_name.clone()),
+            scheduler_type: Some("slurm".to_string()),
+            num_allocations: Some(pa.num_allocations),
+            start_one_worker_per_node: None,
+            max_parallel_jobs: None,
+            persistent: None,
         })
         .collect();
 

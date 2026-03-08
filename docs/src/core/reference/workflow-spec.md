@@ -198,19 +198,18 @@ slurm_defaults:
 
 Defines conditional actions triggered by workflow or job state changes.
 
-| Name                        | Type     | Default    | Description                                                                                               |
-| --------------------------- | -------- | ---------- | --------------------------------------------------------------------------------------------------------- |
-| `trigger_type`              | string   | _required_ | When to trigger: `"on_workflow_start"`, `"on_workflow_complete"`, `"on_jobs_ready"`, `"on_jobs_complete"` |
-| `action_type`               | string   | _required_ | What to do: `"run_commands"`, `"schedule_nodes"`                                                          |
-| `jobs`                      | [string] | none       | For job triggers: exact job names to match                                                                |
-| `job_name_regexes`          | [string] | none       | For job triggers: regex patterns to match job names                                                       |
-| `commands`                  | [string] | none       | For `run_commands`: commands to execute                                                                   |
-| `scheduler`                 | string   | none       | For `schedule_nodes`: scheduler name                                                                      |
-| `scheduler_type`            | string   | none       | For `schedule_nodes`: scheduler type (`"slurm"`, `"local"`)                                               |
-| `num_allocations`           | integer  | none       | For `schedule_nodes`: number of node allocations                                                          |
-| `start_one_worker_per_node` | boolean  | none       | For `schedule_nodes`: enable multi-node mode (worker reports total resources across all nodes)            |
-| `max_parallel_jobs`         | integer  | none       | For `schedule_nodes`: maximum parallel jobs                                                               |
-| `persistent`                | boolean  | false      | Whether the action persists and can be claimed by multiple workers                                        |
+| Name                | Type     | Default    | Description                                                                                               |
+| ------------------- | -------- | ---------- | --------------------------------------------------------------------------------------------------------- |
+| `trigger_type`      | string   | _required_ | When to trigger: `"on_workflow_start"`, `"on_workflow_complete"`, `"on_jobs_ready"`, `"on_jobs_complete"` |
+| `action_type`       | string   | _required_ | What to do: `"run_commands"`, `"schedule_nodes"`                                                          |
+| `jobs`              | [string] | none       | For job triggers: exact job names to match                                                                |
+| `job_name_regexes`  | [string] | none       | For job triggers: regex patterns to match job names                                                       |
+| `commands`          | [string] | none       | For `run_commands`: commands to execute                                                                   |
+| `scheduler`         | string   | none       | For `schedule_nodes`: scheduler name                                                                      |
+| `scheduler_type`    | string   | none       | For `schedule_nodes`: scheduler type (`"slurm"`, `"local"`)                                               |
+| `num_allocations`   | integer  | none       | For `schedule_nodes`: number of node allocations                                                          |
+| `max_parallel_jobs` | integer  | none       | For `schedule_nodes`: maximum parallel jobs                                                               |
+| `persistent`        | boolean  | false      | Whether the action persists and can be claimed by multiple workers                                        |
 
 ## ResourceMonitorConfig
 

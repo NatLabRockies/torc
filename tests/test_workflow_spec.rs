@@ -1917,13 +1917,88 @@ fn test_create_workflows_from_all_example_files(start_server: &ServerProcess) {
 // Scheduler Node Validation Tests
 // =============================================================================
 
-/// Test that validation fails when a multi-node scheduler is used without
-/// start_one_worker_per_node and no jobs have matching num_nodes
+/// Test that validation fails when a job requests a different multi-node count
+/// than the scheduler provides (e.g., job wants 3 nodes, scheduler allocates 2)
 #[rstest]
 fn test_scheduler_node_validation_fails_with_mismatched_nodes(start_server: &ServerProcess) {
     let workflow_data = serde_json::json!({
         "name": "multi_node_mismatch_workflow",
         "description": "Workflow with mismatched scheduler nodes",
+        "jobs": [
+            {
+                "name": "job1",
+                "command": "echo hello",
+                "resource_requirements": "three_node_req",
+                "scheduler": "multi_node_scheduler"
+            }
+        ],
+        "files": null,
+        "user_data": null,
+        "resource_requirements": [
+            {
+                "name": "three_node_req",
+                "num_cpus": 1,
+                "num_nodes": 3,
+                "memory": "1g",
+                "runtime": "PT1H"
+            }
+        ],
+        "slurm_schedulers": [
+            {
+                "name": "multi_node_scheduler",
+                "account": "test_account",
+                "nodes": 2,
+                "walltime": "01:00:00"
+            }
+        ],
+        "actions": [
+            {
+                "trigger_type": "on_workflow_start",
+                "action_type": "schedule_nodes",
+                "scheduler": "multi_node_scheduler",
+                "scheduler_type": "slurm"
+            }
+        ]
+    });
+
+    let temp_file = NamedTempFile::new().expect("Failed to create temp file");
+    fs::write(
+        temp_file.path(),
+        serde_json::to_string_pretty(&workflow_data).unwrap(),
+    )
+    .expect("Failed to write temp file");
+
+    let result = WorkflowSpec::create_workflow_from_spec(
+        &start_server.config,
+        temp_file.path(),
+        "test_user",
+        false,
+        false, // skip_checks = false
+    );
+
+    // Should fail: job requests 3 nodes but scheduler only allocates 2
+    assert!(result.is_err());
+    let err_msg = result.unwrap_err().to_string();
+    assert!(
+        err_msg.contains("Scheduler node validation failed"),
+        "Expected scheduler node validation error, got: {}",
+        err_msg
+    );
+    assert!(
+        err_msg.contains("multi_node_scheduler"),
+        "Error should mention the scheduler name: {}",
+        err_msg
+    );
+}
+
+/// Test that single-node jobs in a multi-node allocation are valid (Pattern 1)
+#[rstest]
+fn test_scheduler_node_validation_passes_single_node_jobs_in_multi_node_allocation(
+    start_server: &ServerProcess,
+) {
+    let workflow_data = serde_json::json!({
+        "name": "single_node_in_multi_alloc",
+        "description": "Single-node jobs in a multi-node allocation",
         "jobs": [
             {
                 "name": "job1",
@@ -1973,32 +2048,28 @@ fn test_scheduler_node_validation_fails_with_mismatched_nodes(start_server: &Ser
         temp_file.path(),
         "test_user",
         false,
-        false, // skip_checks = false
+        false,
     );
 
-    // Should fail due to multi-node scheduler without matching job num_nodes
-    assert!(result.is_err());
-    let err_msg = result.unwrap_err().to_string();
     assert!(
-        err_msg.contains("Scheduler node validation failed"),
-        "Expected scheduler node validation error, got: {}",
-        err_msg
+        result.is_ok(),
+        "Single-node jobs in a multi-node allocation should be valid, got: {:?}",
+        result.err()
     );
-    assert!(
-        err_msg.contains("multi_node_scheduler"),
-        "Error should mention the scheduler name: {}",
-        err_msg
-    );
+
+    if let Ok(workflow_id) = result {
+        let _ = default_api::delete_workflow(&start_server.config, workflow_id, None);
+    }
 }
 
-/// Test that validation passes when start_one_worker_per_node is true
+/// Test that start_one_worker_per_node is accepted in spec (backward compat, ignored)
 #[rstest]
 fn test_scheduler_node_validation_passes_with_start_one_worker_per_node(
     start_server: &ServerProcess,
 ) {
     let workflow_data = serde_json::json!({
         "name": "multi_node_with_workers_workflow",
-        "description": "Workflow with multi-node scheduler and start_one_worker_per_node",
+        "description": "Workflow with multi-node scheduler and deprecated start_one_worker_per_node",
         "jobs": [
             {
                 "name": "job1",
@@ -2052,10 +2123,10 @@ fn test_scheduler_node_validation_passes_with_start_one_worker_per_node(
         false, // skip_checks = false
     );
 
-    // Should succeed because start_one_worker_per_node is true
+    // Should succeed — start_one_worker_per_node is accepted for backward compat (ignored)
     assert!(
         result.is_ok(),
-        "Expected success with start_one_worker_per_node=true, got: {:?}",
+        "Expected success with start_one_worker_per_node in spec, got: {:?}",
         result.err()
     );
 
@@ -2146,7 +2217,7 @@ fn test_scheduler_node_validation_skipped_with_skip_checks(start_server: &Server
             {
                 "name": "job1",
                 "command": "echo hello",
-                "resource_requirements": "single_node_req",
+                "resource_requirements": "three_node_req",
                 "scheduler": "multi_node_scheduler"
             }
         ],
@@ -2154,9 +2225,9 @@ fn test_scheduler_node_validation_skipped_with_skip_checks(start_server: &Server
         "user_data": null,
         "resource_requirements": [
             {
-                "name": "single_node_req",
+                "name": "three_node_req",
                 "num_cpus": 1,
-                "num_nodes": 1,
+                "num_nodes": 3,
                 "memory": "1g",
                 "runtime": "PT1H"
             }
@@ -2391,7 +2462,7 @@ fn test_validate_spec_with_invalid_actions() {
 }
 
 /// Test that validate_spec returns errors for scheduler node mismatch
-/// (This matches the behavior of create_workflow_from_spec with skip_checks=false)
+/// (job requests 3 nodes but scheduler only allocates 2)
 #[test]
 fn test_validate_spec_with_scheduler_error() {
     let workflow_data = serde_json::json!({
@@ -2400,13 +2471,14 @@ fn test_validate_spec_with_scheduler_error() {
             {
                 "name": "job1",
                 "command": "echo hello",
+                "resource_requirements": "three_node_req",
                 "scheduler": "multi_node_scheduler"
             }
         ],
         "resource_requirements": [
             {
-                "name": "single_node_req",
-                "num_nodes": 1,
+                "name": "three_node_req",
+                "num_nodes": 3,
                 "num_cpus": 1,
                 "memory": "1g"
             }

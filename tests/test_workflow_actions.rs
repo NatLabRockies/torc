@@ -87,7 +87,6 @@ fn test_create_workflow_action_schedule_nodes(start_server: &ServerProcess) {
         "scheduler_type": "slurm",
         "scheduler_id": 1,
         "num_allocations": 2,
-        "start_one_worker_per_node": true,
         "max_parallel_jobs": 4
     });
 

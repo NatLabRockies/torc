@@ -1,6 +1,6 @@
 /// Tests for multi-node Slurm scheduling patterns:
 ///   1. Two-node allocation, single worker, true multi-node step (step_nodes = num_nodes)
-///   2. Two-node allocation, one worker per node, multiple parallel single-node jobs
+///   2. Two-node allocation, multiple parallel single-node jobs
 mod common;
 
 use std::fs;
@@ -13,8 +13,7 @@ use torc::client::workflow_spec::WorkflowSpec;
 use torc::models::JobStatus;
 
 // =============================================================================
-// Pattern 1: 2-node allocation, start_one_worker_per_node=false,
-//            job requires both nodes (num_nodes=2, step_nodes=2)
+// Pattern 1: 2-node allocation, job requires both nodes (num_nodes=2, step_nodes=2)
 // =============================================================================
 
 /// Verify that a workflow with a 2-node Slurm allocation and a single job that
@@ -150,7 +149,7 @@ fn test_two_node_allocation_single_worker_multi_node_step(start_server: &ServerP
     assert_eq!(schedulers.len(), 1, "Expected 1 scheduler");
     assert_eq!(schedulers[0].nodes, 2, "Scheduler should have 2 nodes");
 
-    // --- Verify action does NOT have start_one_worker_per_node ---
+    // --- Verify schedule_nodes action was created ---
     let actions = default_api::get_workflow_actions(&start_server.config, workflow_id)
         .expect("Failed to get workflow actions");
 
@@ -164,29 +163,17 @@ fn test_two_node_allocation_single_worker_multi_node_step(start_server: &ServerP
         1,
         "Expected 1 schedule_nodes action"
     );
-    let action = &schedule_actions[0];
-    // start_one_worker_per_node is stored inside action_config JSON
-    let start_one = action
-        .action_config
-        .get("start_one_worker_per_node")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-    assert!(
-        !start_one,
-        "start_one_worker_per_node should be false for a single-worker multi-node allocation"
-    );
 
     let _ = default_api::delete_workflow(&start_server.config, workflow_id, None);
 }
 
 // =============================================================================
-// Pattern 2: 2-node allocation, start_one_worker_per_node=true,
-//            multiple parallel single-node jobs
+// Pattern 2: 2-node allocation, multiple parallel single-node jobs
 // =============================================================================
 
-/// Verify that a workflow with a 2-node Slurm allocation, start_one_worker_per_node=true,
-/// and multiple single-node jobs is accepted and all jobs become ready after initialization
-/// (i.e., they can be dispatched in parallel across the two workers).
+/// Verify that a workflow with a 2-node Slurm allocation and multiple single-node jobs
+/// is accepted and all jobs become ready after initialization (i.e., they can be dispatched
+/// in parallel across the workers).
 #[rstest]
 fn test_two_node_allocation_one_worker_per_node_parallel_jobs(start_server: &ServerProcess) {
     let workflow_data = serde_json::json!({
@@ -241,8 +228,7 @@ fn test_two_node_allocation_one_worker_per_node_parallel_jobs(start_server: &Ser
                 "action_type": "schedule_nodes",
                 "scheduler": "two_node_scheduler",
                 "scheduler_type": "slurm",
-                "num_allocations": 1,
-                "start_one_worker_per_node": true
+                "num_allocations": 1
             }
         ]
     });
@@ -264,13 +250,13 @@ fn test_two_node_allocation_one_worker_per_node_parallel_jobs(start_server: &Ser
 
     assert!(
         result.is_ok(),
-        "Workflow with start_one_worker_per_node=true should be valid, got: {:?}",
+        "Workflow with 2-node allocation and parallel jobs should be valid, got: {:?}",
         result.err()
     );
 
     let workflow_id = result.unwrap();
 
-    // --- Verify action has start_one_worker_per_node=true ---
+    // --- Verify schedule_nodes action was created ---
     let actions = default_api::get_workflow_actions(&start_server.config, workflow_id)
         .expect("Failed to get workflow actions");
 
@@ -284,14 +270,6 @@ fn test_two_node_allocation_one_worker_per_node_parallel_jobs(start_server: &Ser
         1,
         "Expected 1 schedule_nodes action"
     );
-    let action = &schedule_actions[0];
-    // start_one_worker_per_node is stored inside action_config JSON
-    let start_one = action
-        .action_config
-        .get("start_one_worker_per_node")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-    assert!(start_one, "start_one_worker_per_node must be true");
 
     // --- Verify resource requirements use step_nodes=1 (default) ---
     let rr_list = default_api::list_resource_requirements(

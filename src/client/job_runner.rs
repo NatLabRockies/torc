@@ -40,6 +40,7 @@ use crate::client::async_cli_command::AsyncCliCommand;
 use crate::client::resource_correction::format_duration_iso8601;
 use crate::client::resource_monitor::{ResourceMonitor, ResourceMonitorConfig};
 use crate::client::utils;
+use crate::client::workflow_spec::SlurmConfig;
 use crate::config::TorcConfig;
 use crate::memory_utils::memory_string_to_gb;
 use crate::models::{
@@ -125,6 +126,7 @@ pub struct JobRunner {
     is_subtask: bool,
     running_jobs: HashMap<i64, AsyncCliCommand>,
     job_resources: HashMap<i64, ResourceRequirementsModel>,
+    slurm_config: SlurmConfig,
     rules: ComputeNodeRules,
     resource_monitor: Option<ResourceMonitor>,
     /// Flag set when SIGTERM is received. Shared with signal handler.
@@ -170,6 +172,7 @@ impl JobRunner {
             workflow.compute_node_min_time_for_new_jobs_seconds,
             workflow.jobs_sort_method,
         );
+        let slurm_config = SlurmConfig::from_workflow_model(&workflow);
         let job_resources: HashMap<i64, ResourceRequirementsModel> = HashMap::new();
         let orig_resources = ComputeNodesResources {
             id: resources.id,
@@ -228,6 +231,7 @@ impl JobRunner {
             is_subtask,
             running_jobs,
             job_resources,
+            slurm_config,
             rules,
             resource_monitor,
             termination_requested: Arc::new(AtomicBool::new(false)),
@@ -360,8 +364,8 @@ impl JobRunner {
             self.max_parallel_jobs,
             self.end_time,
             self.torc_config.client.slurm.strict_scheduler_match,
-            self.workflow.use_srun.unwrap_or(true),
-            self.workflow.limit_resources.unwrap_or(true),
+            self.slurm_config.use_srun(),
+            self.slurm_config.limit_resources(),
         );
 
         // Warn about version mismatches
@@ -1201,6 +1205,23 @@ impl JobRunner {
         RecoveryOutcome::Retried
     }
 
+    /// Convert total remaining resources to per-node values for server comparison.
+    /// The server compares job resource requirements (which are per-node) against
+    /// worker resources, so we must send per-node values. Dividing remaining total
+    /// by num_nodes gives a conservative estimate that prevents over-allocation.
+    fn resources_per_node(&self) -> ComputeNodesResources {
+        let num_nodes = self.resources.num_nodes.max(1);
+        let mut per_node = ComputeNodesResources::new(
+            self.resources.num_cpus / num_nodes,
+            self.resources.memory_gb / num_nodes as f64,
+            self.resources.num_gpus / num_nodes,
+            self.resources.num_nodes,
+        );
+        per_node.scheduler_config_id = self.resources.scheduler_config_id;
+        per_node.time_limit.clone_from(&self.resources.time_limit);
+        per_node
+    }
+
     fn decrement_resources(&mut self, rr: &ResourceRequirementsModel) {
         let job_memory_gb = memory_string_to_gb(&rr.memory);
         self.resources.memory_gb -= job_memory_gb;
@@ -1254,13 +1275,14 @@ impl JobRunner {
     fn run_ready_jobs_based_on_resources(&mut self) {
         self.update_remaining_time_limit();
 
+        let per_node = self.resources_per_node();
         let limit = self.resources.num_cpus;
         let strict_scheduler_match = self.torc_config.client.slurm.strict_scheduler_match;
         match self.send_with_retries(|| {
             default_api::claim_jobs_based_on_resources(
                 &self.config,
                 self.workflow_id,
-                &self.resources,
+                &per_node,
                 limit,
                 Some(self.rules.jobs_sort_method),
                 Some(strict_scheduler_match),
@@ -1334,11 +1356,11 @@ impl JobRunner {
                         self.resource_monitor.as_ref(),
                         &self.config.base_path,
                         Some(&job_rr),
-                        self.workflow.limit_resources.unwrap_or(true),
-                        self.workflow.use_srun.unwrap_or(true),
-                        self.workflow.enable_cpu_bind.unwrap_or(false),
+                        self.slurm_config.limit_resources(),
+                        self.slurm_config.use_srun(),
+                        self.slurm_config.enable_cpu_bind(),
                         self.end_time,
-                        self.workflow.srun_termination_signal.as_deref(),
+                        self.slurm_config.srun_termination_signal.as_deref(),
                     ) {
                         Ok(()) => {
                             info!(
@@ -1369,7 +1391,7 @@ impl JobRunner {
                     default_api::claim_jobs_based_on_resources(
                         &self.config,
                         self.workflow_id,
-                        &self.resources,
+                        &per_node,
                         limit,
                         Some(self.rules.jobs_sort_method),
                         Some(strict_scheduler_match),
@@ -1479,11 +1501,11 @@ impl JobRunner {
                         self.resource_monitor.as_ref(),
                         &self.config.base_path,
                         Some(&job_rr),
-                        self.workflow.limit_resources.unwrap_or(true),
-                        self.workflow.use_srun.unwrap_or(true),
-                        self.workflow.enable_cpu_bind.unwrap_or(false),
+                        self.slurm_config.limit_resources(),
+                        self.slurm_config.use_srun(),
+                        self.slurm_config.enable_cpu_bind(),
                         self.end_time,
-                        self.workflow.srun_termination_signal.as_deref(),
+                        self.slurm_config.srun_termination_signal.as_deref(),
                     ) {
                         Ok(()) => {
                             info!(
@@ -1858,11 +1880,6 @@ impl JobRunner {
                     .and_then(|v| v.as_i64())
                     .unwrap_or(1) as i32;
 
-                let start_one_worker_per_node = action_config
-                    .get("start_one_worker_per_node")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false);
-
                 let max_parallel_jobs = action_config
                     .get("max_parallel_jobs")
                     .and_then(|v| v.as_i64())
@@ -1884,7 +1901,6 @@ impl JobRunner {
                         "torc_output",
                         self.torc_config.client.slurm.poll_interval,
                         max_parallel_jobs,
-                        start_one_worker_per_node,
                         self.torc_config.client.slurm.keep_submission_scripts,
                     ) {
                         Ok(()) => {

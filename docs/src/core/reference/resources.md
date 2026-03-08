@@ -58,7 +58,7 @@ For most jobs both values are `1`. They differ in two patterns:
 | Multi-node allocation, single-node jobs                  | `N`         | `1`          | One worker manages all nodes; each job runs on one node via srun |
 | True multi-node job steps (MPI / Julia `Distributed.jl`) | `N`         | `N`          | Each job spans all N nodes                                       |
 
-See [srun Job Step Wrapping](../specialized/hpc/slurm.md#srun-job-step-wrapping) for details.
+See [Multi-Node Jobs](../../specialized/hpc/multi-node-jobs.md) for detailed examples and guidance.
 
 ## Memory Format
 

@@ -117,6 +117,11 @@
         "name": "enable_cpu_bind",
         "ordinal": 22,
         "type_info": "Integer"
+      },
+      {
+        "name": "slurm_config",
+        "ordinal": 23,
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -137,6 +142,7 @@
       false,
       true,
       false,
+      true,
       true,
       true,
       true,

@@ -65,8 +65,6 @@ actions:
     scheduler: "gpu_cluster"
     scheduler_type: "slurm"
     num_allocations: 2
-    start_one_worker_per_node: true
-    max_parallel_jobs: 4
 
   # Archive models when all training jobs complete
   - trigger_type: "on_jobs_complete"

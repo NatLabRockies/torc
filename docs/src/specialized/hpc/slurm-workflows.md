@@ -484,7 +484,8 @@ when:
 - **Shared schedulers**: You want multiple jobs to share the same Slurm allocation
 - **Custom timing**: Specific requirements for when allocations should be requested
 - **Resource optimization**: Fine-tuning to minimize allocation waste
-- **Multi-node jobs**: Jobs requiring coordination across multiple nodes
+- **Multi-node jobs**: Jobs requiring coordination across multiple nodes (see
+  [Multi-Node Jobs](./multi-node-jobs.md))
 
 ### What Could Go Wrong
 

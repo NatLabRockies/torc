@@ -121,7 +121,6 @@ impl HpcManager {
     /// * `poll_interval` - Poll interval in seconds for the job runner
     /// * `max_parallel_jobs` - Optional maximum number of parallel jobs
     /// * `keep_submission_script` - Whether to keep the submission script after submission
-    /// * `start_one_worker_per_node` - If true, start a torc worker on each compute node
     ///
     /// # Returns
     /// The HPC job ID
@@ -135,7 +134,6 @@ impl HpcManager {
         poll_interval: i32,
         max_parallel_jobs: Option<i32>,
         keep_submission_script: bool,
-        start_one_worker_per_node: bool,
         tls_ca_cert: Option<&str>,
         tls_insecure: bool,
     ) -> Result<String> {
@@ -150,7 +148,6 @@ impl HpcManager {
             max_parallel_jobs,
             &filename,
             &self.config,
-            start_one_worker_per_node,
             tls_ca_cert,
             tls_insecure,
         )?;
