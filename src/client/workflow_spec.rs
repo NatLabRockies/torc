@@ -684,20 +684,13 @@ impl SlurmConfig {
         }
     }
 
-    /// Build a SlurmConfig from a WorkflowModel, merging slurm_config JSON with
-    /// individual columns. The slurm_config JSON takes precedence.
+    /// Build a SlurmConfig from a WorkflowModel's slurm_config JSON blob.
     pub fn from_workflow_model(workflow: &models::WorkflowModel) -> SlurmConfig {
-        let base = if let Some(ref json_str) = workflow.slurm_config {
+        if let Some(ref json_str) = workflow.slurm_config {
             serde_json::from_str(json_str).unwrap_or_default()
         } else {
             SlurmConfig::default()
-        };
-        base.merge_with_flat_fields(
-            workflow.limit_resources,
-            workflow.use_srun,
-            workflow.srun_termination_signal.clone(),
-            workflow.enable_cpu_bind,
-        )
+        }
     }
 
     pub fn limit_resources(&self) -> bool {
@@ -1849,20 +1842,6 @@ impl WorkflowSpec {
                 spec.srun_termination_signal.clone(),
                 spec.enable_cpu_bind,
             );
-
-        // Populate individual columns for backward compatibility with older servers
-        if let Some(value) = merged_slurm.limit_resources {
-            workflow_model.limit_resources = Some(value);
-        }
-        if let Some(value) = merged_slurm.use_srun {
-            workflow_model.use_srun = Some(value);
-        }
-        if let Some(ref value) = merged_slurm.srun_termination_signal {
-            workflow_model.srun_termination_signal = Some(value.clone());
-        }
-        if let Some(value) = merged_slurm.enable_cpu_bind {
-            workflow_model.enable_cpu_bind = Some(value);
-        }
 
         // Store the merged config as a JSON blob (server treats it opaquely)
         let slurm_config_json = serde_json::to_string(&merged_slurm)

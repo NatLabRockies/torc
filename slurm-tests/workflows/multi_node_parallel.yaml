@@ -1,11 +1,11 @@
 # Test: Multi-Node Parallel CPU Stress
 #
-# 2-node allocation with start_one_worker_per_node=true, 5 parallel jobs.
+# 2-node allocation with a single worker managing both nodes, 40 parallel jobs.
 # Each job uses stress-ng to exercise 5 CPUs for 30 seconds.
-# Verifies that all 5 jobs get full CPU access across 2 nodes.
+# Tests per-node resource tracking and --nodelist placement across 2 nodes.
 
 name: multi_node_parallel
-description: 2-node allocation — 5 jobs x 5 CPUs via stress-ng
+description: 2-node allocation — 40 jobs x 5 CPUs via stress-ng
 project: slurm-tests
 slurm_config:
   enable_cpu_bind: true
@@ -28,7 +28,7 @@ jobs:
     resource_requirements: work_resources
     scheduler: two_node_scheduler
     parameters:
-      i: 1:5
+      i: 1:40
 
 slurm_schedulers:
   - name: two_node_scheduler
@@ -43,4 +43,3 @@ actions:
     scheduler: "two_node_scheduler"
     scheduler_type: "slurm"
     num_allocations: 1
-    start_one_worker_per_node: true

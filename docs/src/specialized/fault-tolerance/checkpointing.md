@@ -1,7 +1,8 @@
 # Tutorial: Graceful Job Termination on HPC
 
 This tutorial teaches you how to configure Torc workflows so that long-running jobs receive an early
-warning signal before Slurm kills them, giving them time to save progress and exit cleanly.
+warning signal before Slurm kills them, giving them time to save progress and automatically resume
+from the last checkpoint.
 
 ## Learning Objectives
 
@@ -10,6 +11,7 @@ By the end of this tutorial, you will:
 - Understand how `srun_termination_signal` delivers early SIGTERM to running jobs
 - Write a Python job that catches SIGTERM and shuts down gracefully
 - Use the shutdown-flag pattern to stop a long-running loop cleanly
+- Use a non-zero exit code with a failure handler so Torc automatically retries the job
 - Configure a complete Torc workflow with early termination support
 
 ## Prerequisites
@@ -26,7 +28,7 @@ with SIGKILL. Any unsaved work—training progress, partial results, intermediat
 
 Torc's `srun_termination_signal` feature tells Slurm to send a catchable signal (SIGTERM) **before**
 the hard kill. Your job can trap that signal, finish the current iteration, save a checkpoint, and
-exit cleanly.
+exit with a dedicated exit code that tells Torc to retry automatically.
 
 ### Timeline of Events
 
@@ -56,6 +58,10 @@ import os
 import signal
 import sys
 import time
+
+# Exit code that signals "checkpointed, please retry".
+# Must match the exit_codes in the workflow's failure_handler.
+EXIT_CHECKPOINT = 42
 
 # --- Shutdown flag -----------------------------------------------------------
 # The SIGTERM handler sets this flag. The main loop checks it on every
@@ -107,7 +113,7 @@ def main():
         if shutdown_requested:
             print("Shutdown flag is set. Saving checkpoint and exiting.")
             save_checkpoint(iteration, accumulator)
-            sys.exit(0)
+            sys.exit(EXIT_CHECKPOINT)
 
         # Simulate one unit of work.
         accumulator += iteration * 0.001
@@ -130,16 +136,21 @@ if __name__ == "__main__":
 
 ### Key Design Points
 
-1. **Global shutdown flag.** The signal handler only sets `shutdown_requested = True`. It does no
+1. **Non-zero exit code.** When SIGTERM arrives before the simulation finishes, the script exits
+   with code 42 (`EXIT_CHECKPOINT`). This tells Torc the job did not complete successfully, so the
+   failure handler can automatically schedule a retry. Exit code 0 is reserved for genuine
+   completion.
+
+2. **Global shutdown flag.** The signal handler only sets `shutdown_requested = True`. It does no
    I/O and no cleanup—signal handlers should be minimal.
 
-2. **Loop checks the flag.** Every iteration starts with `if shutdown_requested:`. This guarantees
+3. **Loop checks the flag.** Every iteration starts with `if shutdown_requested:`. This guarantees
    the current iteration finishes before the job starts saving state.
 
-3. **Atomic checkpoint.** Writing to a `.tmp` file and calling `os.replace()` prevents a corrupted
+4. **Atomic checkpoint.** Writing to a `.tmp` file and calling `os.replace()` prevents a corrupted
    checkpoint if the process is killed during the write.
 
-4. **Handler registered early.** `signal.signal(signal.SIGTERM, handle_sigterm)` runs before the
+5. **Handler registered early.** `signal.signal(signal.SIGTERM, handle_sigterm)` runs before the
    main loop so the handler is active from the start.
 
 ## Step 2: Create the Workflow Specification
@@ -148,8 +159,17 @@ Save as `graceful_termination.yaml`:
 
 ```yaml
 name: graceful_termination_demo
-description: Demonstrates early SIGTERM with srun_termination_signal
-srun_termination_signal: "TERM@120"
+description: Demonstrates early SIGTERM with automatic checkpoint-and-retry
+
+slurm_config:
+  srun_termination_signal: "TERM@120"
+
+failure_handlers:
+  - name: checkpoint_retry
+    rules:
+      # Exit code 42 means "checkpointed, please retry"
+      - exit_codes: [42]
+        max_retries: 100
 
 resource_requirements:
   - name: sim_resources
@@ -162,6 +182,7 @@ jobs:
   - name: simulate
     command: python3 simulate.py
     resource_requirements: sim_resources
+    failure_handler: checkpoint_retry
 
 slurm_schedulers:
   - name: scheduler
@@ -178,8 +199,20 @@ actions:
     num_allocations: 1
 ```
 
-The `srun_termination_signal: "TERM@120"` is set at the **workflow level**. Torc passes it to every
-`srun` invocation as `srun --signal=TERM@120`.
+Three pieces work together here:
+
+- **`slurm_config.srun_termination_signal: "TERM@120"`** tells Slurm to send SIGTERM 120 seconds
+  before the step time limit. Torc passes this to every `srun` invocation as
+  `srun --signal=TERM@120`.
+
+- **`failure_handlers`** with exit code 42 tells Torc to automatically retry the job whenever it
+  exits with code 42. Each retry picks up from the last checkpoint, so the simulation makes progress
+  across multiple Slurm allocations.
+
+- **`max_retries`** controls how many checkpoint cycles the job is allowed. Set this high enough to
+  cover the worst case: if each allocation provides ~2 hours of compute and the total job needs ~40
+  hours, you need at least 20 retries. Setting it generously (e.g., 100) is safe — the job exits
+  with code 0 once it finishes, so unused retries cost nothing.
 
 ## Step 3: Submit and Run
 
@@ -210,19 +243,8 @@ Shutdown flag is set. Saving checkpoint and exiting.
 Checkpoint saved at iteration 47001
 ```
 
-The job exits with code 0, so Torc marks it as **completed** rather than terminated or failed.
-
-## Step 5: Resume from Checkpoint
-
-If the simulation didn't finish all iterations, re-submit the workflow. The job will load the
-checkpoint and continue:
-
-```bash
-torc workflows reinitialize $WORKFLOW_ID
-torc workflows submit $WORKFLOW_ID
-```
-
-The next run picks up where it left off:
+The job exits with code 42, so Torc marks it as **failed** and the failure handler automatically
+schedules a retry. The next attempt loads the checkpoint and continues:
 
 ```
 Resumed from checkpoint at iteration 47001
@@ -231,9 +253,19 @@ Iteration 48000/100000  accumulator=1151.4530
 ...
 ```
 
+This cycle repeats until the simulation finishes all iterations and exits with code 0, at which
+point Torc marks the job as **completed**.
+
+Note that each retry doesn't need to finish the entire remaining work — it only needs to make
+**some** forward progress before the next checkpoint. This is the expected behavior for long-running
+jobs whose total compute time exceeds a single Slurm allocation. The job spreads its work across as
+many allocations as needed, and `max_retries` just needs to be high enough to cover the total number
+of checkpoint cycles.
+
 ## How It Works Under the Hood
 
-1. **`srun_termination_signal: "TERM@120"`** is stored on the workflow record in the Torc database.
+1. **`slurm_config.srun_termination_signal: "TERM@120"`** is stored on the workflow record in the
+   Torc database.
 
 2. When the job runner launches a job inside a Slurm allocation, it builds an `srun` command that
    includes `--signal=TERM@120`.
@@ -243,9 +275,15 @@ Iteration 48000/100000  accumulator=1151.4530
 
 4. Python's signal handler sets `shutdown_requested = True`.
 
-5. The main loop sees the flag, saves the checkpoint, and calls `sys.exit(0)`.
+5. The main loop sees the flag, saves the checkpoint, and calls `sys.exit(42)`.
 
-6. Because the exit code is 0, Torc treats this as a successful completion.
+6. Torc sees exit code 42 (non-zero), marks the job as failed, and consults the failure handler.
+
+7. The failure handler matches exit code 42 and schedules a retry (up to `max_retries` times).
+
+8. On retry, the script calls `load_checkpoint()` and resumes from where it left off.
+
+9. When all iterations finish, the script exits with code 0 and Torc marks it as completed.
 
 ## What You Learned
 
@@ -254,7 +292,7 @@ In this tutorial, you learned:
 - How to set `srun_termination_signal` in a workflow spec for early warning before timeout
 - The shutdown-flag pattern: signal handler sets a flag, main loop checks it each iteration
 - How to write atomic checkpoints that survive unexpected kills
-- How to resume a job from a checkpoint after re-submission
+- How to use a dedicated exit code with a failure handler for automatic checkpoint-and-retry
 
 ## Next Steps
 

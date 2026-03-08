@@ -65,6 +65,120 @@ fn default_max_retries() -> i32 {
     3
 }
 
+/// Tracks per-node resource availability for multi-node Slurm allocations.
+///
+/// When running across multiple nodes, the job runner needs to track each node's available
+/// resources independently. Without this, dividing remaining total resources by `num_nodes`
+/// gives incorrect per-node values when jobs are unevenly distributed across nodes.
+///
+/// # Approach
+///
+/// We use `srun --nodelist=<node>` to explicitly place each job step on a specific node,
+/// calling `claim_jobs_based_on_resources` once per node with that node's available resources.
+/// An alternative would be to let Slurm manage placement and then query `squeue --steps`
+/// with the `%N` format field after launch to discover where each step landed. We chose
+/// explicit placement to avoid the squeue RPC and to keep resource tracking deterministic.
+pub struct PerNodeTracker {
+    nodes: Vec<NodeCapacity>,
+}
+
+/// Resource capacity for a single node in a multi-node allocation.
+pub(crate) struct NodeCapacity {
+    name: String,
+    available_cpus: i64,
+    available_memory_gb: f64,
+    available_gpus: i64,
+}
+
+impl PerNodeTracker {
+    /// Create a new tracker with all nodes initialized to the same per-node capacity.
+    pub fn new(
+        node_names: Vec<String>,
+        cpus_per_node: i64,
+        memory_gb_per_node: f64,
+        gpus_per_node: i64,
+    ) -> Self {
+        let nodes = node_names
+            .into_iter()
+            .map(|name| NodeCapacity {
+                name,
+                available_cpus: cpus_per_node,
+                available_memory_gb: memory_gb_per_node,
+                available_gpus: gpus_per_node,
+            })
+            .collect();
+        PerNodeTracker { nodes }
+    }
+
+    /// Returns the maximum available resources across all nodes.
+    ///
+    /// This is sent to the server so it returns jobs that fit on at least one node.
+    /// The server filters: `rr.num_cpus <= per_node_cpus`, so reporting the max
+    /// ensures we can claim any job that fits on the most-available node.
+    fn max_available(&self) -> (i64, f64, i64) {
+        let cpus = self
+            .nodes
+            .iter()
+            .map(|n| n.available_cpus)
+            .max()
+            .unwrap_or(0);
+        let memory = self
+            .nodes
+            .iter()
+            .map(|n| n.available_memory_gb)
+            .fold(0.0_f64, f64::max);
+        let gpus = self
+            .nodes
+            .iter()
+            .map(|n| n.available_gpus)
+            .max()
+            .unwrap_or(0);
+        (cpus, memory, gpus)
+    }
+
+    /// Decrement resources on a specific node after a job is placed there.
+    fn decrement(&mut self, node_name: &str, cpus: i64, memory_gb: f64, gpus: i64) {
+        if let Some(node) = self.nodes.iter_mut().find(|n| n.name == node_name) {
+            node.available_cpus -= cpus;
+            node.available_memory_gb -= memory_gb;
+            node.available_gpus -= gpus;
+            debug!(
+                "Per-node decrement: node={} cpus={}/{} mem={:.1}/{:.1}GB gpus={}/{}",
+                node_name,
+                cpus,
+                node.available_cpus + cpus,
+                memory_gb,
+                node.available_memory_gb + memory_gb,
+                gpus,
+                node.available_gpus + gpus,
+            );
+        } else {
+            warn!(
+                "Per-node decrement: node {} not found in tracker, skipping",
+                node_name
+            );
+        }
+    }
+
+    /// Increment resources on a specific node when a job completes.
+    fn increment(&mut self, node_name: &str, cpus: i64, memory_gb: f64, gpus: i64) {
+        if let Some(node) = self.nodes.iter_mut().find(|n| n.name == node_name) {
+            node.available_cpus += cpus;
+            node.available_memory_gb += memory_gb;
+            node.available_gpus += gpus;
+            debug!(
+                "Per-node increment: node={} cpus_now={} mem_now={:.1}GB gpus_now={}",
+                node_name, node.available_cpus, node.available_memory_gb, node.available_gpus,
+            );
+        } else {
+            warn!(
+                "Per-node increment: node {} not found in tracker, skipping",
+                node_name
+            );
+        }
+    }
+}
+
 /// Result of running the job worker, indicating whether any jobs failed or were terminated.
 #[derive(Debug, Default, Clone)]
 pub struct WorkerResult {
@@ -126,6 +240,12 @@ pub struct JobRunner {
     is_subtask: bool,
     running_jobs: HashMap<i64, AsyncCliCommand>,
     job_resources: HashMap<i64, ResourceRequirementsModel>,
+    /// Per-node resource tracker for multi-node Slurm allocations.
+    /// None for single-node allocations where dividing total by 1 is correct.
+    node_tracker: Option<PerNodeTracker>,
+    /// Maps job_id to the node name where the job is running.
+    /// Used to increment the correct node's resources on job completion.
+    job_nodes: HashMap<i64, String>,
     slurm_config: SlurmConfig,
     rules: ComputeNodeRules,
     resource_monitor: Option<ResourceMonitor>,
@@ -161,6 +281,7 @@ impl JobRunner {
         cpu_affinity_cpus_per_job: Option<i64>,
         is_subtask: bool,
         unique_label: String,
+        node_tracker: Option<PerNodeTracker>,
     ) -> Self {
         let workflow_id = workflow.id.expect("Workflow ID must be present");
         let running_jobs: HashMap<i64, AsyncCliCommand> = HashMap::new();
@@ -231,6 +352,8 @@ impl JobRunner {
             is_subtask,
             running_jobs,
             job_resources,
+            node_tracker,
+            job_nodes: HashMap::new(),
             slurm_config,
             rules,
             resource_monitor,
@@ -944,6 +1067,7 @@ impl JobRunner {
                         self.workflow_id, job_id, job_name, return_code, attempt_id
                     );
                     if let Some(job_rr) = self.job_resources.get(&job_id).cloned() {
+                        self.increment_node_resources(job_id, &job_rr);
                         self.increment_resources(&job_rr);
                     }
                     self.last_job_claimed_time = Some(Instant::now());
@@ -1022,6 +1146,7 @@ impl JobRunner {
                     }
                 }
                 if let Some(job_rr) = self.job_resources.get(&job_id).cloned() {
+                    self.increment_node_resources(job_id, &job_rr);
                     self.increment_resources(&job_rr);
                 }
                 // Reset the idle timer when a job completes, since blocked jobs may now
@@ -1205,18 +1330,29 @@ impl JobRunner {
         RecoveryOutcome::Retried
     }
 
-    /// Convert total remaining resources to per-node values for server comparison.
+    /// Convert resources to per-node values for server comparison.
+    ///
     /// The server compares job resource requirements (which are per-node) against
-    /// worker resources, so we must send per-node values. Dividing remaining total
-    /// by num_nodes gives a conservative estimate that prevents over-allocation.
+    /// worker resources, so we must send per-node values.
+    ///
+    /// For multi-node allocations with a `PerNodeTracker`, we report the maximum
+    /// available resources across all nodes. This ensures the server returns jobs
+    /// that fit on at least one node. Without per-node tracking, we fall back to
+    /// dividing the remaining total by `num_nodes` (correct for single-node
+    /// allocations where `num_nodes == 1`).
     fn resources_per_node(&self) -> ComputeNodesResources {
-        let num_nodes = self.resources.num_nodes.max(1);
-        let mut per_node = ComputeNodesResources::new(
-            self.resources.num_cpus / num_nodes,
-            self.resources.memory_gb / num_nodes as f64,
-            self.resources.num_gpus / num_nodes,
-            self.resources.num_nodes,
-        );
+        let (cpus, memory_gb, gpus) = if let Some(ref tracker) = self.node_tracker {
+            tracker.max_available()
+        } else {
+            let num_nodes = self.resources.num_nodes.max(1);
+            (
+                self.resources.num_cpus / num_nodes,
+                self.resources.memory_gb / num_nodes as f64,
+                self.resources.num_gpus / num_nodes,
+            )
+        };
+        let mut per_node =
+            ComputeNodesResources::new(cpus, memory_gb, gpus, self.resources.num_nodes);
         per_node.scheduler_config_id = self.resources.scheduler_config_id;
         per_node.time_limit.clone_from(&self.resources.time_limit);
         per_node
@@ -1240,6 +1376,34 @@ impl JobRunner {
         assert!(self.resources.memory_gb <= self.orig_resources.memory_gb);
         assert!(self.resources.num_cpus <= self.orig_resources.num_cpus);
         assert!(self.resources.num_gpus <= self.orig_resources.num_gpus);
+    }
+
+    /// Increment per-node resources when a job completes. Called alongside
+    /// `increment_resources` which tracks the total pool.
+    fn increment_node_resources(&mut self, job_id: i64, rr: &ResourceRequirementsModel) {
+        if let Some(node_list) = self.job_nodes.remove(&job_id)
+            && let Some(ref mut tracker) = self.node_tracker
+        {
+            let job_memory_gb = memory_string_to_gb(&rr.memory);
+            let nodes = expand_slurm_nodelist(&node_list);
+            for node in &nodes {
+                tracker.increment(node, rr.num_cpus, job_memory_gb, rr.num_gpus);
+            }
+        }
+    }
+
+    /// Decrement per-node resources and record the job-to-node mapping.
+    fn track_node_resources(
+        &mut self,
+        job_id: i64,
+        node_name: &str,
+        rr: &ResourceRequirementsModel,
+    ) {
+        if let Some(ref mut tracker) = self.node_tracker {
+            let job_memory_gb = memory_string_to_gb(&rr.memory);
+            tracker.decrement(node_name, rr.num_cpus, job_memory_gb, rr.num_gpus);
+            self.job_nodes.insert(job_id, node_name.to_string());
+        }
     }
 
     /// Update the time_limit in resources based on remaining time until end_time.
@@ -1275,8 +1439,57 @@ impl JobRunner {
     fn run_ready_jobs_based_on_resources(&mut self) {
         self.update_remaining_time_limit();
 
-        let per_node = self.resources_per_node();
-        let limit = self.resources.num_cpus;
+        if self.node_tracker.is_some() {
+            // Multi-node: claim and start jobs per-node so each claim uses that
+            // node's actual available resources and we can pin jobs via --nodelist.
+            let node_names: Vec<String> = self
+                .node_tracker
+                .as_ref()
+                .unwrap()
+                .nodes
+                .iter()
+                .map(|n| n.name.clone())
+                .collect();
+            for node_name in node_names {
+                self.claim_and_start_jobs_for_node(Some(&node_name));
+            }
+        } else {
+            // Single-node: one claim call, no --nodelist pinning.
+            self.claim_and_start_jobs_for_node(None);
+        }
+    }
+
+    /// Claim ready jobs from the server and start them. When `target_node` is
+    /// Some, the claim uses that node's available resources and srun is invoked
+    /// with `--nodelist=<node>` to pin the step. When None, the aggregate
+    /// resources are used and no node pinning is done (single-node path).
+    fn claim_and_start_jobs_for_node(&mut self, target_node: Option<&str>) {
+        let per_node = if let Some(node_name) = target_node {
+            // Build resources from this specific node's availability
+            let tracker = self.node_tracker.as_ref().unwrap();
+            let node = match tracker.nodes.iter().find(|n| n.name == node_name) {
+                Some(n) => n,
+                None => return,
+            };
+            let mut r = ComputeNodesResources::new(
+                node.available_cpus,
+                node.available_memory_gb,
+                node.available_gpus,
+                self.resources.num_nodes,
+            );
+            r.scheduler_config_id = self.resources.scheduler_config_id;
+            r.time_limit.clone_from(&self.resources.time_limit);
+            r
+        } else {
+            self.resources_per_node()
+        };
+
+        // Skip nodes with no available resources
+        if per_node.num_cpus <= 0 {
+            return;
+        }
+
+        let limit = per_node.num_cpus;
         let strict_scheduler_match = self.torc_config.client.slurm.strict_scheduler_match;
         match self.send_with_retries(|| {
             default_api::claim_jobs_based_on_resources(
@@ -1291,7 +1504,6 @@ impl JobRunner {
             Ok(response) => {
                 let jobs = response.jobs.unwrap_or_default();
                 if jobs.is_empty() {
-                    debug!("No ready jobs found");
                     return;
                 }
                 if jobs.len() > limit as usize {
@@ -1301,9 +1513,12 @@ impl JobRunner {
                         jobs.len()
                     );
                 }
-                debug!("Found {} ready jobs to execute", jobs.len());
+                debug!(
+                    "Found {} ready jobs to execute{}",
+                    jobs.len(),
+                    target_node.map_or(String::new(), |n| format!(" on node {}", n))
+                );
 
-                // Update last job claimed time since we got jobs
                 self.last_job_claimed_time = Some(Instant::now());
 
                 for job in jobs {
@@ -1326,7 +1541,6 @@ impl JobRunner {
                         }
                     };
 
-                    // Mark job as started in the database before actually starting it
                     match self.send_with_retries(|| {
                         default_api::start_job(
                             &self.config,
@@ -1361,16 +1575,21 @@ impl JobRunner {
                         self.slurm_config.enable_cpu_bind(),
                         self.end_time,
                         self.slurm_config.srun_termination_signal.as_deref(),
+                        target_node,
                     ) {
                         Ok(()) => {
                             info!(
-                                "Job started workflow_id={} job_id={} run_id={} compute_node_id={} attempt_id={}",
+                                "Job started workflow_id={} job_id={} run_id={} compute_node_id={} attempt_id={}{}",
                                 self.workflow_id,
                                 job_id,
                                 self.run_id,
                                 self.compute_node_id,
-                                attempt_id
+                                attempt_id,
+                                target_node.map_or(String::new(), |n| format!(" node={}", n))
                             );
+                            if let Some(node) = target_node {
+                                self.track_node_resources(job_id, node, &job_rr);
+                            }
                             self.running_jobs.insert(job_id, async_job);
                             self.decrement_resources(&job_rr);
                             self.job_resources.insert(job_id, job_rr);
@@ -1387,26 +1606,6 @@ impl JobRunner {
             }
             Err(err) => {
                 error!("Failed to prepare jobs for submission: {}", err);
-                match self.send_with_retries(|| {
-                    default_api::claim_jobs_based_on_resources(
-                        &self.config,
-                        self.workflow_id,
-                        &per_node,
-                        limit,
-                        Some(self.rules.jobs_sort_method),
-                        Some(strict_scheduler_match),
-                    )
-                }) {
-                    Ok(_) => {
-                        info!("Successfully prepared jobs after retry");
-                    }
-                    Err(retry_err) => {
-                        error!(
-                            "Failed to prepare jobs for submission after retries: {}",
-                            retry_err
-                        );
-                    }
-                }
             }
         }
     }
@@ -1506,6 +1705,7 @@ impl JobRunner {
                         self.slurm_config.enable_cpu_bind(),
                         self.end_time,
                         self.slurm_config.srun_termination_signal.as_deref(),
+                        None, // target_node: user-parallelism mode doesn't use per-node placement
                     ) {
                         Ok(()) => {
                             info!(
@@ -2019,6 +2219,43 @@ fn backfill_sacct_into_result(result: &mut ResultModel, stats: &SlurmStatsModel)
     }
 }
 
+/// Expand a Slurm compact node list into individual node names.
+///
+/// Uses `scontrol show hostnames` which handles all Slurm node list formats:
+/// - Single node: `"node01"` → `["node01"]`
+/// - Range: `"node[01-04]"` → `["node01", "node02", "node03", "node04"]`
+/// - Mixed: `"node[01,03-05]"` → `["node01", "node03", "node04", "node05"]`
+///
+/// Falls back to treating the input as a single node name if `scontrol` fails
+/// (e.g., not running in a Slurm environment).
+fn expand_slurm_nodelist(compact: &str) -> Vec<String> {
+    // If there are no brackets, it's already a single node name.
+    if !compact.contains('[') {
+        return vec![compact.to_string()];
+    }
+
+    match std::process::Command::new("scontrol")
+        .args(["show", "hostnames", compact])
+        .output()
+    {
+        Ok(output) if output.status.success() => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            stdout
+                .lines()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        }
+        _ => {
+            debug!(
+                "scontrol show hostnames failed for '{}', treating as single node",
+                compact
+            );
+            vec![compact.to_string()]
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2139,5 +2376,74 @@ mod tests {
         backfill_sacct_into_result(&mut result, &stats);
         assert!(result.avg_cpu_percent.is_none());
         assert!(result.peak_cpu_percent.is_none());
+    }
+
+    #[test]
+    fn test_per_node_tracker_max_available() {
+        let tracker = PerNodeTracker::new(vec!["node01".into(), "node02".into()], 32, 128.0, 4);
+        let (cpus, mem, gpus) = tracker.max_available();
+        assert_eq!(cpus, 32);
+        assert!((mem - 128.0).abs() < 0.01);
+        assert_eq!(gpus, 4);
+    }
+
+    #[test]
+    fn test_per_node_tracker_decrement_reports_correct_max() {
+        let mut tracker = PerNodeTracker::new(vec!["node01".into(), "node02".into()], 32, 128.0, 4);
+        // Use all of node01's CPUs
+        tracker.decrement("node01", 32, 128.0, 4);
+        let (cpus, mem, gpus) = tracker.max_available();
+        // node02 is still fully available
+        assert_eq!(cpus, 32);
+        assert!((mem - 128.0).abs() < 0.01);
+        assert_eq!(gpus, 4);
+    }
+
+    #[test]
+    fn test_per_node_tracker_decrement_both_nodes() {
+        let mut tracker = PerNodeTracker::new(vec!["node01".into(), "node02".into()], 32, 128.0, 4);
+        tracker.decrement("node01", 8, 32.0, 1);
+        tracker.decrement("node02", 16, 64.0, 2);
+        let (cpus, mem, gpus) = tracker.max_available();
+        // node01: 24 CPUs, 96 GB, 3 GPUs
+        // node02: 16 CPUs, 64 GB, 2 GPUs
+        // max is node01
+        assert_eq!(cpus, 24);
+        assert!((mem - 96.0).abs() < 0.01);
+        assert_eq!(gpus, 3);
+    }
+
+    #[test]
+    fn test_per_node_tracker_increment_after_decrement() {
+        let mut tracker = PerNodeTracker::new(vec!["node01".into(), "node02".into()], 32, 128.0, 4);
+        tracker.decrement("node01", 32, 128.0, 4);
+        tracker.increment("node01", 32, 128.0, 4);
+        let (cpus, mem, gpus) = tracker.max_available();
+        assert_eq!(cpus, 32);
+        assert!((mem - 128.0).abs() < 0.01);
+        assert_eq!(gpus, 4);
+    }
+
+    #[test]
+    fn test_per_node_tracker_unknown_node_no_panic() {
+        let mut tracker = PerNodeTracker::new(vec!["node01".into()], 32, 128.0, 4);
+        // Should log a warning but not panic
+        tracker.decrement("unknown_node", 8, 32.0, 1);
+        tracker.increment("unknown_node", 8, 32.0, 1);
+        let (cpus, _, _) = tracker.max_available();
+        assert_eq!(cpus, 32); // node01 unchanged
+    }
+
+    #[test]
+    fn test_expand_slurm_nodelist_single_node() {
+        let nodes = expand_slurm_nodelist("node01");
+        assert_eq!(nodes, vec!["node01"]);
+    }
+
+    #[test]
+    fn test_expand_slurm_nodelist_no_brackets_passthrough() {
+        // No brackets = single node, no scontrol call needed
+        let nodes = expand_slurm_nodelist("compute-node-5");
+        assert_eq!(nodes, vec!["compute-node-5"]);
     }
 }

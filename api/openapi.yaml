@@ -7194,7 +7194,7 @@ components:
         worker_startup_script: worker_startup_script
         worker_completion_script: worker_completion_script
         srun_termination_signal: "TERM@120"
-        compute_node_expiration_buffer_seconds: 6
+        slurm_config: '{"limit_resources":true,"use_srun":true,"srun_termination_signal":"TERM@120","enable_cpu_bind":false}'
       properties:
         id:
           type: integer
@@ -7218,7 +7218,6 @@ components:
           type: string
 
         compute_node_expiration_buffer_seconds:
-          default: 120
           deprecated: true
           description: "Deprecated: Slurm now manages job termination signals via\
             \ srun --time and KillWait. This field is accepted but ignored. Previously\
@@ -7276,6 +7275,14 @@ components:
             \ By default (false), srun passes --cpu-bind=none to disable binding,\
             \ which prevents CPU binding errors on some cluster configurations."
           type: boolean
+        slurm_config:
+          description: "JSON-encoded blob of Slurm configuration options for the\
+            \ workflow. May include fields such as limit_resources, use_srun,\
+            \ srun_termination_signal, and enable_cpu_bind. Stored as a JSON\
+            \ string to allow flexible, forward-compatible configuration."
+          type:
+          - string
+          - "null"
       required:
       - name
       - user

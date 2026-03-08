@@ -110,6 +110,7 @@ fn run_and_capture_srun_args(
         enable_cpu_bind,
         end_time,
         srun_termination_signal,
+        None, // target_node
     );
     assert!(
         result.is_ok(),
@@ -603,6 +604,7 @@ fn test_srun_step_name_format() {
         false,
         None,
         None,
+        None, // target_node
     );
     assert!(result.is_ok());
 

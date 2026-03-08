@@ -9894,20 +9894,6 @@ pub struct WorkflowModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub use_pending_failed: Option<bool>,
 
-    /// When true (default), srun passes --mem and --cpus-per-task to enforce cgroup limits for
-    /// each job step when running inside a Slurm allocation. Set to false to allow jobs to exceed
-    /// their stated resource requirements (useful for exploratory workloads).
-    #[serde(rename = "limit_resources")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub limit_resources: Option<bool>,
-
-    /// When true (default), jobs are wrapped with srun inside Slurm allocations for cgroup
-    /// enforcement and accounting. Set to false to use direct shell execution even inside
-    /// a Slurm allocation (disables srun job steps, sacct, and sstat monitoring).
-    #[serde(rename = "use_srun")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub use_srun: Option<bool>,
-
     /// When true, automatically create RO-Crate entities for workflow files.
     /// Input files get entities during initialization; output files get entities on job completion.
     #[serde(rename = "enable_ro_crate")]
@@ -9927,20 +9913,6 @@ pub struct WorkflowModel {
     #[serde(rename = "status_id")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status_id: Option<i64>,
-
-    /// Signal specification for srun steps, passed as `srun --signal=<value>`.
-    /// Format: `<signal>@<seconds>` (e.g., `TERM@120` sends SIGTERM 120 seconds before
-    /// the step time limit). This allows jobs to checkpoint before being killed.
-    #[serde(rename = "srun_termination_signal")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub srun_termination_signal: Option<String>,
-
-    /// When true, allow Slurm to bind tasks to specific CPU cores. By default (false),
-    /// srun passes `--cpu-bind=none` to disable binding, which prevents
-    /// "CPU binding outside of job step allocation" errors on some cluster configurations.
-    #[serde(rename = "enable_cpu_bind")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub enable_cpu_bind: Option<bool>,
 
     /// Opaque JSON blob containing Slurm-specific configuration.
     /// The server stores this without interpretation; only the client deserializes it.
@@ -9967,14 +9939,10 @@ impl WorkflowModel {
             resource_monitor_config: None,
             slurm_defaults: None,
             use_pending_failed: Some(false),
-            limit_resources: Some(true),
-            use_srun: Some(true),
             enable_ro_crate: None,
             project: None,
             metadata: None,
             status_id: None,
-            srun_termination_signal: None,
-            enable_cpu_bind: None,
             slurm_config: None,
         }
     }
@@ -10052,21 +10020,9 @@ impl std::string::ToString for WorkflowModel {
                 ]
                 .join(",")
             }),
-            self.limit_resources.as_ref().map(|limit_resources| {
-                ["limit_resources".to_string(), limit_resources.to_string()].join(",")
-            }),
-            self.use_srun
-                .as_ref()
-                .map(|use_srun| ["use_srun".to_string(), use_srun.to_string()].join(",")),
             self.status_id
                 .as_ref()
                 .map(|status_id| ["status_id".to_string(), status_id.to_string()].join(",")),
-            self.srun_termination_signal
-                .as_ref()
-                .map(|v| ["srun_termination_signal".to_string(), v.to_string()].join(",")),
-            self.enable_cpu_bind
-                .as_ref()
-                .map(|v| ["enable_cpu_bind".to_string(), v.to_string()].join(",")),
             self.slurm_config
                 .as_ref()
                 .map(|v| ["slurm_config".to_string(), v.to_string()].join(",")),
@@ -10101,14 +10057,10 @@ impl std::str::FromStr for WorkflowModel {
             pub resource_monitor_config: Vec<String>,
             pub slurm_defaults: Vec<String>,
             pub use_pending_failed: Vec<bool>,
-            pub limit_resources: Vec<bool>,
-            pub use_srun: Vec<bool>,
             pub enable_ro_crate: Vec<bool>,
             pub project: Vec<String>,
             pub metadata: Vec<String>,
             pub status_id: Vec<i64>,
-            pub srun_termination_signal: Vec<String>,
-            pub enable_cpu_bind: Vec<bool>,
             pub slurm_config: Vec<String>,
         }
 
@@ -10179,16 +10131,7 @@ impl std::str::FromStr for WorkflowModel {
                     "status_id" => intermediate_rep.status_id.push(
                         <i64 as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
                     ),
-                    "srun_termination_signal" => intermediate_rep
-                        .srun_termination_signal
-                        .push(val.to_string()),
                     "use_pending_failed" => intermediate_rep.use_pending_failed.push(
-                        <bool as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
-                    ),
-                    "limit_resources" => intermediate_rep.limit_resources.push(
-                        <bool as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
-                    ),
-                    "use_srun" => intermediate_rep.use_srun.push(
                         <bool as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
                     ),
                     "enable_ro_crate" => intermediate_rep.enable_ro_crate.push(
@@ -10199,9 +10142,6 @@ impl std::str::FromStr for WorkflowModel {
                     ),
                     "metadata" => intermediate_rep.metadata.push(
                         <String as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
-                    ),
-                    "enable_cpu_bind" => intermediate_rep.enable_cpu_bind.push(
-                        <bool as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
                     ),
                     "slurm_config" => intermediate_rep.slurm_config.push(
                         <String as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
@@ -10257,14 +10197,10 @@ impl std::str::FromStr for WorkflowModel {
             resource_monitor_config: intermediate_rep.resource_monitor_config.into_iter().next(),
             slurm_defaults: intermediate_rep.slurm_defaults.into_iter().next(),
             use_pending_failed: intermediate_rep.use_pending_failed.into_iter().next(),
-            limit_resources: intermediate_rep.limit_resources.into_iter().next(),
-            use_srun: intermediate_rep.use_srun.into_iter().next(),
             enable_ro_crate: intermediate_rep.enable_ro_crate.into_iter().next(),
             project: intermediate_rep.project.into_iter().next(),
             metadata: intermediate_rep.metadata.into_iter().next(),
             status_id: intermediate_rep.status_id.into_iter().next(),
-            srun_termination_signal: intermediate_rep.srun_termination_signal.into_iter().next(),
-            enable_cpu_bind: intermediate_rep.enable_cpu_bind.into_iter().next(),
             slurm_config: intermediate_rep.slurm_config.into_iter().next(),
         })
     }

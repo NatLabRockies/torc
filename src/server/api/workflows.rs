@@ -164,14 +164,10 @@ const WORKFLOW_COLUMNS: &[&str] = &[
     "resource_monitor_config",
     "slurm_defaults",
     "use_pending_failed",
-    "limit_resources",
-    "use_srun",
     "enable_ro_crate",
     "project",
     "metadata",
     "status_id",
-    "srun_termination_signal",
-    "enable_cpu_bind",
 ];
 
 const WORKFLOW_STATUS_COLUMNS: &[&str] = &[
@@ -197,14 +193,10 @@ const ALL_WORKFLOW_COLUMNS: &[&str] = &[
     "resource_monitor_config",
     "slurm_defaults",
     "use_pending_failed",
-    "limit_resources",
-    "use_srun",
     "enable_ro_crate",
     "project",
     "metadata",
     "status_id",
-    "srun_termination_signal",
-    "enable_cpu_bind",
     "run_id",
     "is_archived",
     "is_canceled",
@@ -289,13 +281,10 @@ impl WorkflowsApiImpl {
                 ,w.resource_monitor_config
                 ,w.slurm_defaults
                 ,w.use_pending_failed
-                ,w.limit_resources
-                ,w.use_srun
+                ,w.enable_ro_crate
                 ,w.project
                 ,w.metadata
                 ,w.status_id
-                ,w.srun_termination_signal
-                ,w.enable_cpu_bind
                 ,w.slurm_config
             FROM workflow w
             INNER JOIN workflow_status ws ON w.status_id = ws.id
@@ -318,13 +307,10 @@ impl WorkflowsApiImpl {
                 ,resource_monitor_config
                 ,slurm_defaults
                 ,use_pending_failed
-                ,limit_resources
-                ,use_srun
+                ,enable_ro_crate
                 ,project
                 ,metadata
                 ,status_id
-                ,srun_termination_signal
-                ,enable_cpu_bind
                 ,slurm_config
             FROM workflow
             "
@@ -457,9 +443,9 @@ impl WorkflowsApiImpl {
                 user: record.get("user"),
                 description: record.get("description"),
                 timestamp: Some(record.get("timestamp")),
-                compute_node_expiration_buffer_seconds: Some(
-                    record.get("compute_node_expiration_buffer_seconds"),
-                ),
+                compute_node_expiration_buffer_seconds: record
+                    .try_get::<Option<i64>, _>("compute_node_expiration_buffer_seconds")
+                    .unwrap_or(None),
                 compute_node_wait_for_new_jobs_seconds: Some(
                     record.get("compute_node_wait_for_new_jobs_seconds"),
                 ),
@@ -480,16 +466,6 @@ impl WorkflowsApiImpl {
                     .ok()
                     .flatten()
                     .map(|v| v != 0),
-                limit_resources: record
-                    .try_get::<Option<i64>, _>("limit_resources")
-                    .ok()
-                    .flatten()
-                    .map(|v| v != 0),
-                use_srun: record
-                    .try_get::<Option<i64>, _>("use_srun")
-                    .ok()
-                    .flatten()
-                    .map(|v| v != 0),
                 enable_ro_crate: record
                     .try_get::<Option<i64>, _>("enable_ro_crate")
                     .ok()
@@ -498,12 +474,6 @@ impl WorkflowsApiImpl {
                 project: record.get("project"),
                 metadata: record.get("metadata"),
                 status_id: Some(record.get("status_id")),
-                srun_termination_signal: record.get("srun_termination_signal"),
-                enable_cpu_bind: record
-                    .try_get::<Option<i64>, _>("enable_cpu_bind")
-                    .ok()
-                    .flatten()
-                    .map(|v| v != 0),
                 slurm_config: record
                     .try_get::<Option<String>, _>("slurm_config")
                     .ok()
@@ -639,8 +609,7 @@ where
             .map(|m| m.to_string())
             .unwrap_or_else(|| "gpus_runtime_memory".to_string());
 
-        let compute_node_expiration_buffer_seconds =
-            body.compute_node_expiration_buffer_seconds.unwrap_or(180);
+        let compute_node_expiration_buffer_seconds = body.compute_node_expiration_buffer_seconds;
         // Default must be >= completion_check_interval_secs + job_completion_poll_interval
         // to avoid workers exiting before dependent jobs are unblocked.
         let compute_node_wait_for_new_jobs_seconds =
@@ -657,10 +626,7 @@ where
 
         // Then, create the workflow record
         let use_pending_failed_int = body.use_pending_failed.map(|v| if v { 1 } else { 0 });
-        let limit_resources_int = body.limit_resources.map(|v| if v { 1 } else { 0 });
-        let use_srun_int = body.use_srun.map(|v| if v { 1 } else { 0 });
         let enable_ro_crate_int = body.enable_ro_crate.map(|v| if v { 1 } else { 0 });
-        let enable_cpu_bind_int = body.enable_cpu_bind.map(|v| if v { 1 } else { 0 });
 
         let workflow_result = match sqlx::query!(
             r#"
@@ -679,17 +645,13 @@ where
                 resource_monitor_config,
                 slurm_defaults,
                 use_pending_failed,
-                limit_resources,
-                use_srun,
                 enable_ro_crate,
                 project,
                 metadata,
                 status_id,
-                srun_termination_signal,
-                enable_cpu_bind,
                 slurm_config
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
             RETURNING rowid
             "#,
             body.name,
@@ -705,14 +667,10 @@ where
             body.resource_monitor_config,
             body.slurm_defaults,
             use_pending_failed_int,
-            limit_resources_int,
-            use_srun_int,
             enable_ro_crate_int,
             body.project,
             body.metadata,
             status_result[0].id,
-            body.srun_termination_signal,
-            enable_cpu_bind_int,
             body.slurm_config,
         )
         .fetch_all(&mut *tx)
@@ -963,9 +921,8 @@ where
                     user: row.user,
                     description: row.description,
                     timestamp: Some(row.timestamp),
-                    compute_node_expiration_buffer_seconds: Some(
-                        row.compute_node_expiration_buffer_seconds,
-                    ),
+                    compute_node_expiration_buffer_seconds: row
+                        .compute_node_expiration_buffer_seconds,
                     compute_node_wait_for_new_jobs_seconds: Some(
                         row.compute_node_wait_for_new_jobs_seconds,
                     ),
@@ -985,14 +942,10 @@ where
                     resource_monitor_config: row.resource_monitor_config,
                     slurm_defaults: row.slurm_defaults,
                     use_pending_failed: row.use_pending_failed.map(|v| v != 0),
-                    limit_resources: row.limit_resources.map(|v| v != 0),
-                    use_srun: row.use_srun.map(|v| v != 0),
                     enable_ro_crate: row.enable_ro_crate.map(|v| v != 0),
                     project: row.project,
                     metadata: row.metadata,
                     status_id: Some(row.status_id),
-                    srun_termination_signal: row.srun_termination_signal,
-                    enable_cpu_bind: row.enable_cpu_bind.map(|v| v != 0),
                     slurm_config: row.slurm_config,
                 },
             )),
@@ -1282,10 +1235,7 @@ where
             .compute_node_ignore_workflow_completion
             .map(|val| if val { 1 } else { 0 });
         let use_pending_failed_int = body.use_pending_failed.map(|val| if val { 1 } else { 0 });
-        let limit_resources_int = body.limit_resources.map(|val| if val { 1 } else { 0 });
-        let use_srun_int = body.use_srun.map(|val| if val { 1 } else { 0 });
         let enable_ro_crate_int = body.enable_ro_crate.map(|val| if val { 1 } else { 0 });
-        let enable_cpu_bind_int = body.enable_cpu_bind.map(|val| if val { 1 } else { 0 });
 
         // Update the workflow record using COALESCE to only update non-null fields
         let result = match sqlx::query!(
@@ -1301,15 +1251,11 @@ where
                 compute_node_wait_for_healthy_database_minutes = COALESCE($7, compute_node_wait_for_healthy_database_minutes),
                 jobs_sort_method = COALESCE($8, jobs_sort_method),
                 use_pending_failed = COALESCE($9, use_pending_failed),
-                limit_resources = COALESCE($10, limit_resources),
-                use_srun = COALESCE($11, use_srun),
-                enable_ro_crate = COALESCE($12, enable_ro_crate),
-                project = COALESCE($13, project),
-                metadata = COALESCE($14, metadata),
-                srun_termination_signal = COALESCE($15, srun_termination_signal),
-                enable_cpu_bind = COALESCE($16, enable_cpu_bind),
-                slurm_config = COALESCE($17, slurm_config)
-            WHERE id = $18
+                enable_ro_crate = COALESCE($10, enable_ro_crate),
+                project = COALESCE($11, project),
+                metadata = COALESCE($12, metadata),
+                slurm_config = COALESCE($13, slurm_config)
+            WHERE id = $14
             "#,
             body.name,
             body.description,
@@ -1320,13 +1266,9 @@ where
             body.compute_node_wait_for_healthy_database_minutes,
             jobs_sort_method_str,
             use_pending_failed_int,
-            limit_resources_int,
-            use_srun_int,
             enable_ro_crate_int,
             body.project,
             body.metadata,
-            body.srun_termination_signal,
-            enable_cpu_bind_int,
             body.slurm_config,
             id
         )

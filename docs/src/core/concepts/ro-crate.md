@@ -18,13 +18,25 @@ RO-Crate is a lightweight approach to packaging research data with JSON-LD metad
 Torc stores RO-Crate entities per workflow. Each entity describes a file, dataset, software, or
 other research object with JSON-LD properties. Entities can be:
 
-1. **Created automatically** when `enable_ro_crate: true` is set on a workflow
-2. **Created manually** using the `torc ro-crate create` command
-3. **Exported** as a standard `ro-crate-metadata.json` document
+1. **Created always** — SoftwareApplication entities for the torc binaries are recorded during
+   workflow initialization, regardless of the `enable_ro_crate` setting. This ensures every workflow
+   has basic software provenance.
+2. **Created automatically** when `enable_ro_crate: true` is set on a workflow — file and job
+   provenance entities
+3. **Created manually** using the `torc ro-crate create` command
+4. **Exported** as a standard `ro-crate-metadata.json` document
 
 ## Automatic Entity Generation
 
-When you enable RO-Crate on a workflow, Torc automatically creates metadata entities:
+### Always recorded (all workflows)
+
+During workflow initialization, Torc creates **SoftwareApplication** entities for the torc binaries
+(server, job runner, etc.) that processed the workflow. These record the software name and version,
+providing a baseline provenance record even when full RO-Crate tracking is not enabled.
+
+### When `enable_ro_crate: true`
+
+When you enable RO-Crate on a workflow, Torc additionally creates file and job provenance entities:
 
 **During workflow initialization:**
 

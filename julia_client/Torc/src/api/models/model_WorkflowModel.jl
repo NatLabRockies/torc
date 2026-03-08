@@ -12,7 +12,7 @@
         timestamp=nothing,
         project=nothing,
         metadata=nothing,
-        compute_node_expiration_buffer_seconds=120,
+        compute_node_expiration_buffer_seconds=nothing,
         compute_node_wait_for_new_jobs_seconds=90,
         compute_node_ignore_workflow_completion=false,
         compute_node_wait_for_healthy_database_minutes=20,
@@ -54,7 +54,7 @@ Base.@kwdef mutable struct WorkflowModel <: OpenAPI.APIModel
     timestamp::Union{Nothing, String} = nothing
     project::Union{Nothing, String} = nothing
     metadata::Union{Nothing, String} = nothing
-    compute_node_expiration_buffer_seconds::Union{Nothing, Int64} = 120
+    compute_node_expiration_buffer_seconds::Union{Nothing, Int64} = nothing
     compute_node_wait_for_new_jobs_seconds::Union{Nothing, Int64} = 90
     compute_node_ignore_workflow_completion::Union{Nothing, Bool} = false
     compute_node_wait_for_healthy_database_minutes::Union{Nothing, Int64} = 20

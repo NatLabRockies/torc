@@ -23,7 +23,7 @@ mod unix_main {
     use torc::client::commands::slurm::{create_compute_node, create_node_resources};
     use torc::client::hpc::hpc_interface::HpcInterface;
     use torc::client::hpc::slurm_interface::SlurmInterface;
-    use torc::client::job_runner::JobRunner;
+    use torc::client::job_runner::{JobRunner, PerNodeTracker};
     use torc::client::log_paths::{
         get_slurm_dmesg_log_file, get_slurm_env_log_file, get_slurm_job_runner_log_file,
     };
@@ -192,10 +192,7 @@ mod unix_main {
             }
         };
 
-        if workflow
-            .compute_node_expiration_buffer_seconds
-            .is_some_and(|v| v != 180)
-        {
+        if workflow.compute_node_expiration_buffer_seconds.is_some() {
             warn!(
                 "compute_node_expiration_buffer_seconds is deprecated and will be ignored. \
                  Slurm now manages job termination signals via srun --time. \
@@ -244,6 +241,38 @@ mod unix_main {
         resources.scheduler_config_id = per_node_resources.scheduler_config_id;
         resources.time_limit = per_node_resources.time_limit;
 
+        // Initialize per-node resource tracker for multi-node allocations.
+        // This tracks which node each job lands on so resources_per_node()
+        // reports accurate per-node availability instead of dividing
+        // remaining total by num_nodes (which gives incorrect values when
+        // jobs are unevenly distributed across nodes).
+        let node_tracker = if num_nodes > 1 {
+            match slurm_interface.list_active_nodes(&job_id) {
+                Ok(node_names) => {
+                    info!(
+                        "Multi-node allocation: {} nodes {:?}, initializing per-node resource tracker",
+                        num_nodes, node_names
+                    );
+                    Some(PerNodeTracker::new(
+                        node_names,
+                        per_node_resources.num_cpus,
+                        per_node_resources.memory_gb,
+                        per_node_resources.num_gpus,
+                    ))
+                }
+                Err(e) => {
+                    warn!(
+                        "Could not enumerate nodes for multi-node allocation: {}. \
+                         Falling back to aggregate resource tracking.",
+                        e
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         let job_id_int: i64 = job_id.parse().unwrap_or(0);
         let scheduler = serde_json::json!({
             "scheduler_id": scheduler_id,
@@ -285,6 +314,7 @@ mod unix_main {
             None, // cpu_affinity_cpus_per_job
             args.is_subtask,
             unique_label,
+            node_tracker,
         );
 
         // Register SIGTERM signal handler

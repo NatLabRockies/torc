@@ -2304,10 +2304,23 @@ fn read_content(local_dir: Option<&Path>, rel_path: &str) -> Result<String, McpE
     fetch_from_github(rel_path)
 }
 
+/// Build a `reqwest::blocking::Client` with connect and read timeouts so that
+/// network calls cannot hang indefinitely.
+fn github_client() -> Result<reqwest::blocking::Client, McpError> {
+    reqwest::blocking::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| internal_error(format!("Failed to build HTTP client: {}", e)))
+}
+
 /// Fetch a file from the GitHub repository.
 fn fetch_from_github(rel_path: &str) -> Result<String, McpError> {
     let url = format!("{}/{}", GITHUB_RAW_BASE, rel_path);
-    let response = reqwest::blocking::get(&url)
+    let client = github_client()?;
+    let response = client
+        .get(&url)
+        .send()
         .map_err(|e| internal_error(format!("Failed to fetch from GitHub: {}", e)))?;
 
     if !response.status().is_success() {
@@ -2330,6 +2343,17 @@ fn read_example_content(
     name: &str,
     format: &str,
 ) -> Result<(String, String), McpError> {
+    // Sanitize name to prevent path traversal attacks.
+    // Only allow alphanumeric characters, underscores, and hyphens.
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
+        return Err(invalid_params(
+            "Example name must contain only alphanumeric characters, underscores, and hyphens.",
+        ));
+    }
+
     let search_order: Vec<(&str, &[&str])> = match format {
         "yaml" | "yml" => vec![
             ("yaml", &["yaml", "yml"][..]),
@@ -2378,7 +2402,8 @@ fn read_example_content(
             for subdir in &subdirs {
                 let rel_path = format!("examples/{}/{}.{}", subdir, name, ext);
                 let url = format!("{}/{}", GITHUB_RAW_BASE, rel_path);
-                if let Ok(response) = reqwest::blocking::get(&url)
+                if let Ok(client) = github_client()
+                    && let Ok(response) = client.get(&url).send()
                     && response.status().is_success()
                     && let Ok(content) = response.text()
                 {

@@ -71,6 +71,7 @@ fn test_async_cli_command_start_simple_command(start_server: &ServerProcess) {
         false,
         None,
         None,
+        None, // target_node
     );
     assert!(
         result.is_ok(),
@@ -112,6 +113,7 @@ fn test_async_cli_command_start_already_running() {
             false,
             None,
             None,
+            None, // target_node
         )
         .expect("First start should succeed");
     assert!(async_cmd.is_running);
@@ -130,6 +132,7 @@ fn test_async_cli_command_start_already_running() {
         false,
         None,
         None,
+        None, // target_node
     );
     assert!(result.is_err());
     assert_eq!(result.unwrap_err().to_string(), "Job is already running");
@@ -159,6 +162,7 @@ fn test_async_cli_command_start_invalid_directory() {
         false,
         None,
         None,
+        None, // target_node
     );
     assert!(result.is_err());
 }
@@ -184,6 +188,7 @@ fn test_async_cli_command_check_status_completion() {
             false,
             None,
             None,
+            None, // target_node
         )
         .expect("Failed to start command");
     assert!(async_cmd.is_running);
@@ -231,6 +236,7 @@ fn test_async_cli_command_with_exit_code_success() {
             false,
             None,
             None,
+            None, // target_node
         )
         .expect("Failed to start command");
 
@@ -262,6 +268,7 @@ fn test_async_cli_command_with_exit_code_failure() {
             false,
             None,
             None,
+            None, // target_node
         )
         .expect("Failed to start command");
 
@@ -294,6 +301,7 @@ fn test_async_cli_command_cancel() {
             false,
             None,
             None,
+            None, // target_node
         )
         .expect("Failed to start command");
     assert!(async_cmd.is_running);
@@ -339,6 +347,7 @@ fn test_async_cli_command_terminate() {
             false,
             None,
             None,
+            None, // target_node
         )
         .expect("Failed to start command");
     assert!(async_cmd.is_running);
@@ -377,6 +386,7 @@ fn test_async_cli_command_wait_for_completion() {
             false,
             None,
             None,
+            None, // target_node
         )
         .expect("Failed to start command");
 
@@ -417,6 +427,7 @@ fn test_async_cli_command_get_result() {
             false,
             None,
             None,
+            None, // target_node
         )
         .expect("Failed to start command");
     let _ = async_cmd.wait_for_completion();
@@ -464,6 +475,7 @@ fn test_async_cli_command_with_invocation_script() {
         false,
         None,
         None,
+        None, // target_node
     );
     assert!(result.is_ok());
 
@@ -498,6 +510,7 @@ fn test_async_cli_command_environment_variables() {
             false,
             None,
             None,
+            None, // target_node
         )
         .expect("Failed to start command");
     let _ = async_cmd.wait_for_completion();
@@ -534,6 +547,7 @@ fn test_async_cli_command_stdout_stderr_separation() {
             false,
             None,
             None,
+            None, // target_node
         )
         .expect("Failed to start command");
     let _ = async_cmd.wait_for_completion();
@@ -570,6 +584,7 @@ fn test_async_cli_command_multiple_jobs_same_workflow() {
             false,
             None,
             None,
+            None, // target_node
         )
         .expect("Failed to start job 1");
 
@@ -589,6 +604,7 @@ fn test_async_cli_command_multiple_jobs_same_workflow() {
             false,
             None,
             None,
+            None, // target_node
         )
         .expect("Failed to start job 2");
 
@@ -608,6 +624,7 @@ fn test_async_cli_command_multiple_jobs_same_workflow() {
             false,
             None,
             None,
+            None, // target_node
         )
         .expect("Failed to start job 3");
 
@@ -651,6 +668,7 @@ fn test_async_cli_command_long_running_job() {
             false,
             None,
             None,
+            None, // target_node
         )
         .expect("Failed to start command");
     assert!(async_cmd.is_running);
@@ -700,6 +718,7 @@ fn test_async_cli_command_complex_shell_command() {
             false,
             None,
             None,
+            None, // target_node
         )
         .expect("Failed to start command");
     let _ = async_cmd.wait_for_completion();
@@ -739,6 +758,7 @@ fn test_async_cli_command_file_creation() {
             false,
             None,
             None,
+            None, // target_node
         )
         .expect("Failed to start command");
     let _ = async_cmd.wait_for_completion();
@@ -772,6 +792,7 @@ fn test_async_cli_command_drop_while_running() {
             false,
             None,
             None,
+            None, // target_node
         )
         .expect("Failed to start command");
     assert!(async_cmd.is_running);
@@ -807,6 +828,7 @@ fn test_async_cli_command_execution_time() {
             false,
             None,
             None,
+            None, // target_node
         )
         .expect("Failed to start command");
     let _ = async_cmd.wait_for_completion();
@@ -838,6 +860,7 @@ fn test_async_cli_command_empty_command() {
         false,
         None,
         None,
+        None, // target_node
     );
     assert!(result.is_ok());
 
@@ -866,6 +889,7 @@ fn test_async_cli_command_command_not_found() {
             false,
             None,
             None,
+            None, // target_node
         )
         .expect("Failed to start command");
     let _ = async_cmd.wait_for_completion();

@@ -7,33 +7,30 @@ written in YAML, JSON, JSON5, or KDL formats.
 
 The top-level container for a complete workflow definition.
 
-| Name                                             | Type                                                    | Default      | Description                                                                        |
-| ------------------------------------------------ | ------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------- |
-| `name`                                           | string                                                  | _required_   | Name of the workflow                                                               |
-| `user`                                           | string                                                  | current user | User who owns this workflow                                                        |
-| `description`                                    | string                                                  | none         | Description of the workflow                                                        |
-| `project`                                        | string                                                  | none         | Project name or identifier for grouping workflows                                  |
-| `metadata`                                       | string                                                  | none         | Arbitrary metadata as JSON string                                                  |
-| `parameters`                                     | map\<string, string\>                                   | none         | Shared parameters that can be used by jobs and files via `use_parameters`          |
-| `jobs`                                           | [[JobSpec](#jobspec)]                                   | _required_   | Jobs that make up this workflow                                                    |
-| `files`                                          | [[FileSpec](#filespec)]                                 | none         | Files associated with this workflow                                                |
-| `user_data`                                      | [[UserDataSpec](#userdataspec)]                         | none         | User data associated with this workflow                                            |
-| `resource_requirements`                          | [[ResourceRequirementsSpec](#resourcerequirementsspec)] | none         | Resource requirements available for this workflow                                  |
-| `failure_handlers`                               | [[FailureHandlerSpec](#failurehandlerspec)]             | none         | Failure handlers available for this workflow                                       |
-| `slurm_schedulers`                               | [[SlurmSchedulerSpec](#slurmschedulerspec)]             | none         | Slurm schedulers available for this workflow                                       |
-| `slurm_defaults`                                 | [SlurmDefaultsSpec](#slurmdefaultsspec)                 | none         | Default Slurm parameters to apply to all schedulers                                |
-| `resource_monitor`                               | [ResourceMonitorConfig](#resourcemonitorconfig)         | none         | Resource monitoring configuration                                                  |
-| `actions`                                        | [[WorkflowActionSpec](#workflowactionspec)]             | none         | Actions to execute based on workflow/job state transitions                         |
-| `use_pending_failed`                             | boolean                                                 | false        | Use PendingFailed status for failed jobs (enables AI-assisted recovery)            |
-| `limit_resources`                                | boolean                                                 | true         | Enforce cgroup limits via srun `--mem`/`--cpus-per-task` in Slurm                  |
-| `use_srun`                                       | boolean                                                 | true         | Wrap jobs with srun inside Slurm allocations for accounting and cgroup enforcement |
-| `compute_node_wait_for_new_jobs_seconds`         | integer                                                 | none         | Compute nodes wait for new jobs this long before exiting                           |
-| `compute_node_ignore_workflow_completion`        | boolean                                                 | false        | Compute nodes hold allocations even after workflow completes                       |
-| `compute_node_wait_for_healthy_database_minutes` | integer                                                 | none         | Compute nodes wait this many minutes for database recovery                         |
-| `jobs_sort_method`                               | [ClaimJobsSortMethod](#claimjobssortmethod)             | `none`       | Method for sorting jobs when claiming them                                         |
-| `enable_ro_crate`                                | boolean                                                 | false        | Enable automatic [RO-Crate](../concepts/ro-crate.md) provenance tracking           |
-| `srun_termination_signal`                        | string                                                  | none         | Signal spec for `srun --signal=<value>` (e.g. `TERM@120`)                          |
-| `enable_cpu_bind`                                | boolean                                                 | false        | Allow Slurm to bind tasks to CPU cores (default: disabled via `--cpu-bind=none`)   |
+| Name                                             | Type                                                    | Default      | Description                                                               |
+| ------------------------------------------------ | ------------------------------------------------------- | ------------ | ------------------------------------------------------------------------- |
+| `name`                                           | string                                                  | _required_   | Name of the workflow                                                      |
+| `user`                                           | string                                                  | current user | User who owns this workflow                                               |
+| `description`                                    | string                                                  | none         | Description of the workflow                                               |
+| `project`                                        | string                                                  | none         | Project name or identifier for grouping workflows                         |
+| `metadata`                                       | string                                                  | none         | Arbitrary metadata as JSON string                                         |
+| `parameters`                                     | map\<string, string\>                                   | none         | Shared parameters that can be used by jobs and files via `use_parameters` |
+| `jobs`                                           | [[JobSpec](#jobspec)]                                   | _required_   | Jobs that make up this workflow                                           |
+| `files`                                          | [[FileSpec](#filespec)]                                 | none         | Files associated with this workflow                                       |
+| `user_data`                                      | [[UserDataSpec](#userdataspec)]                         | none         | User data associated with this workflow                                   |
+| `resource_requirements`                          | [[ResourceRequirementsSpec](#resourcerequirementsspec)] | none         | Resource requirements available for this workflow                         |
+| `failure_handlers`                               | [[FailureHandlerSpec](#failurehandlerspec)]             | none         | Failure handlers available for this workflow                              |
+| `slurm_schedulers`                               | [[SlurmSchedulerSpec](#slurmschedulerspec)]             | none         | Slurm schedulers available for this workflow                              |
+| `slurm_defaults`                                 | [SlurmDefaultsSpec](#slurmdefaultsspec)                 | none         | Default Slurm parameters to apply to all schedulers                       |
+| `resource_monitor`                               | [ResourceMonitorConfig](#resourcemonitorconfig)         | none         | Resource monitoring configuration                                         |
+| `actions`                                        | [[WorkflowActionSpec](#workflowactionspec)]             | none         | Actions to execute based on workflow/job state transitions                |
+| `use_pending_failed`                             | boolean                                                 | false        | Use PendingFailed status for failed jobs (enables AI-assisted recovery)   |
+| `slurm_config`                                   | [SlurmConfig](#slurmconfig)                             | none         | Slurm job step configuration (srun options)                               |
+| `compute_node_wait_for_new_jobs_seconds`         | integer                                                 | none         | Compute nodes wait for new jobs this long before exiting                  |
+| `compute_node_ignore_workflow_completion`        | boolean                                                 | false        | Compute nodes hold allocations even after workflow completes              |
+| `compute_node_wait_for_healthy_database_minutes` | integer                                                 | none         | Compute nodes wait this many minutes for database recovery                |
+| `jobs_sort_method`                               | [ClaimJobsSortMethod](#claimjobssortmethod)             | `none`       | Method for sorting jobs when claiming them                                |
+| `enable_ro_crate`                                | boolean                                                 | false        | Enable automatic [RO-Crate](../concepts/ro-crate.md) provenance tracking  |
 
 ### Examples with project and metadata
 
@@ -173,6 +170,32 @@ Defines a Slurm HPC job scheduler configuration.
 | `ntasks_per_node` | integer | none         | Number of tasks per node                     |
 | `tmp`             | string  | none         | Temporary storage specification              |
 | `extra`           | string  | none         | Additional Slurm parameters                  |
+
+## SlurmConfig
+
+Slurm job step configuration controlling how jobs are executed inside Slurm allocations. These
+settings affect srun arguments passed for each job step.
+
+For backward compatibility, these fields can also be specified as top-level WorkflowSpec fields
+(`limit_resources`, `use_srun`, `srun_termination_signal`, `enable_cpu_bind`). When both are
+present, `slurm_config` takes precedence.
+
+| Name                      | Type    | Default | Description                                                            |
+| ------------------------- | ------- | ------- | ---------------------------------------------------------------------- |
+| `limit_resources`         | boolean | `true`  | Pass `--mem` and `--cpus-per-task` to srun for cgroup enforcement      |
+| `use_srun`                | boolean | `true`  | Wrap jobs with srun for accounting and cgroup enforcement              |
+| `srun_termination_signal` | string  | none    | Signal spec for `srun --signal=<value>` (e.g. `"TERM@120"`)            |
+| `enable_cpu_bind`         | boolean | `false` | Allow Slurm CPU binding (default: disabled via `srun --cpu-bind=none`) |
+
+**Example:**
+
+```yaml
+slurm_config:
+  limit_resources: true
+  use_srun: true
+  srun_termination_signal: "TERM@120"
+  enable_cpu_bind: false
+```
 
 ## SlurmDefaultsSpec
 

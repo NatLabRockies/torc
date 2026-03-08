@@ -293,6 +293,7 @@ pub fn run(args: &Args) {
         args.cpu_affinity_cpus_per_job,
         false,
         unique_label,
+        None, // No per-node tracking for local runner
     );
 
     match job_runner.run_worker() {

@@ -129,6 +129,7 @@ actions:
         None,
         false,
         "test".to_string(),
+        None,
     );
 
     // Run the job runner for a short time to execute on_workflow_start actions
@@ -261,6 +262,7 @@ actions:
         None,
         false,
         "test".to_string(),
+        None,
     );
 
     // Run job runner briefly
@@ -366,6 +368,7 @@ actions:
         None,
         false,
         "test".to_string(),
+        None,
     );
 
     thread::spawn(move || {
@@ -481,6 +484,7 @@ actions:
         None,
         false,
         "test".to_string(),
+        None,
     );
 
     thread::spawn(move || {
@@ -592,6 +596,7 @@ actions:
         None,
         false,
         "test".to_string(),
+        None,
     );
 
     thread::spawn(move || {
@@ -711,6 +716,7 @@ actions:
             None,
             false,
             format!("test-{}", i),
+            None,
         );
         runners.push(runner);
     }
@@ -843,6 +849,7 @@ actions:
             None,
             false,
             format!("test-worker-{}", i),
+            None,
         );
         runners.push(runner);
     }
@@ -981,6 +988,7 @@ actions:
             None,
             false,
             format!("test-worker-{}", i),
+            None,
         );
         runners.push(runner);
     }
@@ -1117,6 +1125,7 @@ actions:
             None,
             false,
             format!("test-worker-{}", i),
+            None,
         );
         runners.push(runner);
     }
@@ -1252,6 +1261,7 @@ actions:
         None,
         false,
         "test".to_string(),
+        None,
     );
 
     thread::spawn(move || {
@@ -1357,6 +1367,7 @@ actions:
             None,
             false,
             format!("test-{}", i),
+            None,
         );
         runners.push(runner);
     }

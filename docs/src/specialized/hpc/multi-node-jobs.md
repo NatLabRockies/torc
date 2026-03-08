@@ -117,6 +117,63 @@ to the job are 128 CPUs and 512 GB.
 | Goal is scaling one job across nodes?         | No                           | Yes                         |
 | `step_nodes` setting                          | `1` (default)                | Same as `num_nodes`         |
 
+## Allocation Strategy: One Large vs. Many Small
+
+When running many single-node jobs (Pattern 1), you also need to decide how to request the
+underlying Slurm allocations. There are two approaches, each with trade-offs.
+
+### One multi-node allocation
+
+Request all nodes in a single `sbatch` job (e.g., `nodes: 4`). Torc runs one worker per node and
+distributes jobs across them.
+
+**Advantages:**
+
+- Slurm schedulers typically give **priority to larger allocations**. On busy clusters, a 4-node job
+  may start sooner than four separate 1-node jobs.
+- Works well when all jobs take roughly the **same amount of time**, because you pay for all nodes
+  until the last job finishes.
+
+**Disadvantages:**
+
+- **Wasted node-hours when runtimes vary.** If one job takes 4 hours and the rest take 30 minutes,
+  three nodes sit idle for 3.5 hours waiting for the slow job to finish. You are billed for all four
+  nodes for the full 4 hours.
+- On heavily loaded clusters, large allocations can take **much longer to schedule** because Slurm
+  must find all nodes free at the same time.
+
+### Many single-node allocations
+
+Request separate 1-node allocations (e.g., `num_allocations: 4` with `nodes: 1`). Each allocation
+runs its own worker and pulls jobs independently.
+
+**Advantages:**
+
+- **Tolerant of variable runtimes.** Each allocation finishes as soon as its last job completes.
+  Fast jobs release their nodes immediately instead of waiting for the slowest one.
+- Single-node jobs are **easier for Slurm to schedule** because they can fill gaps in the queue. You
+  may start running sooner and finish sooner overall.
+- If one allocation fails or is preempted, the others keep running. The failed allocation's
+  incomplete jobs return to the ready queue and are picked up by another worker.
+
+**Disadvantages:**
+
+- On clusters that prioritize large jobs, many small allocations may sit in the queue longer.
+- More Slurm jobs to manage (though Torc handles this automatically).
+
+### Which to choose
+
+| Scenario                                       | Recommended strategy      |
+| ---------------------------------------------- | ------------------------- |
+| Jobs have similar runtimes, cluster is busy    | One multi-node allocation |
+| Jobs have variable runtimes                    | Many single-node allocs   |
+| Cluster has long queue wait for large jobs     | Many single-node allocs   |
+| Cluster prioritizes large jobs, queue is short | One multi-node allocation |
+
+You can also mix strategies: use a multi-node allocation for a batch of similar jobs, then switch to
+single-node allocations for a stage with variable runtimes. Torc's scheduler actions make this easy
+to express per workflow stage.
+
 ## Mixing Both Patterns
 
 A workflow can combine both patterns. For example, single-node preprocessing jobs followed by a

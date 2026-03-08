@@ -88,6 +88,12 @@ impl AsyncCliCommand {
         }
     }
 
+    /// Returns the Slurm step name, if running inside an allocation.
+    /// Set after `start()` is called.
+    pub fn step_name(&self) -> Option<&str> {
+        self.step_name.as_deref()
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn start(
         &mut self,
@@ -103,6 +109,7 @@ impl AsyncCliCommand {
         enable_cpu_bind: bool,
         end_time: Option<DateTime<Utc>>,
         srun_termination_signal: Option<&str>,
+        target_node: Option<&str>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         if self.is_running {
             return Err("Job is already running".into());
@@ -162,6 +169,12 @@ impl AsyncCliCommand {
             // to share nodes in multi-node allocations.
             srun.arg("--exact");
             srun.arg(format!("--job-name={}", step_name));
+            // Pin the step to a specific node when the job runner has claimed
+            // resources on that node. This enables accurate per-node resource
+            // tracking in multi-node allocations.
+            if let Some(node) = target_node {
+                srun.arg(format!("--nodelist={}", node));
+            }
             if let Some(rr) = resource_requirements {
                 let step_nodes = rr.step_nodes.unwrap_or(1).max(1);
                 srun.arg(format!("--nodes={}", step_nodes));

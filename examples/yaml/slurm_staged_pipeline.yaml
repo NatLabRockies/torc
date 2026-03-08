@@ -1,6 +1,13 @@
 name: "slurm_staged_pipeline"
 description: "Multi-stage Slurm pipeline with automated scheduling and resource monitoring"
 
+# Slurm job step configuration
+slurm_config:
+  limit_resources: true           # Pass --mem and --cpus-per-task to srun
+  use_srun: true                  # Wrap jobs with srun for cgroup enforcement
+  srun_termination_signal: "TERM@120" # Send SIGTERM 120s before step time limit
+  enable_cpu_bind: false          # Use --cpu-bind=none (good for Python/NumPy)
+
 # Define three Slurm schedulers for different pipeline stages
 slurm_schedulers:
   - name: "setup_scheduler"
