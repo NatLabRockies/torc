@@ -49,10 +49,10 @@ fn cleanup_slurm_env(preserve_user: bool, original_user: Option<String>) {
 }
 
 #[rstest]
-#[case(16, "32768", 2, 4, Some("0,1"), 123, false, 16, 32.0, 2, 2)] // Normal task
-#[case(16, "16384", 1, 4, None, 456, true, 4, 4.0, 0, 1)] // Subtask (16GB / 4 workers = 4GB)
-#[case(32, "65536", 4, 8, Some("0,1,2,3"), 789, false, 32, 64.0, 4, 4)] // Large cluster
-#[case(8, "8192", 1, 2, Some("0"), 101, true, 2, 2.0, 1, 1)] // Small subtask (8GB / 4 workers = 2GB)
+#[case(16, "32768", 2, 4, Some("0,1"), 123, false, 32, 64.0, 4, 2)] // Normal task, 2 nodes: 16*2=32 cpus, 32*2=64 GB, 2*2=4 gpus
+#[case(16, "16384", 1, 4, None, 456, true, 4, 4.0, 0, 1)] // Subtask, 1 node (16GB / 4 workers = 4GB)
+#[case(32, "65536", 4, 8, Some("0,1,2,3"), 789, false, 128, 256.0, 16, 4)] // Large cluster, 4 nodes: 32*4=128, 64*4=256, 4*4=16
+#[case(8, "8192", 1, 2, Some("0"), 101, true, 2, 2.0, 1, 1)] // Small subtask, 1 node (8GB / 4 workers = 2GB)
 #[serial]
 fn test_create_node_resources(
     #[case] cpus_on_node: usize,
@@ -112,11 +112,14 @@ fn test_create_node_resources_zero_values() {
     let interface = SlurmInterface::new().expect("Failed to create SlurmInterface");
     let resources = create_node_resources(&interface, Some(999), false);
 
-    assert_eq!(resources.num_cpus, 0, "CPU count should be 0");
-    assert_eq!(resources.memory_gb, 0.0, "Memory should be 0");
     assert_eq!(
-        resources.num_gpus, 1,
-        "GPU count should be 1 (empty string splits to 1)"
+        resources.num_cpus, 0,
+        "CPU count should be 0 (0 cpus * 0 nodes)"
+    );
+    assert_eq!(resources.memory_gb, 0.0, "Memory should be 0 (0 * 0 nodes)");
+    assert_eq!(
+        resources.num_gpus, 0,
+        "GPU count should be 0 (1 per node * 0 nodes)"
     );
     assert_eq!(resources.num_nodes, 0, "Node count should be 0");
     assert_eq!(
