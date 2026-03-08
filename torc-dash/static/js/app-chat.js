@@ -324,10 +324,15 @@ Object.assign(TorcDashboard.prototype, {
         if (input) input.focus();
     },
 
-    /** Render markdown to HTML using the marked library. */
+    /** Render markdown to HTML using the marked library (with raw HTML sanitized). */
     renderMarkdown(text) {
         if (typeof marked !== 'undefined' && marked.parse) {
-            return marked.parse(text, { breaks: true });
+            // Strip raw HTML tags from input to prevent XSS.
+            // This removes HTML tags but preserves markdown syntax like > for blockquotes.
+            const sanitized = text.replace(/<\/?[a-zA-Z][^>]*>/g, (match) => {
+                return match.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            });
+            return marked.parse(sanitized, { breaks: true });
         }
         // Fallback: escape HTML and preserve line breaks
         return text

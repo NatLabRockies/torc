@@ -83,6 +83,8 @@ Options:
       --anthropic-api-key           Anthropic API key [env: ANTHROPIC_API_KEY]
       --anthropic-foundry-api-key  Foundry API key [env: ANTHROPIC_FOUNDRY_API_KEY]
       --anthropic-foundry-resource Foundry resource [env: ANTHROPIC_FOUNDRY_RESOURCE]
+      --anthropic-base-url         Override API base URL [env: ANTHROPIC_BASE_URL]
+      --anthropic-auth-header      Override auth header name [env: ANTHROPIC_AUTH_HEADER]
       --torc-mcp-server-bin        Path to torc-mcp-server [default: torc-mcp-server]
       --anthropic-model            Claude model [default: claude-sonnet-4-20250514]
 ```
