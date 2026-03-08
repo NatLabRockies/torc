@@ -2209,6 +2209,14 @@ impl WorkflowSpec {
                             &0
                         };
 
+                        if action_spec.start_one_worker_per_node == Some(true) {
+                            log::warn!(
+                                "start_one_worker_per_node is deprecated and ignored. \
+                                 Multi-node allocations now use a single worker with \
+                                 per-node resource tracking via srun --nodelist."
+                            );
+                        }
+
                         let mut config = serde_json::json!({
                             "scheduler_type": scheduler_type,
                             "scheduler_id": scheduler_id,

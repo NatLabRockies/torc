@@ -7260,6 +7260,13 @@ components:
           default: false
           description: Use PendingFailed status for failed jobs (enables AI-assisted recovery)
           type: boolean
+        enable_ro_crate:
+          default: false
+          description: >-
+            When true, automatically create RO-Crate entities for workflow
+            files. Input files get entities during initialization; output
+            files get entities on job completion.
+          type: boolean
         status_id:
           type: integer
         slurm_config:

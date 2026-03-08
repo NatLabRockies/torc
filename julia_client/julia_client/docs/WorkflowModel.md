@@ -20,6 +20,7 @@ Name | Type | Description | Notes
 **resource_monitor_config** | **String** | Resource monitoring configuration as JSON string | [optional] [default to nothing]
 **slurm_defaults** | **String** | Default Slurm parameters to apply to all schedulers as JSON string | [optional] [default to nothing]
 **use_pending_failed** | **Bool** | Use PendingFailed status for failed jobs (enables AI-assisted recovery) | [optional] [default to false]
+**enable_ro_crate** | **Bool** | When true, automatically create RO-Crate entities for workflow files. Input files get entities during initialization; output files get entities on job completion. | [optional] [default to false]
 **status_id** | **Int64** |  | [optional] [default to nothing]
 **slurm_config** | **String** | JSON-encoded blob of Slurm configuration options for the workflow. May include fields such as limit_resources, use_srun, srun_termination_signal, and enable_cpu_bind. Stored as a JSON string to allow flexible, forward-compatible configuration. | [optional] [default to nothing]
 
