@@ -989,8 +989,9 @@ impl WorkflowSpec {
     /// This validation ensures that when a scheduler allocates multiple nodes (nodes > 1),
     /// jobs using it have consistent node requirements. Both patterns are valid:
     ///
-    /// 1. **Single-node jobs in a multi-node allocation** — each node runs a worker that
-    ///    independently claims single-node jobs (job `num_nodes=1` or unset).
+    /// 1. **Single-node jobs in a multi-node allocation** — a single worker tracks
+    ///    per-node resources and places each job step on a specific node via
+    ///    `srun --nodelist=<node> --exact` (job `num_nodes=1` or unset).
     /// 2. **True multi-node jobs** — jobs span the full allocation (job `num_nodes` matches
     ///    scheduler `nodes`).
     ///
@@ -1843,10 +1844,14 @@ impl WorkflowSpec {
                 spec.enable_cpu_bind,
             );
 
-        // Store the merged config as a JSON blob (server treats it opaquely)
-        let slurm_config_json = serde_json::to_string(&merged_slurm)
-            .map_err(|e| format!("Failed to serialize slurm_config: {}", e))?;
-        workflow_model.slurm_config = Some(slurm_config_json);
+        // Store the merged config as a JSON blob (server treats it opaquely).
+        // Only set it when at least one field is configured, so that workflows
+        // without Slurm settings keep slurm_config = NULL in the database.
+        if merged_slurm != SlurmConfig::default() {
+            let slurm_config_json = serde_json::to_string(&merged_slurm)
+                .map_err(|e| format!("Failed to serialize slurm_config: {}", e))?;
+            workflow_model.slurm_config = Some(slurm_config_json);
+        }
 
         // Set enable_ro_crate if present
         if let Some(value) = spec.enable_ro_crate {
