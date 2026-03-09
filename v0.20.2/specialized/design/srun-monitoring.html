@@ -1,0 +1,598 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Slurm Job Step Monitoring - Torc Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Distributed workflow orchestration for complex computational pipelines">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+        <link rel="stylesheet" href="../../pagetoc.css">
+        <link rel="stylesheet" href="../../version-selector.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Torc Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc/tree/v0.20.2/docs/src/specialized/design/srun-monitoring.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="slurm-job-step-monitoring"><a class="header" href="#slurm-job-step-monitoring">Slurm Job Step Monitoring</a></h1>
+<p>Torc automatically wraps workflow jobs with <code>srun</code> when running inside a Slurm allocation, creating
+per-job steps with cgroup enforcement. It then monitors live resource usage via <code>sstat</code> and collects
+final accounting data via <code>sacct</code>. This page describes the architecture and data flow.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>When a Torc job runner detects <code>SLURM_JOB_ID</code> in the environment, it activates three subsystems:</p>
+<ol>
+<li><strong>srun wrapping</strong> -- creates a Slurm job step per workflow job</li>
+<li><strong>sstat monitoring</strong> -- polls live CPU and memory usage during execution</li>
+<li><strong>sacct collection</strong> -- retrieves final accounting data after completion</li>
+</ol>
+<p>These work together to provide accurate resource metrics for recovery heuristics, resource
+correction, and reporting.</p>
+<pre class="mermaid">flowchart TD
+    classDef runner fill:#2563eb,color:#fff,stroke:#1d4ed8
+    classDef slurm fill:#7c3aed,color:#fff,stroke:#6d28d9
+    classDef data fill:#059669,color:#fff,stroke:#047857
+    classDef server fill:#dc2626,color:#fff,stroke:#b91c1c
+
+    JR[Job Runner]:::runner
+    SRUN[srun wrapper]:::slurm
+    SSTAT[sstat monitor thread]:::slurm
+    SACCT[sacct collector]:::slurm
+    RES[ResultModel]:::data
+    SS[SlurmStatsModel]:::data
+    API[Torc Server API]:::server
+
+    JR --&gt;|wraps command| SRUN
+    JR --&gt;|spawns| SSTAT
+    SRUN --&gt;|creates step| STEP((Slurm Step)):::slurm
+    SSTAT --&gt;|polls step| STEP
+    SSTAT --&gt;|cpu %, memory| RES
+    SRUN --&gt;|exit code| JR
+    JR --&gt;|calls after exit| SACCT
+    SACCT --&gt;|MaxRSS, AveCPU| SS
+    SS --&gt;|backfill peaks| RES
+    RES --&gt;|POST /results| API
+    SS --&gt;|POST /slurm_stats| API
+</pre>
+<h2 id="srun-wrapping"><a class="header" href="#srun-wrapping">srun Wrapping</a></h2>
+<p><strong>Module:</strong> <code>src/client/async_cli_command.rs</code></p>
+<p>When <code>SLURM_JOB_ID</code> is set, <code>AsyncCliCommand::start()</code> wraps the user's command with <code>srun</code> instead
+of running it directly via the shell. This gives each workflow job its own Slurm step with cgroup
+isolation.</p>
+<h3 id="step-naming-convention"><a class="header" href="#step-naming-convention">Step Naming Convention</a></h3>
+<p>Each step is named with a deterministic pattern that enables unambiguous sacct lookup:</p>
+<pre><code>wf{workflow_id}_j{job_id}_r{run_id}_a{attempt_id}
+</code></pre>
+<p>Example: <code>wf42_j7_r1_a1</code> -- workflow 42, job 7, run 1, attempt 1.</p>
+<h3 id="srun-arguments"><a class="header" href="#srun-arguments">srun Arguments</a></h3>
+<pre class="mermaid">flowchart LR
+    classDef flag fill:#f59e0b,color:#000,stroke:#d97706
+    classDef note fill:#e5e7eb,color:#000,stroke:#9ca3af
+
+    SRUN[srun]:::flag
+    JOBID[&quot;--jobid=SLURM_JOB_ID&quot;]:::flag
+    NT[&quot;--ntasks=1&quot;]:::flag
+    EX[&quot;--exact&quot;]:::flag
+    CB[&quot;--cpu-bind=none&quot;]:::flag
+    JN[&quot;--job-name=step_name&quot;]:::flag
+    ND[&quot;--nodes=num_nodes&quot;]:::flag
+    CPU[&quot;--cpus-per-task=N&quot;]:::flag
+    MEM[&quot;--mem=NM&quot;]:::flag
+    TIME[&quot;--time=remaining_min&quot;]:::flag
+    SIG[&quot;--signal=TERM@N&quot;]:::flag
+
+    SRUN --&gt; JOBID
+    SRUN --&gt; NT
+    SRUN --&gt; EX
+    SRUN --&gt; CB
+    SRUN --&gt; JN
+    SRUN --&gt; ND
+
+    EX -.- N0[&quot;Use exact resources,&lt;br/&gt;don't claim entire node&quot;]:::note
+    ND -.- N1[&quot;Default: 1 node&lt;br/&gt;Override via num_nodes&quot;]:::note
+    CB -.- N2[&quot;Default on; disable with&lt;br/&gt;enable_cpu_bind: true&quot;]:::note
+    TIME -.- N4[&quot;Remaining allocation time&lt;br/&gt;rounded down to minutes&quot;]:::note
+    SIG -.- N5[&quot;Early warning signal&lt;br/&gt;e.g. TERM@120&quot;]:::note
+
+    SRUN --&gt; CPU
+    SRUN --&gt; MEM
+    SRUN --&gt; TIME
+    SRUN --&gt; SIG
+</pre>
+<div class="table-wrapper"><table><thead><tr><th>Argument</th><th>Purpose</th></tr></thead><tbody>
+<tr><td><code>--jobid</code></td><td>Binds step to the parent Slurm allocation</td></tr>
+<tr><td><code>--ntasks=1</code></td><td>One task per workflow job</td></tr>
+<tr><td><code>--exact</code></td><td>Use exactly the requested resources; don't claim the entire node exclusively</td></tr>
+<tr><td><code>--cpu-bind=none</code></td><td>Disables CPU affinity binding (default; omitted when <code>enable_cpu_bind: true</code>)</td></tr>
+<tr><td><code>--job-name</code></td><td>Sets the step name for sacct/sstat lookup</td></tr>
+<tr><td><code>--nodes</code></td><td>Number of nodes for this step (from <code>num_nodes</code>, default 1)</td></tr>
+<tr><td><code>--cpus-per-task</code></td><td>CPU cgroup limit (only when <code>limit_resources=true</code>)</td></tr>
+<tr><td><code>--mem</code></td><td>Memory cgroup limit in MB (only when <code>limit_resources=true</code>)</td></tr>
+<tr><td><code>--time</code></td><td>Per-step walltime from remaining allocation time (see below)</td></tr>
+<tr><td><code>--signal</code></td><td>Early warning signal before step timeout (see below)</td></tr>
+</tbody></table>
+</div>
+<h3 id="multi-node-steps"><a class="header" href="#multi-node-steps">Multi-Node Steps</a></h3>
+<p>The <code>num_nodes</code> field on resource requirements controls how many nodes an srun step spans
+(<code>srun --nodes</code>). It defaults to 1. The allocation size (<code>sbatch --nodes</code>) is set via the Slurm
+scheduler configuration.</p>
+<ul>
+<li><strong>Single-node jobs</strong> (default): <code>num_nodes=1</code> -- each job runs on one node</li>
+<li><strong>Multi-node jobs</strong> (MPI, Julia Distributed.jl): <code>num_nodes=N</code> -- step spans N nodes</li>
+</ul>
+<p>When <code>num_nodes &gt; 1</code>, Torc treats the job as consuming whole nodes exclusively for the lifetime of
+the step. This avoids ambiguous partial-node accounting for MPI and other true multi-node jobs.</p>
+<h3 id="the-limit_resources-flag"><a class="header" href="#the-limit_resources-flag">The <code>limit_resources</code> Flag</a></h3>
+<p>When <code>limit_resources</code> is enabled in the scheduler configuration, srun applies <code>--cpus-per-task</code> and
+<code>--mem</code> flags. This creates cgroup-enforced limits: jobs exceeding their memory allocation are
+killed by the OOM killer (exit code 137), and CPU usage is throttled.</p>
+<p>Without <code>limit_resources</code>, Slurm still creates per-step accounting but does not enforce hard limits.</p>
+<h3 id="per-step-walltime---time"><a class="header" href="#per-step-walltime---time">Per-Step Walltime (<code>--time</code>)</a></h3>
+<p>Torc sets <code>srun --time=&lt;remaining_minutes&gt;</code> on every step, where <code>remaining_minutes</code> is the time
+left in the Slurm allocation (rounded <strong>down</strong> to whole minutes, minimum 1). This ensures that when
+a step exceeds its time, Slurm produces a clean <code>State=TIMEOUT</code> with return code 152, rather than
+<code>State=CANCELLED</code> which is what happens when the allocation itself expires and kills the step.</p>
+<p>The rounding-down is intentional: it guarantees the step's timeout fires <strong>before</strong> the allocation
+expires, so Torc can detect the timeout via sacct and report it accurately.</p>
+<h3 id="early-termination-signal---signal"><a class="header" href="#early-termination-signal---signal">Early Termination Signal (<code>--signal</code>)</a></h3>
+<p>When the workflow has <code>srun_termination_signal</code> set (e.g., <code>"TERM@120"</code>), Torc passes
+<code>srun --signal=TERM@120</code> to every step. This tells Slurm to send SIGTERM to the job process 120
+seconds <strong>before</strong> the step's <code>--time</code> limit. The job can catch this signal, save a checkpoint, and
+exit cleanly before the hard kill.</p>
+<p>This is a workflow-level setting stored in the database and applied uniformly to all srun
+invocations. See the <a href="../fault-tolerance/checkpointing.html">Graceful Job Termination tutorial</a> for a
+complete example with a Python signal handler.</p>
+<h3 id="memory-vs-runtime-enforcement"><a class="header" href="#memory-vs-runtime-enforcement">Memory vs Runtime Enforcement</a></h3>
+<p>Memory and runtime are handled differently because they carry different risks:</p>
+<ul>
+<li>
+<p><strong>Memory (<code>--mem</code>)</strong> enforces a <strong>per-job cgroup limit</strong> based on the job's own resource
+requirements. A job that exceeds its declared memory is killed by the OOM killer (exit code 137).
+This strict enforcement is necessary because a runaway memory consumer can destabilize the entire
+node by starving other concurrent jobs of memory.</p>
+</li>
+<li>
+<p><strong>Runtime (<code>--time</code>)</strong> is set to the <strong>remaining allocation time</strong>, not the job's declared
+<code>runtime</code> from resource requirements. This ensures Slurm produces a clean <code>State=TIMEOUT</code> (return
+code 152) instead of <code>State=CANCELLED</code> when time runs out. The per-step <code>--time</code> is not derived
+from the job's resource requirements because, unlike excess memory usage, a long-running job does
+not endanger other jobs — it simply runs longer than expected. Killing a job at 95% completion
+because it slightly exceeded its estimated runtime would waste all the compute invested.</p>
+</li>
+</ul>
+<h2 id="sstat-monitoring"><a class="header" href="#sstat-monitoring">sstat Monitoring</a></h2>
+<p><strong>Module:</strong> <code>src/client/resource_monitor.rs</code></p>
+<p>The resource monitor spawns a background thread that periodically polls <code>sstat</code> for live resource
+metrics. This provides time-series data for CPU and memory usage during job execution.</p>
+<h3 id="step-id-discovery"><a class="header" href="#step-id-discovery">Step ID Discovery</a></h3>
+<p>sstat requires numeric step IDs (e.g., <code>12345.0</code>, <code>12345.1</code>), not step names. After srun starts, the
+monitor discovers the numeric ID:</p>
+<pre class="mermaid">sequenceDiagram
+    participant JR as Job Runner
+    participant RM as Resource Monitor
+    participant SQ as squeue --steps
+    participant SS as sstat
+
+    JR-&gt;&gt;RM: register_srun_step(step_name)
+    loop Up to 5 attempts (200ms apart)
+        RM-&gt;&gt;SQ: squeue --steps -j $SLURM_JOB_ID -o &quot;%i|%j&quot;
+        SQ--&gt;&gt;RM: 12345.2|wf42_j7_r1_a1
+    end
+    Note over RM: Maps step_name → numeric ID &quot;2&quot;
+
+    loop Every sample_interval
+        RM-&gt;&gt;SS: sstat -j 12345.2 --format=AveCPU,MaxRSS
+        SS--&gt;&gt;RM: 00:01:30|2048576K
+        Note over RM: Compute CPU%, track peak memory
+    end
+</pre>
+<p>The <code>squeue --steps</code> command is used instead of <code>scontrol show step</code> because it produces one compact
+line per step, which is critical for allocations with thousands of concurrent steps.</p>
+<h3 id="cpu-percent-calculation"><a class="header" href="#cpu-percent-calculation">CPU Percent Calculation</a></h3>
+<p>sstat reports <code>AveCPU</code> as cumulative CPU time since step start, not instantaneous usage. The monitor
+converts this to a utilization percentage:</p>
+<pre><code>cpu_percent = (new_ave_cpu_s - prev_ave_cpu_s) / elapsed_s * 100.0
+</code></pre>
+<p><strong>First-sample guard:</strong> The first sstat sample is always skipped because there is no previous
+baseline to compute a delta from. Without this guard, the first sample would compute
+<code>cumulative_cpu / total_elapsed</code> which gives an inaccurate average, not instantaneous usage.</p>
+<h3 id="sstat-fields-collected"><a class="header" href="#sstat-fields-collected">sstat Fields Collected</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>sstat Field</th><th>Parsed As</th><th>Stored In</th></tr></thead><tbody>
+<tr><td><code>AveCPU</code></td><td>Seconds (HH:MM:SS)</td><td>CPU percent (derived)</td></tr>
+<tr><td><code>MaxRSS</code></td><td>Bytes (with K/M/G suffix)</td><td><code>peak_memory_bytes</code></td></tr>
+</tbody></table>
+</div>
+<h3 id="noise-reduction"><a class="header" href="#noise-reduction">Noise Reduction</a></h3>
+<p>sstat calls for completed steps return non-zero exit codes. These are logged at <code>debug</code> level (not
+<code>warn</code>) to avoid flooding logs when steps finish between polling intervals.</p>
+<h2 id="sacct-collection"><a class="header" href="#sacct-collection">sacct Collection</a></h2>
+<p><strong>Module:</strong> <code>src/client/async_cli_command.rs</code></p>
+<p>After a job step exits, <code>collect_sacct_stats()</code> retrieves the final Slurm accounting record. This is
+a blocking call that runs on the job runner thread.</p>
+<h3 id="retry-logic"><a class="header" href="#retry-logic">Retry Logic</a></h3>
+<p>The Slurm accounting daemon (<code>slurmdbd</code>) often has a delay between step completion and record
+availability. The collector retries up to 6 times with 5-second delays:</p>
+<pre class="mermaid">flowchart TD
+    classDef action fill:#2563eb,color:#fff,stroke:#1d4ed8
+    classDef decision fill:#f59e0b,color:#000,stroke:#d97706
+    classDef result fill:#059669,color:#fff,stroke:#047857
+    classDef fail fill:#dc2626,color:#fff,stroke:#b91c1c
+
+    START[Step exits]:::action
+    CALL[&quot;sacct -j $JOB_ID -P -n&lt;br/&gt;--format JobName,MaxRSS,...&quot;]:::action
+    FOUND{Step row&lt;br/&gt;found?}:::decision
+    DATA{Has MaxRSS&lt;br/&gt;or AveCPU?}:::decision
+    RETRY{Attempt&lt;br/&gt;&amp;lt; 6?}:::decision
+    WAIT[Sleep 5s]:::action
+    PARSE[Parse fields]:::action
+    RETURN[Return SacctStats]:::result
+    NONE[Return None]:::fail
+
+    START --&gt; CALL
+    CALL --&gt; FOUND
+    FOUND --&gt;|Yes| DATA
+    FOUND --&gt;|No| RETRY
+    DATA --&gt;|Yes| PARSE --&gt; RETURN
+    DATA --&gt;|No, fields empty| RETRY
+    RETRY --&gt;|Yes| WAIT --&gt; CALL
+    RETRY --&gt;|No, give up| NONE
+</pre>
+<h3 id="sacct-output-format"><a class="header" href="#sacct-output-format">sacct Output Format</a></h3>
+<p>The command queries sacct with pipe-separated output:</p>
+<pre><code>sacct -j &lt;slurm_job_id&gt; --format JobName,MaxRSS,MaxVMSize,MaxDiskRead,MaxDiskWrite,AveCPU,NodeList -P -n
+</code></pre>
+<p>The step row is matched by <code>JobName == step_name</code> in code rather than using sacct's <code>--name</code> flag,
+which on some Slurm versions matches the allocation name instead of the step name.</p>
+<h3 id="sacct-fields-collected"><a class="header" href="#sacct-fields-collected">sacct Fields Collected</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>sacct Field</th><th>Model Field</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>MaxRSS</code></td><td><code>max_rss_bytes</code></td><td>Peak resident set size</td></tr>
+<tr><td><code>MaxVMSize</code></td><td><code>max_vm_size_bytes</code></td><td>Peak virtual memory size</td></tr>
+<tr><td><code>MaxDiskRead</code></td><td><code>max_disk_read_bytes</code></td><td>Total bytes read from disk</td></tr>
+<tr><td><code>MaxDiskWrite</code></td><td><code>max_disk_write_bytes</code></td><td>Total bytes written to disk</td></tr>
+<tr><td><code>AveCPU</code></td><td><code>ave_cpu_seconds</code></td><td>Average CPU time (HH:MM:SS parsed to seconds)</td></tr>
+<tr><td><code>NodeList</code></td><td><code>node_list</code></td><td>Nodes where step ran</td></tr>
+</tbody></table>
+</div>
+<h2 id="data-assembly"><a class="header" href="#data-assembly">Data Assembly</a></h2>
+<p><strong>Module:</strong> <code>src/client/job_runner.rs</code></p>
+<p>The job runner assembles the final <code>ResultModel</code> from three sources:</p>
+<pre class="mermaid">flowchart LR
+    classDef sstat fill:#7c3aed,color:#fff,stroke:#6d28d9
+    classDef sacct fill:#2563eb,color:#fff,stroke:#1d4ed8
+    classDef runner fill:#f59e0b,color:#000,stroke:#d97706
+    classDef result fill:#059669,color:#fff,stroke:#047857
+
+    subgraph &quot;sstat (live monitoring)&quot;
+        S1[peak_memory_bytes]:::sstat
+        S2[peak_cpu_percent]:::sstat
+        S3[avg_cpu_percent]:::sstat
+        S4[avg_memory_bytes]:::sstat
+    end
+
+    subgraph &quot;sacct (post-mortem)&quot;
+        A1[max_rss_bytes]:::sacct
+        A2[ave_cpu_seconds]:::sacct
+    end
+
+    subgraph &quot;Job Runner&quot;
+        R1[exec_time_minutes]:::runner
+        R2[return_code]:::runner
+    end
+
+    RESULT[ResultModel]:::result
+
+    S1 --&gt;|&quot;max(sstat, sacct)&quot;| RESULT
+    S2 --&gt; RESULT
+    S3 --&gt; RESULT
+    S4 --&gt; RESULT
+    A1 --&gt;|&quot;max(sstat, sacct)&quot;| RESULT
+    A2 --&gt;|&quot;avg_pct = ave_cpu_s / exec_s * 100&quot;| RESULT
+    R1 --&gt; RESULT
+    R2 --&gt; RESULT
+</pre>
+<h3 id="backfill-strategy"><a class="header" href="#backfill-strategy">Backfill Strategy</a></h3>
+<p>The <code>backfill_sacct_into_result()</code> function merges sacct data into the result, following these
+rules:</p>
+<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Strategy</th><th>Rationale</th></tr></thead><tbody>
+<tr><td><code>peak_memory_bytes</code></td><td><code>max(sstat_peak, sacct_MaxRSS)</code></td><td>sstat may miss spikes between samples; sacct may miss brief spikes between accounting flushes</td></tr>
+<tr><td><code>avg_cpu_percent</code></td><td>sacct <code>ave_cpu_s / exec_s * 100</code></td><td>Replaces sstat-derived average with sacct's authoritative lifetime average</td></tr>
+<tr><td><code>peak_cpu_percent</code></td><td>sacct average (only if sstat gave 0%)</td><td>sacct has no instantaneous peak; using the average is better than displaying 0%</td></tr>
+<tr><td><code>avg_memory_bytes</code></td><td>sstat only (no backfill)</td><td>sacct provides no average RSS; only the sstat time-series has this</td></tr>
+</tbody></table>
+</div>
+<p><strong>Zero guards:</strong> sacct values of 0 are skipped during backfill. A zero usually means accounting was
+never flushed (very short or failed steps), not that the job used no resources.</p>
+<h2 id="storage"><a class="header" href="#storage">Storage</a></h2>
+<h3 id="slurmstatsmodel"><a class="header" href="#slurmstatsmodel">SlurmStatsModel</a></h3>
+<p>Sacct data is stored in the <code>slurm_stats</code> table with a UNIQUE constraint on
+<code>(workflow_id, job_id, run_id, attempt_id)</code>:</p>
+<pre class="mermaid">erDiagram
+    workflow ||--o{ slurm_stats : &quot;has&quot;
+    job ||--o{ slurm_stats : &quot;has&quot;
+
+    slurm_stats {
+        int id PK
+        int workflow_id FK
+        int job_id FK
+        int run_id
+        int attempt_id
+        text slurm_job_id
+        int max_rss_bytes
+        int max_vm_size_bytes
+        int max_disk_read_bytes
+        int max_disk_write_bytes
+        real ave_cpu_seconds
+        text node_list
+    }
+
+    style slurm_stats fill:#7c3aed,color:#fff,stroke:#6d28d9
+</pre>
+<p>The API provides:</p>
+<ul>
+<li><code>POST /slurm_stats</code> -- store accounting data after step completion</li>
+<li><code>GET /slurm_stats?workflow_id=N</code> -- list stats with optional <code>job_id</code>, <code>run_id</code>, <code>attempt_id</code>
+filters</li>
+</ul>
+<h3 id="resultmodel-integration"><a class="header" href="#resultmodel-integration">ResultModel Integration</a></h3>
+<p>The <code>ResultModel</code> (stored in the <code>result</code> table) holds the merged resource metrics from both sstat
+and sacct. These are the fields used by recovery heuristics and resource correction:</p>
+<ul>
+<li><code>peak_memory_bytes</code> -- compared against configured memory limit</li>
+<li><code>peak_cpu_percent</code> -- compared against configured CPU count</li>
+<li><code>exec_time_minutes</code> -- compared against configured runtime</li>
+<li><code>avg_cpu_percent</code> -- displayed in reports and dashboards</li>
+</ul>
+<h2 id="parsing-utilities"><a class="header" href="#parsing-utilities">Parsing Utilities</a></h2>
+<p><strong>Module:</strong> <code>src/client/slurm_utils.rs</code></p>
+<p>Two parsing functions handle Slurm's non-standard formats:</p>
+<ul>
+<li><strong><code>parse_slurm_memory(s)</code></strong> -- parses suffixed memory strings (<code>1024K</code>, <code>2.5G</code>, <code>512M</code>) into bytes</li>
+<li><strong><code>parse_slurm_cpu_time(s)</code></strong> -- parses <code>HH:MM:SS</code> or <code>D-HH:MM:SS</code> timestamps into seconds</li>
+</ul>
+<p>These are used by both the sstat monitor and the sacct collector to normalize Slurm output into
+numeric values.</p>
+<h2 id="failure-modes-and-recovery"><a class="header" href="#failure-modes-and-recovery">Failure Modes and Recovery</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Failure</th><th>Impact</th><th>Handling</th></tr></thead><tbody>
+<tr><td>srun not available</td><td>Falls back to direct shell execution</td><td>Detected by <code>SLURM_JOB_ID</code> absence</td></tr>
+<tr><td>sstat unavailable</td><td>No live metrics; sacct still works</td><td>sstat errors logged at debug level</td></tr>
+<tr><td>Step ID not discoverable</td><td>sstat monitoring skipped for that job</td><td>Retries 5x at 200ms intervals</td></tr>
+<tr><td>sacct returns no data</td><td>SlurmStatsModel has NULL fields</td><td>Retries 6x at 5s intervals</td></tr>
+<tr><td>sacct reports zeros</td><td>Backfill skips zero values</td><td>Preserves sstat-derived metrics</td></tr>
+<tr><td>OOM kill (exit 137)</td><td>Job fails, memory limit detected</td><td>Recovery heuristics increase memory</td></tr>
+<tr><td>Timeout (exit 152)</td><td>Job fails, runtime limit detected</td><td>Recovery heuristics increase runtime</td></tr>
+</tbody></table>
+</div>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Setting</th><th>Location</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>limit_resources</code></td><td>Scheduler config</td><td>Enable cgroup enforcement via srun <code>--mem</code>/<code>--cpus-per-task</code></td></tr>
+<tr><td><code>num_nodes</code></td><td>Resource requirements</td><td>Number of nodes per job (default: 1)</td></tr>
+<tr><td><code>sample_interval_seconds</code></td><td>Resource monitor config</td><td>sstat polling interval</td></tr>
+<tr><td><code>TORC_FAKE_SRUN</code></td><td>Environment variable</td><td>Override srun binary path (testing)</td></tr>
+<tr><td><code>TORC_FAKE_SACCT</code></td><td>Environment variable</td><td>Override sacct binary path (testing)</td></tr>
+</tbody></table>
+</div>
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../specialized/design/interfaces.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../contributing.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../specialized/design/interfaces.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../contributing.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../mermaid.min.js"></script>
+        <script src="../../mermaid-init.js"></script>
+        <script src="../../pagetoc.js"></script>
+        <script src="../../version-selector.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
