@@ -1846,3 +1846,230 @@ fn test_claim_jobs_based_on_resources_returns_invocation_script(start_server: &S
         "invocation_script should be returned by claim_jobs_based_on_resources"
     );
 }
+
+/// Test that multi-node jobs (step_nodes > 1) reserve whole nodes exclusively,
+/// preventing single-node jobs from being scheduled on those nodes.
+///
+/// Allocation: 4 nodes × 16 CPUs per node (64 total CPUs).
+/// Jobs: 1 multi-node job (step_nodes=2) + 3 single-node jobs (8 CPUs each).
+///
+/// The multi-node job reserves 2 whole nodes, leaving 2 nodes (32 CPUs) for
+/// single-node jobs. All 3 single-node jobs fit (3 × 8 = 24 ≤ 32).
+/// Expected: 4 jobs returned (1 multi-node + 3 single-node).
+#[rstest]
+fn test_multi_node_reserves_whole_nodes(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = models::WorkflowModel::new("multi_node_test".to_string(), "user".to_string());
+    let created_workflow =
+        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+    let workflow_id = created_workflow.id.unwrap();
+
+    // Multi-node resource requirements: step_nodes=2
+    let mut multi_rr =
+        models::ResourceRequirementsModel::new(workflow_id, "multi_node_rr".to_string());
+    multi_rr.num_cpus = 16;
+    multi_rr.num_gpus = 0;
+    multi_rr.num_nodes = 2;
+    multi_rr.step_nodes = Some(2);
+    multi_rr.memory = "32g".to_string();
+    multi_rr.runtime = "PT1H".to_string();
+    let multi_rr = default_api::create_resource_requirements(config, multi_rr)
+        .expect("Failed to create multi-node RR");
+
+    // Single-node resource requirements
+    let single_rr = create_test_resource_requirements(
+        config,
+        workflow_id,
+        "single_node_rr",
+        8,
+        0,
+        1,
+        "16g",
+        "PT1H",
+    );
+
+    // Create 1 multi-node job
+    let mut job = models::JobModel::new(workflow_id, "mpi_job".to_string(), "echo mpi".to_string());
+    job.resource_requirements_id = Some(multi_rr.id.unwrap());
+    default_api::create_job(config, job).expect("Failed to create job");
+
+    // Create 3 single-node jobs
+    for i in 0..3 {
+        let mut job = models::JobModel::new(
+            workflow_id,
+            format!("single_job_{}", i),
+            format!("echo single {}", i),
+        );
+        job.resource_requirements_id = Some(single_rr.id.unwrap());
+        default_api::create_job(config, job).expect("Failed to create job");
+    }
+
+    default_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to initialize jobs");
+
+    // 4 nodes × 16 CPUs per node: multi-node takes 2 nodes, 3 single-node jobs fit on remaining 2
+    let resources = models::ComputeNodesResources::new(16, 32.0, 0, 4);
+    let result = default_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        &resources,
+        10,
+        Some(models::ClaimJobsSortMethod::GpusRuntimeMemory),
+        None,
+    )
+    .expect("claim_jobs_based_on_resources should succeed");
+
+    let returned_jobs = result.jobs.expect("Server must return jobs array");
+    assert_eq!(
+        returned_jobs.len(),
+        4,
+        "Expected 4 jobs (1 multi-node + 3 single-node), got {}",
+        returned_jobs.len()
+    );
+}
+
+/// Test that multi-node jobs cannot be placed when single-node jobs would
+/// no longer fit after the exclusive node reservation.
+///
+/// Allocation: 2 nodes × 16 CPUs per node (32 total CPUs).
+/// Jobs: 2 single-node jobs (8 CPUs each) + 1 multi-node job (step_nodes=2).
+///
+/// The 2 single-node jobs consume shared resources. The multi-node job needs
+/// both nodes free, but the single-node jobs are using them. The server
+/// processes jobs in the order returned by SQL (sorted by gpus/runtime/memory
+/// descending), so the multi-node job should be selected first, then the
+/// single-node jobs should fit. All 3 should be returned... unless the
+/// multi-node job takes both nodes, leaving 0 shared nodes.
+///
+/// With 2 nodes and step_nodes=2: the multi-node job takes both nodes.
+/// No shared nodes remain → single-node jobs cannot fit.
+/// Expected: 1 job returned (the multi-node job only).
+#[rstest]
+fn test_multi_node_blocks_single_node_when_all_nodes_used(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = models::WorkflowModel::new("mn_blocks_sn_test".to_string(), "user".to_string());
+    let created_workflow =
+        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+    let workflow_id = created_workflow.id.unwrap();
+
+    // Multi-node RR: needs all 2 nodes
+    let mut multi_rr =
+        models::ResourceRequirementsModel::new(workflow_id, "multi_2node".to_string());
+    multi_rr.num_cpus = 16;
+    multi_rr.num_gpus = 0;
+    multi_rr.num_nodes = 2;
+    multi_rr.step_nodes = Some(2);
+    multi_rr.memory = "32g".to_string();
+    multi_rr.runtime = "PT2H".to_string(); // higher runtime so sorted first
+    let multi_rr = default_api::create_resource_requirements(config, multi_rr)
+        .expect("Failed to create multi-node RR");
+
+    // Single-node RR
+    let single_rr = create_test_resource_requirements(
+        config,
+        workflow_id,
+        "single_1node",
+        8,
+        0,
+        1,
+        "16g",
+        "PT1H",
+    );
+
+    // Create jobs: 1 multi-node + 2 single-node
+    let mut job =
+        models::JobModel::new(workflow_id, "mpi_full".to_string(), "echo mpi".to_string());
+    job.resource_requirements_id = Some(multi_rr.id.unwrap());
+    default_api::create_job(config, job).expect("Failed to create job");
+
+    for i in 0..2 {
+        let mut job = models::JobModel::new(
+            workflow_id,
+            format!("small_job_{}", i),
+            format!("echo {}", i),
+        );
+        job.resource_requirements_id = Some(single_rr.id.unwrap());
+        default_api::create_job(config, job).expect("Failed to create job");
+    }
+
+    default_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to initialize jobs");
+
+    // 2 nodes × 16 CPUs per node
+    let resources = models::ComputeNodesResources::new(16, 32.0, 0, 2);
+    let result = default_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        &resources,
+        10,
+        Some(models::ClaimJobsSortMethod::GpusRuntimeMemory),
+        None,
+    )
+    .expect("claim_jobs_based_on_resources should succeed");
+
+    let returned_jobs = result.jobs.expect("Server must return jobs array");
+    assert_eq!(
+        returned_jobs.len(),
+        1,
+        "Expected 1 job (multi-node uses all 2 nodes, no room for single-node), got {}",
+        returned_jobs.len()
+    );
+    assert_eq!(returned_jobs[0].name, "mpi_full");
+}
+
+/// Test that step_nodes determines multi-node reservation.
+///
+/// A job with step_nodes=2 reserves 2 whole nodes, so only 2 such jobs
+/// fit on a 4-node allocation.
+#[rstest]
+fn test_step_nodes_reserves_whole_nodes(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = models::WorkflowModel::new("step_nodes_test".to_string(), "user".to_string());
+    let created_workflow =
+        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+    let workflow_id = created_workflow.id.unwrap();
+
+    // RR with step_nodes=2 (num_nodes must be >= step_nodes)
+    let mut rr = models::ResourceRequirementsModel::new(workflow_id, "step2_rr".to_string());
+    rr.num_cpus = 8;
+    rr.num_gpus = 0;
+    rr.num_nodes = 2;
+    rr.step_nodes = Some(2);
+    rr.memory = "16g".to_string();
+    rr.runtime = "PT1H".to_string();
+    let rr = default_api::create_resource_requirements(config, rr).expect("Failed to create RR");
+
+    // Create 2 jobs with this RR
+    for i in 0..2 {
+        let mut job = models::JobModel::new(
+            workflow_id,
+            format!("step_job_{}", i),
+            format!("echo {}", i),
+        );
+        job.resource_requirements_id = Some(rr.id.unwrap());
+        default_api::create_job(config, job).expect("Failed to create job");
+    }
+
+    default_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to initialize jobs");
+
+    // 4 nodes: each job reserves 2 nodes, so only 2 jobs can fit
+    let resources = models::ComputeNodesResources::new(16, 32.0, 0, 4);
+    let result = default_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        &resources,
+        10,
+        Some(models::ClaimJobsSortMethod::None),
+        None,
+    )
+    .expect("claim_jobs_based_on_resources should succeed");
+
+    let returned_jobs = result.jobs.expect("Server must return jobs array");
+    assert_eq!(
+        returned_jobs.len(),
+        2,
+        "Expected 2 jobs (each reserves 2 of 4 nodes via step_nodes), got {}",
+        returned_jobs.len()
+    );
+}

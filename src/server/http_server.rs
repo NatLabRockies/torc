@@ -5970,6 +5970,7 @@ where
                 rr.num_cpus,
                 rr.num_gpus,
                 rr.num_nodes,
+                rr.step_nodes,
                 rr.runtime_s
             FROM job
             JOIN resource_requirements rr ON job.resource_requirements_id = rr.id
@@ -6031,6 +6032,7 @@ where
                     rr.num_cpus,
                     rr.num_gpus,
                     rr.num_nodes,
+                    rr.step_nodes,
                     rr.runtime_s
                 FROM job
                 JOIN resource_requirements rr ON job.resource_requirements_id = rr.id
@@ -6080,62 +6082,78 @@ where
             }
         }
 
-        // Track consumed resources
+        // Resource accounting model:
+        //
+        // The client sends per-node capacity (cpus, memory, gpus) and total node count.
+        // We track two kinds of consumption:
+        //   - exclusive_nodes: whole nodes reserved by multi-node jobs (step_nodes > 1)
+        //   - consumed_cpus/memory/gpus: resources used by single-node jobs on shared nodes
+        //
+        // Single-node jobs share the remaining (total - exclusive) nodes.
+        // Multi-node jobs require completely free nodes — they consume whole nodes.
+        let per_node_cpus = resources.num_cpus;
+        let per_node_memory = memory_bytes;
+        let per_node_gpus = resources.num_gpus;
+        let total_nodes = resources.num_nodes.max(1);
+
         let mut consumed_memory_bytes = 0i64;
         let mut consumed_cpus = 0i64;
         let mut consumed_gpus = 0i64;
-        let mut consumed_nodes = 0i64; // Only tracks dedicated nodes consumed by multi-node jobs
+        let mut exclusive_nodes = 0i64;
         let mut selected_jobs = Vec::new();
         let mut job_ids_to_update = Vec::new();
 
         debug!(
-            "get_ready_jobs: Found {} potential jobs for workflow {} with resources: memory_gb={}, cpus={}, gpus={}, nodes={}, time_limit={:?}",
+            "get_ready_jobs: Found {} potential jobs for workflow {} with resources: \
+             per_node(cpus={}, memory_bytes={}, gpus={}), nodes={}, time_limit={:?}",
             rows.len(),
             workflow_id,
-            resources.memory_gb,
-            resources.num_cpus,
-            resources.num_gpus,
-            resources.num_nodes,
+            per_node_cpus,
+            per_node_memory,
+            per_node_gpus,
+            total_nodes,
             resources.time_limit
         );
+
         // Loop through jobs and select those that fit within resource limits
         for row in rows {
             let job_memory: i64 = row.get("memory_bytes");
             let job_cpus: i64 = row.get("num_cpus");
             let job_gpus: i64 = row.get("num_gpus");
             let job_nodes: i64 = row.get("num_nodes");
-            let (claimed_memory_bytes, claimed_cpus, claimed_gpus) = if job_nodes > 1 {
-                let nodes = resources.num_nodes.max(1);
-                (
-                    (memory_bytes / nodes) * job_nodes,
-                    (resources.num_cpus / nodes) * job_nodes,
-                    (resources.num_gpus / nodes) * job_nodes,
-                )
+            let step_nodes: i64 = row
+                .try_get::<Option<i64>, _>("step_nodes")
+                .unwrap_or(None)
+                .unwrap_or(1)
+                .max(1);
+            let reserved_nodes = job_nodes.max(step_nodes).max(1);
+
+            let fits = if reserved_nodes > 1 {
+                // Multi-node job: requires reserved_nodes completely free nodes.
+                // Check 1: enough total nodes
+                // Check 2: single-node jobs still fit on the remaining shared nodes
+                let shared_nodes_after = total_nodes - exclusive_nodes - reserved_nodes;
+                exclusive_nodes + reserved_nodes <= total_nodes
+                    && consumed_cpus <= shared_nodes_after * per_node_cpus
+                    && consumed_memory_bytes <= shared_nodes_after * per_node_memory
+                    && consumed_gpus <= shared_nodes_after * per_node_gpus
             } else {
-                (job_memory, job_cpus, job_gpus)
+                // Single-node job: fits in the shared pool across non-exclusive nodes.
+                let shared_capacity_cpus = (total_nodes - exclusive_nodes) * per_node_cpus;
+                let shared_capacity_memory = (total_nodes - exclusive_nodes) * per_node_memory;
+                let shared_capacity_gpus = (total_nodes - exclusive_nodes) * per_node_gpus;
+                consumed_cpus + job_cpus <= shared_capacity_cpus
+                    && consumed_memory_bytes + job_memory <= shared_capacity_memory
+                    && consumed_gpus + job_gpus <= shared_capacity_gpus
             };
 
-            // Check if this job would exceed resource limits
-            // For multi-node jobs (num_nodes > 1), check if we have enough dedicated nodes
-            // For single-node jobs (num_nodes = 1), they can share nodes so only check other resources
-            let would_exceed_nodes = if job_nodes > 1 {
-                consumed_nodes + job_nodes > resources.num_nodes
-            } else {
-                false // Single-node jobs don't count against node limit
-            };
-
-            if consumed_memory_bytes + claimed_memory_bytes <= memory_bytes
-                && consumed_cpus + claimed_cpus <= resources.num_cpus
-                && consumed_gpus + claimed_gpus <= resources.num_gpus
-                && !would_exceed_nodes
-            {
-                // Add this job to the selection
-                consumed_memory_bytes += claimed_memory_bytes;
-                consumed_cpus += claimed_cpus;
-                consumed_gpus += claimed_gpus;
-                // Only increment consumed_nodes for multi-node jobs
-                if job_nodes > 1 {
-                    consumed_nodes += job_nodes;
+            if fits {
+                if reserved_nodes > 1 {
+                    exclusive_nodes += reserved_nodes;
+                } else {
+                    consumed_memory_bytes += job_memory;
+                    consumed_cpus += job_cpus;
+                    consumed_gpus += job_gpus;
                 }
 
                 let job_id: i64 = row.get("job_id");
@@ -6176,30 +6194,34 @@ where
 
                 selected_jobs.push(job);
             } else {
-                // Job would exceed resource limits, skip it
-                let node_limit_reason = if job_nodes > 1
-                    && consumed_nodes + job_nodes > resources.num_nodes
-                {
+                let reason = if reserved_nodes > 1 {
+                    let available = total_nodes - exclusive_nodes;
                     format!(
-                        " [multi-node job needs {} nodes but only {} available after {} consumed]",
-                        job_nodes,
-                        resources.num_nodes - consumed_nodes,
-                        consumed_nodes
+                        "multi-node job needs {} free nodes, {} available \
+                         (exclusive_nodes={}, shared cpus={}/{})",
+                        reserved_nodes,
+                        available,
+                        exclusive_nodes,
+                        consumed_cpus,
+                        (total_nodes - exclusive_nodes) * per_node_cpus
                     )
                 } else {
-                    String::new()
+                    let shared_nodes = total_nodes - exclusive_nodes;
+                    format!(
+                        "cpus: {}/{}, memory: {}/{}, gpus: {}/{}",
+                        consumed_cpus + job_cpus,
+                        shared_nodes * per_node_cpus,
+                        consumed_memory_bytes + job_memory,
+                        shared_nodes * per_node_memory,
+                        consumed_gpus + job_gpus,
+                        shared_nodes * per_node_gpus
+                    )
                 };
 
                 debug!(
-                    "Skipping job {} - would exceed resource limits (memory: {}/{}, cpus: {}/{}, gpus: {}/{}){}",
+                    "Skipping job {} - would exceed resource limits ({})",
                     row.get::<i64, _>("job_id"),
-                    consumed_memory_bytes + claimed_memory_bytes,
-                    memory_bytes,
-                    consumed_cpus + claimed_cpus,
-                    resources.num_cpus,
-                    consumed_gpus + claimed_gpus,
-                    resources.num_gpus,
-                    node_limit_reason
+                    reason
                 );
             }
         }

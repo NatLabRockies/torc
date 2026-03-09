@@ -1513,11 +1513,15 @@ impl JobRunner {
                 Some(n) => n,
                 None => return,
             };
+            // Send num_nodes=1 because this claim represents a single node's
+            // available resources. The PerNodeTracker path is only used when
+            // there are no multi-node jobs, so the SQL filter rr.num_nodes <= 1
+            // correctly excludes multi-node jobs.
             let mut r = ComputeNodesResources::new(
                 node.available_cpus,
                 node.available_memory_gb,
                 node.available_gpus,
-                self.resources.num_nodes,
+                1,
             );
             r.scheduler_config_id = self.resources.scheduler_config_id;
             r.time_limit.clone_from(&self.resources.time_limit);
