@@ -453,6 +453,27 @@ fn run_monitoring_loop(
                 }
             }
 
+            // Batch-fetch sstat data for all Slurm steps in a single subprocess call.
+            let slurm_steps: Vec<String> = monitored_jobs
+                .values()
+                .filter_map(|j| match &j.source {
+                    MonitorJobSource::Slurm {
+                        slurm_job_id,
+                        numeric_step_id: Some(step_id),
+                        ..
+                    } => Some(format!("{}.{}", slurm_job_id, step_id)),
+                    _ => None,
+                })
+                .collect();
+            let sstat_data = collect_sstat_samples_batch(&slurm_steps, &sstat_binary);
+            if !slurm_steps.is_empty() {
+                debug!(
+                    "Batched sstat query for {} steps, got {} results",
+                    slurm_steps.len(),
+                    sstat_data.len()
+                );
+            }
+
             let timestamp = chrono::Utc::now().timestamp();
 
             for (pid, job) in monitored_jobs.iter_mut() {
@@ -474,32 +495,42 @@ fn run_monitoring_loop(
                                 continue;
                             }
                         };
-                        let now = Instant::now();
-                        let elapsed_s = now.duration_since(*prev_sample_at).as_secs_f64();
-                        match collect_sstat_sample(
-                            slurm_job_id,
-                            step_id,
-                            &sstat_binary,
-                            prev_ave_cpu_s.unwrap_or(0.0),
-                            elapsed_s,
-                        ) {
-                            Some((cpu, mem, new_ave_cpu_s)) => {
-                                *prev_sample_at = now;
-                                // On the first successful sample, AveCPU is cumulative
-                                // since step start and we have no valid baseline for
-                                // delta computation. Record the baseline and skip.
-                                if prev_ave_cpu_s.is_none() {
-                                    *prev_ave_cpu_s = Some(new_ave_cpu_s);
-                                    continue;
-                                }
-                                *prev_ave_cpu_s = Some(new_ave_cpu_s);
-                                (cpu, mem, 1)
-                            }
+                        let job_step = format!("{}.{}", slurm_job_id, step_id);
+                        let (ave_cpu_s, max_rss) = match sstat_data.get(&job_step) {
+                            Some(sample) => *sample,
                             None => {
-                                // sstat returned no data; skip this sample.
+                                // sstat returned no data for this step; skip.
                                 continue;
                             }
+                        };
+
+                        let now = Instant::now();
+                        let elapsed_s = now.duration_since(*prev_sample_at).as_secs_f64();
+                        *prev_sample_at = now;
+
+                        // On the first successful sample, AveCPU is cumulative since step
+                        // start and we have no valid baseline for delta computation.
+                        // Record the baseline and skip.
+                        if prev_ave_cpu_s.is_none() {
+                            *prev_ave_cpu_s = Some(ave_cpu_s);
+                            continue;
                         }
+
+                        let cpu_percent = if elapsed_s > 0.0 {
+                            ((ave_cpu_s - prev_ave_cpu_s.unwrap_or(0.0)) / elapsed_s * 100.0)
+                                .max(0.0)
+                        } else {
+                            0.0
+                        };
+                        *prev_ave_cpu_s = Some(ave_cpu_s);
+
+                        debug!(
+                            "sstat sample for step {}: AveCPU={:.3}s => cpu_pct={:.1}%, \
+                             MaxRSS={}B",
+                            job_step, ave_cpu_s, cpu_percent, max_rss
+                        );
+
+                        (cpu_percent, max_rss, 1)
                     }
                 };
 
@@ -642,90 +673,71 @@ fn discover_step_ids(slurm_job_id: &str) -> HashMap<String, String> {
     map
 }
 
-/// Poll `sstat` for the named Slurm step and return `(cpu_percent, max_rss_bytes, new_ave_cpu_s)`.
+/// Raw sstat data for a single step: `(ave_cpu_seconds, max_rss_bytes)`.
+type SstatRawSample = (f64, u64);
+
+/// Poll `sstat` for multiple Slurm steps in a single subprocess invocation and return
+/// the raw accounting counters keyed by `"jobid.stepid"`.
 ///
-/// `sstat` reports `AveCPU` as cumulative CPU time since step start.  To convert to an
-/// instantaneous utilisation rate we compute:
+/// This batches all step queries into one `sstat -j <comma-separated-steps>` call,
+/// dramatically reducing subprocess overhead when monitoring many concurrent jobs.
 ///
-/// ```text
-/// cpu_percent = (new_ave_cpu_s - prev_ave_cpu_s) / elapsed_s * 100.0
-/// ```
-///
-/// Returns `None` when the step cannot be found (not yet started, already exited, or sstat
-/// unavailable).
-fn collect_sstat_sample(
-    slurm_job_id: &str,
-    step_id: &str,
+/// Returns an empty map when sstat is unavailable or returns no data.
+fn collect_sstat_samples_batch(
+    job_steps: &[String],
     sstat_binary: &str,
-    prev_ave_cpu_s: f64,
-    elapsed_s: f64,
-) -> Option<(f64, u64, f64)> {
-    // Query the specific step via its numeric ID (e.g., "12893794.1").
-    // Name-based lookup ("jobid.stepname") is not supported on all Slurm installations
-    // (notably HPE Cray EX clusters).
-    let job_step = format!("{}.{}", slurm_job_id, step_id);
-    let output = std::process::Command::new(sstat_binary)
+) -> HashMap<String, SstatRawSample> {
+    let mut results = HashMap::new();
+    if job_steps.is_empty() {
+        return results;
+    }
+
+    let steps_arg = job_steps.join(",");
+    let output = match std::process::Command::new(sstat_binary)
         .args([
             "-j",
-            &job_step,
+            &steps_arg,
             "--format",
-            "AveCPU,MaxRSS",
+            "JobID,AveCPU,MaxRSS",
             "-P", // pipe-separated
             "-n", // no header
         ])
         .output()
-        .ok()?;
+    {
+        Ok(o) => o,
+        Err(e) => {
+            debug!("sstat batch query failed to execute: {}", e);
+            return results;
+        }
+    };
 
     if !output.status.success() {
         debug!(
-            "sstat returned non-zero exit code for step {}: {}",
-            job_step,
+            "sstat batch query returned non-zero for steps [{}]: {}",
+            steps_arg,
             String::from_utf8_lossy(&output.stderr).trim()
         );
-        return None;
+        return results;
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    debug!("sstat output for step {}: {:?}", job_step, stdout.trim());
+    debug!("sstat batch output: {:?}", stdout.trim());
 
-    // Take the first non-empty line — we queried a single step so there should be at most one.
+    // Each line is "jobid.stepid|AveCPU|MaxRSS", e.g., "12893801.1|00:01:30|1024K"
     for line in stdout.lines() {
         let fields: Vec<&str> = line.split('|').collect();
-        if fields.len() < 2 {
+        if fields.len() < 3 {
             continue;
         }
 
-        let new_ave_cpu_s = parse_slurm_cpu_time(fields[0]).unwrap_or(0.0);
-        let max_rss = parse_slurm_memory(fields[1]).unwrap_or(0).max(0) as u64;
+        let job_step_id = fields[0].trim();
+        let ave_cpu_s = parse_slurm_cpu_time(fields[1]).unwrap_or(0.0);
+        let max_rss = parse_slurm_memory(fields[2]).unwrap_or(0).max(0) as u64;
 
-        let cpu_percent = if elapsed_s > 0.0 {
-            ((new_ave_cpu_s - prev_ave_cpu_s) / elapsed_s * 100.0).max(0.0)
-        } else {
-            0.0
-        };
-
-        debug!(
-            "sstat sample for step {}: AveCPU={:.3}s (delta={:.3}s over {:.3}s) \
-             => cpu_pct={:.1}%, MaxRSS={}B",
-            job_step,
-            new_ave_cpu_s,
-            new_ave_cpu_s - prev_ave_cpu_s,
-            elapsed_s,
-            cpu_percent,
-            max_rss
-        );
-
-        return Some((cpu_percent, max_rss, new_ave_cpu_s));
+        results.insert(job_step_id.to_string(), (ave_cpu_s, max_rss));
     }
 
-    // sstat ran successfully but returned no output for this step.
-    // Normal during the brief window before the step appears in slurmstepd.
-    debug!(
-        "sstat returned no data for step {:?} (step may not be visible yet)",
-        job_step,
-    );
-
-    None
+    results
 }
 
 /// Initialize the TimeSeries database
