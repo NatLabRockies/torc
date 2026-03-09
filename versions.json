@@ -1,10 +1,15 @@
 {
-  "latest_release": "v0.20.2",
+  "latest_release": "v0.20.3",
   "versions": [
     {
       "version": "latest",
       "label": "latest (dev)",
       "path": "/torc/latest/"
+    },
+    {
+      "version": "v0.20.3",
+      "label": "v0.20.3",
+      "path": "/torc/v0.20.3/"
     },
     {
       "version": "v0.20.2",
@@ -25,11 +30,6 @@
       "version": "v0.19.2",
       "label": "v0.19.2",
       "path": "/torc/v0.19.2/"
-    },
-    {
-      "version": "v0.19.1",
-      "label": "v0.19.1",
-      "path": "/torc/v0.19.1/"
     }
   ]
 }

@@ -1,0 +1,748 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>AI-Assisted Recovery Design - Torc Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Distributed workflow orchestration for complex computational pipelines">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+        <link rel="stylesheet" href="../../pagetoc.css">
+        <link rel="stylesheet" href="../../version-selector.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Torc Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc/tree/v0.20.3/docs/src/specialized/design/ai-assisted-recovery.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="ai-assisted-recovery-design"><a class="header" href="#ai-assisted-recovery-design">AI-Assisted Recovery Design</a></h1>
+<blockquote>
+<p>🧪 <strong>EXPERIMENTAL</strong>: This feature is new and not yet well-tested. The API and behavior may change
+based on user feedback.</p>
+</blockquote>
+<p>This document describes the architecture and implementation of AI-assisted failure recovery in Torc.
+For a user-focused tutorial, see
+<a href="../fault-tolerance/ai-assisted-recovery.html">AI-Assisted Failure Recovery</a>.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>AI-assisted recovery enables intelligent classification of job failures that can't be handled by
+rule-based mechanisms (failure handlers, OOM/timeout detection). It introduces a new job status
+(<code>pending_failed</code>) that defers the fail/retry decision to an AI agent.</p>
+<pre class="mermaid">flowchart TD
+    subgraph traditional[&quot;Traditional Recovery&quot;]
+        FAIL1[&quot;Job fails&quot;]
+        HANDLER{&quot;Failure handler?&quot;}
+        OOM{&quot;OOM/timeout?&quot;}
+        FAILED1[&quot;Status: failed&quot;]
+        RETRY1[&quot;Retry&quot;]
+    end
+
+    subgraph ai[&quot;AI-Assisted Recovery&quot;]
+        FAIL2[&quot;Job fails&quot;]
+        PENDING[&quot;Status: pending_failed&quot;]
+        AGENT[&quot;AI agent classifies&quot;]
+        FAILED2[&quot;Status: failed&quot;]
+        RETRY2[&quot;Retry&quot;]
+    end
+
+    FAIL1 --&gt; HANDLER
+    HANDLER --&gt;|Match| RETRY1
+    HANDLER --&gt;|No match| OOM
+    OOM --&gt;|Yes| RETRY1
+    OOM --&gt;|No| FAILED1
+
+    FAIL2 --&gt; PENDING
+    PENDING --&gt; AGENT
+    AGENT --&gt;|Permanent| FAILED2
+    AGENT --&gt;|Transient| RETRY2
+
+    style FAIL1 fill:#dc3545,color:#fff
+    style FAIL2 fill:#dc3545,color:#fff
+    style PENDING fill:#ffc107,color:#000
+    style AGENT fill:#4a9eff,color:#fff
+    style FAILED1 fill:#6c757d,color:#fff
+    style FAILED2 fill:#6c757d,color:#fff
+    style RETRY1 fill:#28a745,color:#fff
+    style RETRY2 fill:#28a745,color:#fff
+</pre>
+<h2 id="problem-statement"><a class="header" href="#problem-statement">Problem Statement</a></h2>
+<p>Current recovery mechanisms have blind spots:</p>
+<ol>
+<li><strong>Failure handlers</strong>: Require predefined exit codes. Many failures use generic exit code 1.</li>
+<li><strong>OOM/timeout detection</strong>: Only handles resource exhaustion patterns.</li>
+<li><strong><code>--retry-unknown</code></strong>: Blindly retries all failures, wasting compute on unfixable bugs.</li>
+</ol>
+<p>Real-world failures often require <strong>contextual analysis</strong>:</p>
+<div class="table-wrapper"><table><thead><tr><th>Error</th><th>Analysis Required</th><th>Decision</th></tr></thead><tbody>
+<tr><td><code>Connection refused to storage.internal:443</code></td><td>Was the storage server down?</td><td>Retry if transient</td></tr>
+<tr><td><code>NCCL timeout after 1800 seconds</code></td><td>Is this a node failure or code bug?</td><td>Retry if node issue</td></tr>
+<tr><td><code>SyntaxError: invalid syntax</code></td><td>Is the code broken?</td><td>Fail - needs fix</td></tr>
+<tr><td><code>FileNotFoundError: input.csv</code></td><td>Missing input or wrong path?</td><td>Depends on context</td></tr>
+</tbody></table>
+</div>
+<p>AI agents can analyze stderr, correlate with external systems, and make informed decisions.</p>
+<h2 id="architecture"><a class="header" href="#architecture">Architecture</a></h2>
+<h3 id="component-overview"><a class="header" href="#component-overview">Component Overview</a></h3>
+<pre class="mermaid">flowchart LR
+    subgraph client[&quot;Torc Client&quot;]
+        RUNNER[&quot;JobRunner&quot;]
+        WATCH[&quot;torc watch&quot;]
+        RECOVER[&quot;torc recover&quot;]
+    end
+
+    subgraph server[&quot;Torc Server&quot;]
+        API[&quot;REST API&quot;]
+        DB[(SQLite)]
+    end
+
+    subgraph mcp[&quot;MCP Layer&quot;]
+        MCPSRV[&quot;torc-mcp-server&quot;]
+        CUSTOM[&quot;Custom MCP servers&quot;]
+    end
+
+    subgraph agent[&quot;AI Agent&quot;]
+        LLM[&quot;Claude/Copilot/Custom&quot;]
+    end
+
+    RUNNER --&gt; API
+    WATCH --&gt; RECOVER
+    RECOVER --&gt; API
+    API --&gt; DB
+
+    MCPSRV --&gt; API
+    LLM --&gt; MCPSRV
+    LLM --&gt; CUSTOM
+
+    style RUNNER fill:#17a2b8,color:#fff
+    style WATCH fill:#17a2b8,color:#fff
+    style RECOVER fill:#17a2b8,color:#fff
+    style API fill:#28a745,color:#fff
+    style DB fill:#ffc107,color:#000
+    style MCPSRV fill:#4a9eff,color:#fff
+    style LLM fill:#dc3545,color:#fff
+</pre>
+<h3 id="data-flow"><a class="header" href="#data-flow">Data Flow</a></h3>
+<pre class="mermaid">sequenceDiagram
+    participant JR as JobRunner
+    participant API as Torc API
+    participant DB as Database
+    participant MCP as torc-mcp-server
+    participant AI as AI Agent
+
+    Note over JR,DB: Job Failure
+    JR-&gt;&gt;JR: Job exits with code 1
+    JR-&gt;&gt;JR: No failure handler match
+    JR-&gt;&gt;API: complete_job(status=pending_failed)
+    API-&gt;&gt;DB: UPDATE job SET status=10
+
+    Note over AI,DB: AI Classification
+    AI-&gt;&gt;MCP: list_pending_failed_jobs(workflow_id)
+    MCP-&gt;&gt;API: GET /jobs?status=pending_failed
+    API-&gt;&gt;DB: SELECT * FROM job WHERE status=10
+    DB--&gt;&gt;API: Jobs with pending_failed
+    API--&gt;&gt;MCP: Job list
+    MCP-&gt;&gt;MCP: Read stderr files
+    MCP--&gt;&gt;AI: Jobs + stderr content
+
+    AI-&gt;&gt;AI: Analyze errors
+    AI-&gt;&gt;MCP: classify_and_resolve_failures(classifications)
+
+    alt action = retry
+        MCP-&gt;&gt;API: PUT /jobs/{id} status=ready
+        API-&gt;&gt;DB: UPDATE job SET status=2, attempt_id+=1
+    else action = fail
+        MCP-&gt;&gt;API: PUT /jobs/{id} status=failed
+        API-&gt;&gt;DB: UPDATE job SET status=6
+        Note over API,DB: Triggers downstream cancellation
+    end
+</pre>
+<h2 id="job-status-pending_failed"><a class="header" href="#job-status-pending_failed">Job Status: pending_failed</a></h2>
+<h3 id="status-values"><a class="header" href="#status-values">Status Values</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Value</th><th>Name</th><th>Description</th></tr></thead><tbody>
+<tr><td>0</td><td>uninitialized</td><td>Not yet initialized</td></tr>
+<tr><td>1</td><td>blocked</td><td>Waiting on dependencies</td></tr>
+<tr><td>2</td><td>ready</td><td>Ready to run</td></tr>
+<tr><td>3</td><td>pending</td><td>Claimed by worker</td></tr>
+<tr><td>4</td><td>running</td><td>Currently executing</td></tr>
+<tr><td>5</td><td>completed</td><td>Finished successfully</td></tr>
+<tr><td>6</td><td>failed</td><td>Failed (terminal)</td></tr>
+<tr><td>7</td><td>canceled</td><td>Canceled by user</td></tr>
+<tr><td>8</td><td>terminated</td><td>Killed by signal</td></tr>
+<tr><td>9</td><td>disabled</td><td>Skipped</td></tr>
+<tr><td><strong>10</strong></td><td><strong>pending_failed</strong></td><td><strong>Awaiting AI classification</strong></td></tr>
+</tbody></table>
+</div>
+<h3 id="status-transitions"><a class="header" href="#status-transitions">Status Transitions</a></h3>
+<pre class="mermaid">stateDiagram-v2
+    [*] --&gt; uninitialized
+    uninitialized --&gt; blocked : initialize
+    uninitialized --&gt; ready : no dependencies
+    blocked --&gt; ready : dependencies met
+    ready --&gt; pending : claimed
+    pending --&gt; running : started
+    running --&gt; completed : exit 0
+    running --&gt; failed : handler match + max retries
+    running --&gt; pending_failed : no handler match
+    running --&gt; ready : failure handler match
+    running --&gt; terminated : signal
+
+    state &quot;pending_failed&quot; as pending_failed
+    pending_failed --&gt; failed : AI classifies permanent
+    pending_failed --&gt; ready : AI classifies transient
+    pending_failed --&gt; uninitialized : reset-status
+
+    failed --&gt; [*]
+    completed --&gt; [*]
+    canceled --&gt; [*]
+    terminated --&gt; [*]
+</pre>
+<h3 id="workflow-completion-semantics"><a class="header" href="#workflow-completion-semantics">Workflow Completion Semantics</a></h3>
+<p>A workflow with <code>pending_failed</code> jobs is <strong>not complete</strong>:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn is_workflow_complete(workflow_id: i64) -&gt; bool {
+    // Jobs in these statuses are "complete"
+    let complete_statuses = [
+        JobStatus::Completed,
+        JobStatus::Failed,
+        JobStatus::Canceled,
+        JobStatus::Terminated,
+        JobStatus::Disabled,
+    ];
+
+    // pending_failed is NOT in this list
+    // So workflows with pending_failed jobs are incomplete
+
+    !jobs.iter().any(|j| !complete_statuses.contains(&amp;j.status))
+}
+<span class="boring">}</span></code></pre></pre>
+<p>This ensures:</p>
+<ul>
+<li><code>torc watch</code> continues monitoring</li>
+<li>Downstream jobs remain blocked (not canceled)</li>
+<li>The workflow doesn't appear "done" prematurely</li>
+</ul>
+<h2 id="recovery-outcome-enum"><a class="header" href="#recovery-outcome-enum">Recovery Outcome Enum</a></h2>
+<p>The <code>try_recover_job</code> function returns detailed outcomes:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub enum RecoveryOutcome {
+    /// Job was successfully scheduled for retry
+    Retried,
+    /// No failure handler defined - use PendingFailed status
+    NoHandler,
+    /// Failure handler exists but no rule matched - use PendingFailed status
+    NoMatchingRule,
+    /// Max retries exceeded - use Failed status
+    MaxRetriesExceeded,
+    /// API call or other error - use Failed status
+    Error(String),
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Usage in <code>handle_job_completion</code>:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>match self.try_recover_job(job_id, ...) {
+    RecoveryOutcome::Retried =&gt; {
+        // Job queued for retry, clean up
+        return;
+    }
+    RecoveryOutcome::NoHandler | RecoveryOutcome::NoMatchingRule =&gt; {
+        // Check if workflow has use_pending_failed enabled
+        if self.workflow.use_pending_failed.unwrap_or(false) {
+            // Use pending_failed for AI classification
+            final_result.status = JobStatus::PendingFailed;
+        } else {
+            // Use failed status (default behavior)
+            // (status already Failed)
+        }
+    }
+    RecoveryOutcome::MaxRetriesExceeded | RecoveryOutcome::Error(_) =&gt; {
+        // Use failed - no recovery possible
+        // (status already Failed)
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="enabling-ai-assisted-recovery"><a class="header" href="#enabling-ai-assisted-recovery">Enabling AI-Assisted Recovery</a></h2>
+<p><strong>AI-assisted recovery is opt-in per workflow</strong> using the <code>use_pending_failed</code> flag. By default,
+jobs that fail without a matching failure handler get the <code>Failed</code> status.</p>
+<h3 id="workflow-specification"><a class="header" href="#workflow-specification">Workflow Specification</a></h3>
+<p>Add <code>use_pending_failed: true</code> to your workflow spec to enable:</p>
+<pre><code class="language-yaml">name: ml_training
+use_pending_failed: true  # Enable AI-assisted recovery
+
+jobs:
+  - name: train_model
+    command: python train.py
+</code></pre>
+<p>Without this flag (or with <code>use_pending_failed: false</code>), jobs use the traditional behavior:</p>
+<ul>
+<li>Failure handler match → retry</li>
+<li>No failure handler → <code>Failed</code> status</li>
+<li>Max retries exceeded → <code>Failed</code> status</li>
+</ul>
+<p>With <code>use_pending_failed: true</code>:</p>
+<ul>
+<li>Failure handler match → retry</li>
+<li>No failure handler → <code>PendingFailed</code> status (awaiting AI classification)</li>
+<li>Max retries exceeded → <code>Failed</code> status</li>
+</ul>
+<h3 id="why-opt-in"><a class="header" href="#why-opt-in">Why Opt-In?</a></h3>
+<p>The default behavior prioritizes predictability and backward compatibility:</p>
+<ol>
+<li><strong>Existing workflows continue to work</strong> - no breaking changes</li>
+<li><strong>Clear failure semantics</strong> - jobs either retry or fail immediately</li>
+<li><strong>No external dependencies</strong> - doesn't require AI agent integration</li>
+</ol>
+<p>Opt-in when you want:</p>
+<ul>
+<li>Intelligent classification of ambiguous failures</li>
+<li>Human/AI review before retry decisions</li>
+<li>Reduced compute waste from blind retries</li>
+</ul>
+<h2 id="mcp-server-tools"><a class="header" href="#mcp-server-tools">MCP Server Tools</a></h2>
+<h3 id="list_pending_failed_jobs"><a class="header" href="#list_pending_failed_jobs">list_pending_failed_jobs</a></h3>
+<p>Lists jobs awaiting classification with their stderr content.</p>
+<p><strong>Implementation:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn list_pending_failed_jobs(
+    config: &amp;Configuration,
+    workflow_id: i64,
+    output_dir: &amp;Path,
+) -&gt; Result&lt;CallToolResult, McpError&gt; {
+    // 1. Query jobs with pending_failed status
+    let jobs = paginate_jobs(config, workflow_id,
+        JobListParams::new().with_status(JobStatus::PendingFailed));
+
+    // 2. For each job, fetch result and read stderr tail
+    for job in &amp;jobs {
+        let result = get_latest_result(job.id);
+        let stderr_path = get_job_stderr_path(output_dir, ...);
+        let stderr_tail = read_last_n_lines(&amp;stderr_path, 50);
+
+        // Include in response
+    }
+
+    // 3. Return structured response with guidance
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="classify_and_resolve_failures"><a class="header" href="#classify_and_resolve_failures">classify_and_resolve_failures</a></h3>
+<p>Applies AI classifications to jobs.</p>
+<p><strong>Classification struct:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct FailureClassification {
+    pub job_id: i64,
+    pub action: String,         // "retry" or "fail"
+    pub memory: Option&lt;String&gt;, // Optional resource adjustment
+    pub runtime: Option&lt;String&gt;,
+    pub reason: Option&lt;String&gt;, // For audit trail
+}
+<span class="boring">}</span></code></pre></pre>
+<p><strong>Implementation:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn classify_and_resolve_failures(
+    config: &amp;Configuration,
+    workflow_id: i64,
+    classifications: Vec&lt;FailureClassification&gt;,
+    dry_run: bool,
+) -&gt; Result&lt;CallToolResult, McpError&gt; {
+    // 0. Validate workflow has use_pending_failed enabled
+    let workflow = get_workflow(config, workflow_id)?;
+    if !workflow.use_pending_failed.unwrap_or(false) {
+        return Err(invalid_params(
+            "Workflow does not have use_pending_failed enabled"
+        ));
+    }
+
+    for classification in &amp;classifications {
+        // 1. Validate job is in pending_failed status
+        // 2. Apply resource adjustments if specified
+        // 3. Set status based on action:
+        //    - "retry": status = ready, attempt_id += 1
+        //    - "fail": status = failed (triggers cascade)
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<p><strong>Validation:</strong></p>
+<p>The tool validates that the workflow has <code>use_pending_failed: true</code> before allowing any
+classifications. This prevents accidental modification of workflows that don't opt into AI-assisted
+recovery.</p>
+<h2 id="integration-with-reset-status"><a class="header" href="#integration-with-reset-status">Integration with reset-status</a></h2>
+<p>The <code>reset-status --failed-only</code> command also resets <code>pending_failed</code> jobs:</p>
+<pre><code class="language-sql">-- reset_failed_jobs_only query
+SELECT id, status FROM job
+WHERE workflow_id = $1
+  AND status IN (
+    $failed_status,
+    $canceled_status,
+    $terminated_status,
+    $pending_failed_status  -- Added
+  )
+</code></pre>
+<p>This allows users to reset pending_failed jobs without AI classification if desired.</p>
+<h2 id="error-classification-patterns"><a class="header" href="#error-classification-patterns">Error Classification Patterns</a></h2>
+<p>The AI agent should recognize common patterns:</p>
+<h3 id="transient-errors"><a class="header" href="#transient-errors">Transient Errors</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>const TRANSIENT_PATTERNS: &amp;[&amp;str] = &amp;[
+    // Network
+    "Connection refused",
+    "Connection timed out",
+    "Network is unreachable",
+    "DNS resolution failed",
+    "Service Unavailable",
+
+    // GPU/HPC
+    "NCCL timeout",
+    "GPU communication error",
+    "CUDA out of memory",  // Could be transient if memory is shared
+
+    // Hardware
+    "EIO",
+    "Input/output error",
+
+    // Slurm
+    "PREEMPTED",
+    "NODE_FAIL",
+    "TIMEOUT",  // Slurm walltime, not job timeout
+];
+<span class="boring">}</span></code></pre></pre>
+<h3 id="permanent-errors"><a class="header" href="#permanent-errors">Permanent Errors</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>const PERMANENT_PATTERNS: &amp;[&amp;str] = &amp;[
+    // Python
+    "SyntaxError",
+    "IndentationError",
+    "ModuleNotFoundError",
+    "ImportError",
+    "NameError",
+    "TypeError",
+    "ValueError",
+
+    // General
+    "FileNotFoundError",  // For input files
+    "PermissionDenied",
+    "AssertionError",
+    "IndexError",
+    "KeyError",
+];
+<span class="boring">}</span></code></pre></pre>
+<p>These patterns are <strong>guidance for AI agents</strong>, not hard-coded rules. The AI can use context to
+override (e.g., <code>FileNotFoundError</code> for a file that should be created by an upstream job might be
+transient if the upstream job is being retried).</p>
+<h2 id="slurm-integration"><a class="header" href="#slurm-integration">Slurm Integration</a></h2>
+<p>When <code>pending_failed</code> jobs are classified as "retry", they return to <code>ready</code> status. For Slurm
+workflows:</p>
+<ol>
+<li>If active allocations exist, jobs may run immediately</li>
+<li>If no allocations, <code>torc watch --auto-schedule</code> will create new ones</li>
+<li>Manual recovery: <code>torc slurm regenerate --submit</code></li>
+</ol>
+<h2 id="design-decisions"><a class="header" href="#design-decisions">Design Decisions</a></h2>
+<h3 id="why-a-new-status-vs-a-flag"><a class="header" href="#why-a-new-status-vs-a-flag">Why a New Status vs. a Flag?</a></h3>
+<p><strong>Alternative considered</strong>: Add <code>needs_classification: bool</code> flag to jobs.</p>
+<p><strong>Decision</strong>: New status is cleaner because:</p>
+<ul>
+<li>Status is already used for state machine transitions</li>
+<li><code>is_workflow_complete</code> naturally excludes <code>pending_failed</code></li>
+<li>No schema changes to existing status column</li>
+<li>Clearer semantics in logs and UI</li>
+</ul>
+<h3 id="why-defer-to-ai-vs-built-in-heuristics"><a class="header" href="#why-defer-to-ai-vs-built-in-heuristics">Why Defer to AI vs. Built-in Heuristics?</a></h3>
+<p><strong>Alternative considered</strong>: Build pattern matching into Torc directly.</p>
+<p><strong>Decision</strong>: AI-assisted approach because:</p>
+<ul>
+<li>Error patterns are domain-specific and evolving</li>
+<li>AI can use context (multiple errors, timing, external systems)</li>
+<li>Users can customize via custom MCP servers</li>
+<li>Avoids bloating Torc with error classification logic</li>
+</ul>
+<h3 id="why-not-block-on-ai-response"><a class="header" href="#why-not-block-on-ai-response">Why Not Block on AI Response?</a></h3>
+<p><strong>Alternative considered</strong>: Job runner waits for AI classification.</p>
+<p><strong>Decision</strong>: Asynchronous classification because:</p>
+<ul>
+<li>AI inference adds latency (seconds to minutes)</li>
+<li>AI service may be unavailable</li>
+<li>Human oversight is valuable for production workflows</li>
+<li>Jobs can accumulate for batch classification</li>
+</ul>
+<h2 id="cli-integration"><a class="header" href="#cli-integration">CLI Integration</a></h2>
+<p>The <code>torc recover</code> and <code>torc watch</code> commands support automatic AI agent invocation:</p>
+<h3 id="command-line-options"><a class="header" href="#command-line-options">Command-Line Options</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Option</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>--ai-recovery</code></td><td>false</td><td>Enable AI-assisted classification</td></tr>
+<tr><td><code>--ai-agent</code></td><td><code>claude</code></td><td>AI agent CLI to invoke (currently only <code>claude</code>)</td></tr>
+</tbody></table>
+</div>
+<h3 id="invocation-flow"><a class="header" href="#invocation-flow">Invocation Flow</a></h3>
+<p>When <code>--ai-recovery</code> is enabled:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn invoke_ai_agent(workflow_id: i64, agent: &amp;str, output_dir: &amp;Path) -&gt; Result&lt;(), String&gt; {
+    // 1. Check if agent CLI is available (e.g., `which claude`)
+    // 2. Build prompt with workflow context
+    // 3. Spawn agent with --print flag for non-interactive mode
+    // 4. Capture and log output
+    // 5. Return success/failure
+}
+<span class="boring">}</span></code></pre></pre>
+<p>The prompt instructs the AI agent to:</p>
+<ol>
+<li>Call <code>list_pending_failed_jobs</code> to get jobs with stderr</li>
+<li>Analyze each job's error to classify as transient or permanent</li>
+<li>Call <code>classify_and_resolve_failures</code> with classifications</li>
+</ol>
+<h3 id="agent-requirements"><a class="header" href="#agent-requirements">Agent Requirements</a></h3>
+<p>For the <code>claude</code> agent:</p>
+<ul>
+<li>Claude Code CLI must be installed (<code>claude</code> command in PATH)</li>
+<li>Torc MCP server must be configured in <code>~/.claude/mcp_servers.json</code></li>
+<li>The <code>--print</code> flag is used for non-interactive execution</li>
+</ul>
+<h2 id="implementation-files"><a class="header" href="#implementation-files">Implementation Files</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>File</th><th>Purpose</th></tr></thead><tbody>
+<tr><td><code>src/models.rs</code></td><td><code>JobStatus::PendingFailed</code> enum variant</td></tr>
+<tr><td><code>src/client/job_runner.rs</code></td><td><code>RecoveryOutcome</code> enum, status assignment</td></tr>
+<tr><td><code>src/client/commands/recover.rs</code></td><td><code>invoke_ai_agent</code> function, CLI integration</td></tr>
+<tr><td><code>src/server/api/jobs.rs</code></td><td><code>reset_failed_jobs_only</code> includes pending_failed</td></tr>
+<tr><td><code>torc-mcp-server/src/tools.rs</code></td><td>MCP tool implementations</td></tr>
+<tr><td><code>torc-mcp-server/src/server.rs</code></td><td>MCP server handlers</td></tr>
+</tbody></table>
+</div>
+<h2 id="future-enhancements"><a class="header" href="#future-enhancements">Future Enhancements</a></h2>
+<ol>
+<li><strong>Confidence thresholds</strong>: AI classifies with confidence score; low confidence escalates to user</li>
+<li><strong>Learning from outcomes</strong>: Track whether AI classifications led to successful retries</li>
+<li><strong>Batch scheduling optimization</strong>: AI recommends optimal Slurm allocations for retry jobs</li>
+<li><strong>Custom MCP server examples</strong>: Templates for domain-specific error classification</li>
+</ol>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../specialized/design/failure-handlers.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../specialized/design/workflow-graph.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../specialized/design/failure-handlers.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../specialized/design/workflow-graph.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../mermaid.min.js"></script>
+        <script src="../../mermaid-init.js"></script>
+        <script src="../../pagetoc.js"></script>
+        <script src="../../version-selector.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
