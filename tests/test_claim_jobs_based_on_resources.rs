@@ -1847,11 +1847,11 @@ fn test_claim_jobs_based_on_resources_returns_invocation_script(start_server: &S
     );
 }
 
-/// Test that multi-node jobs (step_nodes > 1) reserve whole nodes exclusively,
+/// Test that multi-node jobs (num_nodes > 1) reserve whole nodes exclusively,
 /// preventing single-node jobs from being scheduled on those nodes.
 ///
 /// Allocation: 4 nodes × 16 CPUs per node (64 total CPUs).
-/// Jobs: 1 multi-node job (step_nodes=2) + 3 single-node jobs (8 CPUs each).
+/// Jobs: 1 multi-node job (num_nodes=2) + 3 single-node jobs (8 CPUs each).
 ///
 /// The multi-node job reserves 2 whole nodes, leaving 2 nodes (32 CPUs) for
 /// single-node jobs. All 3 single-node jobs fit (3 × 8 = 24 ≤ 32).
@@ -1864,13 +1864,12 @@ fn test_multi_node_reserves_whole_nodes(start_server: &ServerProcess) {
         default_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap();
 
-    // Multi-node resource requirements: step_nodes=2
+    // Multi-node resource requirements: num_nodes=2
     let mut multi_rr =
         models::ResourceRequirementsModel::new(workflow_id, "multi_node_rr".to_string());
     multi_rr.num_cpus = 16;
     multi_rr.num_gpus = 0;
     multi_rr.num_nodes = 2;
-    multi_rr.step_nodes = Some(2);
     multi_rr.memory = "32g".to_string();
     multi_rr.runtime = "PT1H".to_string();
     let multi_rr = default_api::create_resource_requirements(config, multi_rr)
@@ -1932,7 +1931,7 @@ fn test_multi_node_reserves_whole_nodes(start_server: &ServerProcess) {
 /// no longer fit after the exclusive node reservation.
 ///
 /// Allocation: 2 nodes × 16 CPUs per node (32 total CPUs).
-/// Jobs: 2 single-node jobs (8 CPUs each) + 1 multi-node job (step_nodes=2).
+/// Jobs: 2 single-node jobs (8 CPUs each) + 1 multi-node job (num_nodes=2).
 ///
 /// The 2 single-node jobs consume shared resources. The multi-node job needs
 /// both nodes free, but the single-node jobs are using them. The server
@@ -1941,7 +1940,7 @@ fn test_multi_node_reserves_whole_nodes(start_server: &ServerProcess) {
 /// single-node jobs should fit. All 3 should be returned... unless the
 /// multi-node job takes both nodes, leaving 0 shared nodes.
 ///
-/// With 2 nodes and step_nodes=2: the multi-node job takes both nodes.
+/// With 2 nodes and num_nodes=2: the multi-node job takes both nodes.
 /// No shared nodes remain → single-node jobs cannot fit.
 /// Expected: 1 job returned (the multi-node job only).
 #[rstest]
@@ -1958,7 +1957,6 @@ fn test_multi_node_blocks_single_node_when_all_nodes_used(start_server: &ServerP
     multi_rr.num_cpus = 16;
     multi_rr.num_gpus = 0;
     multi_rr.num_nodes = 2;
-    multi_rr.step_nodes = Some(2);
     multi_rr.memory = "32g".to_string();
     multi_rr.runtime = "PT2H".to_string(); // higher runtime so sorted first
     let multi_rr = default_api::create_resource_requirements(config, multi_rr)
@@ -2017,24 +2015,24 @@ fn test_multi_node_blocks_single_node_when_all_nodes_used(start_server: &ServerP
     assert_eq!(returned_jobs[0].name, "mpi_full");
 }
 
-/// Test that step_nodes determines multi-node reservation.
+/// Test that num_nodes determines multi-node reservation.
 ///
-/// A job with step_nodes=2 reserves 2 whole nodes, so only 2 such jobs
+/// A job with num_nodes=2 reserves 2 whole nodes, so only 2 such jobs
 /// fit on a 4-node allocation.
 #[rstest]
-fn test_step_nodes_reserves_whole_nodes(start_server: &ServerProcess) {
+fn test_num_nodes_reserves_whole_nodes(start_server: &ServerProcess) {
     let config = &start_server.config;
-    let workflow = models::WorkflowModel::new("step_nodes_test".to_string(), "user".to_string());
+    let workflow =
+        models::WorkflowModel::new("num_nodes_reserve_test".to_string(), "user".to_string());
     let created_workflow =
         default_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap();
 
-    // RR with step_nodes=2 (num_nodes must be >= step_nodes)
-    let mut rr = models::ResourceRequirementsModel::new(workflow_id, "step2_rr".to_string());
+    // RR with num_nodes=2
+    let mut rr = models::ResourceRequirementsModel::new(workflow_id, "nodes2_rr".to_string());
     rr.num_cpus = 8;
     rr.num_gpus = 0;
     rr.num_nodes = 2;
-    rr.step_nodes = Some(2);
     rr.memory = "16g".to_string();
     rr.runtime = "PT1H".to_string();
     let rr = default_api::create_resource_requirements(config, rr).expect("Failed to create RR");
@@ -2043,7 +2041,7 @@ fn test_step_nodes_reserves_whole_nodes(start_server: &ServerProcess) {
     for i in 0..2 {
         let mut job = models::JobModel::new(
             workflow_id,
-            format!("step_job_{}", i),
+            format!("node_job_{}", i),
             format!("echo {}", i),
         );
         job.resource_requirements_id = Some(rr.id.unwrap());
@@ -2069,7 +2067,7 @@ fn test_step_nodes_reserves_whole_nodes(start_server: &ServerProcess) {
     assert_eq!(
         returned_jobs.len(),
         2,
-        "Expected 2 jobs (each reserves 2 of 4 nodes via step_nodes), got {}",
+        "Expected 2 jobs (each reserves 2 of 4 nodes via num_nodes), got {}",
         returned_jobs.len()
     );
 }

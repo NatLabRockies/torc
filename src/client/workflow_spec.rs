@@ -206,11 +206,6 @@ pub struct ResourceRequirementsSpec {
     /// Number of nodes required (defaults to 1)
     #[serde(default = "ResourceRequirementsSpec::default_num_nodes")]
     pub num_nodes: i64,
-    /// Number of nodes each srun step spans (defaults to 1).
-    /// Distinct from `num_nodes` (allocation size used by sbatch).
-    /// Set to `num_nodes` for MPI or Julia Distributed.jl jobs.
-    #[serde(default)]
-    pub step_nodes: Option<i64>,
     /// Memory requirement
     pub memory: String,
     /// Runtime limit (defaults to 1 hour)
@@ -1225,7 +1220,7 @@ impl WorkflowSpec {
             }
         }
 
-        // Check duplicate resource_requirements names and validate step_nodes
+        // Check duplicate resource_requirements names
         if let Some(ref resource_reqs) = spec.resource_requirements {
             let mut rr_names_set = HashSet::new();
             for rr in resource_reqs {
@@ -1234,21 +1229,6 @@ impl WorkflowSpec {
                         "Duplicate resource_requirements name: '{}'",
                         rr.name
                     ));
-                }
-                // Validate step_nodes: must be > 0 and <= num_nodes
-                if let Some(step_nodes) = rr.step_nodes {
-                    if step_nodes <= 0 {
-                        errors.push(format!(
-                            "Resource requirement '{}': step_nodes must be > 0, got {}",
-                            rr.name, step_nodes
-                        ));
-                    }
-                    if step_nodes > rr.num_nodes {
-                        errors.push(format!(
-                            "Resource requirement '{}': step_nodes ({}) must be <= num_nodes ({})",
-                            rr.name, step_nodes, rr.num_nodes
-                        ));
-                    }
                 }
             }
         }
@@ -1980,24 +1960,6 @@ impl WorkflowSpec {
                     .into());
                 }
 
-                // Validate step_nodes: must be > 0 and <= num_nodes
-                if let Some(step_nodes) = resource_req_spec.step_nodes {
-                    if step_nodes <= 0 {
-                        return Err(format!(
-                            "Resource requirement '{}': step_nodes must be > 0, got {}",
-                            resource_req_spec.name, step_nodes
-                        )
-                        .into());
-                    }
-                    if step_nodes > resource_req_spec.num_nodes {
-                        return Err(format!(
-                            "Resource requirement '{}': step_nodes ({}) must be <= num_nodes ({})",
-                            resource_req_spec.name, step_nodes, resource_req_spec.num_nodes
-                        )
-                        .into());
-                    }
-                }
-
                 let resource_req_model = models::ResourceRequirementsModel {
                     id: None, // Server will assign ID
                     workflow_id,
@@ -2005,7 +1967,6 @@ impl WorkflowSpec {
                     num_cpus: resource_req_spec.num_cpus,
                     num_gpus: resource_req_spec.num_gpus,
                     num_nodes: resource_req_spec.num_nodes,
-                    step_nodes: resource_req_spec.step_nodes,
                     memory: resource_req_spec.memory.clone(),
                     runtime: resource_req_spec.runtime.clone(),
                 };

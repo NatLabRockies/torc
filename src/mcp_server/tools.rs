@@ -348,7 +348,6 @@ pub fn update_job_resources(
             num_cpus: reqs.num_cpus,
             num_gpus: reqs.num_gpus,
             num_nodes: reqs.num_nodes,
-            step_nodes: reqs.step_nodes,
             memory: reqs.memory.clone(),
             runtime: reqs.runtime.clone(),
         },
@@ -1410,7 +1409,6 @@ pub fn classify_and_resolve_failures(
                                     num_cpus: reqs.num_cpus,
                                     num_gpus: reqs.num_gpus,
                                     num_nodes: reqs.num_nodes,
-                                    step_nodes: reqs.step_nodes,
                                     memory: reqs.memory.clone(),
                                     runtime: reqs.runtime.clone(),
                                 },
@@ -1918,11 +1916,6 @@ pub fn regroup_job_resources(
             .or_else(|| current_rr.map(|rr| rr.num_nodes))
             .unwrap_or(1);
 
-        // Create the new resource requirements record.
-        // Preserve step_nodes from the existing RR (if available) so MPI / multi-node
-        // jobs don't silently lose their step_nodes configuration after regrouping.
-        let resolved_step_nodes = current_rr.and_then(|rr| rr.step_nodes);
-
         let new_rr = ResourceRequirementsModel {
             id: None,
             workflow_id,
@@ -1930,7 +1923,6 @@ pub fn regroup_job_resources(
             num_cpus: group.num_cpus,
             num_gpus: resolved_num_gpus,
             num_nodes: resolved_num_nodes,
-            step_nodes: resolved_step_nodes,
             memory: group.memory.clone(),
             runtime: group.runtime.clone(),
         };

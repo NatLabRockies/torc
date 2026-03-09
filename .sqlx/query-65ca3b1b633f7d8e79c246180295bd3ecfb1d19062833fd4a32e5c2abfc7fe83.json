@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE resource_requirements\n            SET workflow_id = $1,\n                name = $2,\n                num_cpus = $3,\n                num_gpus = $4,\n                num_nodes = $5,\n                memory = $6,\n                runtime = $7,\n                memory_bytes = $8,\n                runtime_s = $9\n            WHERE id = $10\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 10
+    },
+    "nullable": []
+  },
+  "hash": "65ca3b1b633f7d8e79c246180295bd3ecfb1d19062833fd4a32e5c2abfc7fe83"
+}

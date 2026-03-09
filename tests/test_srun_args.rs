@@ -6,7 +6,7 @@
 //! - `limit_resources` (true/false)
 //! - `enable_cpu_bind` (true/false)
 //! - `srun_termination_signal` (set/unset)
-//! - `step_nodes` (1/N)
+//! - `num_nodes` (1/N)
 //! - `end_time` (set/unset)
 //!
 //! Each test sets `SLURM_JOB_ID` and `TORC_FAKE_SRUN` to a script that logs
@@ -31,20 +31,14 @@ fn make_job(job_id: i64, command: &str) -> JobModel {
 }
 
 /// Create a ResourceRequirementsModel with the given parameters.
-fn make_rr(
-    name: &str,
-    num_cpus: i64,
-    memory: &str,
-    step_nodes: Option<i64>,
-) -> ResourceRequirementsModel {
+fn make_rr(name: &str, num_cpus: i64, memory: &str, num_nodes: i64) -> ResourceRequirementsModel {
     ResourceRequirementsModel {
         id: Some(1),
         workflow_id: 1,
         name: name.to_string(),
         num_cpus,
         num_gpus: 0,
-        num_nodes: 1,
-        step_nodes,
+        num_nodes,
         memory: memory.to_string(),
         runtime: "PT30M".to_string(),
     }
@@ -138,7 +132,7 @@ fn run_and_capture_srun_args(
 fn test_srun_default_single_node() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
-    let rr = make_rr("compute", 4, "8g", None);
+    let rr = make_rr("compute", 4, "8g", 1);
 
     let args = run_and_capture_srun_args(
         &temp_dir,
@@ -166,7 +160,7 @@ fn test_srun_default_single_node() {
     );
     // Should have --exact
     assert!(args.contains("--exact"), "Missing --exact: {}", args);
-    // Should have --nodes=1 (step_nodes defaults to 1)
+    // Should have --nodes=1 (num_nodes=1)
     assert!(args.contains("--nodes=1"), "Missing --nodes=1: {}", args);
     // Should have --cpus-per-task=4 (limit_resources=true, name != "default")
     assert!(
@@ -193,7 +187,7 @@ fn test_srun_default_single_node() {
 fn test_srun_no_resource_limits() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
-    let rr = make_rr("compute", 4, "8g", None);
+    let rr = make_rr("compute", 4, "8g", 1);
 
     let args = run_and_capture_srun_args(
         &temp_dir,
@@ -233,7 +227,7 @@ fn test_srun_no_resource_limits() {
 fn test_srun_cpu_bind_enabled() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
-    let rr = make_rr("compute", 2, "4g", None);
+    let rr = make_rr("compute", 2, "4g", 1);
 
     let args = run_and_capture_srun_args(
         &temp_dir,
@@ -269,7 +263,7 @@ fn test_srun_cpu_bind_enabled() {
 fn test_srun_termination_signal() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
-    let rr = make_rr("compute", 2, "4g", None);
+    let rr = make_rr("compute", 2, "4g", 1);
 
     let args = run_and_capture_srun_args(
         &temp_dir,
@@ -297,7 +291,7 @@ fn test_srun_termination_signal() {
 fn test_srun_termination_signal_usr1() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
-    let rr = make_rr("compute", 2, "4g", None);
+    let rr = make_rr("compute", 2, "4g", 1);
 
     let args = run_and_capture_srun_args(
         &temp_dir,
@@ -325,7 +319,7 @@ fn test_srun_termination_signal_usr1() {
 fn test_srun_multi_node_step() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
-    let rr = make_rr("mpi_compute", 8, "16g", Some(4));
+    let rr = make_rr("mpi_compute", 8, "16g", 4);
 
     let args = run_and_capture_srun_args(
         &temp_dir,
@@ -343,7 +337,7 @@ fn test_srun_multi_node_step() {
 
     assert!(
         args.contains("--nodes=4"),
-        "Missing --nodes=4 for step_nodes=4: {}",
+        "Missing --nodes=4 for num_nodes=4: {}",
         args
     );
     assert!(
@@ -363,7 +357,7 @@ fn test_srun_multi_node_step() {
 fn test_srun_with_end_time() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
-    let rr = make_rr("compute", 2, "4g", None);
+    let rr = make_rr("compute", 2, "4g", 1);
 
     // Set end_time 30 minutes from now
     let end_time = chrono::Utc::now() + chrono::Duration::minutes(30);
@@ -395,7 +389,7 @@ fn test_srun_with_end_time() {
 fn test_srun_with_end_time_minimum_one_minute() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
-    let rr = make_rr("compute", 2, "4g", None);
+    let rr = make_rr("compute", 2, "4g", 1);
 
     // Set end_time 10 seconds from now (should clamp to minimum 1 minute)
     let end_time = chrono::Utc::now() + chrono::Duration::seconds(10);
@@ -426,7 +420,7 @@ fn test_srun_with_end_time_minimum_one_minute() {
 fn test_srun_use_srun_false() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
-    let rr = make_rr("compute", 4, "8g", None);
+    let rr = make_rr("compute", 4, "8g", 1);
 
     let args = run_and_capture_srun_args(
         &temp_dir,
@@ -455,7 +449,7 @@ fn test_srun_default_resource_requirements_name() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
     // Use name "default" — the code skips --cpus-per-task and --mem for this name
-    let rr = make_rr("default", 4, "8g", None);
+    let rr = make_rr("default", 4, "8g", 1);
 
     let args = run_and_capture_srun_args(
         &temp_dir,
@@ -531,7 +525,7 @@ fn test_srun_no_resource_requirements() {
 fn test_srun_all_options_set() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
-    let rr = make_rr("gpu_compute", 16, "32g", Some(2));
+    let rr = make_rr("gpu_compute", 16, "32g", 2);
 
     let end_time = chrono::Utc::now() + chrono::Duration::hours(2);
 
@@ -586,7 +580,7 @@ fn test_srun_all_options_set() {
 fn test_srun_step_name_format() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
-    let rr = make_rr("compute", 2, "4g", None);
+    let rr = make_rr("compute", 2, "4g", 1);
 
     let job = make_job(42, "echo hello");
     let mut cmd = AsyncCliCommand::new(job);
@@ -638,7 +632,7 @@ fn test_srun_no_slurm_job_id_falls_back_to_shell() {
         env::set_var("TORC_SRUN_ARGS_LOG", args_log.to_string_lossy().to_string());
     }
 
-    let rr = make_rr("compute", 4, "8g", None);
+    let rr = make_rr("compute", 4, "8g", 1);
     let args = run_and_capture_srun_args(
         &temp_dir,
         &args_log,
@@ -665,7 +659,7 @@ fn test_srun_no_slurm_job_id_falls_back_to_shell() {
 fn test_srun_limit_resources_false_with_cpu_bind_and_signal() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
-    let rr = make_rr("compute", 8, "16g", Some(2));
+    let rr = make_rr("compute", 8, "16g", 2);
 
     let args = run_and_capture_srun_args(
         &temp_dir,
@@ -700,7 +694,7 @@ fn test_srun_limit_resources_false_with_cpu_bind_and_signal() {
         "Missing --signal=TERM@300: {}",
         args
     );
-    // step_nodes=2 should still be present
+    // num_nodes=2 should still be present
     assert!(args.contains("--nodes=2"), "Missing --nodes=2: {}", args);
 }
 
@@ -710,7 +704,7 @@ fn test_srun_small_memory_rounds_up_to_1mb() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
     // Sub-MB memory value; memory_string_to_mb clamps non-zero values to at least 1 MB
-    let rr = make_rr("tiny", 1, "100k", None);
+    let rr = make_rr("tiny", 1, "100k", 1);
 
     let args = run_and_capture_srun_args(
         &temp_dir,
@@ -745,7 +739,7 @@ fn test_srun_zero_memory_omits_mem() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
     // Zero memory — should omit --mem to avoid --mem=0 which in Slurm means "all memory"
-    let rr = make_rr("zero_mem", 1, "0m", None);
+    let rr = make_rr("zero_mem", 1, "0m", 1);
 
     let args = run_and_capture_srun_args(
         &temp_dir,

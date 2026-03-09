@@ -1,5 +1,5 @@
 /// Tests for multi-node Slurm scheduling patterns:
-///   1. Two-node allocation, single worker, true multi-node step (step_nodes = num_nodes)
+///   1. Two-node allocation, single worker, true multi-node step (num_nodes = 2)
 ///   2. Two-node allocation, multiple parallel single-node jobs
 mod common;
 
@@ -13,11 +13,11 @@ use torc::client::workflow_spec::WorkflowSpec;
 use torc::models::JobStatus;
 
 // =============================================================================
-// Pattern 1: 2-node allocation, job requires both nodes (num_nodes=2, step_nodes=2)
+// Pattern 1: 2-node allocation, job requires both nodes (num_nodes=2)
 // =============================================================================
 
 /// Verify that a workflow with a 2-node Slurm allocation and a single job that
-/// spans both nodes (step_nodes=2) is accepted and stores the resource
+/// spans both nodes (num_nodes=2) is accepted and stores the resource
 /// requirements correctly.
 #[rstest]
 fn test_two_node_allocation_single_worker_multi_node_step(start_server: &ServerProcess) {
@@ -37,7 +37,6 @@ fn test_two_node_allocation_single_worker_multi_node_step(start_server: &ServerP
                 "name": "two_node_req",
                 "num_cpus": 32,
                 "num_nodes": 2,
-                "step_nodes": 2,
                 "memory": "128g",
                 "runtime": "PT4H"
             }
@@ -78,7 +77,7 @@ fn test_two_node_allocation_single_worker_multi_node_step(start_server: &ServerP
 
     assert!(
         result.is_ok(),
-        "Workflow with step_nodes=num_nodes=2 should be valid, got: {:?}",
+        "Workflow with num_nodes=2 should be valid, got: {:?}",
         result.err()
     );
 
@@ -117,11 +116,6 @@ fn test_two_node_allocation_single_worker_multi_node_step(start_server: &ServerP
     let rr = &rr_list[0];
     assert_eq!(rr.name, "two_node_req");
     assert_eq!(rr.num_nodes, 2, "num_nodes should be 2");
-    assert_eq!(
-        rr.step_nodes,
-        Some(2),
-        "step_nodes should be 2 for a true multi-node MPI step"
-    );
     assert_eq!(rr.num_cpus, 32, "num_cpus should be 32");
 
     // --- Verify scheduler has 2 nodes ---
@@ -271,7 +265,7 @@ fn test_two_node_allocation_one_worker_per_node_parallel_jobs(start_server: &Ser
         "Expected 1 schedule_nodes action"
     );
 
-    // --- Verify resource requirements use step_nodes=1 (default) ---
+    // --- Verify resource requirements use num_nodes=1 ---
     let rr_list = default_api::list_resource_requirements(
         &start_server.config,
         workflow_id,
@@ -305,11 +299,6 @@ fn test_two_node_allocation_one_worker_per_node_parallel_jobs(start_server: &Ser
     assert_eq!(
         rr.num_nodes, 1,
         "num_nodes should be 1 for single-node jobs"
-    );
-    let step_nodes = rr.step_nodes.unwrap_or(1);
-    assert_eq!(
-        step_nodes, 1,
-        "step_nodes should be 1 (default) for single-node jobs in a one-worker-per-node allocation"
     );
 
     // --- Initialize the workflow so jobs transition to 'ready' ---

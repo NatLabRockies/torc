@@ -8254,18 +8254,6 @@ pub struct ResourceRequirementsModel {
     #[serde(rename = "num_nodes")]
     pub num_nodes: i64,
 
-    /// Number of nodes each srun step spans.
-    ///
-    /// Distinct from `num_nodes` (which is the Slurm allocation size used by sbatch).
-    /// `step_nodes` controls `srun --nodes` for each individual job step.  Defaults to 1
-    /// (single-node step), which is correct for most workflows including multi-worker
-    /// `start_one_worker_per_node` setups.  Set to `num_nodes` for workflows where each
-    /// job is a distributed computation that spans the entire allocation (e.g. MPI or
-    /// Julia `Distributed.jl`).
-    #[serde(rename = "step_nodes")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub step_nodes: Option<i64>,
-
     /// Amount of memory required by a job, e.g., 20g
     #[serde(rename = "memory")]
     pub memory: String,
@@ -8285,7 +8273,6 @@ impl ResourceRequirementsModel {
             num_cpus: 1,
             num_gpus: 0,
             num_nodes: 1,
-            step_nodes: None,
             memory: "1m".to_string(),
             runtime: "P0DT1M".to_string(),
         }
@@ -8307,9 +8294,6 @@ impl std::string::ToString for ResourceRequirementsModel {
             Some(self.num_cpus.to_string()),
             Some(self.num_gpus.to_string()),
             Some(self.num_nodes.to_string()),
-            self.step_nodes
-                .as_ref()
-                .map(|v| ["step_nodes".to_string(), v.to_string()].join(",")),
             Some(self.memory.to_string()),
             Some(self.runtime.to_string()),
         ];
@@ -8335,7 +8319,6 @@ impl std::str::FromStr for ResourceRequirementsModel {
             pub num_cpus: Vec<i64>,
             pub num_gpus: Vec<i64>,
             pub num_nodes: Vec<i64>,
-            pub step_nodes: Vec<i64>,
             pub memory: Vec<String>,
             pub runtime: Vec<String>,
         }
@@ -8375,9 +8358,6 @@ impl std::str::FromStr for ResourceRequirementsModel {
                         <i64 as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
                     ),
                     "num_nodes" => intermediate_rep.num_nodes.push(
-                        <i64 as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
-                    ),
-                    "step_nodes" => intermediate_rep.step_nodes.push(
                         <i64 as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
                     ),
                     "memory" => intermediate_rep.memory.push(
@@ -8426,7 +8406,6 @@ impl std::str::FromStr for ResourceRequirementsModel {
                 .into_iter()
                 .next()
                 .ok_or_else(|| "num_nodes missing in ResourceRequirementsModel".to_string())?,
-            step_nodes: intermediate_rep.step_nodes.into_iter().next(),
             memory: intermediate_rep
                 .memory
                 .into_iter()

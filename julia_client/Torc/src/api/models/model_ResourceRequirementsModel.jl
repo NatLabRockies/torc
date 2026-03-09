@@ -11,7 +11,6 @@
         num_cpus=1,
         num_gpus=0,
         num_nodes=1,
-        step_nodes=1,
         memory="1m",
         runtime="P0DT1M",
     )
@@ -22,7 +21,6 @@
     - num_cpus::Int64 : Number of CPUs required by a job
     - num_gpus::Int64 : Number of GPUs required by a job
     - num_nodes::Int64 : Number of nodes required by a job (allocation size for sbatch)
-    - step_nodes::Int64 : Number of nodes each srun step spans. Distinct from num_nodes (allocation size). Defaults to 1. Set to num_nodes for MPI or Julia Distributed.jl jobs.
     - memory::String : Amount of memory required by a job, e.g., 20g
     - runtime::String : Maximum runtime for a job
 """
@@ -33,18 +31,17 @@ Base.@kwdef mutable struct ResourceRequirementsModel <: OpenAPI.APIModel
     num_cpus::Union{Nothing, Int64} = 1
     num_gpus::Union{Nothing, Int64} = 0
     num_nodes::Union{Nothing, Int64} = 1
-    step_nodes::Union{Nothing, Int64} = 1
     memory::Union{Nothing, String} = "1m"
     runtime::Union{Nothing, String} = "P0DT1M"
 
-    function ResourceRequirementsModel(id, workflow_id, name, num_cpus, num_gpus, num_nodes, step_nodes, memory, runtime, )
-        o = new(id, workflow_id, name, num_cpus, num_gpus, num_nodes, step_nodes, memory, runtime, )
+    function ResourceRequirementsModel(id, workflow_id, name, num_cpus, num_gpus, num_nodes, memory, runtime, )
+        o = new(id, workflow_id, name, num_cpus, num_gpus, num_nodes, memory, runtime, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type ResourceRequirementsModel
 
-const _property_types_ResourceRequirementsModel = Dict{Symbol,String}(Symbol("id")=>"Int64", Symbol("workflow_id")=>"Int64", Symbol("name")=>"String", Symbol("num_cpus")=>"Int64", Symbol("num_gpus")=>"Int64", Symbol("num_nodes")=>"Int64", Symbol("step_nodes")=>"Int64", Symbol("memory")=>"String", Symbol("runtime")=>"String", )
+const _property_types_ResourceRequirementsModel = Dict{Symbol,String}(Symbol("id")=>"Int64", Symbol("workflow_id")=>"Int64", Symbol("name")=>"String", Symbol("num_cpus")=>"Int64", Symbol("num_gpus")=>"Int64", Symbol("num_nodes")=>"Int64", Symbol("memory")=>"String", Symbol("runtime")=>"String", )
 OpenAPI.property_type(::Type{ ResourceRequirementsModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_ResourceRequirementsModel[name]))}
 
 function OpenAPI.check_required(o::ResourceRequirementsModel)
@@ -60,13 +57,11 @@ function OpenAPI.validate_properties(o::ResourceRequirementsModel)
     OpenAPI.validate_property(ResourceRequirementsModel, Symbol("num_cpus"), o.num_cpus)
     OpenAPI.validate_property(ResourceRequirementsModel, Symbol("num_gpus"), o.num_gpus)
     OpenAPI.validate_property(ResourceRequirementsModel, Symbol("num_nodes"), o.num_nodes)
-    OpenAPI.validate_property(ResourceRequirementsModel, Symbol("step_nodes"), o.step_nodes)
     OpenAPI.validate_property(ResourceRequirementsModel, Symbol("memory"), o.memory)
     OpenAPI.validate_property(ResourceRequirementsModel, Symbol("runtime"), o.runtime)
 end
 
 function OpenAPI.validate_property(::Type{ ResourceRequirementsModel }, name::Symbol, val)
-
 
 
 

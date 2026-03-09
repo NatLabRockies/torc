@@ -123,15 +123,14 @@ Arbitrary JSON data that can establish dependencies between jobs.
 
 Defines compute resource requirements for jobs.
 
-| Name         | Type    | Default    | Description                                                                                      |
-| ------------ | ------- | ---------- | ------------------------------------------------------------------------------------------------ |
-| `name`       | string  | _required_ | Name of this resource configuration (referenced by jobs)                                         |
-| `num_cpus`   | integer | _required_ | Number of CPUs required                                                                          |
-| `memory`     | string  | _required_ | Memory requirement (e.g., `"1m"`, `"2g"`, `"512k"`)                                              |
-| `num_gpus`   | integer | `0`        | Number of GPUs required                                                                          |
-| `num_nodes`  | integer | `1`        | Slurm allocation size (`sbatch --nodes`)                                                         |
-| `step_nodes` | integer | `1`        | Nodes each srun step spans (`srun --nodes`); set to `num_nodes` for MPI / Julia `Distributed.jl` |
-| `runtime`    | string  | `"PT1H"`   | Runtime limit in ISO8601 duration format (e.g., `"PT30M"`, `"PT2H"`)                             |
+| Name        | Type    | Default    | Description                                                          |
+| ----------- | ------- | ---------- | -------------------------------------------------------------------- |
+| `name`      | string  | _required_ | Name of this resource configuration (referenced by jobs)             |
+| `num_cpus`  | integer | _required_ | Number of CPUs required                                              |
+| `memory`    | string  | _required_ | Memory requirement (e.g., `"1m"`, `"2g"`, `"512k"`)                  |
+| `num_gpus`  | integer | `0`        | Number of GPUs required                                              |
+| `num_nodes` | integer | `1`        | Number of nodes for the job (`sbatch --nodes` and `srun --nodes`)    |
+| `runtime`   | string  | `"PT1H"`   | Runtime limit in ISO8601 duration format (e.g., `"PT30M"`, `"PT2H"`) |
 
 ## FailureHandlerSpec
 

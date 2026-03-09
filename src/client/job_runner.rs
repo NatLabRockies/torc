@@ -1359,7 +1359,7 @@ impl JobRunner {
     }
 
     fn reserved_node_count(rr: &ResourceRequirementsModel) -> i64 {
-        rr.num_nodes.max(rr.step_nodes.unwrap_or(1)).max(1)
+        rr.num_nodes.max(1)
     }
 
     fn is_multi_node_job(rr: &ResourceRequirementsModel) -> bool {
@@ -2528,7 +2528,6 @@ mod tests {
             num_cpus: 16,
             num_gpus: 0,
             num_nodes: 2,
-            step_nodes: Some(2),
             memory: "64g".to_string(),
             runtime: "PT1H".to_string(),
         };
@@ -2552,7 +2551,6 @@ mod tests {
             num_cpus: 16,
             num_gpus: 0,
             num_nodes: 2,
-            step_nodes: Some(2),
             memory: "64g".to_string(),
             runtime: "PT1H".to_string(),
         };

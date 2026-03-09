@@ -74,7 +74,7 @@ flowchart LR
     EX["--exact"]:::flag
     CB["--cpu-bind=none"]:::flag
     JN["--job-name=step_name"]:::flag
-    ND["--nodes=step_nodes"]:::flag
+    ND["--nodes=num_nodes"]:::flag
     CPU["--cpus-per-task=N"]:::flag
     MEM["--mem=NM"]:::flag
     TIME["--time=remaining_min"]:::flag
@@ -88,7 +88,7 @@ flowchart LR
     SRUN --> ND
 
     EX -.- N0["Use exact resources,<br/>don't claim entire node"]:::note
-    ND -.- N1["Default: 1 node<br/>Override via step_nodes"]:::note
+    ND -.- N1["Default: 1 node<br/>Override via num_nodes"]:::note
     CB -.- N2["Default on; disable with<br/>enable_cpu_bind: true"]:::note
     TIME -.- N4["Remaining allocation time<br/>rounded down to minutes"]:::note
     SIG -.- N5["Early warning signal<br/>e.g. TERM@120"]:::note
@@ -106,21 +106,21 @@ flowchart LR
 | `--exact`         | Use exactly the requested resources; don't claim the entire node exclusively  |
 | `--cpu-bind=none` | Disables CPU affinity binding (default; omitted when `enable_cpu_bind: true`) |
 | `--job-name`      | Sets the step name for sacct/sstat lookup                                     |
-| `--nodes`         | Number of nodes for this step (from `step_nodes`, default 1)                  |
+| `--nodes`         | Number of nodes for this step (from `num_nodes`, default 1)                   |
 | `--cpus-per-task` | CPU cgroup limit (only when `limit_resources=true`)                           |
 | `--mem`           | Memory cgroup limit in MB (only when `limit_resources=true`)                  |
 | `--time`          | Per-step walltime from remaining allocation time (see below)                  |
 | `--signal`        | Early warning signal before step timeout (see below)                          |
 
-### The `step_nodes` Field
+### Multi-Node Steps
 
-The `step_nodes` field on resource requirements controls how many nodes an srun step spans. It
-defaults to 1 and is distinct from `num_nodes` (the allocation size for `sbatch --nodes`).
+The `num_nodes` field on resource requirements controls both the Slurm allocation size and how many
+nodes an srun step spans. It defaults to 1.
 
-- **Single-node jobs** (default): `step_nodes=1` -- each job runs on one node
-- **Multi-node jobs** (MPI, Julia Distributed.jl): `step_nodes=N` -- step spans N nodes
+- **Single-node jobs** (default): `num_nodes=1` -- each job runs on one node
+- **Multi-node jobs** (MPI, Julia Distributed.jl): `num_nodes=N` -- step spans N nodes
 
-When `step_nodes > 1`, Torc treats the job as consuming whole nodes exclusively for the lifetime of
+When `num_nodes > 1`, Torc treats the job as consuming whole nodes exclusively for the lifetime of
 the step. This avoids ambiguous partial-node accounting for MPI and other true multi-node jobs.
 
 ### The `limit_resources` Flag
@@ -422,7 +422,7 @@ numeric values.
 | Setting                   | Location                | Description                                                  |
 | ------------------------- | ----------------------- | ------------------------------------------------------------ |
 | `limit_resources`         | Scheduler config        | Enable cgroup enforcement via srun `--mem`/`--cpus-per-task` |
-| `step_nodes`              | Resource requirements   | Number of nodes per srun step (default: 1)                   |
+| `num_nodes`               | Resource requirements   | Number of nodes per job (default: 1)                         |
 | `sample_interval_seconds` | Resource monitor config | sstat polling interval                                       |
 | `TORC_FAKE_SRUN`          | Environment variable    | Override srun binary path (testing)                          |
 | `TORC_FAKE_SACCT`         | Environment variable    | Override sacct binary path (testing)                         |

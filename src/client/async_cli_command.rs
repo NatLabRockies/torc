@@ -176,8 +176,7 @@ impl AsyncCliCommand {
                 srun.arg(format!("--nodelist={}", node));
             }
             if let Some(rr) = resource_requirements {
-                let step_nodes = rr.step_nodes.unwrap_or(1).max(1);
-                srun.arg(format!("--nodes={}", step_nodes));
+                srun.arg(format!("--nodes={}", rr.num_nodes.max(1)));
                 if limit_resources && rr.name != "default" {
                     srun.arg(format!("--cpus-per-task={}", rr.num_cpus));
                     match memory_string_to_mb(&rr.memory) {

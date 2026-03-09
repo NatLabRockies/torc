@@ -1,13 +1,13 @@
 # Multi-Node MPI Step Test
 
-Tests that torc correctly passes `--nodes=step_nodes` to `srun` when `step_nodes` is greater than 1,
-creating a true multi-node Slurm job step. This exercises the `step_nodes` field and verifies sacct
+Tests that torc correctly passes `--nodes=num_nodes` to `srun` when `num_nodes` is greater than 1,
+creating a true multi-node Slurm job step. This exercises the `num_nodes` field and verifies sacct
 captures the correct node list.
 
 ## Workflow Description
 
 - **Allocation**: 2 nodes via `sbatch --nodes=2`, single torc worker
-- **Job**: `mpi_job` with `num_nodes=2, step_nodes=2`
+- **Job**: `mpi_job` with `num_nodes=2`
 - **srun invocation**: `srun --nodes=2 --ntasks=1 --overlap bash run_mpi_step.sh`
 - The job prints `SLURM_STEP_NODELIST` and `SLURM_STEP_NUM_NODES` to confirm it spans 2 nodes
 
@@ -52,7 +52,7 @@ SLURM_STEP_NUM_NODES: 2
 Node count visible to this step: 2
 ```
 
-If `SLURM_STEP_NUM_NODES` is `1`, srun did not receive `--nodes=2`. Confirm that `step_nodes: 2` is
+If `SLURM_STEP_NUM_NODES` is `1`, srun did not receive `--nodes=2`. Confirm that `num_nodes: 2` is
 set in the resource requirements and rebuild torc.
 
 ### 5. Verify sacct data (node_list)
@@ -91,8 +91,8 @@ Check that:
 
 ## Troubleshooting
 
-**`SLURM_STEP_NUM_NODES` shows 1**: `step_nodes` is not being passed to srun. Check
-`src/client/async_cli_command.rs` for the `--nodes=step_nodes` argument.
+**`SLURM_STEP_NUM_NODES` shows 1**: `num_nodes` is not being passed to srun. Check
+`src/client/async_cli_command.rs` for the `--nodes=num_nodes` argument.
 
 **`node_list` is null in sacct output**: sacct may not have the step in the accounting database yet
 (best-effort collection). Wait a few minutes and retry `torc slurm stats`.

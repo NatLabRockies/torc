@@ -66,10 +66,10 @@ jobs concurrently (64 / 8 = 8). Across 4 nodes, that means up to 32 jobs running
 **Use when**: A single job needs to span multiple nodes — for example, MPI applications, distributed
 deep learning, or Julia `Distributed.jl`.
 
-**How it works**: You set `step_nodes` equal to the number of nodes the job needs. Torc treats that
-job as an exclusive whole-node reservation: if a job needs 4 nodes, those 4 nodes are reserved for
-that step and are not shared with other jobs until the step completes. Torc passes
-`srun --nodes=<step_nodes>` when launching the job, so the process spans multiple nodes within the
+**How it works**: You set `num_nodes` to the number of nodes the job needs. Torc treats that job as
+an exclusive whole-node reservation: if a job needs 4 nodes, those 4 nodes are reserved for that
+step and are not shared with other jobs until the step completes. Torc passes
+`srun --nodes=<num_nodes>` when launching the job, so the process spans multiple nodes within the
 allocation. The job receives the standard Slurm step environment (`SLURM_JOB_NODELIST`,
 `SLURM_NTASKS`, etc.), so MPI launchers and distributed frameworks work automatically.
 
@@ -83,8 +83,7 @@ resource_requirements:
   - name: mpi_training
     num_cpus: 32      # per node (128 total across 4 nodes)
     memory: 128g      # per node (512 GB total across 4 nodes)
-    num_nodes: 4      # sbatch allocates 4 nodes
-    step_nodes: 4     # srun spans all 4 nodes
+    num_nodes: 4      # allocates and spans 4 nodes
     runtime: PT8H
 
 jobs:
@@ -118,14 +117,14 @@ to the job are 128 CPUs and 512 GB.
 | Does the job use MPI or distributed training? | No                           | Yes                         |
 | Goal is throughput (many jobs in parallel)?   | Yes                          | No                          |
 | Goal is scaling one job across nodes?         | No                           | Yes                         |
-| `step_nodes` setting                          | `1` (default)                | Same as `num_nodes`         |
+| `num_nodes` setting                           | `1` (default)                | Number of nodes needed      |
 
 ## Whole-Node Reservation Rule
 
 Torc uses this scheduling rule inside a multi-node Slurm allocation:
 
-- Single-node jobs (`num_nodes=1`, `step_nodes=1`) may share a node.
-- Multi-node jobs (`num_nodes>1` or `step_nodes>1`) reserve whole nodes exclusively.
+- Single-node jobs (`num_nodes=1`) may share a node.
+- Multi-node jobs (`num_nodes>1`) reserve whole nodes exclusively.
 
 This is intentionally conservative. Torc does not try to pack other work onto nodes that are part of
 an active multi-node step.
@@ -208,7 +207,6 @@ resource_requirements:
     num_cpus: 32
     memory: 128g
     num_nodes: 4
-    step_nodes: 4
     runtime: PT4H
 
 jobs:
@@ -254,19 +252,13 @@ actions:
 The preprocessing jobs run across 2 nodes (Pattern 1). When they complete, a 4-node allocation is
 requested for the MPI training job (Pattern 2).
 
-## `num_nodes` vs `step_nodes`
+## `num_nodes`
 
-These two fields serve different purposes:
+The `num_nodes` field controls both the Slurm allocation size (`sbatch --nodes`) and the number of
+nodes each job step spans (`srun --nodes`). It defaults to `1`.
 
-| Field        | Controls                                  | Passed to        | Default |
-| ------------ | ----------------------------------------- | ---------------- | ------- |
-| `num_nodes`  | How many nodes Slurm allocates (`sbatch`) | `sbatch --nodes` | `1`     |
-| `step_nodes` | How many nodes each job step spans        | `srun --nodes`   | `1`     |
-
-- **Pattern 1**: `num_nodes=N`, `step_nodes=1` — N nodes allocated, each job uses 1
-- **Pattern 2**: `num_nodes=N`, `step_nodes=N` — N nodes allocated, each job spans all N
-
-For single-node workflows (the common case), both default to `1` and you don't need to set either.
+- **Pattern 1**: `num_nodes=1` (default) -- each job runs on a single node
+- **Pattern 2**: `num_nodes=N` -- each job spans all N nodes (MPI, distributed training)
 
 ## Common Mistakes
 
@@ -279,7 +271,6 @@ resource_requirements:
     num_cpus: 128     # total across nodes
     memory: 512g      # total across nodes
     num_nodes: 4
-    step_nodes: 4
 
 # CORRECT: 128g is what each of the 4 nodes provides
 resource_requirements:
@@ -287,35 +278,12 @@ resource_requirements:
     num_cpus: 32      # per node (128 total)
     memory: 128g      # per node (512g total)
     num_nodes: 4
-    step_nodes: 4
 ```
 
-### Forgetting `step_nodes` for MPI jobs
+### Using `num_nodes > 1` for independent jobs
 
-Without `step_nodes`, each job runs on a single node even in a multi-node allocation:
-
-```yaml
-# WRONG: job will only use 1 node despite 4-node allocation
-resource_requirements:
-  - name: mpi_job
-    num_cpus: 32
-    memory: 128g
-    num_nodes: 4      # allocates 4 nodes...
-    # step_nodes defaults to 1 — job only runs on 1 node!
-
-# CORRECT: step_nodes=4 tells srun to span all 4 nodes
-resource_requirements:
-  - name: mpi_job
-    num_cpus: 32
-    memory: 128g
-    num_nodes: 4
-    step_nodes: 4     # srun --nodes=4
-```
-
-### Using `step_nodes > 1` for independent jobs
-
-If your jobs don't need inter-node communication, keep `step_nodes=1` and let Torc schedule them
-independently across nodes for maximum throughput.
+If your jobs don't need inter-node communication, keep `num_nodes=1` (the default) and let Torc
+schedule them independently across nodes for maximum throughput.
 
 ## See Also
 

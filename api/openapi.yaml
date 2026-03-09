@@ -6959,12 +6959,6 @@ components:
           description: Number of nodes required by a job (allocation size for sbatch)
           type: integer
           default: 1
-        step_nodes:
-          description: >-
-            Number of nodes each srun step spans. Distinct from num_nodes (allocation size).
-            Defaults to 1. Set to num_nodes for MPI or Julia Distributed.jl jobs.
-          type: integer
-          default: 1
         memory:
           default: 1m
           description: "Amount of memory required by a job, e.g., 20g"

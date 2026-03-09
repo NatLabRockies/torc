@@ -5,7 +5,7 @@
 # This script is invoked by torc via:
 #   srun --nodes=2 --ntasks=1 bash run_mpi_step.sh
 #
-# The environment will contain Slurm multi-node variables if step_nodes=2 is set.
+# The environment will contain Slurm multi-node variables if num_nodes=2 is set.
 
 echo "=== Multi-node step job ==="
 echo "Hostname: $(hostname)"
@@ -21,7 +21,7 @@ echo "Node count visible to this step: $NODE_COUNT"
 
 if [ "$NODE_COUNT" -lt 2 ]; then
     echo "WARNING: Expected at least 2 nodes in the step, got $NODE_COUNT"
-    echo "Check that step_nodes=2 is set in resource requirements"
+    echo "Check that num_nodes=2 is set in resource requirements"
 fi
 
 # Simulate work spanning multiple nodes

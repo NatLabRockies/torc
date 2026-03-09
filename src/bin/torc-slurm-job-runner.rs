@@ -125,10 +125,7 @@ mod unix_main {
 
             let items = response.items.unwrap_or_default();
 
-            if items
-                .iter()
-                .any(|rr| rr.num_nodes > 1 || rr.step_nodes.unwrap_or(1) > 1)
-            {
+            if items.iter().any(|rr| rr.num_nodes > 1) {
                 return true;
             }
 

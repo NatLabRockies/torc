@@ -3091,7 +3091,6 @@ where
                     num_cpus: 1,
                     num_gpus: 0,
                     num_nodes: 1,
-                    step_nodes: None,
                     memory: "1m".to_string(),
                     runtime: "P0DT1M".to_string(),
                 };
@@ -5970,7 +5969,6 @@ where
                 rr.num_cpus,
                 rr.num_gpus,
                 rr.num_nodes,
-                rr.step_nodes,
                 rr.runtime_s
             FROM job
             JOIN resource_requirements rr ON job.resource_requirements_id = rr.id
@@ -6032,7 +6030,6 @@ where
                     rr.num_cpus,
                     rr.num_gpus,
                     rr.num_nodes,
-                    rr.step_nodes,
                     rr.runtime_s
                 FROM job
                 JOIN resource_requirements rr ON job.resource_requirements_id = rr.id
@@ -6086,7 +6083,7 @@ where
         //
         // The client sends per-node capacity (cpus, memory, gpus) and total node count.
         // We track two kinds of consumption:
-        //   - exclusive_nodes: whole nodes reserved by multi-node jobs (step_nodes > 1)
+        //   - exclusive_nodes: whole nodes reserved by multi-node jobs (num_nodes > 1)
         //   - consumed_cpus/memory/gpus: resources used by single-node jobs on shared nodes
         //
         // Single-node jobs share the remaining (total - exclusive) nodes.
@@ -6121,12 +6118,7 @@ where
             let job_cpus: i64 = row.get("num_cpus");
             let job_gpus: i64 = row.get("num_gpus");
             let job_nodes: i64 = row.get("num_nodes");
-            let step_nodes: i64 = row
-                .try_get::<Option<i64>, _>("step_nodes")
-                .unwrap_or(None)
-                .unwrap_or(1)
-                .max(1);
-            let reserved_nodes = job_nodes.max(step_nodes).max(1);
+            let reserved_nodes = job_nodes.max(1);
 
             let fits = if reserved_nodes > 1 {
                 // Multi-node job: requires reserved_nodes completely free nodes.
