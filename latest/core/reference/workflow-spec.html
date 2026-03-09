@@ -206,9 +206,7 @@ written in YAML, JSON, JSON5, or KDL formats.</p>
 <tr><td><code>resource_monitor</code></td><td><a href="#resourcemonitorconfig">ResourceMonitorConfig</a></td><td>none</td><td>Resource monitoring configuration</td></tr>
 <tr><td><code>actions</code></td><td>[<a href="#workflowactionspec">WorkflowActionSpec</a>]</td><td>none</td><td>Actions to execute based on workflow/job state transitions</td></tr>
 <tr><td><code>use_pending_failed</code></td><td>boolean</td><td>false</td><td>Use PendingFailed status for failed jobs (enables AI-assisted recovery)</td></tr>
-<tr><td><code>limit_resources</code></td><td>boolean</td><td>true</td><td>Enforce cgroup limits via srun <code>--mem</code>/<code>--cpus-per-task</code> in Slurm</td></tr>
-<tr><td><code>use_srun</code></td><td>boolean</td><td>true</td><td>Wrap jobs with srun inside Slurm allocations for accounting and cgroup enforcement</td></tr>
-<tr><td><code>compute_node_expiration_buffer_seconds</code></td><td>integer</td><td>none</td><td>Shut down compute nodes this many seconds before expiration</td></tr>
+<tr><td><code>slurm_config</code></td><td><a href="#slurmconfig">SlurmConfig</a></td><td>none</td><td>Slurm job step configuration (srun options)</td></tr>
 <tr><td><code>compute_node_wait_for_new_jobs_seconds</code></td><td>integer</td><td>none</td><td>Compute nodes wait for new jobs this long before exiting</td></tr>
 <tr><td><code>compute_node_ignore_workflow_completion</code></td><td>boolean</td><td>false</td><td>Compute nodes hold allocations even after workflow completes</td></tr>
 <tr><td><code>compute_node_wait_for_healthy_database_minutes</code></td><td>integer</td><td>none</td><td>Compute nodes wait this many minutes for database recovery</td></tr>
@@ -256,7 +254,6 @@ jobs:
 <tr><td><code>failure_handler</code></td><td>string</td><td>none</td><td>Name of a <a href="#failurehandlerspec">FailureHandlerSpec</a> to use</td></tr>
 <tr><td><code>scheduler</code></td><td>string</td><td>none</td><td>Name of the scheduler to use for this job</td></tr>
 <tr><td><code>cancel_on_blocking_job_failure</code></td><td>boolean</td><td>false</td><td>Cancel this job if a blocking job fails</td></tr>
-<tr><td><code>supports_termination</code></td><td>boolean</td><td>false</td><td>Whether this job supports graceful termination</td></tr>
 <tr><td><code>depends_on</code></td><td>[string]</td><td>none</td><td>Job names that must complete before this job runs (exact matches)</td></tr>
 <tr><td><code>depends_on_regexes</code></td><td>[string]</td><td>none</td><td>Regex patterns for job dependencies</td></tr>
 <tr><td><code>input_files</code></td><td>[string]</td><td>none</td><td>File names this job reads (exact matches)</td></tr>
@@ -334,6 +331,26 @@ jobs:
 <tr><td><code>extra</code></td><td>string</td><td>none</td><td>Additional Slurm parameters</td></tr>
 </tbody></table>
 </div>
+<h2 id="slurmconfig"><a class="header" href="#slurmconfig">SlurmConfig</a></h2>
+<p>Slurm job step configuration controlling how jobs are executed inside Slurm allocations. These
+settings affect srun arguments passed for each job step.</p>
+<p>For backward compatibility, these fields can also be specified as top-level WorkflowSpec fields
+(<code>limit_resources</code>, <code>use_srun</code>, <code>srun_termination_signal</code>, <code>enable_cpu_bind</code>). When both are
+present, <code>slurm_config</code> takes precedence.</p>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>limit_resources</code></td><td>boolean</td><td><code>true</code></td><td>Pass <code>--mem</code> and <code>--cpus-per-task</code> to srun for cgroup enforcement</td></tr>
+<tr><td><code>use_srun</code></td><td>boolean</td><td><code>true</code></td><td>Wrap jobs with srun for accounting and cgroup enforcement</td></tr>
+<tr><td><code>srun_termination_signal</code></td><td>string</td><td>none</td><td>Signal spec for <code>srun --signal=&lt;value&gt;</code> (e.g. <code>"TERM@120"</code>)</td></tr>
+<tr><td><code>enable_cpu_bind</code></td><td>boolean</td><td><code>false</code></td><td>Allow Slurm CPU binding (default: disabled via <code>srun --cpu-bind=none</code>)</td></tr>
+</tbody></table>
+</div>
+<p><strong>Example:</strong></p>
+<pre><code class="language-yaml">slurm_config:
+  limit_resources: true
+  use_srun: true
+  srun_termination_signal: "TERM@120"
+  enable_cpu_bind: false
+</code></pre>
 <h2 id="slurmdefaultsspec"><a class="header" href="#slurmdefaultsspec">SlurmDefaultsSpec</a></h2>
 <p>Workflow-level default parameters applied to all Slurm schedulers. This is a map of parameter names
 to values.</p>
@@ -358,7 +375,6 @@ managed by torc: <code>partition</code>, <code>nodes</code>, <code>walltime</cod
 <tr><td><code>scheduler</code></td><td>string</td><td>none</td><td>For <code>schedule_nodes</code>: scheduler name</td></tr>
 <tr><td><code>scheduler_type</code></td><td>string</td><td>none</td><td>For <code>schedule_nodes</code>: scheduler type (<code>"slurm"</code>, <code>"local"</code>)</td></tr>
 <tr><td><code>num_allocations</code></td><td>integer</td><td>none</td><td>For <code>schedule_nodes</code>: number of node allocations</td></tr>
-<tr><td><code>start_one_worker_per_node</code></td><td>boolean</td><td>none</td><td>For <code>schedule_nodes</code>: start one worker per allocated node</td></tr>
 <tr><td><code>max_parallel_jobs</code></td><td>integer</td><td>none</td><td>For <code>schedule_nodes</code>: maximum parallel jobs</td></tr>
 <tr><td><code>persistent</code></td><td>boolean</td><td>false</td><td>Whether the action persists and can be claimed by multiple workers</td></tr>
 </tbody></table>

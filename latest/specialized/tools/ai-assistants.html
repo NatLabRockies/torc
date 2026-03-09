@@ -193,26 +193,36 @@ API.</p>
 <h2 id="available-tools"><a class="header" href="#available-tools">Available Tools</a></h2>
 <p>The AI assistant has access to these Torc operations:</p>
 <div class="table-wrapper"><table><thead><tr><th>Tool</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>create_workflow</code></td><td>Create a workflow from JSON specification</td></tr>
+<tr><td><code>get_execution_plan</code></td><td>Preview execution DAG before or after creating</td></tr>
 <tr><td><code>get_workflow_status</code></td><td>Get workflow info with job counts by status</td></tr>
+<tr><td><code>get_workflow_summary</code></td><td>Get completion summary with execution time</td></tr>
 <tr><td><code>get_job_details</code></td><td>Get detailed job info including resource requirements</td></tr>
 <tr><td><code>get_job_logs</code></td><td>Read stdout/stderr from job log files</td></tr>
 <tr><td><code>list_failed_jobs</code></td><td>List all failed jobs in a workflow</td></tr>
 <tr><td><code>list_jobs_by_status</code></td><td>Filter jobs by status</td></tr>
+<tr><td><code>list_results</code></td><td>List job results with filtering and sorting</td></tr>
+<tr><td><code>analyze_workflow_logs</code></td><td>Scan all logs for error patterns (OOM, timeout, etc.)</td></tr>
 <tr><td><code>check_resource_utilization</code></td><td>Analyze resource usage and detect OOM/timeout issues</td></tr>
 <tr><td><code>update_job_resources</code></td><td>Modify job resource requirements</td></tr>
 <tr><td><code>analyze_resource_usage</code></td><td>Per-job resource data grouped by RR for cluster analysis</td></tr>
 <tr><td><code>regroup_job_resources</code></td><td>Create new RR groups and reassign jobs (dry_run support)</td></tr>
-<tr><td><code>restart_jobs</code></td><td>Reset and restart failed jobs</td></tr>
-<tr><td><code>resubmit_workflow</code></td><td>Regenerate Slurm schedulers and submit new allocations</td></tr>
-<tr><td><code>cancel_jobs</code></td><td>Cancel specific jobs</td></tr>
-<tr><td><code>create_workflow_from_spec</code></td><td>Create a workflow from JSON specification</td></tr>
+<tr><td><code>recover_workflow</code></td><td>Automated recovery from OOM/timeout failures</td></tr>
+<tr><td><code>list_pending_failed_jobs</code></td><td>List jobs awaiting AI-assisted classification</td></tr>
+<tr><td><code>classify_and_resolve_failures</code></td><td>Classify failures as transient or permanent</td></tr>
+<tr><td><code>get_slurm_sacct</code></td><td>Get Slurm accounting data for a workflow</td></tr>
+<tr><td><code>get_docs</code></td><td>Retrieve Torc documentation by topic</td></tr>
+<tr><td><code>list_examples</code></td><td>List available example workflow specifications</td></tr>
+<tr><td><code>get_example</code></td><td>Retrieve a complete example workflow spec</td></tr>
 </tbody></table>
 </div>
 <h2 id="environment-variables"><a class="header" href="#environment-variables">Environment Variables</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Description</th><th>Default</th></tr></thead><tbody>
 <tr><td><code>TORC_API_URL</code></td><td>Torc server URL</td><td><code>http://localhost:8080/torc-service/v1</code></td></tr>
-<tr><td><code>TORC_OUTPUT_DIR</code></td><td>Directory containing job logs</td><td><code>output</code></td></tr>
+<tr><td><code>TORC_OUTPUT_DIR</code></td><td>Directory containing job logs</td><td><code>torc_output</code></td></tr>
 <tr><td><code>TORC_PASSWORD</code></td><td>Password for authentication (optional)</td><td>—</td></tr>
+<tr><td><code>TORC_DOCS_DIR</code></td><td>Local path to <code>docs/src/</code> (optional)</td><td>fetched from GitHub</td></tr>
+<tr><td><code>TORC_EXAMPLES_DIR</code></td><td>Local path to <code>examples/</code> (optional)</td><td>fetched from GitHub</td></tr>
 </tbody></table>
 </div>
 <hr />
@@ -256,6 +266,11 @@ claude mcp remove torc
   }
 }
 </code></pre>
+<blockquote>
+<p><strong>Note:</strong> Documentation and examples are fetched from GitHub automatically. Set <code>TORC_DOCS_DIR</code>
+and <code>TORC_EXAMPLES_DIR</code> only if you want to use local files instead (e.g., for offline use or
+development).</p>
+</blockquote>
 <h3 id="environment-variable-expansion"><a class="header" href="#environment-variable-expansion">Environment Variable Expansion</a></h3>
 <p>You can use environment variable expansion in <code>.mcp.json</code>:</p>
 <pre><code class="language-json">{

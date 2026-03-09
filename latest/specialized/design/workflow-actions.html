@@ -372,16 +372,12 @@ job_name_regexes: ["batch_.*"]
   scheduler: "gpu_cluster"
   scheduler_type: "slurm"
   num_allocations: 2
-  start_one_worker_per_node: true
-  max_parallel_jobs: 8
 </code></pre>
 <p><strong>Parameters</strong>:</p>
 <ul>
 <li><code>scheduler</code> (required) - Name of Slurm scheduler configuration (must exist in <code>slurm_schedulers</code>)</li>
 <li><code>scheduler_type</code> (required) - Must be "slurm"</li>
 <li><code>num_allocations</code> (required) - Number of Slurm allocation requests to submit</li>
-<li><code>start_one_worker_per_node</code> (optional) - Start one job runner per node (default: false)</li>
-<li><code>max_parallel_jobs</code> (optional) - Maximum concurrent jobs per runner</li>
 </ul>
 <p><strong>Use cases</strong>:</p>
 <ul>

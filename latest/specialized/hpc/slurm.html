@@ -312,8 +312,10 @@ actions:
 <li>More Slurm queue overhead</li>
 <li>Multiple jobs to schedule</li>
 </ul>
-<h3 id="strategy-2-multi-node-allocation-one-worker-per-node"><a class="header" href="#strategy-2-multi-node-allocation-one-worker-per-node">Strategy 2: Multi-Node Allocation, One Worker Per Node</a></h3>
-<p>Launch multiple workers within a single allocation:</p>
+<h3 id="strategy-2-multi-node-allocation"><a class="header" href="#strategy-2-multi-node-allocation">Strategy 2: Multi-Node Allocation</a></h3>
+<p>A single Torc worker manages all nodes in the allocation. The worker reports the total resources
+across all nodes (CPUs × nodes, memory × nodes, etc.) and launches each job via <code>srun --exact</code>,
+which lets Slurm place it on whichever node has capacity:</p>
 <pre><code class="language-yaml">slurm_schedulers:
   - name: work_scheduler
     account: my_account
@@ -326,42 +328,22 @@ actions:
     scheduler: work_scheduler
     scheduler_type: slurm
     num_allocations: 1
-    start_one_worker_per_node: true
 </code></pre>
 <p><strong>When to use:</strong></p>
 <ul>
-<li>Many jobs with similar requirements</li>
+<li>Many single-node jobs with similar requirements</li>
 <li>Want faster queue scheduling (larger jobs often prioritized)</li>
+<li>MPI or multi-node jobs that span multiple nodes</li>
 </ul>
 <p><strong>Benefits:</strong></p>
 <ul>
 <li>Single queue wait</li>
-<li>Often prioritized by Slurm scheduler</li>
+<li>Full per-step <code>sacct</code> accounting and cgroup enforcement</li>
+<li>Slurm handles node placement automatically via <code>srun --exact</code></li>
 </ul>
 <p><strong>Drawbacks:</strong></p>
 <ul>
-<li>Shared time limit for all workers</li>
-<li>Less flexibility</li>
-</ul>
-<h3 id="strategy-3-single-worker-per-allocation"><a class="header" href="#strategy-3-single-worker-per-allocation">Strategy 3: Single Worker Per Allocation</a></h3>
-<p>One Torc worker handles all nodes:</p>
-<pre><code class="language-yaml">slurm_schedulers:
-  - name: work_scheduler
-    account: my_account
-    nodes: 10
-    walltime: "04:00:00"
-
-actions:
-  - trigger_type: on_workflow_start
-    action_type: schedule_nodes
-    scheduler: work_scheduler
-    scheduler_type: slurm
-    num_allocations: 1
-</code></pre>
-<p><strong>When to use:</strong></p>
-<ul>
-<li>Your application manages node coordination</li>
-<li>Need full control over compute resources</li>
+<li>Shared time limit for all jobs in the allocation</li>
 </ul>
 <h2 id="staged-allocations"><a class="header" href="#staged-allocations">Staged Allocations</a></h2>
 <p>For pipelines with distinct phases, stage allocations to avoid wasted resources:</p>
@@ -396,7 +378,6 @@ actions:
     scheduler: compute_sched
     scheduler_type: slurm
     num_allocations: 1
-    start_one_worker_per_node: true
 
   # Postprocessing allocated when those jobs are ready
   - trigger_type: on_jobs_ready
@@ -462,6 +443,9 @@ string is embedded in the log file prefix <code>job_wf&lt;workflow_id&gt;_j&lt;j
 (for example, <code>job_wf10_j42_r1_a1.o</code>), so all Slurm and Torc records for a job can be easily
 correlated.</p>
 <h3 id="multi-node-jobs"><a class="header" href="#multi-node-jobs">Multi-Node Jobs</a></h3>
+<blockquote>
+<p>For a comprehensive guide to multi-node patterns, see <a href="./multi-node-jobs.html">Multi-Node Jobs</a>.</p>
+</blockquote>
 <p>Two resource requirement fields control node usage:</p>
 <div class="table-wrapper"><table><thead><tr><th>Field</th><th>Controls</th><th>Passed to</th><th>Default</th></tr></thead><tbody>
 <tr><td><code>num_nodes</code></td><td>Slurm allocation size</td><td><code>sbatch --nodes</code></td><td><code>1</code></td></tr>
@@ -478,9 +462,8 @@ patterns below.</p>
     runtime: PT2H
     # num_nodes defaults to 1, step_nodes defaults to 1
 </code></pre>
-<p><strong>Multi-node allocation with one worker per node</strong> (<code>start_one_worker_per_node: true</code>) — each worker
-runs single-node job steps, so <code>step_nodes</code> must stay at <code>1</code> (the default) even though <code>num_nodes</code>
-may be large:</p>
+<p><strong>Multi-node allocation with single-node jobs</strong> — a single worker manages all nodes. Each job runs
+on one node via <code>srun --nodes=1</code>, and single-node jobs may share a node when resources permit:</p>
 <pre><code class="language-yaml">resource_requirements:
   - name: standard
     num_cpus: 8
@@ -489,8 +472,8 @@ may be large:</p>
     num_nodes: 10   # sbatch allocates 10 nodes
     # step_nodes: 1 is the default — each srun step uses exactly one node
 </code></pre>
-<p><strong>True multi-node job steps</strong> (MPI, Julia <code>Distributed.jl</code>, etc.) — the job itself spans all nodes
-in its allocation, so set <code>step_nodes</code> equal to <code>num_nodes</code>:</p>
+<p><strong>True multi-node job steps</strong> (MPI, Julia <code>Distributed.jl</code>, etc.) — the job itself spans multiple
+nodes in the allocation, so set <code>step_nodes</code> to the number of nodes each job needs:</p>
 <pre><code class="language-yaml">resource_requirements:
   - name: mpi_job
     num_cpus: 32
@@ -499,15 +482,18 @@ in its allocation, so set <code>step_nodes</code> equal to <code>num_nodes</code
     num_nodes: 4      # sbatch allocates 4 nodes
     step_nodes: 4     # srun --nodes=4: each job step spans all 4 nodes
 </code></pre>
-<p>In this pattern, Torc passes <code>srun --nodes=4</code> when launching the job. The job command receives
-<code>SLURM_JOB_NODELIST</code>, <code>SLURM_NTASKS</code>, and the rest of the standard Slurm step environment, so MPI
-launchers (<code>mpirun</code>, <code>mpiexec</code>) and Julia <code>Distributed.jl</code> will automatically use all allocated
-nodes.</p>
-<blockquote>
-<p><strong>Important</strong>: Do not mix <code>start_one_worker_per_node: true</code> with <code>step_nodes &gt; 1</code>. Use
-<code>start_one_worker_per_node</code> for single-node jobs sharing a large allocation, or set
-<code>step_nodes = num_nodes</code> for genuine multi-node tasks — but not both at once.</p>
-</blockquote>
+<p>In this pattern, Torc reserves all 4 nodes for the step exclusively, then passes <code>srun --nodes=4</code>
+when launching the job. The job command receives <code>SLURM_JOB_NODELIST</code>, <code>SLURM_NTASKS</code>, and the rest
+of the standard Slurm step environment, so MPI launchers (<code>mpirun</code>, <code>mpiexec</code>) and Julia
+<code>Distributed.jl</code> will automatically use all allocated nodes.</p>
+<h3 id="multi-node-allocation-rule"><a class="header" href="#multi-node-allocation-rule">Multi-Node Allocation Rule</a></h3>
+<p>Inside a multi-node Slurm allocation, Torc uses two scheduling modes:</p>
+<ul>
+<li>Single-node jobs (<code>num_nodes=1</code>, <code>step_nodes=1</code>) may share nodes based on CPU, memory, and GPU
+availability.</li>
+<li>Multi-node jobs (<code>num_nodes&gt;1</code> or <code>step_nodes&gt;1</code>) reserve whole nodes exclusively.</li>
+</ul>
+<p>This keeps job claiming and local resource accounting aligned with Slurm allocations.</p>
 <h3 id="resource-limit-enforcement"><a class="header" href="#resource-limit-enforcement">Resource Limit Enforcement</a></h3>
 <p>By default (<code>limit_resources = true</code>), Torc passes <code>--cpus-per-task</code> and <code>--mem</code> to <code>srun</code> so Slurm
 enforces the cgroup limits defined in each job's resource requirements. This is the recommended
@@ -578,11 +564,11 @@ and the <code>srun</code> behavior is never triggered. No configuration is neede
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../../specialized/hpc/submit-slurm-workflow.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../../specialized/hpc/multi-node-jobs.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../../specialized/hpc/debugging-slurm.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../../specialized/hpc/slurm-exit-codes.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -592,11 +578,11 @@ and the <code>srun</code> behavior is never triggered. No configuration is neede
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../../specialized/hpc/submit-slurm-workflow.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../../specialized/hpc/multi-node-jobs.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../../specialized/hpc/debugging-slurm.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../../specialized/hpc/slurm-exit-codes.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

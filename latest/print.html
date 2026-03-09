@@ -862,15 +862,6 @@ HPC/Slurm execution, see <a href="getting-started/../getting-started/quick-start
 that can reach this host. For networks with untrusted users, see
 <a href="getting-started/../specialized/admin/authentication.html">Authentication</a> to secure your server.</p>
 </blockquote>
-<h2 id="create-a-worker-file"><a class="header" href="#create-a-worker-file">Create a Worker File</a></h2>
-<p>Create a file listing the remote machines. Each line contains one machine in the format
-<code>[user@]hostname[:port]</code>:</p>
-<pre><code class="language-text"># workers.txt
-worker1.example.com
-alice@worker2.example.com
-admin@192.168.1.10:2222
-</code></pre>
-<p>Lines starting with <code>#</code> are comments. Empty lines are ignored.</p>
 <h2 id="create-a-workflow-1"><a class="header" href="#create-a-workflow-1">Create a Workflow</a></h2>
 <p>Save this as <code>workflow.yaml</code>:</p>
 <pre><code class="language-yaml">name: distributed_hello
@@ -888,9 +879,16 @@ jobs:
 <pre><code class="language-console">torc workflows create workflow.yaml
 </code></pre>
 <p>Note the workflow ID in the output.</p>
+<h2 id="add-remote-workers"><a class="header" href="#add-remote-workers">Add Remote Workers</a></h2>
+<p>Add remote machines as workers. Each address uses the format <code>[user@]hostname[:port]</code>:</p>
+<pre><code class="language-console">torc remote add-workers &lt;workflow-id&gt; user@host1 user@host2 user@host3
+</code></pre>
+<p>Or add workers from a file (one address per line, <code>#</code> for comments):</p>
+<pre><code class="language-console">torc remote add-workers-from-file workers.txt &lt;workflow-id&gt;
+</code></pre>
 <h2 id="run-workers-on-remote-machines"><a class="header" href="#run-workers-on-remote-machines">Run Workers on Remote Machines</a></h2>
-<p>Start workers on all remote machines. Each worker will poll for available jobs and execute them:</p>
-<pre><code class="language-console">torc remote run --workers workers.txt &lt;workflow-id&gt; --poll-interval 5
+<p>Start workers on all registered remote machines via SSH:</p>
+<pre><code class="language-console">torc remote run &lt;workflow-id&gt;
 </code></pre>
 <p>This will:</p>
 <ol>
@@ -2219,12 +2217,21 @@ the data was created.</p>
 <p>Torc stores RO-Crate entities per workflow. Each entity describes a file, dataset, software, or
 other research object with JSON-LD properties. Entities can be:</p>
 <ol>
-<li><strong>Created automatically</strong> when <code>enable_ro_crate: true</code> is set on a workflow</li>
+<li><strong>Created always</strong> — SoftwareApplication entities for the torc binaries are recorded during
+workflow initialization, regardless of the <code>enable_ro_crate</code> setting. This ensures every workflow
+has basic software provenance.</li>
+<li><strong>Created automatically</strong> when <code>enable_ro_crate: true</code> is set on a workflow — file and job
+provenance entities</li>
 <li><strong>Created manually</strong> using the <code>torc ro-crate create</code> command</li>
 <li><strong>Exported</strong> as a standard <code>ro-crate-metadata.json</code> document</li>
 </ol>
 <h2 id="automatic-entity-generation"><a class="header" href="#automatic-entity-generation">Automatic Entity Generation</a></h2>
-<p>When you enable RO-Crate on a workflow, Torc automatically creates metadata entities:</p>
+<h3 id="always-recorded-all-workflows"><a class="header" href="#always-recorded-all-workflows">Always recorded (all workflows)</a></h3>
+<p>During workflow initialization, Torc creates <strong>SoftwareApplication</strong> entities for the torc binaries
+(server, job runner, etc.) that processed the workflow. These record the software name and version,
+providing a baseline provenance record even when full RO-Crate tracking is not enabled.</p>
+<h3 id="when-enable_ro_crate-true"><a class="header" href="#when-enable_ro_crate-true">When <code>enable_ro_crate: true</code></a></h3>
+<p>When you enable RO-Crate on a workflow, Torc additionally creates file and job provenance entities:</p>
 <p><strong>During workflow initialization:</strong></p>
 <ul>
 <li>File entities are created for all <strong>input files</strong> (files that exist on disk)</li>
@@ -9063,9 +9070,7 @@ written in YAML, JSON, JSON5, or KDL formats.</p>
 <tr><td><code>resource_monitor</code></td><td><a href="core/reference/workflow-spec.html#resourcemonitorconfig">ResourceMonitorConfig</a></td><td>none</td><td>Resource monitoring configuration</td></tr>
 <tr><td><code>actions</code></td><td>[<a href="core/reference/workflow-spec.html#workflowactionspec">WorkflowActionSpec</a>]</td><td>none</td><td>Actions to execute based on workflow/job state transitions</td></tr>
 <tr><td><code>use_pending_failed</code></td><td>boolean</td><td>false</td><td>Use PendingFailed status for failed jobs (enables AI-assisted recovery)</td></tr>
-<tr><td><code>limit_resources</code></td><td>boolean</td><td>true</td><td>Enforce cgroup limits via srun <code>--mem</code>/<code>--cpus-per-task</code> in Slurm</td></tr>
-<tr><td><code>use_srun</code></td><td>boolean</td><td>true</td><td>Wrap jobs with srun inside Slurm allocations for accounting and cgroup enforcement</td></tr>
-<tr><td><code>compute_node_expiration_buffer_seconds</code></td><td>integer</td><td>none</td><td>Shut down compute nodes this many seconds before expiration</td></tr>
+<tr><td><code>slurm_config</code></td><td><a href="core/reference/workflow-spec.html#slurmconfig">SlurmConfig</a></td><td>none</td><td>Slurm job step configuration (srun options)</td></tr>
 <tr><td><code>compute_node_wait_for_new_jobs_seconds</code></td><td>integer</td><td>none</td><td>Compute nodes wait for new jobs this long before exiting</td></tr>
 <tr><td><code>compute_node_ignore_workflow_completion</code></td><td>boolean</td><td>false</td><td>Compute nodes hold allocations even after workflow completes</td></tr>
 <tr><td><code>compute_node_wait_for_healthy_database_minutes</code></td><td>integer</td><td>none</td><td>Compute nodes wait this many minutes for database recovery</td></tr>
@@ -9113,7 +9118,6 @@ jobs:
 <tr><td><code>failure_handler</code></td><td>string</td><td>none</td><td>Name of a <a href="core/reference/workflow-spec.html#failurehandlerspec">FailureHandlerSpec</a> to use</td></tr>
 <tr><td><code>scheduler</code></td><td>string</td><td>none</td><td>Name of the scheduler to use for this job</td></tr>
 <tr><td><code>cancel_on_blocking_job_failure</code></td><td>boolean</td><td>false</td><td>Cancel this job if a blocking job fails</td></tr>
-<tr><td><code>supports_termination</code></td><td>boolean</td><td>false</td><td>Whether this job supports graceful termination</td></tr>
 <tr><td><code>depends_on</code></td><td>[string]</td><td>none</td><td>Job names that must complete before this job runs (exact matches)</td></tr>
 <tr><td><code>depends_on_regexes</code></td><td>[string]</td><td>none</td><td>Regex patterns for job dependencies</td></tr>
 <tr><td><code>input_files</code></td><td>[string]</td><td>none</td><td>File names this job reads (exact matches)</td></tr>
@@ -9191,6 +9195,26 @@ jobs:
 <tr><td><code>extra</code></td><td>string</td><td>none</td><td>Additional Slurm parameters</td></tr>
 </tbody></table>
 </div>
+<h2 id="slurmconfig"><a class="header" href="#slurmconfig">SlurmConfig</a></h2>
+<p>Slurm job step configuration controlling how jobs are executed inside Slurm allocations. These
+settings affect srun arguments passed for each job step.</p>
+<p>For backward compatibility, these fields can also be specified as top-level WorkflowSpec fields
+(<code>limit_resources</code>, <code>use_srun</code>, <code>srun_termination_signal</code>, <code>enable_cpu_bind</code>). When both are
+present, <code>slurm_config</code> takes precedence.</p>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>limit_resources</code></td><td>boolean</td><td><code>true</code></td><td>Pass <code>--mem</code> and <code>--cpus-per-task</code> to srun for cgroup enforcement</td></tr>
+<tr><td><code>use_srun</code></td><td>boolean</td><td><code>true</code></td><td>Wrap jobs with srun for accounting and cgroup enforcement</td></tr>
+<tr><td><code>srun_termination_signal</code></td><td>string</td><td>none</td><td>Signal spec for <code>srun --signal=&lt;value&gt;</code> (e.g. <code>"TERM@120"</code>)</td></tr>
+<tr><td><code>enable_cpu_bind</code></td><td>boolean</td><td><code>false</code></td><td>Allow Slurm CPU binding (default: disabled via <code>srun --cpu-bind=none</code>)</td></tr>
+</tbody></table>
+</div>
+<p><strong>Example:</strong></p>
+<pre><code class="language-yaml">slurm_config:
+  limit_resources: true
+  use_srun: true
+  srun_termination_signal: "TERM@120"
+  enable_cpu_bind: false
+</code></pre>
 <h2 id="slurmdefaultsspec"><a class="header" href="#slurmdefaultsspec">SlurmDefaultsSpec</a></h2>
 <p>Workflow-level default parameters applied to all Slurm schedulers. This is a map of parameter names
 to values.</p>
@@ -9215,7 +9239,6 @@ managed by torc: <code>partition</code>, <code>nodes</code>, <code>walltime</cod
 <tr><td><code>scheduler</code></td><td>string</td><td>none</td><td>For <code>schedule_nodes</code>: scheduler name</td></tr>
 <tr><td><code>scheduler_type</code></td><td>string</td><td>none</td><td>For <code>schedule_nodes</code>: scheduler type (<code>"slurm"</code>, <code>"local"</code>)</td></tr>
 <tr><td><code>num_allocations</code></td><td>integer</td><td>none</td><td>For <code>schedule_nodes</code>: number of node allocations</td></tr>
-<tr><td><code>start_one_worker_per_node</code></td><td>boolean</td><td>none</td><td>For <code>schedule_nodes</code>: start one worker per allocated node</td></tr>
 <tr><td><code>max_parallel_jobs</code></td><td>integer</td><td>none</td><td>For <code>schedule_nodes</code>: maximum parallel jobs</td></tr>
 <tr><td><code>persistent</code></td><td>boolean</td><td>false</td><td>Whether the action persists and can be claimed by multiple workers</td></tr>
 </tbody></table>
@@ -9643,11 +9666,11 @@ spans within the allocation.</p>
 <p>For most jobs both values are <code>1</code>. They differ in two patterns:</p>
 <div class="table-wrapper"><table><thead><tr><th>Pattern</th><th><code>num_nodes</code></th><th><code>step_nodes</code></th><th>Description</th></tr></thead><tbody>
 <tr><td>Single-node jobs (default)</td><td><code>1</code></td><td><code>1</code></td><td>Each job runs on one node</td></tr>
-<tr><td>Multi-node allocation, one worker per node</td><td><code>N</code></td><td><code>1</code></td><td>N workers share a large allocation, each job still runs on one node</td></tr>
+<tr><td>Multi-node allocation, single-node jobs</td><td><code>N</code></td><td><code>1</code></td><td>One worker manages all nodes; each job runs on one node via srun</td></tr>
 <tr><td>True multi-node job steps (MPI / Julia <code>Distributed.jl</code>)</td><td><code>N</code></td><td><code>N</code></td><td>Each job spans all N nodes</td></tr>
 </tbody></table>
 </div>
-<p>See <a href="core/reference/../specialized/hpc/slurm.html#srun-job-step-wrapping">srun Job Step Wrapping</a> for details.</p>
+<p>See <a href="core/reference/../../specialized/hpc/multi-node-jobs.html">Multi-Node Jobs</a> for detailed examples and guidance.</p>
 <h2 id="memory-format"><a class="header" href="#memory-format">Memory Format</a></h2>
 <p>String format with unit suffix:</p>
 <div class="table-wrapper"><table><thead><tr><th>Suffix</th><th>Unit</th><th>Example</th></tr></thead><tbody>
@@ -10617,6 +10640,7 @@ curl -X POST http://localhost:8080/torc-service/v1/files \
 <li><a href="specialized/hpc/./slurm-workflows.html">Slurm Overview</a> - How Torc simplifies Slurm workflows</li>
 <li><a href="specialized/hpc/./submit-slurm-workflow.html">Submitting Slurm Workflows</a> - Running workflows on HPC clusters</li>
 <li><a href="specialized/hpc/./slurm.html">Advanced Slurm Configuration</a> - Manual Slurm scheduler setup</li>
+<li><a href="specialized/hpc/./slurm-exit-codes.html">Slurm Exit Codes</a> - Understanding OOM, timeout, and signal exit codes</li>
 <li><a href="specialized/hpc/./debugging-slurm.html">Debugging Slurm Workflows</a> - Troubleshooting Slurm issues</li>
 <li><a href="specialized/hpc/./hpc-profiles.html">HPC Profiles</a> - Pre-configured HPC settings</li>
 <li><a href="specialized/hpc/./hpc-profiles-reference.html">HPC Profiles Reference</a> - Available profiles</li>
@@ -11026,7 +11050,8 @@ when:</p>
 <li><strong>Shared schedulers</strong>: You want multiple jobs to share the same Slurm allocation</li>
 <li><strong>Custom timing</strong>: Specific requirements for when allocations should be requested</li>
 <li><strong>Resource optimization</strong>: Fine-tuning to minimize allocation waste</li>
-<li><strong>Multi-node jobs</strong>: Jobs requiring coordination across multiple nodes</li>
+<li><strong>Multi-node jobs</strong>: Jobs requiring coordination across multiple nodes (see
+<a href="specialized/hpc/./multi-node-jobs.html">Multi-Node Jobs</a>)</li>
 </ul>
 <h3 id="what-could-go-wrong"><a class="header" href="#what-could-go-wrong">What Could Go Wrong</a></h3>
 <p>Without previewing, auto-generation might:</p>
@@ -11115,6 +11140,283 @@ torc submit-slurm --help
 <ul>
 <li><a href="specialized/hpc/../../specialized/hpc/slurm-workflows.html">Slurm Overview</a> — Full Slurm integration guide</li>
 <li><a href="specialized/hpc/../../specialized/hpc/hpc-profiles.html">HPC Profiles</a> — Available HPC system configurations</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="multi-node-jobs"><a class="header" href="#multi-node-jobs">Multi-Node Jobs</a></h1>
+<p>This guide explains how to run jobs across multiple nodes in a Slurm allocation. There are two
+distinct patterns, and choosing the right one depends on whether your individual jobs need more than
+one node.</p>
+<h2 id="key-concept-per-node-resource-values"><a class="header" href="#key-concept-per-node-resource-values">Key Concept: Per-Node Resource Values</a></h2>
+<p><strong>All resource values in Torc are per-node.</strong> When you write <code>num_cpus: 32</code> and <code>memory: 128g</code>, you
+are describing what each node provides — not the total across all nodes. This keeps the mental model
+simple: resource requirements always describe what a single node looks like, regardless of how many
+nodes are in the allocation.</p>
+<h2 id="two-patterns"><a class="header" href="#two-patterns">Two Patterns</a></h2>
+<h3 id="pattern-1-many-single-node-jobs-in-a-multi-node-allocation"><a class="header" href="#pattern-1-many-single-node-jobs-in-a-multi-node-allocation">Pattern 1: Many Single-Node Jobs in a Multi-Node Allocation</a></h3>
+<p><strong>Use when</strong>: You have many independent jobs that each fit on one node, and you want them to run in
+parallel across multiple nodes for throughput.</p>
+<p><strong>How it works</strong>: Torc requests a multi-node Slurm allocation (e.g., 4 nodes). One worker manages
+the allocation and places each single-node job onto one node via <code>srun --nodes=1</code>. Single-node jobs
+may share a node as long as CPU, memory, and GPU limits allow. With N nodes, Torc can spread work
+across the allocation for throughput.</p>
+<p><strong>Example</strong>: 100 independent analysis jobs, each needing 8 CPUs and 32 GB, across a 4-node
+allocation:</p>
+<pre><code class="language-yaml">name: parallel_analysis
+description: Run 100 analysis tasks across 4 nodes
+
+resource_requirements:
+  - name: analysis
+    num_cpus: 8       # per node
+    memory: 32g       # per node
+    runtime: PT1H
+
+jobs:
+  - name: analyze_{i}
+    command: python analyze.py --chunk {i}
+    resource_requirements: analysis
+    scheduler: multi_node
+    parameters:
+      i: "1:100"
+
+slurm_schedulers:
+  - name: multi_node
+    account: myproject
+    nodes: 4
+    walltime: "08:00:00"
+
+actions:
+  - trigger_type: on_workflow_start
+    action_type: schedule_nodes
+    scheduler: multi_node
+    scheduler_type: slurm
+    num_allocations: 1
+</code></pre>
+<p>Each node has 8 CPUs and 32 GB available per job. If a node has 64 CPUs total, it can run up to 8
+jobs concurrently (64 / 8 = 8). Across 4 nodes, that means up to 32 jobs running at once.</p>
+<h3 id="pattern-2-true-multi-node-jobs-mpi-distributed-training"><a class="header" href="#pattern-2-true-multi-node-jobs-mpi-distributed-training">Pattern 2: True Multi-Node Jobs (MPI, Distributed Training)</a></h3>
+<p><strong>Use when</strong>: A single job needs to span multiple nodes — for example, MPI applications, distributed
+deep learning, or Julia <code>Distributed.jl</code>.</p>
+<p><strong>How it works</strong>: You set <code>step_nodes</code> equal to the number of nodes the job needs. Torc treats that
+job as an exclusive whole-node reservation: if a job needs 4 nodes, those 4 nodes are reserved for
+that step and are not shared with other jobs until the step completes. Torc passes
+<code>srun --nodes=&lt;step_nodes&gt;</code> when launching the job, so the process spans multiple nodes within the
+allocation. The job receives the standard Slurm step environment (<code>SLURM_JOB_NODELIST</code>,
+<code>SLURM_NTASKS</code>, etc.), so MPI launchers and distributed frameworks work automatically.</p>
+<p><strong>Example</strong>: An MPI training job that spans all 4 nodes in the allocation:</p>
+<pre><code class="language-yaml">name: distributed_training
+description: MPI training across 4 nodes
+
+resource_requirements:
+  - name: mpi_training
+    num_cpus: 32      # per node (128 total across 4 nodes)
+    memory: 128g      # per node (512 GB total across 4 nodes)
+    num_nodes: 4      # sbatch allocates 4 nodes
+    step_nodes: 4     # srun spans all 4 nodes
+    runtime: PT8H
+
+jobs:
+  - name: train
+    command: srun --mpi=pmix python -m torch.distributed.run train.py
+    resource_requirements: mpi_training
+    scheduler: training_nodes
+
+slurm_schedulers:
+  - name: training_nodes
+    account: myproject
+    nodes: 4
+    walltime: "12:00:00"
+
+actions:
+  - trigger_type: on_workflow_start
+    action_type: schedule_nodes
+    scheduler: training_nodes
+    scheduler_type: slurm
+    num_allocations: 1
+</code></pre>
+<p>Here <code>num_cpus: 32</code> and <code>memory: 128g</code> describe each of the 4 nodes. The total resources available
+to the job are 128 CPUs and 512 GB.</p>
+<h2 id="choosing-between-the-patterns"><a class="header" href="#choosing-between-the-patterns">Choosing Between the Patterns</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Question</th><th>Pattern 1 (single-node jobs)</th><th>Pattern 2 (multi-node jobs)</th></tr></thead><tbody>
+<tr><td>Does each job fit on one node?</td><td>Yes</td><td>No</td></tr>
+<tr><td>Does the job use MPI or distributed training?</td><td>No</td><td>Yes</td></tr>
+<tr><td>Goal is throughput (many jobs in parallel)?</td><td>Yes</td><td>No</td></tr>
+<tr><td>Goal is scaling one job across nodes?</td><td>No</td><td>Yes</td></tr>
+<tr><td><code>step_nodes</code> setting</td><td><code>1</code> (default)</td><td>Same as <code>num_nodes</code></td></tr>
+</tbody></table>
+</div>
+<h2 id="whole-node-reservation-rule"><a class="header" href="#whole-node-reservation-rule">Whole-Node Reservation Rule</a></h2>
+<p>Torc uses this scheduling rule inside a multi-node Slurm allocation:</p>
+<ul>
+<li>Single-node jobs (<code>num_nodes=1</code>, <code>step_nodes=1</code>) may share a node.</li>
+<li>Multi-node jobs (<code>num_nodes&gt;1</code> or <code>step_nodes&gt;1</code>) reserve whole nodes exclusively.</li>
+</ul>
+<p>This is intentionally conservative. Torc does not try to pack other work onto nodes that are part of
+an active multi-node step.</p>
+<h2 id="allocation-strategy-one-large-vs-many-small"><a class="header" href="#allocation-strategy-one-large-vs-many-small">Allocation Strategy: One Large vs. Many Small</a></h2>
+<p>When running many single-node jobs (Pattern 1), you also need to decide how to request the
+underlying Slurm allocations. There are two approaches, each with trade-offs.</p>
+<h3 id="one-multi-node-allocation"><a class="header" href="#one-multi-node-allocation">One multi-node allocation</a></h3>
+<p>Request all nodes in a single <code>sbatch</code> job (e.g., <code>nodes: 4</code>). Torc runs one worker per node and
+distributes jobs across them.</p>
+<p><strong>Advantages:</strong></p>
+<ul>
+<li>Slurm schedulers typically give <strong>priority to larger allocations</strong>. On busy clusters, a 4-node job
+may start sooner than four separate 1-node jobs.</li>
+<li>Works well when all jobs take roughly the <strong>same amount of time</strong>, because you pay for all nodes
+until the last job finishes.</li>
+</ul>
+<p><strong>Disadvantages:</strong></p>
+<ul>
+<li><strong>Wasted node-hours when runtimes vary.</strong> If one job takes 4 hours and the rest take 30 minutes,
+three nodes sit idle for 3.5 hours waiting for the slow job to finish. You are billed for all four
+nodes for the full 4 hours.</li>
+<li>On heavily loaded clusters, large allocations can take <strong>much longer to schedule</strong> because Slurm
+must find all nodes free at the same time.</li>
+</ul>
+<h3 id="many-single-node-allocations"><a class="header" href="#many-single-node-allocations">Many single-node allocations</a></h3>
+<p>Request separate 1-node allocations (e.g., <code>num_allocations: 4</code> with <code>nodes: 1</code>). Each allocation
+runs its own worker and pulls jobs independently.</p>
+<p><strong>Advantages:</strong></p>
+<ul>
+<li><strong>Tolerant of variable runtimes.</strong> Each allocation finishes as soon as its last job completes.
+Fast jobs release their nodes immediately instead of waiting for the slowest one.</li>
+<li>Single-node jobs are <strong>easier for Slurm to schedule</strong> because they can fill gaps in the queue. You
+may start running sooner and finish sooner overall.</li>
+<li>If one allocation fails or is preempted, the others keep running. The failed allocation's
+incomplete jobs return to the ready queue and are picked up by another worker.</li>
+</ul>
+<p><strong>Disadvantages:</strong></p>
+<ul>
+<li>On clusters that prioritize large jobs, many small allocations may sit in the queue longer.</li>
+<li>More Slurm jobs to manage (though Torc handles this automatically).</li>
+</ul>
+<h3 id="which-to-choose"><a class="header" href="#which-to-choose">Which to choose</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Scenario</th><th>Recommended strategy</th></tr></thead><tbody>
+<tr><td>Jobs have similar runtimes, cluster is busy</td><td>One multi-node allocation</td></tr>
+<tr><td>Jobs have variable runtimes</td><td>Many single-node allocs</td></tr>
+<tr><td>Cluster has long queue wait for large jobs</td><td>Many single-node allocs</td></tr>
+<tr><td>Cluster prioritizes large jobs, queue is short</td><td>One multi-node allocation</td></tr>
+</tbody></table>
+</div>
+<p>You can also mix strategies: use a multi-node allocation for a batch of similar jobs, then switch to
+single-node allocations for a stage with variable runtimes. Torc's scheduler actions make this easy
+to express per workflow stage.</p>
+<h2 id="mixing-both-patterns"><a class="header" href="#mixing-both-patterns">Mixing Both Patterns</a></h2>
+<p>A workflow can combine both patterns, but the cleanest approach is to use separate stages or
+separate allocations. Once a true multi-node step starts, Torc reserves whole nodes for it
+exclusively.</p>
+<p>For example, single-node preprocessing jobs followed by a multi-node MPI training step:</p>
+<pre><code class="language-yaml">name: preprocess_then_train
+
+resource_requirements:
+  - name: preprocess
+    num_cpus: 4
+    memory: 16g
+    runtime: PT30M
+
+  - name: mpi_training
+    num_cpus: 32
+    memory: 128g
+    num_nodes: 4
+    step_nodes: 4
+    runtime: PT4H
+
+jobs:
+  - name: prep_{i}
+    command: python preprocess.py --shard {i}
+    resource_requirements: preprocess
+    scheduler: prep_nodes
+    parameters:
+      i: "1:8"
+
+  - name: train
+    command: srun --mpi=pmix python train.py
+    resource_requirements: mpi_training
+    scheduler: training_nodes
+    depends_on: [prep_1, prep_2, prep_3, prep_4, prep_5, prep_6, prep_7, prep_8]
+
+slurm_schedulers:
+  - name: prep_nodes
+    account: myproject
+    nodes: 2
+    walltime: "01:00:00"
+
+  - name: training_nodes
+    account: myproject
+    nodes: 4
+    walltime: "06:00:00"
+
+actions:
+  - trigger_type: on_workflow_start
+    action_type: schedule_nodes
+    scheduler: prep_nodes
+    scheduler_type: slurm
+    num_allocations: 1
+
+  - trigger_type: on_jobs_ready
+    action_type: schedule_nodes
+    jobs: [train]
+    scheduler: training_nodes
+    scheduler_type: slurm
+    num_allocations: 1
+</code></pre>
+<p>The preprocessing jobs run across 2 nodes (Pattern 1). When they complete, a 4-node allocation is
+requested for the MPI training job (Pattern 2).</p>
+<h2 id="num_nodes-vs-step_nodes-1"><a class="header" href="#num_nodes-vs-step_nodes-1"><code>num_nodes</code> vs <code>step_nodes</code></a></h2>
+<p>These two fields serve different purposes:</p>
+<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Controls</th><th>Passed to</th><th>Default</th></tr></thead><tbody>
+<tr><td><code>num_nodes</code></td><td>How many nodes Slurm allocates (<code>sbatch</code>)</td><td><code>sbatch --nodes</code></td><td><code>1</code></td></tr>
+<tr><td><code>step_nodes</code></td><td>How many nodes each job step spans</td><td><code>srun --nodes</code></td><td><code>1</code></td></tr>
+</tbody></table>
+</div>
+<ul>
+<li><strong>Pattern 1</strong>: <code>num_nodes=N</code>, <code>step_nodes=1</code> — N nodes allocated, each job uses 1</li>
+<li><strong>Pattern 2</strong>: <code>num_nodes=N</code>, <code>step_nodes=N</code> — N nodes allocated, each job spans all N</li>
+</ul>
+<p>For single-node workflows (the common case), both default to <code>1</code> and you don't need to set either.</p>
+<h2 id="common-mistakes"><a class="header" href="#common-mistakes">Common Mistakes</a></h2>
+<h3 id="specifying-total-resources-instead-of-per-node"><a class="header" href="#specifying-total-resources-instead-of-per-node">Specifying total resources instead of per-node</a></h3>
+<pre><code class="language-yaml"># WRONG: 512g is the total across 4 nodes
+resource_requirements:
+  - name: mpi_job
+    num_cpus: 128     # total across nodes
+    memory: 512g      # total across nodes
+    num_nodes: 4
+    step_nodes: 4
+
+# CORRECT: 128g is what each of the 4 nodes provides
+resource_requirements:
+  - name: mpi_job
+    num_cpus: 32      # per node (128 total)
+    memory: 128g      # per node (512g total)
+    num_nodes: 4
+    step_nodes: 4
+</code></pre>
+<h3 id="forgetting-step_nodes-for-mpi-jobs"><a class="header" href="#forgetting-step_nodes-for-mpi-jobs">Forgetting <code>step_nodes</code> for MPI jobs</a></h3>
+<p>Without <code>step_nodes</code>, each job runs on a single node even in a multi-node allocation:</p>
+<pre><code class="language-yaml"># WRONG: job will only use 1 node despite 4-node allocation
+resource_requirements:
+  - name: mpi_job
+    num_cpus: 32
+    memory: 128g
+    num_nodes: 4      # allocates 4 nodes...
+    # step_nodes defaults to 1 — job only runs on 1 node!
+
+# CORRECT: step_nodes=4 tells srun to span all 4 nodes
+resource_requirements:
+  - name: mpi_job
+    num_cpus: 32
+    memory: 128g
+    num_nodes: 4
+    step_nodes: 4     # srun --nodes=4
+</code></pre>
+<h3 id="using-step_nodes--1-for-independent-jobs"><a class="header" href="#using-step_nodes--1-for-independent-jobs">Using <code>step_nodes &gt; 1</code> for independent jobs</a></h3>
+<p>If your jobs don't need inter-node communication, keep <code>step_nodes=1</code> and let Torc schedule them
+independently across nodes for maximum throughput.</p>
+<h2 id="see-also-20"><a class="header" href="#see-also-20">See Also</a></h2>
+<ul>
+<li><a href="specialized/hpc/./slurm-workflows.html">Slurm Overview</a> — Auto-generated Slurm configuration with <code>submit-slurm</code></li>
+<li><a href="specialized/hpc/./slurm.html">Advanced Slurm Configuration</a> — Manual scheduler and srun wrapping details</li>
+<li><a href="specialized/hpc/../../core/reference/resources.html">Resource Requirements Reference</a> — Complete field reference</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="advanced-slurm-configuration"><a class="header" href="#advanced-slurm-configuration">Advanced Slurm Configuration</a></h1>
 <p>This guide covers advanced Slurm configuration for users who need fine-grained control over their
@@ -11244,8 +11546,10 @@ actions:
 <li>More Slurm queue overhead</li>
 <li>Multiple jobs to schedule</li>
 </ul>
-<h3 id="strategy-2-multi-node-allocation-one-worker-per-node"><a class="header" href="#strategy-2-multi-node-allocation-one-worker-per-node">Strategy 2: Multi-Node Allocation, One Worker Per Node</a></h3>
-<p>Launch multiple workers within a single allocation:</p>
+<h3 id="strategy-2-multi-node-allocation"><a class="header" href="#strategy-2-multi-node-allocation">Strategy 2: Multi-Node Allocation</a></h3>
+<p>A single Torc worker manages all nodes in the allocation. The worker reports the total resources
+across all nodes (CPUs × nodes, memory × nodes, etc.) and launches each job via <code>srun --exact</code>,
+which lets Slurm place it on whichever node has capacity:</p>
 <pre><code class="language-yaml">slurm_schedulers:
   - name: work_scheduler
     account: my_account
@@ -11258,42 +11562,22 @@ actions:
     scheduler: work_scheduler
     scheduler_type: slurm
     num_allocations: 1
-    start_one_worker_per_node: true
 </code></pre>
 <p><strong>When to use:</strong></p>
 <ul>
-<li>Many jobs with similar requirements</li>
+<li>Many single-node jobs with similar requirements</li>
 <li>Want faster queue scheduling (larger jobs often prioritized)</li>
+<li>MPI or multi-node jobs that span multiple nodes</li>
 </ul>
 <p><strong>Benefits:</strong></p>
 <ul>
 <li>Single queue wait</li>
-<li>Often prioritized by Slurm scheduler</li>
+<li>Full per-step <code>sacct</code> accounting and cgroup enforcement</li>
+<li>Slurm handles node placement automatically via <code>srun --exact</code></li>
 </ul>
 <p><strong>Drawbacks:</strong></p>
 <ul>
-<li>Shared time limit for all workers</li>
-<li>Less flexibility</li>
-</ul>
-<h3 id="strategy-3-single-worker-per-allocation"><a class="header" href="#strategy-3-single-worker-per-allocation">Strategy 3: Single Worker Per Allocation</a></h3>
-<p>One Torc worker handles all nodes:</p>
-<pre><code class="language-yaml">slurm_schedulers:
-  - name: work_scheduler
-    account: my_account
-    nodes: 10
-    walltime: "04:00:00"
-
-actions:
-  - trigger_type: on_workflow_start
-    action_type: schedule_nodes
-    scheduler: work_scheduler
-    scheduler_type: slurm
-    num_allocations: 1
-</code></pre>
-<p><strong>When to use:</strong></p>
-<ul>
-<li>Your application manages node coordination</li>
-<li>Need full control over compute resources</li>
+<li>Shared time limit for all jobs in the allocation</li>
 </ul>
 <h2 id="staged-allocations"><a class="header" href="#staged-allocations">Staged Allocations</a></h2>
 <p>For pipelines with distinct phases, stage allocations to avoid wasted resources:</p>
@@ -11328,7 +11612,6 @@ actions:
     scheduler: compute_sched
     scheduler_type: slurm
     num_allocations: 1
-    start_one_worker_per_node: true
 
   # Postprocessing allocated when those jobs are ready
   - trigger_type: on_jobs_ready
@@ -11393,7 +11676,10 @@ statistics and stores them with the job result (see
 string is embedded in the log file prefix <code>job_wf&lt;workflow_id&gt;_j&lt;job_id&gt;_r&lt;run_id&gt;_a&lt;attempt_id&gt;</code>
 (for example, <code>job_wf10_j42_r1_a1.o</code>), so all Slurm and Torc records for a job can be easily
 correlated.</p>
-<h3 id="multi-node-jobs"><a class="header" href="#multi-node-jobs">Multi-Node Jobs</a></h3>
+<h3 id="multi-node-jobs-1"><a class="header" href="#multi-node-jobs-1">Multi-Node Jobs</a></h3>
+<blockquote>
+<p>For a comprehensive guide to multi-node patterns, see <a href="specialized/hpc/./multi-node-jobs.html">Multi-Node Jobs</a>.</p>
+</blockquote>
 <p>Two resource requirement fields control node usage:</p>
 <div class="table-wrapper"><table><thead><tr><th>Field</th><th>Controls</th><th>Passed to</th><th>Default</th></tr></thead><tbody>
 <tr><td><code>num_nodes</code></td><td>Slurm allocation size</td><td><code>sbatch --nodes</code></td><td><code>1</code></td></tr>
@@ -11410,9 +11696,8 @@ patterns below.</p>
     runtime: PT2H
     # num_nodes defaults to 1, step_nodes defaults to 1
 </code></pre>
-<p><strong>Multi-node allocation with one worker per node</strong> (<code>start_one_worker_per_node: true</code>) — each worker
-runs single-node job steps, so <code>step_nodes</code> must stay at <code>1</code> (the default) even though <code>num_nodes</code>
-may be large:</p>
+<p><strong>Multi-node allocation with single-node jobs</strong> — a single worker manages all nodes. Each job runs
+on one node via <code>srun --nodes=1</code>, and single-node jobs may share a node when resources permit:</p>
 <pre><code class="language-yaml">resource_requirements:
   - name: standard
     num_cpus: 8
@@ -11421,8 +11706,8 @@ may be large:</p>
     num_nodes: 10   # sbatch allocates 10 nodes
     # step_nodes: 1 is the default — each srun step uses exactly one node
 </code></pre>
-<p><strong>True multi-node job steps</strong> (MPI, Julia <code>Distributed.jl</code>, etc.) — the job itself spans all nodes
-in its allocation, so set <code>step_nodes</code> equal to <code>num_nodes</code>:</p>
+<p><strong>True multi-node job steps</strong> (MPI, Julia <code>Distributed.jl</code>, etc.) — the job itself spans multiple
+nodes in the allocation, so set <code>step_nodes</code> to the number of nodes each job needs:</p>
 <pre><code class="language-yaml">resource_requirements:
   - name: mpi_job
     num_cpus: 32
@@ -11431,15 +11716,18 @@ in its allocation, so set <code>step_nodes</code> equal to <code>num_nodes</code
     num_nodes: 4      # sbatch allocates 4 nodes
     step_nodes: 4     # srun --nodes=4: each job step spans all 4 nodes
 </code></pre>
-<p>In this pattern, Torc passes <code>srun --nodes=4</code> when launching the job. The job command receives
-<code>SLURM_JOB_NODELIST</code>, <code>SLURM_NTASKS</code>, and the rest of the standard Slurm step environment, so MPI
-launchers (<code>mpirun</code>, <code>mpiexec</code>) and Julia <code>Distributed.jl</code> will automatically use all allocated
-nodes.</p>
-<blockquote>
-<p><strong>Important</strong>: Do not mix <code>start_one_worker_per_node: true</code> with <code>step_nodes &gt; 1</code>. Use
-<code>start_one_worker_per_node</code> for single-node jobs sharing a large allocation, or set
-<code>step_nodes = num_nodes</code> for genuine multi-node tasks — but not both at once.</p>
-</blockquote>
+<p>In this pattern, Torc reserves all 4 nodes for the step exclusively, then passes <code>srun --nodes=4</code>
+when launching the job. The job command receives <code>SLURM_JOB_NODELIST</code>, <code>SLURM_NTASKS</code>, and the rest
+of the standard Slurm step environment, so MPI launchers (<code>mpirun</code>, <code>mpiexec</code>) and Julia
+<code>Distributed.jl</code> will automatically use all allocated nodes.</p>
+<h3 id="multi-node-allocation-rule"><a class="header" href="#multi-node-allocation-rule">Multi-Node Allocation Rule</a></h3>
+<p>Inside a multi-node Slurm allocation, Torc uses two scheduling modes:</p>
+<ul>
+<li>Single-node jobs (<code>num_nodes=1</code>, <code>step_nodes=1</code>) may share nodes based on CPU, memory, and GPU
+availability.</li>
+<li>Multi-node jobs (<code>num_nodes&gt;1</code> or <code>step_nodes&gt;1</code>) reserve whole nodes exclusively.</li>
+</ul>
+<p>This keeps job claiming and local resource accounting aligned with Slurm allocations.</p>
 <h3 id="resource-limit-enforcement"><a class="header" href="#resource-limit-enforcement">Resource Limit Enforcement</a></h3>
 <p>By default (<code>limit_resources = true</code>), Torc passes <code>--cpus-per-task</code> and <code>--mem</code> to <code>srun</code> so Slurm
 enforces the cgroup limits defined in each job's resource requirements. This is the recommended
@@ -11498,13 +11786,91 @@ etc.) and are available via <code>torc slurm stats &lt;workflow_id&gt;</code>.</
 <h3 id="local-execution-1"><a class="header" href="#local-execution-1">Local Execution</a></h3>
 <p>When running locally (no <code>SLURM_JOB_ID</code> environment variable), Torc uses its standard shell wrapper
 and the <code>srun</code> behavior is never triggered. No configuration is needed for local runs.</p>
-<h2 id="see-also-20"><a class="header" href="#see-also-20">See Also</a></h2>
+<h2 id="see-also-21"><a class="header" href="#see-also-21">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/./slurm-workflows.html">Slurm Overview</a> — Simplified workflow approach</li>
 <li><a href="specialized/hpc/./hpc-profiles.html">HPC Profiles</a> — Automatic partition matching</li>
 <li><a href="specialized/hpc/../design/workflow-actions.html">Workflow Actions</a> — Action system details</li>
 <li><a href="specialized/hpc/./debugging-slurm.html">Debugging Slurm Workflows</a> — Troubleshooting guide</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="slurm-exit-codes"><a class="header" href="#slurm-exit-codes">Slurm Exit Codes</a></h1>
+<p>Torc sets per-step walltimes via <code>srun --time</code>, which produces deterministic exit codes that you can
+inspect with <code>torc results list</code> and <code>torc slurm sacct</code>.</p>
+<h2 id="exit-code-reference"><a class="header" href="#exit-code-reference">Exit Code Reference</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Scenario</th><th>Exit Code</th><th>Slurm State</th><th>Torc Status</th><th>Description</th></tr></thead><tbody>
+<tr><td><strong>Out of memory</strong></td><td>137</td><td><code>OUT_OF_MEMORY</code></td><td>failed</td><td>Exceeded <code>--mem</code> cgroup limit (SIGKILL)</td></tr>
+<tr><td><strong>Timeout, SIGTERM handled</strong></td><td>0</td><td><code>COMPLETED</code></td><td>completed</td><td>Caught SIGTERM, saved state, exited</td></tr>
+<tr><td><strong>Timeout, SIGKILL</strong></td><td>152</td><td><code>TIMEOUT</code></td><td>terminated</td><td>Did not exit before <code>--time</code> limit</td></tr>
+</tbody></table>
+</div>
+<h3 id="out-of-memory-exit-code-137"><a class="header" href="#out-of-memory-exit-code-137">Out of Memory (exit code 137)</a></h3>
+<p>The job exceeded its <code>--mem</code> cgroup limit. Slurm's OOM killer sent SIGKILL (signal 9).
+<code>137 = 128 + 9</code>.</p>
+<pre><code class="language-console">$ torc results list $WORKFLOW_ID
+╭────┬──────────┬─────────┬─────────────╮
+│ ID │ Job Name │ Status  │ Return Code │
+├────┼──────────┼─────────┼─────────────┤
+│ 1  │ train    │ failed  │ 137         │
+╰────┴──────────┴─────────┴─────────────╯
+
+$ torc slurm sacct $WORKFLOW_ID
+╭──────────────────────┬───────────────┬──────────╮
+│ Step Name            │ State         │ MaxRSS   │
+├──────────────────────┼───────────────┼──────────┤
+│ wf1_j1_r1_a1         │ OUT_OF_MEMORY │ 4096000K │
+╰──────────────────────┴───────────────┴──────────╯
+</code></pre>
+<p><strong>Fix:</strong> Increase <code>memory</code> in resource requirements, or use
+<code>torc reports check-resource-utilization --correct</code> to auto-adjust based on peak usage.</p>
+<h3 id="timeout-with-graceful-shutdown-exit-code-0"><a class="header" href="#timeout-with-graceful-shutdown-exit-code-0">Timeout with Graceful Shutdown (exit code 0)</a></h3>
+<p>The job received SIGTERM via <code>srun --signal</code>, saved a checkpoint, and called <code>sys.exit(0)</code>. From
+Slurm's perspective, the job completed normally.</p>
+<pre><code class="language-console">$ torc results list $WORKFLOW_ID
+╭────┬──────────┬───────────┬─────────────╮
+│ ID │ Job Name │ Status    │ Return Code │
+├────┼──────────┼───────────┼─────────────┤
+│ 1  │ simulate │ completed │ 0           │
+╰────┴──────────┴───────────┴─────────────╯
+</code></pre>
+<p>This is the expected outcome when using <code>srun_termination_signal</code>. The job handled the signal
+correctly but did not finish all its work. Reinitialize and re-submit to continue from the
+checkpoint:</p>
+<pre><code class="language-bash">torc workflows reinitialize $WORKFLOW_ID
+torc workflows submit $WORKFLOW_ID
+</code></pre>
+<p>See the <a href="specialized/hpc/../fault-tolerance/checkpointing.html">Graceful Job Termination</a> tutorial for a complete
+example with a Python signal handler.</p>
+<h3 id="timeout-without-handler-exit-code-152"><a class="header" href="#timeout-without-handler-exit-code-152">Timeout without Handler (exit code 152)</a></h3>
+<p>The job did not exit before the step's <code>--time</code> limit. Slurm sent SIGTERM, waited <code>KillWait</code> seconds
+(typically 30s, configured in <code>slurm.conf</code>), then sent SIGKILL. <code>152 = 128 + 24</code> (SIGXCPU).</p>
+<pre><code class="language-console">$ torc results list $WORKFLOW_ID
+╭────┬──────────┬────────────┬─────────────╮
+│ ID │ Job Name │ Status     │ Return Code │
+├────┼──────────┼────────────┼─────────────┤
+│ 1  │ train    │ terminated │ 152         │
+╰────┴──────────┴────────────┴─────────────╯
+
+$ torc slurm sacct $WORKFLOW_ID
+╭──────────────────────┬─────────┬──────────╮
+│ Step Name            │ State   │ MaxRSS   │
+├──────────────────────┼─────────┼──────────┤
+│ wf1_j1_r1_a1         │ TIMEOUT │ 2048000K │
+╰──────────────────────┴─────────┴──────────╯
+</code></pre>
+<p><strong>Fix:</strong></p>
+<ul>
+<li>Add a SIGTERM handler using the
+<a href="specialized/hpc/../fault-tolerance/checkpointing.html#step-1-write-the-python-job">shutdown-flag pattern</a></li>
+<li>Set <code>srun_termination_signal</code> to give more lead time (e.g., <code>"TERM@300"</code> for 5 minutes)</li>
+<li>Increase the allocation walltime</li>
+</ul>
+<h2 id="why-torc-sets---time"><a class="header" href="#why-torc-sets---time">Why Torc Sets <code>--time</code></a></h2>
+<p>Without <code>srun --time</code>, steps inherit the allocation's walltime. When the allocation expires, Slurm
+cancels all steps with <code>State=CANCELLED</code>, which is ambiguous — it could mean the user canceled the
+job, the admin preempted it, or time ran out.</p>
+<p>By setting <code>--time</code> to the remaining allocation time (rounded down to whole minutes), Torc ensures
+the step times out <strong>before</strong> the allocation expires. This produces the unambiguous <code>State=TIMEOUT</code>
+with exit code 152, which Torc can distinguish from user-initiated cancellation.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="debugging-slurm-workflows"><a class="header" href="#debugging-slurm-workflows">Debugging Slurm Workflows</a></h1>
 <p>When running workflows on Slurm clusters, Torc provides additional debugging tools specifically
 designed for Slurm environments. This guide covers Slurm-specific debugging techniques and tools.</p>
@@ -11883,7 +12249,7 @@ when:</p>
 <li><strong><code>torc-dash</code></strong>: Launch web interface with Slurm log viewing</li>
 <li><strong><code>torc tui</code></strong>: Launch terminal UI with Slurm log viewing</li>
 </ul>
-<h2 id="see-also-21"><a class="header" href="#see-also-21">See Also</a></h2>
+<h2 id="see-also-22"><a class="header" href="#see-also-22">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/debugging.html">Debugging Workflows</a> — General debugging tools and workflows</li>
 <li><a href="specialized/hpc/working-with-logs.html">Working with Logs</a> — Bundling and analyzing logs</li>
@@ -12006,7 +12372,7 @@ See <a href="specialized/hpc/./slurm.html">Advanced Slurm Configuration</a> for 
 <li><code>torc submit-slurm</code> - Submit workflows with auto-generated schedulers</li>
 <li><code>torc workflows create-slurm</code> - Create workflows with auto-generated schedulers</li>
 </ul>
-<h2 id="see-also-22"><a class="header" href="#see-also-22">See Also</a></h2>
+<h2 id="see-also-23"><a class="header" href="#see-also-23">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/./slurm.html">Advanced Slurm Configuration</a></li>
 <li><a href="specialized/hpc/./custom-hpc-profile.html">Custom HPC Profile Tutorial</a></li>
@@ -12342,7 +12708,7 @@ default_account = "my_default_account"
 </div>
 <p>Generated walltime uses <code>HH:MM:SS</code> format (e.g., <code>04:00:00</code>).</p>
 <hr />
-<h2 id="see-also-23"><a class="header" href="#see-also-23">See Also</a></h2>
+<h2 id="see-also-24"><a class="header" href="#see-also-24">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/./hpc-profiles.html">Working with HPC Profiles</a></li>
 <li><a href="specialized/hpc/./custom-hpc-profile.html">Custom HPC Profile Tutorial</a></li>
@@ -12538,7 +12904,7 @@ pgrep -f torc-server
 # Check server logs
 tail -100 /scratch/$USER/torc/logs/torc-server*.log
 </code></pre>
-<h2 id="see-also-24"><a class="header" href="#see-also-24">See Also</a></h2>
+<h2 id="see-also-25"><a class="header" href="#see-also-25">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/../../core/reference/configuration.html">Configuration Reference</a></li>
 <li><a href="specialized/hpc/./hpc-profiles-reference.html">HPC Profiles Reference</a></li>
@@ -12850,7 +13216,7 @@ hostname
 </ol>
 <p>Or simply <a href="https://github.com/NatLabRockies/torc/issues">open an issue</a> with your partition
 information and we'll add it for you.</p>
-<h2 id="see-also-25"><a class="header" href="#see-also-25">See Also</a></h2>
+<h2 id="see-also-26"><a class="header" href="#see-also-26">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/./hpc-profiles.html">Working with HPC Profiles</a> - General HPC profile usage</li>
 <li><a href="specialized/hpc/./hpc-profiles-reference.html">HPC Profiles Reference</a> - Complete configuration options</li>
@@ -13620,7 +13986,7 @@ for more details.</p>
 <li>Update jobs with new scheduler reference</li>
 <li>Submit allocations via sbatch</li>
 </ol>
-<h2 id="see-also-26"><a class="header" href="#see-also-26">See Also</a></h2>
+<h2 id="see-also-27"><a class="header" href="#see-also-27">See Also</a></h2>
 <ul>
 <li><a href="specialized/fault-tolerance/./failure-handlers.html">Configurable Failure Handlers</a> - Per-job retry with exit-code-specific
 recovery</li>
@@ -14433,264 +14799,289 @@ Agent: [Uses classify_and_resolve_failures with dry_run=false]
 <li><strong>Error patterns</strong>: Transient vs permanent classification</li>
 <li><strong>Integration</strong>: Works with failure handlers and <code>torc recover</code></li>
 </ul>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="how-to-checkpoint-a-job-during-wall-time-timeout"><a class="header" href="#how-to-checkpoint-a-job-during-wall-time-timeout">How to Checkpoint a Job During Wall-Time Timeout</a></h1>
-<p>When running jobs on HPC systems like Slurm, your job may be terminated when the allocated wall-time
-expires. Torc supports <strong>graceful termination</strong>, allowing jobs to save checkpoints before exiting.
-This guide explains how to configure Slurm and your jobs to handle wall-time timeouts gracefully.</p>
-<h2 id="overview-10"><a class="header" href="#overview-10">Overview</a></h2>
-<p>When Slurm is about to reach wall-time, it can be configured to send a SIGTERM signal to the Torc
-worker process. Torc then:</p>
-<ol>
-<li>Sends SIGTERM to jobs with <code>supports_termination: true</code></li>
-<li>Sends SIGKILL to jobs with <code>supports_termination: false</code> (or unset)</li>
-<li>Waits for all processes to exit</li>
-<li>Reports job status as <code>terminated</code> to the server</li>
-</ol>
-<p>Jobs that support termination can catch SIGTERM and perform cleanup operations like saving
-checkpoints, flushing buffers, or releasing resources.</p>
-<h2 id="enabling-graceful-termination"><a class="header" href="#enabling-graceful-termination">Enabling Graceful Termination</a></h2>
-<h3 id="configuring-slurm-to-send-a-signal-before-timeout"><a class="header" href="#configuring-slurm-to-send-a-signal-before-timeout">Configuring Slurm to Send a Signal Before Timeout</a></h3>
-<p>By default, Slurm does <strong>not</strong> send any signal before the job's end time. When the wall-time limit
-is reached, Slurm immediately terminates all processes. To receive a warning signal before timeout,
-you must explicitly configure it using the <code>--signal</code> option in the <code>extra</code> field of your Slurm
-scheduler specification:</p>
-<pre><code class="language-yaml">slurm_schedulers:
-  - name: gpu_scheduler
-    account: my_project
-    partition: gpu
-    nodes: 1
-    walltime: "04:00:00"
-    extra: "--signal=B:TERM@300"  # Send SIGTERM to batch script 300 seconds before timeout
-</code></pre>
-<p>The <code>--signal</code> option format is <code>[B:]&lt;sig_num&gt;[@sig_time]</code>:</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="tutorial-graceful-job-termination-on-hpc"><a class="header" href="#tutorial-graceful-job-termination-on-hpc">Tutorial: Graceful Job Termination on HPC</a></h1>
+<p>This tutorial teaches you how to configure Torc workflows so that long-running jobs receive an early
+warning signal before Slurm kills them, giving them time to save progress and automatically resume
+from the last checkpoint.</p>
+<h2 id="learning-objectives-8"><a class="header" href="#learning-objectives-8">Learning Objectives</a></h2>
+<p>By the end of this tutorial, you will:</p>
 <ul>
-<li><code>B:</code> prefix sends the signal only to the batch shell (by default, all job steps are signaled but
-not the batch shell itself)</li>
-<li><code>sig_num</code> is the signal name or number (e.g., <code>TERM</code>, <code>USR1</code>, <code>10</code>)</li>
-<li><code>sig_time</code> is seconds before the time limit to send the signal (default: 60 if not specified)</li>
+<li>Understand how <code>srun_termination_signal</code> delivers early SIGTERM to running jobs</li>
+<li>Write a Python job that catches SIGTERM and shuts down gracefully</li>
+<li>Use the shutdown-flag pattern to stop a long-running loop cleanly</li>
+<li>Use a non-zero exit code with a failure handler so Torc automatically retries the job</li>
+<li>Configure a complete Torc workflow with early termination support</li>
 </ul>
-<p>Note: Due to Slurm's event handling resolution, the signal may be sent up to 60 seconds earlier than
-specified.</p>
-<p>To enable graceful termination for a job, set <code>supports_termination: true</code> in your job
-specification:</p>
-<h3 id="configuring-a-torc-job-to-be-terminated-gracefully"><a class="header" href="#configuring-a-torc-job-to-be-terminated-gracefully">Configuring a Torc job to be terminated gracefully</a></h3>
-<pre><code class="language-yaml">jobs:
-  - name: training_job
-    command: python train.py --checkpoint-dir /scratch/checkpoints
-    supports_termination: true
-    resource_requirements:
-      num_cpus: 4
-      memory: 16g
-      runtime: PT2H
-</code></pre>
-<h2 id="writing-a-job-that-handles-sigterm"><a class="header" href="#writing-a-job-that-handles-sigterm">Writing a Job That Handles SIGTERM</a></h2>
-<p>Your job script must catch SIGTERM and save its state. Here's a Python example:</p>
-<pre><code class="language-python">import signal
+<h2 id="prerequisites-16"><a class="header" href="#prerequisites-16">Prerequisites</a></h2>
+<ul>
+<li>Torc server running</li>
+<li>Access to a Slurm cluster</li>
+<li>Basic familiarity with submitting Torc workflows (see
+<a href="specialized/fault-tolerance/../../getting-started/quick-start-hpc.html">Quick Start (HPC/Slurm)</a>)</li>
+</ul>
+<h2 id="background-why-graceful-termination-matters"><a class="header" href="#background-why-graceful-termination-matters">Background: Why Graceful Termination Matters</a></h2>
+<p>On HPC systems, jobs have a fixed wall-time. When time runs out, Slurm kills the process immediately
+with SIGKILL. Any unsaved work—training progress, partial results, intermediate state—is lost.</p>
+<p>Torc's <code>srun_termination_signal</code> feature tells Slurm to send a catchable signal (SIGTERM) <strong>before</strong>
+the hard kill. Your job can trap that signal, finish the current iteration, save a checkpoint, and
+exit with a dedicated exit code that tells Torc to retry automatically.</p>
+<h3 id="timeline-of-events"><a class="header" href="#timeline-of-events">Timeline of Events</a></h3>
+<pre class="mermaid">graph LR
+    A[&quot;Job starts&quot;] --&gt;|normal execution| B[&quot;SIGTERM&quot;]
+    B --&gt;|&quot;120 seconds&quot;| C[&quot;Step timeout&quot;]
+
+    style A fill:#4a9eff,color:#fff
+    style B fill:#e8a735,color:#fff
+    style C fill:#d9534f,color:#fff
+</pre>
+<p>With <code>srun_termination_signal: "TERM@120"</code>, your job gets 120 seconds of warning before the srun
+step's time limit expires.</p>
+<h2 id="step-1-write-the-python-job"><a class="header" href="#step-1-write-the-python-job">Step 1: Write the Python Job</a></h2>
+<p>Save this as <code>simulate.py</code>:</p>
+<pre><code class="language-python">#!/usr/bin/env python3
+"""Long-running simulation that handles SIGTERM for graceful shutdown."""
+
+import json
+import os
+import signal
 import sys
-import pickle
+import time
 
-# Global state
-checkpoint_path = "/scratch/checkpoints/model.pkl"
-model_state = None
+# Exit code that signals "checkpointed, please retry".
+# Must match the exit_codes in the workflow's failure_handler.
+EXIT_CHECKPOINT = 42
 
-def save_checkpoint():
-    """Save current model state to disk."""
-    print("Saving checkpoint...")
-    with open(checkpoint_path, 'wb') as f:
-        pickle.dump(model_state, f)
-    print(f"Checkpoint saved to {checkpoint_path}")
+# --- Shutdown flag -----------------------------------------------------------
+# The SIGTERM handler sets this flag. The main loop checks it on every
+# iteration and breaks out when it becomes True.
+shutdown_requested = False
+
 
 def handle_sigterm(signum, frame):
-    """Handle SIGTERM by saving checkpoint and exiting."""
-    print("Received SIGTERM - saving checkpoint before exit")
-    save_checkpoint()
-    sys.exit(0)  # Exit cleanly after saving
+    """Set the shutdown flag when SIGTERM is received."""
+    global shutdown_requested
+    print(f"SIGTERM received (signal {signum}). Will stop after current iteration.")
+    shutdown_requested = True
 
-# Register the signal handler
+
+# Register the handler BEFORE doing any work.
 signal.signal(signal.SIGTERM, handle_sigterm)
 
-# Main training loop
-def train():
-    global model_state
-    for epoch in range(1000):
-        # Training logic here...
-        model_state = {"epoch": epoch, "weights": [...]}
+# --- Checkpoint helpers ------------------------------------------------------
+CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", "checkpoint.json")
 
-        # Optionally save periodic checkpoints
-        if epoch % 100 == 0:
-            save_checkpoint()
+
+def load_checkpoint():
+    """Load the last saved iteration, or start from 0."""
+    if os.path.exists(CHECKPOINT_PATH):
+        with open(CHECKPOINT_PATH) as f:
+            data = json.load(f)
+        print(f"Resumed from checkpoint at iteration {data['iteration']}")
+        return data["iteration"], data["accumulator"]
+    return 0, 0.0
+
+
+def save_checkpoint(iteration, accumulator):
+    """Atomically save progress to disk."""
+    tmp = CHECKPOINT_PATH + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump({"iteration": iteration, "accumulator": accumulator}, f)
+    os.replace(tmp, CHECKPOINT_PATH)  # atomic on POSIX
+    print(f"Checkpoint saved at iteration {iteration}")
+
+
+# --- Main loop ---------------------------------------------------------------
+def main():
+    iteration, accumulator = load_checkpoint()
+    total_iterations = 100_000
+
+    print(f"Starting simulation from iteration {iteration}")
+    while iteration &lt; total_iterations:
+        # Check the shutdown flag at the top of every iteration.
+        if shutdown_requested:
+            print("Shutdown flag is set. Saving checkpoint and exiting.")
+            save_checkpoint(iteration, accumulator)
+            sys.exit(EXIT_CHECKPOINT)
+
+        # Simulate one unit of work.
+        accumulator += iteration * 0.001
+        iteration += 1
+
+        # Periodic progress and checkpoint.
+        if iteration % 1000 == 0:
+            print(f"Iteration {iteration}/{total_iterations}  accumulator={accumulator:.4f}")
+            save_checkpoint(iteration, accumulator)
+
+        time.sleep(0.01)  # simulate compute time
+
+    print(f"Simulation complete. Final accumulator={accumulator:.4f}")
+    save_checkpoint(iteration, accumulator)
+
 
 if __name__ == "__main__":
-    train()
+    main()
 </code></pre>
-<h3 id="bash-script-example"><a class="header" href="#bash-script-example">Bash Script Example</a></h3>
-<p>For shell scripts, use <code>trap</code> to catch SIGTERM:</p>
-<pre><code class="language-bash">#!/bin/bash
+<h3 id="key-design-points"><a class="header" href="#key-design-points">Key Design Points</a></h3>
+<ol>
+<li>
+<p><strong>Non-zero exit code.</strong> When SIGTERM arrives before the simulation finishes, the script exits
+with code 42 (<code>EXIT_CHECKPOINT</code>). This tells Torc the job did not complete successfully, so the
+failure handler can automatically schedule a retry. Exit code 0 is reserved for genuine
+completion.</p>
+</li>
+<li>
+<p><strong>Global shutdown flag.</strong> The signal handler only sets <code>shutdown_requested = True</code>. It does no
+I/O and no cleanup—signal handlers should be minimal.</p>
+</li>
+<li>
+<p><strong>Loop checks the flag.</strong> Every iteration starts with <code>if shutdown_requested:</code>. This guarantees
+the current iteration finishes before the job starts saving state.</p>
+</li>
+<li>
+<p><strong>Atomic checkpoint.</strong> Writing to a <code>.tmp</code> file and calling <code>os.replace()</code> prevents a corrupted
+checkpoint if the process is killed during the write.</p>
+</li>
+<li>
+<p><strong>Handler registered early.</strong> <code>signal.signal(signal.SIGTERM, handle_sigterm)</code> runs before the
+main loop so the handler is active from the start.</p>
+</li>
+</ol>
+<h2 id="step-2-create-the-workflow-specification-1"><a class="header" href="#step-2-create-the-workflow-specification-1">Step 2: Create the Workflow Specification</a></h2>
+<p>Save as <code>graceful_termination.yaml</code>:</p>
+<pre><code class="language-yaml">name: graceful_termination_demo
+description: Demonstrates early SIGTERM with automatic checkpoint-and-retry
 
-CHECKPOINT_FILE="/scratch/checkpoints/progress.txt"
+slurm_config:
+  srun_termination_signal: "TERM@120"
 
-# Function to save checkpoint
-save_checkpoint() {
-    echo "Saving checkpoint at iteration $ITERATION"
-    echo "$ITERATION" &gt; "$CHECKPOINT_FILE"
-}
+failure_handlers:
+  - name: checkpoint_retry
+    rules:
+      # Exit code 42 means "checkpointed, please retry"
+      - exit_codes: [42]
+        max_retries: 100
 
-# Trap SIGTERM and save checkpoint
-trap 'save_checkpoint; exit 0' SIGTERM
-
-# Load checkpoint if exists
-if [ -f "$CHECKPOINT_FILE" ]; then
-    ITERATION=$(cat "$CHECKPOINT_FILE")
-    echo "Resuming from iteration $ITERATION"
-else
-    ITERATION=0
-fi
-
-# Main loop
-while [ $ITERATION -lt 1000 ]; do
-    # Do work...
-    ITERATION=$((ITERATION + 1))
-    sleep 1
-done
-</code></pre>
-<h3 id="complete-workflow-example-1"><a class="header" href="#complete-workflow-example-1">Complete Workflow Example</a></h3>
-<pre><code class="language-yaml">name: ml_training_workflow
-user: researcher
+resource_requirements:
+  - name: sim_resources
+    num_cpus: 2
+    num_nodes: 1
+    memory: 4g
+    runtime: PT2H
 
 jobs:
-  - name: preprocess
-    command: python preprocess.py
-    supports_termination: false  # Quick job, no checkpointing needed
-
-  - name: train_model
-    command: python train.py --checkpoint-dir /scratch/checkpoints
-    supports_termination: true   # Long job, needs checkpointing
-    depends_on:
-      - preprocess
-    resource_requirements:
-      num_cpus: 8
-      memory: 32g
-      num_gpus: 1
-      runtime: PT4H
-
-  - name: evaluate
-    command: python evaluate.py
-    supports_termination: true
-    depends_on:
-      - train_model
+  - name: simulate
+    command: python3 simulate.py
+    resource_requirements: sim_resources
+    failure_handler: checkpoint_retry
 
 slurm_schedulers:
-  - name: gpu_scheduler
+  - name: scheduler
     account: my_project
-    partition: gpu
+    partition: standard
     nodes: 1
-    walltime: "04:00:00"
-    extra: "--signal=B:TERM@300"  # Send SIGTERM to batch script 300 seconds before timeout
+    walltime: "02:00:00"
 
 actions:
   - trigger_type: on_workflow_start
     action_type: schedule_nodes
-    scheduler: gpu_scheduler
+    scheduler: scheduler
     scheduler_type: slurm
     num_allocations: 1
 </code></pre>
-<h2 id="restarting-after-termination"><a class="header" href="#restarting-after-termination">Restarting After Termination</a></h2>
-<p>When a job is terminated due to wall-time, it will have status <code>terminated</code>. To continue the
-workflow:</p>
+<p>Three pieces work together here:</p>
+<ul>
+<li>
+<p><strong><code>slurm_config.srun_termination_signal: "TERM@120"</code></strong> tells Slurm to send SIGTERM 120 seconds
+before the step time limit. Torc passes this to every <code>srun</code> invocation as
+<code>srun --signal=TERM@120</code>.</p>
+</li>
+<li>
+<p><strong><code>failure_handlers</code></strong> with exit code 42 tells Torc to automatically retry the job whenever it
+exits with code 42. Each retry picks up from the last checkpoint, so the simulation makes progress
+across multiple Slurm allocations.</p>
+</li>
+<li>
+<p><strong><code>max_retries</code></strong> controls how many checkpoint cycles the job is allowed. Set this high enough to
+cover the worst case: if each allocation provides ~2 hours of compute and the total job needs ~40
+hours, you need at least 20 retries. Setting it generously (e.g., 100) is safe — the job exits
+with code 0 once it finishes, so unused retries cost nothing.</p>
+</li>
+</ul>
+<h2 id="step-3-submit-and-run"><a class="header" href="#step-3-submit-and-run">Step 3: Submit and Run</a></h2>
+<pre><code class="language-bash">torc submit-slurm --account my_project graceful_termination.yaml
+</code></pre>
+<p>Or, if you already have schedulers configured in the spec:</p>
+<pre><code class="language-bash">torc submit graceful_termination.yaml
+</code></pre>
+<h2 id="step-4-observe-the-behavior"><a class="header" href="#step-4-observe-the-behavior">Step 4: Observe the Behavior</a></h2>
+<p>Monitor the workflow:</p>
+<pre><code class="language-bash">torc tui
+</code></pre>
+<p>When the srun step nears its time limit, you will see in the job's stdout:</p>
+<pre><code>Iteration 47000/100000  accumulator=1104.4530
+SIGTERM received (signal 15). Will stop after current iteration.
+Shutdown flag is set. Saving checkpoint and exiting.
+Checkpoint saved at iteration 47001
+</code></pre>
+<p>The job exits with code 42, so Torc marks it as <strong>failed</strong> and the failure handler automatically
+schedules a retry. The next attempt loads the checkpoint and continues:</p>
+<pre><code>Resumed from checkpoint at iteration 47001
+Starting simulation from iteration 47001
+Iteration 48000/100000  accumulator=1151.4530
+...
+</code></pre>
+<p>This cycle repeats until the simulation finishes all iterations and exits with code 0, at which
+point Torc marks the job as <strong>completed</strong>.</p>
+<p>Note that each retry doesn't need to finish the entire remaining work — it only needs to make
+<strong>some</strong> forward progress before the next checkpoint. This is the expected behavior for long-running
+jobs whose total compute time exceeds a single Slurm allocation. The job spreads its work across as
+many allocations as needed, and <code>max_retries</code> just needs to be high enough to cover the total number
+of checkpoint cycles.</p>
+<h2 id="how-it-works-under-the-hood"><a class="header" href="#how-it-works-under-the-hood">How It Works Under the Hood</a></h2>
 <ol>
 <li>
-<p><strong>Re-submit the workflow</strong> to allocate new compute time:</p>
-<pre><code class="language-bash">torc workflows submit $WORKFLOW_ID
-</code></pre>
+<p><strong><code>slurm_config.srun_termination_signal: "TERM@120"</code></strong> is stored on the workflow record in the
+Torc database.</p>
 </li>
 <li>
-<p><strong>Reinitialize terminated jobs</strong> to make them ready again:</p>
-<pre><code class="language-bash">torc workflows reinitialize $WORKFLOW_ID
-</code></pre>
+<p>When the job runner launches a job inside a Slurm allocation, it builds an <code>srun</code> command that
+includes <code>--signal=TERM@120</code>.</p>
+</li>
+<li>
+<p>Slurm's step manager sends SIGTERM to the job's process group 120 seconds before <code>--time</code>
+expires.</p>
+</li>
+<li>
+<p>Python's signal handler sets <code>shutdown_requested = True</code>.</p>
+</li>
+<li>
+<p>The main loop sees the flag, saves the checkpoint, and calls <code>sys.exit(42)</code>.</p>
+</li>
+<li>
+<p>Torc sees exit code 42 (non-zero), marks the job as failed, and consults the failure handler.</p>
+</li>
+<li>
+<p>The failure handler matches exit code 42 and schedules a retry (up to <code>max_retries</code> times).</p>
+</li>
+<li>
+<p>On retry, the script calls <code>load_checkpoint()</code> and resumes from where it left off.</p>
+</li>
+<li>
+<p>When all iterations finish, the script exits with code 0 and Torc marks it as completed.</p>
 </li>
 </ol>
-<p>Your job script should detect existing checkpoints and resume from where it left off.</p>
-<h2 id="best-practices-6"><a class="header" href="#best-practices-6">Best Practices</a></h2>
-<h3 id="1-verify-checkpoint-integrity"><a class="header" href="#1-verify-checkpoint-integrity">1. Verify Checkpoint Integrity</a></h3>
-<p>Add validation to ensure checkpoints are complete:</p>
-<pre><code class="language-python">def save_checkpoint():
-    temp_path = checkpoint_path + ".tmp"
-    with open(temp_path, 'wb') as f:
-        pickle.dump(model_state, f)
-    # Atomic rename ensures complete checkpoint
-    os.rename(temp_path, checkpoint_path)
-</code></pre>
-<h3 id="2-handle-multiple-termination-signals"><a class="header" href="#2-handle-multiple-termination-signals">2. Handle Multiple Termination Signals</a></h3>
-<p>Some systems send multiple signals. Ensure your handler is idempotent:</p>
-<pre><code class="language-python">checkpoint_saved = False
-
-def handle_sigterm(signum, frame):
-    global checkpoint_saved
-    if not checkpoint_saved:
-        save_checkpoint()
-        checkpoint_saved = True
-    sys.exit(0)
-</code></pre>
-<h3 id="3-test-locally"><a class="header" href="#3-test-locally">3. Test Locally</a></h3>
-<p>Test your SIGTERM handling locally before running on the cluster:</p>
-<pre><code class="language-bash"># Start your job
-python train.py &amp;
-PID=$!
-
-# Wait a bit, then send SIGTERM
-sleep 10
-kill -TERM $PID
-
-# Verify checkpoint was saved
-ls -la /scratch/checkpoints/
-</code></pre>
-<h2 id="troubleshooting-11"><a class="header" href="#troubleshooting-11">Troubleshooting</a></h2>
-<h3 id="job-killed-without-checkpointing"><a class="header" href="#job-killed-without-checkpointing">Job Killed Without Checkpointing</a></h3>
-<p><strong>Symptoms:</strong> Job status is <code>terminated</code> but no checkpoint was saved.</p>
-<p><strong>Causes:</strong></p>
+<h2 id="what-you-learned-5"><a class="header" href="#what-you-learned-5">What You Learned</a></h2>
+<p>In this tutorial, you learned:</p>
 <ul>
-<li><code>supports_termination</code> not set to <code>true</code></li>
-<li>Signal handler not registered before training started</li>
-<li>Checkpoint save took longer than the buffer time</li>
+<li>How to set <code>srun_termination_signal</code> in a workflow spec for early warning before timeout</li>
+<li>The shutdown-flag pattern: signal handler sets a flag, main loop checks it each iteration</li>
+<li>How to write atomic checkpoints that survive unexpected kills</li>
+<li>How to use a dedicated exit code with a failure handler for automatic checkpoint-and-retry</li>
 </ul>
-<p><strong>Solutions:</strong></p>
+<h2 id="next-steps-14"><a class="header" href="#next-steps-14">Next Steps</a></h2>
 <ul>
-<li>Verify <code>supports_termination: true</code> in job spec</li>
-<li>Register signal handlers early in your script</li>
-</ul>
-<h3 id="checkpoint-file-corrupted"><a class="header" href="#checkpoint-file-corrupted">Checkpoint File Corrupted</a></h3>
-<p><strong>Symptoms:</strong> Job fails to load checkpoint on restart.</p>
-<p><strong>Causes:</strong></p>
-<ul>
-<li>Job was killed during checkpoint write</li>
-<li>Disk space exhausted</li>
-</ul>
-<p><strong>Solutions:</strong></p>
-<ul>
-<li>Use atomic file operations (write to temp, then rename)</li>
-<li>Check available disk space before checkpointing</li>
-<li>Implement checkpoint validation on load</li>
-</ul>
-<h3 id="job-doesnt-receive-sigterm"><a class="header" href="#job-doesnt-receive-sigterm">Job Doesn't Receive SIGTERM</a></h3>
-<p><strong>Symptoms:</strong> Job runs until hard kill with no graceful shutdown.</p>
-<p><strong>Causes:</strong></p>
-<ul>
-<li>Job running in a subprocess that doesn't forward signals</li>
-<li>Container or wrapper script intercepting signals</li>
-</ul>
-<p><strong>Solutions:</strong></p>
-<ul>
-<li>Use <code>exec</code> in wrapper scripts to replace the shell</li>
-<li>Configure signal forwarding in containers</li>
-<li>Run the job directly without wrapper scripts</li>
-</ul>
-<h2 id="see-also-27"><a class="header" href="#see-also-27">See Also</a></h2>
-<ul>
-<li><a href="specialized/fault-tolerance/./slurm.html">Advanced Slurm Configuration</a> - Manual Slurm scheduler setup</li>
-<li><a href="specialized/fault-tolerance/./resources.html">Managing Resources</a> - Resource requirements configuration</li>
-<li><a href="specialized/fault-tolerance/./debugging.html">Debugging Workflows</a> - Troubleshooting workflow issues</li>
-<li><a href="https://slurm.schedmd.com/sbatch.html#OPT_signal">Slurm sbatch --signal option</a> - Customize which
-signal is sent and when before wall-time timeout</li>
+<li><a href="specialized/fault-tolerance/./automatic-recovery.html">Automatic Failure Recovery</a> — Configure Torc to automatically retry or
+recover failed jobs</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="administration--security"><a class="header" href="#administration--security">Administration &amp; Security</a></h1>
 <p>Server deployment, configuration, and security.</p>
@@ -15008,7 +15399,7 @@ instead of restarting the container. See
 </code></pre>
 <p>This adds detailed timing information for all instrumented functions. Note that timing
 instrumentation works with both console and file logging.</p>
-<h2 id="troubleshooting-12"><a class="header" href="#troubleshooting-12">Troubleshooting</a></h2>
+<h2 id="troubleshooting-11"><a class="header" href="#troubleshooting-11">Troubleshooting</a></h2>
 <h3 id="daemon-wont-start"><a class="header" href="#daemon-wont-start">Daemon won't start</a></h3>
 <ol>
 <li>
@@ -15177,7 +15568,7 @@ memory_gb = 256.0
 num_gpus = 8
 output_dir = "/scratch/user/workflow_output"
 </code></pre>
-<h2 id="troubleshooting-13"><a class="header" href="#troubleshooting-13">Troubleshooting</a></h2>
+<h2 id="troubleshooting-12"><a class="header" href="#troubleshooting-12">Troubleshooting</a></h2>
 <p><strong>Configuration not applied?</strong></p>
 <ol>
 <li>Check which files are loaded: <code>torc config validate</code></li>
@@ -15191,7 +15582,7 @@ output_dir = "/scratch/user/workflow_output"
 <div style="break-before: page; page-break-before: always;"></div><h1 id="authentication"><a class="header" href="#authentication">Authentication</a></h1>
 <p>Torc supports HTTP Basic authentication to secure access to your workflow orchestration server. This
 guide explains how to set up and use authentication.</p>
-<h2 id="overview-11"><a class="header" href="#overview-11">Overview</a></h2>
+<h2 id="overview-10"><a class="header" href="#overview-10">Overview</a></h2>
 <p>Torc's authentication system provides:</p>
 <ul>
 <li><strong>Multi-user support</strong> via htpasswd files</li>
@@ -15432,7 +15823,7 @@ torc-server run --auth-file /etc/torc/htpasswd --database prod.db
 # 4. Once all clients authenticate, enable required auth
 torc-server run --auth-file /etc/torc/htpasswd --require-auth --database prod.db
 </code></pre>
-<h2 id="troubleshooting-14"><a class="header" href="#troubleshooting-14">Troubleshooting</a></h2>
+<h2 id="troubleshooting-13"><a class="header" href="#troubleshooting-13">Troubleshooting</a></h2>
 <h3 id="authentication-required-but-no-credentials-provided"><a class="header" href="#authentication-required-but-no-credentials-provided">"Authentication required but no credentials provided"</a></h3>
 <p><strong>Cause:</strong> Server has <code>--require-auth</code> but client didn't send credentials.</p>
 <p><strong>Solution:</strong></p>
@@ -15635,7 +16026,7 @@ let mut config = Configuration::with_tls(tls);
 config.base_path =
     "https://torc.hpc.nrel.gov:8080/torc-service/v1".to_string();
 <span class="boring">}</span></code></pre></pre>
-<h2 id="troubleshooting-15"><a class="header" href="#troubleshooting-15">Troubleshooting</a></h2>
+<h2 id="troubleshooting-14"><a class="header" href="#troubleshooting-14">Troubleshooting</a></h2>
 <h3 id="certificate-verify-failed-or-unable-to-get-local-issuer-certificate"><a class="header" href="#certificate-verify-failed-or-unable-to-get-local-issuer-certificate">"certificate verify failed" or "unable to get local issuer certificate"</a></h3>
 <p>The client cannot verify the server's certificate chain. Provide the CA certificate:</p>
 <pre><code class="language-bash">torc --tls-ca-cert /path/to/ca.pem workflows list
@@ -15677,7 +16068,7 @@ check that the proxy is configured and the URL is correct.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="access-groups"><a class="header" href="#access-groups">Access Groups</a></h1>
 <p>Torc supports team-based access control through access groups. This allows teams to share access to
 workflows while restricting access from other teams.</p>
-<h2 id="overview-12"><a class="header" href="#overview-12">Overview</a></h2>
+<h2 id="overview-11"><a class="header" href="#overview-11">Overview</a></h2>
 <p>Access groups provide:</p>
 <ul>
 <li><strong>Team-based access control</strong> - Share workflows with specific groups</li>
@@ -15874,7 +16265,7 @@ users. The admin group is a system group that cannot be deleted or modified via 
 <div style="break-before: page; page-break-before: always;"></div><h1 id="tutorial-team-based-access-control-with-access-groups"><a class="header" href="#tutorial-team-based-access-control-with-access-groups">Tutorial: Team-Based Access Control with Access Groups</a></h1>
 <p>This tutorial walks you through setting up team-based access control so that workflows can be shared
 within teams while remaining private from other users.</p>
-<h2 id="learning-objectives-8"><a class="header" href="#learning-objectives-8">Learning Objectives</a></h2>
+<h2 id="learning-objectives-9"><a class="header" href="#learning-objectives-9">Learning Objectives</a></h2>
 <p>By the end of this tutorial, you will:</p>
 <ul>
 <li>Understand how Torc's access control system works</li>
@@ -15883,7 +16274,7 @@ within teams while remaining private from other users.</p>
 <li>Share workflows with specific teams</li>
 <li>Enable access control enforcement on the server</li>
 </ul>
-<h2 id="prerequisites-16"><a class="header" href="#prerequisites-16">Prerequisites</a></h2>
+<h2 id="prerequisites-17"><a class="header" href="#prerequisites-17">Prerequisites</a></h2>
 <ul>
 <li>Torc server and CLI installed</li>
 <li>Basic familiarity with the command line</li>
@@ -16170,7 +16561,7 @@ require_auth = true
 enforce_access_control = true
 admin_users = ["alice", "bob"]
 </code></pre>
-<h2 id="troubleshooting-16"><a class="header" href="#troubleshooting-16">Troubleshooting</a></h2>
+<h2 id="troubleshooting-15"><a class="header" href="#troubleshooting-15">Troubleshooting</a></h2>
 <h3 id="anonymous-access-not-allowed"><a class="header" href="#anonymous-access-not-allowed">"Anonymous access not allowed"</a></h3>
 <p>This error appears when:</p>
 <ul>
@@ -16197,7 +16588,7 @@ in config.toml</li>
 user to an appropriate group.</p>
 <h3 id="authentication-working-but-access-control-not-enforced"><a class="header" href="#authentication-working-but-access-control-not-enforced">Authentication Working but Access Control Not Enforced</a></h3>
 <p>Check that <code>--enforce-access-control</code> flag is set when starting the server.</p>
-<h2 id="what-you-learned-5"><a class="header" href="#what-you-learned-5">What You Learned</a></h2>
+<h2 id="what-you-learned-6"><a class="header" href="#what-you-learned-6">What You Learned</a></h2>
 <p>In this tutorial, you learned:</p>
 <ul>
 <li>How to create an htpasswd file with user credentials</li>
@@ -16207,7 +16598,7 @@ user to an appropriate group.</p>
 <li>How to share workflows with teams</li>
 <li>How access control decisions are made</li>
 </ul>
-<h2 id="next-steps-14"><a class="header" href="#next-steps-14">Next Steps</a></h2>
+<h2 id="next-steps-15"><a class="header" href="#next-steps-15">Next Steps</a></h2>
 <ul>
 <li>Learn about <a href="specialized/admin/./configuration.html">Configuration Files</a> to set up persistent configuration</li>
 <li>Explore <a href="specialized/admin/./server-deployment.html">Server Deployment</a> for production setups</li>
@@ -16717,7 +17108,7 @@ integration</li>
 <p>This tutorial walks you through creating a workflow using the interactive wizard in the Torc
 dashboard. The wizard provides a guided, step-by-step interface for building workflows without
 writing YAML or JSON files.</p>
-<h2 id="learning-objectives-9"><a class="header" href="#learning-objectives-9">Learning Objectives</a></h2>
+<h2 id="learning-objectives-10"><a class="header" href="#learning-objectives-10">Learning Objectives</a></h2>
 <p>By the end of this tutorial, you will:</p>
 <ul>
 <li>Create a multi-job workflow using the dashboard wizard</li>
@@ -16726,12 +17117,12 @@ writing YAML or JSON files.</p>
 <li>Set up workflow actions to automatically schedule nodes</li>
 <li>Understand how the wizard generates workflow specifications</li>
 </ul>
-<h2 id="prerequisites-17"><a class="header" href="#prerequisites-17">Prerequisites</a></h2>
+<h2 id="prerequisites-18"><a class="header" href="#prerequisites-18">Prerequisites</a></h2>
 <ul>
 <li>Torc dashboard running (see <a href="specialized/tools/./dashboard-deployment.html">Dashboard Deployment</a>)</li>
 <li>Basic understanding of Torc workflows</li>
 </ul>
-<h2 id="overview-13"><a class="header" href="#overview-13">Overview</a></h2>
+<h2 id="overview-12"><a class="header" href="#overview-12">Overview</a></h2>
 <p>The workflow wizard guides you through five steps:</p>
 <ol>
 <li><strong>Basics</strong> - Workflow name and description</li>
@@ -17013,7 +17404,7 @@ postprocess
 <li>Use <code>on_jobs_ready</code> for just-in-time scheduling</li>
 <li>Match allocations to the number of parallel jobs</li>
 </ul>
-<h2 id="what-you-learned-6"><a class="header" href="#what-you-learned-6">What You Learned</a></h2>
+<h2 id="what-you-learned-7"><a class="header" href="#what-you-learned-7">What You Learned</a></h2>
 <p>In this tutorial, you learned:</p>
 <ul>
 <li>How to navigate the five-step workflow wizard</li>
@@ -17022,7 +17413,7 @@ postprocess
 <li>How to set up actions for automatic node scheduling</li>
 <li>How the wizard generates workflow specifications</li>
 </ul>
-<h2 id="next-steps-15"><a class="header" href="#next-steps-15">Next Steps</a></h2>
+<h2 id="next-steps-16"><a class="header" href="#next-steps-16">Next Steps</a></h2>
 <ul>
 <li><a href="specialized/tools/./diamond.html">Diamond Workflow</a> - Learn about file-based implicit dependencies</li>
 <li><a href="specialized/tools/./simple-params.html">Simple Parameterization</a> - Create parameter sweeps programmatically</li>
@@ -17038,7 +17429,7 @@ without specifying options on every command.</p>
 <li>Using environment variables for configuration</li>
 <li>Common configuration patterns</li>
 </ul>
-<h2 id="prerequisites-18"><a class="header" href="#prerequisites-18">Prerequisites</a></h2>
+<h2 id="prerequisites-19"><a class="header" href="#prerequisites-19">Prerequisites</a></h2>
 <ul>
 <li>Torc CLI installed</li>
 <li>Basic familiarity with TOML format</li>
@@ -17242,7 +17633,7 @@ export TORC_CLIENT__FORMAT="json"
 
 torc run workflow.yaml
 </code></pre>
-<h2 id="troubleshooting-17"><a class="header" href="#troubleshooting-17">Troubleshooting</a></h2>
+<h2 id="troubleshooting-16"><a class="header" href="#troubleshooting-16">Troubleshooting</a></h2>
 <h3 id="configuration-not-loading"><a class="header" href="#configuration-not-loading">Configuration Not Loading</a></h3>
 <p>Check which files are being loaded:</p>
 <pre><code class="language-bash">torc config validate
@@ -17259,7 +17650,7 @@ TORC_CLIENT_API_URL=http://...
 <p>See the merged result of all configuration sources:</p>
 <pre><code class="language-bash">torc config show
 </code></pre>
-<h2 id="next-steps-16"><a class="header" href="#next-steps-16">Next Steps</a></h2>
+<h2 id="next-steps-17"><a class="header" href="#next-steps-17">Next Steps</a></h2>
 <ul>
 <li>See the <a href="specialized/tools/../../core/reference/configuration.html">Configuration Reference</a> for all available options</li>
 <li>Learn about <a href="specialized/tools/../admin/server-deployment.html">Server Deployment</a> for production setups</li>
@@ -17280,7 +17671,7 @@ workflow and job management capabilities without requiring a web browser or SSH 
 <tr><td>3. Shared Server</td><td>HPC login node + dedicated server</td><td>Large-scale multi-user HPC workflows</td></tr>
 </tbody></table>
 </div>
-<h2 id="prerequisites-19"><a class="header" href="#prerequisites-19">Prerequisites</a></h2>
+<h2 id="prerequisites-20"><a class="header" href="#prerequisites-20">Prerequisites</a></h2>
 <p>Before starting, ensure you have:</p>
 <ol>
 <li>
@@ -17579,7 +17970,7 @@ torc-server run \
 <tr><td>Best for</td><td>Single-computer workflows</td><td>Small HPC workflows (&lt; 100 jobs)</td><td>Large-scale production</td></tr>
 </tbody></table>
 </div>
-<h2 id="troubleshooting-18"><a class="header" href="#troubleshooting-18">Troubleshooting</a></h2>
+<h2 id="troubleshooting-17"><a class="header" href="#troubleshooting-17">Troubleshooting</a></h2>
 <h3 id="cannot-connect-to-server-1"><a class="header" href="#cannot-connect-to-server-1">Cannot connect to server</a></h3>
 <pre><code class="language-bash"># Check if server is running
 curl http://localhost:8080/torc-service/v1/workflows
@@ -17633,7 +18024,7 @@ use <code>--host</code>:</p>
 <li>Check network connectivity to server</li>
 <li>Ensure server is running and accessible</li>
 </ul>
-<h2 id="next-steps-17"><a class="header" href="#next-steps-17">Next Steps</a></h2>
+<h2 id="next-steps-18"><a class="header" href="#next-steps-18">Next Steps</a></h2>
 <ul>
 <li><a href="specialized/tools/../../core/concepts/network-connectivity.html">Network Connectivity</a> - Server bind addresses and
 deployment scenarios</li>
@@ -17644,33 +18035,43 @@ deployment scenarios</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="configuring-ai-assistants"><a class="header" href="#configuring-ai-assistants">Configuring AI Assistants</a></h1>
 <p>Complete guide for configuring AI assistants (Claude Code, GitHub Copilot) to work with Torc.</p>
-<h2 id="overview-14"><a class="header" href="#overview-14">Overview</a></h2>
+<h2 id="overview-13"><a class="header" href="#overview-13">Overview</a></h2>
 <p>Torc provides an MCP (Model Context Protocol) server that enables AI assistants to interact with
 workflows. The <code>torc-mcp-server</code> binary acts as a bridge between AI assistants and the Torc HTTP
 API.</p>
 <h2 id="available-tools"><a class="header" href="#available-tools">Available Tools</a></h2>
 <p>The AI assistant has access to these Torc operations:</p>
 <div class="table-wrapper"><table><thead><tr><th>Tool</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>create_workflow</code></td><td>Create a workflow from JSON specification</td></tr>
+<tr><td><code>get_execution_plan</code></td><td>Preview execution DAG before or after creating</td></tr>
 <tr><td><code>get_workflow_status</code></td><td>Get workflow info with job counts by status</td></tr>
+<tr><td><code>get_workflow_summary</code></td><td>Get completion summary with execution time</td></tr>
 <tr><td><code>get_job_details</code></td><td>Get detailed job info including resource requirements</td></tr>
 <tr><td><code>get_job_logs</code></td><td>Read stdout/stderr from job log files</td></tr>
 <tr><td><code>list_failed_jobs</code></td><td>List all failed jobs in a workflow</td></tr>
 <tr><td><code>list_jobs_by_status</code></td><td>Filter jobs by status</td></tr>
+<tr><td><code>list_results</code></td><td>List job results with filtering and sorting</td></tr>
+<tr><td><code>analyze_workflow_logs</code></td><td>Scan all logs for error patterns (OOM, timeout, etc.)</td></tr>
 <tr><td><code>check_resource_utilization</code></td><td>Analyze resource usage and detect OOM/timeout issues</td></tr>
 <tr><td><code>update_job_resources</code></td><td>Modify job resource requirements</td></tr>
 <tr><td><code>analyze_resource_usage</code></td><td>Per-job resource data grouped by RR for cluster analysis</td></tr>
 <tr><td><code>regroup_job_resources</code></td><td>Create new RR groups and reassign jobs (dry_run support)</td></tr>
-<tr><td><code>restart_jobs</code></td><td>Reset and restart failed jobs</td></tr>
-<tr><td><code>resubmit_workflow</code></td><td>Regenerate Slurm schedulers and submit new allocations</td></tr>
-<tr><td><code>cancel_jobs</code></td><td>Cancel specific jobs</td></tr>
-<tr><td><code>create_workflow_from_spec</code></td><td>Create a workflow from JSON specification</td></tr>
+<tr><td><code>recover_workflow</code></td><td>Automated recovery from OOM/timeout failures</td></tr>
+<tr><td><code>list_pending_failed_jobs</code></td><td>List jobs awaiting AI-assisted classification</td></tr>
+<tr><td><code>classify_and_resolve_failures</code></td><td>Classify failures as transient or permanent</td></tr>
+<tr><td><code>get_slurm_sacct</code></td><td>Get Slurm accounting data for a workflow</td></tr>
+<tr><td><code>get_docs</code></td><td>Retrieve Torc documentation by topic</td></tr>
+<tr><td><code>list_examples</code></td><td>List available example workflow specifications</td></tr>
+<tr><td><code>get_example</code></td><td>Retrieve a complete example workflow spec</td></tr>
 </tbody></table>
 </div>
 <h2 id="environment-variables-8"><a class="header" href="#environment-variables-8">Environment Variables</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Description</th><th>Default</th></tr></thead><tbody>
 <tr><td><code>TORC_API_URL</code></td><td>Torc server URL</td><td><code>http://localhost:8080/torc-service/v1</code></td></tr>
-<tr><td><code>TORC_OUTPUT_DIR</code></td><td>Directory containing job logs</td><td><code>output</code></td></tr>
+<tr><td><code>TORC_OUTPUT_DIR</code></td><td>Directory containing job logs</td><td><code>torc_output</code></td></tr>
 <tr><td><code>TORC_PASSWORD</code></td><td>Password for authentication (optional)</td><td>—</td></tr>
+<tr><td><code>TORC_DOCS_DIR</code></td><td>Local path to <code>docs/src/</code> (optional)</td><td>fetched from GitHub</td></tr>
+<tr><td><code>TORC_EXAMPLES_DIR</code></td><td>Local path to <code>examples/</code> (optional)</td><td>fetched from GitHub</td></tr>
 </tbody></table>
 </div>
 <hr />
@@ -17714,6 +18115,11 @@ claude mcp remove torc
   }
 }
 </code></pre>
+<blockquote>
+<p><strong>Note:</strong> Documentation and examples are fetched from GitHub automatically. Set <code>TORC_DOCS_DIR</code>
+and <code>TORC_EXAMPLES_DIR</code> only if you want to use local files instead (e.g., for offline use or
+development).</p>
+</blockquote>
 <h3 id="environment-variable-expansion"><a class="header" href="#environment-variable-expansion">Environment Variable Expansion</a></h3>
 <p>You can use environment variable expansion in <code>.mcp.json</code>:</p>
 <pre><code class="language-json">{
@@ -17730,7 +18136,7 @@ claude mcp remove torc
 </code></pre>
 <hr />
 <h2 id="vs-code--github-copilot-configuration"><a class="header" href="#vs-code--github-copilot-configuration">VS Code + GitHub Copilot Configuration</a></h2>
-<h3 id="prerequisites-20"><a class="header" href="#prerequisites-20">Prerequisites</a></h3>
+<h3 id="prerequisites-21"><a class="header" href="#prerequisites-21">Prerequisites</a></h3>
 <ul>
 <li>VS Code 1.99 or later</li>
 <li>GitHub Copilot extension installed</li>
@@ -17834,7 +18240,7 @@ remains in Torc's database.</p>
 <li>Review proposed actions before they execute</li>
 </ul>
 <hr />
-<h2 id="troubleshooting-19"><a class="header" href="#troubleshooting-19">Troubleshooting</a></h2>
+<h2 id="troubleshooting-18"><a class="header" href="#troubleshooting-18">Troubleshooting</a></h2>
 <h3 id="claude-doesnt-see-the-tools"><a class="header" href="#claude-doesnt-see-the-tools">Claude doesn't see the tools</a></h3>
 <ul>
 <li>Verify the MCP server is configured: <code>claude mcp list</code></li>
@@ -17873,7 +18279,7 @@ remains in Torc's database.</p>
 <li>Create and manage workflows through conversation</li>
 <li>Debug failures by asking questions</li>
 </ul>
-<h2 id="prerequisites-21"><a class="header" href="#prerequisites-21">Prerequisites</a></h2>
+<h2 id="prerequisites-22"><a class="header" href="#prerequisites-22">Prerequisites</a></h2>
 <ul>
 <li>Torc installed and server running</li>
 <li><a href="https://claude.ai/code">Claude Code</a> or VS Code with GitHub Copilot</li>
@@ -18234,13 +18640,13 @@ peaked at ~30 GB. This means:</p>
 <p>The 3 previously failed jobs (work_1, work_7, work_8) are now ready to run with 35g memory. Slurm
 allocations have been submitted and will execute these jobs automatically.</p>
 <hr />
-<h2 id="what-you-learned-7"><a class="header" href="#what-you-learned-7">What You Learned</a></h2>
+<h2 id="what-you-learned-8"><a class="header" href="#what-you-learned-8">What You Learned</a></h2>
 <ul>
 <li>How to configure AI assistants with Torc (one command for Claude Code, one file for VS Code)</li>
 <li>How to create workflows through conversation</li>
 <li>How to debug and fix failures using natural language</li>
 </ul>
-<h2 id="next-steps-18"><a class="header" href="#next-steps-18">Next Steps</a></h2>
+<h2 id="next-steps-19"><a class="header" href="#next-steps-19">Next Steps</a></h2>
 <ul>
 <li><a href="specialized/tools/./ai-assistants.html">Configuring AI Assistants</a> — Full configuration options, all tools,
 troubleshooting</li>
@@ -18486,7 +18892,7 @@ discussed elsewhere in this documentation.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="tutorial-11-filtering-cli-output-with-nushell"><a class="header" href="#tutorial-11-filtering-cli-output-with-nushell">Tutorial 11: Filtering CLI Output with Nushell</a></h1>
 <p>This tutorial teaches you how to filter and analyze Torc CLI output using
 <a href="https://www.nushell.sh/">Nushell</a>, a modern shell with powerful structured data capabilities.</p>
-<h2 id="learning-objectives-10"><a class="header" href="#learning-objectives-10">Learning Objectives</a></h2>
+<h2 id="learning-objectives-11"><a class="header" href="#learning-objectives-11">Learning Objectives</a></h2>
 <p>By the end of this tutorial, you will:</p>
 <ul>
 <li>Understand why Nushell is useful for filtering Torc output</li>
@@ -18494,7 +18900,7 @@ discussed elsewhere in this documentation.</p>
 <li>Be able to analyze results and find failures quickly</li>
 <li>Create complex queries combining multiple conditions</li>
 </ul>
-<h2 id="prerequisites-22"><a class="header" href="#prerequisites-22">Prerequisites</a></h2>
+<h2 id="prerequisites-23"><a class="header" href="#prerequisites-23">Prerequisites</a></h2>
 <ul>
 <li>Torc CLI installed and configured</li>
 <li>A workflow with jobs (ideally one with various statuses)</li>
@@ -18652,7 +19058,7 @@ torc results list $wf -f json | from json | get results | where job_id in $faile
 <li><strong>Pipeline debugging</strong>: Add <code>| first 5</code> to see a sample before processing all data</li>
 <li><strong>Save queries</strong>: Create shell aliases or scripts for common filters</li>
 </ol>
-<h2 id="what-you-learned-8"><a class="header" href="#what-you-learned-8">What You Learned</a></h2>
+<h2 id="what-you-learned-9"><a class="header" href="#what-you-learned-9">What You Learned</a></h2>
 <p>In this tutorial, you learned:</p>
 <ul>
 <li>Why Nushell is a great tool for filtering Torc CLI output</li>
@@ -18661,7 +19067,7 @@ torc results list $wf -f json | from json | get results | where job_id in $faile
 <li>How to work with user data</li>
 <li>Practical examples for debugging workflows</li>
 </ul>
-<h2 id="next-steps-19"><a class="header" href="#next-steps-19">Next Steps</a></h2>
+<h2 id="next-steps-20"><a class="header" href="#next-steps-20">Next Steps</a></h2>
 <ul>
 <li><a href="https://www.nushell.sh/book/">Nushell Documentation</a> - Learn more about Nushell's capabilities</li>
 <li><a href="specialized/tools/../../core/reference/cli.html">Torc CLI Reference</a> - Full list of CLI commands and their JSON
@@ -18670,7 +19076,7 @@ output</li>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="shell-completions"><a class="header" href="#shell-completions">Shell Completions</a></h1>
 <p>Torc provides shell completion scripts to make working with the CLI faster and more convenient.
 Completions help you discover commands, avoid typos, and speed up your workflow.</p>
-<h2 id="overview-15"><a class="header" href="#overview-15">Overview</a></h2>
+<h2 id="overview-14"><a class="header" href="#overview-14">Overview</a></h2>
 <p>Shell completions provide:</p>
 <ul>
 <li><strong>Command completion</strong> - Tab-complete <code>torc</code> subcommands and options</li>
@@ -18914,7 +19320,7 @@ else
     echo "Run: torc completions bash &gt; ~/.local/share/bash-completion/completions/torc"
 fi
 </code></pre>
-<h2 id="troubleshooting-20"><a class="header" href="#troubleshooting-20">Troubleshooting</a></h2>
+<h2 id="troubleshooting-19"><a class="header" href="#troubleshooting-19">Troubleshooting</a></h2>
 <h3 id="completions-not-working"><a class="header" href="#completions-not-working">Completions Not Working</a></h3>
 <p><strong>Problem:</strong> Tab completion doesn't show torc commands.</p>
 <p><strong>Solutions:</strong></p>
@@ -19023,7 +19429,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 <li>Parameter descriptions</li>
 <li>Type-aware completions</li>
 </ul>
-<h2 id="best-practices-7"><a class="header" href="#best-practices-7">Best Practices</a></h2>
+<h2 id="best-practices-6"><a class="header" href="#best-practices-6">Best Practices</a></h2>
 <ol>
 <li><strong>Keep completions updated</strong>: Regenerate after each Torc update</li>
 <li><strong>Use version control</strong>: Include completion installation in dotfiles</li>
@@ -19111,7 +19517,7 @@ examples.</p>
 <p>Workflow actions enable automatic execution of commands and resource allocation in response to
 workflow lifecycle events. Actions provide hooks for setup, teardown, monitoring, and dynamic
 resource management throughout workflow execution.</p>
-<h2 id="overview-16"><a class="header" href="#overview-16">Overview</a></h2>
+<h2 id="overview-15"><a class="header" href="#overview-15">Overview</a></h2>
 <p>Actions consist of three components:</p>
 <ol>
 <li><strong>Trigger</strong> - The condition that activates the action</li>
@@ -19295,16 +19701,12 @@ job_name_regexes: ["batch_.*"]
   scheduler: "gpu_cluster"
   scheduler_type: "slurm"
   num_allocations: 2
-  start_one_worker_per_node: true
-  max_parallel_jobs: 8
 </code></pre>
 <p><strong>Parameters</strong>:</p>
 <ul>
 <li><code>scheduler</code> (required) - Name of Slurm scheduler configuration (must exist in <code>slurm_schedulers</code>)</li>
 <li><code>scheduler_type</code> (required) - Must be "slurm"</li>
 <li><code>num_allocations</code> (required) - Number of Slurm allocation requests to submit</li>
-<li><code>start_one_worker_per_node</code> (optional) - Start one job runner per node (default: false)</li>
-<li><code>max_parallel_jobs</code> (optional) - Maximum concurrent jobs per runner</li>
 </ul>
 <p><strong>Use cases</strong>:</p>
 <ul>
@@ -19910,7 +20312,7 @@ actions</li>
 <p>This document describes the internal architecture and implementation of failure handlers in Torc.
 For a user-focused tutorial, see
 <a href="specialized/design/../fault-tolerance/failure-handlers.html">Configurable Failure Handlers</a>.</p>
-<h2 id="overview-17"><a class="header" href="#overview-17">Overview</a></h2>
+<h2 id="overview-16"><a class="header" href="#overview-16">Overview</a></h2>
 <p>Failure handlers provide per-job automatic retry logic based on exit codes. They allow workflows to
 recover from transient failures without manual intervention or workflow-level recovery heuristics.</p>
 <pre class="mermaid">flowchart LR
@@ -20389,7 +20791,7 @@ based on user feedback.</p>
 <p>This document describes the architecture and implementation of AI-assisted failure recovery in Torc.
 For a user-focused tutorial, see
 <a href="specialized/design/../fault-tolerance/ai-assisted-recovery.html">AI-Assisted Failure Recovery</a>.</p>
-<h2 id="overview-18"><a class="header" href="#overview-18">Overview</a></h2>
+<h2 id="overview-17"><a class="header" href="#overview-17">Overview</a></h2>
 <p>AI-assisted recovery enables intelligent classification of job failures that can't be handled by
 rule-based mechanisms (failure handlers, OOM/timeout detection). It introduces a new job status
 (<code>pending_failed</code>) that defers the fail/retry decision to an AI agent.</p>
@@ -21354,7 +21756,7 @@ bash make_api_clients.sh  # Regenerates both Python and Julia clients
 <p>Torc automatically wraps workflow jobs with <code>srun</code> when running inside a Slurm allocation, creating
 per-job steps with cgroup enforcement. It then monitors live resource usage via <code>sstat</code> and collects
 final accounting data via <code>sacct</code>. This page describes the architecture and data flow.</p>
-<h2 id="overview-19"><a class="header" href="#overview-19">Overview</a></h2>
+<h2 id="overview-18"><a class="header" href="#overview-18">Overview</a></h2>
 <p>When a Torc job runner detects <code>SLURM_JOB_ID</code> in the environment, it activates three subsystems:</p>
 <ol>
 <li><strong>srun wrapping</strong> -- creates a Slurm job step per workflow job</li>
@@ -21407,40 +21809,44 @@ isolation.</p>
     SRUN[srun]:::flag
     JOBID[&quot;--jobid=SLURM_JOB_ID&quot;]:::flag
     NT[&quot;--ntasks=1&quot;]:::flag
-    OV[&quot;--overlap&quot;]:::flag
+    EX[&quot;--exact&quot;]:::flag
     CB[&quot;--cpu-bind=none&quot;]:::flag
     JN[&quot;--job-name=step_name&quot;]:::flag
     ND[&quot;--nodes=step_nodes&quot;]:::flag
     CPU[&quot;--cpus-per-task=N&quot;]:::flag
     MEM[&quot;--mem=NM&quot;]:::flag
+    TIME[&quot;--time=remaining_min&quot;]:::flag
+    SIG[&quot;--signal=TERM@N&quot;]:::flag
 
     SRUN --&gt; JOBID
     SRUN --&gt; NT
-    SRUN --&gt; OV
+    SRUN --&gt; EX
     SRUN --&gt; CB
     SRUN --&gt; JN
     SRUN --&gt; ND
 
+    EX -.- N0[&quot;Use exact resources,&lt;br/&gt;don't claim entire node&quot;]:::note
     ND -.- N1[&quot;Default: 1 node&lt;br/&gt;Override via step_nodes&quot;]:::note
-    OV -.- N2[&quot;Allows concurrent steps&lt;br/&gt;on same node&quot;]:::note
-    CB -.- N3[&quot;Prevents CPU affinity&lt;br/&gt;binding errors&quot;]:::note
+    CB -.- N2[&quot;Default on; disable with&lt;br/&gt;enable_cpu_bind: true&quot;]:::note
+    TIME -.- N4[&quot;Remaining allocation time&lt;br/&gt;rounded down to minutes&quot;]:::note
+    SIG -.- N5[&quot;Early warning signal&lt;br/&gt;e.g. TERM@120&quot;]:::note
 
-    subgraph &quot;Only with limit_resources=true&quot;
-        CPU
-        MEM
-    end
     SRUN --&gt; CPU
     SRUN --&gt; MEM
+    SRUN --&gt; TIME
+    SRUN --&gt; SIG
 </pre>
 <div class="table-wrapper"><table><thead><tr><th>Argument</th><th>Purpose</th></tr></thead><tbody>
 <tr><td><code>--jobid</code></td><td>Binds step to the parent Slurm allocation</td></tr>
 <tr><td><code>--ntasks=1</code></td><td>One task per workflow job</td></tr>
-<tr><td><code>--overlap</code></td><td>Permits concurrent steps to share node resources (Slurm 21.08+)</td></tr>
-<tr><td><code>--cpu-bind=none</code></td><td>Prevents CPU affinity errors when step mask doesn't match allocation</td></tr>
+<tr><td><code>--exact</code></td><td>Use exactly the requested resources; don't claim the entire node exclusively</td></tr>
+<tr><td><code>--cpu-bind=none</code></td><td>Disables CPU affinity binding (default; omitted when <code>enable_cpu_bind: true</code>)</td></tr>
 <tr><td><code>--job-name</code></td><td>Sets the step name for sacct/sstat lookup</td></tr>
 <tr><td><code>--nodes</code></td><td>Number of nodes for this step (from <code>step_nodes</code>, default 1)</td></tr>
 <tr><td><code>--cpus-per-task</code></td><td>CPU cgroup limit (only when <code>limit_resources=true</code>)</td></tr>
 <tr><td><code>--mem</code></td><td>Memory cgroup limit in MB (only when <code>limit_resources=true</code>)</td></tr>
+<tr><td><code>--time</code></td><td>Per-step walltime from remaining allocation time (see below)</td></tr>
+<tr><td><code>--signal</code></td><td>Early warning signal before step timeout (see below)</td></tr>
 </tbody></table>
 </div>
 <h3 id="the-step_nodes-field"><a class="header" href="#the-step_nodes-field">The <code>step_nodes</code> Field</a></h3>
@@ -21450,13 +21856,28 @@ defaults to 1 and is distinct from <code>num_nodes</code> (the allocation size f
 <li><strong>Single-node jobs</strong> (default): <code>step_nodes=1</code> -- each job runs on one node</li>
 <li><strong>Multi-node jobs</strong> (MPI, Julia Distributed.jl): <code>step_nodes=N</code> -- step spans N nodes</li>
 </ul>
-<p>Setting <code>step_nodes</code> equal to <code>num_nodes</code> would make concurrent steps compete for all nodes in the
-allocation, causing "Requested nodes are busy" errors.</p>
+<p>When <code>step_nodes &gt; 1</code>, Torc treats the job as consuming whole nodes exclusively for the lifetime of
+the step. This avoids ambiguous partial-node accounting for MPI and other true multi-node jobs.</p>
 <h3 id="the-limit_resources-flag"><a class="header" href="#the-limit_resources-flag">The <code>limit_resources</code> Flag</a></h3>
 <p>When <code>limit_resources</code> is enabled in the scheduler configuration, srun applies <code>--cpus-per-task</code> and
 <code>--mem</code> flags. This creates cgroup-enforced limits: jobs exceeding their memory allocation are
 killed by the OOM killer (exit code 137), and CPU usage is throttled.</p>
 <p>Without <code>limit_resources</code>, Slurm still creates per-step accounting but does not enforce hard limits.</p>
+<h3 id="per-step-walltime---time"><a class="header" href="#per-step-walltime---time">Per-Step Walltime (<code>--time</code>)</a></h3>
+<p>Torc sets <code>srun --time=&lt;remaining_minutes&gt;</code> on every step, where <code>remaining_minutes</code> is the time
+left in the Slurm allocation (rounded <strong>down</strong> to whole minutes, minimum 1). This ensures that when
+a step exceeds its time, Slurm produces a clean <code>State=TIMEOUT</code> with return code 152, rather than
+<code>State=CANCELLED</code> which is what happens when the allocation itself expires and kills the step.</p>
+<p>The rounding-down is intentional: it guarantees the step's timeout fires <strong>before</strong> the allocation
+expires, so Torc can detect the timeout via sacct and report it accurately.</p>
+<h3 id="early-termination-signal---signal"><a class="header" href="#early-termination-signal---signal">Early Termination Signal (<code>--signal</code>)</a></h3>
+<p>When the workflow has <code>srun_termination_signal</code> set (e.g., <code>"TERM@120"</code>), Torc passes
+<code>srun --signal=TERM@120</code> to every step. This tells Slurm to send SIGTERM to the job process 120
+seconds <strong>before</strong> the step's <code>--time</code> limit. The job can catch this signal, save a checkpoint, and
+exit cleanly before the hard kill.</p>
+<p>This is a workflow-level setting stored in the database and applied uniformly to all srun
+invocations. See the <a href="specialized/design/../fault-tolerance/checkpointing.html">Graceful Job Termination tutorial</a> for a
+complete example with a Python signal handler.</p>
 <h3 id="memory-vs-runtime-enforcement"><a class="header" href="#memory-vs-runtime-enforcement">Memory vs Runtime Enforcement</a></h3>
 <p>Memory and runtime are handled differently because they carry different risks:</p>
 <ul>
@@ -21467,14 +21888,12 @@ This strict enforcement is necessary because a runaway memory consumer can desta
 node by starving other concurrent jobs of memory.</p>
 </li>
 <li>
-<p><strong>Runtime (<code>--time</code>)</strong> is <strong>not passed</strong> to srun. A per-job time limit is unnecessary because
-Slurm already sends SIGTERM to the job runner before the allocation's walltime expires (typically
-60-120 seconds before). The job runner catches this signal and gracefully terminates all running
-jobs. Since srun steps cannot outlive their parent allocation, there is no scenario where a
-per-step <code>--time</code> would trigger before the allocation-level shutdown. Additionally, unlike excess
-memory usage, a long-running job does not endanger other jobs — it simply runs longer than
-expected. Killing a job at 95% completion because it slightly exceeded its estimated runtime would
-waste all the compute invested.</p>
+<p><strong>Runtime (<code>--time</code>)</strong> is set to the <strong>remaining allocation time</strong>, not the job's declared
+<code>runtime</code> from resource requirements. This ensures Slurm produces a clean <code>State=TIMEOUT</code> (return
+code 152) instead of <code>State=CANCELLED</code> when time runs out. The per-step <code>--time</code> is not derived
+from the job's resource requirements because, unlike excess memory usage, a long-running job does
+not endanger other jobs — it simply runs longer than expected. Killing a job at 95% completion
+because it slightly exceeded its estimated runtime would waste all the compute invested.</p>
 </li>
 </ul>
 <h2 id="sstat-monitoring"><a class="header" href="#sstat-monitoring">sstat Monitoring</a></h2>

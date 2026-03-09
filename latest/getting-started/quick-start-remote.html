@@ -204,15 +204,6 @@ HPC/Slurm execution, see <a href="../getting-started/quick-start-hpc.html">Quick
 that can reach this host. For networks with untrusted users, see
 <a href="../specialized/admin/authentication.html">Authentication</a> to secure your server.</p>
 </blockquote>
-<h2 id="create-a-worker-file"><a class="header" href="#create-a-worker-file">Create a Worker File</a></h2>
-<p>Create a file listing the remote machines. Each line contains one machine in the format
-<code>[user@]hostname[:port]</code>:</p>
-<pre><code class="language-text"># workers.txt
-worker1.example.com
-alice@worker2.example.com
-admin@192.168.1.10:2222
-</code></pre>
-<p>Lines starting with <code>#</code> are comments. Empty lines are ignored.</p>
 <h2 id="create-a-workflow"><a class="header" href="#create-a-workflow">Create a Workflow</a></h2>
 <p>Save this as <code>workflow.yaml</code>:</p>
 <pre><code class="language-yaml">name: distributed_hello
@@ -230,9 +221,16 @@ jobs:
 <pre><code class="language-console">torc workflows create workflow.yaml
 </code></pre>
 <p>Note the workflow ID in the output.</p>
+<h2 id="add-remote-workers"><a class="header" href="#add-remote-workers">Add Remote Workers</a></h2>
+<p>Add remote machines as workers. Each address uses the format <code>[user@]hostname[:port]</code>:</p>
+<pre><code class="language-console">torc remote add-workers &lt;workflow-id&gt; user@host1 user@host2 user@host3
+</code></pre>
+<p>Or add workers from a file (one address per line, <code>#</code> for comments):</p>
+<pre><code class="language-console">torc remote add-workers-from-file workers.txt &lt;workflow-id&gt;
+</code></pre>
 <h2 id="run-workers-on-remote-machines"><a class="header" href="#run-workers-on-remote-machines">Run Workers on Remote Machines</a></h2>
-<p>Start workers on all remote machines. Each worker will poll for available jobs and execute them:</p>
-<pre><code class="language-console">torc remote run --workers workers.txt &lt;workflow-id&gt; --poll-interval 5
+<p>Start workers on all registered remote machines via SSH:</p>
+<pre><code class="language-console">torc remote run &lt;workflow-id&gt;
 </code></pre>
 <p>This will:</p>
 <ol>
