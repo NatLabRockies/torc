@@ -422,9 +422,9 @@ listed below.</p>
 <h3 id="nlr-kestrel"><a class="header" href="#nlr-kestrel">NLR Kestrel</a></h3>
 <p><strong>Pre-installed binaries</strong> are available at:</p>
 <pre><code>/scratch/dthom/torc/
-├── 0.20.0/
+├── 0.20.1/
 ├── ...
-└── latest -&gt; 0.20.0  (symlink to current version)
+└── latest -&gt; 0.20.1  (symlink to current version)
 </code></pre>
 <blockquote>
 <p><strong>Recommended</strong>: Use the <code>latest</code> directory. Torc maintains backwards compatibility, so you'll
@@ -9234,7 +9234,7 @@ jobs:
 <tr><td><code>num_cpus</code></td><td>integer</td><td><em>required</em></td><td>Number of CPUs required</td></tr>
 <tr><td><code>memory</code></td><td>string</td><td><em>required</em></td><td>Memory requirement (e.g., <code>"1m"</code>, <code>"2g"</code>, <code>"512k"</code>)</td></tr>
 <tr><td><code>num_gpus</code></td><td>integer</td><td><code>0</code></td><td>Number of GPUs required</td></tr>
-<tr><td><code>num_nodes</code></td><td>integer</td><td><code>1</code></td><td>Number of nodes for the job (<code>sbatch --nodes</code> and <code>srun --nodes</code>)</td></tr>
+<tr><td><code>num_nodes</code></td><td>integer</td><td><code>1</code></td><td>Number of nodes per job (<code>srun --nodes</code>); allocation size is set via Slurm scheduler config</td></tr>
 <tr><td><code>runtime</code></td><td>string</td><td><code>"PT1H"</code></td><td>Runtime limit in ISO8601 duration format (e.g., <code>"PT30M"</code>, <code>"PT2H"</code>)</td></tr>
 </tbody></table>
 </div>
@@ -9697,7 +9697,7 @@ definitions</li>
 <tr><td><code>name</code></td><td>string</td><td>Yes</td><td>—</td><td>Identifier to reference from jobs</td></tr>
 <tr><td><code>num_cpus</code></td><td>integer</td><td>No</td><td><code>1</code></td><td>Number of CPU cores</td></tr>
 <tr><td><code>num_gpus</code></td><td>integer</td><td>No</td><td><code>0</code></td><td>Number of GPUs</td></tr>
-<tr><td><code>num_nodes</code></td><td>integer</td><td>No</td><td><code>1</code></td><td>Number of nodes for the job (<code>sbatch --nodes</code> and <code>srun --nodes</code>)</td></tr>
+<tr><td><code>num_nodes</code></td><td>integer</td><td>No</td><td><code>1</code></td><td>Number of nodes per job (<code>srun --nodes</code>); allocation size is set via Slurm scheduler config</td></tr>
 <tr><td><code>memory</code></td><td>string</td><td>No</td><td><code>1m</code></td><td>Memory allocation (see format below)</td></tr>
 <tr><td><code>runtime</code></td><td>string</td><td>No</td><td><code>PT1H</code></td><td>Maximum runtime (ISO 8601 duration)</td></tr>
 </tbody></table>
@@ -9720,15 +9720,16 @@ definitions</li>
 
   - name: mpi_job       # multi-node MPI or Julia Distributed.jl
     num_cpus: 32
-    num_nodes: 4        # allocates and spans 4 nodes
+    num_nodes: 4        # each job step spans 4 nodes
     memory: 128g
     runtime: PT8H
 </code></pre>
 <h3 id="num_nodes"><a class="header" href="#num_nodes"><code>num_nodes</code></a></h3>
-<p>The <code>num_nodes</code> field controls both the Slurm allocation size (<code>sbatch --nodes</code>) and the number of
-nodes each job step spans (<code>srun --nodes</code>).</p>
+<p>The <code>num_nodes</code> field controls how many nodes each job step spans (<code>srun --nodes</code>). The Slurm
+allocation size (<code>sbatch --nodes</code>) is set separately via the Slurm scheduler configuration.</p>
 <p>For most jobs the value is <code>1</code> (default). Set it to a larger value for multi-node jobs such as MPI
-or Julia <code>Distributed.jl</code>.</p>
+or Julia <code>Distributed.jl</code>. For single-node jobs in a multi-node allocation, keep <code>num_nodes=1</code> and
+configure the allocation size on the Slurm scheduler.</p>
 <p>See <a href="core/reference/../../specialized/hpc/multi-node-jobs.html">Multi-Node Jobs</a> for detailed examples and guidance.</p>
 <h2 id="memory-format"><a class="header" href="#memory-format">Memory Format</a></h2>
 <p>String format with unit suffix:</p>
@@ -11419,11 +11420,13 @@ actions:
 <p>The preprocessing jobs run across 2 nodes (Pattern 1). When they complete, a 4-node allocation is
 requested for the MPI training job (Pattern 2).</p>
 <h2 id="num_nodes-1"><a class="header" href="#num_nodes-1"><code>num_nodes</code></a></h2>
-<p>The <code>num_nodes</code> field controls both the Slurm allocation size (<code>sbatch --nodes</code>) and the number of
-nodes each job step spans (<code>srun --nodes</code>). It defaults to <code>1</code>.</p>
+<p>The <code>num_nodes</code> field controls how many nodes each job step spans (<code>srun --nodes</code>). It defaults to
+<code>1</code>. The Slurm allocation size (<code>sbatch --nodes</code>) is set separately via the Slurm scheduler
+configuration.</p>
 <ul>
-<li><strong>Pattern 1</strong>: <code>num_nodes=1</code> (default) -- each job runs on a single node</li>
-<li><strong>Pattern 2</strong>: <code>num_nodes=N</code> -- each job spans all N nodes (MPI, distributed training)</li>
+<li><strong>Pattern 1</strong>: <code>num_nodes=1</code> (default) -- each job runs on a single node; allocation size is set
+on the scheduler</li>
+<li><strong>Pattern 2</strong>: <code>num_nodes=N</code> -- each job spans N nodes (MPI, distributed training)</li>
 </ul>
 <h2 id="common-mistakes"><a class="header" href="#common-mistakes">Common Mistakes</a></h2>
 <h3 id="specifying-total-resources-instead-of-per-node"><a class="header" href="#specifying-total-resources-instead-of-per-node">Specifying total resources instead of per-node</a></h3>
@@ -11712,8 +11715,9 @@ correlated.</p>
 <blockquote>
 <p>For a comprehensive guide to multi-node patterns, see <a href="specialized/hpc/./multi-node-jobs.html">Multi-Node Jobs</a>.</p>
 </blockquote>
-<p>The <code>num_nodes</code> resource requirement field controls both the Slurm allocation size
-(<code>sbatch --nodes</code>) and the number of nodes each job step spans (<code>srun --nodes</code>). It defaults to <code>1</code>.</p>
+<p>The <code>num_nodes</code> resource requirement field controls how many nodes each job step spans
+(<code>srun --nodes</code>). It defaults to <code>1</code>. The Slurm allocation size (<code>sbatch --nodes</code>) is set separately
+via the Slurm scheduler configuration.</p>
 <p><strong>Single-node jobs (default)</strong> — no extra configuration needed:</p>
 <pre><code class="language-yaml">resource_requirements:
   - name: standard
@@ -11729,12 +11733,12 @@ allocation:</p>
     num_cpus: 32
     memory: 128g
     runtime: PT8H
-    num_nodes: 4      # allocates 4 nodes and srun spans all 4
+    num_nodes: 4      # srun spans all 4 nodes; allocation size set via scheduler
 </code></pre>
-<p>In this pattern, Torc reserves all 4 nodes for the step exclusively, then passes <code>srun --nodes=4</code>
-when launching the job. The job command receives <code>SLURM_JOB_NODELIST</code>, <code>SLURM_NTASKS</code>, and the rest
-of the standard Slurm step environment, so MPI launchers (<code>mpirun</code>, <code>mpiexec</code>) and Julia
-<code>Distributed.jl</code> will automatically use all allocated nodes.</p>
+<p>In this pattern, the step spans 4 nodes exclusively, and Torc passes <code>srun --nodes=4</code> when launching
+the job. The job command receives <code>SLURM_JOB_NODELIST</code>, <code>SLURM_NTASKS</code>, and the rest of the standard
+Slurm step environment, so MPI launchers (<code>mpirun</code>, <code>mpiexec</code>) and Julia <code>Distributed.jl</code> will
+automatically use all allocated nodes.</p>
 <h3 id="multi-node-allocation-rule"><a class="header" href="#multi-node-allocation-rule">Multi-Node Allocation Rule</a></h3>
 <p>Inside a multi-node Slurm allocation, Torc uses two scheduling modes:</p>
 <ul>
@@ -21864,8 +21868,9 @@ isolation.</p>
 </tbody></table>
 </div>
 <h3 id="multi-node-steps"><a class="header" href="#multi-node-steps">Multi-Node Steps</a></h3>
-<p>The <code>num_nodes</code> field on resource requirements controls both the Slurm allocation size and how many
-nodes an srun step spans. It defaults to 1.</p>
+<p>The <code>num_nodes</code> field on resource requirements controls how many nodes an srun step spans
+(<code>srun --nodes</code>). It defaults to 1. The allocation size (<code>sbatch --nodes</code>) is set via the Slurm
+scheduler configuration.</p>
 <ul>
 <li><strong>Single-node jobs</strong> (default): <code>num_nodes=1</code> -- each job runs on one node</li>
 <li><strong>Multi-node jobs</strong> (MPI, Julia Distributed.jl): <code>num_nodes=N</code> -- step spans N nodes</li>

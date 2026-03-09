@@ -403,11 +403,13 @@ actions:
 <p>The preprocessing jobs run across 2 nodes (Pattern 1). When they complete, a 4-node allocation is
 requested for the MPI training job (Pattern 2).</p>
 <h2 id="num_nodes"><a class="header" href="#num_nodes"><code>num_nodes</code></a></h2>
-<p>The <code>num_nodes</code> field controls both the Slurm allocation size (<code>sbatch --nodes</code>) and the number of
-nodes each job step spans (<code>srun --nodes</code>). It defaults to <code>1</code>.</p>
+<p>The <code>num_nodes</code> field controls how many nodes each job step spans (<code>srun --nodes</code>). It defaults to
+<code>1</code>. The Slurm allocation size (<code>sbatch --nodes</code>) is set separately via the Slurm scheduler
+configuration.</p>
 <ul>
-<li><strong>Pattern 1</strong>: <code>num_nodes=1</code> (default) -- each job runs on a single node</li>
-<li><strong>Pattern 2</strong>: <code>num_nodes=N</code> -- each job spans all N nodes (MPI, distributed training)</li>
+<li><strong>Pattern 1</strong>: <code>num_nodes=1</code> (default) -- each job runs on a single node; allocation size is set
+on the scheduler</li>
+<li><strong>Pattern 2</strong>: <code>num_nodes=N</code> -- each job spans N nodes (MPI, distributed training)</li>
 </ul>
 <h2 id="common-mistakes"><a class="header" href="#common-mistakes">Common Mistakes</a></h2>
 <h3 id="specifying-total-resources-instead-of-per-node"><a class="header" href="#specifying-total-resources-instead-of-per-node">Specifying total resources instead of per-node</a></h3>

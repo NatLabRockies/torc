@@ -191,7 +191,7 @@
 <tr><td><code>name</code></td><td>string</td><td>Yes</td><td>—</td><td>Identifier to reference from jobs</td></tr>
 <tr><td><code>num_cpus</code></td><td>integer</td><td>No</td><td><code>1</code></td><td>Number of CPU cores</td></tr>
 <tr><td><code>num_gpus</code></td><td>integer</td><td>No</td><td><code>0</code></td><td>Number of GPUs</td></tr>
-<tr><td><code>num_nodes</code></td><td>integer</td><td>No</td><td><code>1</code></td><td>Number of nodes for the job (<code>sbatch --nodes</code> and <code>srun --nodes</code>)</td></tr>
+<tr><td><code>num_nodes</code></td><td>integer</td><td>No</td><td><code>1</code></td><td>Number of nodes per job (<code>srun --nodes</code>); allocation size is set via Slurm scheduler config</td></tr>
 <tr><td><code>memory</code></td><td>string</td><td>No</td><td><code>1m</code></td><td>Memory allocation (see format below)</td></tr>
 <tr><td><code>runtime</code></td><td>string</td><td>No</td><td><code>PT1H</code></td><td>Maximum runtime (ISO 8601 duration)</td></tr>
 </tbody></table>
@@ -214,15 +214,16 @@
 
   - name: mpi_job       # multi-node MPI or Julia Distributed.jl
     num_cpus: 32
-    num_nodes: 4        # allocates and spans 4 nodes
+    num_nodes: 4        # each job step spans 4 nodes
     memory: 128g
     runtime: PT8H
 </code></pre>
 <h3 id="num_nodes"><a class="header" href="#num_nodes"><code>num_nodes</code></a></h3>
-<p>The <code>num_nodes</code> field controls both the Slurm allocation size (<code>sbatch --nodes</code>) and the number of
-nodes each job step spans (<code>srun --nodes</code>).</p>
+<p>The <code>num_nodes</code> field controls how many nodes each job step spans (<code>srun --nodes</code>). The Slurm
+allocation size (<code>sbatch --nodes</code>) is set separately via the Slurm scheduler configuration.</p>
 <p>For most jobs the value is <code>1</code> (default). Set it to a larger value for multi-node jobs such as MPI
-or Julia <code>Distributed.jl</code>.</p>
+or Julia <code>Distributed.jl</code>. For single-node jobs in a multi-node allocation, keep <code>num_nodes=1</code> and
+configure the allocation size on the Slurm scheduler.</p>
 <p>See <a href="../../specialized/hpc/multi-node-jobs.html">Multi-Node Jobs</a> for detailed examples and guidance.</p>
 <h2 id="memory-format"><a class="header" href="#memory-format">Memory Format</a></h2>
 <p>String format with unit suffix:</p>

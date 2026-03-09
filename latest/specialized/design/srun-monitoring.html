@@ -282,8 +282,9 @@ isolation.</p>
 </tbody></table>
 </div>
 <h3 id="multi-node-steps"><a class="header" href="#multi-node-steps">Multi-Node Steps</a></h3>
-<p>The <code>num_nodes</code> field on resource requirements controls both the Slurm allocation size and how many
-nodes an srun step spans. It defaults to 1.</p>
+<p>The <code>num_nodes</code> field on resource requirements controls how many nodes an srun step spans
+(<code>srun --nodes</code>). It defaults to 1. The allocation size (<code>sbatch --nodes</code>) is set via the Slurm
+scheduler configuration.</p>
 <ul>
 <li><strong>Single-node jobs</strong> (default): <code>num_nodes=1</code> -- each job runs on one node</li>
 <li><strong>Multi-node jobs</strong> (MPI, Julia Distributed.jl): <code>num_nodes=N</code> -- step spans N nodes</li>
