@@ -466,6 +466,10 @@ fn run_monitoring_loop(
                 })
                 .collect();
             let sstat_data = collect_sstat_samples_batch(&slurm_steps, &sstat_binary);
+            // Capture a single timestamp right after the batch call so that all Slurm
+            // steps use the same reference point for elapsed-time / CPU% calculations.
+            // Using per-job Instant::now() would skew deltas as the loop iterates.
+            let sstat_sample_at = Instant::now();
             if !slurm_steps.is_empty() {
                 debug!(
                     "Batched sstat query for {} steps, got {} results",
@@ -504,9 +508,10 @@ fn run_monitoring_loop(
                             }
                         };
 
-                        let now = Instant::now();
-                        let elapsed_s = now.duration_since(*prev_sample_at).as_secs_f64();
-                        *prev_sample_at = now;
+                        let elapsed_s = sstat_sample_at
+                            .duration_since(*prev_sample_at)
+                            .as_secs_f64();
+                        *prev_sample_at = sstat_sample_at;
 
                         // On the first successful sample, AveCPU is cumulative since step
                         // start and we have no valid baseline for delta computation.
