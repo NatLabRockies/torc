@@ -9234,8 +9234,7 @@ jobs:
 <tr><td><code>num_cpus</code></td><td>integer</td><td><em>required</em></td><td>Number of CPUs required</td></tr>
 <tr><td><code>memory</code></td><td>string</td><td><em>required</em></td><td>Memory requirement (e.g., <code>"1m"</code>, <code>"2g"</code>, <code>"512k"</code>)</td></tr>
 <tr><td><code>num_gpus</code></td><td>integer</td><td><code>0</code></td><td>Number of GPUs required</td></tr>
-<tr><td><code>num_nodes</code></td><td>integer</td><td><code>1</code></td><td>Slurm allocation size (<code>sbatch --nodes</code>)</td></tr>
-<tr><td><code>step_nodes</code></td><td>integer</td><td><code>1</code></td><td>Nodes each srun step spans (<code>srun --nodes</code>); set to <code>num_nodes</code> for MPI / Julia <code>Distributed.jl</code></td></tr>
+<tr><td><code>num_nodes</code></td><td>integer</td><td><code>1</code></td><td>Number of nodes for the job (<code>sbatch --nodes</code> and <code>srun --nodes</code>)</td></tr>
 <tr><td><code>runtime</code></td><td>string</td><td><code>"PT1H"</code></td><td>Runtime limit in ISO8601 duration format (e.g., <code>"PT30M"</code>, <code>"PT2H"</code>)</td></tr>
 </tbody></table>
 </div>
@@ -9698,8 +9697,7 @@ definitions</li>
 <tr><td><code>name</code></td><td>string</td><td>Yes</td><td>—</td><td>Identifier to reference from jobs</td></tr>
 <tr><td><code>num_cpus</code></td><td>integer</td><td>No</td><td><code>1</code></td><td>Number of CPU cores</td></tr>
 <tr><td><code>num_gpus</code></td><td>integer</td><td>No</td><td><code>0</code></td><td>Number of GPUs</td></tr>
-<tr><td><code>num_nodes</code></td><td>integer</td><td>No</td><td><code>1</code></td><td>Slurm allocation size (<code>sbatch --nodes</code>)</td></tr>
-<tr><td><code>step_nodes</code></td><td>integer</td><td>No</td><td><code>1</code></td><td>Nodes each srun step spans (<code>srun --nodes</code>); see below</td></tr>
+<tr><td><code>num_nodes</code></td><td>integer</td><td>No</td><td><code>1</code></td><td>Number of nodes for the job (<code>sbatch --nodes</code> and <code>srun --nodes</code>)</td></tr>
 <tr><td><code>memory</code></td><td>string</td><td>No</td><td><code>1m</code></td><td>Memory allocation (see format below)</td></tr>
 <tr><td><code>runtime</code></td><td>string</td><td>No</td><td><code>PT1H</code></td><td>Maximum runtime (ISO 8601 duration)</td></tr>
 </tbody></table>
@@ -9722,30 +9720,15 @@ definitions</li>
 
   - name: mpi_job       # multi-node MPI or Julia Distributed.jl
     num_cpus: 32
-    num_nodes: 4        # sbatch allocates 4 nodes
-    step_nodes: 4       # srun spans all 4 nodes per step
+    num_nodes: 4        # allocates and spans 4 nodes
     memory: 128g
     runtime: PT8H
 </code></pre>
-<h3 id="num_nodes-vs-step_nodes"><a class="header" href="#num_nodes-vs-step_nodes"><code>num_nodes</code> vs <code>step_nodes</code></a></h3>
-<p>These two fields are independent and serve different purposes in Slurm workflows:</p>
-<ul>
-<li>
-<p><strong><code>num_nodes</code></strong> — passed to <code>sbatch --nodes</code>. Controls how large the Slurm allocation is. This is
-the total number of nodes reserved for the job.</p>
-</li>
-<li>
-<p><strong><code>step_nodes</code></strong> — passed to <code>srun --nodes</code>. Controls how many nodes each individual torc job step
-spans within the allocation.</p>
-</li>
-</ul>
-<p>For most jobs both values are <code>1</code>. They differ in two patterns:</p>
-<div class="table-wrapper"><table><thead><tr><th>Pattern</th><th><code>num_nodes</code></th><th><code>step_nodes</code></th><th>Description</th></tr></thead><tbody>
-<tr><td>Single-node jobs (default)</td><td><code>1</code></td><td><code>1</code></td><td>Each job runs on one node</td></tr>
-<tr><td>Multi-node allocation, single-node jobs</td><td><code>N</code></td><td><code>1</code></td><td>One worker manages all nodes; each job runs on one node via srun</td></tr>
-<tr><td>True multi-node job steps (MPI / Julia <code>Distributed.jl</code>)</td><td><code>N</code></td><td><code>N</code></td><td>Each job spans all N nodes</td></tr>
-</tbody></table>
-</div>
+<h3 id="num_nodes"><a class="header" href="#num_nodes"><code>num_nodes</code></a></h3>
+<p>The <code>num_nodes</code> field controls both the Slurm allocation size (<code>sbatch --nodes</code>) and the number of
+nodes each job step spans (<code>srun --nodes</code>).</p>
+<p>For most jobs the value is <code>1</code> (default). Set it to a larger value for multi-node jobs such as MPI
+or Julia <code>Distributed.jl</code>.</p>
 <p>See <a href="core/reference/../../specialized/hpc/multi-node-jobs.html">Multi-Node Jobs</a> for detailed examples and guidance.</p>
 <h2 id="memory-format"><a class="header" href="#memory-format">Memory Format</a></h2>
 <p>String format with unit suffix:</p>
@@ -11271,10 +11254,10 @@ jobs concurrently (64 / 8 = 8). Across 4 nodes, that means up to 32 jobs running
 <h3 id="pattern-2-true-multi-node-jobs-mpi-distributed-training"><a class="header" href="#pattern-2-true-multi-node-jobs-mpi-distributed-training">Pattern 2: True Multi-Node Jobs (MPI, Distributed Training)</a></h3>
 <p><strong>Use when</strong>: A single job needs to span multiple nodes — for example, MPI applications, distributed
 deep learning, or Julia <code>Distributed.jl</code>.</p>
-<p><strong>How it works</strong>: You set <code>step_nodes</code> equal to the number of nodes the job needs. Torc treats that
-job as an exclusive whole-node reservation: if a job needs 4 nodes, those 4 nodes are reserved for
-that step and are not shared with other jobs until the step completes. Torc passes
-<code>srun --nodes=&lt;step_nodes&gt;</code> when launching the job, so the process spans multiple nodes within the
+<p><strong>How it works</strong>: You set <code>num_nodes</code> to the number of nodes the job needs. Torc treats that job as
+an exclusive whole-node reservation: if a job needs 4 nodes, those 4 nodes are reserved for that
+step and are not shared with other jobs until the step completes. Torc passes
+<code>srun --nodes=&lt;num_nodes&gt;</code> when launching the job, so the process spans multiple nodes within the
 allocation. The job receives the standard Slurm step environment (<code>SLURM_JOB_NODELIST</code>,
 <code>SLURM_NTASKS</code>, etc.), so MPI launchers and distributed frameworks work automatically.</p>
 <p><strong>Example</strong>: An MPI training job that spans all 4 nodes in the allocation:</p>
@@ -11285,8 +11268,7 @@ resource_requirements:
   - name: mpi_training
     num_cpus: 32      # per node (128 total across 4 nodes)
     memory: 128g      # per node (512 GB total across 4 nodes)
-    num_nodes: 4      # sbatch allocates 4 nodes
-    step_nodes: 4     # srun spans all 4 nodes
+    num_nodes: 4      # allocates and spans 4 nodes
     runtime: PT8H
 
 jobs:
@@ -11316,14 +11298,14 @@ to the job are 128 CPUs and 512 GB.</p>
 <tr><td>Does the job use MPI or distributed training?</td><td>No</td><td>Yes</td></tr>
 <tr><td>Goal is throughput (many jobs in parallel)?</td><td>Yes</td><td>No</td></tr>
 <tr><td>Goal is scaling one job across nodes?</td><td>No</td><td>Yes</td></tr>
-<tr><td><code>step_nodes</code> setting</td><td><code>1</code> (default)</td><td>Same as <code>num_nodes</code></td></tr>
+<tr><td><code>num_nodes</code> setting</td><td><code>1</code> (default)</td><td>Number of nodes needed</td></tr>
 </tbody></table>
 </div>
 <h2 id="whole-node-reservation-rule"><a class="header" href="#whole-node-reservation-rule">Whole-Node Reservation Rule</a></h2>
 <p>Torc uses this scheduling rule inside a multi-node Slurm allocation:</p>
 <ul>
-<li>Single-node jobs (<code>num_nodes=1</code>, <code>step_nodes=1</code>) may share a node.</li>
-<li>Multi-node jobs (<code>num_nodes&gt;1</code> or <code>step_nodes&gt;1</code>) reserve whole nodes exclusively.</li>
+<li>Single-node jobs (<code>num_nodes=1</code>) may share a node.</li>
+<li>Multi-node jobs (<code>num_nodes&gt;1</code>) reserve whole nodes exclusively.</li>
 </ul>
 <p>This is intentionally conservative. Torc does not try to pack other work onto nodes that are part of
 an active multi-node step.</p>
@@ -11393,7 +11375,6 @@ resource_requirements:
     num_cpus: 32
     memory: 128g
     num_nodes: 4
-    step_nodes: 4
     runtime: PT4H
 
 jobs:
@@ -11437,18 +11418,13 @@ actions:
 </code></pre>
 <p>The preprocessing jobs run across 2 nodes (Pattern 1). When they complete, a 4-node allocation is
 requested for the MPI training job (Pattern 2).</p>
-<h2 id="num_nodes-vs-step_nodes-1"><a class="header" href="#num_nodes-vs-step_nodes-1"><code>num_nodes</code> vs <code>step_nodes</code></a></h2>
-<p>These two fields serve different purposes:</p>
-<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Controls</th><th>Passed to</th><th>Default</th></tr></thead><tbody>
-<tr><td><code>num_nodes</code></td><td>How many nodes Slurm allocates (<code>sbatch</code>)</td><td><code>sbatch --nodes</code></td><td><code>1</code></td></tr>
-<tr><td><code>step_nodes</code></td><td>How many nodes each job step spans</td><td><code>srun --nodes</code></td><td><code>1</code></td></tr>
-</tbody></table>
-</div>
+<h2 id="num_nodes-1"><a class="header" href="#num_nodes-1"><code>num_nodes</code></a></h2>
+<p>The <code>num_nodes</code> field controls both the Slurm allocation size (<code>sbatch --nodes</code>) and the number of
+nodes each job step spans (<code>srun --nodes</code>). It defaults to <code>1</code>.</p>
 <ul>
-<li><strong>Pattern 1</strong>: <code>num_nodes=N</code>, <code>step_nodes=1</code> — N nodes allocated, each job uses 1</li>
-<li><strong>Pattern 2</strong>: <code>num_nodes=N</code>, <code>step_nodes=N</code> — N nodes allocated, each job spans all N</li>
+<li><strong>Pattern 1</strong>: <code>num_nodes=1</code> (default) -- each job runs on a single node</li>
+<li><strong>Pattern 2</strong>: <code>num_nodes=N</code> -- each job spans all N nodes (MPI, distributed training)</li>
 </ul>
-<p>For single-node workflows (the common case), both default to <code>1</code> and you don't need to set either.</p>
 <h2 id="common-mistakes"><a class="header" href="#common-mistakes">Common Mistakes</a></h2>
 <h3 id="specifying-total-resources-instead-of-per-node"><a class="header" href="#specifying-total-resources-instead-of-per-node">Specifying total resources instead of per-node</a></h3>
 <pre><code class="language-yaml"># WRONG: 512g is the total across 4 nodes
@@ -11457,7 +11433,6 @@ resource_requirements:
     num_cpus: 128     # total across nodes
     memory: 512g      # total across nodes
     num_nodes: 4
-    step_nodes: 4
 
 # CORRECT: 128g is what each of the 4 nodes provides
 resource_requirements:
@@ -11465,29 +11440,10 @@ resource_requirements:
     num_cpus: 32      # per node (128 total)
     memory: 128g      # per node (512g total)
     num_nodes: 4
-    step_nodes: 4
 </code></pre>
-<h3 id="forgetting-step_nodes-for-mpi-jobs"><a class="header" href="#forgetting-step_nodes-for-mpi-jobs">Forgetting <code>step_nodes</code> for MPI jobs</a></h3>
-<p>Without <code>step_nodes</code>, each job runs on a single node even in a multi-node allocation:</p>
-<pre><code class="language-yaml"># WRONG: job will only use 1 node despite 4-node allocation
-resource_requirements:
-  - name: mpi_job
-    num_cpus: 32
-    memory: 128g
-    num_nodes: 4      # allocates 4 nodes...
-    # step_nodes defaults to 1 — job only runs on 1 node!
-
-# CORRECT: step_nodes=4 tells srun to span all 4 nodes
-resource_requirements:
-  - name: mpi_job
-    num_cpus: 32
-    memory: 128g
-    num_nodes: 4
-    step_nodes: 4     # srun --nodes=4
-</code></pre>
-<h3 id="using-step_nodes--1-for-independent-jobs"><a class="header" href="#using-step_nodes--1-for-independent-jobs">Using <code>step_nodes &gt; 1</code> for independent jobs</a></h3>
-<p>If your jobs don't need inter-node communication, keep <code>step_nodes=1</code> and let Torc schedule them
-independently across nodes for maximum throughput.</p>
+<h3 id="using-num_nodes--1-for-independent-jobs"><a class="header" href="#using-num_nodes--1-for-independent-jobs">Using <code>num_nodes &gt; 1</code> for independent jobs</a></h3>
+<p>If your jobs don't need inter-node communication, keep <code>num_nodes=1</code> (the default) and let Torc
+schedule them independently across nodes for maximum throughput.</p>
 <h2 id="see-also-20"><a class="header" href="#see-also-20">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/./slurm-workflows.html">Slurm Overview</a> — Auto-generated Slurm configuration with <code>submit-slurm</code></li>
@@ -11756,41 +11712,24 @@ correlated.</p>
 <blockquote>
 <p>For a comprehensive guide to multi-node patterns, see <a href="specialized/hpc/./multi-node-jobs.html">Multi-Node Jobs</a>.</p>
 </blockquote>
-<p>Two resource requirement fields control node usage:</p>
-<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Controls</th><th>Passed to</th><th>Default</th></tr></thead><tbody>
-<tr><td><code>num_nodes</code></td><td>Slurm allocation size</td><td><code>sbatch --nodes</code></td><td><code>1</code></td></tr>
-<tr><td><code>step_nodes</code></td><td>Nodes each individual job step spans</td><td><code>srun --nodes</code></td><td><code>1</code></td></tr>
-</tbody></table>
-</div>
-<p>For most workloads these two values are the same, but they must be set independently for the
-patterns below.</p>
+<p>The <code>num_nodes</code> resource requirement field controls both the Slurm allocation size
+(<code>sbatch --nodes</code>) and the number of nodes each job step spans (<code>srun --nodes</code>). It defaults to <code>1</code>.</p>
 <p><strong>Single-node jobs (default)</strong> — no extra configuration needed:</p>
 <pre><code class="language-yaml">resource_requirements:
   - name: standard
     num_cpus: 4
     memory: 16g
     runtime: PT2H
-    # num_nodes defaults to 1, step_nodes defaults to 1
+    # num_nodes defaults to 1
 </code></pre>
-<p><strong>Multi-node allocation with single-node jobs</strong> — a single worker manages all nodes. Each job runs
-on one node via <code>srun --nodes=1</code>, and single-node jobs may share a node when resources permit:</p>
-<pre><code class="language-yaml">resource_requirements:
-  - name: standard
-    num_cpus: 8
-    memory: 64g
-    runtime: PT4H
-    num_nodes: 10   # sbatch allocates 10 nodes
-    # step_nodes: 1 is the default — each srun step uses exactly one node
-</code></pre>
-<p><strong>True multi-node job steps</strong> (MPI, Julia <code>Distributed.jl</code>, etc.) — the job itself spans multiple
-nodes in the allocation, so set <code>step_nodes</code> to the number of nodes each job needs:</p>
+<p><strong>True multi-node jobs</strong> (MPI, Julia <code>Distributed.jl</code>, etc.) — the job spans multiple nodes in the
+allocation:</p>
 <pre><code class="language-yaml">resource_requirements:
   - name: mpi_job
     num_cpus: 32
     memory: 128g
     runtime: PT8H
-    num_nodes: 4      # sbatch allocates 4 nodes
-    step_nodes: 4     # srun --nodes=4: each job step spans all 4 nodes
+    num_nodes: 4      # allocates 4 nodes and srun spans all 4
 </code></pre>
 <p>In this pattern, Torc reserves all 4 nodes for the step exclusively, then passes <code>srun --nodes=4</code>
 when launching the job. The job command receives <code>SLURM_JOB_NODELIST</code>, <code>SLURM_NTASKS</code>, and the rest
@@ -11799,9 +11738,8 @@ of the standard Slurm step environment, so MPI launchers (<code>mpirun</code>, <
 <h3 id="multi-node-allocation-rule"><a class="header" href="#multi-node-allocation-rule">Multi-Node Allocation Rule</a></h3>
 <p>Inside a multi-node Slurm allocation, Torc uses two scheduling modes:</p>
 <ul>
-<li>Single-node jobs (<code>num_nodes=1</code>, <code>step_nodes=1</code>) may share nodes based on CPU, memory, and GPU
-availability.</li>
-<li>Multi-node jobs (<code>num_nodes&gt;1</code> or <code>step_nodes&gt;1</code>) reserve whole nodes exclusively.</li>
+<li>Single-node jobs (<code>num_nodes=1</code>) may share nodes based on CPU, memory, and GPU availability.</li>
+<li>Multi-node jobs (<code>num_nodes&gt;1</code>) reserve whole nodes exclusively.</li>
 </ul>
 <p>This keeps job claiming and local resource accounting aligned with Slurm allocations.</p>
 <h3 id="resource-limit-enforcement"><a class="header" href="#resource-limit-enforcement">Resource Limit Enforcement</a></h3>
@@ -21888,7 +21826,7 @@ isolation.</p>
     EX[&quot;--exact&quot;]:::flag
     CB[&quot;--cpu-bind=none&quot;]:::flag
     JN[&quot;--job-name=step_name&quot;]:::flag
-    ND[&quot;--nodes=step_nodes&quot;]:::flag
+    ND[&quot;--nodes=num_nodes&quot;]:::flag
     CPU[&quot;--cpus-per-task=N&quot;]:::flag
     MEM[&quot;--mem=NM&quot;]:::flag
     TIME[&quot;--time=remaining_min&quot;]:::flag
@@ -21902,7 +21840,7 @@ isolation.</p>
     SRUN --&gt; ND
 
     EX -.- N0[&quot;Use exact resources,&lt;br/&gt;don't claim entire node&quot;]:::note
-    ND -.- N1[&quot;Default: 1 node&lt;br/&gt;Override via step_nodes&quot;]:::note
+    ND -.- N1[&quot;Default: 1 node&lt;br/&gt;Override via num_nodes&quot;]:::note
     CB -.- N2[&quot;Default on; disable with&lt;br/&gt;enable_cpu_bind: true&quot;]:::note
     TIME -.- N4[&quot;Remaining allocation time&lt;br/&gt;rounded down to minutes&quot;]:::note
     SIG -.- N5[&quot;Early warning signal&lt;br/&gt;e.g. TERM@120&quot;]:::note
@@ -21918,21 +21856,21 @@ isolation.</p>
 <tr><td><code>--exact</code></td><td>Use exactly the requested resources; don't claim the entire node exclusively</td></tr>
 <tr><td><code>--cpu-bind=none</code></td><td>Disables CPU affinity binding (default; omitted when <code>enable_cpu_bind: true</code>)</td></tr>
 <tr><td><code>--job-name</code></td><td>Sets the step name for sacct/sstat lookup</td></tr>
-<tr><td><code>--nodes</code></td><td>Number of nodes for this step (from <code>step_nodes</code>, default 1)</td></tr>
+<tr><td><code>--nodes</code></td><td>Number of nodes for this step (from <code>num_nodes</code>, default 1)</td></tr>
 <tr><td><code>--cpus-per-task</code></td><td>CPU cgroup limit (only when <code>limit_resources=true</code>)</td></tr>
 <tr><td><code>--mem</code></td><td>Memory cgroup limit in MB (only when <code>limit_resources=true</code>)</td></tr>
 <tr><td><code>--time</code></td><td>Per-step walltime from remaining allocation time (see below)</td></tr>
 <tr><td><code>--signal</code></td><td>Early warning signal before step timeout (see below)</td></tr>
 </tbody></table>
 </div>
-<h3 id="the-step_nodes-field"><a class="header" href="#the-step_nodes-field">The <code>step_nodes</code> Field</a></h3>
-<p>The <code>step_nodes</code> field on resource requirements controls how many nodes an srun step spans. It
-defaults to 1 and is distinct from <code>num_nodes</code> (the allocation size for <code>sbatch --nodes</code>).</p>
+<h3 id="multi-node-steps"><a class="header" href="#multi-node-steps">Multi-Node Steps</a></h3>
+<p>The <code>num_nodes</code> field on resource requirements controls both the Slurm allocation size and how many
+nodes an srun step spans. It defaults to 1.</p>
 <ul>
-<li><strong>Single-node jobs</strong> (default): <code>step_nodes=1</code> -- each job runs on one node</li>
-<li><strong>Multi-node jobs</strong> (MPI, Julia Distributed.jl): <code>step_nodes=N</code> -- step spans N nodes</li>
+<li><strong>Single-node jobs</strong> (default): <code>num_nodes=1</code> -- each job runs on one node</li>
+<li><strong>Multi-node jobs</strong> (MPI, Julia Distributed.jl): <code>num_nodes=N</code> -- step spans N nodes</li>
 </ul>
-<p>When <code>step_nodes &gt; 1</code>, Torc treats the job as consuming whole nodes exclusively for the lifetime of
+<p>When <code>num_nodes &gt; 1</code>, Torc treats the job as consuming whole nodes exclusively for the lifetime of
 the step. This avoids ambiguous partial-node accounting for MPI and other true multi-node jobs.</p>
 <h3 id="the-limit_resources-flag"><a class="header" href="#the-limit_resources-flag">The <code>limit_resources</code> Flag</a></h3>
 <p>When <code>limit_resources</code> is enabled in the scheduler configuration, srun applies <code>--cpus-per-task</code> and
@@ -22177,7 +22115,7 @@ numeric values.</p>
 <h2 id="configuration-3"><a class="header" href="#configuration-3">Configuration</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Setting</th><th>Location</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>limit_resources</code></td><td>Scheduler config</td><td>Enable cgroup enforcement via srun <code>--mem</code>/<code>--cpus-per-task</code></td></tr>
-<tr><td><code>step_nodes</code></td><td>Resource requirements</td><td>Number of nodes per srun step (default: 1)</td></tr>
+<tr><td><code>num_nodes</code></td><td>Resource requirements</td><td>Number of nodes per job (default: 1)</td></tr>
 <tr><td><code>sample_interval_seconds</code></td><td>Resource monitor config</td><td>sstat polling interval</td></tr>
 <tr><td><code>TORC_FAKE_SRUN</code></td><td>Environment variable</td><td>Override srun binary path (testing)</td></tr>
 <tr><td><code>TORC_FAKE_SACCT</code></td><td>Environment variable</td><td>Override sacct binary path (testing)</td></tr>

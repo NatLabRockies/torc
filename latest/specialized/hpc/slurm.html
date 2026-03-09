@@ -446,41 +446,24 @@ correlated.</p>
 <blockquote>
 <p>For a comprehensive guide to multi-node patterns, see <a href="./multi-node-jobs.html">Multi-Node Jobs</a>.</p>
 </blockquote>
-<p>Two resource requirement fields control node usage:</p>
-<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Controls</th><th>Passed to</th><th>Default</th></tr></thead><tbody>
-<tr><td><code>num_nodes</code></td><td>Slurm allocation size</td><td><code>sbatch --nodes</code></td><td><code>1</code></td></tr>
-<tr><td><code>step_nodes</code></td><td>Nodes each individual job step spans</td><td><code>srun --nodes</code></td><td><code>1</code></td></tr>
-</tbody></table>
-</div>
-<p>For most workloads these two values are the same, but they must be set independently for the
-patterns below.</p>
+<p>The <code>num_nodes</code> resource requirement field controls both the Slurm allocation size
+(<code>sbatch --nodes</code>) and the number of nodes each job step spans (<code>srun --nodes</code>). It defaults to <code>1</code>.</p>
 <p><strong>Single-node jobs (default)</strong> — no extra configuration needed:</p>
 <pre><code class="language-yaml">resource_requirements:
   - name: standard
     num_cpus: 4
     memory: 16g
     runtime: PT2H
-    # num_nodes defaults to 1, step_nodes defaults to 1
+    # num_nodes defaults to 1
 </code></pre>
-<p><strong>Multi-node allocation with single-node jobs</strong> — a single worker manages all nodes. Each job runs
-on one node via <code>srun --nodes=1</code>, and single-node jobs may share a node when resources permit:</p>
-<pre><code class="language-yaml">resource_requirements:
-  - name: standard
-    num_cpus: 8
-    memory: 64g
-    runtime: PT4H
-    num_nodes: 10   # sbatch allocates 10 nodes
-    # step_nodes: 1 is the default — each srun step uses exactly one node
-</code></pre>
-<p><strong>True multi-node job steps</strong> (MPI, Julia <code>Distributed.jl</code>, etc.) — the job itself spans multiple
-nodes in the allocation, so set <code>step_nodes</code> to the number of nodes each job needs:</p>
+<p><strong>True multi-node jobs</strong> (MPI, Julia <code>Distributed.jl</code>, etc.) — the job spans multiple nodes in the
+allocation:</p>
 <pre><code class="language-yaml">resource_requirements:
   - name: mpi_job
     num_cpus: 32
     memory: 128g
     runtime: PT8H
-    num_nodes: 4      # sbatch allocates 4 nodes
-    step_nodes: 4     # srun --nodes=4: each job step spans all 4 nodes
+    num_nodes: 4      # allocates 4 nodes and srun spans all 4
 </code></pre>
 <p>In this pattern, Torc reserves all 4 nodes for the step exclusively, then passes <code>srun --nodes=4</code>
 when launching the job. The job command receives <code>SLURM_JOB_NODELIST</code>, <code>SLURM_NTASKS</code>, and the rest
@@ -489,9 +472,8 @@ of the standard Slurm step environment, so MPI launchers (<code>mpirun</code>, <
 <h3 id="multi-node-allocation-rule"><a class="header" href="#multi-node-allocation-rule">Multi-Node Allocation Rule</a></h3>
 <p>Inside a multi-node Slurm allocation, Torc uses two scheduling modes:</p>
 <ul>
-<li>Single-node jobs (<code>num_nodes=1</code>, <code>step_nodes=1</code>) may share nodes based on CPU, memory, and GPU
-availability.</li>
-<li>Multi-node jobs (<code>num_nodes&gt;1</code> or <code>step_nodes&gt;1</code>) reserve whole nodes exclusively.</li>
+<li>Single-node jobs (<code>num_nodes=1</code>) may share nodes based on CPU, memory, and GPU availability.</li>
+<li>Multi-node jobs (<code>num_nodes&gt;1</code>) reserve whole nodes exclusively.</li>
 </ul>
 <p>This keeps job claiming and local resource accounting aligned with Slurm allocations.</p>
 <h3 id="resource-limit-enforcement"><a class="header" href="#resource-limit-enforcement">Resource Limit Enforcement</a></h3>

@@ -238,10 +238,10 @@ jobs concurrently (64 / 8 = 8). Across 4 nodes, that means up to 32 jobs running
 <h3 id="pattern-2-true-multi-node-jobs-mpi-distributed-training"><a class="header" href="#pattern-2-true-multi-node-jobs-mpi-distributed-training">Pattern 2: True Multi-Node Jobs (MPI, Distributed Training)</a></h3>
 <p><strong>Use when</strong>: A single job needs to span multiple nodes — for example, MPI applications, distributed
 deep learning, or Julia <code>Distributed.jl</code>.</p>
-<p><strong>How it works</strong>: You set <code>step_nodes</code> equal to the number of nodes the job needs. Torc treats that
-job as an exclusive whole-node reservation: if a job needs 4 nodes, those 4 nodes are reserved for
-that step and are not shared with other jobs until the step completes. Torc passes
-<code>srun --nodes=&lt;step_nodes&gt;</code> when launching the job, so the process spans multiple nodes within the
+<p><strong>How it works</strong>: You set <code>num_nodes</code> to the number of nodes the job needs. Torc treats that job as
+an exclusive whole-node reservation: if a job needs 4 nodes, those 4 nodes are reserved for that
+step and are not shared with other jobs until the step completes. Torc passes
+<code>srun --nodes=&lt;num_nodes&gt;</code> when launching the job, so the process spans multiple nodes within the
 allocation. The job receives the standard Slurm step environment (<code>SLURM_JOB_NODELIST</code>,
 <code>SLURM_NTASKS</code>, etc.), so MPI launchers and distributed frameworks work automatically.</p>
 <p><strong>Example</strong>: An MPI training job that spans all 4 nodes in the allocation:</p>
@@ -252,8 +252,7 @@ resource_requirements:
   - name: mpi_training
     num_cpus: 32      # per node (128 total across 4 nodes)
     memory: 128g      # per node (512 GB total across 4 nodes)
-    num_nodes: 4      # sbatch allocates 4 nodes
-    step_nodes: 4     # srun spans all 4 nodes
+    num_nodes: 4      # allocates and spans 4 nodes
     runtime: PT8H
 
 jobs:
@@ -283,14 +282,14 @@ to the job are 128 CPUs and 512 GB.</p>
 <tr><td>Does the job use MPI or distributed training?</td><td>No</td><td>Yes</td></tr>
 <tr><td>Goal is throughput (many jobs in parallel)?</td><td>Yes</td><td>No</td></tr>
 <tr><td>Goal is scaling one job across nodes?</td><td>No</td><td>Yes</td></tr>
-<tr><td><code>step_nodes</code> setting</td><td><code>1</code> (default)</td><td>Same as <code>num_nodes</code></td></tr>
+<tr><td><code>num_nodes</code> setting</td><td><code>1</code> (default)</td><td>Number of nodes needed</td></tr>
 </tbody></table>
 </div>
 <h2 id="whole-node-reservation-rule"><a class="header" href="#whole-node-reservation-rule">Whole-Node Reservation Rule</a></h2>
 <p>Torc uses this scheduling rule inside a multi-node Slurm allocation:</p>
 <ul>
-<li>Single-node jobs (<code>num_nodes=1</code>, <code>step_nodes=1</code>) may share a node.</li>
-<li>Multi-node jobs (<code>num_nodes&gt;1</code> or <code>step_nodes&gt;1</code>) reserve whole nodes exclusively.</li>
+<li>Single-node jobs (<code>num_nodes=1</code>) may share a node.</li>
+<li>Multi-node jobs (<code>num_nodes&gt;1</code>) reserve whole nodes exclusively.</li>
 </ul>
 <p>This is intentionally conservative. Torc does not try to pack other work onto nodes that are part of
 an active multi-node step.</p>
@@ -360,7 +359,6 @@ resource_requirements:
     num_cpus: 32
     memory: 128g
     num_nodes: 4
-    step_nodes: 4
     runtime: PT4H
 
 jobs:
@@ -404,18 +402,13 @@ actions:
 </code></pre>
 <p>The preprocessing jobs run across 2 nodes (Pattern 1). When they complete, a 4-node allocation is
 requested for the MPI training job (Pattern 2).</p>
-<h2 id="num_nodes-vs-step_nodes"><a class="header" href="#num_nodes-vs-step_nodes"><code>num_nodes</code> vs <code>step_nodes</code></a></h2>
-<p>These two fields serve different purposes:</p>
-<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Controls</th><th>Passed to</th><th>Default</th></tr></thead><tbody>
-<tr><td><code>num_nodes</code></td><td>How many nodes Slurm allocates (<code>sbatch</code>)</td><td><code>sbatch --nodes</code></td><td><code>1</code></td></tr>
-<tr><td><code>step_nodes</code></td><td>How many nodes each job step spans</td><td><code>srun --nodes</code></td><td><code>1</code></td></tr>
-</tbody></table>
-</div>
+<h2 id="num_nodes"><a class="header" href="#num_nodes"><code>num_nodes</code></a></h2>
+<p>The <code>num_nodes</code> field controls both the Slurm allocation size (<code>sbatch --nodes</code>) and the number of
+nodes each job step spans (<code>srun --nodes</code>). It defaults to <code>1</code>.</p>
 <ul>
-<li><strong>Pattern 1</strong>: <code>num_nodes=N</code>, <code>step_nodes=1</code> — N nodes allocated, each job uses 1</li>
-<li><strong>Pattern 2</strong>: <code>num_nodes=N</code>, <code>step_nodes=N</code> — N nodes allocated, each job spans all N</li>
+<li><strong>Pattern 1</strong>: <code>num_nodes=1</code> (default) -- each job runs on a single node</li>
+<li><strong>Pattern 2</strong>: <code>num_nodes=N</code> -- each job spans all N nodes (MPI, distributed training)</li>
 </ul>
-<p>For single-node workflows (the common case), both default to <code>1</code> and you don't need to set either.</p>
 <h2 id="common-mistakes"><a class="header" href="#common-mistakes">Common Mistakes</a></h2>
 <h3 id="specifying-total-resources-instead-of-per-node"><a class="header" href="#specifying-total-resources-instead-of-per-node">Specifying total resources instead of per-node</a></h3>
 <pre><code class="language-yaml"># WRONG: 512g is the total across 4 nodes
@@ -424,7 +417,6 @@ resource_requirements:
     num_cpus: 128     # total across nodes
     memory: 512g      # total across nodes
     num_nodes: 4
-    step_nodes: 4
 
 # CORRECT: 128g is what each of the 4 nodes provides
 resource_requirements:
@@ -432,29 +424,10 @@ resource_requirements:
     num_cpus: 32      # per node (128 total)
     memory: 128g      # per node (512g total)
     num_nodes: 4
-    step_nodes: 4
 </code></pre>
-<h3 id="forgetting-step_nodes-for-mpi-jobs"><a class="header" href="#forgetting-step_nodes-for-mpi-jobs">Forgetting <code>step_nodes</code> for MPI jobs</a></h3>
-<p>Without <code>step_nodes</code>, each job runs on a single node even in a multi-node allocation:</p>
-<pre><code class="language-yaml"># WRONG: job will only use 1 node despite 4-node allocation
-resource_requirements:
-  - name: mpi_job
-    num_cpus: 32
-    memory: 128g
-    num_nodes: 4      # allocates 4 nodes...
-    # step_nodes defaults to 1 — job only runs on 1 node!
-
-# CORRECT: step_nodes=4 tells srun to span all 4 nodes
-resource_requirements:
-  - name: mpi_job
-    num_cpus: 32
-    memory: 128g
-    num_nodes: 4
-    step_nodes: 4     # srun --nodes=4
-</code></pre>
-<h3 id="using-step_nodes--1-for-independent-jobs"><a class="header" href="#using-step_nodes--1-for-independent-jobs">Using <code>step_nodes &gt; 1</code> for independent jobs</a></h3>
-<p>If your jobs don't need inter-node communication, keep <code>step_nodes=1</code> and let Torc schedule them
-independently across nodes for maximum throughput.</p>
+<h3 id="using-num_nodes--1-for-independent-jobs"><a class="header" href="#using-num_nodes--1-for-independent-jobs">Using <code>num_nodes &gt; 1</code> for independent jobs</a></h3>
+<p>If your jobs don't need inter-node communication, keep <code>num_nodes=1</code> (the default) and let Torc
+schedule them independently across nodes for maximum throughput.</p>
 <h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>
 <ul>
 <li><a href="./slurm-workflows.html">Slurm Overview</a> — Auto-generated Slurm configuration with <code>submit-slurm</code></li>
