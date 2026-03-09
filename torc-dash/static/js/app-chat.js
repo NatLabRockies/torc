@@ -142,7 +142,7 @@ Object.assign(TorcDashboard.prototype, {
                         try { textData = JSON.parse(data); } catch (_) { /* use raw */ }
                     }
 
-                    this.handleChatSSEEvent(eventType || 'text', textData, assistantDiv, { fullText, toolCalls });
+                    this.handleChatSSEEvent(eventType || 'text', textData, assistantDiv);
                     if (eventType === 'text') {
                         fullText += textData;
                     } else if (eventType === 'tool_use' || eventType === 'tool_result') {
@@ -173,7 +173,7 @@ Object.assign(TorcDashboard.prototype, {
         }
     },
 
-    handleChatSSEEvent(eventType, data, assistantDiv, state) {
+    handleChatSSEEvent(eventType, data, assistantDiv) {
         switch (eventType) {
             case 'text':
                 this.appendTextToAssistantDiv(assistantDiv, data);
@@ -327,25 +327,38 @@ Object.assign(TorcDashboard.prototype, {
     /** Render markdown to HTML using the marked library (with raw HTML sanitized). */
     renderMarkdown(text) {
         if (typeof marked !== 'undefined' && marked.parse) {
-            // Strip raw HTML tags from input to prevent XSS.
-            // This removes HTML tags but preserves markdown syntax like > for blockquotes.
-            const sanitized = text.replace(/<\/?[a-zA-Z][^>]*>/g, (match) => {
-                return match.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            });
+            // Escape ampersands first to prevent entity-encoded XSS (e.g. &#x3C;script&#x3E;),
+            // then escape raw HTML tags. This preserves markdown syntax like > for blockquotes
+            // since those appear at line start without <.
+            const sanitized = text
+                .replace(/&/g, '&amp;')
+                .replace(/<\/?[a-zA-Z][^>]*>/g, (match) => {
+                    return match.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                });
             const renderer = new marked.Renderer();
+            // marked v15 uses token objects, not positional (href, title, text) args.
+            const isSafeUrl = (url) => {
+                if (!url) return false;
+                const trimmed = url.trim();
+                if (/^(https?:|mailto:)/i.test(trimmed)) return true;
+                if (/^(\/|\.\/|\.\.\/|#)/.test(trimmed)) return true;
+                return false;
+            };
             const baseLinkRenderer = renderer.link.bind(renderer);
-            renderer.link = function (href, title, text) {
-                if (href && /^\s*javascript\s*:/i.test(href)) {
-                    return text || '';
+            renderer.link = function (token) {
+                const href = token && typeof token.href === 'string' ? token.href : '';
+                if (!isSafeUrl(href)) {
+                    return token.text || '';
                 }
-                return baseLinkRenderer(href, title, text);
+                return baseLinkRenderer(token);
             };
             const baseImageRenderer = renderer.image.bind(renderer);
-            renderer.image = function (href, title, text) {
-                if (href && /^\s*javascript\s*:/i.test(href)) {
-                    return text || '';
+            renderer.image = function (token) {
+                const href = token && typeof token.href === 'string' ? token.href : '';
+                if (!isSafeUrl(href)) {
+                    return token.text || '';
                 }
-                return baseImageRenderer(href, title, text);
+                return baseImageRenderer(token);
             };
             return marked.parse(sanitized, { breaks: true, renderer });
         }
