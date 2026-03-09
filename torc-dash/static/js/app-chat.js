@@ -109,7 +109,6 @@ Object.assign(TorcDashboard.prototype, {
             const decoder = new TextDecoder();
             let buffer = '';
             let fullText = '';
-            let toolCalls = [];
 
             while (true) {
                 const { done, value } = await reader.read();
@@ -145,21 +144,15 @@ Object.assign(TorcDashboard.prototype, {
                     this.handleChatSSEEvent(eventType || 'text', textData, assistantDiv);
                     if (eventType === 'text') {
                         fullText += textData;
-                    } else if (eventType === 'tool_use' || eventType === 'tool_result') {
-                        try {
-                            toolCalls.push({ type: eventType, data: JSON.parse(data) });
-                        } catch (_) { /* ignore parse errors */ }
                     }
                 }
             }
 
             // Record assistant response
-            const contentParts = [];
-            if (fullText) contentParts.push(fullText);
-            if (contentParts.length > 0 || toolCalls.length > 0) {
+            if (fullText) {
                 this.chatMessages.push({
                     role: 'assistant',
-                    content: fullText || '(tool calls only)',
+                    content: fullText,
                 });
             }
         } catch (e) {
@@ -374,10 +367,12 @@ Object.assign(TorcDashboard.prototype, {
         const sendBtn = document.getElementById('chat-send-btn');
         const stopBtn = document.getElementById('chat-stop-btn');
         const input = document.getElementById('chat-input');
+        const clearBtn = document.getElementById('chat-clear-btn');
 
         if (sendBtn) sendBtn.style.display = this.chatStreaming ? 'none' : 'inline-flex';
         if (stopBtn) stopBtn.style.display = this.chatStreaming ? 'inline-flex' : 'none';
         if (input) input.disabled = this.chatStreaming;
+        if (clearBtn) clearBtn.disabled = this.chatStreaming;
     },
 
     stopChat() {
