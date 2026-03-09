@@ -10,7 +10,7 @@ use axum::{
     Json, Router,
     body::Body,
     extract::{Path, State},
-    http::{Request, StatusCode, header},
+    http::{HeaderMap, Request, StatusCode, header},
     response::{
         Html, IntoResponse, Response,
         sse::{Event, KeepAlive, Sse},
@@ -25,12 +25,11 @@ use std::borrow::Cow;
 use std::path::Path as FsPath;
 use std::process::Command as StdCommand;
 use std::sync::Arc;
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::Mutex;
 use torc::config::TorcConfig;
 use torc::network_utils::find_available_port;
-use tower_http::cors::{Any, CorsLayer};
 use tracing::{error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -330,6 +329,7 @@ async fn main() -> Result<()> {
             Ok(mut child) => {
                 let pid = child.id();
                 info!("Started torc-server with PID {:?}", pid);
+                let mut port_reported = false;
 
                 // Read stdout to find the actual port
                 if let Some(stdout) = child.stdout.take() {
@@ -359,6 +359,7 @@ async fn main() -> Result<()> {
                                     && let Ok(port) = port_str.trim().parse::<u16>()
                                 {
                                     actual_server_port = port;
+                                    port_reported = true;
                                     info!("Server reported actual port: {}", actual_server_port);
                                     break;
                                 }
@@ -374,6 +375,33 @@ async fn main() -> Result<()> {
                             }
                         }
                     }
+                }
+
+                if server_port == 0 && !port_reported {
+                    let mut stderr_output = String::new();
+                    if let Some(mut stderr) = child.stderr.take() {
+                        let _ = stderr.read_to_string(&mut stderr_output).await;
+                    }
+
+                    if let Ok(Some(status)) = child.try_wait() {
+                        let stderr_output = stderr_output.trim();
+                        let details = if stderr_output.is_empty() {
+                            format!("torc-server exited with status {}", status)
+                        } else {
+                            format!(
+                                "torc-server exited with status {}: {}",
+                                status, stderr_output
+                            )
+                        };
+                        return Err(anyhow::anyhow!(
+                            "Managed server failed to start before reporting a port: {}",
+                            details
+                        ));
+                    }
+
+                    return Err(anyhow::anyhow!(
+                        "Managed server did not report an assigned port within 10 seconds"
+                    ));
                 }
 
                 ManagedServer {
@@ -543,12 +571,6 @@ async fn main() -> Result<()> {
                 .put(proxy_handler)
                 .patch(proxy_handler)
                 .delete(proxy_handler),
-        )
-        .layer(
-            CorsLayer::new()
-                .allow_origin(Any)
-                .allow_methods(Any)
-                .allow_headers(Any),
         )
         .with_state(state);
 
@@ -2959,11 +2981,36 @@ fn extract_tool_result_text(result: &rmcp::model::CallToolResult) -> String {
         .join("\n")
 }
 
+fn validate_same_origin(headers: &HeaderMap) -> Result<(), StatusCode> {
+    let origin = match headers.get(header::ORIGIN).and_then(|v| v.to_str().ok()) {
+        Some(origin) => origin,
+        None => return Ok(()),
+    };
+
+    let host = headers
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .ok_or(StatusCode::FORBIDDEN)?;
+
+    let expected_http = format!("http://{}", host);
+    let expected_https = format!("https://{}", host);
+
+    if origin == expected_http || origin == expected_https {
+        Ok(())
+    } else {
+        Err(StatusCode::FORBIDDEN)
+    }
+}
+
 /// Chat endpoint: streams SSE events as the AI processes the conversation.
 async fn chat_handler(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(req): Json<ChatRequest>,
 ) -> impl IntoResponse {
+    validate_same_origin(&headers)
+        .map_err(|status| (status, "Cross-origin requests are not allowed"))?;
+
     let api_key = match &state.anthropic_api_key {
         Some(key) => key.clone(),
         None => {
