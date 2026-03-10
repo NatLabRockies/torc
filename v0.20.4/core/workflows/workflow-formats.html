@@ -1,0 +1,516 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Workflow Specification Formats - Torc Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Distributed workflow orchestration for complex computational pipelines">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+        <link rel="stylesheet" href="../../pagetoc.css">
+        <link rel="stylesheet" href="../../version-selector.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Torc Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc/tree/v0.20.4/docs/src/core/workflows/workflow-formats.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="workflow-specification-formats"><a class="header" href="#workflow-specification-formats">Workflow Specification Formats</a></h1>
+<p>Torc supports three workflow specification formats: YAML, JSON5, and KDL. All formats provide the
+same functionality with different syntaxes to suit different preferences and use cases.</p>
+<h2 id="format-overview"><a class="header" href="#format-overview">Format Overview</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Feature</th><th>YAML</th><th>JSON5</th><th>KDL</th></tr></thead><tbody>
+<tr><td>Parameter Expansion</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td>Comments</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td>Trailing Commas</td><td>✗</td><td>✓</td><td>N/A</td></tr>
+<tr><td>Human-Readable</td><td>✓✓✓</td><td>✓✓</td><td>✓✓✓</td></tr>
+<tr><td>Programmatic Generation</td><td>✓✓</td><td>✓✓✓</td><td>✓</td></tr>
+<tr><td>Industry Standard</td><td>✓✓✓</td><td>✓✓</td><td>✓</td></tr>
+<tr><td>Jobs, Files, Resources</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td>User Data</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td>Workflow Actions</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td>Resource Monitoring</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td>Slurm Schedulers</td><td>✓</td><td>✓</td><td>✓</td></tr>
+</tbody></table>
+</div>
+<h2 id="yaml-format"><a class="header" href="#yaml-format">YAML Format</a></h2>
+<p><strong>Best for:</strong> Most workflows, especially those using multi-line commands.</p>
+<p><strong>File Extension:</strong> <code>.yaml</code> or <code>.yml</code></p>
+<p><strong>Example:</strong></p>
+<pre><code class="language-yaml">name: data_processing_workflow
+user: datauser
+description: Multi-stage data processing pipeline
+
+# File definitions
+files:
+  - name: raw_data
+    path: /data/input/raw_data.csv
+  - name: processed_data
+    path: /data/output/processed_data.csv
+
+# Resource requirements
+resource_requirements:
+  - name: small_job
+    num_cpus: 2
+    num_gpus: 0
+    num_nodes: 1
+    memory: 4g
+    runtime: PT30M
+
+# Jobs
+jobs:
+  - name: download_data
+    command: wget https://example.com/data.csv -O ${files.output.raw_data}
+    resource_requirements: small_job
+
+  - name: process_data
+    command: python process.py ${files.input.raw_data} -o ${files.output.processed_data}
+    resource_requirements: small_job
+    depends_on:
+      - download_data
+
+# Workflow actions
+actions:
+  - trigger_type: on_workflow_start
+    action_type: run_commands
+    commands:
+      - mkdir -p /data/input /data/output
+      - echo "Workflow started"
+</code></pre>
+<p><strong>Advantages:</strong></p>
+<ul>
+<li>Most widely used configuration format</li>
+<li>Excellent for complex workflows with many jobs</li>
+<li>Clean, readable syntax without brackets</li>
+</ul>
+<p><strong>Disadvantages:</strong></p>
+<ul>
+<li>Indentation-sensitive</li>
+<li>Can be verbose for deeply nested structures</li>
+</ul>
+<h2 id="json5-format"><a class="header" href="#json5-format">JSON5 Format</a></h2>
+<p><strong>Best for:</strong> Programmatic workflow generation and JSON compatibility.</p>
+<p><strong>File Extension:</strong> <code>.json5</code></p>
+<p><strong>Example:</strong></p>
+<pre><code class="language-json5">{
+  name: "data_processing_workflow",
+  user: "datauser",
+  description: "Multi-stage data processing pipeline",
+
+  // File definitions
+  files: [
+    {name: "raw_data", path: "/data/input/raw_data.csv"},
+    {name: "processed_data", path: "/data/output/processed_data.csv"},
+  ],
+
+  // Resource requirements
+  resource_requirements: [
+    {
+      name: "small_job",
+      num_cpus: 2,
+      num_gpus: 0,
+      num_nodes: 1,
+      memory: "4g",
+      runtime: "PT30M",
+    },
+  ],
+
+  // Jobs
+  jobs: [
+    {
+      name: "download_data",
+      command: "wget https://example.com/data.csv -O ${files.output.raw_data}",
+      resource_requirements: "small_job",
+    },
+    {
+      name: "process_data",
+      command: "python process.py ${files.input.raw_data} -o ${files.output.processed_data}",
+      resource_requirements: "small_job",
+      depends_on: ["download_data"],
+    },
+  ],
+
+  // Workflow actions
+  actions: [
+    {
+      trigger_type: "on_workflow_start",
+      action_type: "run_commands",
+      commands: [
+        "mkdir -p /data/input /data/output",
+        "echo 'Workflow started'",
+      ],
+    },
+  ],
+}
+</code></pre>
+<p><strong>Advantages:</strong></p>
+<ul>
+<li>JSON-compatible (easy programmatic manipulation)</li>
+<li>Supports comments and trailing commas</li>
+<li>Familiar to JavaScript/JSON users</li>
+</ul>
+<p><strong>Disadvantages:</strong></p>
+<ul>
+<li>More verbose than YAML</li>
+<li>More brackets and commas than YAML</li>
+</ul>
+<h2 id="kdl-format"><a class="header" href="#kdl-format">KDL Format</a></h2>
+<p><strong>Best for:</strong> Simple to moderate workflows with clean syntax.</p>
+<p><strong>File Extension:</strong> <code>.kdl</code></p>
+<p><strong>Example:</strong></p>
+<pre><code class="language-kdl">name "data_processing_workflow"
+user "datauser"
+description "Multi-stage data processing pipeline"
+
+// File definitions
+file "raw_data" path="/data/input/raw_data.csv"
+file "processed_data" path="/data/output/processed_data.csv"
+
+// Resource requirements
+resource_requirements "small_job" {
+    num_cpus 2
+    num_gpus 0
+    num_nodes 1
+    memory "4g"
+    runtime "PT30M"
+}
+
+// Jobs
+job "download_data" {
+    command "wget https://example.com/data.csv -O ${files.output.raw_data}"
+    resource_requirements "small_job"
+}
+
+job "process_data" {
+    command "python process.py ${files.input.raw_data} -o ${files.output.processed_data}"
+    resource_requirements "small_job"
+    depends_on_job "download_data"
+}
+
+// Workflow actions
+action {
+    trigger_type "on_workflow_start"
+    action_type "run_commands"
+    command "mkdir -p /data/input /data/output"
+    command "echo 'Workflow started'"
+}
+</code></pre>
+<p><strong>Advantages:</strong></p>
+<ul>
+<li>Clean, minimal syntax</li>
+<li>No indentation requirements</li>
+<li>Supports all core Torc features</li>
+</ul>
+<p><strong>Disadvantages:</strong></p>
+<ul>
+<li>Less familiar to most users</li>
+<li>Boolean values use special syntax (<code>#true</code>, <code>#false</code>)</li>
+</ul>
+<h3 id="kdl-specific-syntax-notes"><a class="header" href="#kdl-specific-syntax-notes">KDL-Specific Syntax Notes</a></h3>
+<ol>
+<li>
+<p><strong>Boolean values</strong>: Use <code>#true</code> and <code>#false</code> (not <code>true</code> or <code>false</code>)</p>
+<pre><code class="language-kdl">resource_monitor {
+    enabled #true
+    generate_plots #false
+}
+</code></pre>
+</li>
+<li>
+<p><strong>Repeated child nodes</strong>: Use multiple statements</p>
+<pre><code class="language-kdl">action {
+    command "echo 'First command'"
+    command "echo 'Second command'"
+}
+</code></pre>
+</li>
+<li>
+<p><strong>User data</strong>: Requires child nodes for properties</p>
+<pre><code class="language-kdl">user_data "metadata" {
+    is_ephemeral #true
+    data "{\"key\": \"value\"}"
+}
+</code></pre>
+</li>
+</ol>
+<h2 id="common-features-across-all-formats"><a class="header" href="#common-features-across-all-formats">Common Features Across All Formats</a></h2>
+<h3 id="variable-substitution"><a class="header" href="#variable-substitution">Variable Substitution</a></h3>
+<p>All formats support the same variable substitution syntax:</p>
+<ul>
+<li><code>${files.input.NAME}</code> - Input file path</li>
+<li><code>${files.output.NAME}</code> - Output file path</li>
+<li><code>${user_data.input.NAME}</code> - Input user data</li>
+<li><code>${user_data.output.NAME}</code> - Output user data</li>
+</ul>
+<h3 id="supported-fields"><a class="header" href="#supported-fields">Supported Fields</a></h3>
+<p>All formats support:</p>
+<ul>
+<li><strong>Workflow metadata</strong>: name, user, description</li>
+<li><strong>Jobs</strong>: name, command, dependencies, resource requirements</li>
+<li><strong>Files</strong>: name, path, modification time</li>
+<li><strong>User data</strong>: name, data (JSON), ephemeral flag</li>
+<li><strong>Resource requirements</strong>: CPUs, GPUs, memory, runtime</li>
+<li><strong>Slurm schedulers</strong>: account, partition, walltime, etc.</li>
+<li><strong>Workflow actions</strong>: triggers, action types, commands</li>
+<li><strong>Resource monitoring</strong>: enabled, granularity, sampling interval</li>
+</ul>
+<h2 id="examples-directory"><a class="header" href="#examples-directory">Examples Directory</a></h2>
+<p>The Torc repository includes comprehensive examples in all three formats:</p>
+<pre><code>examples/
+├── yaml/     # All workflows (15 examples)
+├── json/     # All workflows (15 examples)
+└── kdl/      # Non-parameterized workflows (9 examples)
+</code></pre>
+<p>Compare the same workflow in different formats to choose your preference:</p>
+<ul>
+<li><a href="https://github.com/NatLabRockies/torc/blob/main/examples/yaml/sample_workflow.yaml">sample_workflow.yaml</a></li>
+<li><a href="https://github.com/NatLabRockies/torc/blob/main/examples/json/sample_workflow.json5">sample_workflow.json5</a></li>
+<li><a href="https://github.com/NatLabRockies/torc/blob/main/examples/kdl/sample_workflow.kdl">sample_workflow.kdl</a></li>
+</ul>
+<p>See the <a href="https://github.com/NatLabRockies/torc/tree/main/examples">examples directory</a> for the
+complete collection.</p>
+<h2 id="creating-workflows"><a class="header" href="#creating-workflows">Creating Workflows</a></h2>
+<p>All formats use the same command:</p>
+<pre><code class="language-bash">torc workflows create examples/yaml/sample_workflow.yaml
+torc workflows create examples/json/sample_workflow.json5
+torc workflows create examples/kdl/sample_workflow.kdl
+</code></pre>
+<p>Or use the quick execution commands:</p>
+<pre><code class="language-bash"># Create and run locally
+torc run examples/yaml/sample_workflow.yaml
+
+# Create and submit to scheduler
+torc submit examples/yaml/workflow_actions_data_pipeline.yaml
+</code></pre>
+<h2 id="recommendations"><a class="header" href="#recommendations">Recommendations</a></h2>
+<p><strong>Start with YAML</strong> if you're unsure.</p>
+<p><strong>Switch to JSON5</strong> if you need to programmatically generate workflows or prefer JSON syntax.</p>
+<p><strong>Try KDL</strong> if you prefer minimal syntax.</p>
+<p>All three formats are fully supported and maintained. Choose based on your workflow complexity and
+personal preference.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../core/workflows/creating-workflows.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../core/workflows/visualizing-workflows.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../core/workflows/creating-workflows.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../core/workflows/visualizing-workflows.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../mermaid.min.js"></script>
+        <script src="../../mermaid-init.js"></script>
+        <script src="../../pagetoc.js"></script>
+        <script src="../../version-selector.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

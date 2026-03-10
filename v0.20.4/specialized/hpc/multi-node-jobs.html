@@ -1,0 +1,495 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Multi-Node Jobs - Torc Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Distributed workflow orchestration for complex computational pipelines">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+        <link rel="stylesheet" href="../../pagetoc.css">
+        <link rel="stylesheet" href="../../version-selector.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Torc Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc/tree/v0.20.4/docs/src/specialized/hpc/multi-node-jobs.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="multi-node-jobs"><a class="header" href="#multi-node-jobs">Multi-Node Jobs</a></h1>
+<p>This guide explains how to run jobs across multiple nodes in a Slurm allocation. There are two
+distinct patterns, and choosing the right one depends on whether your individual jobs need more than
+one node.</p>
+<h2 id="key-concept-per-node-resource-values"><a class="header" href="#key-concept-per-node-resource-values">Key Concept: Per-Node Resource Values</a></h2>
+<p><strong>All resource values in Torc are per-node.</strong> When you write <code>num_cpus: 32</code> and <code>memory: 128g</code>, you
+are describing what each node provides — not the total across all nodes. This keeps the mental model
+simple: resource requirements always describe what a single node looks like, regardless of how many
+nodes are in the allocation.</p>
+<h2 id="two-patterns"><a class="header" href="#two-patterns">Two Patterns</a></h2>
+<h3 id="pattern-1-many-single-node-jobs-in-a-multi-node-allocation"><a class="header" href="#pattern-1-many-single-node-jobs-in-a-multi-node-allocation">Pattern 1: Many Single-Node Jobs in a Multi-Node Allocation</a></h3>
+<p><strong>Use when</strong>: You have many independent jobs that each fit on one node, and you want them to run in
+parallel across multiple nodes for throughput.</p>
+<p><strong>How it works</strong>: Torc requests a multi-node Slurm allocation (e.g., 4 nodes). One worker manages
+the allocation and places each single-node job onto one node via <code>srun --nodes=1</code>. Single-node jobs
+may share a node as long as CPU, memory, and GPU limits allow. With N nodes, Torc can spread work
+across the allocation for throughput.</p>
+<p><strong>Example</strong>: 100 independent analysis jobs, each needing 8 CPUs and 32 GB, across a 4-node
+allocation:</p>
+<pre><code class="language-yaml">name: parallel_analysis
+description: Run 100 analysis tasks across 4 nodes
+
+resource_requirements:
+  - name: analysis
+    num_cpus: 8       # per node
+    memory: 32g       # per node
+    runtime: PT1H
+
+jobs:
+  - name: analyze_{i}
+    command: python analyze.py --chunk {i}
+    resource_requirements: analysis
+    scheduler: multi_node
+    parameters:
+      i: "1:100"
+
+slurm_schedulers:
+  - name: multi_node
+    account: myproject
+    nodes: 4
+    walltime: "08:00:00"
+
+actions:
+  - trigger_type: on_workflow_start
+    action_type: schedule_nodes
+    scheduler: multi_node
+    scheduler_type: slurm
+    num_allocations: 1
+</code></pre>
+<p>Each node has 8 CPUs and 32 GB available per job. If a node has 64 CPUs total, it can run up to 8
+jobs concurrently (64 / 8 = 8). Across 4 nodes, that means up to 32 jobs running at once.</p>
+<h3 id="pattern-2-true-multi-node-jobs-mpi-distributed-training"><a class="header" href="#pattern-2-true-multi-node-jobs-mpi-distributed-training">Pattern 2: True Multi-Node Jobs (MPI, Distributed Training)</a></h3>
+<p><strong>Use when</strong>: A single job needs to span multiple nodes — for example, MPI applications, distributed
+deep learning, or Julia <code>Distributed.jl</code>.</p>
+<p><strong>How it works</strong>: You set <code>num_nodes</code> to the number of nodes the job needs. Torc treats that job as
+an exclusive whole-node reservation: if a job needs 4 nodes, those 4 nodes are reserved for that
+step and are not shared with other jobs until the step completes. Torc passes
+<code>srun --nodes=&lt;num_nodes&gt;</code> when launching the job, so the process spans multiple nodes within the
+allocation. The job receives the standard Slurm step environment (<code>SLURM_JOB_NODELIST</code>,
+<code>SLURM_NTASKS</code>, etc.), so MPI launchers and distributed frameworks work automatically.</p>
+<p><strong>Example</strong>: An MPI training job that spans all 4 nodes in the allocation:</p>
+<pre><code class="language-yaml">name: distributed_training
+description: MPI training across 4 nodes
+
+resource_requirements:
+  - name: mpi_training
+    num_cpus: 32      # per node (128 total across 4 nodes)
+    memory: 128g      # per node (512 GB total across 4 nodes)
+    num_nodes: 4      # allocates and spans 4 nodes
+    runtime: PT8H
+
+jobs:
+  - name: train
+    command: srun --mpi=pmix python -m torch.distributed.run train.py
+    resource_requirements: mpi_training
+    scheduler: training_nodes
+
+slurm_schedulers:
+  - name: training_nodes
+    account: myproject
+    nodes: 4
+    walltime: "12:00:00"
+
+actions:
+  - trigger_type: on_workflow_start
+    action_type: schedule_nodes
+    scheduler: training_nodes
+    scheduler_type: slurm
+    num_allocations: 1
+</code></pre>
+<p>Here <code>num_cpus: 32</code> and <code>memory: 128g</code> describe each of the 4 nodes. The total resources available
+to the job are 128 CPUs and 512 GB.</p>
+<h2 id="choosing-between-the-patterns"><a class="header" href="#choosing-between-the-patterns">Choosing Between the Patterns</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Question</th><th>Pattern 1 (single-node jobs)</th><th>Pattern 2 (multi-node jobs)</th></tr></thead><tbody>
+<tr><td>Does each job fit on one node?</td><td>Yes</td><td>No</td></tr>
+<tr><td>Does the job use MPI or distributed training?</td><td>No</td><td>Yes</td></tr>
+<tr><td>Goal is throughput (many jobs in parallel)?</td><td>Yes</td><td>No</td></tr>
+<tr><td>Goal is scaling one job across nodes?</td><td>No</td><td>Yes</td></tr>
+<tr><td><code>num_nodes</code> setting</td><td><code>1</code> (default)</td><td>Number of nodes needed</td></tr>
+</tbody></table>
+</div>
+<h2 id="whole-node-reservation-rule"><a class="header" href="#whole-node-reservation-rule">Whole-Node Reservation Rule</a></h2>
+<p>Torc uses this scheduling rule inside a multi-node Slurm allocation:</p>
+<ul>
+<li>Single-node jobs (<code>num_nodes=1</code>) may share a node.</li>
+<li>Multi-node jobs (<code>num_nodes&gt;1</code>) reserve whole nodes exclusively.</li>
+</ul>
+<p>This is intentionally conservative. Torc does not try to pack other work onto nodes that are part of
+an active multi-node step.</p>
+<h2 id="allocation-strategy-one-large-vs-many-small"><a class="header" href="#allocation-strategy-one-large-vs-many-small">Allocation Strategy: One Large vs. Many Small</a></h2>
+<p>When running many single-node jobs (Pattern 1), you also need to decide how to request the
+underlying Slurm allocations. There are two approaches, each with trade-offs.</p>
+<h3 id="one-multi-node-allocation"><a class="header" href="#one-multi-node-allocation">One multi-node allocation</a></h3>
+<p>Request all nodes in a single <code>sbatch</code> job (e.g., <code>nodes: 4</code>). Torc runs one worker per node and
+distributes jobs across them.</p>
+<p><strong>Advantages:</strong></p>
+<ul>
+<li>Slurm schedulers typically give <strong>priority to larger allocations</strong>. On busy clusters, a 4-node job
+may start sooner than four separate 1-node jobs.</li>
+<li>Works well when all jobs take roughly the <strong>same amount of time</strong>, because you pay for all nodes
+until the last job finishes.</li>
+</ul>
+<p><strong>Disadvantages:</strong></p>
+<ul>
+<li><strong>Wasted node-hours when runtimes vary.</strong> If one job takes 4 hours and the rest take 30 minutes,
+three nodes sit idle for 3.5 hours waiting for the slow job to finish. You are billed for all four
+nodes for the full 4 hours.</li>
+<li>On heavily loaded clusters, large allocations can take <strong>much longer to schedule</strong> because Slurm
+must find all nodes free at the same time.</li>
+</ul>
+<h3 id="many-single-node-allocations"><a class="header" href="#many-single-node-allocations">Many single-node allocations</a></h3>
+<p>Request separate 1-node allocations (e.g., <code>num_allocations: 4</code> with <code>nodes: 1</code>). Each allocation
+runs its own worker and pulls jobs independently.</p>
+<p><strong>Advantages:</strong></p>
+<ul>
+<li><strong>Tolerant of variable runtimes.</strong> Each allocation finishes as soon as its last job completes.
+Fast jobs release their nodes immediately instead of waiting for the slowest one.</li>
+<li>Single-node jobs are <strong>easier for Slurm to schedule</strong> because they can fill gaps in the queue. You
+may start running sooner and finish sooner overall.</li>
+<li>If one allocation fails or is preempted, the others keep running. The failed allocation's
+incomplete jobs return to the ready queue and are picked up by another worker.</li>
+</ul>
+<p><strong>Disadvantages:</strong></p>
+<ul>
+<li>On clusters that prioritize large jobs, many small allocations may sit in the queue longer.</li>
+<li>More Slurm jobs to manage (though Torc handles this automatically).</li>
+</ul>
+<h3 id="which-to-choose"><a class="header" href="#which-to-choose">Which to choose</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Scenario</th><th>Recommended strategy</th></tr></thead><tbody>
+<tr><td>Jobs have similar runtimes, cluster is busy</td><td>One multi-node allocation</td></tr>
+<tr><td>Jobs have variable runtimes</td><td>Many single-node allocs</td></tr>
+<tr><td>Cluster has long queue wait for large jobs</td><td>Many single-node allocs</td></tr>
+<tr><td>Cluster prioritizes large jobs, queue is short</td><td>One multi-node allocation</td></tr>
+</tbody></table>
+</div>
+<p>You can also mix strategies: use a multi-node allocation for a batch of similar jobs, then switch to
+single-node allocations for a stage with variable runtimes. Torc's scheduler actions make this easy
+to express per workflow stage.</p>
+<h2 id="mixing-both-patterns"><a class="header" href="#mixing-both-patterns">Mixing Both Patterns</a></h2>
+<p>A workflow can combine both patterns, but the cleanest approach is to use separate stages or
+separate allocations. Once a true multi-node step starts, Torc reserves whole nodes for it
+exclusively.</p>
+<p>For example, single-node preprocessing jobs followed by a multi-node MPI training step:</p>
+<pre><code class="language-yaml">name: preprocess_then_train
+
+resource_requirements:
+  - name: preprocess
+    num_cpus: 4
+    memory: 16g
+    runtime: PT30M
+
+  - name: mpi_training
+    num_cpus: 32
+    memory: 128g
+    num_nodes: 4
+    runtime: PT4H
+
+jobs:
+  - name: prep_{i}
+    command: python preprocess.py --shard {i}
+    resource_requirements: preprocess
+    scheduler: prep_nodes
+    parameters:
+      i: "1:8"
+
+  - name: train
+    command: srun --mpi=pmix python train.py
+    resource_requirements: mpi_training
+    scheduler: training_nodes
+    depends_on: [prep_1, prep_2, prep_3, prep_4, prep_5, prep_6, prep_7, prep_8]
+
+slurm_schedulers:
+  - name: prep_nodes
+    account: myproject
+    nodes: 2
+    walltime: "01:00:00"
+
+  - name: training_nodes
+    account: myproject
+    nodes: 4
+    walltime: "06:00:00"
+
+actions:
+  - trigger_type: on_workflow_start
+    action_type: schedule_nodes
+    scheduler: prep_nodes
+    scheduler_type: slurm
+    num_allocations: 1
+
+  - trigger_type: on_jobs_ready
+    action_type: schedule_nodes
+    jobs: [train]
+    scheduler: training_nodes
+    scheduler_type: slurm
+    num_allocations: 1
+</code></pre>
+<p>The preprocessing jobs run across 2 nodes (Pattern 1). When they complete, a 4-node allocation is
+requested for the MPI training job (Pattern 2).</p>
+<h2 id="num_nodes"><a class="header" href="#num_nodes"><code>num_nodes</code></a></h2>
+<p>The <code>num_nodes</code> field controls how many nodes each job step spans (<code>srun --nodes</code>). It defaults to
+<code>1</code>. The Slurm allocation size (<code>sbatch --nodes</code>) is set separately via the Slurm scheduler
+configuration.</p>
+<ul>
+<li><strong>Pattern 1</strong>: <code>num_nodes=1</code> (default) -- each job runs on a single node; allocation size is set
+on the scheduler</li>
+<li><strong>Pattern 2</strong>: <code>num_nodes=N</code> -- each job spans N nodes (MPI, distributed training)</li>
+</ul>
+<h2 id="common-mistakes"><a class="header" href="#common-mistakes">Common Mistakes</a></h2>
+<h3 id="specifying-total-resources-instead-of-per-node"><a class="header" href="#specifying-total-resources-instead-of-per-node">Specifying total resources instead of per-node</a></h3>
+<pre><code class="language-yaml"># WRONG: 512g is the total across 4 nodes
+resource_requirements:
+  - name: mpi_job
+    num_cpus: 128     # total across nodes
+    memory: 512g      # total across nodes
+    num_nodes: 4
+
+# CORRECT: 128g is what each of the 4 nodes provides
+resource_requirements:
+  - name: mpi_job
+    num_cpus: 32      # per node (128 total)
+    memory: 128g      # per node (512g total)
+    num_nodes: 4
+</code></pre>
+<h3 id="using-num_nodes--1-for-independent-jobs"><a class="header" href="#using-num_nodes--1-for-independent-jobs">Using <code>num_nodes &gt; 1</code> for independent jobs</a></h3>
+<p>If your jobs don't need inter-node communication, keep <code>num_nodes=1</code> (the default) and let Torc
+schedule them independently across nodes for maximum throughput.</p>
+<h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>
+<ul>
+<li><a href="./slurm-workflows.html">Slurm Overview</a> — Auto-generated Slurm configuration with <code>submit-slurm</code></li>
+<li><a href="./slurm.html">Advanced Slurm Configuration</a> — Manual scheduler and srun wrapping details</li>
+<li><a href="../../core/reference/resources.html">Resource Requirements Reference</a> — Complete field reference</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../specialized/hpc/submit-slurm-workflow.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../specialized/hpc/slurm.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../specialized/hpc/submit-slurm-workflow.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../specialized/hpc/slurm.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../mermaid.min.js"></script>
+        <script src="../../mermaid-init.js"></script>
+        <script src="../../pagetoc.js"></script>
+        <script src="../../version-selector.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
