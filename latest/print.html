@@ -6501,7 +6501,7 @@ requirement mismatches.</p>
 resource_monitor:
   enabled: true
   granularity: "summary"       # or "time_series"
-  sample_interval_seconds: 5
+  sample_interval_seconds: 10
 
 jobs:
   # ... your jobs
@@ -9323,7 +9323,7 @@ managed by torc: <code>partition</code>, <code>nodes</code>, <code>walltime</cod
 <div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>enabled</code></td><td>boolean</td><td><code>false</code></td><td>Enable resource monitoring</td></tr>
 <tr><td><code>granularity</code></td><td><a href="core/reference/workflow-spec.html#monitorgranularity">MonitorGranularity</a></td><td><code>"Summary"</code></td><td>Level of detail for metrics collection</td></tr>
-<tr><td><code>sample_interval_seconds</code></td><td>integer</td><td><code>5</code></td><td>Sampling interval in seconds</td></tr>
+<tr><td><code>sample_interval_seconds</code></td><td>integer</td><td><code>10</code></td><td>Sampling interval in seconds</td></tr>
 <tr><td><code>generate_plots</code></td><td>boolean</td><td><code>false</code></td><td>Generate resource usage plots</td></tr>
 </tbody></table>
 </div>
@@ -9975,7 +9975,7 @@ jobs:
 <div class="table-wrapper"><table><thead><tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>enabled</code></td><td>boolean</td><td><code>true</code></td><td>Enable or disable monitoring</td></tr>
 <tr><td><code>granularity</code></td><td>string</td><td><code>"summary"</code></td><td><code>"summary"</code> or <code>"time_series"</code></td></tr>
-<tr><td><code>sample_interval_seconds</code></td><td>integer</td><td><code>5</code></td><td>Seconds between resource samples</td></tr>
+<tr><td><code>sample_interval_seconds</code></td><td>integer</td><td><code>10</code></td><td>Seconds between resource samples</td></tr>
 <tr><td><code>generate_plots</code></td><td>boolean</td><td><code>false</code></td><td>Reserved for future use</td></tr>
 </tbody></table>
 </div>
@@ -13456,7 +13456,7 @@ worker3
 resource_monitor_config:
   enabled: true
   granularity: time_series
-  sample_interval_seconds: 5
+  sample_interval_seconds: 10
 </code></pre>
 <p>The <code>collect-logs</code> command retrieves these databases along with job logs.</p>
 <h2 id="troubleshooting-8"><a class="header" href="#troubleshooting-8">Troubleshooting</a></h2>
