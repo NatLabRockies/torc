@@ -1,0 +1,626 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Debugging Slurm Workflows - Torc Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Distributed workflow orchestration for complex computational pipelines">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+        <link rel="stylesheet" href="../../pagetoc.css">
+        <link rel="stylesheet" href="../../version-selector.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Torc Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc/tree/v0.20.6/docs/src/specialized/hpc/debugging-slurm.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="debugging-slurm-workflows"><a class="header" href="#debugging-slurm-workflows">Debugging Slurm Workflows</a></h1>
+<p>When running workflows on Slurm clusters, Torc provides additional debugging tools specifically
+designed for Slurm environments. This guide covers Slurm-specific debugging techniques and tools.</p>
+<p>For general debugging concepts and tools that apply to all workflows, see
+<a href="debugging.html">Debugging Workflows</a>.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>Slurm workflows generate additional log files beyond the standard job logs:</p>
+<ul>
+<li><strong>Slurm stdout/stderr</strong>: Output from Slurm's perspective (job allocation, environment setup)</li>
+<li><strong>Slurm environment logs</strong>: All SLURM environment variables captured at job runner startup</li>
+<li><strong>dmesg logs</strong>: Kernel message buffer captured when the Slurm job runner exits</li>
+</ul>
+<p>These logs help diagnose issues specific to the cluster environment, such as resource allocation
+failures, node problems, and system-level errors.</p>
+<h2 id="slurm-log-file-structure"><a class="header" href="#slurm-log-file-structure">Slurm Log File Structure</a></h2>
+<p>For jobs executed via Slurm scheduler (<code>compute_node_type: "slurm"</code>), the debug report includes
+these additional log paths:</p>
+<pre><code class="language-json">{
+  "job_stdout": "torc_output/job_stdio/job_wf1_j456_r1_a1.o",
+  "job_stderr": "torc_output/job_stdio/job_wf1_j456_r1_a1.e",
+  "job_runner_log": "torc_output/job_runner_slurm_wf1_sl12345_n0_pid67890.log",
+  "slurm_stdout": "torc_output/slurm_output_wf1_sl12345.o",
+  "slurm_stderr": "torc_output/slurm_output_wf1_sl12345.e",
+  "slurm_env_log": "torc_output/slurm_env_wf1_sl12345_n0_pid67890.log",
+  "dmesg_log": "torc_output/dmesg_slurm_wf1_sl12345_n0_pid67890.log"
+}
+</code></pre>
+<p>All Slurm log files include the workflow ID (<code>wf&lt;id&gt;</code>) prefix, making it easy to identify and
+collect logs for a specific workflow.</p>
+<h3 id="log-file-descriptions"><a class="header" href="#log-file-descriptions">Log File Descriptions</a></h3>
+<ol>
+<li>
+<p><strong>slurm_stdout</strong> (<code>torc_output/slurm_output_wf&lt;workflow_id&gt;_sl&lt;slurm_job_id&gt;.o</code>):</p>
+<ul>
+<li>Standard output from Slurm's perspective</li>
+<li>Includes Slurm environment setup, job allocation info</li>
+<li><strong>Use for</strong>: Debugging Slurm job submission issues</li>
+</ul>
+</li>
+<li>
+<p><strong>slurm_stderr</strong> (<code>torc_output/slurm_output_wf&lt;workflow_id&gt;_sl&lt;slurm_job_id&gt;.e</code>):</p>
+<ul>
+<li>Standard error from Slurm's perspective</li>
+<li>Contains Slurm-specific errors (allocation failures, node issues)</li>
+<li><strong>Use for</strong>: Investigating Slurm scheduler problems</li>
+</ul>
+</li>
+<li>
+<p><strong>job_runner_log</strong> (<code>torc_output/job_runner_slurm_wf&lt;id&gt;_sl&lt;slurm_job_id&gt;_n&lt;node&gt;_pid&lt;pid&gt;.log</code>):</p>
+<ul>
+<li>Log output from the Torc Slurm job runner process</li>
+<li>Contains job execution details, status updates, and runner-level errors</li>
+<li><strong>Use for</strong>: Debugging job runner issues, understanding job execution flow</li>
+</ul>
+</li>
+<li>
+<p><strong>slurm_env_log</strong> (<code>torc_output/slurm_env_wf&lt;id&gt;_sl&lt;slurm_job_id&gt;_n&lt;node_id&gt;_pid&lt;task_pid&gt;.log</code>):</p>
+<ul>
+<li>All SLURM environment variables captured at job runner startup</li>
+<li>Contains job allocation details, resource limits, node assignments</li>
+<li><strong>Use for</strong>: Verifying Slurm job configuration, debugging resource allocation issues</li>
+</ul>
+</li>
+<li>
+<p><strong>dmesg_log</strong> (<code>torc_output/dmesg_slurm_wf&lt;id&gt;_sl&lt;slurm_job_id&gt;_n&lt;node_id&gt;_pid&lt;task_pid&gt;.log</code>):</p>
+<ul>
+<li>Kernel message buffer captured when the Slurm job runner exits (only on failure)</li>
+<li>Contains system-level events: OOM killer activity, hardware errors, kernel panics</li>
+<li><strong>Use for</strong>: Investigating job failures caused by system-level issues (e.g., out-of-memory
+kills, hardware failures)</li>
+</ul>
+</li>
+</ol>
+<p><strong>Note</strong>: All Slurm log files include the workflow ID, Slurm job ID, node ID, and task PID in the
+filename for easy filtering and correlation with Slurm's own logs.</p>
+<h2 id="parsing-slurm-log-files-for-errors"><a class="header" href="#parsing-slurm-log-files-for-errors">Parsing Slurm Log Files for Errors</a></h2>
+<p>The <code>torc slurm parse-logs</code> command scans Slurm stdout/stderr log files for known error patterns and
+correlates them with affected Torc jobs:</p>
+<pre><code class="language-bash"># Parse logs for a specific workflow
+torc slurm parse-logs &lt;workflow_id&gt;
+
+# Specify custom output directory
+torc slurm parse-logs &lt;workflow_id&gt; --output-dir /path/to/torc_output
+
+# Output as JSON for programmatic processing
+torc slurm parse-logs &lt;workflow_id&gt; --format json
+</code></pre>
+<h3 id="detected-error-patterns"><a class="header" href="#detected-error-patterns">Detected Error Patterns</a></h3>
+<p>The command detects common Slurm failure patterns including:</p>
+<p><strong>Memory Errors:</strong></p>
+<ul>
+<li><code>out of memory</code>, <code>oom-kill</code>, <code>cannot allocate memory</code></li>
+<li><code>memory cgroup out of memory</code>, <code>Exceeded job memory limit</code></li>
+<li><code>task/cgroup: .*: Killed</code></li>
+<li><code>std::bad_alloc</code> (C++), <code>MemoryError</code> (Python)</li>
+</ul>
+<p><strong>Slurm-Specific Errors:</strong></p>
+<ul>
+<li><code>slurmstepd: error:</code>, <code>srun: error:</code></li>
+<li><code>DUE TO TIME LIMIT</code>, <code>DUE TO PREEMPTION</code></li>
+<li><code>NODE_FAIL</code>, <code>FAILED</code>, <code>CANCELLED</code></li>
+<li><code>Exceeded.*step.*limit</code></li>
+</ul>
+<p><strong>GPU/CUDA Errors:</strong></p>
+<ul>
+<li><code>CUDA out of memory</code>, <code>CUDA error</code>, <code>GPU memory.*exceeded</code></li>
+</ul>
+<p><strong>Signal/Crash Errors:</strong></p>
+<ul>
+<li><code>Segmentation fault</code>, <code>SIGSEGV</code></li>
+<li><code>Bus error</code>, <code>SIGBUS</code></li>
+<li><code>killed by signal</code>, <code>core dumped</code></li>
+</ul>
+<p><strong>Python Errors:</strong></p>
+<ul>
+<li><code>Traceback (most recent call last)</code></li>
+<li><code>ModuleNotFoundError</code>, <code>ImportError</code></li>
+</ul>
+<p><strong>File System Errors:</strong></p>
+<ul>
+<li><code>No space left on device</code>, <code>Disk quota exceeded</code></li>
+<li><code>Read-only file system</code>, <code>Permission denied</code></li>
+</ul>
+<p><strong>Network Errors:</strong></p>
+<ul>
+<li><code>Connection refused</code>, <code>Connection timed out</code>, <code>Network is unreachable</code></li>
+</ul>
+<h3 id="example-output"><a class="header" href="#example-output">Example Output</a></h3>
+<p><strong>Table format:</strong></p>
+<pre><code>Slurm Log Analysis Results
+==========================
+
+Found 2 error(s) in log files:
+
+╭─────────────────────────────┬──────────────┬──────┬─────────────────────────────┬──────────┬──────────────────────────────╮
+│ File                        │ Slurm Job ID │ Line │ Pattern                     │ Severity │ Affected Torc Jobs           │
+├─────────────────────────────┼──────────────┼──────┼─────────────────────────────┼──────────┼──────────────────────────────┤
+│ slurm_output_sl12345.e      │ 12345        │ 42   │ Out of Memory (OOM) Kill    │ critical │ process_data (ID: 456)       │
+│ slurm_output_sl12346.e      │ 12346        │ 15   │ CUDA out of memory          │ error    │ train_model (ID: 789)        │
+╰─────────────────────────────┴──────────────┴──────┴─────────────────────────────┴──────────┴──────────────────────────────╯
+</code></pre>
+<h2 id="viewing-slurm-accounting-data"><a class="header" href="#viewing-slurm-accounting-data">Viewing Slurm Accounting Data</a></h2>
+<p>The <code>torc slurm sacct</code> command displays a summary of Slurm job accounting data for all scheduled
+compute nodes in a workflow:</p>
+<pre><code class="language-bash"># Display sacct summary table for a workflow
+torc slurm sacct &lt;workflow_id&gt;
+
+# Also save full JSON files for detailed analysis
+torc slurm sacct &lt;workflow_id&gt; --save-json --output-dir /path/to/torc_output
+
+# Output as JSON for programmatic processing
+torc slurm sacct &lt;workflow_id&gt; --format json
+</code></pre>
+<h3 id="summary-table-fields"><a class="header" href="#summary-table-fields">Summary Table Fields</a></h3>
+<p>The command displays a summary table with key metrics:</p>
+<ul>
+<li><strong>Slurm Job</strong>: The Slurm job ID</li>
+<li><strong>Job Step</strong>: Name of the job step (e.g., "worker_1", "batch")</li>
+<li><strong>State</strong>: Job state (COMPLETED, FAILED, TIMEOUT, OUT_OF_MEMORY, etc.)</li>
+<li><strong>Exit Code</strong>: Exit code of the job step</li>
+<li><strong>Elapsed</strong>: Wall clock time for the job step</li>
+<li><strong>Max RSS</strong>: Maximum resident set size (memory usage)</li>
+<li><strong>CPU Time</strong>: Total CPU time consumed</li>
+<li><strong>Nodes</strong>: Compute nodes used</li>
+</ul>
+<h3 id="example-output-1"><a class="header" href="#example-output-1">Example Output</a></h3>
+<pre><code>Slurm Accounting Summary for Workflow 123
+
+╭────────────┬───────────┬───────────┬───────────┬─────────┬─────────┬──────────┬─────────╮
+│ Slurm Job  │ Job Step  │ State     │ Exit Code │ Elapsed │ Max RSS │ CPU Time │ Nodes   │
+├────────────┼───────────┼───────────┼───────────┼─────────┼─────────┼──────────┼─────────┤
+│ 12345      │ worker_1  │ COMPLETED │ 0         │ 2h 15m  │ 4.5GB   │ 4h 30m   │ node01  │
+│ 12345      │ batch     │ COMPLETED │ 0         │ 2h 16m  │ 128.0MB │ 1m 30s   │ node01  │
+│ 12346      │ worker_1  │ FAILED    │ 1         │ 45m 30s │ 8.2GB   │ 1h 30m   │ node02  │
+╰────────────┴───────────┴───────────┴───────────┴─────────┴─────────┴──────────┴─────────╯
+
+Total: 3 job steps
+</code></pre>
+<h3 id="saving-full-json-output"><a class="header" href="#saving-full-json-output">Saving Full JSON Output</a></h3>
+<p>Use <code>--save-json</code> to save full sacct JSON output to files for detailed analysis:</p>
+<pre><code class="language-bash">torc slurm sacct 123 --save-json --output-dir torc_output
+# Creates: torc_output/sacct_12345.json, torc_output/sacct_12346.json, etc.
+</code></pre>
+<h2 id="viewing-slurm-logs-in-torc-dash"><a class="header" href="#viewing-slurm-logs-in-torc-dash">Viewing Slurm Logs in torc-dash</a></h2>
+<p>The torc-dash web interface provides two ways to view Slurm logs:</p>
+<h3 id="debugging-tab---slurm-log-analysis"><a class="header" href="#debugging-tab---slurm-log-analysis">Debugging Tab - Slurm Log Analysis</a></h3>
+<p>The Debugging tab includes a "Slurm Log Analysis" section:</p>
+<ol>
+<li>Navigate to the <strong>Debugging</strong> tab</li>
+<li>Find the <strong>Slurm Log Analysis</strong> section</li>
+<li>Enter the output directory path (default: <code>torc_output</code>)</li>
+<li>Click <strong>Analyze Slurm Logs</strong></li>
+</ol>
+<p>The results show all detected errors with their Slurm job IDs, line numbers, error patterns,
+severity levels, and affected Torc jobs.</p>
+<h3 id="debugging-tab---slurm-accounting-data"><a class="header" href="#debugging-tab---slurm-accounting-data">Debugging Tab - Slurm Accounting Data</a></h3>
+<p>The Debugging tab also includes a "Slurm Accounting Data" section:</p>
+<ol>
+<li>Navigate to the <strong>Debugging</strong> tab</li>
+<li>Find the <strong>Slurm Accounting Data</strong> section</li>
+<li>Click <strong>Collect sacct Data</strong></li>
+</ol>
+<p>This displays a summary table showing job state, exit codes, elapsed time, memory usage (Max RSS),
+CPU time, and nodes for all Slurm job steps. The table helps quickly identify failed jobs and
+resource usage patterns.</p>
+<h3 id="scheduled-nodes-tab---view-slurm-logs"><a class="header" href="#scheduled-nodes-tab---view-slurm-logs">Scheduled Nodes Tab - View Slurm Logs</a></h3>
+<p>You can view individual Slurm job logs directly from the Details view:</p>
+<ol>
+<li>Select a workflow</li>
+<li>Go to the <strong>Details</strong> tab</li>
+<li>Switch to the <strong>Scheduled Nodes</strong> sub-tab</li>
+<li>Find a Slurm scheduled node in the table</li>
+<li>Click the <strong>View Logs</strong> button in the Logs column</li>
+</ol>
+<p>This opens a modal with tabs for viewing the Slurm job's stdout and stderr files.</p>
+<h2 id="viewing-slurm-logs-in-the-tui"><a class="header" href="#viewing-slurm-logs-in-the-tui">Viewing Slurm Logs in the TUI</a></h2>
+<p>The <code>torc tui</code> terminal interface also supports Slurm log viewing:</p>
+<ol>
+<li>Launch the TUI: <code>torc tui</code></li>
+<li>Select a workflow and press Enter to load details</li>
+<li>Press Tab to switch to the <strong>Scheduled Nodes</strong> tab</li>
+<li>Navigate to a Slurm scheduled node using arrow keys</li>
+<li>Press <code>l</code> to view the Slurm job's logs</li>
+</ol>
+<p>The log viewer shows:</p>
+<ul>
+<li><strong>stdout tab</strong>: Slurm job standard output (<code>slurm_output_wf&lt;id&gt;_sl&lt;slurm_job_id&gt;.o</code>)</li>
+<li><strong>stderr tab</strong>: Slurm job standard error (<code>slurm_output_wf&lt;id&gt;_sl&lt;slurm_job_id&gt;.e</code>)</li>
+</ul>
+<p>Use Tab to switch between stdout/stderr, arrow keys to scroll, <code>/</code> to search, and <code>q</code> to close.</p>
+<h2 id="debugging-slurm-job-failures"><a class="header" href="#debugging-slurm-job-failures">Debugging Slurm Job Failures</a></h2>
+<p>When a Slurm job fails, follow this debugging workflow:</p>
+<ol>
+<li>
+<p><strong>Parse logs for known errors:</strong></p>
+<pre><code class="language-bash">torc slurm parse-logs &lt;workflow_id&gt;
+</code></pre>
+</li>
+<li>
+<p><strong>If OOM or resource issues are detected, collect sacct data:</strong></p>
+<pre><code class="language-bash">torc slurm sacct &lt;workflow_id&gt;
+cat torc_output/sacct_&lt;slurm_job_id&gt;.json | jq '.jobs[].steps[].tres.requested'
+</code></pre>
+</li>
+<li>
+<p><strong>View the specific Slurm log files:</strong></p>
+<ul>
+<li>Use torc-dash: Details → Scheduled Nodes → View Logs</li>
+<li>Or use TUI: Scheduled Nodes tab → press <code>l</code></li>
+<li>Or directly: <code>cat torc_output/slurm_output_wf&lt;workflow_id&gt;_sl&lt;slurm_job_id&gt;.e</code></li>
+</ul>
+</li>
+<li>
+<p><strong>Check the job's own stderr for application errors:</strong></p>
+<pre><code class="language-bash">torc reports results &lt;workflow_id&gt; &gt; report.json
+jq -r '.results[] | select(.return_code != 0) | .job_stderr' report.json | xargs cat
+</code></pre>
+</li>
+<li>
+<p><strong>Review dmesg logs for system-level issues:</strong></p>
+<pre><code class="language-bash">cat torc_output/dmesg_slurm_wf&lt;workflow_id&gt;_sl&lt;slurm_job_id&gt;_*.log
+</code></pre>
+</li>
+</ol>
+<h2 id="orphaned-jobs-and-status-synchronization"><a class="header" href="#orphaned-jobs-and-status-synchronization">Orphaned Jobs and Status Synchronization</a></h2>
+<p>When a Slurm allocation terminates unexpectedly (e.g., due to timeout, node failure, or admin
+intervention), jobs may become "orphaned" - stuck in "running" status in Torc's database even though
+no process is actually executing them.</p>
+<h3 id="detecting-orphaned-jobs"><a class="header" href="#detecting-orphaned-jobs">Detecting Orphaned Jobs</a></h3>
+<p>Common signs of orphaned jobs:</p>
+<ul>
+<li>Jobs remain in "running" status long after the Slurm allocation ended</li>
+<li><code>torc recover</code> reports "there are active Slurm allocations" but <code>squeue</code> shows none</li>
+<li>Workflow appears stuck but no Slurm jobs are actually running</li>
+</ul>
+<h3 id="synchronizing-status-with-slurm"><a class="header" href="#synchronizing-status-with-slurm">Synchronizing Status with Slurm</a></h3>
+<p>The <code>torc workflows sync-status</code> command detects and fixes orphaned jobs by checking the actual
+Slurm state:</p>
+<pre><code class="language-bash"># Preview what would be cleaned up (recommended first)
+torc workflows sync-status &lt;workflow_id&gt; --dry-run
+
+# Clean up orphaned jobs
+torc workflows sync-status &lt;workflow_id&gt;
+
+# Get JSON output for scripting
+torc -f json workflows sync-status &lt;workflow_id&gt;
+</code></pre>
+<p>This command:</p>
+<ol>
+<li>Checks each "active" scheduled compute node against <code>squeue</code></li>
+<li>If Slurm reports the job is no longer running, marks associated Torc jobs as failed</li>
+<li>Updates scheduled compute node status to "complete"</li>
+<li>Also handles "pending" allocations that were cancelled before starting</li>
+</ol>
+<h3 id="example-output-2"><a class="header" href="#example-output-2">Example Output</a></h3>
+<pre><code>Synchronizing job statuses for workflow 42...
+
+Cleaned up orphaned jobs:
+  - 3 job(s) from terminated Slurm allocations
+  - 1 pending allocation(s) that no longer exist in Slurm
+
+Affected jobs:
+  - Job 107 (train_model_7): Allocation terminated (Slurm job 12345)
+  - Job 112 (train_model_12): Allocation terminated (Slurm job 12345)
+  - Job 123 (train_model_23): Allocation terminated (Slurm job 12345)
+
+Total: 3 job(s) marked as failed
+
+You can now run `torc recover 42` to retry failed jobs.
+</code></pre>
+<h3 id="automatic-cleanup-in-recovery"><a class="header" href="#automatic-cleanup-in-recovery">Automatic Cleanup in Recovery</a></h3>
+<p>The <code>torc recover</code> command automatically performs orphan detection as its first step, so you
+typically don't need to run <code>sync-status</code> manually before recovery. However, <code>sync-status</code> is useful
+when:</p>
+<ul>
+<li>You want to clean up orphaned jobs without triggering a full recovery</li>
+<li>You want to preview what <code>recover</code> would clean up (using <code>--dry-run</code>)</li>
+<li>You're debugging why <code>recover</code> reports active allocations</li>
+</ul>
+<h2 id="common-slurm-issues-and-solutions"><a class="header" href="#common-slurm-issues-and-solutions">Common Slurm Issues and Solutions</a></h2>
+<h3 id="out-of-memory-oom-kills"><a class="header" href="#out-of-memory-oom-kills">Out of Memory (OOM) Kills</a></h3>
+<p><strong>Symptoms:</strong></p>
+<ul>
+<li><code>torc slurm parse-logs</code> shows "Out of Memory (OOM) Kill"</li>
+<li>Job exits with signal 9 (SIGKILL)</li>
+<li>dmesg log shows "oom-kill" entries</li>
+</ul>
+<p><strong>Solutions:</strong></p>
+<ul>
+<li>Increase memory request in job specification</li>
+<li>Check <code>torc slurm sacct</code> output for actual memory usage (Max RSS)</li>
+<li>Consider splitting job into smaller chunks</li>
+</ul>
+<h3 id="time-limit-exceeded"><a class="header" href="#time-limit-exceeded">Time Limit Exceeded</a></h3>
+<p><strong>Symptoms:</strong></p>
+<ul>
+<li><code>torc slurm parse-logs</code> shows "DUE TO TIME LIMIT"</li>
+<li>Job state in sacct shows "TIMEOUT"</li>
+</ul>
+<p><strong>Solutions:</strong></p>
+<ul>
+<li>Increase runtime in job specification</li>
+<li>Check if job is stuck (review stdout for progress)</li>
+<li>Consider optimizing the job or splitting into phases</li>
+</ul>
+<h3 id="node-failures"><a class="header" href="#node-failures">Node Failures</a></h3>
+<p><strong>Symptoms:</strong></p>
+<ul>
+<li><code>torc slurm parse-logs</code> shows "NODE_FAIL"</li>
+<li>Job may have completed partially</li>
+</ul>
+<p><strong>Solutions:</strong></p>
+<ul>
+<li>Reinitialize workflow to retry failed jobs</li>
+<li>Check cluster status with <code>sinfo</code></li>
+<li>Review dmesg logs for hardware issues</li>
+</ul>
+<h3 id="gpucuda-errors"><a class="header" href="#gpucuda-errors">GPU/CUDA Errors</a></h3>
+<p><strong>Symptoms:</strong></p>
+<ul>
+<li><code>torc slurm parse-logs</code> shows "CUDA out of memory" or "CUDA error"</li>
+</ul>
+<p><strong>Solutions:</strong></p>
+<ul>
+<li>Reduce batch size or model size</li>
+<li>Check GPU memory with <code>nvidia-smi</code> in job script</li>
+<li>Ensure correct CUDA version is loaded</li>
+</ul>
+<h2 id="related-commands"><a class="header" href="#related-commands">Related Commands</a></h2>
+<ul>
+<li><strong><code>torc slurm parse-logs</code></strong>: Parse Slurm logs for known error patterns</li>
+<li><strong><code>torc slurm sacct</code></strong>: Collect Slurm accounting data for workflow jobs</li>
+<li><strong><code>torc workflows sync-status</code></strong>: Detect and fix orphaned jobs from terminated Slurm allocations</li>
+<li><strong><code>torc reports results</code></strong>: Generate debug report with all log file paths</li>
+<li><strong><code>torc results list</code></strong>: View summary of job results in table format</li>
+<li><strong><code>torc-dash</code></strong>: Launch web interface with Slurm log viewing</li>
+<li><strong><code>torc tui</code></strong>: Launch terminal UI with Slurm log viewing</li>
+</ul>
+<h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>
+<ul>
+<li><a href="debugging.html">Debugging Workflows</a> — General debugging tools and workflows</li>
+<li><a href="working-with-logs.html">Working with Logs</a> — Bundling and analyzing logs</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../specialized/hpc/slurm-exit-codes.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../specialized/hpc/hpc-profiles.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../specialized/hpc/slurm-exit-codes.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../specialized/hpc/hpc-profiles.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../mermaid.min.js"></script>
+        <script src="../../mermaid-init.js"></script>
+        <script src="../../pagetoc.js"></script>
+        <script src="../../version-selector.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

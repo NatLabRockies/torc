@@ -1,0 +1,510 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Setting Up Remote Workers - Torc Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Distributed workflow orchestration for complex computational pipelines">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+        <link rel="stylesheet" href="../../pagetoc.css">
+        <link rel="stylesheet" href="../../version-selector.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Torc Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc/tree/v0.20.6/docs/src/specialized/remote/remote-workers.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="remote-workers"><a class="header" href="#remote-workers">Remote Workers</a></h1>
+<p>Run workflows across multiple machines via SSH without requiring an HPC scheduler.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>Torc supports three execution modes:</p>
+<ol>
+<li><strong>Local</strong> (<code>torc run</code>) - Jobs run on the current machine</li>
+<li><strong>HPC</strong> (<code>torc submit-slurm</code>) - Jobs run on Slurm-allocated nodes</li>
+<li><strong>Remote Workers</strong> (<code>torc remote run</code>) - Jobs run on SSH-accessible machines</li>
+</ol>
+<p>Remote workers are ideal for:</p>
+<ul>
+<li>Ad-hoc clusters of workstations or cloud VMs</li>
+<li>Environments without a scheduler</li>
+<li>Testing distributed workflows before HPC deployment</li>
+</ul>
+<h2 id="worker-file-format"><a class="header" href="#worker-file-format">Worker File Format</a></h2>
+<p>Create a text file listing remote machines:</p>
+<pre><code class="language-text"># Lines starting with # are comments
+# Format: [user@]hostname[:port]
+
+# Simple hostname
+worker1.example.com
+
+# With username
+alice@worker2.example.com
+
+# With custom SSH port
+admin@192.168.1.10:2222
+
+# IPv4 address
+10.0.0.5
+
+# IPv6 address (must be in brackets for port specification)
+[2001:db8::1]
+[::1]:2222
+</code></pre>
+<p>Each host can only appear once. Duplicate hosts will cause an error.</p>
+<h2 id="worker-management"><a class="header" href="#worker-management">Worker Management</a></h2>
+<p>Workers are stored in the database and persist across command invocations. This means you only need
+to specify workers once, and subsequent commands can reference them by workflow ID.</p>
+<h3 id="add-workers"><a class="header" href="#add-workers">Add Workers</a></h3>
+<pre><code class="language-console">torc remote add-workers &lt;workflow-id&gt; &lt;worker&gt;...
+</code></pre>
+<p>Add one or more workers directly on the command line:</p>
+<pre><code class="language-console">torc remote add-workers 42 worker1.example.com alice@worker2.example.com admin@192.168.1.10:2222
+</code></pre>
+<h3 id="add-workers-from-file"><a class="header" href="#add-workers-from-file">Add Workers from File</a></h3>
+<pre><code class="language-console">torc remote add-workers-from-file &lt;worker-file&gt; [workflow-id]
+</code></pre>
+<p>Example:</p>
+<pre><code class="language-console">torc remote add-workers-from-file workers.txt 42
+</code></pre>
+<p>If <code>workflow-id</code> is omitted, you'll be prompted to select a workflow interactively.</p>
+<h3 id="list-workers"><a class="header" href="#list-workers">List Workers</a></h3>
+<pre><code class="language-console">torc remote list-workers [workflow-id]
+</code></pre>
+<p>If <code>workflow-id</code> is omitted, you'll be prompted to select a workflow interactively.</p>
+<h3 id="remove-a-worker"><a class="header" href="#remove-a-worker">Remove a Worker</a></h3>
+<pre><code class="language-console">torc remote remove-worker &lt;worker&gt; [workflow-id]
+</code></pre>
+<p>Example:</p>
+<pre><code class="language-console">torc remote remove-worker worker1.example.com 42
+</code></pre>
+<p>If <code>workflow-id</code> is omitted, you'll be prompted to select a workflow interactively.</p>
+<h2 id="commands"><a class="header" href="#commands">Commands</a></h2>
+<h3 id="start-workers"><a class="header" href="#start-workers">Start Workers</a></h3>
+<pre><code class="language-console">torc remote run [workflow-id] [options]
+</code></pre>
+<p>If <code>workflow-id</code> is omitted, you'll be prompted to select a workflow interactively.</p>
+<p>Workers are fetched from the database. If you want to add workers from a file at the same time:</p>
+<pre><code class="language-console">torc remote run &lt;workflow-id&gt; --workers &lt;worker-file&gt; [options]
+</code></pre>
+<p><strong>Options:</strong></p>
+<div class="table-wrapper"><table><thead><tr><th>Option</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>--workers</code></td><td>none</td><td>Worker file to add before starting</td></tr>
+<tr><td><code>-o, --output-dir</code></td><td><code>torc_output</code></td><td>Output directory on remote machines</td></tr>
+<tr><td><code>--max-parallel-ssh</code></td><td><code>10</code></td><td>Maximum parallel SSH connections</td></tr>
+<tr><td><code>-p, --poll-interval</code></td><td><code>5.0</code></td><td>How often workers poll for jobs (seconds)</td></tr>
+<tr><td><code>--max-parallel-jobs</code></td><td>auto</td><td>Maximum parallel jobs per worker</td></tr>
+<tr><td><code>--num-cpus</code></td><td>auto</td><td>CPUs per worker (auto-detected if not specified)</td></tr>
+<tr><td><code>--memory-gb</code></td><td>auto</td><td>Memory per worker (auto-detected if not specified)</td></tr>
+<tr><td><code>--num-gpus</code></td><td>auto</td><td>GPUs per worker (auto-detected if not specified)</td></tr>
+<tr><td><code>--skip-version-check</code></td><td>false</td><td>Skip version verification (not recommended)</td></tr>
+</tbody></table>
+</div>
+<p><strong>Example:</strong></p>
+<pre><code class="language-console"># First time: add workers and start
+torc remote run 42 --workers workers.txt \
+    --output-dir /data/torc_output \
+    --poll-interval 10
+
+# Subsequent runs: workers already in database
+torc remote run 42 --output-dir /data/torc_output
+</code></pre>
+<h3 id="check-status"><a class="header" href="#check-status">Check Status</a></h3>
+<pre><code class="language-console">torc remote status [workflow-id] [options]
+</code></pre>
+<p>Shows which workers are still running. Workers are fetched from the database. If <code>workflow-id</code> is
+omitted, you'll be prompted to select a workflow interactively.</p>
+<p><strong>Options:</strong></p>
+<div class="table-wrapper"><table><thead><tr><th>Option</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>--max-parallel-ssh</code></td><td><code>10</code></td><td>Maximum parallel SSH connections</td></tr>
+</tbody></table>
+</div>
+<h3 id="stop-workers"><a class="header" href="#stop-workers">Stop Workers</a></h3>
+<pre><code class="language-console">torc remote stop [workflow-id] [options]
+</code></pre>
+<p>If <code>workflow-id</code> is omitted, you'll be prompted to select a workflow interactively.</p>
+<p><strong>Options:</strong></p>
+<div class="table-wrapper"><table><thead><tr><th>Option</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>--force</code></td><td><code>false</code></td><td>Send SIGKILL instead of SIGTERM</td></tr>
+<tr><td><code>--max-parallel-ssh</code></td><td><code>10</code></td><td>Maximum parallel SSH connections</td></tr>
+</tbody></table>
+</div>
+<h3 id="collect-logs"><a class="header" href="#collect-logs">Collect Logs</a></h3>
+<pre><code class="language-console">torc remote collect-logs [workflow-id] [options]
+</code></pre>
+<p>If <code>workflow-id</code> is omitted, you'll be prompted to select a workflow interactively.</p>
+<p><strong>Options:</strong></p>
+<div class="table-wrapper"><table><thead><tr><th>Option</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>-l, --local-output-dir</code></td><td><code>remote_logs</code></td><td>Local directory for collected logs</td></tr>
+<tr><td><code>--remote-output-dir</code></td><td><code>torc_output</code></td><td>Remote output directory</td></tr>
+<tr><td><code>--delete</code></td><td><code>false</code></td><td>Delete remote logs after successful collection</td></tr>
+<tr><td><code>--max-parallel-ssh</code></td><td><code>10</code></td><td>Maximum parallel SSH connections</td></tr>
+</tbody></table>
+</div>
+<p><strong>Example with deletion:</strong></p>
+<pre><code class="language-console"># Collect logs and clean up remote workers
+torc remote collect-logs 42 --delete
+</code></pre>
+<h3 id="delete-logs"><a class="header" href="#delete-logs">Delete Logs</a></h3>
+<pre><code class="language-console">torc remote delete-logs [workflow-id] [options]
+</code></pre>
+<p>Delete the output directory from all remote workers without collecting logs first. Use
+<code>collect-logs --delete</code> if you want to save logs before deleting.</p>
+<p>If <code>workflow-id</code> is omitted, you'll be prompted to select a workflow interactively.</p>
+<p><strong>Options:</strong></p>
+<div class="table-wrapper"><table><thead><tr><th>Option</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>--remote-output-dir</code></td><td><code>torc_output</code></td><td>Remote output directory</td></tr>
+<tr><td><code>--max-parallel-ssh</code></td><td><code>10</code></td><td>Maximum parallel SSH connections</td></tr>
+</tbody></table>
+</div>
+<h2 id="typical-workflow"><a class="header" href="#typical-workflow">Typical Workflow</a></h2>
+<ol>
+<li>
+<p><strong>Create a workflow:</strong></p>
+<pre><code class="language-console">torc workflows create my_workflow.yaml
+</code></pre>
+</li>
+<li>
+<p><strong>Add workers:</strong></p>
+<pre><code class="language-console"># From command line
+torc remote add-workers 42 worker1.example.com worker2.example.com
+
+# Or from file
+torc remote add-workers-from-file workers.txt 42
+</code></pre>
+</li>
+<li>
+<p><strong>Start workers:</strong></p>
+<pre><code class="language-console">torc remote run 42
+</code></pre>
+</li>
+<li>
+<p><strong>Monitor status:</strong></p>
+<pre><code class="language-console">torc remote status 42
+</code></pre>
+</li>
+<li>
+<p><strong>Collect logs when complete:</strong></p>
+<pre><code class="language-console">torc remote collect-logs 42 -l ./logs
+</code></pre>
+</li>
+</ol>
+<p>Or combine steps 2 and 3:</p>
+<pre><code class="language-console">torc remote run 42 --workers workers.txt
+</code></pre>
+<h2 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h2>
+<ol>
+<li><strong>Version Check</strong>: Verifies all remote machines have the same torc version</li>
+<li><strong>Worker Start</strong>: Uses <code>nohup</code> to start detached workers that survive SSH disconnection</li>
+<li><strong>Job Execution</strong>: Each worker polls the server for available jobs and executes them locally</li>
+<li><strong>Completion</strong>: Workers exit when the workflow is complete or canceled</li>
+</ol>
+<p>The server coordinates job distribution. Multiple workers can safely poll the same workflow without
+double-allocating jobs.</p>
+<h2 id="ssh-configuration"><a class="header" href="#ssh-configuration">SSH Configuration</a></h2>
+<p>Workers connect using SSH with these options:</p>
+<ul>
+<li><code>ConnectTimeout=30</code> - 30 second connection timeout</li>
+<li><code>BatchMode=yes</code> - No password prompts (requires key-based auth)</li>
+<li><code>StrictHostKeyChecking=accept-new</code> - Accept new host keys automatically</li>
+</ul>
+<p>For custom SSH configuration, use <code>~/.ssh/config</code> on the local machine:</p>
+<pre><code class="language-ssh-config">Host worker1
+    HostName worker1.example.com
+    User alice
+    Port 2222
+    IdentityFile ~/.ssh/worker_key
+</code></pre>
+<p>Then reference the alias in your worker file:</p>
+<pre><code class="language-text">worker1
+worker2
+worker3
+</code></pre>
+<h2 id="resource-monitoring"><a class="header" href="#resource-monitoring">Resource Monitoring</a></h2>
+<p>If your workflow has resource monitoring enabled, each worker collects utilization data:</p>
+<pre><code class="language-yaml">name: my_workflow
+resource_monitor_config:
+  enabled: true
+  granularity: time_series
+  sample_interval_seconds: 10
+</code></pre>
+<p>The <code>collect-logs</code> command retrieves these databases along with job logs.</p>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="no-workers-configured"><a class="header" href="#no-workers-configured">No Workers Configured</a></h3>
+<pre><code>No workers configured for workflow 42. Use 'torc remote add-workers' or '--workers' flag.
+</code></pre>
+<p>Add workers to the workflow using <code>torc remote add-workers</code> or the <code>--workers</code> flag on <code>run</code>.</p>
+<h3 id="version-mismatch"><a class="header" href="#version-mismatch">Version Mismatch</a></h3>
+<pre><code>Error: Version check failed on 2 worker(s):
+  worker1: Version mismatch: local=0.7.0, worker1=0.6.5
+  worker2: Version mismatch: local=0.7.0, worker2=0.6.5
+</code></pre>
+<p>Install the same torc version on all machines, or use <code>--skip-version-check</code> (not recommended for
+production).</p>
+<h3 id="ssh-connection-failed"><a class="header" href="#ssh-connection-failed">SSH Connection Failed</a></h3>
+<pre><code>Error: SSH connectivity check failed for 1 worker(s):
+  worker1: SSH connection failed to worker1: Permission denied (publickey)
+</code></pre>
+<p>Verify SSH key-based authentication works:</p>
+<pre><code class="language-console">ssh worker1.example.com true
+</code></pre>
+<h3 id="worker-died-immediately"><a class="header" href="#worker-died-immediately">Worker Died Immediately</a></h3>
+<pre><code>[FAILED] worker1: Process died immediately. Last log:
+  Error: connection refused...
+</code></pre>
+<p>The worker couldn't connect to the server. Check:</p>
+<ol>
+<li>Server is accessible from the remote machine</li>
+<li>Firewall allows connections on the server port</li>
+<li>The <code>--url</code> points to the correct server address</li>
+</ol>
+<h3 id="workers-not-claiming-jobs"><a class="header" href="#workers-not-claiming-jobs">Workers Not Claiming Jobs</a></h3>
+<p>If workers start but don't claim jobs:</p>
+<ol>
+<li>Check the workflow is initialized: <code>torc workflows status &lt;id&gt;</code></li>
+<li>Check jobs are ready: <code>torc jobs list &lt;id&gt;</code></li>
+<li>Check resource requirements match available resources</li>
+</ol>
+<h2 id="comparison-with-slurm"><a class="header" href="#comparison-with-slurm">Comparison with Slurm</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Feature</th><th>Remote Workers</th><th>Slurm</th></tr></thead><tbody>
+<tr><td>Scheduler required</td><td>No</td><td>Yes</td></tr>
+<tr><td>Resource allocation</td><td>Manual (worker file)</td><td>Automatic</td></tr>
+<tr><td>Fault tolerance</td><td>Limited</td><td>Full (job requeue)</td></tr>
+<tr><td>Walltime limits</td><td>No</td><td>Yes</td></tr>
+<tr><td>Priority/queuing</td><td>No</td><td>Yes</td></tr>
+<tr><td>Best for</td><td>Ad-hoc clusters, testing</td><td>Production HPC</td></tr>
+</tbody></table>
+</div>
+<h2 id="security-considerations"><a class="header" href="#security-considerations">Security Considerations</a></h2>
+<ul>
+<li>Workers authenticate to the torc server (if authentication is enabled)</li>
+<li>SSH keys should be properly secured</li>
+<li>Workers run with the permissions of the SSH user on each machine</li>
+<li>The torc server URL is passed to workers and visible in process lists</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../specialized/remote/index.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../specialized/fault-tolerance/index.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../specialized/remote/index.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../specialized/fault-tolerance/index.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../mermaid.min.js"></script>
+        <script src="../../mermaid-init.js"></script>
+        <script src="../../pagetoc.js"></script>
+        <script src="../../version-selector.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
