@@ -190,7 +190,8 @@ For a user-focused tutorial, see
 <a href="../fault-tolerance/failure-handlers.html">Configurable Failure Handlers</a>.</p>
 <h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
 <p>Failure handlers provide per-job automatic retry logic based on exit codes. They allow workflows to
-recover from transient failures without manual intervention or workflow-level recovery heuristics.</p>
+recover from transient failures and terminations (e.g., Slurm timeouts) without manual intervention
+or workflow-level recovery heuristics.</p>
 <pre class="mermaid">flowchart LR
     subgraph workflow[&quot;Workflow Specification&quot;]
         FH[&quot;failure_handlers:&lt;br/&gt;- name: handler1&lt;br/&gt;  rules: [...]&quot;]
@@ -301,8 +302,8 @@ optional recovery scripts.</p>
     }
 </pre>
 <h2 id="rule-matching"><a class="header" href="#rule-matching">Rule Matching</a></h2>
-<p>Failure handler rules are stored as a JSON array. When a job fails, rules are evaluated in a
-specific order to find a match.</p>
+<p>Failure handler rules are stored as a JSON array. When a job fails or is terminated (e.g., due to a
+Slurm timeout with exit code 152), rules are evaluated in a specific order to find a match.</p>
 <h3 id="rule-structure"><a class="header" href="#rule-structure">Rule Structure</a></h3>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
@@ -316,7 +317,7 @@ specific order to find a match.</p>
 <h3 id="matching-priority"><a class="header" href="#matching-priority">Matching Priority</a></h3>
 <p>Rules are evaluated with <strong>specific matches taking priority over catch-all rules</strong>:</p>
 <pre class="mermaid">flowchart TD
-    START[&quot;Job fails with exit code X&quot;]
+    START[&quot;Job fails or terminates&lt;br/&gt;with exit code X&quot;]
     SPECIFIC{&quot;Find rule where&lt;br/&gt;exit_codes contains X?&quot;}
     CATCHALL{&quot;Find rule where&lt;br/&gt;match_all_exit_codes = true?&quot;}
     FOUND[&quot;Rule matched&quot;]
@@ -600,7 +601,7 @@ status:</p>
 <span class="boring">}</span></code></pre></pre>
 <h3 id="status-assignment-flow"><a class="header" href="#status-assignment-flow">Status Assignment Flow</a></h3>
 <pre class="mermaid">flowchart TD
-    FAIL[&quot;Job fails&quot;]
+    FAIL[&quot;Job fails or terminates&quot;]
     TRY[&quot;try_recover_job()&quot;]
     RETRIED{&quot;Outcome?&quot;}
     READY[&quot;Status: ready&lt;br/&gt;attempt_id += 1&quot;]

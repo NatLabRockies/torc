@@ -201,7 +201,8 @@ recovery scripts.</p>
 <li>A running Torc server</li>
 </ul>
 <h2 id="what-are-failure-handlers"><a class="header" href="#what-are-failure-handlers">What Are Failure Handlers?</a></h2>
-<p>Failure handlers provide per-job automatic retry logic based on exit codes. Unlike
+<p>Failure handlers provide per-job automatic retry logic based on exit codes. They apply to both
+failed jobs and terminated jobs (e.g., Slurm timeouts with exit code 152). Unlike
 <code>torc watch --recover</code> which applies workflow-level recovery heuristics, failure handlers let you
 define:</p>
 <ul>
@@ -230,7 +231,7 @@ jobs:
     failure_handler: job_recovery
 </code></pre>
 <h2 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h2>
-<p>When a job with a failure handler fails:</p>
+<p>When a job with a failure handler fails or is terminated:</p>
 <ol>
 <li>JobRunner checks the exit code against handler rules</li>
 <li>If a matching rule is found and <code>attempt_id &lt; max_retries</code>:
@@ -243,7 +244,7 @@ jobs:
 <li>If no match or max retries exceeded: job is marked as Failed</li>
 </ol>
 <pre class="mermaid">flowchart TD
-    fail[&quot;Job Fails&lt;br/&gt;(exit code 10)&quot;]
+    fail[&quot;Job Fails/Terminates&lt;br/&gt;(exit code 10)&quot;]
     match{&quot;Matching rule&lt;br/&gt;for exit code?&quot;}
     retry{&quot;attempt_id&lt;br/&gt;&lt; max_retries?&quot;}
     recovery[&quot;Run recovery script&quot;]
@@ -387,6 +388,28 @@ order, so put specific rules first:</p>
       - match_all_exit_codes: true
         max_retries: 2
 </code></pre>
+<h2 id="handling-slurm-timeouts"><a class="header" href="#handling-slurm-timeouts">Handling Slurm Timeouts</a></h2>
+<p>When a Slurm job exceeds its walltime, it is terminated with exit code 152. You can use a failure
+handler to automatically retry these jobs:</p>
+<pre><code class="language-yaml">failure_handlers:
+  - name: timeout_recovery
+    rules:
+      - exit_codes: [152] # Slurm TIMEOUT
+        max_retries: 2
+
+jobs:
+  - name: long_running_job
+    command: ./compute.sh
+    failure_handler: timeout_recovery
+</code></pre>
+<p>This is useful when:</p>
+<ul>
+<li>Jobs have variable runtime and occasionally exceed walltime</li>
+<li>You want to retry with a different allocation that has more time</li>
+<li>Combined with <code>--auto-schedule</code> to automatically request new Slurm allocations</li>
+</ul>
+<p><strong>Note:</strong> Exit code 152 is only set when <code>sacct</code> reports <code>State=TIMEOUT</code>. User-initiated
+cancellations via <code>scancel</code> result in a different exit code (143) and won't match this rule.</p>
 <h2 id="log-files"><a class="header" href="#log-files">Log Files</a></h2>
 <p>Each attempt gets separate log files, preserving history across retries:</p>
 <pre><code>torc_output/job_stdio/job_wf1_j42_r1_a1.o  # Attempt 1 stdout
@@ -398,7 +421,7 @@ torc_output/job_stdio/job_wf1_j42_r1_a2.e  # Attempt 2 stderr
 <h2 id="comparison-with-torc-watch---recover"><a class="header" href="#comparison-with-torc-watch---recover">Comparison with <code>torc watch --recover</code></a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Feature</th><th>Failure Handlers</th><th><code>torc watch --recover</code></th></tr></thead><tbody>
 <tr><td><strong>Scope</strong></td><td>Per-job, exit-code-specific</td><td>Workflow-wide</td></tr>
-<tr><td><strong>Triggers</strong></td><td>Specific exit codes</td><td>OOM, timeout detection</td></tr>
+<tr><td><strong>Triggers</strong></td><td>Exit codes (including timeouts)</td><td>OOM, timeout detection</td></tr>
 <tr><td><strong>Recovery</strong></td><td>Custom scripts</td><td>Resource adjustment</td></tr>
 <tr><td><strong>Timing</strong></td><td>Immediate (during run)</td><td>After workflow completes</td></tr>
 <tr><td><strong>Configuration</strong></td><td>In workflow spec</td><td>Command-line options</td></tr>
