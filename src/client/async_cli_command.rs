@@ -104,6 +104,7 @@ impl AsyncCliCommand {
         resource_monitor: Option<&ResourceMonitor>,
         api_url: &str,
         resource_requirements: Option<&ResourceRequirementsModel>,
+        gpu_visible_devices: Option<&str>,
         limit_resources: bool,
         use_srun: bool,
         enable_cpu_bind: bool,
@@ -228,6 +229,13 @@ impl AsyncCliCommand {
             shell.arg(&command_str);
             shell
         };
+
+        if let Some(v) = gpu_visible_devices {
+            cmd.env("CUDA_VISIBLE_DEVICES", v)
+                .env("HIP_VISIBLE_DEVICES", v)
+                .env("ROCR_VISIBLE_DEVICES", v)
+                .env("TORC_GPU_VISIBLE_DEVICES", v);
+        }
 
         let child = cmd
             .env("TORC_WORKFLOW_ID", workflow_id_str)

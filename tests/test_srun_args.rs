@@ -99,6 +99,7 @@ fn run_and_capture_srun_args(
         None,
         "http://localhost:8080/torc-service/v1",
         rr,
+        None, // gpu_visible_devices
         limit_resources,
         use_srun,
         enable_cpu_bind,
@@ -598,6 +599,7 @@ fn test_srun_step_name_format() {
         None,
         "http://localhost:8080/torc-service/v1",
         Some(&rr),
+        None, // gpu_visible_devices
         true,
         true,
         false,
