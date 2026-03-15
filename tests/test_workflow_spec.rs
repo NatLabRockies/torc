@@ -2203,9 +2203,7 @@ fn test_scheduler_node_validation_fails_with_start_one_worker_per_node_in_slurm_
     assert!(result.is_err(), "Expected workflow creation to fail");
     let err = result.err().unwrap().to_string();
     assert!(
-        err.contains(
-            "start_one_worker_per_node requires execution_config.mode to be 'direct'"
-        ),
+        err.contains("start_one_worker_per_node requires execution_config.mode to be 'direct'"),
         "Unexpected error: {}",
         err
     );
@@ -2273,9 +2271,7 @@ fn test_scheduler_node_validation_fails_with_start_one_worker_per_node_in_auto_m
     assert!(result.is_err(), "Expected workflow creation to fail");
     let err = result.err().unwrap().to_string();
     assert!(
-        err.contains(
-            "start_one_worker_per_node requires execution_config.mode to be 'direct'"
-        ),
+        err.contains("start_one_worker_per_node requires execution_config.mode to be 'direct'"),
         "Unexpected error: {}",
         err
     );
