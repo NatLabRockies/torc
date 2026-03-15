@@ -402,6 +402,121 @@ action {
 </code></pre>
 </li>
 </ol>
+<h2 id="execution-configuration"><a class="header" href="#execution-configuration">Execution Configuration</a></h2>
+<p>The <code>execution_config</code> section controls how jobs are executed and terminated. It supports three
+modes:</p>
+<ul>
+<li><strong>direct</strong>: Torc manages job execution and termination directly via signals</li>
+<li><strong>slurm</strong>: Jobs are wrapped with <code>srun</code> and Slurm manages resource limits/termination</li>
+<li><strong>auto</strong> (default): Uses <code>slurm</code> mode if <code>SLURM_JOB_ID</code> is set, otherwise <code>direct</code></li>
+</ul>
+<h3 id="yaml-example"><a class="header" href="#yaml-example">YAML Example</a></h3>
+<pre><code class="language-yaml">execution_config:
+  mode: direct # Options: direct, slurm, auto
+  limit_resources: true # Enforce memory/CPU limits (default: true)
+
+  # Direct mode settings
+  termination_signal: SIGTERM # Signal before SIGKILL (default: SIGTERM)
+  sigterm_lead_seconds: 30 # Seconds before SIGKILL to send signal (default: 30)
+  sigkill_headroom_seconds: 60 # Seconds before end_time for SIGKILL (default: 60)
+  timeout_exit_code: 152 # Exit code for timeout (default: 152, matches Slurm)
+  oom_exit_code: 137 # Exit code for OOM kill (default: 137)
+
+  # Slurm mode settings
+  srun_termination_signal: "TERM@120" # srun --signal spec
+  enable_cpu_bind: false # Allow Slurm CPU binding (default: false)
+</code></pre>
+<h3 id="kdl-example"><a class="header" href="#kdl-example">KDL Example</a></h3>
+<pre><code class="language-kdl">execution_config {
+    mode "slurm"
+    srun_termination_signal "TERM@120"
+    sigkill_headroom_seconds 180
+    enable_cpu_bind #true
+}
+</code></pre>
+<h3 id="json5-example"><a class="header" href="#json5-example">JSON5 Example</a></h3>
+<pre><code class="language-json5">{
+  execution_config: {
+    mode: "direct",
+    termination_signal: "SIGTERM",
+    sigterm_lead_seconds: 30,
+    sigkill_headroom_seconds: 60,
+  },
+}
+</code></pre>
+<h3 id="configuration-fields"><a class="header" href="#configuration-fields">Configuration Fields</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>mode</code></td><td>string</td><td><code>auto</code></td><td>Execution mode: <code>direct</code>, <code>slurm</code>, or <code>auto</code></td></tr>
+<tr><td><code>limit_resources</code></td><td>bool</td><td><code>true</code></td><td>Enforce memory/CPU limits</td></tr>
+<tr><td><code>termination_signal</code></td><td>string</td><td><code>SIGTERM</code></td><td>Signal to send before SIGKILL (direct mode)</td></tr>
+<tr><td><code>sigterm_lead_seconds</code></td><td>int</td><td><code>30</code></td><td>Seconds before SIGKILL to send termination signal</td></tr>
+<tr><td><code>sigkill_headroom_seconds</code></td><td>int</td><td><code>60</code></td><td>Seconds before end_time to send SIGKILL</td></tr>
+<tr><td><code>timeout_exit_code</code></td><td>int</td><td><code>152</code></td><td>Exit code for timed-out jobs</td></tr>
+<tr><td><code>oom_exit_code</code></td><td>int</td><td><code>137</code></td><td>Exit code for OOM-killed jobs</td></tr>
+<tr><td><code>srun_termination_signal</code></td><td>string</td><td>(none)</td><td>Slurm signal spec (e.g., <code>TERM@120</code>)</td></tr>
+<tr><td><code>enable_cpu_bind</code></td><td>bool</td><td><code>false</code></td><td>Allow Slurm CPU binding</td></tr>
+</tbody></table>
+</div>
+<h3 id="when-to-use-each-mode"><a class="header" href="#when-to-use-each-mode">When to Use Each Mode</a></h3>
+<ul>
+<li>
+<p><strong>direct mode</strong>: Use when running outside Slurm, or when <code>srun</code>/<code>sacct</code> are unreliable. Torc
+manages termination via SIGTERM/SIGKILL signals.</p>
+</li>
+<li>
+<p><strong>slurm mode</strong>: Use inside Slurm allocations when srun works correctly. Jobs are wrapped with
+<code>srun</code> and Slurm manages resource enforcement and termination.</p>
+</li>
+<li>
+<p><strong>auto mode</strong> (default): Automatically selects <code>slurm</code> mode if running inside a Slurm allocation
+(detected via <code>SLURM_JOB_ID</code> environment variable), otherwise uses <code>direct</code> mode.</p>
+</li>
+</ul>
+<h3 id="termination-timeline-direct-mode"><a class="header" href="#termination-timeline-direct-mode">Termination Timeline (Direct Mode)</a></h3>
+<p>When <code>sigkill_headroom_seconds=60</code> and <code>sigterm_lead_seconds=30</code>:</p>
+<pre><code>end_time - 90s: Send SIGTERM (or configured termination_signal)
+end_time - 60s: Send SIGKILL to any still-running jobs
+end_time:       Job runner exits
+</code></pre>
+<h3 id="slurm-mode-headroom"><a class="header" href="#slurm-mode-headroom">Slurm Mode Headroom</a></h3>
+<p>In Slurm mode, <code>sigkill_headroom_seconds</code> controls the <code>srun --time</code> parameter. The job's srun step
+time limit is set to <code>remaining_time - sigkill_headroom_seconds</code>, giving the job runner time to
+detect completion and report results before the allocation expires.</p>
+<p>If using <code>srun_termination_signal</code> (e.g., <code>TERM@120</code>), ensure its time value is less than
+<code>sigkill_headroom_seconds</code> so the signal is sent before Slurm kills the step.</p>
+<h3 id="migration-from-slurm_config-deprecated"><a class="header" href="#migration-from-slurm_config-deprecated">Migration from slurm_config (Deprecated)</a></h3>
+<p>The <code>slurm_config</code> field and top-level <code>use_srun</code>, <code>limit_resources</code>, <code>srun_termination_signal</code>, and
+<code>enable_cpu_bind</code> fields are <strong>deprecated</strong> and will be removed in a future release. Please migrate
+to <code>execution_config</code>:</p>
+<p><strong>Before (deprecated):</strong></p>
+<pre><code class="language-yaml"># Old style - deprecated
+slurm_config:
+  use_srun: true
+  limit_resources: true
+  srun_termination_signal: "TERM@120"
+
+# Or flat fields - also deprecated
+use_srun: true
+limit_resources: true
+</code></pre>
+<p><strong>After (recommended):</strong></p>
+<pre><code class="language-yaml"># New style - use execution_config
+execution_config:
+  mode: slurm # Replaces use_srun: true
+  limit_resources: true
+  srun_termination_signal: "TERM@120"
+  sigkill_headroom_seconds: 180 # New: controls srun --time headroom
+</code></pre>
+<p><strong>Migration mapping:</strong></p>
+<div class="table-wrapper"><table><thead><tr><th>Old Field</th><th>New Field in execution_config</th></tr></thead><tbody>
+<tr><td><code>use_srun: true</code></td><td><code>mode: slurm</code></td></tr>
+<tr><td><code>use_srun: false</code></td><td><code>mode: direct</code></td></tr>
+<tr><td>(not set)</td><td><code>mode: auto</code> (default)</td></tr>
+<tr><td><code>limit_resources</code></td><td><code>limit_resources</code></td></tr>
+<tr><td><code>srun_termination_signal</code></td><td><code>srun_termination_signal</code></td></tr>
+<tr><td><code>enable_cpu_bind</code></td><td><code>enable_cpu_bind</code></td></tr>
+</tbody></table>
+</div>
 <h2 id="common-features-across-all-formats"><a class="header" href="#common-features-across-all-formats">Common Features Across All Formats</a></h2>
 <h3 id="variable-substitution"><a class="header" href="#variable-substitution">Variable Substitution</a></h3>
 <p>All formats support the same variable substitution syntax:</p>

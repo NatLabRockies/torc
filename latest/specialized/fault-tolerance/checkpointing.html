@@ -336,7 +336,7 @@ main loop so the handler is active from the start.</p>
 <pre><code class="language-yaml">name: graceful_termination_demo
 description: Demonstrates early SIGTERM with automatic checkpoint-and-retry
 
-slurm_config:
+execution_config:
   srun_termination_signal: "TERM@120"
 
 failure_handlers:
@@ -376,7 +376,7 @@ actions:
 <p>Three pieces work together here:</p>
 <ul>
 <li>
-<p><strong><code>slurm_config.srun_termination_signal: "TERM@120"</code></strong> tells Slurm to send SIGTERM 120 seconds
+<p><strong><code>execution_config.srun_termination_signal: "TERM@120"</code></strong> tells Slurm to send SIGTERM 120 seconds
 before the step time limit. Torc passes this to every <code>srun</code> invocation as
 <code>srun --signal=TERM@120</code>.</p>
 </li>
@@ -425,8 +425,8 @@ of checkpoint cycles.</p>
 <h2 id="how-it-works-under-the-hood"><a class="header" href="#how-it-works-under-the-hood">How It Works Under the Hood</a></h2>
 <ol>
 <li>
-<p><strong><code>slurm_config.srun_termination_signal: "TERM@120"</code></strong> is stored on the workflow record in the
-Torc database.</p>
+<p><strong><code>execution_config.srun_termination_signal: "TERM@120"</code></strong> is stored on the workflow record in
+the Torc database.</p>
 </li>
 <li>
 <p>When the job runner launches a job inside a Slurm allocation, it builds an <code>srun</code> command that

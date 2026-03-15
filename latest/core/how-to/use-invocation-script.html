@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Parameterize Jobs with Files - Torc Documentation</title>
+        <title>Use Invocation Scripts - Torc Documentation</title>
 
 
         <!-- Custom HTML head -->
@@ -150,7 +150,7 @@
                         <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/NatLabRockies/torc/edit/main/docs/src/core/how-to/parameterize-with-files.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://github.com/NatLabRockies/torc/edit/main/docs/src/core/how-to/use-invocation-script.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
@@ -184,83 +184,118 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="how-to-parameterize-jobs-with-files"><a class="header" href="#how-to-parameterize-jobs-with-files">How to Parameterize Jobs with Files</a></h1>
-<p>Process multiple input files by combining parameterization with file path templating.</p>
-<h2 id="basic-pattern"><a class="header" href="#basic-pattern">Basic Pattern</a></h2>
-<p>Use a parameter to generate jobs for each file:</p>
-<pre><code class="language-yaml">name: process_files
+                        <h1 id="how-to-use-invocation-scripts"><a class="header" href="#how-to-use-invocation-scripts">How to Use Invocation Scripts</a></h1>
+<p>Set up the job environment before running the command.</p>
+<h2 id="the-problem"><a class="header" href="#the-problem">The Problem</a></h2>
+<p>Your jobs need a specific environment (conda, modules, virtualenv) but you don't want to embed
+activation commands in every job command.</p>
+<h2 id="the-solution"><a class="header" href="#the-solution">The Solution</a></h2>
+<p>Use <code>invocation_script</code> to wrap job commands with environment setup.</p>
+<h2 id="step-1-create-a-setup-script"><a class="header" href="#step-1-create-a-setup-script">Step 1: Create a Setup Script</a></h2>
+<p>Create a script that sets up your environment and executes the command passed to it:</p>
+<pre><code class="language-bash">#!/bin/bash
+# setup.sh - Environment wrapper for jobs
+
+# Load required modules (HPC systems)
+module load conda
+
+# Activate the conda environment
+conda activate my_env
+
+# Execute the job command (passed as arguments)
+"$@"
+</code></pre>
+<p>The key is <code>"$@"</code> at the end, which runs the job's command with all its arguments.</p>
+<h2 id="step-2-reference-in-job-definition"><a class="header" href="#step-2-reference-in-job-definition">Step 2: Reference in Job Definition</a></h2>
+<p>Add <code>invocation_script</code> to your job:</p>
+<pre><code class="language-yaml">jobs:
+  - name: train_model
+    command: python train.py --epochs 100 --output model.pt
+    invocation_script: bash setup.sh
+</code></pre>
+<p>When this job runs, Torc executes:</p>
+<pre><code class="language-bash">bash setup.sh python train.py --epochs 100 --output model.pt
+</code></pre>
+<p>The setup script loads conda, activates the environment, then runs <code>python train.py ...</code>.</p>
+<h2 id="complete-example"><a class="header" href="#complete-example">Complete Example</a></h2>
+<p><strong>setup.sh:</strong></p>
+<pre><code class="language-bash">#!/bin/bash
+module load conda
+conda activate ml_env
+"$@"
+</code></pre>
+<p><strong>workflow.yaml:</strong></p>
+<pre><code class="language-yaml">name: ml_training
+description: Train models with conda environment
 
 jobs:
-  - name: process_{dataset}
-    command: python process.py --input data/{dataset}.csv --output results/{dataset}.json
-    parameters:
-      dataset: "[train, test, validation]"
+  - name: preprocess
+    command: python preprocess.py --input data.csv --output processed.pkl
+    invocation_script: bash setup.sh
+
+  - name: train
+    command: python train.py --data processed.pkl --model model.pt
+    invocation_script: bash setup.sh
+    depends_on: [preprocess]
+
+  - name: evaluate
+    command: python evaluate.py --model model.pt --output results.json
+    invocation_script: bash setup.sh
+    depends_on: [train]
 </code></pre>
-<p>This creates 3 jobs:</p>
+<h2 id="common-patterns"><a class="header" href="#common-patterns">Common Patterns</a></h2>
+<h3 id="python-virtual-environment"><a class="header" href="#python-virtual-environment">Python Virtual Environment</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+source /path/to/venv/bin/activate
+"$@"
+</code></pre>
+<h3 id="hpc-module-system"><a class="header" href="#hpc-module-system">HPC Module System</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+module purge
+module load gcc/11.2 cuda/11.8 python/3.10
+"$@"
+</code></pre>
+<h3 id="combined-setup"><a class="header" href="#combined-setup">Combined Setup</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+# Load modules
+module load cuda/11.8
+
+# Activate conda
+source /opt/conda/etc/profile.d/conda.sh
+conda activate my_env
+
+# Set environment variables
+export CUDA_VISIBLE_DEVICES=0
+
+# Run the command
+"$@"
+</code></pre>
+<h3 id="using-apptainer"><a class="header" href="#using-apptainer">Using Apptainer</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+apptainer exec /path/to/container.sif "$@"
+</code></pre>
+<h2 id="tips"><a class="header" href="#tips">Tips</a></h2>
 <ul>
-<li><code>process_train</code> → processes <code>data/train.csv</code></li>
-<li><code>process_test</code> → processes <code>data/test.csv</code></li>
-<li><code>process_validation</code> → processes <code>data/validation.csv</code></li>
+<li>Make the setup script executable: <code>chmod +x setup.sh</code></li>
+<li>Use absolute paths for portability across nodes</li>
+<li>Test the script manually before submitting: <code>bash setup.sh python --version</code></li>
+<li>Different jobs can use different invocation scripts</li>
 </ul>
-<h2 id="with-file-dependencies"><a class="header" href="#with-file-dependencies">With File Dependencies</a></h2>
-<p>Combine parameterization with explicit file definitions for dependency tracking:</p>
-<pre><code class="language-yaml">name: file_pipeline
-
-files:
-  - name: raw_{dataset}
-    path: data/{dataset}.csv
-  - name: processed_{dataset}
-    path: results/{dataset}.json
-
-jobs:
-  - name: process_{dataset}
-    command: python process.py -i ${files.input.raw_{dataset}} -o ${files.output.processed_{dataset}}
-    parameters:
-      dataset: "[train, test, validation]"
-
-  - name: aggregate
-    command: python aggregate.py --input results/ --output summary.json
-    depends_on:
-      - process_{dataset}
-    parameters:
-      dataset: "[train, test, validation]"
-</code></pre>
-<p>The <code>aggregate</code> job automatically waits for all <code>process_*</code> jobs to complete.</p>
-<h2 id="processing-numbered-files"><a class="header" href="#processing-numbered-files">Processing Numbered Files</a></h2>
-<p>Use range syntax for numbered file sequences:</p>
-<pre><code class="language-yaml">jobs:
-  - name: convert_{i:03d}
-    command: ffmpeg -i video_{i:03d}.mp4 -o audio_{i:03d}.mp3
-    parameters:
-      i: "1:100"
-</code></pre>
-<p>Creates jobs for <code>video_001.mp4</code> through <code>video_100.mp4</code>.</p>
-<h2 id="multi-dimensional-sweeps"><a class="header" href="#multi-dimensional-sweeps">Multi-Dimensional Sweeps</a></h2>
-<p>Combine multiple parameters for Cartesian product expansion:</p>
-<pre><code class="language-yaml">jobs:
-  - name: analyze_{region}_{year}
-    command: python analyze.py --region {region} --year {year} --output results/{region}_{year}.json
-    parameters:
-      region: "[north, south, east, west]"
-      year: "2020:2024"
-</code></pre>
-<p>Creates 20 jobs (4 regions × 5 years).</p>
 <h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>
 <ul>
-<li><a href="../tutorials/simple-params.html">Simple Parameterization</a> — Basic parameter tutorial</li>
-<li><a href="../tutorials/advanced-params.html">Advanced Parameterization</a> — Multi-dimensional sweeps</li>
-<li><a href="../reference/parameterization.html">Job Parameterization Reference</a> — Complete syntax</li>
+<li><a href="../reference/workflow-spec.html">Workflow Specification</a> - Full JobSpec reference</li>
+<li><a href="../../specialized/hpc/slurm-workflows.html">Slurm Workflows</a> - HPC-specific configuration</li>
 </ul>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../../core/how-to/view-resource-plots.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../../core/how-to/parameterize-with-files.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../../core/how-to/use-invocation-script.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../../core/how-to/ro-crate-metadata.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -270,11 +305,11 @@ jobs:
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../../core/how-to/view-resource-plots.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../../core/how-to/parameterize-with-files.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../../core/how-to/use-invocation-script.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../../core/how-to/ro-crate-metadata.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

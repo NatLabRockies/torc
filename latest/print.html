@@ -1696,11 +1696,274 @@ scheduling new Slurm allocations.</li>
 </ul>
 <p>When a ready job is retrieved, the runner checks if sufficient resources are available before
 executing it.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="execution-modes"><a class="header" href="#execution-modes">Execution Modes</a></h1>
+<p>Torc supports three execution modes that determine how jobs are launched and managed. The execution
+mode affects resource enforcement, job termination, and integration with cluster schedulers like
+Slurm.</p>
+<h2 id="overview-1"><a class="header" href="#overview-1">Overview</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Mode</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>direct</code></td><td>Torc manages job execution directly without Slurm step wrapping</td></tr>
+<tr><td><code>slurm</code></td><td>Jobs are wrapped with <code>srun</code>, letting Slurm manage resources and termination</td></tr>
+<tr><td><code>auto</code></td><td>Automatically selects <code>slurm</code> if <code>SLURM_JOB_ID</code> is set, otherwise uses <code>direct</code></td></tr>
+</tbody></table>
+</div>
+<p>Configure the execution mode in your workflow specification:</p>
+<pre><code class="language-yaml">execution_config:
+  mode: direct  # or "slurm" or "auto"
+</code></pre>
+<h2 id="when-to-use-each-mode"><a class="header" href="#when-to-use-each-mode">When to Use Each Mode</a></h2>
+<h3 id="direct-mode"><a class="header" href="#direct-mode">Direct Mode</a></h3>
+<p>Use direct mode when:</p>
+<ul>
+<li>Running jobs <strong>outside of Slurm</strong> (local machine, cloud VMs, containers)</li>
+<li>Running inside Slurm but <strong>srun is unreliable</strong> or has compatibility issues</li>
+<li>You want Torc to <strong>enforce memory limits</strong> via OOM detection</li>
+<li>You need <strong>custom termination signals</strong> (e.g., SIGINT for graceful shutdown)</li>
+</ul>
+<h3 id="slurm-mode"><a class="header" href="#slurm-mode">Slurm Mode</a></h3>
+<p>Use slurm mode when:</p>
+<ul>
+<li>Running inside a <strong>Slurm allocation</strong> and want full Slurm integration</li>
+<li>You want Slurm's <strong>cgroup-based resource enforcement</strong></li>
+<li>You need <strong>sacct accounting</strong> for job steps</li>
+<li>HPC admins need <strong>visibility into job steps</strong> via Slurm tools</li>
+</ul>
+<h3 id="auto-mode-default"><a class="header" href="#auto-mode-default">Auto Mode (Default)</a></h3>
+<p>Auto mode is the default and works well for most use cases:</p>
+<ul>
+<li>Detects Slurm by checking for <code>SLURM_JOB_ID</code> environment variable</li>
+<li>Uses <code>slurm</code> mode inside allocations, <code>direct</code> mode outside</li>
+<li>No configuration needed for portable workflows</li>
+</ul>
+<h2 id="direct-mode-1"><a class="header" href="#direct-mode-1">Direct Mode</a></h2>
+<p>In direct mode, Torc spawns job processes directly and manages their lifecycle without Slurm
+integration.</p>
+<h3 id="resource-enforcement"><a class="header" href="#resource-enforcement">Resource Enforcement</a></h3>
+<p>When <code>limit_resources: true</code> (the default), Torc enforces resource limits:</p>
+<ul>
+<li>
+<p><strong>Memory limits</strong>: The resource monitor periodically samples job memory usage. If a job exceeds
+its configured memory limit, Torc sends SIGKILL and sets the exit code to <code>oom_exit_code</code> (default
+137).</p>
+</li>
+<li>
+<p><strong>CPU limits</strong>: CPU counts are tracked for job scheduling but not enforced at the process level.
+Jobs may use more CPUs than requested.</p>
+</li>
+<li>
+<p><strong>GPU allocation</strong>: GPU counts are tracked for scheduling. In direct mode, GPU access depends on
+system configuration (e.g., <code>CUDA_VISIBLE_DEVICES</code>).</p>
+</li>
+</ul>
+<h3 id="termination-timeline"><a class="header" href="#termination-timeline">Termination Timeline</a></h3>
+<p>When a job runner reaches its <code>end_time</code> or receives a termination signal, Torc follows this
+timeline:</p>
+<pre><code>end_time - sigkill_headroom - sigterm_lead:  Send termination_signal (default: SIGTERM)
+                                              ↓
+                              Wait sigterm_lead_seconds (default: 30s)
+                                              ↓
+end_time - sigkill_headroom:                 Send SIGKILL to remaining jobs
+                                              ↓
+                              Wait for processes to exit
+                                              ↓
+end_time:                                    Job runner exits
+</code></pre>
+<p>This gives jobs time to:</p>
+<ol>
+<li>Receive SIGTERM and perform graceful cleanup (checkpoint, flush buffers)</li>
+<li>Exit voluntarily before SIGKILL</li>
+<li>Be forcefully terminated if they don't respond</li>
+</ol>
+<h3 id="oom-detection"><a class="header" href="#oom-detection">OOM Detection</a></h3>
+<p>The resource monitor runs in a background thread, sampling job memory usage at the configured
+interval (default: 1 second in <code>time_series</code> mode). When a job's memory exceeds its limit:</p>
+<ol>
+<li>An OOM violation is detected and logged</li>
+<li>SIGKILL is sent to the job process</li>
+<li>The exit code is set to <code>oom_exit_code</code> (default: 137 = 128 + SIGKILL)</li>
+<li>Job status is set to <code>Failed</code></li>
+</ol>
+<p>OOM detection requires:</p>
+<ul>
+<li><code>limit_resources: true</code></li>
+<li>Resource monitor enabled (<code>resource_monitor.enabled: true</code>)</li>
+<li>Job has a memory limit in its <code>resource_requirements</code></li>
+</ul>
+<p><strong>Detection Latency</strong>: OOM violations are detected on sample boundaries, so there is inherent
+latency up to the <code>sample_interval_seconds</code> value (default: 10 seconds). A memory spike could
+persist for up to one sample interval before detection. For memory-constrained environments where
+faster detection is needed, reduce the sample interval:</p>
+<pre><code class="language-yaml">resource_monitor:
+  enabled: true
+  granularity: time_series
+  sample_interval_seconds: 1  # Check every second
+</code></pre>
+<p>Note that <code>sample_interval_seconds</code> is an integer (fractional seconds are not supported). More
+frequent sampling increases CPU overhead. For most workloads, the default 10-second interval
+provides a good balance between detection speed and overhead.</p>
+<h3 id="direct-mode-configuration"><a class="header" href="#direct-mode-configuration">Direct Mode Configuration</a></h3>
+<pre><code class="language-yaml">execution_config:
+  mode: direct
+  limit_resources: true        # Enforce memory limits (default: true)
+  termination_signal: SIGTERM  # Signal sent before SIGKILL
+  sigterm_lead_seconds: 30     # Seconds between SIGTERM and SIGKILL
+  sigkill_headroom_seconds: 60 # Seconds before end_time for SIGKILL
+  timeout_exit_code: 152       # Exit code for timed-out jobs
+  oom_exit_code: 137           # Exit code for OOM-killed jobs
+</code></pre>
+<h2 id="slurm-mode-1"><a class="header" href="#slurm-mode-1">Slurm Mode</a></h2>
+<p>In slurm mode, each job is wrapped with <code>srun</code>, creating a Slurm job step. This provides:</p>
+<ul>
+<li><strong>Cgroup isolation</strong>: Slurm enforces CPU and memory limits via cgroups</li>
+<li><strong>Accounting</strong>: Job steps appear in <code>sacct</code> with resource usage metrics</li>
+<li><strong>Admin visibility</strong>: HPC admins can see and manage steps via Slurm tools</li>
+<li><strong>Automatic cleanup</strong>: Slurm terminates steps when the allocation ends</li>
+</ul>
+<h3 id="how-srun-wrapping-works"><a class="header" href="#how-srun-wrapping-works">How srun Wrapping Works</a></h3>
+<p>When a job starts, Torc builds an srun command:</p>
+<pre><code class="language-bash">srun --jobid=&lt;allocation_id&gt; \
+     --ntasks=1 \
+     --exact \
+     --job-name=wf&lt;workflow_id&gt;_j&lt;job_id&gt;_r&lt;run_id&gt;_a&lt;attempt_id&gt; \
+     --nodes=&lt;num_nodes&gt; \
+     --cpus-per-task=&lt;num_cpus&gt; \
+     --mem=&lt;memory&gt;M \
+     --gpus=&lt;num_gpus&gt; \
+     --time=&lt;remaining_minutes&gt; \
+     --signal=&lt;srun_termination_signal&gt; \
+     bash -c "&lt;job_command&gt;"
+</code></pre>
+<p>Key flags:</p>
+<ul>
+<li><code>--exact</code>: Use exactly the requested resources, allowing multiple steps to share nodes</li>
+<li><code>--time</code>: Set to <code>remaining_time - sigkill_headroom</code> so steps timeout before the allocation ends</li>
+<li><code>--signal</code>: Send a warning signal before step timeout (e.g., <code>TERM@120</code> sends SIGTERM 120s before)</li>
+</ul>
+<h3 id="resource-enforcement-in-slurm-mode"><a class="header" href="#resource-enforcement-in-slurm-mode">Resource Enforcement in Slurm Mode</a></h3>
+<p>When <code>limit_resources: true</code>:</p>
+<ul>
+<li><code>--cpus-per-task</code>, <code>--mem</code>, and <code>--gpus</code> are passed to srun</li>
+<li>Slurm's cgroups enforce these limits</li>
+<li>Jobs exceeding memory are killed by Slurm with exit code 137</li>
+</ul>
+<p>When <code>limit_resources: false</code>:</p>
+<ul>
+<li>CPU and memory flags are omitted</li>
+<li>Jobs can use any available resources in the allocation</li>
+<li>GPU flags are still passed (required for GPU access)</li>
+</ul>
+<h3 id="slurm-mode-configuration"><a class="header" href="#slurm-mode-configuration">Slurm Mode Configuration</a></h3>
+<pre><code class="language-yaml">execution_config:
+  mode: slurm
+  limit_resources: true            # Pass resource limits to srun
+  srun_termination_signal: TERM@120  # Send SIGTERM 120s before step timeout
+  sigkill_headroom_seconds: 180    # End steps 3 minutes before allocation ends
+  enable_cpu_bind: false           # Set to true to enable Slurm CPU binding
+</code></pre>
+<h3 id="step-timeout-vs-allocation-end"><a class="header" href="#step-timeout-vs-allocation-end">Step Timeout vs Allocation End</a></h3>
+<p>The <code>sigkill_headroom_seconds</code> setting creates a buffer between step timeouts and allocation end:</p>
+<pre><code>Allocation start                                        Allocation end
+    |                                                        |
+    |   [-------- Job step runs --------]                    |
+    |                                    ↑                   |
+    |                          Step timeout                  |
+    |                    (--time=remaining - headroom)       |
+    |                                                        |
+    |&lt;---------------- sigkill_headroom_seconds ------------&gt;|
+</code></pre>
+<p>This ensures:</p>
+<ol>
+<li>Steps timeout with Slurm's <code>TIMEOUT</code> status (exit code 152)</li>
+<li>The job runner has time to collect results and report to the server</li>
+<li>The allocation doesn't end while jobs are still running</li>
+</ol>
+<h2 id="disabling-resource-limits"><a class="header" href="#disabling-resource-limits">Disabling Resource Limits</a></h2>
+<p>Set <code>limit_resources: false</code> to disable resource enforcement:</p>
+<pre><code class="language-yaml">execution_config:
+  mode: direct  # or slurm
+  limit_resources: false
+</code></pre>
+<p>Effects:</p>
+<div class="table-wrapper"><table><thead><tr><th>Feature</th><th>limit_resources: true</th><th>limit_resources: false</th></tr></thead><tbody>
+<tr><td>Memory limits (direct)</td><td>OOM detection and SIGKILL</td><td>No enforcement</td></tr>
+<tr><td>Memory limits (slurm)</td><td>srun --mem passed</td><td>--mem omitted</td></tr>
+<tr><td>CPU limits (slurm)</td><td>srun --cpus-per-task</td><td>--cpus-per-task omitted</td></tr>
+<tr><td>GPU allocation</td><td>Always passed to srun</td><td>Always passed to srun</td></tr>
+<tr><td>Timeout termination</td><td>Enforced</td><td>Enforced</td></tr>
+</tbody></table>
+</div>
+<p>Note: GPU allocation is always requested regardless of <code>limit_resources</code> because jobs need explicit
+GPU access in Slurm.</p>
+<h2 id="exit-codes"><a class="header" href="#exit-codes">Exit Codes</a></h2>
+<p>Torc uses specific exit codes to identify termination reasons:</p>
+<div class="table-wrapper"><table><thead><tr><th>Exit Code</th><th>Meaning</th><th>Default</th><th>Configuration Key</th></tr></thead><tbody>
+<tr><td>137</td><td>OOM killed (128 + SIGKILL)</td><td>Yes</td><td><code>oom_exit_code</code></td></tr>
+<tr><td>152</td><td>Timeout (Slurm convention)</td><td>Yes</td><td><code>timeout_exit_code</code></td></tr>
+</tbody></table>
+</div>
+<p>These match Slurm's conventions, making it easy to handle failures consistently across execution
+modes.</p>
+<h2 id="example-configurations"><a class="header" href="#example-configurations">Example Configurations</a></h2>
+<h3 id="local-development"><a class="header" href="#local-development">Local Development</a></h3>
+<pre><code class="language-yaml">execution_config:
+  mode: direct
+  limit_resources: false  # Don't enforce limits during development
+</code></pre>
+<h3 id="production-hpc"><a class="header" href="#production-hpc">Production HPC</a></h3>
+<pre><code class="language-yaml">execution_config:
+  mode: auto  # Use slurm inside allocations
+  limit_resources: true
+  srun_termination_signal: TERM@120
+  sigkill_headroom_seconds: 300
+</code></pre>
+<h3 id="graceful-shutdown-with-custom-signal"><a class="header" href="#graceful-shutdown-with-custom-signal">Graceful Shutdown with Custom Signal</a></h3>
+<pre><code class="language-yaml">execution_config:
+  mode: direct
+  termination_signal: SIGINT  # Send SIGINT instead of SIGTERM
+  sigterm_lead_seconds: 60    # Give jobs 60s to handle SIGINT
+  sigkill_headroom_seconds: 90
+</code></pre>
+<h3 id="strict-memory-enforcement"><a class="header" href="#strict-memory-enforcement">Strict Memory Enforcement</a></h3>
+<pre><code class="language-yaml">resource_monitor:
+  enabled: true
+  granularity: time_series
+  sample_interval_seconds: 1
+
+execution_config:
+  mode: direct
+  limit_resources: true
+  oom_exit_code: 137
+</code></pre>
+<h2 id="monitoring-and-debugging"><a class="header" href="#monitoring-and-debugging">Monitoring and Debugging</a></h2>
+<h3 id="check-execution-mode"><a class="header" href="#check-execution-mode">Check Execution Mode</a></h3>
+<p>The job runner logs the effective execution mode at startup:</p>
+<pre><code>INFO Job runner starting workflow_id=1 ... execution_mode=Direct limit_resources=true
+</code></pre>
+<h3 id="view-termination-events"><a class="header" href="#view-termination-events">View Termination Events</a></h3>
+<p>Termination events are logged with context:</p>
+<pre><code>INFO Jobs terminating workflow_id=1 count=3
+INFO Job SIGTERM workflow_id=1 job_id=42
+INFO Waiting 30s for graceful termination before SIGKILL
+INFO Job SIGKILL workflow_id=1 job_id=42
+</code></pre>
+<h3 id="oom-violations"><a class="header" href="#oom-violations">OOM Violations</a></h3>
+<p>OOM violations are logged with memory details:</p>
+<pre><code>WARN OOM violation detected: workflow_id=1 job_id=42 pid=12345 memory=2.50GB limit=2.00GB
+WARN Killing OOM job workflow_id=1 job_id=42
+</code></pre>
+<h2 id="related-documentation"><a class="header" href="#related-documentation">Related Documentation</a></h2>
+<ul>
+<li><a href="core/concepts/../reference/resources.html">Resource Requirements</a> - Configuring job resource limits</li>
+<li><a href="core/concepts/../monitoring/resource-monitoring.html">Resource Monitoring</a> - Enabling the resource monitor</li>
+<li><a href="core/concepts/../reference/workflow-spec.html">Workflow Specification</a> - Full execution_config reference</li>
+<li><a href="core/concepts/../../specialized/fault-tolerance/checkpointing.html">Graceful Job Termination</a> - Handling
+termination signals in jobs</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="parallelization-strategies"><a class="header" href="#parallelization-strategies">Parallelization Strategies</a></h1>
 <p>Torc provides flexible parallelization strategies to accommodate different workflow patterns and
 resource allocation scenarios. Understanding these strategies helps you optimize job execution for
 your specific use case.</p>
-<h2 id="overview-1"><a class="header" href="#overview-1">Overview</a></h2>
+<h2 id="overview-2"><a class="header" href="#overview-2">Overview</a></h2>
 <p>Torc supports two primary approaches to parallel job execution:</p>
 <ol>
 <li><strong>Resource-aware allocation</strong> - Define per-job resource requirements and let runners
@@ -2911,6 +3174,121 @@ action {
 </code></pre>
 </li>
 </ol>
+<h2 id="execution-configuration"><a class="header" href="#execution-configuration">Execution Configuration</a></h2>
+<p>The <code>execution_config</code> section controls how jobs are executed and terminated. It supports three
+modes:</p>
+<ul>
+<li><strong>direct</strong>: Torc manages job execution and termination directly via signals</li>
+<li><strong>slurm</strong>: Jobs are wrapped with <code>srun</code> and Slurm manages resource limits/termination</li>
+<li><strong>auto</strong> (default): Uses <code>slurm</code> mode if <code>SLURM_JOB_ID</code> is set, otherwise <code>direct</code></li>
+</ul>
+<h3 id="yaml-example"><a class="header" href="#yaml-example">YAML Example</a></h3>
+<pre><code class="language-yaml">execution_config:
+  mode: direct # Options: direct, slurm, auto
+  limit_resources: true # Enforce memory/CPU limits (default: true)
+
+  # Direct mode settings
+  termination_signal: SIGTERM # Signal before SIGKILL (default: SIGTERM)
+  sigterm_lead_seconds: 30 # Seconds before SIGKILL to send signal (default: 30)
+  sigkill_headroom_seconds: 60 # Seconds before end_time for SIGKILL (default: 60)
+  timeout_exit_code: 152 # Exit code for timeout (default: 152, matches Slurm)
+  oom_exit_code: 137 # Exit code for OOM kill (default: 137)
+
+  # Slurm mode settings
+  srun_termination_signal: "TERM@120" # srun --signal spec
+  enable_cpu_bind: false # Allow Slurm CPU binding (default: false)
+</code></pre>
+<h3 id="kdl-example"><a class="header" href="#kdl-example">KDL Example</a></h3>
+<pre><code class="language-kdl">execution_config {
+    mode "slurm"
+    srun_termination_signal "TERM@120"
+    sigkill_headroom_seconds 180
+    enable_cpu_bind #true
+}
+</code></pre>
+<h3 id="json5-example"><a class="header" href="#json5-example">JSON5 Example</a></h3>
+<pre><code class="language-json5">{
+  execution_config: {
+    mode: "direct",
+    termination_signal: "SIGTERM",
+    sigterm_lead_seconds: 30,
+    sigkill_headroom_seconds: 60,
+  },
+}
+</code></pre>
+<h3 id="configuration-fields"><a class="header" href="#configuration-fields">Configuration Fields</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>mode</code></td><td>string</td><td><code>auto</code></td><td>Execution mode: <code>direct</code>, <code>slurm</code>, or <code>auto</code></td></tr>
+<tr><td><code>limit_resources</code></td><td>bool</td><td><code>true</code></td><td>Enforce memory/CPU limits</td></tr>
+<tr><td><code>termination_signal</code></td><td>string</td><td><code>SIGTERM</code></td><td>Signal to send before SIGKILL (direct mode)</td></tr>
+<tr><td><code>sigterm_lead_seconds</code></td><td>int</td><td><code>30</code></td><td>Seconds before SIGKILL to send termination signal</td></tr>
+<tr><td><code>sigkill_headroom_seconds</code></td><td>int</td><td><code>60</code></td><td>Seconds before end_time to send SIGKILL</td></tr>
+<tr><td><code>timeout_exit_code</code></td><td>int</td><td><code>152</code></td><td>Exit code for timed-out jobs</td></tr>
+<tr><td><code>oom_exit_code</code></td><td>int</td><td><code>137</code></td><td>Exit code for OOM-killed jobs</td></tr>
+<tr><td><code>srun_termination_signal</code></td><td>string</td><td>(none)</td><td>Slurm signal spec (e.g., <code>TERM@120</code>)</td></tr>
+<tr><td><code>enable_cpu_bind</code></td><td>bool</td><td><code>false</code></td><td>Allow Slurm CPU binding</td></tr>
+</tbody></table>
+</div>
+<h3 id="when-to-use-each-mode-1"><a class="header" href="#when-to-use-each-mode-1">When to Use Each Mode</a></h3>
+<ul>
+<li>
+<p><strong>direct mode</strong>: Use when running outside Slurm, or when <code>srun</code>/<code>sacct</code> are unreliable. Torc
+manages termination via SIGTERM/SIGKILL signals.</p>
+</li>
+<li>
+<p><strong>slurm mode</strong>: Use inside Slurm allocations when srun works correctly. Jobs are wrapped with
+<code>srun</code> and Slurm manages resource enforcement and termination.</p>
+</li>
+<li>
+<p><strong>auto mode</strong> (default): Automatically selects <code>slurm</code> mode if running inside a Slurm allocation
+(detected via <code>SLURM_JOB_ID</code> environment variable), otherwise uses <code>direct</code> mode.</p>
+</li>
+</ul>
+<h3 id="termination-timeline-direct-mode"><a class="header" href="#termination-timeline-direct-mode">Termination Timeline (Direct Mode)</a></h3>
+<p>When <code>sigkill_headroom_seconds=60</code> and <code>sigterm_lead_seconds=30</code>:</p>
+<pre><code>end_time - 90s: Send SIGTERM (or configured termination_signal)
+end_time - 60s: Send SIGKILL to any still-running jobs
+end_time:       Job runner exits
+</code></pre>
+<h3 id="slurm-mode-headroom"><a class="header" href="#slurm-mode-headroom">Slurm Mode Headroom</a></h3>
+<p>In Slurm mode, <code>sigkill_headroom_seconds</code> controls the <code>srun --time</code> parameter. The job's srun step
+time limit is set to <code>remaining_time - sigkill_headroom_seconds</code>, giving the job runner time to
+detect completion and report results before the allocation expires.</p>
+<p>If using <code>srun_termination_signal</code> (e.g., <code>TERM@120</code>), ensure its time value is less than
+<code>sigkill_headroom_seconds</code> so the signal is sent before Slurm kills the step.</p>
+<h3 id="migration-from-slurm_config-deprecated"><a class="header" href="#migration-from-slurm_config-deprecated">Migration from slurm_config (Deprecated)</a></h3>
+<p>The <code>slurm_config</code> field and top-level <code>use_srun</code>, <code>limit_resources</code>, <code>srun_termination_signal</code>, and
+<code>enable_cpu_bind</code> fields are <strong>deprecated</strong> and will be removed in a future release. Please migrate
+to <code>execution_config</code>:</p>
+<p><strong>Before (deprecated):</strong></p>
+<pre><code class="language-yaml"># Old style - deprecated
+slurm_config:
+  use_srun: true
+  limit_resources: true
+  srun_termination_signal: "TERM@120"
+
+# Or flat fields - also deprecated
+use_srun: true
+limit_resources: true
+</code></pre>
+<p><strong>After (recommended):</strong></p>
+<pre><code class="language-yaml"># New style - use execution_config
+execution_config:
+  mode: slurm # Replaces use_srun: true
+  limit_resources: true
+  srun_termination_signal: "TERM@120"
+  sigkill_headroom_seconds: 180 # New: controls srun --time headroom
+</code></pre>
+<p><strong>Migration mapping:</strong></p>
+<div class="table-wrapper"><table><thead><tr><th>Old Field</th><th>New Field in execution_config</th></tr></thead><tbody>
+<tr><td><code>use_srun: true</code></td><td><code>mode: slurm</code></td></tr>
+<tr><td><code>use_srun: false</code></td><td><code>mode: direct</code></td></tr>
+<tr><td>(not set)</td><td><code>mode: auto</code> (default)</td></tr>
+<tr><td><code>limit_resources</code></td><td><code>limit_resources</code></td></tr>
+<tr><td><code>srun_termination_signal</code></td><td><code>srun_termination_signal</code></td></tr>
+<tr><td><code>enable_cpu_bind</code></td><td><code>enable_cpu_bind</code></td></tr>
+</tbody></table>
+</div>
 <h2 id="common-features-across-all-formats"><a class="header" href="#common-features-across-all-formats">Common Features Across All Formats</a></h2>
 <h3 id="variable-substitution"><a class="header" href="#variable-substitution">Variable Substitution</a></h3>
 <p>All formats support the same variable substitution syntax:</p>
@@ -3489,6 +3867,7 @@ management in active projects where historical data is valuable but visual clutt
 <li><a href="core/how-to/./check-resource-utilization.html">Check Resource Utilization</a> - Monitoring resource usage</li>
 <li><a href="core/how-to/./view-resource-plots.html">View Resource Plots</a> - Visualizing resource metrics</li>
 <li><a href="core/how-to/./parameterize-with-files.html">Parameterize Jobs with Files</a> - Using file-based parameters</li>
+<li><a href="core/how-to/./use-invocation-script.html">Use Invocation Scripts</a> - Setting up job environments</li>
 <li><a href="core/how-to/./ro-crate-metadata.html">Add RO-Crate Metadata</a> - Storing provenance with RO-Crate</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="how-to-track-workflow-status"><a class="header" href="#how-to-track-workflow-status">How to Track Workflow Status</a></h1>
@@ -3979,6 +4358,108 @@ jobs:
 <li><a href="core/how-to/../tutorials/advanced-params.html">Advanced Parameterization</a> — Multi-dimensional sweeps</li>
 <li><a href="core/how-to/../reference/parameterization.html">Job Parameterization Reference</a> — Complete syntax</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="how-to-use-invocation-scripts"><a class="header" href="#how-to-use-invocation-scripts">How to Use Invocation Scripts</a></h1>
+<p>Set up the job environment before running the command.</p>
+<h2 id="the-problem"><a class="header" href="#the-problem">The Problem</a></h2>
+<p>Your jobs need a specific environment (conda, modules, virtualenv) but you don't want to embed
+activation commands in every job command.</p>
+<h2 id="the-solution"><a class="header" href="#the-solution">The Solution</a></h2>
+<p>Use <code>invocation_script</code> to wrap job commands with environment setup.</p>
+<h2 id="step-1-create-a-setup-script"><a class="header" href="#step-1-create-a-setup-script">Step 1: Create a Setup Script</a></h2>
+<p>Create a script that sets up your environment and executes the command passed to it:</p>
+<pre><code class="language-bash">#!/bin/bash
+# setup.sh - Environment wrapper for jobs
+
+# Load required modules (HPC systems)
+module load conda
+
+# Activate the conda environment
+conda activate my_env
+
+# Execute the job command (passed as arguments)
+"$@"
+</code></pre>
+<p>The key is <code>"$@"</code> at the end, which runs the job's command with all its arguments.</p>
+<h2 id="step-2-reference-in-job-definition"><a class="header" href="#step-2-reference-in-job-definition">Step 2: Reference in Job Definition</a></h2>
+<p>Add <code>invocation_script</code> to your job:</p>
+<pre><code class="language-yaml">jobs:
+  - name: train_model
+    command: python train.py --epochs 100 --output model.pt
+    invocation_script: bash setup.sh
+</code></pre>
+<p>When this job runs, Torc executes:</p>
+<pre><code class="language-bash">bash setup.sh python train.py --epochs 100 --output model.pt
+</code></pre>
+<p>The setup script loads conda, activates the environment, then runs <code>python train.py ...</code>.</p>
+<h2 id="complete-example-1"><a class="header" href="#complete-example-1">Complete Example</a></h2>
+<p><strong>setup.sh:</strong></p>
+<pre><code class="language-bash">#!/bin/bash
+module load conda
+conda activate ml_env
+"$@"
+</code></pre>
+<p><strong>workflow.yaml:</strong></p>
+<pre><code class="language-yaml">name: ml_training
+description: Train models with conda environment
+
+jobs:
+  - name: preprocess
+    command: python preprocess.py --input data.csv --output processed.pkl
+    invocation_script: bash setup.sh
+
+  - name: train
+    command: python train.py --data processed.pkl --model model.pt
+    invocation_script: bash setup.sh
+    depends_on: [preprocess]
+
+  - name: evaluate
+    command: python evaluate.py --model model.pt --output results.json
+    invocation_script: bash setup.sh
+    depends_on: [train]
+</code></pre>
+<h2 id="common-patterns"><a class="header" href="#common-patterns">Common Patterns</a></h2>
+<h3 id="python-virtual-environment"><a class="header" href="#python-virtual-environment">Python Virtual Environment</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+source /path/to/venv/bin/activate
+"$@"
+</code></pre>
+<h3 id="hpc-module-system"><a class="header" href="#hpc-module-system">HPC Module System</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+module purge
+module load gcc/11.2 cuda/11.8 python/3.10
+"$@"
+</code></pre>
+<h3 id="combined-setup"><a class="header" href="#combined-setup">Combined Setup</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+# Load modules
+module load cuda/11.8
+
+# Activate conda
+source /opt/conda/etc/profile.d/conda.sh
+conda activate my_env
+
+# Set environment variables
+export CUDA_VISIBLE_DEVICES=0
+
+# Run the command
+"$@"
+</code></pre>
+<h3 id="using-apptainer"><a class="header" href="#using-apptainer">Using Apptainer</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+apptainer exec /path/to/container.sif "$@"
+</code></pre>
+<h2 id="tips"><a class="header" href="#tips">Tips</a></h2>
+<ul>
+<li>Make the setup script executable: <code>chmod +x setup.sh</code></li>
+<li>Use absolute paths for portability across nodes</li>
+<li>Test the script manually before submitting: <code>bash setup.sh python --version</code></li>
+<li>Different jobs can use different invocation scripts</li>
+</ul>
+<h2 id="see-also-12"><a class="header" href="#see-also-12">See Also</a></h2>
+<ul>
+<li><a href="core/how-to/../reference/workflow-spec.html">Workflow Specification</a> - Full JobSpec reference</li>
+<li><a href="core/how-to/../../specialized/hpc/slurm-workflows.html">Slurm Workflows</a> - HPC-specific configuration</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="how-to-add-ro-crate-metadata"><a class="header" href="#how-to-add-ro-crate-metadata">How to Add RO-Crate Metadata</a></h1>
 <p>Store provenance information about simulation input/output data using
 <a href="https://www.researchobject.org/ro-crate/">Research Object Crates (RO-Crate)</a>. Torc lets you attach
@@ -4234,7 +4715,7 @@ metadata JSON.</p>
 <h2 id="workflow-exportimport"><a class="header" href="#workflow-exportimport">Workflow Export/Import</a></h2>
 <p>RO-Crate entities are included in workflow exports (<code>torc workflows export</code>) and restored during
 imports (<code>torc workflows import</code>). File ID links are remapped automatically.</p>
-<h2 id="see-also-12"><a class="header" href="#see-also-12">See Also</a></h2>
+<h2 id="see-also-13"><a class="header" href="#see-also-13">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/../concepts/ro-crate.html">RO-Crate Provenance Tracking</a> — Concept overview</li>
 <li><a href="https://www.researchobject.org/ro-crate/">RO-Crate Specification</a> — Official documentation</li>
@@ -5118,7 +5599,7 @@ cat /results/summary.csv
 </ul>
 <p>For larger sweeps (1000+ jobs), consider the <a href="core/tutorials/./multi-stage-barrier.html">barrier pattern</a> to reduce
 dependencies from O(n²) to O(n).</p>
-<h2 id="common-patterns"><a class="header" href="#common-patterns">Common Patterns</a></h2>
+<h2 id="common-patterns-1"><a class="header" href="#common-patterns-1">Common Patterns</a></h2>
 <h3 id="mixing-fixed-and-parameterized-jobs"><a class="header" href="#mixing-fixed-and-parameterized-jobs">Mixing Fixed and Parameterized Jobs</a></h3>
 <pre><code class="language-yaml">jobs:
   # Fixed job (no parameters)
@@ -5548,7 +6029,7 @@ jobs:
 </tbody></table>
 </div>
 <p>As you can see, barriers become <strong>essential</strong> for large-scale workflows.</p>
-<h2 id="complete-example-1"><a class="header" href="#complete-example-1">Complete Example</a></h2>
+<h2 id="complete-example-2"><a class="header" href="#complete-example-2">Complete Example</a></h2>
 <p>See
 <a href="https://github.com/NatLabRockies/torc/blob/main/examples/yaml/multi_stage_barrier_pattern.yaml">multi_stage_barrier_pattern.yaml</a>
 for a comprehensive example with:</p>
@@ -5768,7 +6249,7 @@ torc user-data update $USER_DATA_ID --data "$(cat results.json)"
 <li>✅ How <code>${user_data.input.*}</code> and <code>${user_data.output.*}</code> create dependencies</li>
 <li>✅ How to read and write user_data from within jobs</li>
 </ul>
-<h2 id="common-patterns-1"><a class="header" href="#common-patterns-1">Common Patterns</a></h2>
+<h2 id="common-patterns-2"><a class="header" href="#common-patterns-2">Common Patterns</a></h2>
 <h3 id="dynamic-configuration-generation"><a class="header" href="#dynamic-configuration-generation">Dynamic Configuration Generation</a></h3>
 <pre><code class="language-yaml">jobs:
   - name: analyze_data
@@ -5813,7 +6294,7 @@ torc user-data update $USER_DATA_ID --data "$(cat results.json)"
 <div style="break-before: page; page-break-before: always;"></div><h1 id="web-dashboard-torc-dash"><a class="header" href="#web-dashboard-torc-dash">Web Dashboard (torc-dash)</a></h1>
 <p>The Torc Dashboard (<code>torc-dash</code>) provides a modern web-based interface for monitoring and managing
 workflows, offering an intuitive alternative to the command-line interface.</p>
-<h2 id="overview-2"><a class="header" href="#overview-2">Overview</a></h2>
+<h2 id="overview-3"><a class="header" href="#overview-3">Overview</a></h2>
 <p><code>torc-dash</code> is a Rust-based web application that allows you to:</p>
 <ul>
 <li><strong>Monitor workflows and jobs</strong> with real-time status updates</li>
@@ -6641,7 +7122,7 @@ associated log file paths</li>
 <a href="core/monitoring/working-with-logs.html">Working with Logs</a>)</li>
 <li><strong>torc-dash Debug tab</strong>: Interactive web interface for visual debugging with log file viewer</li>
 </ul>
-<h2 id="overview-3"><a class="header" href="#overview-3">Overview</a></h2>
+<h2 id="overview-4"><a class="header" href="#overview-4">Overview</a></h2>
 <p>Torc automatically captures return codes and multiple log files for each job execution:</p>
 <ul>
 <li><strong>Job stdout/stderr</strong>: Output from your job commands</li>
@@ -7130,7 +7611,7 @@ torc reports results &lt;workflow_id&gt; --output-dir &lt;correct_path&gt;
 <li><strong><code>torc-dash</code></strong>: Launch web interface with interactive Debugging tab</li>
 <li><strong><code>torc tui</code></strong>: Launch terminal UI for workflow monitoring</li>
 </ul>
-<h2 id="see-also-13"><a class="header" href="#see-also-13">See Also</a></h2>
+<h2 id="see-also-14"><a class="header" href="#see-also-14">See Also</a></h2>
 <ul>
 <li><a href="core/monitoring/working-with-logs.html">Working with Logs</a> — Bundling and analyzing logs</li>
 <li><a href="core/monitoring/debugging-slurm.html">Debugging Slurm Workflows</a> — Slurm-specific debugging tools</li>
@@ -7284,7 +7765,7 @@ torc logs analyze wf&lt;id&gt;/
 <li><strong><code>torc slurm parse-logs</code></strong>: Parse Slurm logs for error patterns (Slurm-specific)</li>
 <li><strong><code>torc slurm sacct</code></strong>: Collect Slurm accounting data</li>
 </ul>
-<h2 id="see-also-14"><a class="header" href="#see-also-14">See Also</a></h2>
+<h2 id="see-also-15"><a class="header" href="#see-also-15">See Also</a></h2>
 <ul>
 <li><a href="core/monitoring/debugging.html">Debugging Workflows</a> — General debugging workflow and log file details</li>
 <li><a href="core/monitoring/debugging-slurm.html">Debugging Slurm Workflows</a> — Slurm-specific debugging tools</li>
@@ -7603,7 +8084,7 @@ torc watch 123 --auto-schedule \
     --auto-schedule-cooldown 3600 \
     --auto-schedule-stranded-timeout 14400
 </code></pre>
-<h3 id="see-also-15"><a class="header" href="#see-also-15">See Also</a></h3>
+<h3 id="see-also-16"><a class="header" href="#see-also-16">See Also</a></h3>
 <ul>
 <li><a href="core/reference/cli.html#torc-recover"><code>torc recover</code></a> — One-shot recovery (no continuous monitoring)</li>
 <li><a href="core/reference/../../specialized/fault-tolerance/automatic-recovery.html">Automatic Failure Recovery</a> — Detailed
@@ -7658,7 +8139,7 @@ torc recover 123 --retry-unknown
 # With custom recovery hook for domain-specific fixes
 torc recover 123 --recovery-hook 'bash fix-cluster.sh'
 </code></pre>
-<h3 id="see-also-16"><a class="header" href="#see-also-16">See Also</a></h3>
+<h3 id="see-also-17"><a class="header" href="#see-also-17">See Also</a></h3>
 <ul>
 <li><a href="core/reference/cli.html#torc-watch"><code>torc watch --recover</code></a> — Continuous monitoring with automatic recovery</li>
 <li><a href="core/reference/../../specialized/fault-tolerance/automatic-recovery.html">Automatic Failure Recovery</a> — Detailed
@@ -9146,7 +9627,7 @@ written in YAML, JSON, JSON5, or KDL formats.</p>
 <tr><td><code>resource_monitor</code></td><td><a href="core/reference/workflow-spec.html#resourcemonitorconfig">ResourceMonitorConfig</a></td><td>none</td><td>Resource monitoring configuration</td></tr>
 <tr><td><code>actions</code></td><td>[<a href="core/reference/workflow-spec.html#workflowactionspec">WorkflowActionSpec</a>]</td><td>none</td><td>Actions to execute based on workflow/job state transitions</td></tr>
 <tr><td><code>use_pending_failed</code></td><td>boolean</td><td>false</td><td>Use PendingFailed status for failed jobs (enables AI-assisted recovery)</td></tr>
-<tr><td><code>slurm_config</code></td><td><a href="core/reference/workflow-spec.html#slurmconfig">SlurmConfig</a></td><td>none</td><td>Slurm job step configuration (srun options)</td></tr>
+<tr><td><code>execution_config</code></td><td><a href="core/reference/workflow-spec.html#executionconfig">ExecutionConfig</a></td><td>none</td><td>Execution mode and termination settings</td></tr>
 <tr><td><code>compute_node_wait_for_new_jobs_seconds</code></td><td>integer</td><td>none</td><td>Compute nodes wait for new jobs this long before exiting</td></tr>
 <tr><td><code>compute_node_ignore_workflow_completion</code></td><td>boolean</td><td>false</td><td>Compute nodes hold allocations even after workflow completes</td></tr>
 <tr><td><code>compute_node_wait_for_healthy_database_minutes</code></td><td>integer</td><td>none</td><td>Compute nodes wait this many minutes for database recovery</td></tr>
@@ -9270,26 +9751,56 @@ jobs:
 <tr><td><code>extra</code></td><td>string</td><td>none</td><td>Additional Slurm parameters</td></tr>
 </tbody></table>
 </div>
-<h2 id="slurmconfig"><a class="header" href="#slurmconfig">SlurmConfig</a></h2>
-<p>Slurm job step configuration controlling how jobs are executed inside Slurm allocations. These
-settings affect srun arguments passed for each job step.</p>
-<p>For backward compatibility, these fields can also be specified as top-level WorkflowSpec fields
-(<code>limit_resources</code>, <code>use_srun</code>, <code>srun_termination_signal</code>, <code>enable_cpu_bind</code>). When both are
-present, <code>slurm_config</code> takes precedence.</p>
+<h2 id="executionconfig"><a class="header" href="#executionconfig">ExecutionConfig</a></h2>
+<p>Controls how jobs are executed and terminated. Supports three modes for different execution
+environments.</p>
 <div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>limit_resources</code></td><td>boolean</td><td><code>true</code></td><td>Pass <code>--mem</code> and <code>--cpus-per-task</code> to srun for cgroup enforcement</td></tr>
-<tr><td><code>use_srun</code></td><td>boolean</td><td><code>true</code></td><td>Wrap jobs with srun for accounting and cgroup enforcement</td></tr>
-<tr><td><code>srun_termination_signal</code></td><td>string</td><td>none</td><td>Signal spec for <code>srun --signal=&lt;value&gt;</code> (e.g. <code>"TERM@120"</code>)</td></tr>
-<tr><td><code>enable_cpu_bind</code></td><td>boolean</td><td><code>false</code></td><td>Allow Slurm CPU binding (default: disabled via <code>srun --cpu-bind=none</code>)</td></tr>
+<tr><td><code>mode</code></td><td>string</td><td><code>"auto"</code></td><td>Execution mode: <code>"direct"</code>, <code>"slurm"</code>, or <code>"auto"</code></td></tr>
+<tr><td><code>limit_resources</code></td><td>boolean</td><td><code>true</code></td><td>Enforce memory/CPU limits</td></tr>
+<tr><td><code>termination_signal</code></td><td>string</td><td><code>"SIGTERM"</code></td><td>Signal to send before SIGKILL (direct mode)</td></tr>
+<tr><td><code>sigterm_lead_seconds</code></td><td>integer</td><td><code>30</code></td><td>Seconds before SIGKILL to send termination signal</td></tr>
+<tr><td><code>sigkill_headroom_seconds</code></td><td>integer</td><td><code>60</code></td><td>Seconds before end_time for SIGKILL or srun --time adjustment</td></tr>
+<tr><td><code>timeout_exit_code</code></td><td>integer</td><td><code>152</code></td><td>Exit code for timed-out jobs (matches Slurm TIMEOUT)</td></tr>
+<tr><td><code>oom_exit_code</code></td><td>integer</td><td><code>137</code></td><td>Exit code for OOM-killed jobs (128 + SIGKILL)</td></tr>
+<tr><td><code>srun_termination_signal</code></td><td>string</td><td>none</td><td>Slurm signal spec for <code>srun --signal=&lt;value&gt;</code></td></tr>
+<tr><td><code>enable_cpu_bind</code></td><td>boolean</td><td><code>false</code></td><td>Allow Slurm CPU binding</td></tr>
 </tbody></table>
 </div>
-<p><strong>Example:</strong></p>
-<pre><code class="language-yaml">slurm_config:
+<h3 id="execution-modes-1"><a class="header" href="#execution-modes-1">Execution Modes</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Mode</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>direct</code></td><td>Torc manages job execution directly. Use outside Slurm or when srun unreliable</td></tr>
+<tr><td><code>slurm</code></td><td>Jobs wrapped with <code>srun</code>. Slurm manages resource limits and termination</td></tr>
+<tr><td><code>auto</code></td><td>Uses <code>slurm</code> if <code>SLURM_JOB_ID</code> is set, otherwise <code>direct</code> (default)</td></tr>
+</tbody></table>
+</div>
+<h3 id="direct-mode-example"><a class="header" href="#direct-mode-example">Direct Mode Example</a></h3>
+<pre><code class="language-yaml">execution_config:
+  mode: direct
   limit_resources: true
-  use_srun: true
+  termination_signal: SIGTERM
+  sigterm_lead_seconds: 30
+  sigkill_headroom_seconds: 60
+  timeout_exit_code: 152
+  oom_exit_code: 137
+</code></pre>
+<h3 id="slurm-mode-example"><a class="header" href="#slurm-mode-example">Slurm Mode Example</a></h3>
+<pre><code class="language-yaml">execution_config:
+  mode: slurm
   srun_termination_signal: "TERM@120"
+  sigkill_headroom_seconds: 180
   enable_cpu_bind: false
 </code></pre>
+<h3 id="termination-timeline-direct-mode-1"><a class="header" href="#termination-timeline-direct-mode-1">Termination Timeline (Direct Mode)</a></h3>
+<p>With <code>sigkill_headroom_seconds=60</code> and <code>sigterm_lead_seconds=30</code>:</p>
+<ol>
+<li><code>end_time - 90s</code>: Send SIGTERM (or configured <code>termination_signal</code>)</li>
+<li><code>end_time - 60s</code>: Send SIGKILL to remaining jobs, set exit code to <code>timeout_exit_code</code></li>
+<li><code>end_time</code>: Job runner exits</li>
+</ol>
+<h3 id="slurm-mode-headroom-1"><a class="header" href="#slurm-mode-headroom-1">Slurm Mode Headroom</a></h3>
+<p>In Slurm mode, <code>sigkill_headroom_seconds</code> controls <code>srun --time</code>. The step time limit is set to
+<code>remaining_time - sigkill_headroom_seconds</code>, allowing the job runner to detect completion before the
+allocation expires.</p>
 <h2 id="slurmdefaultsspec"><a class="header" href="#slurmdefaultsspec">SlurmDefaultsSpec</a></h2>
 <p>Workflow-level default parameters applied to all Slurm schedulers. This is a map of parameter names
 to values.</p>
@@ -9920,7 +10431,7 @@ esac
 
 exit 0  # Exit 0 to proceed with retry, non-zero to abort
 </code></pre>
-<h2 id="complete-example-2"><a class="header" href="#complete-example-2">Complete Example</a></h2>
+<h2 id="complete-example-3"><a class="header" href="#complete-example-3">Complete Example</a></h2>
 <p>Here's a complete example of a job that uses the environment variables:</p>
 <pre><code class="language-yaml">name: "Environment Variables Demo"
 user: "demo"
@@ -10458,7 +10969,7 @@ completion_check_interval_secs = 5
 <tr><td><code>RUST_LOG</code></td><td>All</td><td>Log level filter</td></tr>
 </tbody></table>
 </div>
-<h2 id="complete-example-3"><a class="header" href="#complete-example-3">Complete Example</a></h2>
+<h2 id="complete-example-4"><a class="header" href="#complete-example-4">Complete Example</a></h2>
 <pre><code class="language-toml"># ~/.config/torc/config.toml
 
 [client]
@@ -10505,7 +11016,7 @@ standalone = false
 server_port = 0
 completion_check_interval_secs = 5
 </code></pre>
-<h2 id="see-also-17"><a class="header" href="#see-also-17">See Also</a></h2>
+<h2 id="see-also-18"><a class="header" href="#see-also-18">See Also</a></h2>
 <ul>
 <li><a href="core/reference/../../specialized/admin/configuration-files.html">Configuration Files How-To</a></li>
 <li><a href="core/reference/../../specialized/tools/configuration.html">Configuration Tutorial</a></li>
@@ -11151,7 +11662,7 @@ curl $TORC_API_URL/health
 <p>Use <code>torc hpc match</code> to see which partitions match your requirements:</p>
 <pre><code class="language-bash">torc hpc match kestrel --cpus 32 --memory 64g --walltime 02:00:00 --gpus 2
 </code></pre>
-<h2 id="see-also-18"><a class="header" href="#see-also-18">See Also</a></h2>
+<h2 id="see-also-19"><a class="header" href="#see-also-19">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/../../core/workflows/visualizing-workflows.html">Visualizing Workflow Structure</a> — Execution plans
 and DAG visualization</li>
@@ -11196,7 +11707,7 @@ jobs:
 <pre><code class="language-bash"># See all options
 torc submit-slurm --help
 </code></pre>
-<h2 id="see-also-19"><a class="header" href="#see-also-19">See Also</a></h2>
+<h2 id="see-also-20"><a class="header" href="#see-also-20">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/../../specialized/hpc/slurm-workflows.html">Slurm Overview</a> — Full Slurm integration guide</li>
 <li><a href="specialized/hpc/../../specialized/hpc/hpc-profiles.html">HPC Profiles</a> — Available HPC system configurations</li>
@@ -11447,7 +11958,7 @@ resource_requirements:
 <h3 id="using-num_nodes--1-for-independent-jobs"><a class="header" href="#using-num_nodes--1-for-independent-jobs">Using <code>num_nodes &gt; 1</code> for independent jobs</a></h3>
 <p>If your jobs don't need inter-node communication, keep <code>num_nodes=1</code> (the default) and let Torc
 schedule them independently across nodes for maximum throughput.</p>
-<h2 id="see-also-20"><a class="header" href="#see-also-20">See Also</a></h2>
+<h2 id="see-also-21"><a class="header" href="#see-also-21">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/./slurm-workflows.html">Slurm Overview</a> — Auto-generated Slurm configuration with <code>submit-slurm</code></li>
 <li><a href="specialized/hpc/./slurm.html">Advanced Slurm Configuration</a> — Manual scheduler and srun wrapping details</li>
@@ -11804,7 +12315,7 @@ etc.) and are available via <code>torc slurm stats &lt;workflow_id&gt;</code>.</
 <h3 id="local-execution-1"><a class="header" href="#local-execution-1">Local Execution</a></h3>
 <p>When running locally (no <code>SLURM_JOB_ID</code> environment variable), Torc uses its standard shell wrapper
 and the <code>srun</code> behavior is never triggered. No configuration is needed for local runs.</p>
-<h2 id="see-also-21"><a class="header" href="#see-also-21">See Also</a></h2>
+<h2 id="see-also-22"><a class="header" href="#see-also-22">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/./slurm-workflows.html">Slurm Overview</a> — Simplified workflow approach</li>
 <li><a href="specialized/hpc/./hpc-profiles.html">HPC Profiles</a> — Automatic partition matching</li>
@@ -11894,7 +12405,7 @@ with exit code 152, which Torc can distinguish from user-initiated cancellation.
 designed for Slurm environments. This guide covers Slurm-specific debugging techniques and tools.</p>
 <p>For general debugging concepts and tools that apply to all workflows, see
 <a href="specialized/hpc/debugging.html">Debugging Workflows</a>.</p>
-<h2 id="overview-4"><a class="header" href="#overview-4">Overview</a></h2>
+<h2 id="overview-5"><a class="header" href="#overview-5">Overview</a></h2>
 <p>Slurm workflows generate additional log files beyond the standard job logs:</p>
 <ul>
 <li><strong>Slurm stdout/stderr</strong>: Output from Slurm's perspective (job allocation, environment setup)</li>
@@ -12267,7 +12778,7 @@ when:</p>
 <li><strong><code>torc-dash</code></strong>: Launch web interface with Slurm log viewing</li>
 <li><strong><code>torc tui</code></strong>: Launch terminal UI with Slurm log viewing</li>
 </ul>
-<h2 id="see-also-22"><a class="header" href="#see-also-22">See Also</a></h2>
+<h2 id="see-also-23"><a class="header" href="#see-also-23">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/debugging.html">Debugging Workflows</a> — General debugging tools and workflows</li>
 <li><a href="specialized/hpc/working-with-logs.html">Working with Logs</a> — Bundling and analyzing logs</li>
@@ -12276,7 +12787,7 @@ when:</p>
 <p>HPC (High-Performance Computing) profiles provide pre-configured knowledge about specific HPC
 systems, including their partitions, resource limits, and optimal settings. Torc uses this
 information to automatically match job requirements to appropriate partitions.</p>
-<h2 id="overview-5"><a class="header" href="#overview-5">Overview</a></h2>
+<h2 id="overview-6"><a class="header" href="#overview-6">Overview</a></h2>
 <p>HPC profiles contain:</p>
 <ul>
 <li><strong>Partition definitions</strong>: Available queues with their resource limits (CPUs, memory, walltime,
@@ -12390,7 +12901,7 @@ See <a href="specialized/hpc/./slurm.html">Advanced Slurm Configuration</a> for 
 <li><code>torc submit-slurm</code> - Submit workflows with auto-generated schedulers</li>
 <li><code>torc workflows create-slurm</code> - Create workflows with auto-generated schedulers</li>
 </ul>
-<h2 id="see-also-23"><a class="header" href="#see-also-23">See Also</a></h2>
+<h2 id="see-also-24"><a class="header" href="#see-also-24">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/./slurm.html">Advanced Slurm Configuration</a></li>
 <li><a href="specialized/hpc/./custom-hpc-profile.html">Custom HPC Profile Tutorial</a></li>
@@ -12400,7 +12911,7 @@ See <a href="specialized/hpc/./slurm.html">Advanced Slurm Configuration</a> for 
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="hpc-profiles-reference"><a class="header" href="#hpc-profiles-reference">HPC Profiles Reference</a></h1>
 <p>Complete reference for HPC profile system and CLI commands.</p>
-<h2 id="overview-6"><a class="header" href="#overview-6">Overview</a></h2>
+<h2 id="overview-7"><a class="header" href="#overview-7">Overview</a></h2>
 <p>HPC profiles contain pre-configured knowledge about High-Performance Computing systems, enabling
 automatic Slurm scheduler generation based on job resource requirements. Torc supports built-in
 profiles, custom profiles in your config file, and <strong>dynamic Slurm profiles</strong> generated by querying
@@ -12726,7 +13237,7 @@ default_account = "my_default_account"
 </div>
 <p>Generated walltime uses <code>HH:MM:SS</code> format (e.g., <code>04:00:00</code>).</p>
 <hr />
-<h2 id="see-also-24"><a class="header" href="#see-also-24">See Also</a></h2>
+<h2 id="see-also-25"><a class="header" href="#see-also-25">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/./hpc-profiles.html">Working with HPC Profiles</a></li>
 <li><a href="specialized/hpc/./custom-hpc-profile.html">Custom HPC Profile Tutorial</a></li>
@@ -12736,7 +13247,7 @@ default_account = "my_default_account"
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="hpc-deployment-reference"><a class="header" href="#hpc-deployment-reference">HPC Deployment Reference</a></h1>
 <p>Configuration guide for deploying Torc on High-Performance Computing systems.</p>
-<h2 id="overview-7"><a class="header" href="#overview-7">Overview</a></h2>
+<h2 id="overview-8"><a class="header" href="#overview-8">Overview</a></h2>
 <p>Running Torc on HPC systems requires special configuration to ensure:</p>
 <ul>
 <li>Compute nodes can reach the torc-server running on a login node</li>
@@ -12922,7 +13433,7 @@ pgrep -f torc-server
 # Check server logs
 tail -100 /scratch/$USER/torc/logs/torc-server*.log
 </code></pre>
-<h2 id="see-also-25"><a class="header" href="#see-also-25">See Also</a></h2>
+<h2 id="see-also-26"><a class="header" href="#see-also-26">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/../../core/reference/configuration.html">Configuration Reference</a></li>
 <li><a href="specialized/hpc/./hpc-profiles-reference.html">HPC Profiles Reference</a></li>
@@ -13234,7 +13745,7 @@ hostname
 </ol>
 <p>Or simply <a href="https://github.com/NatLabRockies/torc/issues">open an issue</a> with your partition
 information and we'll add it for you.</p>
-<h2 id="see-also-26"><a class="header" href="#see-also-26">See Also</a></h2>
+<h2 id="see-also-27"><a class="header" href="#see-also-27">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/./hpc-profiles.html">Working with HPC Profiles</a> - General HPC profile usage</li>
 <li><a href="specialized/hpc/./hpc-profiles-reference.html">HPC Profiles Reference</a> - Complete configuration options</li>
@@ -13247,7 +13758,7 @@ information and we'll add it for you.</p>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="remote-workers-4"><a class="header" href="#remote-workers-4">Remote Workers</a></h1>
 <p>Run workflows across multiple machines via SSH without requiring an HPC scheduler.</p>
-<h2 id="overview-8"><a class="header" href="#overview-8">Overview</a></h2>
+<h2 id="overview-9"><a class="header" href="#overview-9">Overview</a></h2>
 <p>Torc supports three execution modes:</p>
 <ol>
 <li><strong>Local</strong> (<code>torc run</code>) - Jobs run on the current machine</li>
@@ -13524,7 +14035,7 @@ agents</li>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="automatic-failure-recovery"><a class="header" href="#automatic-failure-recovery">Automatic Failure Recovery</a></h1>
 <p>This guide explains how to use Torc's automatic recovery features to handle workflow failures
 without manual intervention.</p>
-<h2 id="overview-9"><a class="header" href="#overview-9">Overview</a></h2>
+<h2 id="overview-10"><a class="header" href="#overview-10">Overview</a></h2>
 <p>Torc provides <strong>automatic failure recovery</strong> through two commands:</p>
 <ul>
 <li><strong><code>torc recover</code></strong> - One-shot recovery for Slurm workflows</li>
@@ -14004,7 +14515,7 @@ for more details.</p>
 <li>Update jobs with new scheduler reference</li>
 <li>Submit allocations via sbatch</li>
 </ol>
-<h2 id="see-also-27"><a class="header" href="#see-also-27">See Also</a></h2>
+<h2 id="see-also-28"><a class="header" href="#see-also-28">See Also</a></h2>
 <ul>
 <li><a href="specialized/fault-tolerance/./failure-handlers.html">Configurable Failure Handlers</a> - Per-job retry with exit-code-specific
 recovery</li>
@@ -14315,7 +14826,7 @@ New allocation starts, runs the 3 retry jobs
 
 Process continues until all jobs succeed or max_retries exceeded
 </code></pre>
-<h2 id="complete-example-4"><a class="header" href="#complete-example-4">Complete Example</a></h2>
+<h2 id="complete-example-5"><a class="header" href="#complete-example-5">Complete Example</a></h2>
 <p>Here's a complete workflow specification with failure handlers. See
 <code>examples/yaml/failure_handler_simulation.yaml</code> for the full runnable example.</p>
 <pre><code class="language-yaml">name: failure_handler_simulation
@@ -14531,7 +15042,7 @@ mechanisms.</p>
 <li>An MCP-compatible AI agent (Claude Code, GitHub Copilot, or custom)</li>
 <li><code>torc-mcp-server</code> installed</li>
 </ul>
-<h2 id="the-problem"><a class="header" href="#the-problem">The Problem</a></h2>
+<h2 id="the-problem-1"><a class="header" href="#the-problem-1">The Problem</a></h2>
 <p>Traditional recovery mechanisms have limitations:</p>
 <div class="table-wrapper"><table><thead><tr><th>Mechanism</th><th>Limitation</th></tr></thead><tbody>
 <tr><td><strong>Failure handlers</strong></td><td>Require predefined exit codes</td></tr>
@@ -14992,7 +15503,7 @@ main loop so the handler is active from the start.</p>
 <pre><code class="language-yaml">name: graceful_termination_demo
 description: Demonstrates early SIGTERM with automatic checkpoint-and-retry
 
-slurm_config:
+execution_config:
   srun_termination_signal: "TERM@120"
 
 failure_handlers:
@@ -15032,7 +15543,7 @@ actions:
 <p>Three pieces work together here:</p>
 <ul>
 <li>
-<p><strong><code>slurm_config.srun_termination_signal: "TERM@120"</code></strong> tells Slurm to send SIGTERM 120 seconds
+<p><strong><code>execution_config.srun_termination_signal: "TERM@120"</code></strong> tells Slurm to send SIGTERM 120 seconds
 before the step time limit. Torc passes this to every <code>srun</code> invocation as
 <code>srun --signal=TERM@120</code>.</p>
 </li>
@@ -15081,8 +15592,8 @@ of checkpoint cycles.</p>
 <h2 id="how-it-works-under-the-hood"><a class="header" href="#how-it-works-under-the-hood">How It Works Under the Hood</a></h2>
 <ol>
 <li>
-<p><strong><code>slurm_config.srun_termination_signal: "TERM@120"</code></strong> is stored on the workflow record in the
-Torc database.</p>
+<p><strong><code>execution_config.srun_termination_signal: "TERM@120"</code></strong> is stored on the workflow record in
+the Torc database.</p>
 </li>
 <li>
 <p>When the job runner launches a job inside a Slurm allocation, it builds an <code>srun</code> command that
@@ -15574,7 +16085,7 @@ torc --format json workflows list
 # CLI url overrides config file
 torc --url http://other:8080/torc-service/v1 workflows list
 </code></pre>
-<h2 id="common-patterns-2"><a class="header" href="#common-patterns-2">Common Patterns</a></h2>
+<h2 id="common-patterns-3"><a class="header" href="#common-patterns-3">Common Patterns</a></h2>
 <h3 id="development-environment"><a class="header" href="#development-environment">Development Environment</a></h3>
 <pre><code class="language-toml"># ~/.config/torc/config.toml
 [client]
@@ -15623,7 +16134,7 @@ output_dir = "/scratch/user/workflow_output"
 <div style="break-before: page; page-break-before: always;"></div><h1 id="authentication"><a class="header" href="#authentication">Authentication</a></h1>
 <p>Torc supports HTTP Basic authentication to secure access to your workflow orchestration server. This
 guide explains how to set up and use authentication.</p>
-<h2 id="overview-10"><a class="header" href="#overview-10">Overview</a></h2>
+<h2 id="overview-11"><a class="header" href="#overview-11">Overview</a></h2>
 <p>Torc's authentication system provides:</p>
 <ul>
 <li><strong>Multi-user support</strong> via htpasswd files</li>
@@ -16099,7 +16610,7 @@ check that the proxy is configured and the URL is correct.</p>
 <li><strong>Format:</strong> PEM-encoded (Base64 ASCII, begins with <code>-----BEGIN CERTIFICATE-----</code>)</li>
 <li><strong>Type:</strong> CA certificate (not the server's leaf certificate)</li>
 </ul>
-<h2 id="see-also-28"><a class="header" href="#see-also-28">See Also</a></h2>
+<h2 id="see-also-29"><a class="header" href="#see-also-29">See Also</a></h2>
 <ul>
 <li><a href="specialized/admin/./authentication.html">Authentication</a> — Setting up user authentication</li>
 <li><a href="specialized/admin/./security.html">Security Reference</a> — Security best practices and threat model</li>
@@ -16109,7 +16620,7 @@ check that the proxy is configured and the URL is correct.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="access-groups"><a class="header" href="#access-groups">Access Groups</a></h1>
 <p>Torc supports team-based access control through access groups. This allows teams to share access to
 workflows while restricting access from other teams.</p>
-<h2 id="overview-11"><a class="header" href="#overview-11">Overview</a></h2>
+<h2 id="overview-12"><a class="header" href="#overview-12">Overview</a></h2>
 <p>Access groups provide:</p>
 <ul>
 <li><strong>Team-based access control</strong> - Share workflows with specific groups</li>
@@ -17163,7 +17674,7 @@ writing YAML or JSON files.</p>
 <li>Torc dashboard running (see <a href="specialized/tools/./dashboard-deployment.html">Dashboard Deployment</a>)</li>
 <li>Basic understanding of Torc workflows</li>
 </ul>
-<h2 id="overview-12"><a class="header" href="#overview-12">Overview</a></h2>
+<h2 id="overview-13"><a class="header" href="#overview-13">Overview</a></h2>
 <p>The workflow wizard guides you through five steps:</p>
 <ol>
 <li><strong>Basics</strong> - Workflow name and description</li>
@@ -18076,7 +18587,7 @@ deployment scenarios</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="configuring-ai-assistants"><a class="header" href="#configuring-ai-assistants">Configuring AI Assistants</a></h1>
 <p>Complete guide for configuring AI assistants (Claude Code, GitHub Copilot) to work with Torc.</p>
-<h2 id="overview-13"><a class="header" href="#overview-13">Overview</a></h2>
+<h2 id="overview-14"><a class="header" href="#overview-14">Overview</a></h2>
 <p>Torc provides an MCP (Model Context Protocol) server that enables AI assistants to interact with
 workflows. The <code>torc-mcp-server</code> binary acts as a bridge between AI assistants and the Torc HTTP
 API.</p>
@@ -18306,7 +18817,7 @@ remains in Torc's database.</p>
 <li>Check that jobs have actually run (logs are created at runtime)</li>
 </ul>
 <hr />
-<h2 id="see-also-29"><a class="header" href="#see-also-29">See Also</a></h2>
+<h2 id="see-also-30"><a class="header" href="#see-also-30">See Also</a></h2>
 <ul>
 <li><a href="specialized/tools/./ai-assistant.html">AI-Assisted Workflow Management Tutorial</a></li>
 <li><a href="specialized/tools/../../core/reference/configuration.html">Configuration Reference</a></li>
@@ -19092,7 +19603,7 @@ torc results list $wf -f json | from json | get results | where job_id in $faile
 <tr><td>Convert to CSV</td><td><code>to csv</code></td></tr>
 </tbody></table>
 </div>
-<h2 id="tips"><a class="header" href="#tips">Tips</a></h2>
+<h2 id="tips-1"><a class="header" href="#tips-1">Tips</a></h2>
 <ol>
 <li><strong>Use <code>nu</code> interactively</strong>: Start a Nushell session to explore data step by step</li>
 <li><strong>Tab completion</strong>: Nushell provides completions for commands and field names</li>
@@ -19117,7 +19628,7 @@ output</li>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="shell-completions"><a class="header" href="#shell-completions">Shell Completions</a></h1>
 <p>Torc provides shell completion scripts to make working with the CLI faster and more convenient.
 Completions help you discover commands, avoid typos, and speed up your workflow.</p>
-<h2 id="overview-14"><a class="header" href="#overview-14">Overview</a></h2>
+<h2 id="overview-15"><a class="header" href="#overview-15">Overview</a></h2>
 <p>Shell completions provide:</p>
 <ul>
 <li><strong>Command completion</strong> - Tab-complete <code>torc</code> subcommands and options</li>
@@ -19558,7 +20069,7 @@ examples.</p>
 <p>Workflow actions enable automatic execution of commands and resource allocation in response to
 workflow lifecycle events. Actions provide hooks for setup, teardown, monitoring, and dynamic
 resource management throughout workflow execution.</p>
-<h2 id="overview-15"><a class="header" href="#overview-15">Overview</a></h2>
+<h2 id="overview-16"><a class="header" href="#overview-16">Overview</a></h2>
 <p>Actions consist of three components:</p>
 <ol>
 <li><strong>Trigger</strong> - The condition that activates the action</li>
@@ -20353,7 +20864,7 @@ actions</li>
 <p>This document describes the internal architecture and implementation of failure handlers in Torc.
 For a user-focused tutorial, see
 <a href="specialized/design/../fault-tolerance/failure-handlers.html">Configurable Failure Handlers</a>.</p>
-<h2 id="overview-16"><a class="header" href="#overview-16">Overview</a></h2>
+<h2 id="overview-17"><a class="header" href="#overview-17">Overview</a></h2>
 <p>Failure handlers provide per-job automatic retry logic based on exit codes. They allow workflows to
 recover from transient failures and terminations (e.g., Slurm timeouts) without manual intervention
 or workflow-level recovery heuristics.</p>
@@ -20833,7 +21344,7 @@ based on user feedback.</p>
 <p>This document describes the architecture and implementation of AI-assisted failure recovery in Torc.
 For a user-focused tutorial, see
 <a href="specialized/design/../fault-tolerance/ai-assisted-recovery.html">AI-Assisted Failure Recovery</a>.</p>
-<h2 id="overview-17"><a class="header" href="#overview-17">Overview</a></h2>
+<h2 id="overview-18"><a class="header" href="#overview-18">Overview</a></h2>
 <p>AI-assisted recovery enables intelligent classification of job failures that can't be handled by
 rule-based mechanisms (failure handlers, OOM/timeout detection). It introduces a new job status
 (<code>pending_failed</code>) that defers the fail/retry decision to an AI agent.</p>
@@ -21798,7 +22309,7 @@ bash make_api_clients.sh  # Regenerates both Python and Julia clients
 <p>Torc automatically wraps workflow jobs with <code>srun</code> when running inside a Slurm allocation, creating
 per-job steps with cgroup enforcement. It then monitors live resource usage via <code>sstat</code> and collects
 final accounting data via <code>sacct</code>. This page describes the architecture and data flow.</p>
-<h2 id="overview-18"><a class="header" href="#overview-18">Overview</a></h2>
+<h2 id="overview-19"><a class="header" href="#overview-19">Overview</a></h2>
 <p>When a Torc job runner detects <code>SLURM_JOB_ID</code> in the environment, it activates three subsystems:</p>
 <ol>
 <li><strong>srun wrapping</strong> -- creates a Slurm job step per workflow job</li>
@@ -22389,7 +22900,7 @@ document should cover:</p>
 ├── test_job_runner.rs     # Job runner tests
 └── scripts/               # Helper scripts for tests
 </code></pre>
-<h3 id="common-patterns-3"><a class="header" href="#common-patterns-3">Common Patterns</a></h3>
+<h3 id="common-patterns-4"><a class="header" href="#common-patterns-4">Common Patterns</a></h3>
 <p><strong>Fixture Pattern:</strong></p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
@@ -22686,7 +23197,7 @@ pub enum WorkflowError {
 let job = get_job(config, job_id)
     .expect("Job should exist after creation");
 <span class="boring">}</span></code></pre></pre>
-<h2 id="common-patterns-4"><a class="header" href="#common-patterns-4">Common Patterns</a></h2>
+<h2 id="common-patterns-5"><a class="header" href="#common-patterns-5">Common Patterns</a></h2>
 <h3 id="configuration-priority"><a class="header" href="#configuration-priority">Configuration Priority</a></h3>
 <p>CLI arguments override environment variables, which override config files:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
