@@ -8,7 +8,8 @@ use petgraph::graph::NodeIndex;
 use ratatui::widgets::TableState;
 
 use crate::client::log_paths::{
-    get_job_stderr_path, get_job_stdout_path, get_slurm_stderr_path, get_slurm_stdout_path,
+    get_job_combined_path, get_job_stderr_path, get_job_stdout_path, get_slurm_stderr_path,
+    get_slurm_stdout_path,
 };
 use crate::client::sse_client::SseEvent;
 use crate::models::{
@@ -1772,26 +1773,40 @@ impl App {
                     result.run_id,
                     attempt_id,
                 );
+                let combined_path = get_job_combined_path(
+                    output_dir,
+                    workflow_id,
+                    viewer.job_id,
+                    result.run_id,
+                    attempt_id,
+                );
 
-                viewer.stdout_path = Some(stdout_path.clone());
-                viewer.stderr_path = Some(stderr_path.clone());
-
-                // Try to read stdout
+                // Try separate .o file first, then fall back to combined .log
                 if let Ok(content) = std::fs::read_to_string(&stdout_path) {
+                    viewer.stdout_path = Some(stdout_path);
+                    viewer.stdout_content = content;
+                } else if let Ok(content) = std::fs::read_to_string(&combined_path) {
+                    viewer.stdout_path = Some(combined_path.clone());
                     viewer.stdout_content = content;
                 } else {
+                    viewer.stdout_path = Some(stdout_path.clone());
                     viewer.stdout_content = format!(
-                        "Could not read file: {}\n\nThe file may not exist if:\n- The job has not run yet\n- The output directory is different\n- You are on a different system",
+                        "Could not read file: {}\n\nThe file may not exist if:\n- The job has not run yet\n- The output directory is different\n- You are on a different system\n- The job used a stdio mode that doesn't capture stdout",
                         stdout_path
                     );
                 }
 
-                // Try to read stderr
+                // Try separate .e file first, then fall back to combined .log
                 if let Ok(content) = std::fs::read_to_string(&stderr_path) {
+                    viewer.stderr_path = Some(stderr_path);
+                    viewer.stderr_content = content;
+                } else if let Ok(content) = std::fs::read_to_string(&combined_path) {
+                    viewer.stderr_path = Some(combined_path);
                     viewer.stderr_content = content;
                 } else {
+                    viewer.stderr_path = Some(stderr_path.clone());
                     viewer.stderr_content = format!(
-                        "Could not read file: {}\n\nThe file may not exist if:\n- The job has not run yet\n- The output directory is different\n- You are on a different system",
+                        "Could not read file: {}\n\nThe file may not exist if:\n- The job has not run yet\n- The output directory is different\n- You are on a different system\n- The job used a stdio mode that doesn't capture stderr",
                         stderr_path
                     );
                 }

@@ -639,7 +639,7 @@ impl JobSpec {
 }
 
 /// How to capture stdout and stderr for job processes.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default, clap::ValueEnum)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum StdioMode {
     /// Separate stdout and stderr files (.o and .e) — the default.

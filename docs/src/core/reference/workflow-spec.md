@@ -238,9 +238,6 @@ jobs:
       mode: separate
 ```
 
-The `--stdio-mode` and `--delete-stdio-on-success` CLI flags on `torc run` override the
-workflow-level setting for all jobs in that run.
-
 ### Execution Modes
 
 | Mode     | Description                                                                    |

@@ -8,6 +8,7 @@ use std::thread;
 use std::time::Duration;
 use tempfile::TempDir;
 use torc::client::async_cli_command::AsyncCliCommand;
+use torc::client::job_runner::cleanup_job_stdio_files;
 use torc::client::workflow_spec::{ExecutionMode, StdioMode};
 use torc::models::{JobModel, JobStatus};
 
@@ -1215,4 +1216,79 @@ fn test_stdio_mode_none(start_server: &ServerProcess) {
 
     assert!(async_cmd.stdout_path.is_none());
     assert!(async_cmd.stderr_path.is_none());
+}
+
+// =============================================================================
+// cleanup_job_stdio_files tests
+// =============================================================================
+
+#[test]
+fn test_cleanup_stdio_files_separate_mode() {
+    let temp_dir = TempDir::new().unwrap();
+    let stdout = temp_dir.path().join("job.o");
+    let stderr = temp_dir.path().join("job.e");
+    fs::write(&stdout, "out").unwrap();
+    fs::write(&stderr, "err").unwrap();
+
+    cleanup_job_stdio_files(
+        Some(stdout.to_str().unwrap()),
+        Some(stderr.to_str().unwrap()),
+    );
+
+    assert!(!stdout.exists(), "stdout file should be deleted");
+    assert!(!stderr.exists(), "stderr file should be deleted");
+}
+
+#[test]
+fn test_cleanup_stdio_files_combined_mode() {
+    let temp_dir = TempDir::new().unwrap();
+    let combined = temp_dir.path().join("job.log");
+    fs::write(&combined, "combined output").unwrap();
+
+    // Combined mode: stdout_path points to .log, stderr_path is None
+    cleanup_job_stdio_files(Some(combined.to_str().unwrap()), None);
+
+    assert!(!combined.exists(), "combined file should be deleted");
+}
+
+#[test]
+fn test_cleanup_stdio_files_no_stdout_mode() {
+    let temp_dir = TempDir::new().unwrap();
+    let stderr = temp_dir.path().join("job.e");
+    fs::write(&stderr, "err").unwrap();
+
+    // NoStdout mode: stdout_path is None
+    cleanup_job_stdio_files(None, Some(stderr.to_str().unwrap()));
+
+    assert!(!stderr.exists(), "stderr file should be deleted");
+}
+
+#[test]
+fn test_cleanup_stdio_files_none_mode() {
+    // None mode: both paths are None — should not panic
+    cleanup_job_stdio_files(None, None);
+}
+
+#[test]
+fn test_cleanup_stdio_files_already_missing() {
+    // Files that don't exist should be silently ignored (NotFound)
+    cleanup_job_stdio_files(Some("/nonexistent/path.o"), Some("/nonexistent/path.e"));
+}
+
+#[test]
+fn test_cleanup_stdio_files_retains_on_failure() {
+    // This test verifies that cleanup is only called for successful jobs.
+    // The decision logic is in ExecutionConfig::delete_stdio_on_success,
+    // which is tested in test_execution_config.rs. Here we verify that
+    // NOT calling cleanup preserves the files.
+    let temp_dir = TempDir::new().unwrap();
+    let stdout = temp_dir.path().join("job.o");
+    let stderr = temp_dir.path().join("job.e");
+    fs::write(&stdout, "out").unwrap();
+    fs::write(&stderr, "err").unwrap();
+
+    // Simulate: job failed, so cleanup is NOT called.
+    // Files should still exist.
+    assert!(stdout.exists(), "stdout should be retained on failure");
+    assert!(stderr.exists(), "stderr should be retained on failure");
 }

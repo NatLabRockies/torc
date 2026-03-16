@@ -1547,21 +1547,7 @@ impl JobRunner {
 
     /// Delete stdio files for a completed job.
     fn cleanup_stdio_files(cmd: &AsyncCliCommand) {
-        for path in [&cmd.stdout_path, &cmd.stderr_path]
-            .iter()
-            .copied()
-            .flatten()
-        {
-            match std::fs::remove_file(path) {
-                Ok(()) => {
-                    debug!("Deleted stdio file: {}", path);
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                Err(e) => {
-                    warn!("Failed to delete stdio file {}: {}", path, e);
-                }
-            }
-        }
+        cleanup_job_stdio_files(cmd.stdout_path.as_deref(), cmd.stderr_path.as_deref());
     }
 
     /// Run a recovery script with environment variables set.
@@ -2685,6 +2671,23 @@ impl ComputeNodeRules {
 /// from the sstat time-series if TimeSeries monitoring was configured.
 /// Backfill sacct accounting data into a job result, preferring the max of sacct vs sstat peaks.
 ///
+/// Delete stdio files for a completed job given optional stdout and stderr paths.
+///
+/// Silently ignores files that don't exist (e.g., when using `NoStdout` or `NoStderr` modes).
+pub fn cleanup_job_stdio_files(stdout_path: Option<&str>, stderr_path: Option<&str>) {
+    for path in [stdout_path, stderr_path].iter().copied().flatten() {
+        match std::fs::remove_file(path) {
+            Ok(()) => {
+                debug!("Deleted stdio file: {}", path);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => {
+                warn!("Failed to delete stdio file {}: {}", path, e);
+            }
+        }
+    }
+}
+
 /// This ensures that even when sstat time-series monitoring missed a spike, the sacct
 /// post-mortem data fills in accurate resource usage.
 fn backfill_sacct_into_result(result: &mut ResultModel, stats: &SlurmStatsModel) {
