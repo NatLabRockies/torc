@@ -95,12 +95,6 @@ pub struct Args {
     /// Skip TLS certificate verification (for testing only)
     #[arg(long, env = "TORC_TLS_INSECURE")]
     pub tls_insecure: bool,
-    /// Stdio capture mode: separate, combined, no_stdout, no_stderr, none
-    #[arg(long)]
-    pub stdio_mode: Option<crate::client::workflow_spec::StdioMode>,
-    /// Delete stdout/stderr files when jobs complete successfully
-    #[arg(long)]
-    pub delete_stdio_on_success: bool,
 }
 
 fn resolve_end_time(
@@ -320,8 +314,6 @@ pub fn run(args: &Args) {
         unique_label,
         None, // No per-node tracking for local runner
     );
-
-    job_runner.override_stdio(args.stdio_mode.clone(), args.delete_stdio_on_success);
 
     match job_runner.run_worker() {
         Ok(result) => {

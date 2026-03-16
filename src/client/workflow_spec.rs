@@ -3018,6 +3018,10 @@ impl WorkflowSpec {
                             );
                         }
                     }
+                    "stdio" => {
+                        let stdio_obj = Self::kdl_stdio_config_to_json(child)?;
+                        obj.insert("stdio".to_string(), stdio_obj);
+                    }
                     _ => {}
                 }
             }
@@ -3556,6 +3560,12 @@ impl WorkflowSpec {
         if let Some(children) = node.children() {
             for child in children.nodes() {
                 let key = child.name().value();
+                // Handle child blocks (no entry value, only children)
+                if key == "stdio" {
+                    let stdio_obj = Self::kdl_stdio_config_to_json(child)?;
+                    obj.insert("stdio".to_string(), stdio_obj);
+                    continue;
+                }
                 if let Some(entry) = child.entries().first() {
                     let value = entry.value();
                     match key {
@@ -3598,6 +3608,53 @@ impl WorkflowSpec {
                         }
                         _ => {
                             log::warn!("Unknown execution_config field '{}' will be ignored", key);
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(serde_json::Value::Object(obj))
+    }
+
+    /// Convert a KDL stdio config node to a JSON object.
+    ///
+    /// Handles blocks like:
+    /// ```kdl
+    /// stdio {
+    ///     mode "combined"
+    ///     delete_on_success #true
+    /// }
+    /// ```
+    #[cfg(feature = "client")]
+    fn kdl_stdio_config_to_json(
+        node: &KdlNode,
+    ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+        let mut obj = serde_json::Map::new();
+
+        if let Some(children) = node.children() {
+            for child in children.nodes() {
+                let key = child.name().value();
+                if let Some(entry) = child.entries().first() {
+                    match key {
+                        "mode" => {
+                            if let Some(s) = entry.value().as_string() {
+                                obj.insert(
+                                    "mode".to_string(),
+                                    serde_json::Value::String(s.to_string()),
+                                );
+                            }
+                        }
+                        "delete_on_success" => {
+                            if let Some(b) = entry.value().as_bool() {
+                                obj.insert(
+                                    "delete_on_success".to_string(),
+                                    serde_json::Value::Bool(b),
+                                );
+                            }
+                        }
+                        _ => {
+                            log::warn!("Unknown stdio field '{}' will be ignored", key);
                         }
                     }
                 }
@@ -4101,6 +4158,9 @@ impl WorkflowSpec {
                     if bind { "#true" } else { "#false" }
                 ));
             }
+            if let Some(ref stdio) = exec_config.stdio {
+                Self::stdio_config_to_kdl(&mut lines, stdio, "    ");
+            }
             lines.push("}".to_string());
             lines.push(String::new());
         }
@@ -4131,6 +4191,28 @@ impl WorkflowSpec {
         }
 
         lines.join("\n")
+    }
+
+    /// Serialize a `StdioConfig` to KDL lines with a given indent prefix.
+    #[cfg(feature = "client")]
+    fn stdio_config_to_kdl(lines: &mut Vec<String>, stdio: &StdioConfig, indent: &str) {
+        lines.push(format!("{}stdio {{", indent));
+        let mode_str = match stdio.mode {
+            StdioMode::Separate => "separate",
+            StdioMode::Combined => "combined",
+            StdioMode::NoStdout => "no_stdout",
+            StdioMode::NoStderr => "no_stderr",
+            StdioMode::None => "none",
+        };
+        lines.push(format!("{}    mode \"{}\"", indent, mode_str));
+        if let Some(delete) = stdio.delete_on_success {
+            lines.push(format!(
+                "{}    delete_on_success {}",
+                indent,
+                if delete { "#true" } else { "#false" }
+            ));
+        }
+        lines.push(format!("{}}}", indent));
     }
 
     #[cfg(feature = "client")]
@@ -4360,6 +4442,9 @@ impl WorkflowSpec {
                 lines.push(format!("        {} {}", key, escape(value)));
             }
             lines.push("    }".to_string());
+        }
+        if let Some(ref stdio) = job.stdio {
+            Self::stdio_config_to_kdl(lines, stdio, "    ");
         }
         lines.push("}".to_string());
     }

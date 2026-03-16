@@ -40,7 +40,7 @@ use crate::client::async_cli_command::AsyncCliCommand;
 use crate::client::resource_correction::format_duration_iso8601;
 use crate::client::resource_monitor::{ResourceMonitor, ResourceMonitorConfig};
 use crate::client::utils;
-use crate::client::workflow_spec::{ExecutionConfig, ExecutionMode, StdioConfig, StdioMode};
+use crate::client::workflow_spec::{ExecutionConfig, ExecutionMode};
 use crate::config::TorcConfig;
 use crate::memory_utils::memory_string_to_gb;
 use crate::models::{
@@ -520,22 +520,6 @@ impl JobRunner {
             had_failures: false,
             had_terminations: false,
             start_instant: Instant::now(),
-        }
-    }
-
-    /// Apply CLI overrides to the stdio configuration.
-    pub fn override_stdio(&mut self, stdio_mode: Option<StdioMode>, delete_on_success: bool) {
-        if stdio_mode.is_some() || delete_on_success {
-            let stdio = self
-                .execution_config
-                .stdio
-                .get_or_insert_with(StdioConfig::default);
-            if let Some(mode) = stdio_mode {
-                stdio.mode = mode;
-            }
-            if delete_on_success {
-                stdio.delete_on_success = Some(true);
-            }
         }
     }
 

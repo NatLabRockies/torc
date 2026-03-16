@@ -1031,3 +1031,188 @@ fn test_async_cli_command_command_not_found() {
 
     assert!(async_cmd.is_complete);
 }
+
+// =============================================================================
+// StdioMode tests
+// =============================================================================
+
+#[rstest]
+#[cfg(unix)]
+fn test_stdio_mode_combined(start_server: &ServerProcess) {
+    let _ = start_server;
+    let job = create_test_job_model(1, 1, "echo out; echo err >&2");
+    let mut async_cmd = AsyncCliCommand::new(job);
+    let temp_dir = create_temp_output_dir();
+
+    async_cmd
+        .start(
+            temp_dir.path(),
+            1,
+            1,
+            1,
+            None,
+            "http://localhost:8080/torc-service/v1",
+            None,
+            None,
+            true,
+            ExecutionMode::Direct,
+            false,
+            None,
+            None,
+            60,
+            None,
+            &StdioMode::Combined,
+        )
+        .expect("Failed to start command");
+    let _ = async_cmd.wait_for_completion();
+
+    // Combined mode writes both stdout and stderr to a single .log file
+    let combined_path = temp_dir
+        .path()
+        .join("job_stdio")
+        .join("job_wf1_j1_r1_a1.log");
+    assert!(combined_path.exists(), "Combined .log file should exist");
+    let contents = fs::read_to_string(&combined_path).expect("Failed to read combined log");
+    assert!(contents.contains("out"));
+    assert!(contents.contains("err"));
+
+    // Separate files should not exist
+    let stdout_path = temp_dir.path().join("job_stdio").join("job_wf1_j1_r1_a1.o");
+    let stderr_path = temp_dir.path().join("job_stdio").join("job_wf1_j1_r1_a1.e");
+    assert!(!stdout_path.exists(), "Separate .o file should not exist");
+    assert!(!stderr_path.exists(), "Separate .e file should not exist");
+
+    // stdout_path on the command should point to the combined file, stderr_path should be None
+    assert!(async_cmd.stdout_path.is_some());
+    assert!(async_cmd.stderr_path.is_none());
+}
+
+#[rstest]
+#[cfg(unix)]
+fn test_stdio_mode_no_stdout(start_server: &ServerProcess) {
+    let _ = start_server;
+    let job = create_test_job_model(1, 1, "echo out; echo err >&2");
+    let mut async_cmd = AsyncCliCommand::new(job);
+    let temp_dir = create_temp_output_dir();
+
+    async_cmd
+        .start(
+            temp_dir.path(),
+            1,
+            1,
+            1,
+            None,
+            "http://localhost:8080/torc-service/v1",
+            None,
+            None,
+            true,
+            ExecutionMode::Direct,
+            false,
+            None,
+            None,
+            60,
+            None,
+            &StdioMode::NoStdout,
+        )
+        .expect("Failed to start command");
+    let _ = async_cmd.wait_for_completion();
+
+    // Stderr should be captured
+    let stderr_path = temp_dir.path().join("job_stdio").join("job_wf1_j1_r1_a1.e");
+    assert!(stderr_path.exists(), "Stderr file should exist");
+    let contents = fs::read_to_string(&stderr_path).expect("Failed to read stderr");
+    assert!(contents.contains("err"));
+
+    // Stdout file should not exist (sent to /dev/null)
+    let stdout_path = temp_dir.path().join("job_stdio").join("job_wf1_j1_r1_a1.o");
+    assert!(!stdout_path.exists(), "Stdout file should not exist");
+
+    assert!(async_cmd.stdout_path.is_none());
+    assert!(async_cmd.stderr_path.is_some());
+}
+
+#[rstest]
+#[cfg(unix)]
+fn test_stdio_mode_no_stderr(start_server: &ServerProcess) {
+    let _ = start_server;
+    let job = create_test_job_model(1, 1, "echo out; echo err >&2");
+    let mut async_cmd = AsyncCliCommand::new(job);
+    let temp_dir = create_temp_output_dir();
+
+    async_cmd
+        .start(
+            temp_dir.path(),
+            1,
+            1,
+            1,
+            None,
+            "http://localhost:8080/torc-service/v1",
+            None,
+            None,
+            true,
+            ExecutionMode::Direct,
+            false,
+            None,
+            None,
+            60,
+            None,
+            &StdioMode::NoStderr,
+        )
+        .expect("Failed to start command");
+    let _ = async_cmd.wait_for_completion();
+
+    // Stdout should be captured
+    let stdout_path = temp_dir.path().join("job_stdio").join("job_wf1_j1_r1_a1.o");
+    assert!(stdout_path.exists(), "Stdout file should exist");
+    let contents = fs::read_to_string(&stdout_path).expect("Failed to read stdout");
+    assert!(contents.contains("out"));
+
+    // Stderr file should not exist (sent to /dev/null)
+    let stderr_path = temp_dir.path().join("job_stdio").join("job_wf1_j1_r1_a1.e");
+    assert!(!stderr_path.exists(), "Stderr file should not exist");
+
+    assert!(async_cmd.stdout_path.is_some());
+    assert!(async_cmd.stderr_path.is_none());
+}
+
+#[rstest]
+#[cfg(unix)]
+fn test_stdio_mode_none(start_server: &ServerProcess) {
+    let _ = start_server;
+    let job = create_test_job_model(1, 1, "echo out; echo err >&2");
+    let mut async_cmd = AsyncCliCommand::new(job);
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    // Intentionally do NOT create the job_stdio subdirectory — None mode should skip it.
+
+    async_cmd
+        .start(
+            temp_dir.path(),
+            1,
+            1,
+            1,
+            None,
+            "http://localhost:8080/torc-service/v1",
+            None,
+            None,
+            true,
+            ExecutionMode::Direct,
+            false,
+            None,
+            None,
+            60,
+            None,
+            &StdioMode::None,
+        )
+        .expect("Failed to start command");
+    let _ = async_cmd.wait_for_completion();
+
+    // No stdio files should be created at all
+    let stdio_dir = temp_dir.path().join("job_stdio");
+    assert!(
+        !stdio_dir.exists(),
+        "job_stdio directory should not be created in None mode"
+    );
+
+    assert!(async_cmd.stdout_path.is_none());
+    assert!(async_cmd.stderr_path.is_none());
+}

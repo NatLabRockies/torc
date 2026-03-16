@@ -12,10 +12,13 @@ mod common;
 use common::{ServerProcess, start_server};
 use rstest::rstest;
 use serial_test::serial;
+use std::collections::HashMap;
 use std::fs;
 use tempfile::NamedTempFile;
 use torc::client::default_api;
-use torc::client::workflow_spec::{ExecutionConfig, ExecutionMode, WorkflowSpec};
+use torc::client::workflow_spec::{
+    ExecutionConfig, ExecutionMode, StdioConfig, StdioMode, WorkflowSpec,
+};
 
 // =============================================================================
 // ExecutionMode parsing tests
@@ -451,6 +454,351 @@ fn test_execution_config_json_roundtrip() {
     let parsed: ExecutionConfig = serde_json::from_str(&json).unwrap();
 
     assert_eq!(original, parsed);
+}
+
+// =============================================================================
+// StdioConfig unit tests
+// =============================================================================
+
+#[test]
+fn test_stdio_for_job_returns_default_when_no_config() {
+    let config = ExecutionConfig::default();
+    let stdio = config.stdio_for_job("any_job");
+    assert_eq!(stdio.mode, StdioMode::Separate);
+    assert_eq!(stdio.delete_on_success, None);
+}
+
+#[test]
+fn test_stdio_for_job_returns_workflow_level_config() {
+    let config = ExecutionConfig {
+        stdio: Some(StdioConfig {
+            mode: StdioMode::Combined,
+            delete_on_success: Some(true),
+        }),
+        ..Default::default()
+    };
+    let stdio = config.stdio_for_job("any_job");
+    assert_eq!(stdio.mode, StdioMode::Combined);
+    assert_eq!(stdio.delete_on_success, Some(true));
+}
+
+#[test]
+fn test_stdio_for_job_per_job_override_takes_precedence() {
+    let mut overrides = HashMap::new();
+    overrides.insert(
+        "special_job".to_string(),
+        StdioConfig {
+            mode: StdioMode::None,
+            delete_on_success: Some(false),
+        },
+    );
+    let config = ExecutionConfig {
+        stdio: Some(StdioConfig {
+            mode: StdioMode::Combined,
+            delete_on_success: Some(true),
+        }),
+        job_stdio_overrides: Some(overrides),
+        ..Default::default()
+    };
+
+    // Overridden job gets its own config
+    let special = config.stdio_for_job("special_job");
+    assert_eq!(special.mode, StdioMode::None);
+    assert_eq!(special.delete_on_success, Some(false));
+
+    // Other jobs fall back to workflow-level
+    let normal = config.stdio_for_job("other_job");
+    assert_eq!(normal.mode, StdioMode::Combined);
+    assert_eq!(normal.delete_on_success, Some(true));
+}
+
+#[test]
+fn test_delete_stdio_on_success_defaults_to_false() {
+    let config = ExecutionConfig::default();
+    assert!(!config.delete_stdio_on_success("any_job"));
+}
+
+#[test]
+fn test_delete_stdio_on_success_respects_workflow_config() {
+    let config = ExecutionConfig {
+        stdio: Some(StdioConfig {
+            mode: StdioMode::Separate,
+            delete_on_success: Some(true),
+        }),
+        ..Default::default()
+    };
+    assert!(config.delete_stdio_on_success("any_job"));
+}
+
+#[test]
+fn test_delete_stdio_on_success_respects_per_job_override() {
+    let mut overrides = HashMap::new();
+    overrides.insert(
+        "keep_logs".to_string(),
+        StdioConfig {
+            mode: StdioMode::Separate,
+            delete_on_success: Some(false),
+        },
+    );
+    let config = ExecutionConfig {
+        stdio: Some(StdioConfig {
+            mode: StdioMode::Separate,
+            delete_on_success: Some(true),
+        }),
+        job_stdio_overrides: Some(overrides),
+        ..Default::default()
+    };
+    assert!(!config.delete_stdio_on_success("keep_logs"));
+    assert!(config.delete_stdio_on_success("other_job"));
+}
+
+#[test]
+fn test_stdio_config_yaml_parsing() {
+    let yaml = r#"
+        name: stdio_test
+        user: test_user
+        jobs:
+          - name: job1
+            command: "echo hello"
+        execution_config:
+            stdio:
+                mode: combined
+                delete_on_success: true
+    "#;
+    let spec: WorkflowSpec = serde_yaml::from_str(yaml).unwrap();
+    let exec = spec.execution_config.unwrap();
+    let stdio = exec.stdio.unwrap();
+    assert_eq!(stdio.mode, StdioMode::Combined);
+    assert_eq!(stdio.delete_on_success, Some(true));
+}
+
+#[test]
+fn test_stdio_mode_all_variants_yaml_parsing() {
+    for (yaml_val, expected) in [
+        ("separate", StdioMode::Separate),
+        ("combined", StdioMode::Combined),
+        ("no_stdout", StdioMode::NoStdout),
+        ("no_stderr", StdioMode::NoStderr),
+        ("none", StdioMode::None),
+    ] {
+        let yaml = format!(
+            r#"
+            name: stdio_test
+            user: test_user
+            jobs:
+              - name: job1
+                command: "echo hello"
+            execution_config:
+                stdio:
+                    mode: {}
+        "#,
+            yaml_val
+        );
+        let spec: WorkflowSpec = serde_yaml::from_str(&yaml).unwrap();
+        let exec = spec.execution_config.unwrap();
+        assert_eq!(
+            exec.stdio.unwrap().mode,
+            expected,
+            "Failed for YAML value '{}'",
+            yaml_val
+        );
+    }
+}
+
+#[test]
+fn test_per_job_stdio_override_yaml_parsing() {
+    let yaml = r#"
+        name: per_job_stdio_test
+        user: test_user
+        jobs:
+          - name: job1
+            command: "echo hello"
+            stdio:
+                mode: none
+          - name: job2
+            command: "echo world"
+            stdio:
+                mode: combined
+                delete_on_success: true
+          - name: job3
+            command: "echo default"
+    "#;
+    let spec: WorkflowSpec = serde_yaml::from_str(yaml).unwrap();
+
+    // job1 has per-job override
+    assert_eq!(spec.jobs[0].stdio.as_ref().unwrap().mode, StdioMode::None);
+
+    // job2 has per-job override with delete_on_success
+    let job2_stdio = spec.jobs[1].stdio.as_ref().unwrap();
+    assert_eq!(job2_stdio.mode, StdioMode::Combined);
+    assert_eq!(job2_stdio.delete_on_success, Some(true));
+
+    // job3 has no override
+    assert!(spec.jobs[2].stdio.is_none());
+}
+
+#[test]
+fn test_stdio_config_roundtrip() {
+    let original = ExecutionConfig {
+        stdio: Some(StdioConfig {
+            mode: StdioMode::NoStderr,
+            delete_on_success: Some(true),
+        }),
+        job_stdio_overrides: Some(HashMap::from([(
+            "special".to_string(),
+            StdioConfig {
+                mode: StdioMode::None,
+                delete_on_success: Some(false),
+            },
+        )])),
+        ..Default::default()
+    };
+
+    let yaml = serde_yaml::to_string(&original).unwrap();
+    let parsed: ExecutionConfig = serde_yaml::from_str(&yaml).unwrap();
+    assert_eq!(original, parsed);
+
+    let json = serde_json::to_string(&original).unwrap();
+    let parsed: ExecutionConfig = serde_json::from_str(&json).unwrap();
+    assert_eq!(original, parsed);
+}
+
+// =============================================================================
+// KDL stdio parsing tests
+// =============================================================================
+
+#[test]
+fn test_stdio_config_kdl_parsing() {
+    let kdl = r#"
+        name "stdio_kdl_test"
+        user "test_user"
+        job "job1" {
+            command "echo hello"
+        }
+        execution_config {
+            mode "direct"
+            stdio {
+                mode "combined"
+                delete_on_success #true
+            }
+        }
+    "#;
+    let spec = WorkflowSpec::from_spec_file_content(kdl, "kdl").expect("Failed to parse KDL");
+    let exec = spec.execution_config.unwrap();
+    let stdio = exec.stdio.unwrap();
+    assert_eq!(stdio.mode, StdioMode::Combined);
+    assert_eq!(stdio.delete_on_success, Some(true));
+}
+
+#[test]
+fn test_stdio_mode_all_variants_kdl_parsing() {
+    for (kdl_val, expected) in [
+        ("separate", StdioMode::Separate),
+        ("combined", StdioMode::Combined),
+        ("no_stdout", StdioMode::NoStdout),
+        ("no_stderr", StdioMode::NoStderr),
+        ("none", StdioMode::None),
+    ] {
+        let kdl = format!(
+            r#"
+            name "stdio_kdl_test"
+            user "test_user"
+            job "job1" {{
+                command "echo hello"
+            }}
+            execution_config {{
+                mode "direct"
+                stdio {{
+                    mode "{}"
+                }}
+            }}
+        "#,
+            kdl_val
+        );
+        let spec = WorkflowSpec::from_spec_file_content(&kdl, "kdl").expect("Failed to parse KDL");
+        let exec = spec.execution_config.unwrap();
+        assert_eq!(
+            exec.stdio.unwrap().mode,
+            expected,
+            "Failed for KDL value '{}'",
+            kdl_val
+        );
+    }
+}
+
+#[test]
+fn test_per_job_stdio_override_kdl_parsing() {
+    let kdl = r#"
+        name "per_job_stdio_kdl_test"
+        user "test_user"
+        job "job1" {
+            command "echo hello"
+            stdio {
+                mode "none"
+            }
+        }
+        job "job2" {
+            command "echo world"
+            stdio {
+                mode "combined"
+                delete_on_success #true
+            }
+        }
+        job "job3" {
+            command "echo default"
+        }
+    "#;
+    let spec = WorkflowSpec::from_spec_file_content(kdl, "kdl").expect("Failed to parse KDL");
+
+    // job1 has per-job override
+    assert_eq!(spec.jobs[0].stdio.as_ref().unwrap().mode, StdioMode::None);
+
+    // job2 has per-job override with delete_on_success
+    let job2_stdio = spec.jobs[1].stdio.as_ref().unwrap();
+    assert_eq!(job2_stdio.mode, StdioMode::Combined);
+    assert_eq!(job2_stdio.delete_on_success, Some(true));
+
+    // job3 has no override
+    assert!(spec.jobs[2].stdio.is_none());
+}
+
+#[test]
+fn test_stdio_config_kdl_roundtrip() {
+    let yaml = r#"
+        name: stdio_roundtrip_test
+        user: test_user
+        jobs:
+          - name: job1
+            command: "echo hello"
+            stdio:
+                mode: none
+          - name: job2
+            command: "echo world"
+        execution_config:
+            mode: direct
+            stdio:
+                mode: no_stderr
+                delete_on_success: true
+    "#;
+    let spec: WorkflowSpec = serde_yaml::from_str(yaml).unwrap();
+
+    // Serialize to KDL and parse back
+    let kdl_str = spec.to_kdl_str();
+    let roundtripped =
+        WorkflowSpec::from_spec_file_content(&kdl_str, "kdl").expect("Failed to parse KDL");
+
+    // Verify execution_config stdio survived the roundtrip
+    let exec = roundtripped.execution_config.unwrap();
+    let stdio = exec.stdio.unwrap();
+    assert_eq!(stdio.mode, StdioMode::NoStderr);
+    assert_eq!(stdio.delete_on_success, Some(true));
+
+    // Verify per-job stdio survived the roundtrip
+    assert_eq!(
+        roundtripped.jobs[0].stdio.as_ref().unwrap().mode,
+        StdioMode::None
+    );
+    assert!(roundtripped.jobs[1].stdio.is_none());
 }
 
 // =============================================================================

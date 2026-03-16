@@ -172,12 +172,6 @@ EXAMPLES:
         /// Skip validation checks (e.g., scheduler node requirements). Use with caution.
         #[arg(long, default_value = "false")]
         skip_checks: bool,
-        /// Stdio capture mode: separate, combined, no_stdout, no_stderr, none
-        #[arg(long)]
-        stdio_mode: Option<crate::client::workflow_spec::StdioMode>,
-        /// Delete stdout/stderr files when jobs complete successfully
-        #[arg(long)]
-        delete_stdio_on_success: bool,
     },
     /// Submit a workflow to scheduler (create from spec file or submit existing workflow by ID)
     ///

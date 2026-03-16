@@ -2243,8 +2243,6 @@ fn handle_run(
             .as_ref()
             .map(|p| p.to_string_lossy().to_string()),
         tls_insecure: config.tls.insecure,
-        stdio_mode: None,
-        delete_stdio_on_success: false,
     };
 
     crate::run_jobs_cmd::run(&args);
