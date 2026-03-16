@@ -343,13 +343,14 @@ impl HpcInterface for SlurmInterface {
     }
 
     fn get_job_stats(&self, job_id: &str) -> Result<HpcJobStats> {
-        let output = Command::new("sacct")
-            .args([
-                "-j",
-                job_id,
-                "--format=JobID,JobName%20,state,start,end,Account,Partition%15,QOS",
-            ])
-            .output()?;
+        let mut sacct_cmd = Command::new("sacct");
+        sacct_cmd.args([
+            "-j",
+            job_id,
+            "--format=JobID,JobName%20,state,start,end,Account,Partition%15,QOS",
+        ]);
+        debug!("sacct command for job {}: {:?}", job_id, sacct_cmd);
+        let output = sacct_cmd.output()?;
 
         if !output.status.success() {
             return Err(anyhow::anyhow!("Failed to run sacct command"));
@@ -450,10 +451,10 @@ impl HpcInterface for SlurmInterface {
     }
 
     fn get_num_cpus_per_task(&self) -> usize {
-        let cpus_per_task = env::var("SLURM_CPUS_PER_TASK").expect("SLURM_CPUS_PER_TASK not set");
-        cpus_per_task
-            .parse()
-            .expect("Failed to parse SLURM_CPUS_PER_TASK")
+        match env::var("SLURM_CPUS_PER_TASK") {
+            Ok(val) => val.parse().expect("Failed to parse SLURM_CPUS_PER_TASK"),
+            Err(_) => self.get_num_cpus(),
+        }
     }
 
     fn get_num_gpus(&self) -> usize {

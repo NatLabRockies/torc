@@ -2023,6 +2023,29 @@ impl JobRunner {
                                 "Job start failed workflow_id={} job_id={} error={}",
                                 self.workflow_id, job_id, e
                             );
+                            // Revert job status so it can be picked up by another worker
+                            match self.send_with_retries(|| {
+                                default_api::manage_status_change(
+                                    &self.config,
+                                    job_id,
+                                    JobStatus::Ready,
+                                    self.run_id,
+                                    None,
+                                )
+                            }) {
+                                Ok(_) => {
+                                    info!(
+                                        "Reverted job to ready workflow_id={} job_id={}",
+                                        self.workflow_id, job_id
+                                    );
+                                }
+                                Err(revert_err) => {
+                                    error!(
+                                        "Failed to revert job to ready workflow_id={} job_id={} error={}",
+                                        self.workflow_id, job_id, revert_err
+                                    );
+                                }
+                            }
                             self.release_gpu_devices(job_id);
                             continue;
                         }
@@ -2156,6 +2179,29 @@ impl JobRunner {
                                 "Job start failed workflow_id={} job_id={} error={}",
                                 self.workflow_id, job_id, e
                             );
+                            // Revert job status so it can be picked up by another worker
+                            match self.send_with_retries(|| {
+                                default_api::manage_status_change(
+                                    &self.config,
+                                    job_id,
+                                    JobStatus::Ready,
+                                    self.run_id,
+                                    None,
+                                )
+                            }) {
+                                Ok(_) => {
+                                    info!(
+                                        "Reverted job to ready workflow_id={} job_id={}",
+                                        self.workflow_id, job_id
+                                    );
+                                }
+                                Err(revert_err) => {
+                                    error!(
+                                        "Failed to revert job to ready workflow_id={} job_id={} error={}",
+                                        self.workflow_id, job_id, revert_err
+                                    );
+                                }
+                            }
                             self.release_gpu_devices(job_id);
                             continue;
                         }

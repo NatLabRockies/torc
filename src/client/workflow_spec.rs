@@ -993,6 +993,19 @@ impl WorkflowSpec {
     /// Deserialize a WorkflowSpec from a serde_json::Value
     /// This is the common conversion point for all file formats
     pub fn from_json_value(value: serde_json::Value) -> Result<Self, Box<dyn std::error::Error>> {
+        // Check for removed fields and provide helpful migration guidance
+        // before serde's deny_unknown_fields produces a generic error.
+        if let serde_json::Value::Object(ref map) = value
+            && map.contains_key("slurm_config")
+        {
+            return Err(
+                "The 'slurm_config' field has been removed from the workflow spec. \
+                 Use 'execution_config' instead.\n\
+                 See docs: docs/src/core/reference/workflow-spec.md \
+                 and docs/src/core/concepts/execution-modes.md"
+                    .into(),
+            );
+        }
         Ok(serde_json::from_value(value)?)
     }
 

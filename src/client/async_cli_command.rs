@@ -136,6 +136,8 @@ fn build_srun_command(params: &SrunParams) -> Result<Command, String> {
     // Run via bash so job.command can use shell features
     srun.args(["bash", "-c", params.command_str]);
 
+    debug!("srun command for job {}: {:?}", params.job_id, srun);
+
     Ok(srun)
 }
 
@@ -891,21 +893,25 @@ fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats
             std::thread::sleep(SACCT_RETRY_DELAY);
         }
 
-        let output = std::process::Command::new(&sacct_binary)
-            .args([
-                "-j",
-                slurm_job_id,
-                // sacct -j <jobid> already returns all step records (allocation, batch, srun
-                // steps) for the specified job without any extra flag.
-                "--format",
-                // JobName is first so we can filter by step name in code — more reliable than
-                // sacct's --name flag, which on some Slurm versions matches the allocation name
-                // rather than the step name.
-                "JobName,MaxRSS,MaxVMSize,MaxDiskRead,MaxDiskWrite,AveCPU,NodeList,State",
-                "-P", // pipe-separated output
-                "-n", // no header
-            ])
-            .output();
+        let mut sacct_cmd = std::process::Command::new(&sacct_binary);
+        sacct_cmd.args([
+            "-j",
+            slurm_job_id,
+            // sacct -j <jobid> already returns all step records (allocation, batch, srun
+            // steps) for the specified job without any extra flag.
+            "--format",
+            // JobName is first so we can filter by step name in code — more reliable than
+            // sacct's --name flag, which on some Slurm versions matches the allocation name
+            // rather than the step name.
+            "JobName,MaxRSS,MaxVMSize,MaxDiskRead,MaxDiskWrite,AveCPU,NodeList,State",
+            "-P", // pipe-separated output
+            "-n", // no header
+        ]);
+        debug!(
+            "sacct command for step {} (attempt {}/{}): {:?}",
+            step_name, attempt, MAX_SACCT_ATTEMPTS, sacct_cmd
+        );
+        let output = sacct_cmd.output();
 
         let output = match output {
             Ok(o) => o,
