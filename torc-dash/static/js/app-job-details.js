@@ -516,7 +516,9 @@ Object.assign(TorcDashboard.prototype, {
                     body: JSON.stringify({ path: combinedPath }),
                 });
                 responseData = await response.json();
-                filePath = combinedPath;
+                if (responseData.exists) {
+                    filePath = combinedPath;
+                }
             }
 
             logPathEl.textContent = filePath;
