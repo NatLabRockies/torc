@@ -74,28 +74,29 @@ jobs:
 
 Defines a single computational task within a workflow.
 
-| Name                             | Type                  | Default     | Description                                                            |
-| -------------------------------- | --------------------- | ----------- | ---------------------------------------------------------------------- |
-| `name`                           | string                | _required_  | Name of the job                                                        |
-| `command`                        | string                | _required_  | Command to execute for this job                                        |
-| `invocation_script`              | string                | none        | Optional script for job invocation                                     |
-| `resource_requirements`          | string                | none        | Name of a [ResourceRequirementsSpec](#resourcerequirementsspec) to use |
-| `failure_handler`                | string                | none        | Name of a [FailureHandlerSpec](#failurehandlerspec) to use             |
-| `scheduler`                      | string                | none        | Name of the scheduler to use for this job                              |
-| `cancel_on_blocking_job_failure` | boolean               | false       | Cancel this job if a blocking job fails                                |
-| `depends_on`                     | [string]              | none        | Job names that must complete before this job runs (exact matches)      |
-| `depends_on_regexes`             | [string]              | none        | Regex patterns for job dependencies                                    |
-| `input_files`                    | [string]              | none        | File names this job reads (exact matches)                              |
-| `input_file_regexes`             | [string]              | none        | Regex patterns for input files                                         |
-| `output_files`                   | [string]              | none        | File names this job produces (exact matches)                           |
-| `output_file_regexes`            | [string]              | none        | Regex patterns for output files                                        |
-| `input_user_data`                | [string]              | none        | User data names this job reads (exact matches)                         |
-| `input_user_data_regexes`        | [string]              | none        | Regex patterns for input user data                                     |
-| `output_user_data`               | [string]              | none        | User data names this job produces (exact matches)                      |
-| `output_user_data_regexes`       | [string]              | none        | Regex patterns for output user data                                    |
-| `parameters`                     | map\<string, string\> | none        | Local parameters for generating multiple jobs                          |
-| `parameter_mode`                 | string                | `"product"` | How to combine parameters: `"product"` (Cartesian) or `"zip"`          |
-| `use_parameters`                 | [string]              | none        | Workflow parameter names to use for this job                           |
+| Name                             | Type                        | Default     | Description                                                            |
+| -------------------------------- | --------------------------- | ----------- | ---------------------------------------------------------------------- |
+| `name`                           | string                      | _required_  | Name of the job                                                        |
+| `command`                        | string                      | _required_  | Command to execute for this job                                        |
+| `invocation_script`              | string                      | none        | Optional script for job invocation                                     |
+| `resource_requirements`          | string                      | none        | Name of a [ResourceRequirementsSpec](#resourcerequirementsspec) to use |
+| `failure_handler`                | string                      | none        | Name of a [FailureHandlerSpec](#failurehandlerspec) to use             |
+| `scheduler`                      | string                      | none        | Name of the scheduler to use for this job                              |
+| `cancel_on_blocking_job_failure` | boolean                     | false       | Cancel this job if a blocking job fails                                |
+| `depends_on`                     | [string]                    | none        | Job names that must complete before this job runs (exact matches)      |
+| `depends_on_regexes`             | [string]                    | none        | Regex patterns for job dependencies                                    |
+| `input_files`                    | [string]                    | none        | File names this job reads (exact matches)                              |
+| `input_file_regexes`             | [string]                    | none        | Regex patterns for input files                                         |
+| `output_files`                   | [string]                    | none        | File names this job produces (exact matches)                           |
+| `output_file_regexes`            | [string]                    | none        | Regex patterns for output files                                        |
+| `input_user_data`                | [string]                    | none        | User data names this job reads (exact matches)                         |
+| `input_user_data_regexes`        | [string]                    | none        | Regex patterns for input user data                                     |
+| `output_user_data`               | [string]                    | none        | User data names this job produces (exact matches)                      |
+| `output_user_data_regexes`       | [string]                    | none        | Regex patterns for output user data                                    |
+| `parameters`                     | map\<string, string\>       | none        | Local parameters for generating multiple jobs                          |
+| `parameter_mode`                 | string                      | `"product"` | How to combine parameters: `"product"` (Cartesian) or `"zip"`          |
+| `use_parameters`                 | [string]                    | none        | Workflow parameter names to use for this job                           |
+| `stdio`                          | [StdioConfig](#stdioconfig) | none        | Per-job override for stdout/stderr capture (overrides workflow-level)  |
 
 ## FileSpec
 
@@ -175,17 +176,70 @@ Defines a Slurm HPC job scheduler configuration.
 Controls how jobs are executed and terminated. Supports three modes for different execution
 environments.
 
-| Name                       | Type    | Default     | Description                                                   |
-| -------------------------- | ------- | ----------- | ------------------------------------------------------------- |
-| `mode`                     | string  | `"auto"`    | Execution mode: `"direct"`, `"slurm"`, or `"auto"`            |
-| `limit_resources`          | boolean | `true`      | Enforce memory/CPU limits                                     |
-| `termination_signal`       | string  | `"SIGTERM"` | Signal to send before SIGKILL (direct mode)                   |
-| `sigterm_lead_seconds`     | integer | `30`        | Seconds before SIGKILL to send termination signal             |
-| `sigkill_headroom_seconds` | integer | `60`        | Seconds before end_time for SIGKILL or srun --time adjustment |
-| `timeout_exit_code`        | integer | `152`       | Exit code for timed-out jobs (matches Slurm TIMEOUT)          |
-| `oom_exit_code`            | integer | `137`       | Exit code for OOM-killed jobs (128 + SIGKILL)                 |
-| `srun_termination_signal`  | string  | none        | Slurm signal spec for `srun --signal=<value>`                 |
-| `enable_cpu_bind`          | boolean | `false`     | Allow Slurm CPU binding                                       |
+| Name                       | Type                        | Default     | Description                                                   |
+| -------------------------- | --------------------------- | ----------- | ------------------------------------------------------------- |
+| `mode`                     | string                      | `"auto"`    | Execution mode: `"direct"`, `"slurm"`, or `"auto"`            |
+| `limit_resources`          | boolean                     | `true`      | Enforce memory/CPU limits                                     |
+| `termination_signal`       | string                      | `"SIGTERM"` | Signal to send before SIGKILL (direct mode)                   |
+| `sigterm_lead_seconds`     | integer                     | `30`        | Seconds before SIGKILL to send termination signal             |
+| `sigkill_headroom_seconds` | integer                     | `60`        | Seconds before end_time for SIGKILL or srun --time adjustment |
+| `timeout_exit_code`        | integer                     | `152`       | Exit code for timed-out jobs (matches Slurm TIMEOUT)          |
+| `oom_exit_code`            | integer                     | `137`       | Exit code for OOM-killed jobs (128 + SIGKILL)                 |
+| `srun_termination_signal`  | string                      | none        | Slurm signal spec for `srun --signal=<value>`                 |
+| `enable_cpu_bind`          | boolean                     | `false`     | Allow Slurm CPU binding                                       |
+| `stdio`                    | [StdioConfig](#stdioconfig) | see below   | Workflow-level default for stdout/stderr capture              |
+
+### StdioConfig
+
+Controls how stdout and stderr are captured for job processes.
+
+| Name                | Type                    | Default      | Description                                             |
+| ------------------- | ----------------------- | ------------ | ------------------------------------------------------- |
+| `mode`              | [StdioMode](#stdiomode) | `"separate"` | How to capture stdout/stderr                            |
+| `delete_on_success` | boolean                 | `false`      | Delete captured files when a job completes successfully |
+
+### StdioMode
+
+| Value       | Description                                                      |
+| ----------- | ---------------------------------------------------------------- |
+| `separate`  | Separate stdout (`.o`) and stderr (`.e`) files per job (default) |
+| `combined`  | Combine stdout and stderr into a single `.log` file per job      |
+| `no_stdout` | Discard stdout (`/dev/null`); capture stderr only                |
+| `no_stderr` | Discard stderr (`/dev/null`); capture stdout only                |
+| `none`      | Discard both stdout and stderr                                   |
+
+Per-job overrides can be set via the `stdio` field on individual [JobSpec](#jobspec) entries, which
+takes precedence over the workflow-level setting.
+
+#### Stdio Examples
+
+Combine stdout and stderr into a single file, and delete it on success:
+
+```yaml
+execution_config:
+  stdio:
+    mode: combined
+    delete_on_success: true
+```
+
+Suppress stdout for most jobs, but keep separate files for a specific job:
+
+```yaml
+execution_config:
+  stdio:
+    mode: no_stdout
+
+jobs:
+  - name: preprocess
+    command: python preprocess.py
+  - name: train
+    command: python train.py
+    stdio:
+      mode: separate
+```
+
+The `--stdio-mode` and `--delete-stdio-on-success` CLI flags on `torc run` override the
+workflow-level setting for all jobs in that run.
 
 ### Execution Modes
 

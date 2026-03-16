@@ -39,7 +39,13 @@ cat output/job_stdio/job_wf43_j15_r1_a1.e
 
 # View stdout
 cat output/job_stdio/job_wf43_j15_r1_a1.o
+
+# In combined stdio mode, both streams are in a single .log file
+cat output/job_stdio/job_wf43_j15_r1_a1.log
 ```
+
+> **Note:** If `stdio` is configured with `mode: none` or `mode: no_stderr`, log files may not
+> exist. See [`StdioConfig`](../reference/workflow-spec.md#stdioconfig) for details.
 
 ## Step 4: Check Resource Usage
 

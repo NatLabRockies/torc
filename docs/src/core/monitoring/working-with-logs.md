@@ -10,15 +10,22 @@ Torc provides tools for bundling and analyzing workflow logs. These are useful f
 
 Torc generates several types of log files during workflow execution:
 
-| Log Type     | Path Pattern                                             | Contents                          |
-| ------------ | -------------------------------------------------------- | --------------------------------- |
-| Job stdout   | `output/job_stdio/job_wf<id>_j<job>_r<run>_a<attempt>.o` | Standard output from job commands |
-| Job stderr   | `output/job_stdio/job_wf<id>_j<job>_r<run>_a<attempt>.e` | Error output, stack traces        |
-| Job runner   | `output/job_runner_*.log`                                | Torc job runner internal logs     |
-| Slurm stdout | `output/slurm_output_wf<id>_sl<slurm_id>.o`              | Slurm job allocation output       |
-| Slurm stderr | `output/slurm_output_wf<id>_sl<slurm_id>.e`              | Slurm-specific errors             |
-| Slurm env    | `output/slurm_env_*.log`                                 | Slurm environment variables       |
-| dmesg        | `output/dmesg_slurm_*.log`                               | Kernel messages (on failure)      |
+| Log Type     | Path Pattern                                               | Contents                               |
+| ------------ | ---------------------------------------------------------- | -------------------------------------- |
+| Job stdout   | `output/job_stdio/job_wf<id>_j<job>_r<run>_a<attempt>.o`   | Standard output from job commands      |
+| Job stderr   | `output/job_stdio/job_wf<id>_j<job>_r<run>_a<attempt>.e`   | Error output, stack traces             |
+| Job combined | `output/job_stdio/job_wf<id>_j<job>_r<run>_a<attempt>.log` | Combined stdout+stderr (combined mode) |
+| Job runner   | `output/job_runner_*.log`                                  | Torc job runner internal logs          |
+| Slurm stdout | `output/slurm_output_wf<id>_sl<slurm_id>.o`                | Slurm job allocation output            |
+| Slurm stderr | `output/slurm_output_wf<id>_sl<slurm_id>.e`                | Slurm-specific errors                  |
+| Slurm env    | `output/slurm_env_*.log`                                   | Slurm environment variables            |
+| dmesg        | `output/dmesg_slurm_*.log`                                 | Kernel messages (on failure)           |
+
+> **Note:** The file extensions depend on the
+> [`stdio` configuration](../reference/workflow-spec.md#stdioconfig). In `separate` mode (default),
+> jobs produce `.o` and `.e` files. In `combined` mode, a single `.log` file is created. Modes like
+> `no_stdout`, `no_stderr`, or `none` suppress some or all output files. If `delete_on_success` is
+> enabled, files are removed when a job completes with exit code 0.
 
 For detailed information about log file contents, see [Debugging Workflows](debugging.md) and
 [Debugging Slurm Workflows](debugging-slurm.md).
