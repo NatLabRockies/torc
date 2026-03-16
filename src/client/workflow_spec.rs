@@ -659,6 +659,7 @@ pub enum StdioMode {
 
 /// Configuration for job stdout/stderr capture.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct StdioConfig {
     /// How to capture stdout/stderr. Default: separate files.
     #[serde(default)]
@@ -693,6 +694,7 @@ pub enum ExecutionMode {
 /// distinguishes between direct execution (torc manages everything) and Slurm
 /// execution (srun manages resources and termination).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct ExecutionConfig {
     /// Execution mode: direct, slurm, or auto (default).
     #[serde(default)]

@@ -2654,23 +2654,6 @@ impl ComputeNodeRules {
     }
 }
 
-/// Backfill Slurm sacct accounting data into a [`ResultModel`] result.
-///
-/// When a job runs through `srun`, torc's sysinfo-based resource monitor only sees the
-/// srun launcher process (negligible overhead), not the actual job.  This function fills
-/// the summary resource fields from the authoritative sacct record collected after job
-/// completion.
-///
-/// Fields updated:
-/// - `peak_memory_bytes` ← `max_rss_bytes` (sacct MaxRSS, the step's peak RSS)
-/// - `avg_cpu_percent`   ← `ave_cpu_seconds / exec_time_s * 100`  (lifetime average)
-/// - `peak_cpu_percent`  ← same formula, only when the sstat time-series left it at zero
-///   (sacct does not provide an instantaneous CPU peak, but the avg is better than 0%)
-///
-/// `avg_memory_bytes` is left as-is: sacct does not provide an average RSS; that comes
-/// from the sstat time-series if TimeSeries monitoring was configured.
-/// Backfill sacct accounting data into a job result, preferring the max of sacct vs sstat peaks.
-///
 /// Delete stdio files for a completed job given optional stdout and stderr paths.
 ///
 /// Silently ignores files that don't exist (e.g., when using `NoStdout` or `NoStderr` modes).
@@ -2688,6 +2671,21 @@ pub fn cleanup_job_stdio_files(stdout_path: Option<&str>, stderr_path: Option<&s
     }
 }
 
+/// Backfill Slurm sacct accounting data into a [`ResultModel`] result.
+///
+/// When a job runs through `srun`, torc's sysinfo-based resource monitor only sees the
+/// srun launcher process (negligible overhead), not the actual job.  This function fills
+/// the summary resource fields from the authoritative sacct record collected after job
+/// completion.
+///
+/// Fields updated:
+/// - `peak_memory_bytes` ← `max_rss_bytes` (sacct MaxRSS, the step's peak RSS)
+/// - `avg_cpu_percent`   ← `ave_cpu_seconds / exec_time_s * 100`  (lifetime average)
+/// - `peak_cpu_percent`  ← same formula, only when the sstat time-series left it at zero
+///   (sacct does not provide an instantaneous CPU peak, but the avg is better than 0%)
+///
+/// `avg_memory_bytes` is left as-is: sacct does not provide an average RSS; that comes
+/// from the sstat time-series if TimeSeries monitoring was configured.
 /// This ensures that even when sstat time-series monitoring missed a spike, the sacct
 /// post-mortem data fills in accurate resource usage.
 fn backfill_sacct_into_result(result: &mut ResultModel, stats: &SlurmStatsModel) {
