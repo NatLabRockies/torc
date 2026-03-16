@@ -24,10 +24,10 @@
 //! After calling `terminate()` or `cancel()`, call `wait_for_completion()` to wait
 //! for the process to exit and capture its exit code.
 
-use crate::client::log_paths::{get_job_stderr_path, get_job_stdout_path};
+use crate::client::log_paths::{get_job_combined_path, get_job_stderr_path, get_job_stdout_path};
 use crate::client::resource_monitor::ResourceMonitor;
 use crate::client::slurm_utils::{parse_slurm_cpu_time, parse_slurm_memory};
-use crate::client::workflow_spec::ExecutionMode;
+use crate::client::workflow_spec::{ExecutionMode, StdioMode};
 use crate::memory_utils::{memory_string_to_bytes, memory_string_to_mb};
 use crate::models::{JobModel, JobStatus, ResourceRequirementsModel, ResultModel, SlurmStatsModel};
 use chrono::{DateTime, Utc};
@@ -161,6 +161,10 @@ pub struct AsyncCliCommand {
     return_code: Option<i64>,
     pub is_complete: bool,
     status: JobStatus,
+    /// Path to stdout file (if captured).
+    pub stdout_path: Option<String>,
+    /// Path to stderr file (if captured); for combined mode this is None.
+    pub stderr_path: Option<String>,
 }
 
 impl AsyncCliCommand {
@@ -184,6 +188,8 @@ impl AsyncCliCommand {
             return_code: None,
             is_complete: false,
             status,
+            stdout_path: None,
+            stderr_path: None,
         }
     }
 
@@ -211,6 +217,7 @@ impl AsyncCliCommand {
         srun_termination_signal: Option<&str>,
         sigkill_headroom_seconds: i64,
         target_node: Option<&str>,
+        stdio_mode: &StdioMode,
     ) -> Result<(), Box<dyn std::error::Error>> {
         if self.is_running {
             return Err("Job is already running".into());
@@ -220,14 +227,62 @@ impl AsyncCliCommand {
         let workflow_id_str = workflow_id.to_string();
         let attempt_id_str = attempt_id.to_string();
 
-        // Create output file paths using consistent naming from log_paths
-        let stdio_dir = output_dir.join(JOB_STDIO_DIR);
-        std::fs::create_dir_all(&stdio_dir)?;
+        // Create output directory for stdio files (unless we're not capturing anything)
+        if *stdio_mode != StdioMode::None {
+            let stdio_dir = output_dir.join(JOB_STDIO_DIR);
+            std::fs::create_dir_all(&stdio_dir)?;
+        }
 
-        let stdout_path =
-            get_job_stdout_path(output_dir, workflow_id, self.job_id, run_id, attempt_id);
-        let stderr_path =
-            get_job_stderr_path(output_dir, workflow_id, self.job_id, run_id, attempt_id);
+        // Configure stdio based on the requested mode
+        let (stdout_stdio, stderr_stdio, stdout_path_opt, stderr_path_opt) = match stdio_mode {
+            StdioMode::Separate => {
+                let stdout_p =
+                    get_job_stdout_path(output_dir, workflow_id, self.job_id, run_id, attempt_id);
+                let stderr_p =
+                    get_job_stderr_path(output_dir, workflow_id, self.job_id, run_id, attempt_id);
+                (
+                    Stdio::from(File::create(&stdout_p)?),
+                    Stdio::from(File::create(&stderr_p)?),
+                    Some(stdout_p),
+                    Some(stderr_p),
+                )
+            }
+            StdioMode::Combined => {
+                let combined_p =
+                    get_job_combined_path(output_dir, workflow_id, self.job_id, run_id, attempt_id);
+                let file = File::create(&combined_p)?;
+                let file_dup = file.try_clone()?;
+                (
+                    Stdio::from(file),
+                    Stdio::from(file_dup),
+                    Some(combined_p),
+                    None,
+                )
+            }
+            StdioMode::NoStdout => {
+                let stderr_p =
+                    get_job_stderr_path(output_dir, workflow_id, self.job_id, run_id, attempt_id);
+                (
+                    Stdio::null(),
+                    Stdio::from(File::create(&stderr_p)?),
+                    None,
+                    Some(stderr_p),
+                )
+            }
+            StdioMode::NoStderr => {
+                let stdout_p =
+                    get_job_stdout_path(output_dir, workflow_id, self.job_id, run_id, attempt_id);
+                (
+                    Stdio::from(File::create(&stdout_p)?),
+                    Stdio::null(),
+                    Some(stdout_p),
+                    None,
+                )
+            }
+            StdioMode::None => (Stdio::null(), Stdio::null(), None, None),
+        };
+        self.stdout_path = stdout_path_opt;
+        self.stderr_path = stderr_path_opt;
 
         let command_str = if let Some(ref invocation_script) = self.job.invocation_script {
             format!("{} {}", invocation_script, self.job.command)
@@ -291,8 +346,8 @@ impl AsyncCliCommand {
             .env("TORC_OUTPUT_DIR", output_dir.to_string_lossy().to_string())
             .env("TORC_ATTEMPT_ID", attempt_id_str)
             .env("TORC_API_URL", api_url)
-            .stdout(Stdio::from(File::create(&stdout_path)?))
-            .stderr(Stdio::from(File::create(&stderr_path)?))
+            .stdout(stdout_stdio)
+            .stderr(stderr_stdio)
             .spawn()?;
 
         let pid = child.id();

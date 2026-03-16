@@ -421,6 +421,8 @@ fn test_execution_config_yaml_roundtrip() {
         oom_exit_code: Some(137),
         srun_termination_signal: None,
         enable_cpu_bind: None,
+        stdio: None,
+        job_stdio_overrides: None,
     };
 
     let yaml = serde_yaml::to_string(&original).unwrap();
@@ -441,6 +443,8 @@ fn test_execution_config_json_roundtrip() {
         oom_exit_code: None,
         srun_termination_signal: Some("TERM@90".to_string()),
         enable_cpu_bind: Some(true),
+        stdio: None,
+        job_stdio_overrides: None,
     };
 
     let json = serde_json::to_string(&original).unwrap();

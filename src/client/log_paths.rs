@@ -70,6 +70,24 @@ pub fn get_job_stderr_path(
     )
 }
 
+/// Get the path to a job's combined stdout+stderr log file
+pub fn get_job_combined_path(
+    output_dir: &Path,
+    workflow_id: i64,
+    job_id: i64,
+    run_id: i64,
+    attempt_id: i64,
+) -> String {
+    format!(
+        "{}/job_stdio/job_wf{}_j{}_r{}_a{}.log",
+        output_dir.display(),
+        workflow_id,
+        job_id,
+        run_id,
+        attempt_id
+    )
+}
+
 /// Get the path to Slurm's stdout log file
 pub fn get_slurm_stdout_path(output_dir: &Path, workflow_id: i64, slurm_job_id: &str) -> String {
     format!(

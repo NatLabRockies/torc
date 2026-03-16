@@ -20,7 +20,7 @@ use std::thread;
 use std::time::Duration;
 use tempfile::TempDir;
 use torc::client::async_cli_command::AsyncCliCommand;
-use torc::client::workflow_spec::ExecutionMode;
+use torc::client::workflow_spec::{ExecutionMode, StdioMode};
 use torc::models::{JobModel, JobStatus, ResourceRequirementsModel};
 
 /// Create a minimal JobModel for testing.
@@ -145,6 +145,7 @@ fn run_and_capture_srun_args_with_headroom(
         srun_termination_signal,
         sigkill_headroom_seconds,
         None, // target_node
+        &StdioMode::Separate,
     );
     assert!(
         result.is_ok(),
@@ -462,6 +463,7 @@ fn test_srun_with_end_time_insufficient_time_rejected() {
         None,
         60,
         None,
+        &StdioMode::Separate,
     );
 
     cleanup_srun_env();
@@ -667,6 +669,7 @@ fn test_srun_step_name_format() {
         None,
         60,   // sigkill_headroom_seconds
         None, // target_node
+        &StdioMode::Separate,
     );
     assert!(result.is_ok());
 

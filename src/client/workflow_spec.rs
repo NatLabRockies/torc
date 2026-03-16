@@ -458,6 +458,10 @@ pub struct JobSpec {
     /// If set, only these parameters from the workflow will be used
     #[serde(skip_serializing_if = "Option::is_none")]
     pub use_parameters: Option<Vec<String>>,
+    /// Per-job override for stdout/stderr capture configuration.
+    /// If set, overrides the workflow-level `execution_config.stdio` for this job.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stdio: Option<StdioConfig>,
 }
 
 impl JobSpec {
@@ -486,6 +490,7 @@ impl JobSpec {
             parameters: None,
             parameter_mode: None,
             use_parameters: None,
+            stdio: None,
         }
     }
 
@@ -633,6 +638,36 @@ impl JobSpec {
     }
 }
 
+/// How to capture stdout and stderr for job processes.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default, clap::ValueEnum)]
+#[serde(rename_all = "snake_case")]
+pub enum StdioMode {
+    /// Separate stdout and stderr files (.o and .e) — the default.
+    #[default]
+    Separate,
+    /// Combine stdout and stderr into a single file (.log) per job.
+    Combined,
+    /// Don't capture stdout (send to /dev/null); capture stderr only.
+    NoStdout,
+    /// Don't capture stderr (send to /dev/null); capture stdout only.
+    NoStderr,
+    /// Don't capture either stdout or stderr.
+    None,
+    // Future: CombinedPerNode — all jobs on a node share one chronological file,
+    // each line tagged with the job ID.
+}
+
+/// Configuration for job stdout/stderr capture.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+pub struct StdioConfig {
+    /// How to capture stdout/stderr. Default: separate files.
+    #[serde(default)]
+    pub mode: StdioMode,
+    /// Delete stdout/stderr files if the job completes successfully.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delete_on_success: Option<bool>,
+}
+
 /// Execution mode for job processes.
 ///
 /// Controls how torc manages job processes during execution, particularly
@@ -715,6 +750,16 @@ pub struct ExecutionConfig {
     /// (false), srun passes `--cpu-bind=none` to disable binding.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enable_cpu_bind: Option<bool>,
+
+    // ========== Stdio settings ==========
+    /// Workflow-level default for stdout/stderr capture.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stdio: Option<StdioConfig>,
+
+    /// Per-job stdio overrides keyed by job name.
+    /// Populated during workflow creation from per-job `stdio` fields in the spec.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub job_stdio_overrides: Option<HashMap<String, StdioConfig>>,
 }
 
 impl ExecutionConfig {
@@ -786,6 +831,23 @@ impl ExecutionConfig {
     /// Get the OOM exit code.
     pub fn oom_exit_code(&self) -> i32 {
         self.oom_exit_code.unwrap_or(Self::DEFAULT_OOM_EXIT_CODE)
+    }
+
+    /// Resolve the effective `StdioConfig` for a job, checking per-job overrides first.
+    pub fn stdio_for_job(&self, job_name: &str) -> StdioConfig {
+        if let Some(ref overrides) = self.job_stdio_overrides
+            && let Some(cfg) = overrides.get(job_name)
+        {
+            return cfg.clone();
+        }
+        self.stdio.clone().unwrap_or_default()
+    }
+
+    /// Whether to delete stdio files on successful completion for a job.
+    pub fn delete_stdio_on_success(&self, job_name: &str) -> bool {
+        self.stdio_for_job(job_name)
+            .delete_on_success
+            .unwrap_or(false)
     }
 
     /// Validate the configuration, returning any warnings.
@@ -872,6 +934,8 @@ impl ExecutionConfig {
             sigkill_headroom_seconds: None,
             timeout_exit_code: None,
             oom_exit_code: None,
+            stdio: None,
+            job_stdio_overrides: None,
         }
     }
 }
@@ -1835,6 +1899,25 @@ impl WorkflowSpec {
 
         // Step 1.5: Perform variable substitution in commands
         spec.substitute_variables()?;
+
+        // Step 1.6: Collect per-job stdio overrides into execution_config
+        {
+            let overrides: HashMap<String, StdioConfig> = spec
+                .jobs
+                .iter()
+                .filter_map(|job| {
+                    job.stdio
+                        .as_ref()
+                        .map(|stdio| (job.name.clone(), stdio.clone()))
+                })
+                .collect();
+            if !overrides.is_empty() {
+                let ec = spec
+                    .execution_config
+                    .get_or_insert_with(ExecutionConfig::default);
+                ec.job_stdio_overrides = Some(overrides);
+            }
+        }
 
         // Step 2: Create WorkflowModel
         let workflow_id = Self::create_workflow(config, &spec)?;
@@ -4974,6 +5057,7 @@ job "train_lr{lr:.4f}_bs{batch_size}" {
                 parameter_mode: None,
                 use_parameters: None,
                 failure_handler: None,
+                stdio: None,
             }],
             files: Some(vec![{
                 let mut file =
@@ -5662,6 +5746,8 @@ jobs:
             oom_exit_code: Some(201),
             srun_termination_signal: None,
             enable_cpu_bind: None,
+            stdio: None,
+            job_stdio_overrides: None,
         };
         assert!(!config.limit_resources());
         assert_eq!(config.termination_signal(), "SIGUSR1");

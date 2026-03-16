@@ -8,7 +8,7 @@ use std::thread;
 use std::time::Duration;
 use tempfile::TempDir;
 use torc::client::async_cli_command::AsyncCliCommand;
-use torc::client::workflow_spec::ExecutionMode;
+use torc::client::workflow_spec::{ExecutionMode, StdioMode};
 use torc::models::{JobModel, JobStatus};
 
 /// Helper to create a temporary output directory for job stdio
@@ -75,6 +75,7 @@ fn test_async_cli_command_start_simple_command(start_server: &ServerProcess) {
         None,
         60,   // sigkill_headroom_seconds
         None, // target_node
+        &StdioMode::Separate,
     );
     assert!(
         result.is_ok(),
@@ -119,6 +120,7 @@ fn test_async_cli_command_start_already_running() {
             None,
             60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("First start should succeed");
     assert!(async_cmd.is_running);
@@ -140,6 +142,7 @@ fn test_async_cli_command_start_already_running() {
         None,
         60,   // sigkill_headroom_seconds
         None, // target_node
+        &StdioMode::Separate,
     );
     assert!(result.is_err());
     assert_eq!(result.unwrap_err().to_string(), "Job is already running");
@@ -172,6 +175,7 @@ fn test_async_cli_command_start_invalid_directory() {
         None,
         60,   // sigkill_headroom_seconds
         None, // target_node
+        &StdioMode::Separate,
     );
     assert!(result.is_err());
 }
@@ -200,6 +204,7 @@ fn test_async_cli_command_check_status_completion() {
             None,
             60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
     assert!(async_cmd.is_running);
@@ -250,6 +255,7 @@ fn test_async_cli_command_with_exit_code_success() {
             None,
             60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
 
@@ -284,6 +290,7 @@ fn test_async_cli_command_with_exit_code_failure() {
             None,
             60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
 
@@ -319,6 +326,7 @@ fn test_async_cli_command_cancel() {
             None,
             60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
     assert!(async_cmd.is_running);
@@ -367,6 +375,7 @@ fn test_async_cli_command_terminate() {
             None,
             60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
     assert!(async_cmd.is_running);
@@ -408,6 +417,7 @@ fn test_async_cli_command_wait_for_completion() {
             None,
             60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
 
@@ -451,6 +461,7 @@ fn test_async_cli_command_get_result() {
             None,
             60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
     let _ = async_cmd.wait_for_completion();
@@ -501,6 +512,7 @@ fn test_async_cli_command_with_invocation_script() {
         None,
         60,   // sigkill_headroom_seconds
         None, // target_node
+        &StdioMode::Separate,
     );
     assert!(result.is_ok());
 
@@ -538,6 +550,7 @@ fn test_async_cli_command_environment_variables() {
             None,
             60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
     let _ = async_cmd.wait_for_completion();
@@ -581,6 +594,7 @@ fn test_async_cli_command_gpu_visible_devices_env() {
             None,
             60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
     let _ = async_cmd.wait_for_completion();
@@ -638,6 +652,7 @@ fn test_async_cli_command_stdout_stderr_separation() {
             None,
             60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
     let _ = async_cmd.wait_for_completion();
@@ -677,6 +692,7 @@ fn test_async_cli_command_multiple_jobs_same_workflow() {
             None,
             60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start job 1");
 
@@ -699,6 +715,7 @@ fn test_async_cli_command_multiple_jobs_same_workflow() {
             None,
             60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start job 2");
 
@@ -721,6 +738,7 @@ fn test_async_cli_command_multiple_jobs_same_workflow() {
             None,
             60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start job 3");
 
@@ -767,6 +785,7 @@ fn test_async_cli_command_long_running_job() {
             None,
             60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
     assert!(async_cmd.is_running);
@@ -819,6 +838,7 @@ fn test_async_cli_command_complex_shell_command() {
             None,
             60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
     let _ = async_cmd.wait_for_completion();
@@ -861,6 +881,7 @@ fn test_async_cli_command_file_creation() {
             None,
             60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
     let _ = async_cmd.wait_for_completion();
@@ -897,6 +918,7 @@ fn test_async_cli_command_drop_while_running() {
             None,
             60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
     assert!(async_cmd.is_running);
@@ -935,6 +957,7 @@ fn test_async_cli_command_execution_time() {
             None,
             60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
     let _ = async_cmd.wait_for_completion();
@@ -969,6 +992,7 @@ fn test_async_cli_command_empty_command() {
         None,
         60,   // sigkill_headroom_seconds
         None, // target_node
+        &StdioMode::Separate,
     );
     assert!(result.is_ok());
 
@@ -1000,6 +1024,7 @@ fn test_async_cli_command_command_not_found() {
             None,
             60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
     let _ = async_cmd.wait_for_completion();

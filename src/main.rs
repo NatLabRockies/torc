@@ -179,6 +179,8 @@ fn main() {
             time_limit,
             end_time,
             skip_checks,
+            stdio_mode,
+            delete_stdio_on_success,
         } => {
             let workflow_id = if is_spec_file(workflow_spec_or_id) {
                 // Create workflow from spec file
@@ -240,6 +242,8 @@ fn main() {
                 password,
                 tls_ca_cert: tls_ca_cert.clone(),
                 tls_insecure,
+                stdio_mode: stdio_mode.clone(),
+                delete_stdio_on_success: *delete_stdio_on_success,
             };
 
             run_jobs_cmd::run(&args);

@@ -40,7 +40,7 @@ use crate::client::async_cli_command::AsyncCliCommand;
 use crate::client::resource_correction::format_duration_iso8601;
 use crate::client::resource_monitor::{ResourceMonitor, ResourceMonitorConfig};
 use crate::client::utils;
-use crate::client::workflow_spec::{ExecutionConfig, ExecutionMode};
+use crate::client::workflow_spec::{ExecutionConfig, ExecutionMode, StdioConfig, StdioMode};
 use crate::config::TorcConfig;
 use crate::memory_utils::memory_string_to_gb;
 use crate::models::{
@@ -520,6 +520,22 @@ impl JobRunner {
             had_failures: false,
             had_terminations: false,
             start_instant: Instant::now(),
+        }
+    }
+
+    /// Apply CLI overrides to the stdio configuration.
+    pub fn override_stdio(&mut self, stdio_mode: Option<StdioMode>, delete_on_success: bool) {
+        if stdio_mode.is_some() || delete_on_success {
+            let stdio = self
+                .execution_config
+                .stdio
+                .get_or_insert_with(StdioConfig::default);
+            if let Some(mode) = stdio_mode {
+                stdio.mode = mode;
+            }
+            if delete_on_success {
+                stdio.delete_on_success = Some(true);
+            }
         }
     }
 
@@ -1522,6 +1538,16 @@ impl JobRunner {
                 // become ready. This gives dependent jobs time to be picked up before
                 // the runner exits due to no jobs being claimed.
                 self.last_job_claimed_time = Some(Instant::now());
+
+                // Delete stdio files on successful completion if configured
+                if final_result.return_code == 0
+                    && let Some(cmd) = self.running_jobs.get(&job_id)
+                {
+                    let job_name = &cmd.job.name;
+                    if self.execution_config.delete_stdio_on_success(job_name) {
+                        Self::cleanup_stdio_files(cmd);
+                    }
+                }
             }
             Err(e) => {
                 error!(
@@ -1533,6 +1559,25 @@ impl JobRunner {
         self.running_jobs.remove(&job_id);
         self.job_resources.remove(&job_id);
         self.release_gpu_devices(job_id);
+    }
+
+    /// Delete stdio files for a completed job.
+    fn cleanup_stdio_files(cmd: &AsyncCliCommand) {
+        for path in [&cmd.stdout_path, &cmd.stderr_path]
+            .iter()
+            .copied()
+            .flatten()
+        {
+            match std::fs::remove_file(path) {
+                Ok(()) => {
+                    debug!("Deleted stdio file: {}", path);
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => {
+                    warn!("Failed to delete stdio file {}: {}", path, e);
+                }
+            }
+        }
     }
 
     /// Run a recovery script with environment variables set.
@@ -1984,6 +2029,7 @@ impl JobRunner {
                     } else {
                         self.allocate_gpu_devices(job_id, job_rr.num_gpus)
                     };
+                    let stdio_config = self.execution_config.stdio_for_job(&async_job.job.name);
                     match async_job.start(
                         &self.output_dir,
                         self.workflow_id,
@@ -2000,6 +2046,7 @@ impl JobRunner {
                         self.execution_config.srun_termination_signal.as_deref(),
                         self.execution_config.sigkill_headroom_seconds(),
                         target_node,
+                        &stdio_config.mode,
                     ) {
                         Ok(()) => {
                             info!(
@@ -2123,6 +2170,7 @@ impl JobRunner {
                     } else {
                         self.allocate_gpu_devices(job_id, job_rr.num_gpus)
                     };
+                    let stdio_config = self.execution_config.stdio_for_job(&async_job.job.name);
                     match async_job.start(
                         &self.output_dir,
                         self.workflow_id,
@@ -2139,6 +2187,7 @@ impl JobRunner {
                         self.execution_config.srun_termination_signal.as_deref(),
                         self.execution_config.sigkill_headroom_seconds(),
                         None, // target_node: user-parallelism mode doesn't use per-node placement
+                        &stdio_config.mode,
                     ) {
                         Ok(()) => {
                             info!(
