@@ -2834,7 +2834,10 @@ fn fetch_sacct_for_workflow(
 
         let mut sacct_cmd = Command::new("sacct");
         sacct_cmd.args(["-j", &slurm_job_id, "--json"]);
-        debug!("sacct command for Slurm job {}: {:?}", slurm_job_id, sacct_cmd);
+        debug!(
+            "sacct command for Slurm job {}: {:?}",
+            slurm_job_id, sacct_cmd
+        );
         let sacct_result = sacct_cmd.output();
 
         match sacct_result {

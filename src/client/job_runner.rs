@@ -2023,30 +2023,7 @@ impl JobRunner {
                                 "Job start failed workflow_id={} job_id={} error={}",
                                 self.workflow_id, job_id, e
                             );
-                            // Revert job status so it can be picked up by another worker
-                            match self.send_with_retries(|| {
-                                default_api::manage_status_change(
-                                    &self.config,
-                                    job_id,
-                                    JobStatus::Ready,
-                                    self.run_id,
-                                    None,
-                                )
-                            }) {
-                                Ok(_) => {
-                                    info!(
-                                        "Reverted job to ready workflow_id={} job_id={}",
-                                        self.workflow_id, job_id
-                                    );
-                                }
-                                Err(revert_err) => {
-                                    error!(
-                                        "Failed to revert job to ready workflow_id={} job_id={} error={}",
-                                        self.workflow_id, job_id, revert_err
-                                    );
-                                }
-                            }
-                            self.release_gpu_devices(job_id);
+                            self.revert_job_to_ready(job_id);
                             continue;
                         }
                     }
@@ -2179,30 +2156,7 @@ impl JobRunner {
                                 "Job start failed workflow_id={} job_id={} error={}",
                                 self.workflow_id, job_id, e
                             );
-                            // Revert job status so it can be picked up by another worker
-                            match self.send_with_retries(|| {
-                                default_api::manage_status_change(
-                                    &self.config,
-                                    job_id,
-                                    JobStatus::Ready,
-                                    self.run_id,
-                                    None,
-                                )
-                            }) {
-                                Ok(_) => {
-                                    info!(
-                                        "Reverted job to ready workflow_id={} job_id={}",
-                                        self.workflow_id, job_id
-                                    );
-                                }
-                                Err(revert_err) => {
-                                    error!(
-                                        "Failed to revert job to ready workflow_id={} job_id={} error={}",
-                                        self.workflow_id, job_id, revert_err
-                                    );
-                                }
-                            }
-                            self.release_gpu_devices(job_id);
+                            self.revert_job_to_ready(job_id);
                             continue;
                         }
                     }
@@ -2216,6 +2170,36 @@ impl JobRunner {
                 panic!("Failed to prepare jobs for submission after retries");
             }
         }
+    }
+
+    /// Revert a job's status back to Ready after a failed start attempt.
+    ///
+    /// This allows the job to be picked up by another worker. Also releases any
+    /// GPU devices that were reserved for the job.
+    fn revert_job_to_ready(&mut self, job_id: i64) {
+        match self.send_with_retries(|| {
+            default_api::manage_status_change(
+                &self.config,
+                job_id,
+                JobStatus::Ready,
+                self.run_id,
+                None,
+            )
+        }) {
+            Ok(_) => {
+                info!(
+                    "Reverted job to ready workflow_id={} job_id={}",
+                    self.workflow_id, job_id
+                );
+            }
+            Err(revert_err) => {
+                error!(
+                    "Failed to revert job to ready workflow_id={} job_id={} error={}",
+                    self.workflow_id, job_id, revert_err
+                );
+            }
+        }
+        self.release_gpu_devices(job_id);
     }
 
     /// Helper method to execute actions of a specific trigger type.
