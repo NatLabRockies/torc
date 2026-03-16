@@ -9825,6 +9825,7 @@ managed by torc: <code>partition</code>, <code>nodes</code>, <code>walltime</cod
 <tr><td><code>scheduler</code></td><td>string</td><td>none</td><td>For <code>schedule_nodes</code>: scheduler name</td></tr>
 <tr><td><code>scheduler_type</code></td><td>string</td><td>none</td><td>For <code>schedule_nodes</code>: scheduler type (<code>"slurm"</code>, <code>"local"</code>)</td></tr>
 <tr><td><code>num_allocations</code></td><td>integer</td><td>none</td><td>For <code>schedule_nodes</code>: number of node allocations</td></tr>
+<tr><td><code>start_one_worker_per_node</code></td><td>boolean</td><td>false</td><td>For <code>schedule_nodes</code>: launch one worker per node (direct mode only)</td></tr>
 <tr><td><code>max_parallel_jobs</code></td><td>integer</td><td>none</td><td>For <code>schedule_nodes</code>: maximum parallel jobs</td></tr>
 <tr><td><code>persistent</code></td><td>boolean</td><td>false</td><td>Whether the action persists and can be claimed by multiple workers</td></tr>
 </tbody></table>
@@ -11725,12 +11726,20 @@ nodes are in the allocation.</p>
 <h3 id="pattern-1-many-single-node-jobs-in-a-multi-node-allocation"><a class="header" href="#pattern-1-many-single-node-jobs-in-a-multi-node-allocation">Pattern 1: Many Single-Node Jobs in a Multi-Node Allocation</a></h3>
 <p><strong>Use when</strong>: You have many independent jobs that each fit on one node, and you want them to run in
 parallel across multiple nodes for throughput.</p>
-<p><strong>How it works</strong>: Torc requests a multi-node Slurm allocation (e.g., 4 nodes). One worker manages
-the allocation and places each single-node job onto one node via <code>srun --nodes=1</code>. Single-node jobs
-may share a node as long as CPU, memory, and GPU limits allow. With N nodes, Torc can spread work
-across the allocation for throughput.</p>
-<p><strong>Example</strong>: 100 independent analysis jobs, each needing 8 CPUs and 32 GB, across a 4-node
-allocation:</p>
+<p><strong>How it works</strong>: Torc requests a multi-node Slurm allocation (e.g., 4 nodes). The behavior depends
+on the execution mode:</p>
+<ul>
+<li><strong>Slurm mode</strong> (default): A single worker manages the allocation and places each single-node job
+onto a node via <code>srun --nodes=1</code>. Slurm handles resource isolation and node placement.</li>
+<li><strong>Direct mode</strong>: Jobs are executed directly without <code>srun</code> wrapping. To distribute work across
+nodes, set <code>start_one_worker_per_node: true</code> on the <code>schedule_nodes</code> action. This launches one
+worker per node via <code>srun --ntasks-per-node=1</code>, and each worker executes jobs directly on its
+node.</li>
+</ul>
+<p>Single-node jobs may share a node as long as CPU, memory, and GPU limits allow. With N nodes, Torc
+can spread work across the allocation for throughput.</p>
+<p><strong>Example (Slurm mode)</strong>: 100 independent analysis jobs, each needing 8 CPUs and 32 GB, across a
+4-node allocation:</p>
 <pre><code class="language-yaml">name: parallel_analysis
 description: Run 100 analysis tasks across 4 nodes
 
@@ -11761,8 +11770,49 @@ actions:
     scheduler_type: slurm
     num_allocations: 1
 </code></pre>
+<p><strong>Example (Direct mode)</strong>: The same workload using direct execution with one worker per node:</p>
+<pre><code class="language-yaml">name: parallel_analysis_direct
+description: Run 20 analysis tasks across 2 nodes via direct execution
+
+execution_config:
+  mode: direct
+
+resource_requirements:
+  - name: analysis
+    num_cpus: 5
+    num_nodes: 1
+    memory: 2g
+    runtime: PT3M
+
+jobs:
+  - name: analyze_{i}
+    command: python analyze.py --chunk {i}
+    resource_requirements: analysis
+    scheduler: multi_node
+    parameters:
+      i: "1:20"
+
+slurm_schedulers:
+  - name: multi_node
+    account: myproject
+    nodes: 2
+    walltime: "00:10:00"
+
+actions:
+  - trigger_type: on_workflow_start
+    action_type: schedule_nodes
+    scheduler: multi_node
+    scheduler_type: slurm
+    start_one_worker_per_node: true
+    num_allocations: 1
+</code></pre>
 <p>Each node has 8 CPUs and 32 GB available per job. If a node has 64 CPUs total, it can run up to 8
 jobs concurrently (64 / 8 = 8). Across 4 nodes, that means up to 32 jobs running at once.</p>
+<blockquote>
+<p><strong>Note:</strong> <code>start_one_worker_per_node</code> is only supported with <code>execution_config.mode: direct</code>. It
+is not compatible with slurm execution mode, where Torc uses a single worker with <code>srun</code>-based
+node placement.</p>
+</blockquote>
 <h3 id="pattern-2-true-multi-node-jobs-mpi-distributed-training"><a class="header" href="#pattern-2-true-multi-node-jobs-mpi-distributed-training">Pattern 2: True Multi-Node Jobs (MPI, Distributed Training)</a></h3>
 <p><strong>Use when</strong>: A single job needs to span multiple nodes — for example, MPI applications, distributed
 deep learning, or Julia <code>Distributed.jl</code>.</p>
@@ -11825,8 +11875,9 @@ an active multi-node step.</p>
 <p>When running many single-node jobs (Pattern 1), you also need to decide how to request the
 underlying Slurm allocations. There are two approaches, each with trade-offs.</p>
 <h3 id="one-multi-node-allocation"><a class="header" href="#one-multi-node-allocation">One multi-node allocation</a></h3>
-<p>Request all nodes in a single <code>sbatch</code> job (e.g., <code>nodes: 4</code>). Torc runs one worker per node and
-distributes jobs across them.</p>
+<p>Request all nodes in a single <code>sbatch</code> job (e.g., <code>nodes: 4</code>). In slurm mode, a single worker
+distributes jobs across nodes via <code>srun</code>. In direct mode with <code>start_one_worker_per_node</code>, Torc runs
+one worker per node and each worker executes jobs locally.</p>
 <p><strong>Advantages:</strong></p>
 <ul>
 <li>Slurm schedulers typically give <strong>priority to larger allocations</strong>. On busy clusters, a 4-node job
@@ -20259,6 +20310,9 @@ job_name_regexes: ["batch_.*"]
 <li><code>scheduler</code> (required) - Name of Slurm scheduler configuration (must exist in <code>slurm_schedulers</code>)</li>
 <li><code>scheduler_type</code> (required) - Must be "slurm"</li>
 <li><code>num_allocations</code> (required) - Number of Slurm allocation requests to submit</li>
+<li><code>start_one_worker_per_node</code> (optional, default: false) - Launch one worker per allocated node via
+<code>srun --ntasks-per-node=1</code>. Use this for direct-mode workflows with single-node jobs sharing a
+multi-node allocation. Not compatible with <code>execution_config.mode: slurm</code>.</li>
 </ul>
 <p><strong>Use cases</strong>:</p>
 <ul>
