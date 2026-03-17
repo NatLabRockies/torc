@@ -5153,6 +5153,7 @@ job "train_lr{lr:.4f}_bs{batch_size}" {
                 use_parameters: None,
                 failure_handler: None,
                 stdio: None,
+                priority: None,
             }],
             files: Some(vec![{
                 let mut file =
