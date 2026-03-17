@@ -2102,15 +2102,15 @@ where
         // Update the job (only non-relationship fields)
         let status_int = body.status.map(|s| s.to_int());
 
-        if let Some(p) = body.priority {
-            if p < 0 {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("priority must be >= 0, got {}", p)
-                }));
-                return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
-                    error_response,
-                ));
-            }
+        if let Some(p) = body.priority
+            && p < 0
+        {
+            let error_response = models::ErrorResponse::new(serde_json::json!({
+                "message": format!("priority must be >= 0, got {}", p)
+            }));
+            return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
+                error_response,
+            ));
         }
 
         let result = match sqlx::query!(
