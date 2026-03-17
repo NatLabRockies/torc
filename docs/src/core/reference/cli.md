@@ -225,6 +225,14 @@ resource requirements, and resubmits jobs.
 - `--auto-schedule-stranded-timeout <SECONDS>` — Schedule stranded jobs after this timeout even if
   below threshold. Default: `7200` (2 hrs). Set to `0` to disable.
 
+**Scheduler overrides:**
+
+- `--partition <PARTITION>` — Fixed Slurm partition for regenerated schedulers. Bypasses automatic
+  partition selection. Node count is still calculated dynamically.
+- `--walltime <WALLTIME>` — Fixed Slurm walltime for regenerated schedulers (format: `HH:MM:SS` or
+  `D-HH:MM:SS`). Bypasses automatic walltime calculation. Node count is still calculated
+  dynamically.
+
 ### Auto-Scheduling Behavior
 
 When `--auto-schedule` is enabled:
@@ -261,6 +269,10 @@ torc watch 123 --auto-schedule \
     --auto-schedule-threshold 10 \
     --auto-schedule-cooldown 3600 \
     --auto-schedule-stranded-timeout 14400
+
+# Fixed partition and walltime (dynamic node count only)
+# Useful for long-running checkpointable jobs
+torc watch 123 --auto-schedule --partition standard --walltime 04:00:00
 ```
 
 ### See Also
@@ -1701,6 +1713,10 @@ regenerate schedulers to submit new allocations.
 
 - `--account <ACCOUNT>` — Slurm account to use (defaults to account from existing schedulers)
 - `--profile <PROFILE>` — HPC profile to use (if not specified, tries to detect current system)
+- `--partition <PARTITION>` — Fixed Slurm partition (bypasses automatic partition selection). Node
+  count is still calculated dynamically.
+- `--walltime <WALLTIME>` — Fixed Slurm walltime (format: `HH:MM:SS` or `D-HH:MM:SS`). Bypasses
+  automatic walltime calculation. Node count is still calculated dynamically.
 - `--single-allocation` — Bundle all nodes into a single Slurm allocation per scheduler
 - `--submit` — Submit the generated allocations immediately
 - `-o`, `--output-dir <OUTPUT_DIR>` — Output directory for job output files (used when submitting).
@@ -1710,9 +1726,9 @@ regenerate schedulers to submit new allocations.
 - `--group-by <GROUP_BY>` — Strategy for grouping jobs into schedulers. Possible values:
   `resource-requirements` (default), `partition`
 - `--walltime-strategy <STRATEGY>` — Strategy for determining Slurm job walltime. Possible values:
-  `max-job-runtime` (default), `max-partition-time`
+  `max-job-runtime` (default), `max-partition-time`. Ignored when `--walltime` is set.
 - `--walltime-multiplier <MULTIPLIER>` — Multiplier for job runtime when using
-  `--walltime-strategy=max-job-runtime`. Default: `1.5`
+  `--walltime-strategy=max-job-runtime`. Default: `1.5`. Ignored when `--walltime` is set.
 - `--dry-run` — Show what would be created without making changes
 - `--include-job-ids <JOB_IDS>` — Include specific job IDs in planning regardless of their status
   (useful for recovery dry-run to include failed jobs)

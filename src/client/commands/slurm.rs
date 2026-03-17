@@ -607,6 +607,22 @@ EXAMPLES:
         #[arg(long)]
         profile: Option<String>,
 
+        /// Fixed Slurm partition (bypasses automatic partition selection)
+        ///
+        /// When set, all regenerated schedulers use this partition instead of
+        /// auto-detecting the best partition from job resource requirements.
+        /// Node count is still calculated dynamically.
+        #[arg(long)]
+        partition: Option<String>,
+
+        /// Fixed Slurm walltime (bypasses automatic walltime calculation)
+        ///
+        /// When set, all regenerated schedulers use this walltime instead of
+        /// calculating it from job runtimes. Format: HH:MM:SS or D-HH:MM:SS.
+        /// Node count is still calculated dynamically.
+        #[arg(long)]
+        walltime: Option<String>,
+
         /// Bundle all nodes into a single Slurm allocation per scheduler
         #[arg(long)]
         single_allocation: bool,
@@ -627,6 +643,8 @@ EXAMPLES:
         ///   Longer walltime allows more sequential jobs per allocation, reducing
         ///   the total number of allocations. However, longer walltime requests
         ///   may receive lower queue priority from the scheduler.
+        ///
+        /// Ignored when --walltime is set.
         #[arg(long, value_enum, default_value_t = WalltimeStrategy::MaxJobRuntime)]
         walltime_strategy: WalltimeStrategy,
 
@@ -635,6 +653,8 @@ EXAMPLES:
         /// The maximum job runtime is multiplied by this value to provide a safety
         /// margin. For example, 1.5 means requesting 50% more time than the longest
         /// job estimate.
+        ///
+        /// Ignored when --walltime is set.
         #[arg(long, default_value = "1.5")]
         walltime_multiplier: f64,
 
@@ -732,7 +752,9 @@ pub fn generate_schedulers_for_workflow(
         spec.actions = None;
     }
 
-    use crate::client::scheduler_plan::{apply_plan_to_spec, generate_scheduler_plan};
+    use crate::client::scheduler_plan::{
+        SchedulerOverrides, apply_plan_to_spec, generate_scheduler_plan,
+    };
 
     // Save original jobs and files before expansion so we can restore them later
     let original_jobs = spec.jobs.clone();
@@ -782,6 +804,7 @@ pub fn generate_schedulers_for_workflow(
         add_actions,
         None,  // No suffix for regular generation (uses "_scheduler")
         false, // Not a recovery scenario
+        &SchedulerOverrides::default(),
     );
 
     // Combine warnings
@@ -1382,6 +1405,8 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
             workflow_id,
             account,
             profile: profile_name,
+            partition,
+            walltime,
             single_allocation,
             group_by,
             walltime_strategy,
@@ -1402,6 +1427,8 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
                 *workflow_id,
                 account.as_deref(),
                 profile_name.as_deref(),
+                partition.as_deref(),
+                walltime.as_deref(),
                 *single_allocation,
                 *group_by,
                 *walltime_strategy,
@@ -3376,6 +3403,8 @@ fn handle_regenerate(
     workflow_id: i64,
     account: Option<&str>,
     profile_name: Option<&str>,
+    partition: Option<&str>,
+    walltime: Option<&str>,
     single_allocation: bool,
     group_by: GroupByStrategy,
     walltime_strategy: WalltimeStrategy,
@@ -3585,7 +3614,18 @@ fn handle_regenerate(
             std::process::exit(1);
         });
 
-    use crate::client::scheduler_plan::generate_scheduler_plan;
+    use crate::client::scheduler_plan::{SchedulerOverrides, generate_scheduler_plan};
+
+    // Build overrides from partition/walltime arguments
+    let overrides = SchedulerOverrides {
+        partition: partition.map(|s| s.to_string()),
+        walltime_secs: walltime.map(|w| {
+            parse_walltime_secs(w).unwrap_or_else(|e| {
+                eprintln!("Error: invalid --walltime '{}': {}", w, e);
+                std::process::exit(1);
+            })
+        }),
+    };
 
     // Build WorkflowGraph from pending jobs for proper dependency-aware grouping
     // This aligns with create-slurm's behavior of separating jobs by (rr, has_dependencies)
@@ -3628,6 +3668,7 @@ fn handle_regenerate(
         true, // add_actions (we'll create them as recovery actions)
         Some(&format!("regen_{}", timestamp)),
         true, // is_recovery
+        &overrides,
     );
 
     // Combine warnings from planning

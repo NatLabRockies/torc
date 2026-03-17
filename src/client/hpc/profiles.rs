@@ -249,6 +249,11 @@ impl HpcProfile {
             .collect()
     }
 
+    /// Find a partition by its exact name
+    pub fn find_partition_by_name(&self, name: &str) -> Option<&HpcPartition> {
+        self.partitions.iter().find(|p| p.name == name)
+    }
+
     /// Find the best partition for the given requirements
     /// Prefers: GPU partitions if GPUs requested, shared if small job, otherwise standard
     /// Avoids: debug partitions (they're for development, not production)

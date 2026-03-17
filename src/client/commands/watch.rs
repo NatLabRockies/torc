@@ -87,6 +87,10 @@ pub struct WatchArgs {
     pub ai_recovery: bool,
     /// AI agent CLI to use for --ai-recovery (e.g., "claude")
     pub ai_agent: String,
+    /// Fixed Slurm partition for regenerated schedulers (bypasses auto-selection)
+    pub partition: Option<String>,
+    /// Fixed Slurm walltime for regenerated schedulers (bypasses auto-calculation)
+    pub walltime: Option<String>,
 }
 
 /// Get job counts by status for a workflow
@@ -304,6 +308,8 @@ struct AutoScheduleOptions {
     cooldown: Duration,
     stranded_timeout: Duration,
     output_dir: PathBuf,
+    partition: Option<String>,
+    walltime: Option<String>,
 }
 
 /// Poll until workflow is complete, optionally printing status updates.
@@ -397,8 +403,12 @@ fn poll_until_complete(
                                     "Auto-schedule: {} retry jobs waiting (threshold: {}), scheduling more nodes...",
                                     retry_ready, auto_schedule.threshold
                                 );
-                                match regenerate_and_submit(workflow_id, &auto_schedule.output_dir)
-                                {
+                                match regenerate_and_submit(
+                                    workflow_id,
+                                    &auto_schedule.output_dir,
+                                    auto_schedule.partition.as_deref(),
+                                    auto_schedule.walltime.as_deref(),
+                                ) {
                                     Ok(()) => {
                                         info!(
                                             "Auto-schedule: Successfully submitted new allocations"
@@ -416,8 +426,12 @@ fn poll_until_complete(
                                     last_auto_schedule.elapsed().as_secs(),
                                     auto_schedule.stranded_timeout.as_secs()
                                 );
-                                match regenerate_and_submit(workflow_id, &auto_schedule.output_dir)
-                                {
+                                match regenerate_and_submit(
+                                    workflow_id,
+                                    &auto_schedule.output_dir,
+                                    auto_schedule.partition.as_deref(),
+                                    auto_schedule.walltime.as_deref(),
+                                ) {
                                     Ok(()) => {
                                         info!(
                                             "Auto-schedule: Successfully submitted new allocations"
@@ -491,7 +505,12 @@ fn poll_until_complete(
                                 total_ready, retry_ready
                             );
                             info!("Auto-schedule: Regenerating schedulers...");
-                            match regenerate_and_submit(workflow_id, &auto_schedule.output_dir) {
+                            match regenerate_and_submit(
+                                workflow_id,
+                                &auto_schedule.output_dir,
+                                auto_schedule.partition.as_deref(),
+                                auto_schedule.walltime.as_deref(),
+                            ) {
                                 Ok(()) => {
                                     info!("Auto-schedule: Successfully submitted new allocations");
                                     last_auto_schedule = Instant::now();
@@ -645,6 +664,8 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
         cooldown: Duration::from_secs(args.auto_schedule_cooldown),
         stranded_timeout: Duration::from_secs(args.auto_schedule_stranded_timeout),
         output_dir: args.output_dir.clone(),
+        partition: args.partition.clone(),
+        walltime: args.walltime.clone(),
     };
 
     if args.auto_schedule {
@@ -903,7 +924,12 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
 
         // Step 5: Regenerate Slurm schedulers (this also marks old actions as executed)
         info!("Regenerating Slurm schedulers...");
-        if let Err(e) = regenerate_and_submit(args.workflow_id, &args.output_dir) {
+        if let Err(e) = regenerate_and_submit(
+            args.workflow_id,
+            &args.output_dir,
+            args.partition.as_deref(),
+            args.walltime.as_deref(),
+        ) {
             warn!("Error regenerating schedulers: {}", e);
             std::process::exit(1);
         }

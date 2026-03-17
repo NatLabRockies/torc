@@ -31,6 +31,19 @@ use super::commands::slurm::{
 };
 use crate::client::hpc::HpcPartition;
 
+/// Optional overrides for partition and walltime selection.
+///
+/// When set, these bypass the automatic size-fitting for partition and/or walltime,
+/// using the user-specified values instead. Node count calculation still happens
+/// dynamically based on the number of pending jobs.
+#[derive(Debug, Clone, Default)]
+pub struct SchedulerOverrides {
+    /// Fixed partition name (bypasses `find_best_partition`)
+    pub partition: Option<String>,
+    /// Fixed walltime in seconds (bypasses `calculate_walltime`)
+    pub walltime_secs: Option<u64>,
+}
+
 /// Parameters for calculating the number of allocations needed for a group of jobs.
 struct AllocationParams {
     /// Maximum CPUs required by any job in the group
@@ -255,6 +268,7 @@ pub trait ResourceRequirements {
 /// * `add_actions` - Whether to add workflow actions for scheduling
 /// * `scheduler_name_suffix` - Optional suffix for scheduler names (e.g., "_regen_20240101")
 /// * `is_recovery` - Whether this is a recovery scenario (actions marked as recovery)
+/// * `overrides` - Optional partition/walltime overrides that bypass auto-selection
 #[allow(clippy::too_many_arguments)]
 pub fn generate_scheduler_plan<RR: ResourceRequirements>(
     graph: &WorkflowGraph,
@@ -268,6 +282,7 @@ pub fn generate_scheduler_plan<RR: ResourceRequirements>(
     add_actions: bool,
     scheduler_name_suffix: Option<&str>,
     is_recovery: bool,
+    overrides: &SchedulerOverrides,
 ) -> SchedulerPlan {
     let mut plan = SchedulerPlan::new();
 
@@ -289,6 +304,7 @@ pub fn generate_scheduler_plan<RR: ResourceRequirements>(
                 add_actions,
                 scheduler_name_suffix,
                 is_recovery,
+                overrides,
                 &mut plan,
             );
         }
@@ -306,6 +322,7 @@ pub fn generate_scheduler_plan<RR: ResourceRequirements>(
                     add_actions,
                     scheduler_name_suffix,
                     is_recovery,
+                    overrides,
                 ) {
                     Ok((scheduler, action)) => {
                         // Record job assignments
@@ -344,6 +361,7 @@ fn process_scheduler_group<RR: ResourceRequirements>(
     add_actions: bool,
     scheduler_name_suffix: Option<&str>,
     is_recovery: bool,
+    overrides: &SchedulerOverrides,
 ) -> Result<(PlannedScheduler, Option<PlannedAction>), String> {
     let rr_name = &group.resource_requirements;
     let rr = resource_requirements.get(rr_name.as_str()).ok_or_else(|| {
@@ -378,28 +396,43 @@ fn process_scheduler_group<RR: ResourceRequirements>(
         None
     };
 
-    // Find best partition
-    let partition = profile
-        .find_best_partition(rr.num_cpus() as u32, memory_mb, runtime_secs, gpus)
-        .ok_or_else(|| {
-            format!(
-                "No partition found for resource requirements '{}' (CPUs: {}, Memory: {}, Runtime: {}, GPUs: {:?})",
-                rr.name(),
-                rr.num_cpus(),
-                rr.memory(),
-                rr.runtime(),
-                gpus
-            )
-        })?;
+    // Find partition: use override if provided, otherwise auto-detect
+    let partition = if let Some(ref partition_name) = overrides.partition {
+        profile
+            .find_partition_by_name(partition_name)
+            .ok_or_else(|| {
+                format!(
+                    "Partition '{}' not found in HPC profile for resource requirements '{}'",
+                    partition_name,
+                    rr.name()
+                )
+            })?
+    } else {
+        profile
+            .find_best_partition(rr.num_cpus() as u32, memory_mb, runtime_secs, gpus)
+            .ok_or_else(|| {
+                format!(
+                    "No partition found for resource requirements '{}' (CPUs: {}, Memory: {}, Runtime: {}, GPUs: {:?})",
+                    rr.name(),
+                    rr.num_cpus(),
+                    rr.memory(),
+                    rr.runtime(),
+                    gpus
+                )
+            })?
+    };
 
-    // Calculate walltime based on strategy (must be computed before allocations
-    // since time_slots depends on the actual allocation walltime, not partition max)
-    let walltime_secs = calculate_walltime(
-        runtime_secs,
-        partition.max_walltime_secs,
-        walltime_strategy,
-        walltime_multiplier,
-    );
+    // Calculate walltime: use override if provided, otherwise use strategy
+    let walltime_secs = if let Some(override_secs) = overrides.walltime_secs {
+        override_secs
+    } else {
+        calculate_walltime(
+            runtime_secs,
+            partition.max_walltime_secs,
+            walltime_strategy,
+            walltime_multiplier,
+        )
+    };
 
     // Calculate allocations using the shared helper function
     let alloc_params = AllocationParams {
@@ -448,7 +481,7 @@ fn process_scheduler_group<RR: ResourceRequirements>(
     let scheduler = PlannedScheduler {
         name: scheduler_name.clone(),
         account: account.to_string(),
-        partition: if partition.requires_explicit_request {
+        partition: if overrides.partition.is_some() || partition.requires_explicit_request {
             Some(partition.name.clone())
         } else {
             None
@@ -531,6 +564,7 @@ fn generate_plan_grouped_by_partition<RR: ResourceRequirements>(
     add_actions: bool,
     scheduler_name_suffix: Option<&str>,
     is_recovery: bool,
+    overrides: &SchedulerOverrides,
     plan: &mut SchedulerPlan,
 ) {
     // First pass: resolve each scheduler group to its partition and build merged groups
@@ -582,24 +616,33 @@ fn generate_plan_grouped_by_partition<RR: ResourceRequirements>(
             None
         };
 
-        // Find best partition for this RR
-        let partition = match profile.find_best_partition(
-            rr.num_cpus() as u32,
-            memory_mb,
-            runtime_secs,
-            gpus,
-        ) {
-            Some(p) => p,
-            None => {
-                plan.warnings.push(format!(
-                    "No partition found for resource requirements '{}' (CPUs: {}, Memory: {}, Runtime: {}, GPUs: {:?})",
-                    rr.name(),
-                    rr.num_cpus(),
-                    rr.memory(),
-                    rr.runtime(),
-                    gpus
-                ));
-                continue;
+        // Find partition: use override if provided, otherwise auto-detect
+        let partition = if let Some(ref partition_name) = overrides.partition {
+            match profile.find_partition_by_name(partition_name) {
+                Some(p) => p,
+                None => {
+                    plan.warnings.push(format!(
+                        "Partition '{}' not found in HPC profile for resource requirements '{}'",
+                        partition_name,
+                        rr.name()
+                    ));
+                    continue;
+                }
+            }
+        } else {
+            match profile.find_best_partition(rr.num_cpus() as u32, memory_mb, runtime_secs, gpus) {
+                Some(p) => p,
+                None => {
+                    plan.warnings.push(format!(
+                        "No partition found for resource requirements '{}' (CPUs: {}, Memory: {}, Runtime: {}, GPUs: {:?})",
+                        rr.name(),
+                        rr.num_cpus(),
+                        rr.memory(),
+                        rr.runtime(),
+                        gpus
+                    ));
+                    continue;
+                }
             }
         };
 
@@ -644,19 +687,27 @@ fn generate_plan_grouped_by_partition<RR: ResourceRequirements>(
         } else {
             None
         };
-        let partition = profile.find_best_partition(
-            pg.max_cpus as u32,
-            pg.max_memory_mb,
-            pg.max_runtime_secs,
-            gpus,
-        )?;
+        let partition = if let Some(ref partition_name) = overrides.partition {
+            profile.find_partition_by_name(partition_name)?
+        } else {
+            profile.find_best_partition(
+                pg.max_cpus as u32,
+                pg.max_memory_mb,
+                pg.max_runtime_secs,
+                gpus,
+            )?
+        };
 
-        let alloc_walltime_secs = calculate_walltime(
-            pg.max_runtime_secs,
-            partition.max_walltime_secs,
-            walltime_strategy,
-            walltime_multiplier,
-        );
+        let alloc_walltime_secs = if let Some(override_secs) = overrides.walltime_secs {
+            override_secs
+        } else {
+            calculate_walltime(
+                pg.max_runtime_secs,
+                partition.max_walltime_secs,
+                walltime_strategy,
+                walltime_multiplier,
+            )
+        };
 
         let params = AllocationParams {
             max_cpus: pg.max_cpus as u32,
@@ -730,30 +781,46 @@ fn generate_plan_grouped_by_partition<RR: ResourceRequirements>(
             None
         };
 
-        let partition = match profile.find_best_partition(
-            pg.max_cpus as u32,
-            pg.max_memory_mb,
-            pg.max_runtime_secs,
-            gpus,
-        ) {
-            Some(p) => p,
-            None => {
-                plan.warnings.push(format!(
-                    "No partition found for merged group '{}' (this shouldn't happen)",
-                    pg.partition_name
-                ));
-                continue;
+        let partition = if let Some(ref partition_name) = overrides.partition {
+            match profile.find_partition_by_name(partition_name) {
+                Some(p) => p,
+                None => {
+                    plan.warnings.push(format!(
+                        "Partition '{}' not found in HPC profile for merged group '{}'",
+                        partition_name, pg.partition_name
+                    ));
+                    continue;
+                }
+            }
+        } else {
+            match profile.find_best_partition(
+                pg.max_cpus as u32,
+                pg.max_memory_mb,
+                pg.max_runtime_secs,
+                gpus,
+            ) {
+                Some(p) => p,
+                None => {
+                    plan.warnings.push(format!(
+                        "No partition found for merged group '{}' (this shouldn't happen)",
+                        pg.partition_name
+                    ));
+                    continue;
+                }
             }
         };
 
-        // Calculate walltime based on strategy (must be computed before allocations
-        // since time_slots depends on the actual allocation walltime, not partition max)
-        let walltime_secs = calculate_walltime(
-            pg.max_runtime_secs,
-            partition.max_walltime_secs,
-            walltime_strategy,
-            walltime_multiplier,
-        );
+        // Calculate walltime: use override if provided, otherwise use strategy
+        let walltime_secs = if let Some(override_secs) = overrides.walltime_secs {
+            override_secs
+        } else {
+            calculate_walltime(
+                pg.max_runtime_secs,
+                partition.max_walltime_secs,
+                walltime_strategy,
+                walltime_multiplier,
+            )
+        };
 
         // Calculate allocations using the shared helper function
         let alloc_params = AllocationParams {
@@ -806,7 +873,7 @@ fn generate_plan_grouped_by_partition<RR: ResourceRequirements>(
         let scheduler = PlannedScheduler {
             name: scheduler_name.clone(),
             account: account.to_string(),
-            partition: if partition.requires_explicit_request {
+            partition: if overrides.partition.is_some() || partition.requires_explicit_request {
                 Some(partition.name.clone())
             } else {
                 None

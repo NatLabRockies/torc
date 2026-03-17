@@ -175,7 +175,9 @@ torc watch <workflow_id> \
   --auto-schedule \             # Automatically schedule nodes for stranded jobs
   --auto-schedule-threshold 5 \ # Min retry jobs before scheduling (default: 5)
   --auto-schedule-cooldown 1800 \      # Seconds between auto-schedule attempts (default: 1800)
-  --auto-schedule-stranded-timeout 7200  # Schedule stranded jobs after this time (default: 7200)
+  --auto-schedule-stranded-timeout 7200 \ # Schedule stranded jobs after this time (default: 7200)
+  --partition standard \        # Fixed Slurm partition (bypass auto-detection)
+  --walltime 04:00:00           # Fixed walltime (bypass auto-calculation)
 ```
 
 ### Custom Recovery Hooks

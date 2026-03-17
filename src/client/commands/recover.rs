@@ -369,7 +369,7 @@ pub fn recover_workflow(
 
     // Step 7: Regenerate Slurm schedulers and submit
     info!("Schedulers regenerating workflow_id={}", args.workflow_id);
-    regenerate_and_submit(args.workflow_id, &args.output_dir)?;
+    regenerate_and_submit(args.workflow_id, &args.output_dir, None, None)?;
 
     Ok(result)
 }
@@ -942,16 +942,30 @@ pub fn run_recovery_hook(workflow_id: i64, hook_command: &str) -> Result<(), Str
 }
 
 /// Regenerate Slurm schedulers and submit allocations
-pub fn regenerate_and_submit(workflow_id: i64, output_dir: &Path) -> Result<(), String> {
+pub fn regenerate_and_submit(
+    workflow_id: i64,
+    output_dir: &Path,
+    partition: Option<&str>,
+    walltime: Option<&str>,
+) -> Result<(), String> {
+    let mut args = vec![
+        "slurm".to_string(),
+        "regenerate".to_string(),
+        workflow_id.to_string(),
+        "--submit".to_string(),
+        "-o".to_string(),
+        output_dir.to_str().unwrap_or("torc_output").to_string(),
+    ];
+    if let Some(p) = partition {
+        args.push("--partition".to_string());
+        args.push(p.to_string());
+    }
+    if let Some(w) = walltime {
+        args.push("--walltime".to_string());
+        args.push(w.to_string());
+    }
     let output = Command::new("torc")
-        .args([
-            "slurm",
-            "regenerate",
-            &workflow_id.to_string(),
-            "--submit",
-            "-o",
-            output_dir.to_str().unwrap_or("torc_output"),
-        ])
+        .args(&args)
         .output()
         .map_err(|e| format!("Failed to run slurm regenerate: {}", e))?;
 

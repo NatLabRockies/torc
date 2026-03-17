@@ -565,6 +565,8 @@ fn main() {
             auto_schedule_stranded_timeout,
             ai_recovery,
             ai_agent,
+            partition,
+            walltime,
         } => {
             let args = WatchArgs {
                 workflow_id: *workflow_id,
@@ -584,6 +586,8 @@ fn main() {
                 auto_schedule_stranded_timeout: *auto_schedule_stranded_timeout,
                 ai_recovery: *ai_recovery,
                 ai_agent: ai_agent.clone(),
+                partition: partition.clone(),
+                walltime: walltime.clone(),
             };
             run_watch(&config, &args);
         }
