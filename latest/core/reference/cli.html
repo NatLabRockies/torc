@@ -335,7 +335,7 @@ resource requirements, and resubmits jobs.</p>
 <pre><code class="language-bash">torc watch 123 --recover
 </code></pre>
 <p>Automatically diagnoses OOM/timeout failures, adjusts resources, and retries. Runs until all jobs
-complete or max retries exceeded.</p>
+complete. Use <code>--max-retries</code> to limit recovery attempts.</p>
 </li>
 <li>
 <p><strong>With auto-scheduling</strong> (<code>--auto-schedule</code>):</p>
@@ -360,7 +360,7 @@ server load for large workflows.</li>
 <p><strong>Recovery:</strong></p>
 <ul>
 <li><code>-r</code>, <code>--recover</code> — Enable automatic failure recovery</li>
-<li><code>-m</code>, <code>--max-retries &lt;MAX_RETRIES&gt;</code> — Maximum number of recovery attempts. Default: <code>3</code></li>
+<li><code>-m</code>, <code>--max-retries &lt;MAX_RETRIES&gt;</code> — Maximum number of recovery attempts. Default: unlimited</li>
 <li><code>--memory-multiplier &lt;MEMORY_MULTIPLIER&gt;</code> — Memory multiplier for OOM failures. Default: <code>1.5</code></li>
 <li><code>--runtime-multiplier &lt;RUNTIME_MULTIPLIER&gt;</code> — Runtime multiplier for timeout failures. Default:
 <code>1.5</code></li>
@@ -377,6 +377,14 @@ Default: <code>5</code></li>
 (30 min)</li>
 <li><code>--auto-schedule-stranded-timeout &lt;SECONDS&gt;</code> — Schedule stranded jobs after this timeout even if
 below threshold. Default: <code>7200</code> (2 hrs). Set to <code>0</code> to disable.</li>
+</ul>
+<p><strong>Scheduler overrides:</strong></p>
+<ul>
+<li><code>--partition &lt;PARTITION&gt;</code> — Fixed Slurm partition for regenerated schedulers. Bypasses automatic
+partition selection. Node count is still calculated dynamically.</li>
+<li><code>--walltime &lt;WALLTIME&gt;</code> — Fixed Slurm walltime for regenerated schedulers (format: <code>HH:MM:SS</code> or
+<code>D-HH:MM:SS</code>). Bypasses automatic walltime calculation. Node count is still calculated
+dynamically.</li>
 </ul>
 <h3 id="auto-scheduling-behavior"><a class="header" href="#auto-scheduling-behavior">Auto-Scheduling Behavior</a></h3>
 <p>When <code>--auto-schedule</code> is enabled:</p>
@@ -411,6 +419,10 @@ torc watch 123 --auto-schedule \
     --auto-schedule-threshold 10 \
     --auto-schedule-cooldown 3600 \
     --auto-schedule-stranded-timeout 14400
+
+# Fixed partition and walltime (dynamic node count only)
+# Useful for long-running checkpointable jobs
+torc watch 123 --auto-schedule --partition standard --walltime 04:00:00
 </code></pre>
 <h3 id="see-also"><a class="header" href="#see-also">See Also</a></h3>
 <ul>
@@ -1572,6 +1584,10 @@ regenerate schedulers to submit new allocations.</p>
 <ul>
 <li><code>--account &lt;ACCOUNT&gt;</code> — Slurm account to use (defaults to account from existing schedulers)</li>
 <li><code>--profile &lt;PROFILE&gt;</code> — HPC profile to use (if not specified, tries to detect current system)</li>
+<li><code>--partition &lt;PARTITION&gt;</code> — Fixed Slurm partition (bypasses automatic partition selection). Node
+count is still calculated dynamically.</li>
+<li><code>--walltime &lt;WALLTIME&gt;</code> — Fixed Slurm walltime (format: <code>HH:MM:SS</code> or <code>D-HH:MM:SS</code>). Bypasses
+automatic walltime calculation. Node count is still calculated dynamically.</li>
 <li><code>--single-allocation</code> — Bundle all nodes into a single Slurm allocation per scheduler</li>
 <li><code>--submit</code> — Submit the generated allocations immediately</li>
 <li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory for job output files (used when submitting).
@@ -1581,9 +1597,9 @@ Default: <code>60</code></li>
 <li><code>--group-by &lt;GROUP_BY&gt;</code> — Strategy for grouping jobs into schedulers. Possible values:
 <code>resource-requirements</code> (default), <code>partition</code></li>
 <li><code>--walltime-strategy &lt;STRATEGY&gt;</code> — Strategy for determining Slurm job walltime. Possible values:
-<code>max-job-runtime</code> (default), <code>max-partition-time</code></li>
+<code>max-job-runtime</code> (default), <code>max-partition-time</code>. Ignored when <code>--walltime</code> is set.</li>
 <li><code>--walltime-multiplier &lt;MULTIPLIER&gt;</code> — Multiplier for job runtime when using
-<code>--walltime-strategy=max-job-runtime</code>. Default: <code>1.5</code></li>
+<code>--walltime-strategy=max-job-runtime</code>. Default: <code>1.5</code>. Ignored when <code>--walltime</code> is set.</li>
 <li><code>--dry-run</code> — Show what would be created without making changes</li>
 <li><code>--include-job-ids &lt;JOB_IDS&gt;</code> — Include specific job IDs in planning regardless of their status
 (useful for recovery dry-run to include failed jobs)</li>

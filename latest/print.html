@@ -8030,7 +8030,7 @@ resource requirements, and resubmits jobs.</p>
 <pre><code class="language-bash">torc watch 123 --recover
 </code></pre>
 <p>Automatically diagnoses OOM/timeout failures, adjusts resources, and retries. Runs until all jobs
-complete or max retries exceeded.</p>
+complete. Use <code>--max-retries</code> to limit recovery attempts.</p>
 </li>
 <li>
 <p><strong>With auto-scheduling</strong> (<code>--auto-schedule</code>):</p>
@@ -8055,7 +8055,7 @@ server load for large workflows.</li>
 <p><strong>Recovery:</strong></p>
 <ul>
 <li><code>-r</code>, <code>--recover</code> — Enable automatic failure recovery</li>
-<li><code>-m</code>, <code>--max-retries &lt;MAX_RETRIES&gt;</code> — Maximum number of recovery attempts. Default: <code>3</code></li>
+<li><code>-m</code>, <code>--max-retries &lt;MAX_RETRIES&gt;</code> — Maximum number of recovery attempts. Default: unlimited</li>
 <li><code>--memory-multiplier &lt;MEMORY_MULTIPLIER&gt;</code> — Memory multiplier for OOM failures. Default: <code>1.5</code></li>
 <li><code>--runtime-multiplier &lt;RUNTIME_MULTIPLIER&gt;</code> — Runtime multiplier for timeout failures. Default:
 <code>1.5</code></li>
@@ -8072,6 +8072,14 @@ Default: <code>5</code></li>
 (30 min)</li>
 <li><code>--auto-schedule-stranded-timeout &lt;SECONDS&gt;</code> — Schedule stranded jobs after this timeout even if
 below threshold. Default: <code>7200</code> (2 hrs). Set to <code>0</code> to disable.</li>
+</ul>
+<p><strong>Scheduler overrides:</strong></p>
+<ul>
+<li><code>--partition &lt;PARTITION&gt;</code> — Fixed Slurm partition for regenerated schedulers. Bypasses automatic
+partition selection. Node count is still calculated dynamically.</li>
+<li><code>--walltime &lt;WALLTIME&gt;</code> — Fixed Slurm walltime for regenerated schedulers (format: <code>HH:MM:SS</code> or
+<code>D-HH:MM:SS</code>). Bypasses automatic walltime calculation. Node count is still calculated
+dynamically.</li>
 </ul>
 <h3 id="auto-scheduling-behavior"><a class="header" href="#auto-scheduling-behavior">Auto-Scheduling Behavior</a></h3>
 <p>When <code>--auto-schedule</code> is enabled:</p>
@@ -8106,6 +8114,10 @@ torc watch 123 --auto-schedule \
     --auto-schedule-threshold 10 \
     --auto-schedule-cooldown 3600 \
     --auto-schedule-stranded-timeout 14400
+
+# Fixed partition and walltime (dynamic node count only)
+# Useful for long-running checkpointable jobs
+torc watch 123 --auto-schedule --partition standard --walltime 04:00:00
 </code></pre>
 <h3 id="see-also-16"><a class="header" href="#see-also-16">See Also</a></h3>
 <ul>
@@ -9267,6 +9279,10 @@ regenerate schedulers to submit new allocations.</p>
 <ul>
 <li><code>--account &lt;ACCOUNT&gt;</code> — Slurm account to use (defaults to account from existing schedulers)</li>
 <li><code>--profile &lt;PROFILE&gt;</code> — HPC profile to use (if not specified, tries to detect current system)</li>
+<li><code>--partition &lt;PARTITION&gt;</code> — Fixed Slurm partition (bypasses automatic partition selection). Node
+count is still calculated dynamically.</li>
+<li><code>--walltime &lt;WALLTIME&gt;</code> — Fixed Slurm walltime (format: <code>HH:MM:SS</code> or <code>D-HH:MM:SS</code>). Bypasses
+automatic walltime calculation. Node count is still calculated dynamically.</li>
 <li><code>--single-allocation</code> — Bundle all nodes into a single Slurm allocation per scheduler</li>
 <li><code>--submit</code> — Submit the generated allocations immediately</li>
 <li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory for job output files (used when submitting).
@@ -9276,9 +9292,9 @@ Default: <code>60</code></li>
 <li><code>--group-by &lt;GROUP_BY&gt;</code> — Strategy for grouping jobs into schedulers. Possible values:
 <code>resource-requirements</code> (default), <code>partition</code></li>
 <li><code>--walltime-strategy &lt;STRATEGY&gt;</code> — Strategy for determining Slurm job walltime. Possible values:
-<code>max-job-runtime</code> (default), <code>max-partition-time</code></li>
+<code>max-job-runtime</code> (default), <code>max-partition-time</code>. Ignored when <code>--walltime</code> is set.</li>
 <li><code>--walltime-multiplier &lt;MULTIPLIER&gt;</code> — Multiplier for job runtime when using
-<code>--walltime-strategy=max-job-runtime</code>. Default: <code>1.5</code></li>
+<code>--walltime-strategy=max-job-runtime</code>. Default: <code>1.5</code>. Ignored when <code>--walltime</code> is set.</li>
 <li><code>--dry-run</code> — Show what would be created without making changes</li>
 <li><code>--include-job-ids &lt;JOB_IDS&gt;</code> — Include specific job IDs in planning regardless of their status
 (useful for recovery dry-run to include failed jobs)</li>
@@ -14280,12 +14296,12 @@ Reset 1 job(s). Slurm schedulers regenerated and submitted.
 <li>Adjust resource requirements based on heuristics</li>
 <li>Reset failed jobs and submit new Slurm allocations</li>
 <li>Resume monitoring</li>
-<li>Repeat until success or max retries exceeded</li>
+<li>Repeat until success (or max retries exceeded, if <code>--max-retries</code> is set)</li>
 </ol>
 <h3 id="options-72"><a class="header" href="#options-72">Options</a></h3>
 <pre><code class="language-bash">torc watch &lt;workflow_id&gt; \
   -r \                          # Enable automatic recovery (--recover)
-  -m 3 \                        # Maximum recovery attempts (--max-retries)
+  -m 5 \                        # Optional: limit recovery attempts (--max-retries)
   --memory-multiplier 1.5 \     # Memory increase factor for OOM
   --runtime-multiplier 1.5 \    # Runtime increase factor for timeout
   --retry-unknown \             # Also retry jobs with unknown failures
@@ -14296,7 +14312,9 @@ Reset 1 job(s). Slurm schedulers regenerated and submitted.
   --auto-schedule \             # Automatically schedule nodes for stranded jobs
   --auto-schedule-threshold 5 \ # Min retry jobs before scheduling (default: 5)
   --auto-schedule-cooldown 1800 \      # Seconds between auto-schedule attempts (default: 1800)
-  --auto-schedule-stranded-timeout 7200  # Schedule stranded jobs after this time (default: 7200)
+  --auto-schedule-stranded-timeout 7200 \ # Schedule stranded jobs after this time (default: 7200)
+  --partition standard \        # Fixed Slurm partition (bypass auto-detection)
+  --walltime 04:00:00           # Fixed walltime (bypass auto-calculation)
 </code></pre>
 <h3 id="custom-recovery-hooks"><a class="header" href="#custom-recovery-hooks">Custom Recovery Hooks</a></h3>
 <p>For failures that torc can't handle automatically (not OOM or timeout), you can provide a custom
@@ -14388,14 +14406,14 @@ torc watch $WORKFLOW_ID --auto-schedule
 Submitted to Slurm with 10 allocations
 </code></pre>
 <h3 id="2-start-watching-with-auto-recovery"><a class="header" href="#2-start-watching-with-auto-recovery">2. Start Watching with Auto-Recovery</a></h3>
-<pre><code class="language-bash">torc watch 42 --recover --max-retries 3 --show-job-counts
+<pre><code class="language-bash">torc watch 42 --recover --show-job-counts
 </code></pre>
 <blockquote>
 <p><strong>Note:</strong> The <code>--show-job-counts</code> flag is optional. Without it, the command polls silently until
 completion, which reduces server load for large workflows.</p>
 </blockquote>
 <p>Output:</p>
-<pre><code>Watching workflow 42 (poll interval: 60s, recover enabled, max retries: 3, job counts enabled)
+<pre><code>Watching workflow 42 (poll interval: 60s, recover enabled, unlimited retries, job counts enabled)
   completed=0, running=10, pending=0, failed=0, blocked=90
   completed=25, running=10, pending=0, failed=0, blocked=65
   ...
@@ -14408,7 +14426,7 @@ Workflow completed with failures:
   - Terminated: 0
   - Completed: 95
 
-Attempting automatic recovery (attempt 1/3)
+Attempting automatic recovery (attempt 1)
 
 Diagnosing failures...
 Applying recovery heuristics...
@@ -14424,7 +14442,7 @@ Regenerating Slurm schedulers and submitting...
 
 Recovery initiated. Resuming monitoring...
 
-Watching workflow 42 (poll interval: 60s, recover enabled, max retries: 3, job counts enabled)
+Watching workflow 42 (poll interval: 60s, recover enabled, unlimited retries, job counts enabled)
   completed=95, running=5, pending=0, failed=0, blocked=0
   ...
 Workflow 42 is complete
@@ -14442,7 +14460,7 @@ Or use the Torc MCP server with your AI assistant to investigate.
 </code></pre>
 <p>This prevents wasting allocation time on jobs that likely have script or data bugs.</p>
 <h3 id="4-if-max-retries-exceeded"><a class="header" href="#4-if-max-retries-exceeded">4. If Max Retries Exceeded</a></h3>
-<p>If failures persist after max retries:</p>
+<p>If <code>--max-retries</code> is set and failures persist after that many attempts:</p>
 <pre><code>Max retries (3) exceeded. Manual intervention required.
 Use the Torc MCP server with your AI assistant to investigate.
 </code></pre>
@@ -14506,10 +14524,12 @@ intervention:</p>
 <li>Only failing jobs get increased resources</li>
 <li>Avoids wasting HPC resources on over-provisioned jobs</li>
 </ul>
-<h3 id="2-set-reasonable-max-retries"><a class="header" href="#2-set-reasonable-max-retries">2. Set Reasonable Max Retries</a></h3>
-<pre><code class="language-bash">--max-retries 3  # Good for most workflows
+<h3 id="2-set-max-retries-when-appropriate"><a class="header" href="#2-set-max-retries-when-appropriate">2. Set Max Retries When Appropriate</a></h3>
+<p>By default, <code>torc watch</code> retries indefinitely until the workflow succeeds. Use <code>--max-retries</code> to
+limit recovery attempts if needed:</p>
+<pre><code class="language-bash">--max-retries 5  # Limit to 5 recovery attempts
 </code></pre>
-<p>Too many retries can waste allocation time on jobs that will never succeed.</p>
+<p>This can prevent wasting allocation time on jobs that will never succeed.</p>
 <h3 id="3-use-appropriate-multipliers"><a class="header" href="#3-use-appropriate-multipliers">3. Use Appropriate Multipliers</a></h3>
 <p>For memory-bound jobs:</p>
 <pre><code class="language-bash">--memory-multiplier 2.0  # Double on OOM
@@ -14612,7 +14632,7 @@ for more details.</p>
 <li>Resume polling</li>
 </ul>
 </li>
-<li>Exit 0 on success, exit 1 on max retries exceeded</li>
+<li>Exit 0 on success, exit 1 on max retries exceeded (if <code>--max-retries</code> is set)</li>
 </ol>
 <h3 id="the-regenerate-command-flow"><a class="header" href="#the-regenerate-command-flow">The Regenerate Command Flow</a></h3>
 <ol>
