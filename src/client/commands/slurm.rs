@@ -1572,10 +1572,10 @@ pub fn schedule_slurm_nodes(
         } else {
             num_hpc_jobs
         };
-        let delay = compute_startup_delay(total_runners);
+        let delay = compute_startup_delay(total_runners.max(0) as u32);
         if delay > 0 {
             info!(
-                "Startup jitter: {} runners, max delay {} seconds",
+                "Startup jitter: {} runners, delay window {} seconds",
                 total_runners, delay
             );
         }
@@ -1677,7 +1677,7 @@ pub fn schedule_slurm_nodes(
 ///
 /// Returns 0 for a single runner, scales linearly from 2–10s for 2–10 runners,
 /// 10–60s for 11–100 runners, and caps at 60s for 100+ runners.
-pub fn compute_startup_delay(total_runners: i32) -> u64 {
+pub fn compute_startup_delay(total_runners: u32) -> u64 {
     match total_runners {
         0..=1 => 0,
         2..=10 => total_runners as u64,

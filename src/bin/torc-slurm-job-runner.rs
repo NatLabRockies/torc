@@ -265,7 +265,7 @@ mod unix_main {
                 hasher.finish() % args.startup_delay_seconds
             };
             info!(
-                "Startup jitter: sleeping {} seconds (max={})",
+                "Startup jitter: sleeping {} seconds (window={})",
                 jitter, args.startup_delay_seconds
             );
             thread::sleep(std::time::Duration::from_secs(jitter));
