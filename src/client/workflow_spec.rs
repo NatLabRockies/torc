@@ -753,6 +753,13 @@ pub struct ExecutionConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enable_cpu_bind: Option<bool>,
 
+    // ========== HPC scheduling settings ==========
+    /// Enable staggered startup for Slurm job runners to mitigate thundering herd.
+    /// When true (default), each runner sleeps a deterministic jitter before
+    /// contacting the server, spreading load when many nodes start at once.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub staggered_start: Option<bool>,
+
     // ========== Stdio settings ==========
     /// Workflow-level default for stdout/stderr capture.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -833,6 +840,11 @@ impl ExecutionConfig {
     /// Get the OOM exit code.
     pub fn oom_exit_code(&self) -> i32 {
         self.oom_exit_code.unwrap_or(Self::DEFAULT_OOM_EXIT_CODE)
+    }
+
+    /// Whether staggered startup is enabled for Slurm job runners.
+    pub fn staggered_start(&self) -> bool {
+        self.staggered_start.unwrap_or(true)
     }
 
     /// Resolve the effective `StdioConfig` for a job, checking per-job overrides first.
@@ -936,6 +948,7 @@ impl ExecutionConfig {
             sigkill_headroom_seconds: None,
             timeout_exit_code: None,
             oom_exit_code: None,
+            staggered_start: None,
             stdio: None,
             job_stdio_overrides: None,
         }
@@ -5833,6 +5846,7 @@ jobs:
             oom_exit_code: Some(201),
             srun_termination_signal: None,
             enable_cpu_bind: None,
+            staggered_start: None,
             stdio: None,
             job_stdio_overrides: None,
         };

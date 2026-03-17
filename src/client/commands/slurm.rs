@@ -1559,6 +1559,31 @@ pub fn schedule_slurm_nodes(
 
     std::fs::create_dir_all(output)?;
 
+    // Compute startup jitter window for thundering herd mitigation.
+    // When many allocations start simultaneously, each runner sleeps a deterministic
+    // jitter in [0, startup_delay_seconds) before contacting the server.
+    let startup_delay_seconds = if execution_config.staggered_start() {
+        let nodes_per_alloc: i32 = config_map
+            .get("nodes")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(1);
+        let total_runners = if start_one_worker_per_node {
+            num_hpc_jobs * nodes_per_alloc
+        } else {
+            num_hpc_jobs
+        };
+        let delay = compute_startup_delay(total_runners);
+        if delay > 0 {
+            info!(
+                "Startup jitter: {} runners, max delay {} seconds",
+                total_runners, delay
+            );
+        }
+        delay
+    } else {
+        0
+    };
+
     for job_num in 1..num_hpc_jobs + 1 {
         let job_name = format!(
             "{}wf{}_{}_{}",
@@ -1584,6 +1609,7 @@ pub fn schedule_slurm_nodes(
             start_one_worker_per_node,
             tls_ca_cert,
             tls_insecure,
+            startup_delay_seconds,
         ) {
             error!("Error creating submission script: {}", e);
             return Err(e.into());
@@ -1645,6 +1671,19 @@ pub fn schedule_slurm_nodes(
     }
 
     Ok(())
+}
+
+/// Compute the startup delay window in seconds based on the total number of runners.
+///
+/// Returns 0 for a single runner, scales linearly from 2–10s for 2–10 runners,
+/// 10–60s for 11–100 runners, and caps at 60s for 100+ runners.
+pub fn compute_startup_delay(total_runners: i32) -> u64 {
+    match total_runners {
+        0..=1 => 0,
+        2..=10 => total_runners as u64,
+        11..=100 => 10 + ((total_runners - 10) as u64 * 50 / 90), // linear 10..60
+        _ => 60,
+    }
 }
 
 /// Create a ComputeNodesResources instance by reading information from the Slurm environment

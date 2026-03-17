@@ -349,6 +349,7 @@ fn test_create_submission_script() {
         false,
         None,
         false,
+        0,
     );
 
     assert!(
@@ -427,6 +428,7 @@ fn test_create_submission_script_with_extra() {
         false,
         None,
         false,
+        0,
     );
 
     assert!(
@@ -473,6 +475,7 @@ fn test_create_submission_script_without_srun() {
         false,
         None,
         false,
+        0,
     );
 
     assert!(
@@ -527,6 +530,7 @@ fn test_create_submission_script_with_srun() {
         true,
         None,
         false,
+        0,
     );
 
     assert!(
@@ -545,6 +549,116 @@ fn test_create_submission_script_with_srun() {
     assert!(
         script_content.contains("torc-slurm-job-runner"),
         "Should run torc-slurm-job-runner via srun"
+    );
+
+    let _ = fs::remove_file(&script_path);
+}
+
+#[test]
+fn test_compute_startup_delay() {
+    use torc::client::commands::slurm::compute_startup_delay;
+
+    // Single runner: no delay
+    assert_eq!(compute_startup_delay(0), 0);
+    assert_eq!(compute_startup_delay(1), 0);
+
+    // 2-10 runners: delay equals runner count
+    assert_eq!(compute_startup_delay(2), 2);
+    assert_eq!(compute_startup_delay(5), 5);
+    assert_eq!(compute_startup_delay(10), 10);
+
+    // 11-100 runners: linear scale from 10 to 60
+    assert_eq!(compute_startup_delay(11), 10); // 10 + (1*50/90) = 10
+    assert_eq!(compute_startup_delay(55), 35); // 10 + (45*50/90) = 35
+    assert_eq!(compute_startup_delay(100), 60); // 10 + (90*50/90) = 60
+
+    // 100+ runners: capped at 60
+    assert_eq!(compute_startup_delay(101), 60);
+    assert_eq!(compute_startup_delay(500), 60);
+    assert_eq!(compute_startup_delay(1000), 60);
+}
+
+#[test]
+fn test_create_submission_script_with_startup_delay() {
+    let interface = SlurmInterface::new().expect("Failed to create SlurmInterface");
+
+    let temp_dir = env::temp_dir();
+    let script_path = temp_dir.join("test_submission_script_startup_delay.sh");
+
+    let mut config = std::collections::HashMap::new();
+    config.insert("account".to_string(), "test_account".to_string());
+    config.insert("walltime".to_string(), "01:00:00".to_string());
+
+    let result = interface.create_submission_script(
+        "test_job",
+        "http://localhost:8080/torc-service/v1",
+        12345,
+        "/tmp/output",
+        5,
+        None,
+        &script_path,
+        &config,
+        false,
+        None,
+        false,
+        30,
+    );
+
+    assert!(
+        result.is_ok(),
+        "Failed to create submission script: {:?}",
+        result.err()
+    );
+
+    let script_content =
+        fs::read_to_string(&script_path).expect("Failed to read submission script");
+
+    assert!(
+        script_content.contains("--startup-delay-seconds 30"),
+        "Should have --startup-delay-seconds flag when delay > 0"
+    );
+
+    let _ = fs::remove_file(&script_path);
+}
+
+#[test]
+fn test_create_submission_script_without_startup_delay() {
+    let interface = SlurmInterface::new().expect("Failed to create SlurmInterface");
+
+    let temp_dir = env::temp_dir();
+    let script_path = temp_dir.join("test_submission_script_no_startup_delay.sh");
+
+    let mut config = std::collections::HashMap::new();
+    config.insert("account".to_string(), "test_account".to_string());
+    config.insert("walltime".to_string(), "01:00:00".to_string());
+
+    let result = interface.create_submission_script(
+        "test_job",
+        "http://localhost:8080/torc-service/v1",
+        12345,
+        "/tmp/output",
+        5,
+        None,
+        &script_path,
+        &config,
+        false,
+        None,
+        false,
+        0,
+    );
+
+    assert!(
+        result.is_ok(),
+        "Failed to create submission script: {:?}",
+        result.err()
+    );
+
+    let script_content =
+        fs::read_to_string(&script_path).expect("Failed to read submission script");
+
+    assert!(
+        !script_content.contains("--startup-delay-seconds"),
+        "Should NOT have --startup-delay-seconds flag when delay is 0"
     );
 
     let _ = fs::remove_file(&script_path);
