@@ -67,7 +67,7 @@ pub struct WatchArgs {
     pub workflow_id: i64,
     pub poll_interval: u64,
     pub recover: bool,
-    pub max_retries: u32,
+    pub max_retries: Option<u32>,
     pub memory_multiplier: f64,
     pub runtime_multiplier: f64,
     pub retry_unknown: bool,
@@ -620,7 +620,10 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
         args.workflow_id,
         args.poll_interval,
         if args.recover {
-            format!(", recover enabled, max retries: {}", args.max_retries)
+            match args.max_retries {
+                Some(max) => format!(", recover enabled, max retries: {}", max),
+                None => ", recover enabled, unlimited retries".to_string(),
+            }
         } else {
             String::new()
         },
@@ -753,20 +756,24 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
             std::process::exit(1);
         }
 
-        if retry_count >= args.max_retries {
+        if let Some(max) = args.max_retries.filter(|&max| retry_count >= max) {
             warn!(
                 "\nMax retries ({}) exceeded. Manual intervention required.",
-                args.max_retries
+                max
             );
             warn!("Use the Torc MCP server with your AI assistant to investigate.");
             std::process::exit(1);
         }
 
         retry_count += 1;
-        info!(
-            "\nAttempting automatic recovery (attempt {}/{})",
-            retry_count, args.max_retries
-        );
+        if let Some(max) = args.max_retries {
+            info!(
+                "\nAttempting automatic recovery (attempt {}/{})",
+                retry_count, max
+            );
+        } else {
+            info!("\nAttempting automatic recovery (attempt {})", retry_count);
+        }
 
         // Step 1: Diagnose failures
         info!("\nDiagnosing failures...");

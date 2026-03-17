@@ -400,9 +400,9 @@ SEE ALSO:
         #[arg(short, long)]
         recover: bool,
 
-        /// Maximum number of recovery attempts
-        #[arg(short, long, default_value = "3")]
-        max_retries: u32,
+        /// Maximum number of recovery attempts (unlimited if not set)
+        #[arg(short, long)]
+        max_retries: Option<u32>,
 
         /// Memory multiplier for OOM failures (default: 1.5 = 50% increase)
         #[arg(long, default_value = "1.5")]

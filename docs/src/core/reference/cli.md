@@ -180,7 +180,7 @@ resource requirements, and resubmits jobs.
    ```
 
    Automatically diagnoses OOM/timeout failures, adjusts resources, and retries. Runs until all jobs
-   complete or max retries exceeded.
+   complete. Use `--max-retries` to limit recovery attempts.
 
 3. **With auto-scheduling** (`--auto-schedule`):
 
@@ -207,7 +207,7 @@ resource requirements, and resubmits jobs.
 **Recovery:**
 
 - `-r`, `--recover` — Enable automatic failure recovery
-- `-m`, `--max-retries <MAX_RETRIES>` — Maximum number of recovery attempts. Default: `3`
+- `-m`, `--max-retries <MAX_RETRIES>` — Maximum number of recovery attempts. Default: unlimited
 - `--memory-multiplier <MEMORY_MULTIPLIER>` — Memory multiplier for OOM failures. Default: `1.5`
 - `--runtime-multiplier <RUNTIME_MULTIPLIER>` — Runtime multiplier for timeout failures. Default:
   `1.5`

@@ -157,14 +157,14 @@ This will:
 3. Adjust resource requirements based on heuristics
 4. Reset failed jobs and submit new Slurm allocations
 5. Resume monitoring
-6. Repeat until success or max retries exceeded
+6. Repeat until success (or max retries exceeded, if `--max-retries` is set)
 
 ### Options
 
 ```bash
 torc watch <workflow_id> \
   -r \                          # Enable automatic recovery (--recover)
-  -m 3 \                        # Maximum recovery attempts (--max-retries)
+  -m 5 \                        # Optional: limit recovery attempts (--max-retries)
   --memory-multiplier 1.5 \     # Memory increase factor for OOM
   --runtime-multiplier 1.5 \    # Runtime increase factor for timeout
   --retry-unknown \             # Also retry jobs with unknown failures
@@ -287,7 +287,7 @@ Submitted to Slurm with 10 allocations
 ### 2. Start Watching with Auto-Recovery
 
 ```bash
-torc watch 42 --recover --max-retries 3 --show-job-counts
+torc watch 42 --recover --show-job-counts
 ```
 
 > **Note:** The `--show-job-counts` flag is optional. Without it, the command polls silently until
@@ -296,7 +296,7 @@ torc watch 42 --recover --max-retries 3 --show-job-counts
 Output:
 
 ```
-Watching workflow 42 (poll interval: 60s, recover enabled, max retries: 3, job counts enabled)
+Watching workflow 42 (poll interval: 60s, recover enabled, unlimited retries, job counts enabled)
   completed=0, running=10, pending=0, failed=0, blocked=90
   completed=25, running=10, pending=0, failed=0, blocked=65
   ...
@@ -309,7 +309,7 @@ Workflow completed with failures:
   - Terminated: 0
   - Completed: 95
 
-Attempting automatic recovery (attempt 1/3)
+Attempting automatic recovery (attempt 1)
 
 Diagnosing failures...
 Applying recovery heuristics...
@@ -325,7 +325,7 @@ Regenerating Slurm schedulers and submitting...
 
 Recovery initiated. Resuming monitoring...
 
-Watching workflow 42 (poll interval: 60s, recover enabled, max retries: 3, job counts enabled)
+Watching workflow 42 (poll interval: 60s, recover enabled, unlimited retries, job counts enabled)
   completed=95, running=5, pending=0, failed=0, blocked=0
   ...
 Workflow 42 is complete
@@ -350,7 +350,7 @@ This prevents wasting allocation time on jobs that likely have script or data bu
 
 ### 4. If Max Retries Exceeded
 
-If failures persist after max retries:
+If `--max-retries` is set and failures persist after that many attempts:
 
 ```
 Max retries (3) exceeded. Manual intervention required.
@@ -417,13 +417,16 @@ Set initial resource requests lower and let auto-recovery increase them:
 - Only failing jobs get increased resources
 - Avoids wasting HPC resources on over-provisioned jobs
 
-### 2. Set Reasonable Max Retries
+### 2. Set Max Retries When Appropriate
+
+By default, `torc watch` retries indefinitely until the workflow succeeds. Use `--max-retries` to
+limit recovery attempts if needed:
 
 ```bash
---max-retries 3  # Good for most workflows
+--max-retries 5  # Limit to 5 recovery attempts
 ```
 
-Too many retries can waste allocation time on jobs that will never succeed.
+This can prevent wasting allocation time on jobs that will never succeed.
 
 ### 3. Use Appropriate Multipliers
 
@@ -551,7 +554,7 @@ If jobs are requesting more resources than partitions allow:
    - Run `torc slurm regenerate --submit`
    - Increment retry counter
    - Resume polling
-5. Exit 0 on success, exit 1 on max retries exceeded
+5. Exit 0 on success, exit 1 on max retries exceeded (if `--max-retries` is set)
 
 ### The Regenerate Command Flow
 
