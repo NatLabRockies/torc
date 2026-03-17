@@ -344,8 +344,30 @@ pub struct GetDocsParams {
         'quick-start' (getting started), 'architecture' (system design), \
         'checkpointing' (job checkpointing), 'hpc-profiles' (HPC profile config), \
         'workflow-formats' (YAML/JSON/KDL formats), \
+        'allocation-strategies' (single-large vs many-small Slurm allocations), \
         'tutorials' (list of available tutorials)")]
     pub topic: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct PlanAllocationsParams {
+    #[schemars(
+        description = "Workflow specification as JSON string. Must include 'resource_requirements' section with CPU, memory, and runtime for each job type."
+    )]
+    pub spec_json: String,
+    #[schemars(description = "Slurm account to use for allocation estimates")]
+    pub account: String,
+    #[schemars(description = "Partition to target (optional, auto-selected if not specified)")]
+    pub partition: Option<String>,
+    #[schemars(
+        description = "HPC profile to use (optional, auto-detected if not specified). Use when auto-detection fails."
+    )]
+    pub hpc_profile: Option<String>,
+    #[schemars(
+        description = "Skip sbatch --test-only probes (faster, uses heuristics only). Default: false"
+    )]
+    #[serde(default)]
+    pub skip_test_only: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
@@ -1030,6 +1052,7 @@ KEY TOPICS:
 - "checkpointing" - Graceful job termination on HPC: catching SIGTERM, saving checkpoints, resuming from where you left off (srun_termination_signal, shutdown-flag pattern)
 - "hpc-profiles" - HPC profile configuration for different clusters
 - "workflow-formats" - YAML, JSON, JSON5, KDL format comparison
+- "allocation-strategies" - Single-large vs many-small Slurm allocation tradeoffs, fair-share scheduling, sbatch --test-only probes
 - "tutorials" - List of available tutorials
 
 WHEN TO USE:
@@ -1037,7 +1060,8 @@ WHEN TO USE:
 - Before Slurm submission: check "slurm" and "hpc-profiles"
 - To understand dependencies: check "dependencies"
 - To set up error handling: check "failure-handlers" and "recovery"
-- When user asks about workflow patterns or long-running jobs: check "checkpointing""#)]
+- When user asks about workflow patterns or long-running jobs: check "checkpointing"
+- When planning Slurm allocation strategy: check "allocation-strategies""#)]
     async fn get_docs(
         &self,
         #[tool(aggr)] params: GetDocsParams,
@@ -1047,6 +1071,68 @@ WHEN TO USE:
         tokio::task::spawn_blocking(move || tools::get_docs(docs_dir.as_deref(), &topic))
             .await
             .map_err(|e| McpError::internal_error(format!("Task join error: {}", e), None))?
+    }
+
+    /// Analyze a workflow and recommend Slurm allocation strategy.
+    #[tool(
+        description = r#"Analyze a workflow specification and current cluster state to recommend
+whether to use a single large Slurm allocation or many small allocations.
+
+This tool runs sbatch --test-only probes to get estimated start times from the Slurm
+scheduler, then compares completion times for different strategies.
+
+WHAT IT RETURNS:
+- Workflow analysis: job count, dependency depth, max parallelism, resource groups
+- Cluster state: node availability, queue depth per partition
+- sbatch --test-only estimates: predicted start/completion for single-large vs many-small
+- Recommendation: which strategy minimizes total completion time (makespan)
+
+KEY CONCEPTS FOR INTERPRETING RESULTS:
+- "single-large" (1 x N nodes): One allocation requesting all needed nodes. Slurm
+  prioritizes larger jobs via backfill scheduling. All work completes in one walltime window.
+- "many-small" (N x 1 node): N separate single-node allocations. First jobs start faster,
+  but fair-share degradation means later jobs wait longer.
+- The "many-small" wait estimate is OPTIMISTIC (first job only). The tool applies a
+  fair-share penalty factor but actual degradation depends on account balance.
+- For deep DAGs, check max_parallelism vs ideal_nodes - you may not need as many nodes
+  as the flat calculation suggests.
+
+WHEN TO RECOMMEND SINGLE-LARGE:
+- Cluster is busy (few idle nodes) - Slurm reserves slots for large jobs
+- User cares about total completion time, not time-to-first-result
+- sbatch --test-only shows large allocation completes sooner
+
+WHEN TO RECOMMEND MANY-SMALL:
+- User needs partial results quickly
+- Large allocation wait is extremely long (many hours more than small)
+- Ideal nodes exceeds partition's max_nodes_per_user limit
+
+For detailed background on allocation strategies, use get_docs with
+topic='allocation-strategies'.
+
+IMPORTANT: Always present both the raw estimates AND the recommendation to the user
+so they can make an informed decision."#
+    )]
+    async fn plan_allocations(
+        &self,
+        #[tool(aggr)] params: PlanAllocationsParams,
+    ) -> Result<CallToolResult, McpError> {
+        let spec_json = params.spec_json;
+        let account = params.account;
+        let partition = params.partition;
+        let hpc_profile = params.hpc_profile;
+        let skip_test_only = params.skip_test_only;
+        tokio::task::spawn_blocking(move || {
+            tools::plan_allocations(
+                &spec_json,
+                &account,
+                partition.as_deref(),
+                hpc_profile.as_deref(),
+                skip_test_only,
+            )
+        })
+        .await
+        .map_err(|e| McpError::internal_error(format!("Task join error: {}", e), None))?
     }
 }
 

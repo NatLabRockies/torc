@@ -2244,6 +2244,11 @@ fn doc_topic_mapping() -> Vec<(&'static str, &'static str, &'static str)> {
             "Slurm workflow patterns",
         ),
         (
+            "allocation-strategies",
+            "specialized/hpc/allocation-strategies.md",
+            "Slurm allocation strategies: single-large vs many-small tradeoffs, fair-share, sbatch --test-only",
+        ),
+        (
             "tutorials",
             "core/tutorials/index.md",
             "List of available tutorials",
@@ -2549,6 +2554,83 @@ pub fn get_docs(docs_dir: Option<&Path>, topic: &str) -> Result<CallToolResult, 
         "error": format!("Topic '{}' not found.", topic),
         "available_topics": all_topics,
     });
+
+    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
+        serde_json::to_string_pretty(&response).unwrap_or_default(),
+    )]))
+}
+
+/// Analyze a workflow spec and recommend Slurm allocation strategy.
+pub fn plan_allocations(
+    spec_json: &str,
+    account: &str,
+    partition: Option<&str>,
+    hpc_profile: Option<&str>,
+    skip_test_only: bool,
+) -> Result<CallToolResult, McpError> {
+    use crate::client::commands::hpc::create_registry_with_config_public;
+    use crate::client::commands::slurm::{
+        GroupByStrategy, WalltimeStrategy, analyze_plan_allocations,
+    };
+    use crate::client::workflow_spec::WorkflowSpec;
+    use crate::config::TorcConfig;
+
+    // Parse the workflow spec from JSON
+    let mut spec: WorkflowSpec = serde_json::from_str(spec_json)
+        .map_err(|e| invalid_params(&format!("Failed to parse workflow spec JSON: {}", e)))?;
+
+    // Load HPC profile
+    let torc_config = TorcConfig::load().unwrap_or_default();
+    let registry = create_registry_with_config_public(&torc_config.client.hpc);
+
+    let profile = if let Some(name) = hpc_profile {
+        registry.get(name).ok_or_else(|| {
+            invalid_params(&format!(
+                "Unknown HPC profile: '{}'. Available profiles can be listed with 'torc hpc list'.",
+                name
+            ))
+        })?
+    } else {
+        registry.detect().ok_or_else(|| {
+            invalid_params(
+                "No HPC profile detected. Specify hpc_profile parameter or run on an HPC system.",
+            )
+        })?
+    };
+
+    // Run the analysis
+    let result = analyze_plan_allocations(
+        &mut spec,
+        account,
+        partition,
+        &profile,
+        false, // not offline — we want cluster state
+        skip_test_only,
+        GroupByStrategy::ResourceRequirements,
+        WalltimeStrategy::MaxJobRuntime,
+        1.5, // default walltime multiplier
+    )
+    .map_err(|e| internal_error(format!("Analysis failed: {}", e)))?;
+
+    // Add guidance to help the AI interpret results
+    let mut response = serde_json::to_value(&result)
+        .map_err(|e| internal_error(format!("Failed to serialize result: {}", e)))?;
+
+    if let Some(obj) = response.as_object_mut() {
+        obj.insert(
+            "guidance".to_string(),
+            serde_json::json!({
+                "doc_topic": "allocation-strategies",
+                "key_points": [
+                    "The 'many-small' sbatch estimate is for the FIRST job only — later jobs are delayed by fair-share degradation",
+                    "Slurm's backfill scheduler prioritizes larger allocations, giving them reserved slots in the queue",
+                    "Check max_parallelism vs ideal_nodes — deep DAGs may not benefit from many nodes",
+                    "If dependency_depth > 1, not all jobs can run simultaneously, so fewer nodes may suffice",
+                    "Present both raw estimates AND the recommendation to the user"
+                ]
+            }),
+        );
+    }
 
     Ok(CallToolResult::success(vec![rmcp::model::Content::text(
         serde_json::to_string_pretty(&response).unwrap_or_default(),

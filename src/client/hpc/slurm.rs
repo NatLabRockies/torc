@@ -274,7 +274,7 @@ pub fn parse_sinfo_string(input: &str) -> Result<Vec<SinfoPartition>, String> {
 }
 
 /// Parse timelimit string from Slurm format to seconds
-fn parse_slurm_timelimit(s: &str) -> u64 {
+pub fn parse_slurm_timelimit(s: &str) -> u64 {
     let s = s.trim();
 
     if s == "infinite" || s == "UNLIMITED" {
@@ -587,6 +587,143 @@ pub fn parse_queue_depth(input: &str) -> Result<Vec<QueueDepthInfo>, String> {
     Ok(map.into_values().collect())
 }
 
+// ============================================================================
+// sbatch --test-only probes
+// ============================================================================
+
+/// Result of an `sbatch --test-only` probe
+#[derive(Debug, Clone)]
+pub struct SbatchTestResult {
+    /// Estimated start time from Slurm scheduler
+    pub estimated_start: Option<chrono::NaiveDateTime>,
+    /// Whether the probe succeeded
+    pub success: bool,
+    /// Error message if the probe failed
+    pub error_message: Option<String>,
+    /// Raw output from sbatch (for debugging)
+    pub raw_output: String,
+}
+
+/// Get the sbatch executable path (allows for testing with fake binary in dev/test builds)
+fn get_sbatch_exec() -> String {
+    if cfg!(any(test, debug_assertions)) {
+        std::env::var("TORC_FAKE_SBATCH").unwrap_or_else(|_| "sbatch".to_string())
+    } else {
+        "sbatch".to_string()
+    }
+}
+
+/// Run `sbatch --test-only` to get an estimated start time from Slurm.
+///
+/// This does NOT submit a job. It asks the scheduler when a job with the given
+/// parameters would start, without actually queuing it.
+pub fn run_sbatch_test_only(
+    account: &str,
+    partition: &str,
+    nodes: u32,
+    walltime: &str,
+    qos: Option<&str>,
+    gres: Option<&str>,
+) -> SbatchTestResult {
+    let sbatch = get_sbatch_exec();
+    let mut cmd = Command::new(&sbatch);
+
+    cmd.args([
+        "--test-only",
+        "--account",
+        account,
+        "--partition",
+        partition,
+        "--nodes",
+        &nodes.to_string(),
+        "--time",
+        walltime,
+        "--wrap",
+        "hostname",
+    ]);
+
+    if let Some(q) = qos {
+        cmd.args(["--qos", q]);
+    }
+    if let Some(g) = gres {
+        cmd.args(["--gres", g]);
+    }
+
+    debug!(
+        "Running sbatch --test-only: account={} partition={} nodes={} walltime={}",
+        account, partition, nodes, walltime
+    );
+
+    let output = match cmd.output() {
+        Ok(o) => o,
+        Err(e) => {
+            return SbatchTestResult {
+                estimated_start: None,
+                success: false,
+                error_message: Some(format!("Failed to run sbatch: {}", e)),
+                raw_output: String::new(),
+            };
+        }
+    };
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    let combined = format!("{}\n{}", stdout, stderr);
+
+    parse_sbatch_test_only(&combined)
+}
+
+/// Parse the output of `sbatch --test-only`.
+///
+/// Slurm outputs the estimated start time in stderr, in a format like:
+/// `sbatch: Job 12345 to start at 2026-03-17T14:30:00 using 167 processors on nodes ...`
+///
+/// Some Slurm versions use slightly different formats:
+/// `sbatch: Job 12345 to start at 2026-03-17T14:30:00 on nodes ...`
+pub fn parse_sbatch_test_only(output: &str) -> SbatchTestResult {
+    // Look for the estimated start time pattern
+    // Various Slurm versions may use slightly different formats
+    for line in output.lines() {
+        let line = line.trim();
+
+        // Match: "sbatch: Job NNNNN to start at YYYY-MM-DDTHH:MM:SS"
+        if let Some(idx) = line.find("to start at ") {
+            let after = &line[idx + "to start at ".len()..];
+            // Take the datetime portion (19 chars: YYYY-MM-DDTHH:MM:SS)
+            if after.len() >= 19 {
+                let datetime_str = &after[..19];
+                if let Ok(dt) =
+                    chrono::NaiveDateTime::parse_from_str(datetime_str, "%Y-%m-%dT%H:%M:%S")
+                {
+                    return SbatchTestResult {
+                        estimated_start: Some(dt),
+                        success: true,
+                        error_message: None,
+                        raw_output: output.to_string(),
+                    };
+                }
+            }
+        }
+
+        // Check for error messages
+        if line.contains("error:") || line.contains("Unable to allocate") {
+            return SbatchTestResult {
+                estimated_start: None,
+                success: false,
+                error_message: Some(line.to_string()),
+                raw_output: output.to_string(),
+            };
+        }
+    }
+
+    SbatchTestResult {
+        estimated_start: None,
+        success: false,
+        error_message: Some("Could not parse sbatch --test-only output".to_string()),
+        raw_output: output.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -718,5 +855,55 @@ gpu-h100|RUNNING|1
     fn test_parse_queue_depth_empty() {
         let result = parse_queue_depth("").unwrap();
         assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_parse_sbatch_test_only_success() {
+        let output = "sbatch: Job 12345 to start at 2026-03-17T14:30:00 using 167 processors on nodes node[001-167]";
+        let result = parse_sbatch_test_only(output);
+        assert!(result.success);
+        assert!(result.estimated_start.is_some());
+        let dt = result.estimated_start.unwrap();
+        assert_eq!(dt.to_string(), "2026-03-17 14:30:00");
+    }
+
+    #[test]
+    fn test_parse_sbatch_test_only_simple_format() {
+        // Some Slurm versions use a simpler format
+        let output = "sbatch: Job 99999 to start at 2026-04-01T08:00:00 on nodes compute-001";
+        let result = parse_sbatch_test_only(output);
+        assert!(result.success);
+        let dt = result.estimated_start.unwrap();
+        assert_eq!(dt.to_string(), "2026-04-01 08:00:00");
+    }
+
+    #[test]
+    fn test_parse_sbatch_test_only_error() {
+        let output = "sbatch: error: Batch job submission failed: Invalid account or account/partition combination specified";
+        let result = parse_sbatch_test_only(output);
+        assert!(!result.success);
+        assert!(result.estimated_start.is_none());
+        assert!(result.error_message.is_some());
+    }
+
+    #[test]
+    fn test_parse_sbatch_test_only_unparseable() {
+        let output = "some unexpected output";
+        let result = parse_sbatch_test_only(output);
+        assert!(!result.success);
+        assert!(result.estimated_start.is_none());
+    }
+
+    #[test]
+    fn test_parse_sbatch_test_only_multiline() {
+        // sbatch often writes to stderr with informational lines first
+        let output = "\
+sbatch: Pending job allocation 0
+sbatch: Job 54321 to start at 2026-03-18T09:15:00 using 4 processors on nodes node[100-103]
+";
+        let result = parse_sbatch_test_only(output);
+        assert!(result.success);
+        let dt = result.estimated_start.unwrap();
+        assert_eq!(dt.to_string(), "2026-03-18 09:15:00");
     }
 }
