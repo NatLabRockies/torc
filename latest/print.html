@@ -3998,10 +3998,18 @@ tail -f output/job_stdio/job_wf43_j15_r1_a1.*
 <p>By default, logs are stored in the output directory:</p>
 <pre><code>output/
 └── job_stdio/
-    ├── job_wf&lt;workflow_id&gt;_j&lt;job_id&gt;_r&lt;run_id&gt;_a&lt;attempt_id&gt;.o
-    ├── job_wf&lt;workflow_id&gt;_j&lt;job_id&gt;_r&lt;run_id&gt;_a&lt;attempt_id&gt;.3
+    ├── job_wf&lt;id&gt;_j&lt;job&gt;_r&lt;run&gt;_a&lt;attempt&gt;.o    # stdout (separate mode)
+    ├── job_wf&lt;id&gt;_j&lt;job&gt;_r&lt;run&gt;_a&lt;attempt&gt;.e    # stderr (separate mode)
+    ├── job_wf&lt;id&gt;_j&lt;job&gt;_r&lt;run&gt;_a&lt;attempt&gt;.log  # combined mode
 </code></pre>
 <p>The output directory can be configured via the run/submit CLI options.</p>
+<blockquote>
+<p><strong>Note:</strong> The files present depend on the
+<a href="core/how-to/../reference/workflow-spec.html#stdioconfig"><code>stdio</code> configuration</a>. In <code>combined</code> mode, stdout and
+stderr are merged into a single <code>.log</code> file. Modes like <code>no_stdout</code>, <code>no_stderr</code>, or <code>none</code>
+suppress some or all files. If <code>delete_on_success</code> is enabled, files are removed after successful
+job completion.</p>
+</blockquote>
 <h2 id="view-logs-for-failed-jobs"><a class="header" href="#view-logs-for-failed-jobs">View Logs for Failed Jobs</a></h2>
 <p>Quickly find logs for failed jobs:</p>
 <pre><code class="language-bash"># Get failed job IDs
@@ -4052,7 +4060,14 @@ cat output/job_stdio/job_wf43_j15_r1_a1.e
 
 # View stdout
 cat output/job_stdio/job_wf43_j15_r1_a1.o
+
+# In combined stdio mode, both streams are in a single .log file
+cat output/job_stdio/job_wf43_j15_r1_a1.log
 </code></pre>
+<blockquote>
+<p><strong>Note:</strong> If <code>stdio</code> is configured with <code>mode: none</code> or <code>mode: no_stderr</code>, log files may not
+exist. See <a href="core/how-to/../reference/workflow-spec.html#stdioconfig"><code>StdioConfig</code></a> for details.</p>
+</blockquote>
 <h2 id="step-4-check-resource-usage"><a class="header" href="#step-4-check-resource-usage">Step 4: Check Resource Usage</a></h2>
 <p>Did the job exceed its resource limits?</p>
 <pre><code class="language-bash">torc reports check-resource-utilization &lt;workflow_id&gt;
@@ -7628,6 +7643,7 @@ torc reports results &lt;workflow_id&gt; --output-dir &lt;correct_path&gt;
 <div class="table-wrapper"><table><thead><tr><th>Log Type</th><th>Path Pattern</th><th>Contents</th></tr></thead><tbody>
 <tr><td>Job stdout</td><td><code>output/job_stdio/job_wf&lt;id&gt;_j&lt;job&gt;_r&lt;run&gt;_a&lt;attempt&gt;.o</code></td><td>Standard output from job commands</td></tr>
 <tr><td>Job stderr</td><td><code>output/job_stdio/job_wf&lt;id&gt;_j&lt;job&gt;_r&lt;run&gt;_a&lt;attempt&gt;.e</code></td><td>Error output, stack traces</td></tr>
+<tr><td>Job combined</td><td><code>output/job_stdio/job_wf&lt;id&gt;_j&lt;job&gt;_r&lt;run&gt;_a&lt;attempt&gt;.log</code></td><td>Combined stdout+stderr (combined mode)</td></tr>
 <tr><td>Job runner</td><td><code>output/job_runner_*.log</code></td><td>Torc job runner internal logs</td></tr>
 <tr><td>Slurm stdout</td><td><code>output/slurm_output_wf&lt;id&gt;_sl&lt;slurm_id&gt;.o</code></td><td>Slurm job allocation output</td></tr>
 <tr><td>Slurm stderr</td><td><code>output/slurm_output_wf&lt;id&gt;_sl&lt;slurm_id&gt;.e</code></td><td>Slurm-specific errors</td></tr>
@@ -7635,6 +7651,13 @@ torc reports results &lt;workflow_id&gt; --output-dir &lt;correct_path&gt;
 <tr><td>dmesg</td><td><code>output/dmesg_slurm_*.log</code></td><td>Kernel messages (on failure)</td></tr>
 </tbody></table>
 </div>
+<blockquote>
+<p><strong>Note:</strong> The file extensions depend on the
+<a href="core/monitoring/../reference/workflow-spec.html#stdioconfig"><code>stdio</code> configuration</a>. In <code>separate</code> mode (default),
+jobs produce <code>.o</code> and <code>.e</code> files. In <code>combined</code> mode, a single <code>.log</code> file is created. Modes like
+<code>no_stdout</code>, <code>no_stderr</code>, or <code>none</code> suppress some or all output files. If <code>delete_on_success</code> is
+enabled, files are removed when a job completes with exit code 0.</p>
+</blockquote>
 <p>For detailed information about log file contents, see <a href="core/monitoring/debugging.html">Debugging Workflows</a> and
 <a href="core/monitoring/debugging-slurm.html">Debugging Slurm Workflows</a>.</p>
 <h2 id="bundling-logs"><a class="header" href="#bundling-logs">Bundling Logs</a></h2>
@@ -9688,6 +9711,7 @@ jobs:
 <tr><td><code>parameters</code></td><td>map&lt;string, string&gt;</td><td>none</td><td>Local parameters for generating multiple jobs</td></tr>
 <tr><td><code>parameter_mode</code></td><td>string</td><td><code>"product"</code></td><td>How to combine parameters: <code>"product"</code> (Cartesian) or <code>"zip"</code></td></tr>
 <tr><td><code>use_parameters</code></td><td>[string]</td><td>none</td><td>Workflow parameter names to use for this job</td></tr>
+<tr><td><code>stdio</code></td><td><a href="core/reference/workflow-spec.html#stdioconfig">StdioConfig</a></td><td>none</td><td>Per-job override for stdout/stderr capture (overrides workflow-level)</td></tr>
 </tbody></table>
 </div>
 <h2 id="filespec"><a class="header" href="#filespec">FileSpec</a></h2>
@@ -9764,8 +9788,47 @@ environments.</p>
 <tr><td><code>oom_exit_code</code></td><td>integer</td><td><code>137</code></td><td>Exit code for OOM-killed jobs (128 + SIGKILL)</td></tr>
 <tr><td><code>srun_termination_signal</code></td><td>string</td><td>none</td><td>Slurm signal spec for <code>srun --signal=&lt;value&gt;</code></td></tr>
 <tr><td><code>enable_cpu_bind</code></td><td>boolean</td><td><code>false</code></td><td>Allow Slurm CPU binding</td></tr>
+<tr><td><code>stdio</code></td><td><a href="core/reference/workflow-spec.html#stdioconfig">StdioConfig</a></td><td>see below</td><td>Workflow-level default for stdout/stderr capture</td></tr>
 </tbody></table>
 </div>
+<h3 id="stdioconfig"><a class="header" href="#stdioconfig">StdioConfig</a></h3>
+<p>Controls how stdout and stderr are captured for job processes.</p>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>mode</code></td><td><a href="core/reference/workflow-spec.html#stdiomode">StdioMode</a></td><td><code>"separate"</code></td><td>How to capture stdout/stderr</td></tr>
+<tr><td><code>delete_on_success</code></td><td>boolean</td><td><code>false</code></td><td>Delete captured files when a job completes successfully</td></tr>
+</tbody></table>
+</div>
+<h3 id="stdiomode"><a class="header" href="#stdiomode">StdioMode</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Value</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>separate</code></td><td>Separate stdout (<code>.o</code>) and stderr (<code>.e</code>) files per job (default)</td></tr>
+<tr><td><code>combined</code></td><td>Combine stdout and stderr into a single <code>.log</code> file per job</td></tr>
+<tr><td><code>no_stdout</code></td><td>Discard stdout (<code>/dev/null</code>); capture stderr only</td></tr>
+<tr><td><code>no_stderr</code></td><td>Discard stderr (<code>/dev/null</code>); capture stdout only</td></tr>
+<tr><td><code>none</code></td><td>Discard both stdout and stderr</td></tr>
+</tbody></table>
+</div>
+<p>Per-job overrides can be set via the <code>stdio</code> field on individual <a href="core/reference/workflow-spec.html#jobspec">JobSpec</a> entries, which
+takes precedence over the workflow-level setting.</p>
+<h4 id="stdio-examples"><a class="header" href="#stdio-examples">Stdio Examples</a></h4>
+<p>Combine stdout and stderr into a single file, and delete it on success:</p>
+<pre><code class="language-yaml">execution_config:
+  stdio:
+    mode: combined
+    delete_on_success: true
+</code></pre>
+<p>Suppress stdout for most jobs, but keep separate files for a specific job:</p>
+<pre><code class="language-yaml">execution_config:
+  stdio:
+    mode: no_stdout
+
+jobs:
+  - name: preprocess
+    command: python preprocess.py
+  - name: train
+    command: python train.py
+    stdio:
+      mode: separate
+</code></pre>
 <h3 id="execution-modes-1"><a class="header" href="#execution-modes-1">Execution Modes</a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Mode</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>direct</code></td><td>Torc manages job execution directly. Use outside Slurm or when srun unreliable</td></tr>

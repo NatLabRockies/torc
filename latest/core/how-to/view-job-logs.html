@@ -220,10 +220,18 @@ tail -f output/job_stdio/job_wf43_j15_r1_a1.*
 <p>By default, logs are stored in the output directory:</p>
 <pre><code>output/
 └── job_stdio/
-    ├── job_wf&lt;workflow_id&gt;_j&lt;job_id&gt;_r&lt;run_id&gt;_a&lt;attempt_id&gt;.o
-    ├── job_wf&lt;workflow_id&gt;_j&lt;job_id&gt;_r&lt;run_id&gt;_a&lt;attempt_id&gt;.3
+    ├── job_wf&lt;id&gt;_j&lt;job&gt;_r&lt;run&gt;_a&lt;attempt&gt;.o    # stdout (separate mode)
+    ├── job_wf&lt;id&gt;_j&lt;job&gt;_r&lt;run&gt;_a&lt;attempt&gt;.e    # stderr (separate mode)
+    ├── job_wf&lt;id&gt;_j&lt;job&gt;_r&lt;run&gt;_a&lt;attempt&gt;.log  # combined mode
 </code></pre>
 <p>The output directory can be configured via the run/submit CLI options.</p>
+<blockquote>
+<p><strong>Note:</strong> The files present depend on the
+<a href="../reference/workflow-spec.html#stdioconfig"><code>stdio</code> configuration</a>. In <code>combined</code> mode, stdout and
+stderr are merged into a single <code>.log</code> file. Modes like <code>no_stdout</code>, <code>no_stderr</code>, or <code>none</code>
+suppress some or all files. If <code>delete_on_success</code> is enabled, files are removed after successful
+job completion.</p>
+</blockquote>
 <h2 id="view-logs-for-failed-jobs"><a class="header" href="#view-logs-for-failed-jobs">View Logs for Failed Jobs</a></h2>
 <p>Quickly find logs for failed jobs:</p>
 <pre><code class="language-bash"># Get failed job IDs

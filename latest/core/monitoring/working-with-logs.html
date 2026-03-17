@@ -196,6 +196,7 @@
 <div class="table-wrapper"><table><thead><tr><th>Log Type</th><th>Path Pattern</th><th>Contents</th></tr></thead><tbody>
 <tr><td>Job stdout</td><td><code>output/job_stdio/job_wf&lt;id&gt;_j&lt;job&gt;_r&lt;run&gt;_a&lt;attempt&gt;.o</code></td><td>Standard output from job commands</td></tr>
 <tr><td>Job stderr</td><td><code>output/job_stdio/job_wf&lt;id&gt;_j&lt;job&gt;_r&lt;run&gt;_a&lt;attempt&gt;.e</code></td><td>Error output, stack traces</td></tr>
+<tr><td>Job combined</td><td><code>output/job_stdio/job_wf&lt;id&gt;_j&lt;job&gt;_r&lt;run&gt;_a&lt;attempt&gt;.log</code></td><td>Combined stdout+stderr (combined mode)</td></tr>
 <tr><td>Job runner</td><td><code>output/job_runner_*.log</code></td><td>Torc job runner internal logs</td></tr>
 <tr><td>Slurm stdout</td><td><code>output/slurm_output_wf&lt;id&gt;_sl&lt;slurm_id&gt;.o</code></td><td>Slurm job allocation output</td></tr>
 <tr><td>Slurm stderr</td><td><code>output/slurm_output_wf&lt;id&gt;_sl&lt;slurm_id&gt;.e</code></td><td>Slurm-specific errors</td></tr>
@@ -203,6 +204,13 @@
 <tr><td>dmesg</td><td><code>output/dmesg_slurm_*.log</code></td><td>Kernel messages (on failure)</td></tr>
 </tbody></table>
 </div>
+<blockquote>
+<p><strong>Note:</strong> The file extensions depend on the
+<a href="../reference/workflow-spec.html#stdioconfig"><code>stdio</code> configuration</a>. In <code>separate</code> mode (default),
+jobs produce <code>.o</code> and <code>.e</code> files. In <code>combined</code> mode, a single <code>.log</code> file is created. Modes like
+<code>no_stdout</code>, <code>no_stderr</code>, or <code>none</code> suppress some or all output files. If <code>delete_on_success</code> is
+enabled, files are removed when a job completes with exit code 0.</p>
+</blockquote>
 <p>For detailed information about log file contents, see <a href="debugging.html">Debugging Workflows</a> and
 <a href="debugging-slurm.html">Debugging Slurm Workflows</a>.</p>
 <h2 id="bundling-logs"><a class="header" href="#bundling-logs">Bundling Logs</a></h2>

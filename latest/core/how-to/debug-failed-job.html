@@ -213,7 +213,14 @@ cat output/job_stdio/job_wf43_j15_r1_a1.e
 
 # View stdout
 cat output/job_stdio/job_wf43_j15_r1_a1.o
+
+# In combined stdio mode, both streams are in a single .log file
+cat output/job_stdio/job_wf43_j15_r1_a1.log
 </code></pre>
+<blockquote>
+<p><strong>Note:</strong> If <code>stdio</code> is configured with <code>mode: none</code> or <code>mode: no_stderr</code>, log files may not
+exist. See <a href="../reference/workflow-spec.html#stdioconfig"><code>StdioConfig</code></a> for details.</p>
+</blockquote>
 <h2 id="step-4-check-resource-usage"><a class="header" href="#step-4-check-resource-usage">Step 4: Check Resource Usage</a></h2>
 <p>Did the job exceed its resource limits?</p>
 <pre><code class="language-bash">torc reports check-resource-utilization &lt;workflow_id&gt;

@@ -267,6 +267,7 @@ jobs:
 <tr><td><code>parameters</code></td><td>map&lt;string, string&gt;</td><td>none</td><td>Local parameters for generating multiple jobs</td></tr>
 <tr><td><code>parameter_mode</code></td><td>string</td><td><code>"product"</code></td><td>How to combine parameters: <code>"product"</code> (Cartesian) or <code>"zip"</code></td></tr>
 <tr><td><code>use_parameters</code></td><td>[string]</td><td>none</td><td>Workflow parameter names to use for this job</td></tr>
+<tr><td><code>stdio</code></td><td><a href="#stdioconfig">StdioConfig</a></td><td>none</td><td>Per-job override for stdout/stderr capture (overrides workflow-level)</td></tr>
 </tbody></table>
 </div>
 <h2 id="filespec"><a class="header" href="#filespec">FileSpec</a></h2>
@@ -343,8 +344,47 @@ environments.</p>
 <tr><td><code>oom_exit_code</code></td><td>integer</td><td><code>137</code></td><td>Exit code for OOM-killed jobs (128 + SIGKILL)</td></tr>
 <tr><td><code>srun_termination_signal</code></td><td>string</td><td>none</td><td>Slurm signal spec for <code>srun --signal=&lt;value&gt;</code></td></tr>
 <tr><td><code>enable_cpu_bind</code></td><td>boolean</td><td><code>false</code></td><td>Allow Slurm CPU binding</td></tr>
+<tr><td><code>stdio</code></td><td><a href="#stdioconfig">StdioConfig</a></td><td>see below</td><td>Workflow-level default for stdout/stderr capture</td></tr>
 </tbody></table>
 </div>
+<h3 id="stdioconfig"><a class="header" href="#stdioconfig">StdioConfig</a></h3>
+<p>Controls how stdout and stderr are captured for job processes.</p>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>mode</code></td><td><a href="#stdiomode">StdioMode</a></td><td><code>"separate"</code></td><td>How to capture stdout/stderr</td></tr>
+<tr><td><code>delete_on_success</code></td><td>boolean</td><td><code>false</code></td><td>Delete captured files when a job completes successfully</td></tr>
+</tbody></table>
+</div>
+<h3 id="stdiomode"><a class="header" href="#stdiomode">StdioMode</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Value</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>separate</code></td><td>Separate stdout (<code>.o</code>) and stderr (<code>.e</code>) files per job (default)</td></tr>
+<tr><td><code>combined</code></td><td>Combine stdout and stderr into a single <code>.log</code> file per job</td></tr>
+<tr><td><code>no_stdout</code></td><td>Discard stdout (<code>/dev/null</code>); capture stderr only</td></tr>
+<tr><td><code>no_stderr</code></td><td>Discard stderr (<code>/dev/null</code>); capture stdout only</td></tr>
+<tr><td><code>none</code></td><td>Discard both stdout and stderr</td></tr>
+</tbody></table>
+</div>
+<p>Per-job overrides can be set via the <code>stdio</code> field on individual <a href="#jobspec">JobSpec</a> entries, which
+takes precedence over the workflow-level setting.</p>
+<h4 id="stdio-examples"><a class="header" href="#stdio-examples">Stdio Examples</a></h4>
+<p>Combine stdout and stderr into a single file, and delete it on success:</p>
+<pre><code class="language-yaml">execution_config:
+  stdio:
+    mode: combined
+    delete_on_success: true
+</code></pre>
+<p>Suppress stdout for most jobs, but keep separate files for a specific job:</p>
+<pre><code class="language-yaml">execution_config:
+  stdio:
+    mode: no_stdout
+
+jobs:
+  - name: preprocess
+    command: python preprocess.py
+  - name: train
+    command: python train.py
+    stdio:
+      mode: separate
+</code></pre>
 <h3 id="execution-modes"><a class="header" href="#execution-modes">Execution Modes</a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Mode</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>direct</code></td><td>Torc manages job execution directly. Use outside Slurm or when srun unreliable</td></tr>
