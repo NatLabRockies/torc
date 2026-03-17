@@ -414,6 +414,179 @@ fn parse_gres(gres: &Option<String>) -> (Option<u32>, Option<String>) {
     (None, None)
 }
 
+// ============================================================================
+// Live cluster state queries
+// ============================================================================
+
+/// Node availability counts for a partition
+#[derive(Debug, Clone)]
+pub struct PartitionAvailability {
+    pub partition: String,
+    pub idle: u32,
+    pub mixed: u32,
+    pub allocated: u32,
+    pub down: u32,
+    pub total: u32,
+}
+
+/// Queue depth information for a partition
+#[derive(Debug, Clone)]
+pub struct QueueDepthInfo {
+    pub partition: String,
+    pub pending_jobs: u32,
+    pub pending_nodes: u32,
+    pub running_jobs: u32,
+}
+
+/// Query sinfo for node availability per partition.
+///
+/// If `partition` is Some, only queries that partition. Otherwise queries all.
+pub fn query_partition_availability(
+    partition: Option<&str>,
+) -> Result<Vec<PartitionAvailability>, String> {
+    let mut args = vec!["-e", "-o", "%P|%T|%D", "--noheader"];
+    let partition_arg;
+    if let Some(p) = partition {
+        partition_arg = p.to_string();
+        args.push("-p");
+        args.push(&partition_arg);
+    }
+
+    let output = Command::new(get_sinfo_exec())
+        .args(&args)
+        .output()
+        .map_err(|e| format!("Failed to run sinfo: {}", e))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "sinfo failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    parse_partition_availability(&stdout)
+}
+
+/// Parse sinfo output for node availability.
+/// Format: "%P|%T|%D" (partition|state|node_count)
+pub fn parse_partition_availability(input: &str) -> Result<Vec<PartitionAvailability>, String> {
+    let mut map: HashMap<String, PartitionAvailability> = HashMap::new();
+
+    for line in input.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = line.split('|').collect();
+        if parts.len() < 3 {
+            continue;
+        }
+
+        let name = parts[0].trim_end_matches('*').to_string();
+        let state = parts[1].to_lowercase();
+        let count: u32 = parts[2].parse().unwrap_or(0);
+
+        let entry = map.entry(name.clone()).or_insert(PartitionAvailability {
+            partition: name,
+            idle: 0,
+            mixed: 0,
+            allocated: 0,
+            down: 0,
+            total: 0,
+        });
+
+        entry.total += count;
+
+        if state.starts_with("idle") {
+            entry.idle += count;
+        } else if state.starts_with("mix") {
+            entry.mixed += count;
+        } else if state.starts_with("alloc") {
+            entry.allocated += count;
+        } else if state.starts_with("down")
+            || state.starts_with("drain")
+            || state.starts_with("not_responding")
+        {
+            entry.down += count;
+        }
+        // Other states (completing, reserved, etc.) count toward total only
+    }
+
+    Ok(map.into_values().collect())
+}
+
+/// Query squeue for queue depth on a partition.
+///
+/// If `partition` is Some, only queries that partition. Otherwise queries all.
+pub fn query_queue_depth(partition: Option<&str>) -> Result<Vec<QueueDepthInfo>, String> {
+    let squeue_exec = if cfg!(any(test, debug_assertions)) {
+        std::env::var("TORC_FAKE_SQUEUE").unwrap_or_else(|_| "squeue".to_string())
+    } else {
+        "squeue".to_string()
+    };
+
+    let mut args = vec!["--noheader", "-o", "%P|%T|%D"];
+    let partition_arg;
+    if let Some(p) = partition {
+        partition_arg = p.to_string();
+        args.push("-p");
+        args.push(&partition_arg);
+    }
+
+    let output = Command::new(&squeue_exec)
+        .args(&args)
+        .output()
+        .map_err(|e| format!("Failed to run squeue: {}", e))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "squeue failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    parse_queue_depth(&stdout)
+}
+
+/// Parse squeue output for queue depth.
+/// Format: "%P|%T|%D" (partition|state|nodes)
+pub fn parse_queue_depth(input: &str) -> Result<Vec<QueueDepthInfo>, String> {
+    let mut map: HashMap<String, QueueDepthInfo> = HashMap::new();
+
+    for line in input.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = line.split('|').collect();
+        if parts.len() < 3 {
+            continue;
+        }
+
+        let name = parts[0].trim_end_matches('*').to_string();
+        let state = parts[1].to_uppercase();
+        let nodes: u32 = parts[2].parse().unwrap_or(0);
+
+        let entry = map.entry(name.clone()).or_insert(QueueDepthInfo {
+            partition: name,
+            pending_jobs: 0,
+            pending_nodes: 0,
+            running_jobs: 0,
+        });
+
+        if state == "PENDING" || state == "CONFIGURING" {
+            entry.pending_jobs += 1;
+            entry.pending_nodes += nodes;
+        } else if state == "RUNNING" || state == "COMPLETING" {
+            entry.running_jobs += 1;
+        }
+    }
+
+    Ok(map.into_values().collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -478,5 +651,72 @@ mod tests {
             Some((4, "gpu".to_string()))
         );
         assert_eq!(infer_gpu_from_name("compute"), None);
+    }
+
+    #[test]
+    fn test_parse_partition_availability() {
+        let input = "\
+standard|idle|45
+standard|mixed|12
+standard|allocated|180
+standard|down|3
+gpu-h100|idle|2
+gpu-h100|mixed|1
+gpu-h100|allocated|15
+";
+        let result = parse_partition_availability(input).unwrap();
+        assert_eq!(result.len(), 2);
+
+        let std_part = result.iter().find(|p| p.partition == "standard").unwrap();
+        assert_eq!(std_part.idle, 45);
+        assert_eq!(std_part.mixed, 12);
+        assert_eq!(std_part.allocated, 180);
+        assert_eq!(std_part.down, 3);
+        assert_eq!(std_part.total, 240);
+
+        let gpu_part = result.iter().find(|p| p.partition == "gpu-h100").unwrap();
+        assert_eq!(gpu_part.idle, 2);
+        assert_eq!(gpu_part.mixed, 1);
+        assert_eq!(gpu_part.allocated, 15);
+        assert_eq!(gpu_part.total, 18);
+    }
+
+    #[test]
+    fn test_parse_partition_availability_with_default_marker() {
+        let input = "standard*|idle|10\nstandard*|allocated|50\n";
+        let result = parse_partition_availability(input).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].partition, "standard");
+        assert_eq!(result[0].idle, 10);
+    }
+
+    #[test]
+    fn test_parse_queue_depth() {
+        let input = "\
+standard|PENDING|4
+standard|PENDING|8
+standard|RUNNING|1
+standard|RUNNING|1
+gpu-h100|PENDING|2
+gpu-h100|RUNNING|1
+";
+        let result = parse_queue_depth(input).unwrap();
+        assert_eq!(result.len(), 2);
+
+        let std_q = result.iter().find(|q| q.partition == "standard").unwrap();
+        assert_eq!(std_q.pending_jobs, 2);
+        assert_eq!(std_q.pending_nodes, 12);
+        assert_eq!(std_q.running_jobs, 2);
+
+        let gpu_q = result.iter().find(|q| q.partition == "gpu-h100").unwrap();
+        assert_eq!(gpu_q.pending_jobs, 1);
+        assert_eq!(gpu_q.pending_nodes, 2);
+        assert_eq!(gpu_q.running_jobs, 1);
+    }
+
+    #[test]
+    fn test_parse_queue_depth_empty() {
+        let result = parse_queue_depth("").unwrap();
+        assert!(result.is_empty());
     }
 }

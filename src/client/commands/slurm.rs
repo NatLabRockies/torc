@@ -22,6 +22,9 @@ const SLURM_HELP_TEMPLATE: &str = "\
 \x1b[1;32mExecution:\x1b[0m
   \x1b[1;36mschedule-nodes\x1b[0m   Submit Slurm allocations for a scheduler
 
+\x1b[1;32mPlanning:\x1b[0m
+  \x1b[1;36mplan-allocations\x1b[0m Analyze workflow and cluster to recommend allocation strategy
+
 \x1b[1;32mDiagnostics:\x1b[0m
   \x1b[1;36mparse-logs\x1b[0m       Parse Slurm logs for error messages
   \x1b[1;36msacct\x1b[0m            Show Slurm accounting info for allocations
@@ -678,6 +681,62 @@ EXAMPLES:
         /// (useful for recovery dry-run to include failed jobs)
         #[arg(long, value_delimiter = ',')]
         include_job_ids: Option<Vec<i64>>,
+    },
+    /// Analyze a workflow spec and current cluster state to recommend an allocation strategy
+    ///
+    /// Determines whether to use one large allocation, many small allocations,
+    /// or a middle ground based on the workflow's parallelism structure and
+    /// current node availability.
+    #[command(
+        name = "plan-allocations",
+        after_long_help = "\
+EXAMPLES:
+    # Basic usage
+    torc slurm plan-allocations --account myproject workflow.yaml
+
+    # Specify partition explicitly
+    torc slurm plan-allocations --account myproject --partition standard workflow.yaml
+
+    # Offline mode (skip sinfo/squeue, only analyze workflow)
+    torc slurm plan-allocations --account myproject --offline workflow.yaml
+"
+    )]
+    PlanAllocations {
+        /// Path to workflow specification file (YAML, JSON, JSON5, or KDL)
+        #[arg()]
+        workflow_file: PathBuf,
+
+        /// Slurm account (can also be specified in workflow's slurm_defaults)
+        #[arg(short, long)]
+        account: Option<String>,
+
+        /// Partition to target (overrides automatic selection)
+        #[arg(short, long)]
+        partition: Option<String>,
+
+        /// QOS to use
+        #[arg(short, long)]
+        qos: Option<String>,
+
+        /// HPC profile to use (if not specified, tries to detect current system)
+        #[arg(long)]
+        profile: Option<String>,
+
+        /// Skip live cluster queries (sinfo/squeue) and only analyze the workflow
+        #[arg(long)]
+        offline: bool,
+
+        /// Strategy for grouping jobs into schedulers
+        #[arg(long, value_enum, default_value_t = GroupByStrategy::ResourceRequirements)]
+        group_by: GroupByStrategy,
+
+        /// Strategy for determining Slurm job walltime
+        #[arg(long, value_enum, default_value_t = WalltimeStrategy::MaxJobRuntime)]
+        walltime_strategy: WalltimeStrategy,
+
+        /// Multiplier for job runtime when using max-job-runtime strategy
+        #[arg(long, default_value = "1.5")]
+        walltime_multiplier: f64,
     },
 }
 
@@ -1438,6 +1497,33 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
                 *poll_interval,
                 *dry_run,
                 include_job_ids.as_deref(),
+                format,
+            );
+        }
+        SlurmCommands::PlanAllocations {
+            workflow_file,
+            account,
+            partition,
+            qos: _,
+            profile: profile_name,
+            offline,
+            group_by,
+            walltime_strategy,
+            walltime_multiplier,
+        } => {
+            if *walltime_multiplier <= 0.0 {
+                eprintln!("Error: --walltime-multiplier must be greater than 0");
+                std::process::exit(1);
+            }
+            handle_plan_allocations(
+                workflow_file,
+                account.as_deref(),
+                partition.as_deref(),
+                profile_name.as_deref(),
+                *offline,
+                *group_by,
+                *walltime_strategy,
+                *walltime_multiplier,
                 format,
             );
         }
@@ -3110,6 +3196,527 @@ fn run_usage_for_workflow(config: &Configuration, workflow_id: i64, format: &str
                 println!("  {}", err);
             }
         }
+    }
+}
+
+/// Allocation strategy recommendation
+#[derive(Debug, Clone, Serialize)]
+struct AllocationRecommendation {
+    /// Resource group or partition name
+    group_name: String,
+    /// Target partition
+    partition: String,
+    /// Number of allocations to submit
+    num_allocations: i64,
+    /// Nodes per allocation
+    nodes_per_allocation: i64,
+    /// Total nodes across all allocations
+    total_nodes: i64,
+    /// Strategy name: "single", "many-small", or "chunked"
+    strategy: String,
+    /// Human-readable reason for the recommendation
+    reason: String,
+    /// Walltime per allocation
+    walltime: String,
+    /// Number of jobs in this group
+    job_count: usize,
+}
+
+/// Compute allocation recommendations based on workflow analysis and cluster state.
+///
+/// The algorithm:
+/// 1. Compute ideal node count from the scheduler plan (existing logic)
+/// 2. If cluster state is available, size allocations to what the cluster can satisfy:
+///    - If enough idle nodes: 1 large allocation
+///    - If very few idle nodes or deep queue: many 1-node allocations
+///    - Otherwise: medium-sized chunks
+fn compute_recommendations(
+    plan: &crate::client::scheduler_plan::SchedulerPlan,
+    cluster_state: &HashMap<
+        String,
+        (
+            crate::client::hpc::slurm::PartitionAvailability,
+            crate::client::hpc::slurm::QueueDepthInfo,
+        ),
+    >,
+    offline: bool,
+) -> Vec<AllocationRecommendation> {
+    let mut recommendations = Vec::new();
+
+    for scheduler in &plan.schedulers {
+        let partition_name = scheduler.partition.as_deref().unwrap_or("default");
+
+        let ideal_nodes = scheduler.num_allocations;
+
+        if offline || !cluster_state.contains_key(partition_name) {
+            // Offline mode: just report the ideal plan from generate
+            recommendations.push(AllocationRecommendation {
+                group_name: scheduler.resource_requirements.clone(),
+                partition: partition_name.to_string(),
+                num_allocations: ideal_nodes,
+                nodes_per_allocation: 1,
+                total_nodes: ideal_nodes,
+                strategy: "default".to_string(),
+                reason: format!(
+                    "Offline mode: {} allocations x 1 node (ideal from workflow analysis)",
+                    ideal_nodes
+                ),
+                walltime: scheduler.walltime.clone(),
+                job_count: scheduler.job_count,
+            });
+            continue;
+        }
+
+        let (avail, queue) = cluster_state.get(partition_name).unwrap();
+        let idle = avail.idle as i64;
+        let _mixed = avail.mixed as i64;
+        let total = avail.total as i64;
+
+        // Queue pressure: ratio of pending nodes to total nodes
+        let queue_pressure = if total > 0 {
+            queue.pending_nodes as f64 / total as f64
+        } else {
+            0.0
+        };
+
+        let (strategy, num_allocs, nodes_per_alloc, reason) = if ideal_nodes <= 1 {
+            // Only 1 node needed, no decision to make
+            ("single", 1_i64, 1_i64, "Only 1 node needed".to_string())
+        } else if idle >= ideal_nodes && queue_pressure < 0.5 {
+            // Plenty of idle nodes and low queue pressure: single large allocation
+            (
+                "single",
+                1_i64,
+                ideal_nodes,
+                format!(
+                    "{} idle nodes >= {} needed, low queue pressure ({:.0}%)",
+                    idle,
+                    ideal_nodes,
+                    queue_pressure * 100.0,
+                ),
+            )
+        } else if idle < (ideal_nodes + 2) / 3 || queue_pressure > 2.0 {
+            // Very few idle nodes or very high queue pressure: many small allocations
+            (
+                "many-small",
+                ideal_nodes,
+                1_i64,
+                format!(
+                    "{} idle nodes < {} needed/3, or high queue pressure ({:.0}%): \
+                     small allocations start as nodes become available",
+                    idle,
+                    ideal_nodes,
+                    queue_pressure * 100.0,
+                ),
+            )
+        } else {
+            // Middle ground: chunk into medium allocations
+            // Target chunk size: roughly what's available, capped at reasonable sizes
+            let chunk_size = std::cmp::max(
+                2,
+                std::cmp::min(idle / 2, std::cmp::min(8, ideal_nodes / 2)),
+            );
+            let num_chunks = (ideal_nodes + chunk_size - 1) / chunk_size;
+            (
+                "chunked",
+                num_chunks,
+                chunk_size,
+                format!(
+                    "{} idle nodes partially covers {} needed: \
+                     {} allocations x {} nodes balances start time vs overhead",
+                    idle, ideal_nodes, num_chunks, chunk_size,
+                ),
+            )
+        };
+
+        recommendations.push(AllocationRecommendation {
+            group_name: scheduler.resource_requirements.clone(),
+            partition: partition_name.to_string(),
+            num_allocations: num_allocs,
+            nodes_per_allocation: nodes_per_alloc,
+            total_nodes: num_allocs * nodes_per_alloc,
+            strategy: strategy.to_string(),
+            reason,
+            walltime: scheduler.walltime.clone(),
+            job_count: scheduler.job_count,
+        });
+    }
+
+    recommendations
+}
+
+/// Handle the plan-allocations command
+#[allow(clippy::too_many_arguments)]
+fn handle_plan_allocations(
+    workflow_file: &PathBuf,
+    account: Option<&str>,
+    partition: Option<&str>,
+    profile_name: Option<&str>,
+    offline: bool,
+    group_by: GroupByStrategy,
+    walltime_strategy: WalltimeStrategy,
+    walltime_multiplier: f64,
+    format: &str,
+) {
+    // Load HPC config and registry
+    let torc_config = TorcConfig::load().unwrap_or_default();
+    let registry = create_registry_with_config_public(&torc_config.client.hpc);
+
+    let profile = if let Some(n) = profile_name {
+        registry.get(n)
+    } else {
+        registry.detect()
+    };
+
+    let profile = match profile {
+        Some(p) => p,
+        None => {
+            if let Some(name) = profile_name {
+                eprintln!("Unknown HPC profile: {}", name);
+            } else {
+                eprintln!("No HPC profile specified and no system detected.");
+                eprintln!("Use --profile <name> or run on an HPC system.");
+            }
+            std::process::exit(1);
+        }
+    };
+
+    // Parse workflow spec
+    let mut spec: WorkflowSpec = match WorkflowSpec::from_spec_file(workflow_file) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Failed to parse workflow file: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Resolve account
+    let resolved_account = if let Some(acct) = account {
+        acct.to_string()
+    } else if let Some(ref defaults) = spec.slurm_defaults {
+        defaults
+            .0
+            .get("account")
+            .and_then(|v| v.as_str().map(String::from))
+            .unwrap_or_else(|| {
+                eprintln!(
+                    "Error: No account specified. Use --account or set 'account' in slurm_defaults."
+                );
+                std::process::exit(1);
+            })
+    } else {
+        eprintln!("Error: No account specified. Use --account or set 'account' in slurm_defaults.");
+        std::process::exit(1);
+    };
+
+    // Expand parameters and build graph
+    if let Err(e) = spec.expand_parameters() {
+        eprintln!("Failed to expand parameters: {}", e);
+        std::process::exit(1);
+    }
+
+    let rr_vec = spec.resource_requirements.as_deref().unwrap_or(&[]);
+    let rr_map: HashMap<&str, &ResourceRequirementsSpec> =
+        rr_vec.iter().map(|rr| (rr.name.as_str(), rr)).collect();
+
+    if rr_map.is_empty() {
+        eprintln!("Workflow has no resource_requirements defined.");
+        std::process::exit(1);
+    }
+
+    let mut graph = match WorkflowGraph::from_spec(&spec) {
+        Ok(g) => g,
+        Err(e) => {
+            eprintln!("Failed to build workflow graph: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Compute DAG metrics
+    let levels = match graph.topological_levels() {
+        Ok(l) => l.clone(),
+        Err(e) => {
+            eprintln!("Failed to compute topological levels: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let max_parallelism: usize = levels
+        .iter()
+        .map(|level| {
+            level
+                .iter()
+                .filter_map(|name| graph.get_job(name))
+                .map(|node| node.instance_count)
+                .sum()
+        })
+        .max()
+        .unwrap_or(0);
+
+    let max_parallelism_level = levels
+        .iter()
+        .enumerate()
+        .max_by_key(|(_, level)| -> usize {
+            level
+                .iter()
+                .filter_map(|name| graph.get_job(name))
+                .map(|node| node.instance_count)
+                .sum()
+        })
+        .map(|(i, _)| i)
+        .unwrap_or(0);
+
+    // Generate the scheduler plan (reuse existing logic)
+    use crate::client::scheduler_plan::{SchedulerOverrides, generate_scheduler_plan};
+
+    let overrides = SchedulerOverrides {
+        partition: partition.map(|s| s.to_string()),
+        walltime_secs: None,
+    };
+
+    let plan = generate_scheduler_plan(
+        &graph,
+        &rr_map,
+        &profile,
+        &resolved_account,
+        false, // Not single_allocation - we want N×1 as baseline
+        group_by,
+        walltime_strategy,
+        walltime_multiplier,
+        false, // No actions
+        None,
+        false,
+        &overrides,
+    );
+
+    // Query cluster state (unless offline)
+    use crate::client::hpc::slurm::{PartitionAvailability, QueueDepthInfo};
+    let mut cluster_state: HashMap<String, (PartitionAvailability, QueueDepthInfo)> =
+        HashMap::new();
+
+    if !offline {
+        // Collect unique partitions from the plan
+        let partitions: Vec<String> = plan
+            .schedulers
+            .iter()
+            .filter_map(|s| s.partition.clone())
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+
+        for part_name in &partitions {
+            let avail =
+                match crate::client::hpc::slurm::query_partition_availability(Some(part_name)) {
+                    Ok(mut v) => v.pop().unwrap_or(PartitionAvailability {
+                        partition: part_name.clone(),
+                        idle: 0,
+                        mixed: 0,
+                        allocated: 0,
+                        down: 0,
+                        total: 0,
+                    }),
+                    Err(e) => {
+                        warn!("Failed to query sinfo for partition '{}': {}", part_name, e);
+                        PartitionAvailability {
+                            partition: part_name.clone(),
+                            idle: 0,
+                            mixed: 0,
+                            allocated: 0,
+                            down: 0,
+                            total: 0,
+                        }
+                    }
+                };
+
+            let queue = match crate::client::hpc::slurm::query_queue_depth(Some(part_name)) {
+                Ok(mut v) => v.pop().unwrap_or(QueueDepthInfo {
+                    partition: part_name.clone(),
+                    pending_jobs: 0,
+                    pending_nodes: 0,
+                    running_jobs: 0,
+                }),
+                Err(e) => {
+                    warn!(
+                        "Failed to query squeue for partition '{}': {}",
+                        part_name, e
+                    );
+                    QueueDepthInfo {
+                        partition: part_name.clone(),
+                        pending_jobs: 0,
+                        pending_nodes: 0,
+                        running_jobs: 0,
+                    }
+                }
+            };
+
+            cluster_state.insert(part_name.clone(), (avail, queue));
+        }
+    }
+
+    // Compute recommendations
+    let recommendations = compute_recommendations(&plan, &cluster_state, offline);
+
+    // Output
+    if format == "json" {
+        #[derive(Serialize)]
+        struct PlanAllocationsOutput {
+            workflow_analysis: WorkflowAnalysis,
+            cluster_state: Vec<ClusterStateEntry>,
+            recommendations: Vec<AllocationRecommendation>,
+            warnings: Vec<String>,
+        }
+
+        #[derive(Serialize)]
+        struct WorkflowAnalysis {
+            total_jobs: usize,
+            total_instances: usize,
+            dependency_depth: usize,
+            max_parallelism: usize,
+            max_parallelism_level: usize,
+            resource_groups: usize,
+        }
+
+        #[derive(Serialize)]
+        struct ClusterStateEntry {
+            partition: String,
+            idle: u32,
+            mixed: u32,
+            allocated: u32,
+            down: u32,
+            total: u32,
+            pending_jobs: u32,
+            pending_nodes: u32,
+            running_jobs: u32,
+        }
+
+        let cluster_entries: Vec<ClusterStateEntry> = cluster_state
+            .iter()
+            .map(|(_, (a, q))| ClusterStateEntry {
+                partition: a.partition.clone(),
+                idle: a.idle,
+                mixed: a.mixed,
+                allocated: a.allocated,
+                down: a.down,
+                total: a.total,
+                pending_jobs: q.pending_jobs,
+                pending_nodes: q.pending_nodes,
+                running_jobs: q.running_jobs,
+            })
+            .collect();
+
+        let output = PlanAllocationsOutput {
+            workflow_analysis: WorkflowAnalysis {
+                total_jobs: graph.job_count(),
+                total_instances: graph.total_instance_count(),
+                dependency_depth: levels.len(),
+                max_parallelism,
+                max_parallelism_level,
+                resource_groups: plan.schedulers.len(),
+            },
+            cluster_state: cluster_entries,
+            recommendations,
+            warnings: plan.warnings.clone(),
+        };
+        print_json(&output, "plan allocations");
+    } else {
+        // Human-readable output
+        println!("Workflow Analysis");
+        println!("=================");
+        println!("  Total jobs:         {}", graph.job_count());
+        println!("  Total instances:    {}", graph.total_instance_count());
+        println!("  Dependency depth:   {} levels", levels.len());
+        println!(
+            "  Max parallelism:    {} instances (at level {})",
+            max_parallelism, max_parallelism_level
+        );
+        println!("  Resource groups:    {}", plan.schedulers.len());
+        println!();
+
+        // Show per-scheduler-group info
+        for scheduler in &plan.schedulers {
+            let partition_name = scheduler.partition.as_deref().unwrap_or("default");
+
+            println!(
+                "Resource Group: \"{}\" (partition: {})",
+                scheduler.resource_requirements, partition_name
+            );
+            println!(
+                "  Jobs: {}, Walltime: {}, Ideal nodes: {}",
+                scheduler.job_count, scheduler.walltime, scheduler.num_allocations
+            );
+            println!();
+        }
+
+        // Show cluster state
+        if !cluster_state.is_empty() {
+            for (avail, queue) in cluster_state.values() {
+                println!("Cluster State (partition: {})", avail.partition);
+                println!(
+                    "  Idle: {}, Mixed: {}, Allocated: {}, Down: {}, Total: {}",
+                    avail.idle, avail.mixed, avail.allocated, avail.down, avail.total
+                );
+                println!(
+                    "  Queue depth: {} pending jobs ({} pending nodes), {} running jobs",
+                    queue.pending_jobs, queue.pending_nodes, queue.running_jobs
+                );
+                println!();
+            }
+        } else if !offline {
+            println!("Cluster State: unavailable (no partitions resolved)");
+            println!();
+        }
+
+        // Show recommendations
+        println!("Recommendations");
+        println!("===============");
+        for rec in &recommendations {
+            println!(
+                "  \"{}\": {} allocation(s) x {} node(s) [{}]",
+                rec.group_name, rec.num_allocations, rec.nodes_per_allocation, rec.strategy
+            );
+            println!("    {}", rec.reason);
+            println!(
+                "    Total nodes: {}, Walltime: {}, Jobs: {}",
+                rec.total_nodes, rec.walltime, rec.job_count
+            );
+
+            // Suggest command
+            match rec.strategy.as_str() {
+                "single" if rec.total_nodes > 1 => {
+                    println!(
+                        "    Suggested: torc slurm generate --account {} --single-allocation {}",
+                        resolved_account,
+                        workflow_file.display()
+                    );
+                }
+                "many-small" => {
+                    println!(
+                        "    Suggested: torc slurm generate --account {} {}",
+                        resolved_account,
+                        workflow_file.display()
+                    );
+                }
+                "chunked" => {
+                    println!(
+                        "    Note: Chunked allocations require manual configuration or multiple",
+                    );
+                    println!(
+                        "    schedulers. Use 'torc slurm generate' and adjust nodes per scheduler."
+                    );
+                }
+                _ => {}
+            }
+            println!();
+        }
+
+        if !plan.warnings.is_empty() {
+            println!("Warnings:");
+            for warning in &plan.warnings {
+                println!("  - {}", warning);
+            }
+        }
+
+        println!("Profile: {} ({})", profile.display_name, profile.name);
     }
 }
 
