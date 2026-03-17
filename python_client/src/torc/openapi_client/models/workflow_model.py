@@ -125,5 +125,3 @@ class WorkflowModel(BaseModel):
             "slurm_config": obj.get("slurm_config")
         })
         return _obj
-
-

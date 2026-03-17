@@ -91,5 +91,3 @@ class UserDataModel(BaseModel):
             "data": obj.get("data")
         })
         return _obj
-
-

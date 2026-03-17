@@ -93,5 +93,3 @@ class RoCrateEntityModel(BaseModel):
             "metadata": obj.get("metadata")
         })
         return _obj
-
-

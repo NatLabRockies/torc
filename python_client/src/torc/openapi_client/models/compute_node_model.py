@@ -111,5 +111,3 @@ class ComputeNodeModel(BaseModel):
             "scheduler": obj.get("scheduler")
         })
         return _obj
-
-

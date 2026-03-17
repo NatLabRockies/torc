@@ -91,5 +91,3 @@ class WorkflowStatusModel(BaseModel):
             "has_detected_need_to_run_completion_script": obj.get("has_detected_need_to_run_completion_script") if obj.get("has_detected_need_to_run_completion_script") is not None else False
         })
         return _obj
-
-

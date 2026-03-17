@@ -53,7 +53,7 @@ fn test_prepare_jobs_minimal_resources(start_server: &ServerProcess) {
     );
 }
 
-/// Test claim_jobs_based_on_resources with CPU constraint limiting job allocation  
+/// Test claim_jobs_based_on_resources with CPU constraint limiting job allocation
 /// Workflow: 3 jobs, each needing 64 CPUs, 128.0 GB memory, 0 GPUs, 1 node
 /// Resources: 64 CPUs, 128.0 GB memory total → Can support max 1 job simultaneously
 /// Expected: Returns at most 1 job (limited by CPU availability)
@@ -95,7 +95,7 @@ fn test_prepare_jobs_high_cpu_resources(start_server: &ServerProcess) {
 }
 
 /// Test claim_jobs_based_on_resources with memory constraint limiting job allocation
-/// Workflow: 2 jobs, each needing 4 CPUs, 512.0 GB memory, 0 GPUs, 1 node  
+/// Workflow: 2 jobs, each needing 4 CPUs, 512.0 GB memory, 0 GPUs, 1 node
 /// Resources: 4 CPUs, 512.0 GB memory total → Can support max 1 job simultaneously
 /// Expected: Returns at most 1 job (limited by memory availability)
 #[rstest]
@@ -137,7 +137,7 @@ fn test_prepare_jobs_high_memory_resources(start_server: &ServerProcess) {
 
 /// Test claim_jobs_based_on_resources with GPU constraint limiting job allocation
 /// Workflow: 3 jobs, each needing 8 CPUs, 32.0 GB memory, 4 GPUs, 1 node
-/// Resources: 8 CPUs, 32.0 GB memory, 4 GPUs total → Can support max 1 job simultaneously  
+/// Resources: 8 CPUs, 32.0 GB memory, 4 GPUs total → Can support max 1 job simultaneously
 /// Expected: Returns at most 1 job (limited by GPU availability)
 #[rstest]
 fn test_prepare_jobs_gpu_resources(start_server: &ServerProcess) {
@@ -800,7 +800,7 @@ fn test_prepare_jobs_integration_example(start_server: &ServerProcess) {
 
 /// Test that claim_jobs_based_on_resources returns multiple jobs when resources allow
 /// Workflow: 4 jobs, each needing 1 CPU, 1.0 GB memory, 0 GPUs, 1 node
-/// Resources: 4 CPUs, 4.0 GB memory total → Can support all 4 jobs simultaneously  
+/// Resources: 4 CPUs, 4.0 GB memory total → Can support all 4 jobs simultaneously
 /// Expected: Should return multiple jobs (at least 1, ideally all 4)
 #[rstest]
 fn test_prepare_jobs_multiple_jobs_returned(start_server: &ServerProcess) {
@@ -1202,7 +1202,7 @@ fn test_prepare_jobs_limit_parameter_truncation(start_server: &ServerProcess) {
 }
 
 /// Test limit parameter with edge cases - limit larger than available jobs
-/// Workflow: 20 jobs, each needing 1 CPU, 1.0 GB memory, 0 GPUs, 1 node  
+/// Workflow: 20 jobs, each needing 1 CPU, 1.0 GB memory, 0 GPUs, 1 node
 /// Resources: 50 CPUs, 50.0 GB memory total → Can support all 20 jobs
 /// Limit: 50 jobs → Expected: Returns exactly 20 jobs (limited by available jobs, not limit)
 #[rstest]

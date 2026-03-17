@@ -1881,13 +1881,13 @@ class DefaultApi:
             _path_params['limit'] = limit
         # process the query parameters
         if sort_method is not None:
-            
+
             _query_params.append(('sort_method', sort_method.value))
-            
+
         if strict_scheduler_match is not None:
-            
+
             _query_params.append(('strict_scheduler_match', strict_scheduler_match))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -2199,9 +2199,9 @@ class DefaultApi:
             _path_params['id'] = id
         # process the query parameters
         if limit is not None:
-            
+
             _query_params.append(('limit', limit))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -7096,13 +7096,13 @@ class DefaultApi:
         # process the path parameters
         # process the query parameters
         if consumer_job_id is not None:
-            
+
             _query_params.append(('consumer_job_id', consumer_job_id))
-            
+
         if producer_job_id is not None:
-            
+
             _query_params.append(('producer_job_id', producer_job_id))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -8278,9 +8278,9 @@ class DefaultApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -8874,9 +8874,9 @@ class DefaultApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -9470,9 +9470,9 @@ class DefaultApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -10363,9 +10363,9 @@ class DefaultApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -10959,9 +10959,9 @@ class DefaultApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -11555,9 +11555,9 @@ class DefaultApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -12435,9 +12435,9 @@ class DefaultApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -13031,9 +13031,9 @@ class DefaultApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -14221,9 +14221,9 @@ class DefaultApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -14817,9 +14817,9 @@ class DefaultApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -17859,9 +17859,9 @@ class DefaultApi:
             _path_params['id'] = id
         # process the query parameters
         if trigger_type is not None:
-            
+
             _query_params.append(('trigger_type', trigger_type))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -18145,9 +18145,9 @@ class DefaultApi:
             _path_params['id'] = id
         # process the query parameters
         if scheduler_config_id is not None:
-            
+
             _query_params.append(('scheduler_config_id', scheduler_config_id))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -21126,13 +21126,13 @@ class DefaultApi:
             _path_params['id'] = id
         # process the query parameters
         if only_uninitialized is not None:
-            
+
             _query_params.append(('only_uninitialized', only_uninitialized))
-            
+
         if clear_ephemeral_user_data is not None:
-            
+
             _query_params.append(('clear_ephemeral_user_data', clear_ephemeral_user_data))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -21967,13 +21967,13 @@ class DefaultApi:
         # process the path parameters
         # process the query parameters
         if offset is not None:
-            
+
             _query_params.append(('offset', offset))
-            
+
         if limit is not None:
-            
+
             _query_params.append(('limit', limit))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -22333,37 +22333,37 @@ class DefaultApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         if offset is not None:
-            
+
             _query_params.append(('offset', offset))
-            
+
         if limit is not None:
-            
+
             _query_params.append(('limit', limit))
-            
+
         if sort_by is not None:
-            
+
             _query_params.append(('sort_by', sort_by))
-            
+
         if reverse_sort is not None:
-            
+
             _query_params.append(('reverse_sort', reverse_sort))
-            
+
         if hostname is not None:
-            
+
             _query_params.append(('hostname', hostname))
-            
+
         if is_active is not None:
-            
+
             _query_params.append(('is_active', is_active))
-            
+
         if scheduled_compute_node_id is not None:
-            
+
             _query_params.append(('scheduled_compute_node_id', scheduled_compute_node_id))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -22710,33 +22710,33 @@ class DefaultApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         if offset is not None:
-            
+
             _query_params.append(('offset', offset))
-            
+
         if limit is not None:
-            
+
             _query_params.append(('limit', limit))
-            
+
         if sort_by is not None:
-            
+
             _query_params.append(('sort_by', sort_by))
-            
+
         if reverse_sort is not None:
-            
+
             _query_params.append(('reverse_sort', reverse_sort))
-            
+
         if category is not None:
-            
+
             _query_params.append(('category', category))
-            
+
         if after_timestamp is not None:
-            
+
             _query_params.append(('after_timestamp', after_timestamp))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -23033,13 +23033,13 @@ class DefaultApi:
             _path_params['id'] = id
         # process the query parameters
         if offset is not None:
-            
+
             _query_params.append(('offset', offset))
-            
+
         if limit is not None:
-            
+
             _query_params.append(('limit', limit))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -23412,41 +23412,41 @@ class DefaultApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         if produced_by_job_id is not None:
-            
+
             _query_params.append(('produced_by_job_id', produced_by_job_id))
-            
+
         if offset is not None:
-            
+
             _query_params.append(('offset', offset))
-            
+
         if limit is not None:
-            
+
             _query_params.append(('limit', limit))
-            
+
         if sort_by is not None:
-            
+
             _query_params.append(('sort_by', sort_by))
-            
+
         if reverse_sort is not None:
-            
+
             _query_params.append(('reverse_sort', reverse_sort))
-            
+
         if name is not None:
-            
+
             _query_params.append(('name', name))
-            
+
         if path is not None:
-            
+
             _query_params.append(('path', path))
-            
+
         if is_output is not None:
-            
+
             _query_params.append(('is_output', is_output))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -23743,13 +23743,13 @@ class DefaultApi:
             _path_params['id'] = id
         # process the query parameters
         if offset is not None:
-            
+
             _query_params.append(('offset', offset))
-            
+
         if limit is not None:
-            
+
             _query_params.append(('limit', limit))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -24046,13 +24046,13 @@ class DefaultApi:
             _path_params['id'] = id
         # process the query parameters
         if offset is not None:
-            
+
             _query_params.append(('offset', offset))
-            
+
         if limit is not None:
-            
+
             _query_params.append(('limit', limit))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -24349,13 +24349,13 @@ class DefaultApi:
             _path_params['id'] = id
         # process the query parameters
         if offset is not None:
-            
+
             _query_params.append(('offset', offset))
-            
+
         if limit is not None:
-            
+
             _query_params.append(('limit', limit))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -24921,13 +24921,13 @@ class DefaultApi:
             _path_params['id'] = id
         # process the query parameters
         if offset is not None:
-            
+
             _query_params.append(('offset', offset))
-            
+
         if limit is not None:
-            
+
             _query_params.append(('limit', limit))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -25313,45 +25313,45 @@ class DefaultApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         if status is not None:
-            
+
             _query_params.append(('status', status.value))
-            
+
         if needs_file_id is not None:
-            
+
             _query_params.append(('needs_file_id', needs_file_id))
-            
+
         if upstream_job_id is not None:
-            
+
             _query_params.append(('upstream_job_id', upstream_job_id))
-            
+
         if offset is not None:
-            
+
             _query_params.append(('offset', offset))
-            
+
         if limit is not None:
-            
+
             _query_params.append(('limit', limit))
-            
+
         if sort_by is not None:
-            
+
             _query_params.append(('sort_by', sort_by))
-            
+
         if reverse_sort is not None:
-            
+
             _query_params.append(('reverse_sort', reverse_sort))
-            
+
         if include_relationships is not None:
-            
+
             _query_params.append(('include_relationships', include_relationships))
-            
+
         if active_compute_node_id is not None:
-            
+
             _query_params.append(('active_compute_node_id', active_compute_node_id))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -25698,33 +25698,33 @@ class DefaultApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         if offset is not None:
-            
+
             _query_params.append(('offset', offset))
-            
+
         if limit is not None:
-            
+
             _query_params.append(('limit', limit))
-            
+
         if sort_by is not None:
-            
+
             _query_params.append(('sort_by', sort_by))
-            
+
         if reverse_sort is not None:
-            
+
             _query_params.append(('reverse_sort', reverse_sort))
-            
+
         if memory is not None:
-            
+
             _query_params.append(('memory', memory))
-            
+
         if num_cpus is not None:
-            
+
             _query_params.append(('num_cpus', num_cpus))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -26943,53 +26943,53 @@ class DefaultApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         if job_id is not None:
-            
+
             _query_params.append(('job_id', job_id))
-            
+
         if offset is not None:
-            
+
             _query_params.append(('offset', offset))
-            
+
         if limit is not None:
-            
+
             _query_params.append(('limit', limit))
-            
+
         if sort_by is not None:
-            
+
             _query_params.append(('sort_by', sort_by))
-            
+
         if reverse_sort is not None:
-            
+
             _query_params.append(('reverse_sort', reverse_sort))
-            
+
         if name is not None:
-            
+
             _query_params.append(('name', name))
-            
+
         if memory is not None:
-            
+
             _query_params.append(('memory', memory))
-            
+
         if num_cpus is not None:
-            
+
             _query_params.append(('num_cpus', num_cpus))
-            
+
         if num_gpus is not None:
-            
+
             _query_params.append(('num_gpus', num_gpus))
-            
+
         if num_nodes is not None:
-            
+
             _query_params.append(('num_nodes', num_nodes))
-            
+
         if runtime is not None:
-            
+
             _query_params.append(('runtime', runtime))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -27388,49 +27388,49 @@ class DefaultApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         if job_id is not None:
-            
+
             _query_params.append(('job_id', job_id))
-            
+
         if offset is not None:
-            
+
             _query_params.append(('offset', offset))
-            
+
         if limit is not None:
-            
+
             _query_params.append(('limit', limit))
-            
+
         if sort_by is not None:
-            
+
             _query_params.append(('sort_by', sort_by))
-            
+
         if reverse_sort is not None:
-            
+
             _query_params.append(('reverse_sort', reverse_sort))
-            
+
         if run_id is not None:
-            
+
             _query_params.append(('run_id', run_id))
-            
+
         if return_code is not None:
-            
+
             _query_params.append(('return_code', return_code))
-            
+
         if status is not None:
-            
+
             _query_params.append(('status', status.value))
-            
+
         if all_runs is not None:
-            
+
             _query_params.append(('all_runs', all_runs))
-            
+
         if compute_node_id is not None:
-            
+
             _query_params.append(('compute_node_id', compute_node_id))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -27730,13 +27730,13 @@ class DefaultApi:
             _path_params['id'] = id
         # process the query parameters
         if offset is not None:
-            
+
             _query_params.append(('offset', offset))
-            
+
         if limit is not None:
-            
+
             _query_params.append(('limit', limit))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -28096,37 +28096,37 @@ class DefaultApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         if offset is not None:
-            
+
             _query_params.append(('offset', offset))
-            
+
         if limit is not None:
-            
+
             _query_params.append(('limit', limit))
-            
+
         if sort_by is not None:
-            
+
             _query_params.append(('sort_by', sort_by))
-            
+
         if reverse_sort is not None:
-            
+
             _query_params.append(('reverse_sort', reverse_sort))
-            
+
         if scheduler_id is not None:
-            
+
             _query_params.append(('scheduler_id', scheduler_id))
-            
+
         if scheduler_config_id is not None:
-            
+
             _query_params.append(('scheduler_config_id', scheduler_config_id))
-            
+
         if status is not None:
-            
+
             _query_params.append(('status', status))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -28564,61 +28564,61 @@ class DefaultApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         if offset is not None:
-            
+
             _query_params.append(('offset', offset))
-            
+
         if limit is not None:
-            
+
             _query_params.append(('limit', limit))
-            
+
         if sort_by is not None:
-            
+
             _query_params.append(('sort_by', sort_by))
-            
+
         if reverse_sort is not None:
-            
+
             _query_params.append(('reverse_sort', reverse_sort))
-            
+
         if name is not None:
-            
+
             _query_params.append(('name', name))
-            
+
         if account is not None:
-            
+
             _query_params.append(('account', account))
-            
+
         if gres is not None:
-            
+
             _query_params.append(('gres', gres))
-            
+
         if mem is not None:
-            
+
             _query_params.append(('mem', mem))
-            
+
         if nodes is not None:
-            
+
             _query_params.append(('nodes', nodes))
-            
+
         if partition is not None:
-            
+
             _query_params.append(('partition', partition))
-            
+
         if qos is not None:
-            
+
             _query_params.append(('qos', qos))
-            
+
         if tmp is not None:
-            
+
             _query_params.append(('tmp', tmp))
-            
+
         if walltime is not None:
-            
+
             _query_params.append(('walltime', walltime))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -28926,21 +28926,21 @@ class DefaultApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         if job_id is not None:
-            
+
             _query_params.append(('job_id', job_id))
-            
+
         if offset is not None:
-            
+
             _query_params.append(('offset', offset))
-            
+
         if limit is not None:
-            
+
             _query_params.append(('limit', limit))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -29313,41 +29313,41 @@ class DefaultApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         if consumer_job_id is not None:
-            
+
             _query_params.append(('consumer_job_id', consumer_job_id))
-            
+
         if producer_job_id is not None:
-            
+
             _query_params.append(('producer_job_id', producer_job_id))
-            
+
         if offset is not None:
-            
+
             _query_params.append(('offset', offset))
-            
+
         if limit is not None:
-            
+
             _query_params.append(('limit', limit))
-            
+
         if sort_by is not None:
-            
+
             _query_params.append(('sort_by', sort_by))
-            
+
         if reverse_sort is not None:
-            
+
             _query_params.append(('reverse_sort', reverse_sort))
-            
+
         if name is not None:
-            
+
             _query_params.append(('name', name))
-            
+
         if is_ephemeral is not None:
-            
+
             _query_params.append(('is_ephemeral', is_ephemeral))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -29644,13 +29644,13 @@ class DefaultApi:
             _path_params['user_name'] = user_name
         # process the query parameters
         if offset is not None:
-            
+
             _query_params.append(('offset', offset))
-            
+
         if limit is not None:
-            
+
             _query_params.append(('limit', limit))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -30279,37 +30279,37 @@ class DefaultApi:
         # process the path parameters
         # process the query parameters
         if offset is not None:
-            
+
             _query_params.append(('offset', offset))
-            
+
         if sort_by is not None:
-            
+
             _query_params.append(('sort_by', sort_by))
-            
+
         if reverse_sort is not None:
-            
+
             _query_params.append(('reverse_sort', reverse_sort))
-            
+
         if limit is not None:
-            
+
             _query_params.append(('limit', limit))
-            
+
         if name is not None:
-            
+
             _query_params.append(('name', name))
-            
+
         if user is not None:
-            
+
             _query_params.append(('user', user))
-            
+
         if description is not None:
-            
+
             _query_params.append(('description', description))
-            
+
         if is_archived is not None:
-            
+
             _query_params.append(('is_archived', is_archived))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -31184,9 +31184,9 @@ class DefaultApi:
             _path_params['id'] = id
         # process the query parameters
         if dry_run is not None:
-            
+
             _query_params.append(('dry_run', dry_run))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -32122,9 +32122,9 @@ class DefaultApi:
             _path_params['id'] = id
         # process the query parameters
         if failed_only is not None:
-            
+
             _query_params.append(('failed_only', failed_only))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -32439,9 +32439,9 @@ class DefaultApi:
             _path_params['id'] = id
         # process the query parameters
         if force is not None:
-            
+
             _query_params.append(('force', force))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -36998,5 +36998,3 @@ class DefaultApi:
             _host=_host,
             _request_auth=_request_auth
         )
-
-

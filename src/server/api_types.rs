@@ -956,8 +956,6 @@ pub enum InitializeJobsResponse {
 pub enum GetTaskResponse {
     /// Successful response
     SuccessfulResponse(models::TaskModel),
-    /// Forbidden - user does not have access
-    ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response

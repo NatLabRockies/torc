@@ -2478,18 +2478,6 @@ where
                                         .expect("impossible to fail to serialize");
                                     *response.body_mut() = Body::from(body_content);
                                 }
-                                GetTaskResponse::ForbiddenErrorResponse(body) => {
-                                    *response.status_mut() = StatusCode::from_u16(403)
-                                        .expect("Unable to turn 403 into a StatusCode");
-                                    response.headers_mut().insert(
-                                    CONTENT_TYPE,
-                                    HeaderValue::from_str("application/json")
-                                        .expect("Unable to create Content-Type header for application/json"),
-                                );
-                                    let body_content = serde_json::to_string(&body)
-                                        .expect("impossible to fail to serialize");
-                                    *response.body_mut() = Body::from(body_content);
-                                }
                                 GetTaskResponse::NotFoundErrorResponse(body) => {
                                     *response.status_mut() = StatusCode::from_u16(404)
                                         .expect("Unable to turn 404 into a StatusCode");

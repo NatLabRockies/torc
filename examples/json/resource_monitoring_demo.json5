@@ -29,13 +29,13 @@
       "resource_requirements": "medium"
     }
   ],
-  
+
   // File definitions
   "files": [],
-  
+
   // User data
   "user_data": [],
-  
+
   // Resource requirements
   "resource_requirements": [
     {
@@ -47,10 +47,10 @@
       "runtime": "PT5M"
     }
   ],
-  
+
   // Slurm schedulers
   "slurm_schedulers": [],
-  
+
     "resource_monitor": {
     "enabled": true,
     "granularity": "time_series",

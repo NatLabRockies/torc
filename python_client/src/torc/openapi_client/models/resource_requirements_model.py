@@ -97,5 +97,3 @@ class ResourceRequirementsModel(BaseModel):
             "runtime": obj.get("runtime") if obj.get("runtime") is not None else 'P0DT1M'
         })
         return _obj
-
-

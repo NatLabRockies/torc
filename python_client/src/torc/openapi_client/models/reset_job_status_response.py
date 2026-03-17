@@ -89,5 +89,3 @@ class ResetJobStatusResponse(BaseModel):
             "reset_type": obj.get("reset_type")
         })
         return _obj
-
-

@@ -12,7 +12,7 @@ The API module is organized as follows:
 api/
 ├── mod.rs                    # Common utilities and re-exports
 ├── events.rs                 # Event-related API endpoints
-├── workflows.rs              # Workflow-related API endpoints  
+├── workflows.rs              # Workflow-related API endpoints
 ├── jobs.rs                   # Job-related API endpoints
 ├── files.rs                  # File-related API endpoints
 ├── results.rs                # Result-related API endpoints

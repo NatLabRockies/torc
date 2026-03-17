@@ -107,5 +107,3 @@ class SlurmSchedulerModel(BaseModel):
             "extra": obj.get("extra")
         })
         return _obj
-
-

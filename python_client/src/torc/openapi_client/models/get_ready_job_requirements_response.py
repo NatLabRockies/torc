@@ -93,5 +93,3 @@ class GetReadyJobRequirementsResponse(BaseModel):
             "max_runtime": obj.get("max_runtime")
         })
         return _obj
-
-

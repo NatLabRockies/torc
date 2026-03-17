@@ -140,7 +140,7 @@ Add a user to an access group.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | ID of the access group |
 **body** | [**UserGroupMembershipModel**](UserGroupMembershipModel.md) | User membership to add |
 
@@ -171,7 +171,7 @@ Grant an access group access to a workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | ID of the workflow |
 **body** | [**WorkflowAccessGroupModel**](WorkflowAccessGroupModel.md) | Group association to create |
 
@@ -202,14 +202,14 @@ Cancel a workflow. Workers will detect the status change and cancel jobs.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -238,7 +238,7 @@ Check if a user can access a workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **workflow_id** | **Int64** | ID of the workflow |
 **user_name** | **String** | Username to check |
 
@@ -269,7 +269,7 @@ Atomically claim a workflow action for execution by a compute node.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Workflow ID |
 **action_id** | **Int64** | Action ID |
 **body** | [**ClaimActionRequest**](ClaimActionRequest.md) | Compute node claiming the action |
@@ -301,7 +301,7 @@ Return jobs that are ready for submission and meet worker resource requirements.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Workflow ID |
 **limit** | **Int64** |  |
 **body** | [**ComputeNodesResources**](ComputeNodesResources.md) | Available worker resources. |
@@ -340,7 +340,7 @@ Return user-requested number of jobs that are ready for submission. Sets status 
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
@@ -348,7 +348,7 @@ Name | Type | Description  | Notes
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **limit** | **Int64** |  | [default to 1.0]
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -377,7 +377,7 @@ Complete a job, connect it to a result, and manage side effects.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Job ID |
 **status** | [**JobStatus**](.md) | New job status. |
 **run_id** | **Int64** | Current job run ID |
@@ -410,7 +410,7 @@ Create a new access group.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **body** | [**AccessGroupModel**](AccessGroupModel.md) | Access group to create |
 
 ### Return type
@@ -440,7 +440,7 @@ Store a compute node.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **body** | [**ComputeNodeModel**](ComputeNodeModel.md) | Compute node |
 
 ### Return type
@@ -470,7 +470,7 @@ Store an event.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **body** | [**EventModel**](EventModel.md) | Event body |
 
 ### Return type
@@ -500,7 +500,7 @@ Create a failure handler with rules for automatic job retry.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **body** | [**FailureHandlerModel**](FailureHandlerModel.md) | Failure handler to create |
 
 ### Return type
@@ -530,7 +530,7 @@ Store a file.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **body** | [**FileModel**](FileModel.md) | file. |
 
 ### Return type
@@ -560,7 +560,7 @@ Store a job.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **body** | [**JobModel**](JobModel.md) | Job body |
 
 ### Return type
@@ -590,7 +590,7 @@ Create jobs in bulk. Recommended max job count of 10,000.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **body** | [**JobsModel**](JobsModel.md) |  |
 
 ### Return type
@@ -620,7 +620,7 @@ Store a local scheduler. table.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **body** | [**LocalSchedulerModel**](LocalSchedulerModel.md) | local compute node configuration. |
 
 ### Return type
@@ -650,7 +650,7 @@ Store remote workers for a workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Workflow ID |
 **workers** | [**Vector{String}**](String.md) | List of remote workers to add |
 
@@ -681,7 +681,7 @@ Store one resource requirements definition.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **body** | [**ResourceRequirementsModel**](ResourceRequirementsModel.md) | resource requirements. |
 
 ### Return type
@@ -711,7 +711,7 @@ Store a job result.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **body** | [**ResultModel**](ResultModel.md) | result. |
 
 ### Return type
@@ -741,7 +741,7 @@ Create a new RO-Crate entity.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **body** | [**RoCrateEntityModel**](RoCrateEntityModel.md) | RO-Crate entity to create |
 
 ### Return type
@@ -771,7 +771,7 @@ Store a scheduled compute node.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **body** | [**ScheduledComputeNodesModel**](ScheduledComputeNodesModel.md) | scheduled compute node. |
 
 ### Return type
@@ -801,7 +801,7 @@ Store a Slurm compute node configuration.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **body** | [**SlurmSchedulerModel**](SlurmSchedulerModel.md) | Slurm compute node configuration. |
 
 ### Return type
@@ -831,7 +831,7 @@ Store Slurm accounting stats collected via sacct for a job step.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **body** | [**SlurmStatsModel**](SlurmStatsModel.md) | Slurm stats record. |
 
 ### Return type
@@ -861,7 +861,7 @@ Store a user data record.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **body** | [**UserDataModel**](UserDataModel.md) | user data. |
 
 ### Optional Parameters
@@ -898,7 +898,7 @@ Store a workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **body** | [**WorkflowModel**](WorkflowModel.md) | Workflow attributes |
 
 ### Return type
@@ -928,7 +928,7 @@ Create a workflow action.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Workflow ID |
 **body** | [**WorkflowActionModel**](WorkflowActionModel.md) | Workflow action to create |
 
@@ -959,14 +959,14 @@ Delete an access group.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | ID of the access group |
 
 ### Optional Parameters
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -995,14 +995,14 @@ Delete all user data records for one workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **workflow_id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -1031,14 +1031,14 @@ Delete a compute node.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | ID of the compute node |
 
 ### Optional Parameters
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -1067,14 +1067,14 @@ Delete all compute node records for one workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **workflow_id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -1103,14 +1103,14 @@ Deletes an event.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | ID of the event record. |
 
 ### Optional Parameters
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -1139,14 +1139,14 @@ Delete all events for one workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **workflow_id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -1175,14 +1175,14 @@ Delete a failure handler.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Failure handler ID |
 
 ### Optional Parameters
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -1211,14 +1211,14 @@ Delete a file.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | ID of the file record. |
 
 ### Optional Parameters
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -1247,14 +1247,14 @@ Delete all files for one workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **workflow_id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -1283,14 +1283,14 @@ Delete a job.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Job ID |
 
 ### Optional Parameters
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -1319,14 +1319,14 @@ Delete all jobs for one workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **workflow_id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -1355,14 +1355,14 @@ Delete a local scheduler.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | ID of the local compute node configuration record. |
 
 ### Optional Parameters
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -1391,14 +1391,14 @@ Delete all local schedulers for one workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **workflow_id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -1427,7 +1427,7 @@ Delete a remote worker from a workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Workflow ID |
 **worker** | **String** | Worker address (URL-encoded) |
 
@@ -1458,14 +1458,14 @@ Delete a resource requirements record.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Resource requirements ID |
 
 ### Optional Parameters
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -1494,14 +1494,14 @@ Delete all resource requirements records for one workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **workflow_id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -1530,14 +1530,14 @@ Delete a job result.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Results ID |
 
 ### Optional Parameters
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -1566,14 +1566,14 @@ Delete all job results for one workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **workflow_id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -1602,14 +1602,14 @@ Delete all RO-Crate entities for a workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** |  |
 
 ### Optional Parameters
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** | Optional request body (ignored) | 
+ **body** | **Any** | Optional request body (ignored) |
 
 ### Return type
 
@@ -1638,14 +1638,14 @@ Delete an RO-Crate entity.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** |  |
 
 ### Optional Parameters
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** | Optional request body (ignored) | 
+ **body** | **Any** | Optional request body (ignored) |
 
 ### Return type
 
@@ -1674,14 +1674,14 @@ Delete a scheduled compute node.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Scheduled compute node ID |
 
 ### Optional Parameters
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -1710,14 +1710,14 @@ Delete all scheduled compute node records for one workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **workflow_id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -1746,14 +1746,14 @@ Delete Slurm compute node configuration.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Slurm compute node configuration ID |
 
 ### Optional Parameters
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -1782,14 +1782,14 @@ Retrieve all Slurm compute node configurations for one workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **workflow_id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -1818,14 +1818,14 @@ Delete a user data record.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | User data record ID |
 
 ### Optional Parameters
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -1854,14 +1854,14 @@ Delete a workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Workflow ID. |
 
 ### Optional Parameters
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -1890,7 +1890,7 @@ Get an access group by ID.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | ID of the access group |
 
 ### Return type
@@ -1920,7 +1920,7 @@ Retrieve a compute node by ID.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | ID of the compute node record |
 
 ### Return type
@@ -1950,7 +1950,7 @@ Retrieve an event by ID.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | ID of the events record |
 
 ### Return type
@@ -1980,7 +1980,7 @@ Retrieve a failure handler by ID.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Failure handler ID |
 
 ### Return type
@@ -2010,7 +2010,7 @@ Retrieve a file.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | ID of the files record |
 
 ### Return type
@@ -2040,7 +2040,7 @@ Retrieve a job.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | ID of the job record |
 
 ### Return type
@@ -2070,7 +2070,7 @@ Return the timestamp of the latest event in ms since the epoch in UTC.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Workflow ID |
 
 ### Return type
@@ -2100,7 +2100,7 @@ Retrieve a local scheduler.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Scheduler ID |
 
 ### Return type
@@ -2130,7 +2130,7 @@ Get pending (unexecuted) workflow actions for a workflow, optionally filtered by
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
@@ -2166,7 +2166,7 @@ Return the resource requirements for jobs with a status of ready.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
@@ -2202,7 +2202,7 @@ Retrieve one resource requirements record.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Resource requirements ID |
 
 ### Return type
@@ -2232,7 +2232,7 @@ Retrieve a job result.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Results ID |
 
 ### Return type
@@ -2262,7 +2262,7 @@ Get an RO-Crate entity by ID.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** |  |
 
 ### Return type
@@ -2292,7 +2292,7 @@ Retrieve a scheduled compute node.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | ID of the scheduled_compute_nodes record |
 
 ### Return type
@@ -2322,7 +2322,7 @@ Retrieve a Slurm compute node configuration.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Slurm compute node configuration ID |
 
 ### Return type
@@ -2352,7 +2352,7 @@ Retrieve a user data record.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | User data record ID |
 
 ### Return type
@@ -2408,7 +2408,7 @@ Retrieve a workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | ID of the workflows record |
 
 ### Return type
@@ -2438,7 +2438,7 @@ Get all workflow actions for a workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Workflow ID |
 
 ### Return type
@@ -2468,7 +2468,7 @@ Return the workflow status.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Workflow ID |
 
 ### Return type
@@ -2498,7 +2498,7 @@ Initialize job relationships based on file and user_data relationships.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
@@ -2507,7 +2507,7 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **only_uninitialized** | **Bool** | Only initialize jobs with a status of uninitialized. | [default to false]
  **clear_ephemeral_user_data** | **Bool** | Clear all ephemeral user data. | [default to true]
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -2536,7 +2536,7 @@ Return true if all jobs in the workflow are complete.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Workflow ID |
 
 ### Return type
@@ -2566,7 +2566,7 @@ Return true if all jobs in the workflow are uninitialized or disabled.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Workflow ID |
 
 ### Return type
@@ -2596,7 +2596,7 @@ List all access groups.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 
 ### Optional Parameters
 
@@ -2632,7 +2632,7 @@ Retrieve all compute node records for one workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **workflow_id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
@@ -2674,7 +2674,7 @@ Retrieve all events for one workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **workflow_id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
@@ -2715,7 +2715,7 @@ List all failure handlers for a workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
@@ -2752,7 +2752,7 @@ Retrieve all files for one workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **workflow_id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
@@ -2795,7 +2795,7 @@ List members of an access group.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | ID of the access group |
 
 ### Optional Parameters
@@ -2832,7 +2832,7 @@ Retrieve all job blocking relationships for one workflow from the job_depends_on
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
@@ -2869,7 +2869,7 @@ Retrieve all job-file relationships for one workflow from the job_input_file and
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
@@ -2906,7 +2906,7 @@ Retrieve all job IDs for one workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Workflow ID |
 
 ### Return type
@@ -2936,7 +2936,7 @@ Retrieve all job-user_data relationships for one workflow from the job_input_use
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
@@ -2973,7 +2973,7 @@ Retrieve all jobs for one workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **workflow_id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
@@ -3017,7 +3017,7 @@ Retrieve local schedulers for one workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **workflow_id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
@@ -3058,7 +3058,7 @@ List missing user data that should exist.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Workflow ID |
 
 ### Return type
@@ -3088,7 +3088,7 @@ List all remote workers for a workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Workflow ID |
 
 ### Return type
@@ -3118,7 +3118,7 @@ List files that must exist.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Workflow ID |
 
 ### Return type
@@ -3148,7 +3148,7 @@ Retrieve all resource requirements records for one workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **workflow_id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
@@ -3194,7 +3194,7 @@ Retrieve all job results for one workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **workflow_id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
@@ -3239,7 +3239,7 @@ List all RO-Crate entities for a workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** |  |
 
 ### Optional Parameters
@@ -3276,7 +3276,7 @@ Retrieve scheduled compute node records for one workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **workflow_id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
@@ -3318,7 +3318,7 @@ Retrieve a Slurm compute node configuration.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **workflow_id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
@@ -3366,7 +3366,7 @@ Retrieve Slurm accounting stats for a workflow, optionally filtered by job.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **workflow_id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
@@ -3404,7 +3404,7 @@ Retrieve all user data records for one workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **workflow_id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
@@ -3447,7 +3447,7 @@ List groups a user belongs to.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **user_name** | **String** | Username |
 
 ### Optional Parameters
@@ -3484,7 +3484,7 @@ List access groups that have access to a workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | ID of the workflow |
 
 ### Return type
@@ -3514,7 +3514,7 @@ Retrieve all workflows.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 
 ### Optional Parameters
 
@@ -3556,7 +3556,7 @@ Change the status of a job and manage side effects.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Job ID |
 **status** | [**JobStatus**](.md) | New job status |
 **run_id** | **Int64** | Current job run ID |
@@ -3565,7 +3565,7 @@ Name | Type | Description  | Notes
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -3620,7 +3620,7 @@ Check for changed job inputs and update status accordingly.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
@@ -3628,7 +3628,7 @@ Name | Type | Description  | Notes
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **dry_run** | **Bool** | If true, report changes but do not change the database. | [default to nothing]
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -3657,7 +3657,7 @@ Remove a user from an access group.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | ID of the access group |
 **user_name** | **String** | Username to remove |
 
@@ -3665,7 +3665,7 @@ Name | Type | Description  | Notes
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -3694,7 +3694,7 @@ Revoke an access group's access to a workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | ID of the workflow |
 **group_id** | **Int64** | ID of the access group |
 
@@ -3702,7 +3702,7 @@ Name | Type | Description  | Notes
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -3731,7 +3731,7 @@ Reset status for jobs to uninitialized.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
@@ -3739,7 +3739,7 @@ Name | Type | Description  | Notes
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **failed_only** | **Bool** | Only reset failed jobs | [default to false]
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -3768,7 +3768,7 @@ Reset workflow status.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
@@ -3776,7 +3776,7 @@ Name | Type | Description  | Notes
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **force** | **Bool** | If true, ignore active jobs check and reset anyway | [default to false]
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -3805,7 +3805,7 @@ Retry a failed job by resetting it to ready status and incrementing attempt_id.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Job ID |
 **run_id** | **Int64** | Current workflow run ID |
 
@@ -3813,7 +3813,7 @@ Name | Type | Description  | Notes
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -3842,7 +3842,7 @@ Start a job and manage side effects.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Job ID |
 **run_id** | **Int64** | Current job run ID |
 **compute_node_id** | **Int64** | Compute node ID that started the job |
@@ -3851,7 +3851,7 @@ Name | Type | Description  | Notes
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+ **body** | **Any** |  |
 
 ### Return type
 
@@ -3880,7 +3880,7 @@ Update a compute node.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | ID of the compute node. |
 **body** | [**ComputeNodeModel**](ComputeNodeModel.md) | Compute node to update in the database. |
 
@@ -3911,7 +3911,7 @@ Update an event.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | ID of the event. |
 **body** | [**EventModel**](EventModel.md) | event to update in the table. |
 
@@ -3942,7 +3942,7 @@ Update a file.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | ID of the file. |
 **body** | [**FileModel**](FileModel.md) | file to update in the table. |
 
@@ -3973,7 +3973,7 @@ Update a job.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | ID of the job. |
 **body** | [**JobModel**](JobModel.md) | job to update in the table. |
 
@@ -4004,7 +4004,7 @@ Update a local scheduler.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Scheduler ID |
 **body** | [**LocalSchedulerModel**](LocalSchedulerModel.md) | local compute node configuration to update in the table. |
 
@@ -4035,7 +4035,7 @@ Update one resource requirements record.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Resource requirements ID |
 **body** | [**ResourceRequirementsModel**](ResourceRequirementsModel.md) | resource requirements to update in the table. |
 
@@ -4066,7 +4066,7 @@ Update a job result.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Result ID |
 **body** | [**ResultModel**](ResultModel.md) | result to update in the table. |
 
@@ -4097,7 +4097,7 @@ Update an RO-Crate entity.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** |  |
 **body** | [**RoCrateEntityModel**](RoCrateEntityModel.md) | Updated RO-Crate entity |
 
@@ -4128,7 +4128,7 @@ Update a scheduled compute node.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Scheduled compute node ID |
 **body** | [**ScheduledComputeNodesModel**](ScheduledComputeNodesModel.md) | scheduled compute node to update in the table. |
 
@@ -4159,7 +4159,7 @@ Update a Slurm compute node configuration.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Slurm compute node configuration ID |
 **body** | [**SlurmSchedulerModel**](SlurmSchedulerModel.md) | Slurm compute node configuration to update in the table. |
 
@@ -4190,7 +4190,7 @@ Update a user data record.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | User data record ID |
 **body** | [**UserDataModel**](UserDataModel.md) | user data to update in the table. |
 
@@ -4221,7 +4221,7 @@ Update a workflow.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Workflow ID |
 **body** | [**WorkflowModel**](WorkflowModel.md) | workflow to update in the table. |
 
@@ -4252,7 +4252,7 @@ Update the workflow status.
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **DefaultApi** | API context | 
+ **_api** | **DefaultApi** | API context |
 **id** | **Int64** | Workflow ID |
 **body** | [**WorkflowStatusModel**](WorkflowStatusModel.md) | Updated workflow status |
 
@@ -4270,4 +4270,3 @@ No authorization required
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
-

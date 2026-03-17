@@ -8,6 +8,7 @@ import time
 import sys
 import random
 
+
 def allocate_memory(duration_seconds=60):
     """
     Allocate and manipulate large data structures.
@@ -23,7 +24,7 @@ def allocate_memory(duration_seconds=60):
 
     # Allocate memory in chunks over the duration
     chunk_size = 500_000  # 500k integers per chunk
-    target_chunks = 20    # Target ~20 chunks (10 million integers total)
+    target_chunks = 20  # Target ~20 chunks (10 million integers total)
 
     while time.time() - start_time < duration_seconds:
         iteration += 1
@@ -36,8 +37,10 @@ def allocate_memory(duration_seconds=60):
 
             elapsed = time.time() - start_time
             memory_mb = (total_elements * 8) / (1024 * 1024)  # Rough estimate
-            print(f"Iteration {iteration}: Allocated {len(data_structures)} chunks, "
-                  f"~{memory_mb:.1f} MB, elapsed: {elapsed:.1f}s")
+            print(
+                f"Iteration {iteration}: Allocated {len(data_structures)} chunks, "
+                f"~{memory_mb:.1f} MB, elapsed: {elapsed:.1f}s"
+            )
         else:
             # Once we've allocated target memory, do some operations on it
             # to keep memory active
@@ -55,8 +58,10 @@ def allocate_memory(duration_seconds=60):
 
             if iteration % 5 == 0:
                 elapsed = time.time() - start_time
-                print(f"Iteration {iteration}: Working on chunk {chunk_idx}, "
-                      f"sample sum: {total}, elapsed: {elapsed:.1f}s")
+                print(
+                    f"Iteration {iteration}: Working on chunk {chunk_idx}, "
+                    f"sample sum: {total}, elapsed: {elapsed:.1f}s"
+                )
 
         # Small sleep to avoid spinning too fast
         time.sleep(0.5)
@@ -70,10 +75,11 @@ def allocate_memory(duration_seconds=60):
 
     return len(data_structures)
 
+
 if __name__ == "__main__":
     try:
         chunks = allocate_memory(60)
-        print(f"\n✓ Memory-intensive job completed successfully")
+        print("\n✓ Memory-intensive job completed successfully")
         sys.exit(0)
     except Exception as e:
         print(f"\n✗ Error: {e}", file=sys.stderr)

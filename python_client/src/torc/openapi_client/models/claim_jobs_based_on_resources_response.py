@@ -93,5 +93,3 @@ class ClaimJobsBasedOnResourcesResponse(BaseModel):
             "reason": obj.get("reason")
         })
         return _obj
-
-

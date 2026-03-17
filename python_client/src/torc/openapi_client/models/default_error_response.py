@@ -89,5 +89,3 @@ class DefaultErrorResponse(BaseModel):
             "code": obj.get("code")
         })
         return _obj
-
-

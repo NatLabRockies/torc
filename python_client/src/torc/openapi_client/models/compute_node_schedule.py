@@ -89,5 +89,3 @@ class ComputeNodeSchedule(BaseModel):
             "start_one_worker_per_node": obj.get("start_one_worker_per_node") if obj.get("start_one_worker_per_node") is not None else False
         })
         return _obj
-
-

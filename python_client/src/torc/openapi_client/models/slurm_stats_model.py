@@ -105,5 +105,3 @@ class SlurmStatsModel(BaseModel):
             "node_list": obj.get("node_list")
         })
         return _obj
-
-

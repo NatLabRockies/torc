@@ -208,7 +208,7 @@
       ]
     }
   ],
-  
+
   // File definitions
   "files": [
     {
@@ -296,7 +296,7 @@
       "path": "/scratch/pipeline/final_results.dat"
     }
   ],
-  
+
   // Resource requirements
   "resource_requirements": [
     {
@@ -324,7 +324,7 @@
       "num_nodes": 1
     }
   ],
-  
+
   // Slurm schedulers
   "slurm_schedulers": [
     {
@@ -346,7 +346,7 @@
       "nodes": 1
     }
   ],
-  
+
     "resource_monitor": {
     "enabled": true,
     "sample_interval_seconds": 10,

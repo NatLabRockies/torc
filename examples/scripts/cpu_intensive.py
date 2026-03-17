@@ -10,6 +10,7 @@ import sys
 import multiprocessing
 import os
 
+
 def is_prime(n):
     """Check if a number is prime using trial division."""
     if n < 2:
@@ -27,13 +28,16 @@ def is_prime(n):
         i += 2
     return True
 
+
 def compute_primes_worker(worker_id, duration_seconds, return_dict):
     """
     Worker function that runs in a subprocess.
     Computes prime numbers for the specified duration.
     """
     pid = os.getpid()
-    print(f"Worker {worker_id} (PID {pid}): Starting prime computation for {duration_seconds} seconds...")
+    print(
+        f"Worker {worker_id} (PID {pid}): Starting prime computation for {duration_seconds} seconds..."
+    )
 
     start_time = time.time()
     primes_found = 0
@@ -49,7 +53,9 @@ def compute_primes_worker(worker_id, duration_seconds, return_dict):
             # Print progress every 1000 primes
             if primes_found % 1000 == 0:
                 elapsed = time.time() - start_time
-                print(f"Worker {worker_id} (PID {pid}): Found {primes_found} primes in {elapsed:.1f}s, largest: {largest_prime}")
+                print(
+                    f"Worker {worker_id} (PID {pid}): Found {primes_found} primes in {elapsed:.1f}s, largest: {largest_prime}"
+                )
 
         n += 3  # Skip by 3 to distribute work across workers
 
@@ -59,15 +65,16 @@ def compute_primes_worker(worker_id, duration_seconds, return_dict):
     print(f"Worker {worker_id}: Largest prime: {largest_prime}")
 
     return_dict[worker_id] = {
-        'primes_found': primes_found,
-        'largest_prime': largest_prime,
-        'pid': pid
+        "primes_found": primes_found,
+        "largest_prime": largest_prime,
+        "pid": pid,
     }
+
 
 def main():
     """Main function that spawns 3 worker processes."""
     print(f"Main process PID: {os.getpid()}")
-    print(f"Starting CPU-intensive job with 3 worker subprocesses...")
+    print("Starting CPU-intensive job with 3 worker subprocesses...")
 
     # Shared dictionary for results (multiprocessing.Manager provides shared memory)
     manager = multiprocessing.Manager()
@@ -82,8 +89,7 @@ def main():
 
     for i in range(num_workers):
         p = multiprocessing.Process(
-            target=compute_primes_worker,
-            args=(i, duration_per_worker, return_dict)
+            target=compute_primes_worker, args=(i, duration_per_worker, return_dict)
         )
         processes.append(p)
         p.start()
@@ -97,8 +103,8 @@ def main():
     elapsed = time.time() - start_time
 
     # Aggregate results
-    total_primes = sum(r['primes_found'] for r in return_dict.values())
-    max_prime = max(r['largest_prime'] for r in return_dict.values())
+    total_primes = sum(r["primes_found"] for r in return_dict.values())
+    max_prime = max(r["largest_prime"] for r in return_dict.values())
 
     print(f"\n{'='*60}")
     print(f"All workers completed in {elapsed:.2f} seconds")
@@ -109,13 +115,15 @@ def main():
 
     return total_primes
 
+
 if __name__ == "__main__":
     try:
         primes = main()
-        print(f"\n✓ CPU-intensive job with multiprocessing completed successfully")
+        print("\n✓ CPU-intensive job with multiprocessing completed successfully")
         sys.exit(0)
     except Exception as e:
         print(f"\n✗ Error: {e}", file=sys.stderr)
         import traceback
+
         traceback.print_exc()
         sys.exit(1)

@@ -23,7 +23,7 @@
       "command": "bash tests/scripts/postprocess.sh -i ${files.input.f4} -i ${files.input.f5} -o ${files.output.f6}"
     }
   ],
-  
+
   // File definitions
   "files": [
     {

@@ -28,7 +28,7 @@
       "resource_requirements": "small"
     }
   ],
-  
+
   // Resource requirements
   "resource_requirements": [
     {
@@ -48,7 +48,7 @@
       "runtime": "PT2H"
     }
   ],
-  
+
   // Slurm schedulers
   "slurm_schedulers": [
     {
@@ -70,7 +70,7 @@
       "walltime": "00:30:00"
     }
   ],
-  
+
   // Workflow actions
   "actions": [
     {

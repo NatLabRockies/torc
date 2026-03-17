@@ -116,5 +116,3 @@ class JobModel(BaseModel):
             "attempt_id": obj.get("attempt_id") if obj.get("attempt_id") is not None else 1
         })
         return _obj
-
-

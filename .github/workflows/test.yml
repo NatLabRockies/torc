@@ -46,7 +46,7 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-        
+
       - name: Ensure cargo in PATH (Windows)
         if: matrix.os == 'windows-latest'
         run: echo "$HOME/.cargo/bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append

@@ -91,5 +91,3 @@ class LocalSchedulerModel(BaseModel):
             "num_cpus": obj.get("num_cpus")
         })
         return _obj
-
-

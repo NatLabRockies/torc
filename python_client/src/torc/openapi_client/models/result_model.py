@@ -110,5 +110,3 @@ class ResultModel(BaseModel):
             "avg_cpu_percent": obj.get("avg_cpu_percent")
         })
         return _obj
-
-

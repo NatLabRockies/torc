@@ -101,5 +101,3 @@ class ListLocalSchedulersResponse(BaseModel):
             "has_more": obj.get("has_more")
         })
         return _obj
-
-

@@ -101,5 +101,3 @@ class WorkflowActionModel(BaseModel):
             "persistent": obj.get("persistent") if obj.get("persistent") is not None else False
         })
         return _obj
-
-

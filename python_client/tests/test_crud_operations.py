@@ -164,7 +164,9 @@ class TestJobCRUD:
     def test_update_job(self, api_client, test_workflow):
         """Test updating a job."""
         job = api_client.create_job(
-            JobModel(workflow_id=test_workflow.id, name="test_update_job", command="echo 'original'"),
+            JobModel(
+                workflow_id=test_workflow.id, name="test_update_job", command="echo 'original'"
+            ),
         )
         job.command = "echo 'updated'"
         updated = api_client.update_job(job.id, job)
@@ -173,7 +175,9 @@ class TestJobCRUD:
     def test_delete_job(self, api_client, test_workflow):
         """Test deleting a job."""
         job = api_client.create_job(
-            JobModel(workflow_id=test_workflow.id, name="test_delete_job", command="echo 'delete me'"),
+            JobModel(
+                workflow_id=test_workflow.id, name="test_delete_job", command="echo 'delete me'"
+            ),
         )
         api_client.delete_job(job.id)
         # Verify deletion
@@ -259,7 +263,12 @@ class TestResourceRequirementsCRUD:
         """Test creating resource requirements."""
         req = api_client.create_resource_requirements(
             ResourceRequirementsModel(
-                name="test", workflow_id=test_workflow.id, num_cpus=4, memory="8g", num_gpus=0, runtime="PT1H"
+                name="test",
+                workflow_id=test_workflow.id,
+                num_cpus=4,
+                memory="8g",
+                num_gpus=0,
+                runtime="PT1H",
             ),
         )
         assert req.id is not None
@@ -270,7 +279,12 @@ class TestResourceRequirementsCRUD:
         """Test getting resource requirements by ID."""
         created_req = api_client.create_resource_requirements(
             ResourceRequirementsModel(
-                name="test", workflow_id=test_workflow.id, num_cpus=2, memory="4g", num_gpus=0, runtime="PT30M"
+                name="test",
+                workflow_id=test_workflow.id,
+                num_cpus=2,
+                memory="4g",
+                num_gpus=0,
+                runtime="PT30M",
             ),
         )
         retrieved = api_client.get_resource_requirements(created_req.id)
@@ -280,10 +294,14 @@ class TestResourceRequirementsCRUD:
     def test_list_resource_requirements(self, api_client, test_workflow):
         """Test listing resource requirements."""
         api_client.create_resource_requirements(
-            ResourceRequirementsModel(name="test", workflow_id=test_workflow.id, num_cpus=1, memory="2g", num_gpus=0),
+            ResourceRequirementsModel(
+                name="test", workflow_id=test_workflow.id, num_cpus=1, memory="2g", num_gpus=0
+            ),
         )
         api_client.create_resource_requirements(
-            ResourceRequirementsModel(name="test", workflow_id=test_workflow.id, num_cpus=2, memory="4g", num_gpus=0),
+            ResourceRequirementsModel(
+                name="test", workflow_id=test_workflow.id, num_cpus=2, memory="4g", num_gpus=0
+            ),
         )
         reqs = api_client.list_resource_requirements(test_workflow.id)
         assert reqs.items is not None
@@ -292,20 +310,22 @@ class TestResourceRequirementsCRUD:
     def test_update_resource_requirements(self, api_client, test_workflow):
         """Test updating resource requirements."""
         req = api_client.create_resource_requirements(
-            ResourceRequirementsModel(name="test", workflow_id=test_workflow.id, num_cpus=2, memory="4g", num_gpus=0),
+            ResourceRequirementsModel(
+                name="test", workflow_id=test_workflow.id, num_cpus=2, memory="4g", num_gpus=0
+            ),
         )
         req.num_cpus = 8
         req.memory = "16g"
-        updated = api_client.update_resource_requirements(
-            req.id, req
-        )
+        updated = api_client.update_resource_requirements(req.id, req)
         assert updated.num_cpus == 8
         assert updated.memory == "16g"
 
     def test_delete_resource_requirement(self, api_client, test_workflow):
         """Test deleting resource requirements."""
         req = api_client.create_resource_requirements(
-            ResourceRequirementsModel(name="test", workflow_id=test_workflow.id, num_cpus=1, memory="1g", num_gpus=0),
+            ResourceRequirementsModel(
+                name="test", workflow_id=test_workflow.id, num_cpus=1, memory="1g", num_gpus=0
+            ),
         )
         api_client.delete_resource_requirement(req.id)
         # Verify deletion
@@ -314,7 +334,7 @@ class TestResourceRequirementsCRUD:
         assert req.id not in req_ids
 
 
-#class TestResultCRUD:
+# class TestResultCRUD:
 #    """Test CRUD operations for Results."""
 #
 #    def test_create_result(self, api_client, test_workflow):
@@ -488,7 +508,7 @@ class TestEventCRUD:
         assert events.items is not None
         assert len(events.items) >= 2
 
-    #def test_update_event(self, api_client, test_workflow):
+    # def test_update_event(self, api_client, test_workflow):
     #    """Test updating an event."""
     #    event = api_client.create_event(
     #        EventModel(
@@ -554,12 +574,12 @@ class TestUserDataCRUD:
     def test_update_user_data(self, api_client, test_workflow):
         """Test updating user data."""
         user_data = api_client.create_user_data(
-            UserDataModel(workflow_id=test_workflow.id, name="update_data", data={"original": "value"}),
+            UserDataModel(
+                workflow_id=test_workflow.id, name="update_data", data={"original": "value"}
+            ),
         )
         user_data.data = {"updated": "value"}
-        updated = api_client.update_user_data(
-            user_data.id, user_data
-        )
+        updated = api_client.update_user_data(user_data.id, user_data)
         assert updated.data == {"updated": "value"}
 
     def test_delete_user_data(self, api_client, test_workflow):
@@ -774,9 +794,7 @@ class TestSlurmSchedulerCRUD:
             ),
         )
         scheduler.partition = "new_partition"
-        updated = api_client.update_slurm_scheduler(
-            scheduler.id, scheduler
-        )
+        updated = api_client.update_slurm_scheduler(scheduler.id, scheduler)
         assert updated.partition == "new_partition"
 
     def test_delete_slurm_scheduler(self, api_client, test_workflow):

@@ -91,5 +91,3 @@ class FileModel(BaseModel):
             "st_mtime": obj.get("st_mtime")
         })
         return _obj
-
-

@@ -89,5 +89,3 @@ class NotFoundErrorResponse(BaseModel):
             "code": obj.get("code")
         })
         return _obj
-
-

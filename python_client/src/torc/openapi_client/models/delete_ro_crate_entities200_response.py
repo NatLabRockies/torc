@@ -85,5 +85,3 @@ class DeleteRoCrateEntities200Response(BaseModel):
             "deleted_count": obj.get("deleted_count")
         })
         return _obj
-
-

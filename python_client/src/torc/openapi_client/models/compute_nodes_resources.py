@@ -95,5 +95,3 @@ class ComputeNodesResources(BaseModel):
             "scheduler_config_id": obj.get("scheduler_config_id")
         })
         return _obj
-
-

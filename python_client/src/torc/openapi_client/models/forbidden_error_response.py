@@ -89,5 +89,3 @@ class ForbiddenErrorResponse(BaseModel):
             "code": obj.get("code")
         })
         return _obj
-
-

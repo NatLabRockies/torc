@@ -89,5 +89,3 @@ class FailureHandlerModel(BaseModel):
             "rules": obj.get("rules")
         })
         return _obj
-
-

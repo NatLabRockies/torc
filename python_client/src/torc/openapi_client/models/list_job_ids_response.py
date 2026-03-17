@@ -85,5 +85,3 @@ class ListJobIdsResponse(BaseModel):
             "count": obj.get("count")
         })
         return _obj
-
-
