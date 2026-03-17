@@ -619,7 +619,7 @@ fn get_sbatch_exec() -> String {
 /// parameters would start, without actually queuing it.
 pub fn run_sbatch_test_only(
     account: &str,
-    partition: &str,
+    partition: Option<&str>,
     nodes: u32,
     walltime: &str,
     qos: Option<&str>,
@@ -632,8 +632,6 @@ pub fn run_sbatch_test_only(
         "--test-only",
         "--account",
         account,
-        "--partition",
-        partition,
         "--nodes",
         &nodes.to_string(),
         "--time",
@@ -642,6 +640,9 @@ pub fn run_sbatch_test_only(
         "hostname",
     ]);
 
+    if let Some(p) = partition {
+        cmd.args(["--partition", p]);
+    }
     if let Some(q) = qos {
         cmd.args(["--qos", q]);
     }
@@ -651,7 +652,10 @@ pub fn run_sbatch_test_only(
 
     debug!(
         "Running sbatch --test-only: account={} partition={} nodes={} walltime={}",
-        account, partition, nodes, walltime
+        account,
+        partition.unwrap_or("<default>"),
+        nodes,
+        walltime
     );
 
     let output = match cmd.output() {

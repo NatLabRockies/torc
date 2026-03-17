@@ -3278,7 +3278,7 @@ pub struct ClusterStateInfo {
 #[derive(Debug, Clone, Serialize)]
 pub struct ResourceGroupInfo {
     pub name: String,
-    pub partition: String,
+    pub partition: Option<String>,
     pub job_count: usize,
     pub walltime: String,
     pub ideal_nodes: i64,
@@ -3289,8 +3289,8 @@ pub struct ResourceGroupInfo {
 pub struct AllocationRecommendation {
     /// Resource group or partition name
     group_name: String,
-    /// Target partition
-    partition: String,
+    /// Target partition (None means Slurm default)
+    partition: Option<String>,
     /// Number of allocations to submit
     num_allocations: i64,
     /// Nodes per allocation
@@ -3358,14 +3358,15 @@ fn run_sbatch_estimates(
     let now = chrono::Local::now().naive_local();
 
     for scheduler in &plan.schedulers {
-        let partition = scheduler.partition.as_deref().unwrap_or("default");
+        let partition = scheduler.partition.as_deref();
         let walltime = &scheduler.walltime;
-        let ideal_nodes = scheduler.num_allocations;
+        let nodes_per_alloc = scheduler.nodes;
+        let total_nodes = scheduler.nodes * scheduler.num_allocations;
         let gres = scheduler.gres.as_deref();
         let qos = scheduler.qos.as_deref();
 
-        if ideal_nodes <= 1 {
-            // Single node either way, no comparison needed
+        if total_nodes <= nodes_per_alloc {
+            // Single allocation either way, no comparison needed
             continue;
         }
 
@@ -3374,22 +3375,29 @@ fn run_sbatch_estimates(
 
         let mut estimates = Vec::new();
 
-        // Test 1: Single large allocation (1 x N nodes)
+        // Test 1: Single large allocation (1 x total_nodes)
         let large_result =
-            run_sbatch_test_only(account, partition, ideal_nodes as u32, walltime, qos, gres);
+            run_sbatch_test_only(account, partition, total_nodes as u32, walltime, qos, gres);
         estimates.push(build_sbatch_estimate(
             "single-large",
-            ideal_nodes,
+            total_nodes,
             walltime_secs,
             &large_result,
             now,
         ));
 
-        // Test 2: Single small allocation (1 x 1 node)
-        let small_result = run_sbatch_test_only(account, partition, 1, walltime, qos, gres);
+        // Test 2: Many small allocations (nodes_per_alloc each)
+        let small_result = run_sbatch_test_only(
+            account,
+            partition,
+            nodes_per_alloc as u32,
+            walltime,
+            qos,
+            gres,
+        );
         estimates.push(build_sbatch_estimate(
             "many-small",
-            1,
+            nodes_per_alloc,
             walltime_secs,
             &small_result,
             now,
@@ -3444,16 +3452,19 @@ fn compute_recommendations(
     let mut recommendations = Vec::new();
 
     for scheduler in &plan.schedulers {
-        let partition_name = scheduler.partition.as_deref().unwrap_or("default");
+        let partition_name = scheduler.partition.as_deref();
 
         let ideal_nodes = scheduler.num_allocations;
         let estimates = sbatch_estimates.get(&scheduler.resource_requirements);
 
-        if offline || !cluster_state.contains_key(partition_name) {
-            // Offline mode: just report the ideal plan from generate
+        // Look up cluster state by partition name; skip lookup if no partition is set
+        let cluster_entry = partition_name.and_then(|p| cluster_state.get(p));
+
+        if offline || cluster_entry.is_none() {
+            // Offline mode or no partition/cluster state: just report the ideal plan
             recommendations.push(AllocationRecommendation {
                 group_name: scheduler.resource_requirements.clone(),
-                partition: partition_name.to_string(),
+                partition: partition_name.map(|s| s.to_string()),
                 num_allocations: ideal_nodes,
                 nodes_per_allocation: 1,
                 total_nodes: ideal_nodes,
@@ -3469,7 +3480,7 @@ fn compute_recommendations(
             continue;
         }
 
-        let (avail, queue) = cluster_state.get(partition_name).unwrap();
+        let (avail, queue) = cluster_entry.unwrap();
         let idle = avail.idle as i64;
         let _mixed = avail.mixed as i64;
         let total = avail.total as i64;
@@ -3579,7 +3590,7 @@ fn compute_recommendations(
 
         recommendations.push(AllocationRecommendation {
             group_name: scheduler.resource_requirements.clone(),
-            partition: partition_name.to_string(),
+            partition: partition_name.map(|s| s.to_string()),
             num_allocations: num_allocs,
             nodes_per_allocation: nodes_per_alloc,
             total_nodes: num_allocs * nodes_per_alloc,
@@ -3685,7 +3696,7 @@ pub fn analyze_plan_allocations(
         .iter()
         .map(|s| ResourceGroupInfo {
             name: s.resource_requirements.clone(),
-            partition: s.partition.clone().unwrap_or_else(|| "default".to_string()),
+            partition: s.partition.clone(),
             job_count: s.job_count,
             walltime: s.walltime.clone(),
             ideal_nodes: s.num_allocations,
@@ -3767,7 +3778,7 @@ pub fn analyze_plan_allocations(
         compute_recommendations(&plan, &cluster_state_map, &sbatch_estimates, offline);
 
     // Build cluster state info
-    let cluster_state: Vec<ClusterStateInfo> = cluster_state_map
+    let mut cluster_state: Vec<ClusterStateInfo> = cluster_state_map
         .iter()
         .map(|(_, (a, q))| ClusterStateInfo {
             partition: a.partition.clone(),
@@ -3781,6 +3792,7 @@ pub fn analyze_plan_allocations(
             running_jobs: q.running_jobs,
         })
         .collect();
+    cluster_state.sort_by(|a, b| a.partition.cmp(&b.partition));
 
     Ok(PlanAllocationsResult {
         workflow_analysis: WorkflowAnalysisInfo {
@@ -3907,7 +3919,8 @@ fn handle_plan_allocations(
         for rg in &result.resource_groups {
             println!(
                 "Resource Group: \"{}\" (partition: {})",
-                rg.name, rg.partition
+                rg.name,
+                rg.partition.as_deref().unwrap_or("<default>")
             );
             println!(
                 "  Jobs: {}, Walltime: {}, Ideal nodes: {}",
@@ -4157,7 +4170,7 @@ fn handle_generate(
                         "  Scheduler: {} (account: {}, partition: {}, walltime: {}, nodes: {})",
                         sched.name.as_deref().unwrap_or("unnamed"),
                         sched.account,
-                        sched.partition.as_deref().unwrap_or("default"),
+                        sched.partition.as_deref().unwrap_or("<default>"),
                         sched.walltime,
                         sched.nodes
                     );
@@ -4727,7 +4740,7 @@ fn handle_regenerate(
                 println!(
                     "    Account: {}, Partition: {}, Walltime: {}, Nodes: {}",
                     sched.account,
-                    sched.partition.as_deref().unwrap_or("default"),
+                    sched.partition.as_deref().unwrap_or("<default>"),
                     sched.walltime,
                     sched.nodes
                 );

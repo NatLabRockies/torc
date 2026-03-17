@@ -1,8 +1,8 @@
 # Slurm Allocation Strategies
 
 When submitting a workflow with many jobs to Slurm, you must decide how to split work across
-allocations. The `torc slurm plan-allocations` command analyzes your workflow and cluster state to
-recommend a strategy.
+allocations. The `torc slurm plan-allocations` command (or the `plan_allocations` MCP tool for AI
+assistants) analyzes your workflow and cluster state to recommend a strategy.
 
 ## The Core Tradeoff: Single Large vs Many Small
 
@@ -36,18 +36,22 @@ Given N nodes worth of work, there are two extremes:
 ## Using `sbatch --test-only`
 
 The `plan-allocations` command runs `sbatch --test-only` to ask Slurm's scheduler when each strategy
-would start, without actually submitting jobs:
+would start, without actually submitting jobs. For a plan with K nodes per allocation and N total
+allocations:
 
 ```bash
-# Single large: when would 167 nodes start?
-sbatch --test-only --nodes=167 --time=04:00:00 --account=myproject --partition=short --wrap="hostname"
+# Single large: when would all K*N nodes start together?
+sbatch --test-only --nodes=<K*N> --time=04:00:00 --account=myproject --wrap="hostname"
 
-# Single small: when would 1 node start?
-sbatch --test-only --nodes=1 --time=04:00:00 --account=myproject --partition=short --wrap="hostname"
+# Many small: when would one K-node allocation start?
+sbatch --test-only --nodes=<K> --time=04:00:00 --account=myproject --wrap="hostname"
 ```
 
-The single-large estimated start + walltime gives the completion time directly. The single-small
-estimate is **optimistic** — it only predicts when the _first_ small allocation would start. Later
+When no partition is explicitly configured, the `--partition` flag is omitted so Slurm uses its
+default partition.
+
+The single-large estimated start + walltime gives the completion time directly. The many-small
+estimate is **optimistic** — it only predicts when the _first_ allocation would start. Later
 allocations will be delayed by fair-share degradation.
 
 ### Fair-Share Degradation Estimate
@@ -114,3 +118,38 @@ torc slurm generate --account myproject --single-allocation workflow.yaml
 # Many small allocations (N x 1 node, the default)
 torc slurm generate --account myproject workflow.yaml
 ```
+
+## Using with AI Assistants
+
+The `plan_allocations` MCP tool provides the same analysis through AI assistants (Claude Code,
+GitHub Copilot). The assistant can analyze your workflow spec and present the recommendation
+conversationally:
+
+```
+> I have a workflow with 167 parallel jobs. Should I use one big Slurm
+> allocation or many small ones? My account is "myproject".
+
+⏺ torc - plan_allocations (MCP)(spec_json: {...}, account: "myproject")
+  ⎿  { "recommendations": [...], "cluster_state": [...], ... }
+
+⏺ Based on the current cluster state and sbatch --test-only probes:
+
+  Recommendation: Single large allocation (1 x 167 nodes)
+
+  | Strategy    | Estimated Start | Estimated Completion |
+  |-------------|-----------------|----------------------|
+  | Single large| ~30 min         | ~4h 30min            |
+  | Many small  | ~5 min (first)  | ~6h 30min (last)     |
+
+  The single large allocation completes ~2 hours faster because Slurm
+  prioritizes it in the backfill queue, and you avoid fair-share
+  degradation from 167 separate allocations.
+
+  Shall I generate the workflow with a single allocation?
+```
+
+The tool accepts a workflow spec as a JSON object, the Slurm account, and optional partition and HPC
+profile overrides. Use `skip_test_only: true` to skip the sbatch probes for faster results based on
+heuristics only.
+
+See [Configuring AI Assistants](../tools/ai-assistants.md) for setup instructions.

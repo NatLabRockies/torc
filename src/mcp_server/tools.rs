@@ -2632,8 +2632,11 @@ pub fn plan_allocations(
         );
     }
 
+    let json_output = serde_json::to_string_pretty(&response)
+        .map_err(|e| internal_error(format!("Failed to serialize response: {}", e)))?;
+
     Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-        serde_json::to_string_pretty(&response).unwrap_or_default(),
+        json_output,
     )]))
 }
 

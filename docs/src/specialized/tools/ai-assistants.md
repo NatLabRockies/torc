@@ -32,6 +32,7 @@ The AI assistant has access to these Torc operations:
 | `list_pending_failed_jobs`      | List jobs awaiting AI-assisted classification            |
 | `classify_and_resolve_failures` | Classify failures as transient or permanent              |
 | `get_slurm_sacct`               | Get Slurm accounting data for a workflow                 |
+| `plan_allocations`              | Analyze workflow and recommend Slurm allocation strategy |
 | `get_docs`                      | Retrieve Torc documentation by topic                     |
 | `list_examples`                 | List available example workflow specifications           |
 | `get_example`                   | Retrieve a complete example workflow spec                |

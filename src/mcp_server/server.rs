@@ -161,9 +161,9 @@ pub struct UpdateJobResourcesParams {
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct CreateWorkflowParams {
     #[schemars(
-        description = "Workflow specification as JSON string (always use JSON here - it will be auto-converted to the output file_format). For Slurm workflows, must include a 'resource_requirements' section and each job must reference one."
+        description = "Workflow specification as a JSON object (not a string). For Slurm workflows, must include a 'resource_requirements' section and each job must reference one."
     )]
-    pub spec_json: String,
+    pub spec_json: serde_json::Value,
     #[schemars(description = "User that owns the workflow (optional, defaults to current user)")]
     pub user: Option<String>,
     #[schemars(
@@ -352,9 +352,9 @@ pub struct GetDocsParams {
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct PlanAllocationsParams {
     #[schemars(
-        description = "Workflow specification as JSON string. Must include 'resource_requirements' section with CPU, memory, and runtime for each job type."
+        description = "Workflow specification as a JSON object (not a string). Must include 'resource_requirements' section with CPU, memory, and runtime for each job type."
     )]
-    pub spec_json: String,
+    pub spec_json: serde_json::Value,
     #[schemars(description = "Slurm account to use for allocation estimates")]
     pub account: String,
     #[schemars(description = "Partition to target (optional, auto-selected if not specified)")]
@@ -495,7 +495,8 @@ EXAMPLE - Fan-out/Fan-in with files (3 groups, 10 workers each, aggregation):
         #[tool(aggr)] params: CreateWorkflowParams,
     ) -> Result<CallToolResult, McpError> {
         let config = self.config.clone();
-        let spec_json = params.spec_json;
+        let spec_json = serde_json::to_string(&params.spec_json)
+            .map_err(|e| McpError::invalid_params(format!("Invalid spec JSON: {}", e), None))?;
         let user = params
             .user
             .unwrap_or_else(|| std::env::var("USER").unwrap_or_else(|_| "unknown".to_string()));
@@ -1117,7 +1118,8 @@ so they can make an informed decision."#
         &self,
         #[tool(aggr)] params: PlanAllocationsParams,
     ) -> Result<CallToolResult, McpError> {
-        let spec_json = params.spec_json;
+        let spec_json = serde_json::to_string(&params.spec_json)
+            .map_err(|e| McpError::invalid_params(format!("Invalid spec JSON: {}", e), None))?;
         let account = params.account;
         let partition = params.partition;
         let hpc_profile = params.hpc_profile;
