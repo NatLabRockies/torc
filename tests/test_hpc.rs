@@ -40,6 +40,8 @@ use torc::client::commands::slurm::{
 };
 use torc::client::hpc::kestrel::kestrel_profile;
 use torc::client::hpc::{HpcDetection, HpcPartition, HpcProfile, HpcProfileRegistry};
+use torc::client::scheduler_plan::{SchedulerOverrides, generate_scheduler_plan};
+use torc::client::workflow_graph::WorkflowGraph;
 use torc::client::workflow_spec::{JobSpec, ResourceRequirementsSpec, WorkflowSpec};
 use torc::time_utils::duration_string_to_seconds;
 
@@ -3211,4 +3213,396 @@ fn test_find_best_partition_gpu_prefers_smallest() {
         best.name, "gpu-h100",
         "Should pick the GPU partition with smallest sufficient memory"
     );
+}
+
+// ============== Scheduler Override Tests ==============
+
+/// Helper to create a simple workflow spec for override tests
+fn create_override_test_spec() -> WorkflowSpec {
+    WorkflowSpec {
+        name: "override_test".to_string(),
+        description: Some("Test workflow for scheduler overrides".to_string()),
+        jobs: vec![
+            JobSpec {
+                name: "job1".to_string(),
+                command: "echo hello".to_string(),
+                resource_requirements: Some("small".to_string()),
+                ..Default::default()
+            },
+            JobSpec {
+                name: "job2".to_string(),
+                command: "echo world".to_string(),
+                resource_requirements: Some("small".to_string()),
+                ..Default::default()
+            },
+        ],
+        resource_requirements: Some(vec![ResourceRequirementsSpec {
+            name: "small".to_string(),
+            num_cpus: 4,
+            num_gpus: 0,
+            num_nodes: 1,
+            memory: "8g".to_string(),
+            runtime: "PT1H".to_string(), // 1 hour
+        }]),
+        ..Default::default()
+    }
+}
+
+/// Helper to create a profile with two partitions for override tests
+fn create_override_test_profile() -> HpcProfile {
+    create_test_profile(
+        "test_cluster",
+        vec![
+            // "standard" partition: 104 CPUs, 240GB, 48h max walltime
+            create_test_partition("standard", 104, 245760, 172800, None),
+            // "short" partition: 104 CPUs, 240GB, 4h max walltime
+            create_test_partition("short", 104, 245760, 14400, None),
+        ],
+    )
+}
+
+#[rstest]
+fn test_partition_override_uses_specified_partition() {
+    let spec = create_override_test_spec();
+    let profile = create_override_test_profile();
+
+    let graph = WorkflowGraph::from_spec(&spec).unwrap();
+    let rr_vec = spec.resource_requirements.as_ref().unwrap();
+    let rr_map: HashMap<&str, &ResourceRequirementsSpec> =
+        rr_vec.iter().map(|rr| (rr.name.as_str(), rr)).collect();
+
+    let overrides = SchedulerOverrides {
+        partition: Some("short".to_string()),
+        walltime_secs: None,
+    };
+
+    let plan = generate_scheduler_plan(
+        &graph,
+        &rr_map,
+        &profile,
+        "testaccount",
+        false,
+        GroupByStrategy::ResourceRequirements,
+        WalltimeStrategy::MaxJobRuntime,
+        1.5,
+        true,
+        None,
+        false,
+        &overrides,
+    );
+
+    assert!(plan.warnings.is_empty(), "Expected no warnings");
+    assert_eq!(plan.schedulers.len(), 1);
+
+    let scheduler = &plan.schedulers[0];
+    // Partition should be explicitly set to "short" even though it doesn't require explicit request
+    assert_eq!(scheduler.partition.as_deref(), Some("short"));
+}
+
+#[rstest]
+fn test_walltime_override_uses_specified_walltime() {
+    let spec = create_override_test_spec();
+    let profile = create_override_test_profile();
+
+    let graph = WorkflowGraph::from_spec(&spec).unwrap();
+    let rr_vec = spec.resource_requirements.as_ref().unwrap();
+    let rr_map: HashMap<&str, &ResourceRequirementsSpec> =
+        rr_vec.iter().map(|rr| (rr.name.as_str(), rr)).collect();
+
+    // Override walltime to exactly 2 hours (7200 seconds)
+    let overrides = SchedulerOverrides {
+        partition: None,
+        walltime_secs: Some(7200),
+    };
+
+    let plan = generate_scheduler_plan(
+        &graph,
+        &rr_map,
+        &profile,
+        "testaccount",
+        false,
+        GroupByStrategy::ResourceRequirements,
+        WalltimeStrategy::MaxJobRuntime,
+        1.5,
+        true,
+        None,
+        false,
+        &overrides,
+    );
+
+    assert!(plan.warnings.is_empty(), "Expected no warnings");
+    assert_eq!(plan.schedulers.len(), 1);
+    assert_eq!(plan.schedulers[0].walltime, "02:00:00");
+}
+
+#[rstest]
+fn test_partition_and_walltime_override_together() {
+    let spec = create_override_test_spec();
+    let profile = create_override_test_profile();
+
+    let graph = WorkflowGraph::from_spec(&spec).unwrap();
+    let rr_vec = spec.resource_requirements.as_ref().unwrap();
+    let rr_map: HashMap<&str, &ResourceRequirementsSpec> =
+        rr_vec.iter().map(|rr| (rr.name.as_str(), rr)).collect();
+
+    let overrides = SchedulerOverrides {
+        partition: Some("short".to_string()),
+        walltime_secs: Some(14400), // 4 hours
+    };
+
+    let plan = generate_scheduler_plan(
+        &graph,
+        &rr_map,
+        &profile,
+        "testaccount",
+        false,
+        GroupByStrategy::ResourceRequirements,
+        WalltimeStrategy::MaxJobRuntime,
+        1.5,
+        true,
+        None,
+        false,
+        &overrides,
+    );
+
+    assert!(plan.warnings.is_empty(), "Expected no warnings");
+    assert_eq!(plan.schedulers.len(), 1);
+    assert_eq!(plan.schedulers[0].partition.as_deref(), Some("short"));
+    assert_eq!(plan.schedulers[0].walltime, "04:00:00");
+}
+
+#[rstest]
+fn test_invalid_partition_override_returns_warning() {
+    let spec = create_override_test_spec();
+    let profile = create_override_test_profile();
+
+    let graph = WorkflowGraph::from_spec(&spec).unwrap();
+    let rr_vec = spec.resource_requirements.as_ref().unwrap();
+    let rr_map: HashMap<&str, &ResourceRequirementsSpec> =
+        rr_vec.iter().map(|rr| (rr.name.as_str(), rr)).collect();
+
+    let overrides = SchedulerOverrides {
+        partition: Some("nonexistent".to_string()),
+        walltime_secs: None,
+    };
+
+    let plan = generate_scheduler_plan(
+        &graph,
+        &rr_map,
+        &profile,
+        "testaccount",
+        false,
+        GroupByStrategy::ResourceRequirements,
+        WalltimeStrategy::MaxJobRuntime,
+        1.5,
+        true,
+        None,
+        false,
+        &overrides,
+    );
+
+    // Should return no schedulers and a single warning
+    assert!(plan.schedulers.is_empty());
+    assert_eq!(plan.warnings.len(), 1);
+    assert!(plan.warnings[0].contains("nonexistent"));
+    assert!(plan.warnings[0].contains("not found"));
+}
+
+#[rstest]
+fn test_no_overrides_uses_auto_selection() {
+    let spec = create_override_test_spec();
+    let profile = create_override_test_profile();
+
+    let graph = WorkflowGraph::from_spec(&spec).unwrap();
+    let rr_vec = spec.resource_requirements.as_ref().unwrap();
+    let rr_map: HashMap<&str, &ResourceRequirementsSpec> =
+        rr_vec.iter().map(|rr| (rr.name.as_str(), rr)).collect();
+
+    let plan = generate_scheduler_plan(
+        &graph,
+        &rr_map,
+        &profile,
+        "testaccount",
+        false,
+        GroupByStrategy::ResourceRequirements,
+        WalltimeStrategy::MaxJobRuntime,
+        1.5,
+        true,
+        None,
+        false,
+        &SchedulerOverrides::default(),
+    );
+
+    assert!(plan.warnings.is_empty(), "Expected no warnings");
+    assert_eq!(plan.schedulers.len(), 1);
+
+    // With default overrides, partition should NOT be explicitly set
+    // (since neither test partition requires explicit request)
+    assert!(plan.schedulers[0].partition.is_none());
+
+    // Walltime should be auto-calculated: 1h * 1.5 = 1.5h = 01:30:00
+    assert_eq!(plan.schedulers[0].walltime, "01:30:00");
+}
+
+#[rstest]
+fn test_walltime_override_affects_allocation_count() {
+    // With a longer walltime, more jobs fit per allocation → fewer allocations needed
+    let mut spec = WorkflowSpec {
+        name: "alloc_test".to_string(),
+        jobs: (0..10)
+            .map(|i| JobSpec {
+                name: format!("job_{}", i),
+                command: "echo hello".to_string(),
+                resource_requirements: Some("compute".to_string()),
+                ..Default::default()
+            })
+            .collect(),
+        resource_requirements: Some(vec![ResourceRequirementsSpec {
+            name: "compute".to_string(),
+            num_cpus: 104, // uses full node
+            num_gpus: 0,
+            num_nodes: 1,
+            memory: "240g".to_string(),
+            runtime: "PT1H".to_string(), // 1 hour per job
+        }]),
+        ..Default::default()
+    };
+
+    // Expand parameters so the spec is ready
+    spec.expand_parameters().unwrap();
+
+    let profile = create_override_test_profile();
+    let graph = WorkflowGraph::from_spec(&spec).unwrap();
+    let rr_vec = spec.resource_requirements.as_ref().unwrap();
+    let rr_map: HashMap<&str, &ResourceRequirementsSpec> =
+        rr_vec.iter().map(|rr| (rr.name.as_str(), rr)).collect();
+
+    // With 1h walltime: 1 job per allocation → 10 allocations
+    let plan_short = generate_scheduler_plan(
+        &graph,
+        &rr_map,
+        &profile,
+        "testaccount",
+        false,
+        GroupByStrategy::ResourceRequirements,
+        WalltimeStrategy::MaxJobRuntime,
+        1.0, // no multiplier
+        true,
+        None,
+        false,
+        &SchedulerOverrides {
+            partition: Some("standard".to_string()),
+            walltime_secs: Some(3600), // 1 hour
+        },
+    );
+
+    // With 4h walltime: 4 jobs per allocation → ceil(10/4) = 3 allocations
+    let plan_long = generate_scheduler_plan(
+        &graph,
+        &rr_map,
+        &profile,
+        "testaccount",
+        false,
+        GroupByStrategy::ResourceRequirements,
+        WalltimeStrategy::MaxJobRuntime,
+        1.0,
+        true,
+        None,
+        false,
+        &SchedulerOverrides {
+            partition: Some("standard".to_string()),
+            walltime_secs: Some(14400), // 4 hours
+        },
+    );
+
+    assert_eq!(plan_short.total_allocations(), 10);
+    assert_eq!(plan_long.total_allocations(), 3);
+}
+
+#[rstest]
+fn test_find_partition_by_name() {
+    let profile = create_override_test_profile();
+
+    assert!(profile.find_partition_by_name("standard").is_some());
+    assert!(profile.find_partition_by_name("short").is_some());
+    assert!(profile.find_partition_by_name("nonexistent").is_none());
+
+    let partition = profile.find_partition_by_name("standard").unwrap();
+    assert_eq!(partition.cpus_per_node, 104);
+    assert_eq!(partition.max_walltime_secs, 172800);
+}
+
+#[rstest]
+fn test_partition_override_with_group_by_partition() {
+    let spec = WorkflowSpec {
+        name: "group_by_test".to_string(),
+        jobs: vec![
+            JobSpec {
+                name: "small_job".to_string(),
+                command: "echo small".to_string(),
+                resource_requirements: Some("small".to_string()),
+                ..Default::default()
+            },
+            JobSpec {
+                name: "medium_job".to_string(),
+                command: "echo medium".to_string(),
+                resource_requirements: Some("medium".to_string()),
+                ..Default::default()
+            },
+        ],
+        resource_requirements: Some(vec![
+            ResourceRequirementsSpec {
+                name: "small".to_string(),
+                num_cpus: 4,
+                num_gpus: 0,
+                num_nodes: 1,
+                memory: "8g".to_string(),
+                runtime: "PT1H".to_string(),
+            },
+            ResourceRequirementsSpec {
+                name: "medium".to_string(),
+                num_cpus: 32,
+                num_gpus: 0,
+                num_nodes: 1,
+                memory: "64g".to_string(),
+                runtime: "PT2H".to_string(),
+            },
+        ]),
+        ..Default::default()
+    };
+
+    let profile = create_override_test_profile();
+    let graph = WorkflowGraph::from_spec(&spec).unwrap();
+    let rr_vec = spec.resource_requirements.as_ref().unwrap();
+    let rr_map: HashMap<&str, &ResourceRequirementsSpec> =
+        rr_vec.iter().map(|rr| (rr.name.as_str(), rr)).collect();
+
+    // With partition override + group-by-partition, all jobs go to the specified partition
+    let overrides = SchedulerOverrides {
+        partition: Some("short".to_string()),
+        walltime_secs: Some(14400),
+    };
+
+    let plan = generate_scheduler_plan(
+        &graph,
+        &rr_map,
+        &profile,
+        "testaccount",
+        false,
+        GroupByStrategy::Partition,
+        WalltimeStrategy::MaxJobRuntime,
+        1.5,
+        true,
+        None,
+        false,
+        &overrides,
+    );
+
+    assert!(plan.warnings.is_empty(), "Expected no warnings");
+
+    // All schedulers should use the "short" partition
+    for scheduler in &plan.schedulers {
+        assert_eq!(scheduler.partition.as_deref(), Some("short"));
+        assert_eq!(scheduler.walltime, "04:00:00");
+    }
 }

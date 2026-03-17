@@ -9,6 +9,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use log::warn;
 use serde::{Deserialize, Serialize};
 
 /// Threshold for auto-merging deferred and non-deferred scheduler groups.
@@ -286,6 +287,17 @@ pub fn generate_scheduler_plan<RR: ResourceRequirements>(
 ) -> SchedulerPlan {
     let mut plan = SchedulerPlan::new();
 
+    // Validate partition override up front to avoid repeated lookups and duplicate warnings
+    if let Some(ref partition_name) = overrides.partition
+        && profile.find_partition_by_name(partition_name).is_none()
+    {
+        plan.warnings.push(format!(
+            "Partition '{}' not found in HPC profile. No schedulers will be generated.",
+            partition_name
+        ));
+        return plan;
+    }
+
     // Get scheduler groups from the graph
     // Groups jobs by (resource_requirements, has_dependencies)
     let scheduler_groups = graph.scheduler_groups();
@@ -424,6 +436,14 @@ fn process_scheduler_group<RR: ResourceRequirements>(
 
     // Calculate walltime: use override if provided, otherwise use strategy
     let walltime_secs = if let Some(override_secs) = overrides.walltime_secs {
+        if override_secs > partition.max_walltime_secs {
+            warn!(
+                "Override walltime ({}) exceeds partition '{}' maximum ({}). Slurm may reject the job.",
+                secs_to_walltime(override_secs),
+                partition.name,
+                secs_to_walltime(partition.max_walltime_secs)
+            );
+        }
         override_secs
     } else {
         calculate_walltime(
@@ -812,6 +832,14 @@ fn generate_plan_grouped_by_partition<RR: ResourceRequirements>(
 
         // Calculate walltime: use override if provided, otherwise use strategy
         let walltime_secs = if let Some(override_secs) = overrides.walltime_secs {
+            if override_secs > partition.max_walltime_secs {
+                warn!(
+                    "Override walltime ({}) exceeds partition '{}' maximum ({}). Slurm may reject the job.",
+                    secs_to_walltime(override_secs),
+                    partition.name,
+                    secs_to_walltime(partition.max_walltime_secs)
+                );
+            }
             override_secs
         } else {
             calculate_walltime(
