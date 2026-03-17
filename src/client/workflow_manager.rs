@@ -5,7 +5,7 @@ use crate::config::TorcConfig;
 use log::{self, debug, error, info, warn};
 
 use crate::client::commands::pagination::{FileListParams, JobListParams, iter_files, iter_jobs};
-use crate::models::{FileModel, JobStatus, WorkflowModel};
+use crate::models::{FileModel, JobStatus, TaskModel, WorkflowModel};
 use std::fs;
 use std::path::Path;
 use std::time::UNIX_EPOCH;
@@ -160,6 +160,38 @@ impl WorkflowManager {
         self.initialize_jobs(false)?;
         // Event is now broadcast via SSE from the server
         Ok(())
+    }
+
+    /// Initialize the workflow asynchronously.
+    ///
+    /// Performs the same client-side pre-steps as `initialize()`, but runs the server-side
+    /// initialization (`initialize_jobs`) asynchronously and returns a task record.
+    pub fn initialize_async(&self, force: bool) -> Result<TaskModel, TorcError> {
+        self.check_workflow(force)?;
+        self.cleanup_output_files(false)?;
+        match default_api::reset_workflow_status(&self.config, self.workflow_id, None, None) {
+            Ok(_) => {}
+            Err(err) => {
+                error!(
+                    "Failed to reset status of workflow_id={}: {}",
+                    self.workflow_id, err
+                );
+                return Err(TorcError::ApiError(err.to_string()));
+            }
+        }
+        match default_api::reset_job_status(&self.config, self.workflow_id, Some(false), None) {
+            Ok(_) => {}
+            Err(err) => {
+                error!(
+                    "Failed to reset job status of workflow_id={}: {}",
+                    self.workflow_id, err
+                );
+                return Err(TorcError::ApiError(err.to_string()));
+            }
+        }
+        let _run_id = self.bump_run_id()?;
+        self.initialize_files()?;
+        self.initialize_jobs_async(false)
     }
 
     /// Start the workflow: initialize if needed and schedule nodes for on_workflow_start actions
@@ -340,6 +372,59 @@ impl WorkflowManager {
         self.reinitialize_jobs(dry_run)?;
         // Event is now broadcast via SSE from the server
         Ok(())
+    }
+
+    /// Reinitialize the workflow asynchronously.
+    ///
+    /// Runs client-side reinitialization checks and change detection, then starts an async
+    /// server-side initialization and returns the task record. If `dry_run` is true,
+    /// no task is created and `Ok(None)` is returned.
+    pub fn reinitialize_async(
+        &self,
+        force: bool,
+        dry_run: bool,
+    ) -> Result<Option<TaskModel>, TorcError> {
+        self.check_workflow(force)?;
+        if dry_run {
+            self.reinitialize_jobs(true)?;
+            return Ok(None);
+        }
+
+        self.bump_run_id()?;
+        match default_api::reset_workflow_status(&self.config, self.workflow_id, None, None) {
+            Ok(_) => {
+                info!("Reset status of workflow_id={}", self.workflow_id);
+            }
+            Err(err) => {
+                error!(
+                    "Failed to reset status of workflow_id={}: {}",
+                    self.workflow_id, err
+                );
+                return Err(TorcError::ApiError(err.to_string()));
+            }
+        }
+
+        self.process_changed_files(false)?;
+        self.update_jobs_if_output_files_are_missing(false)?;
+        self.process_changed_user_data(false)?;
+
+        let task = self.initialize_jobs_async(true)?;
+        Ok(Some(task))
+    }
+
+    fn initialize_jobs_async(&self, only_uninitialized: bool) -> Result<TaskModel, TorcError> {
+        match default_api::initialize_jobs_with_async(
+            &self.config,
+            self.workflow_id,
+            Some(only_uninitialized),
+            Some(false),
+            Some(true),
+            None,
+        ) {
+            Ok(value) => serde_json::from_value::<TaskModel>(value)
+                .map_err(|e| TorcError::ApiError(format!("Failed to parse task response: {}", e))),
+            Err(err) => Err(TorcError::ApiError(err.to_string())),
+        }
     }
 
     /// Increment the run_id field of the workflow.

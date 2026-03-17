@@ -449,6 +449,29 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
             .expect("Failed to run migrations");
         info!("Database migrations completed successfully");
 
+        // Mark any in-progress async handles as failed (server restarted mid-operation).
+        // Async handles are persisted; SSE events are ephemeral.
+        if let Ok(result) = sqlx::query(
+            r#"
+            UPDATE async_handles
+            SET status = 'failed',
+                finished_at_ms = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER),
+                error = COALESCE(error, 'server restarted while task was in progress')
+            WHERE status IN ('queued', 'running')
+            "#,
+        )
+        .execute(&pool)
+        .await
+        {
+            let count = result.rows_affected();
+            if count > 0 {
+                info!(
+                    "Marked {} async handle(s) as failed due to server restart",
+                    count
+                );
+            }
+        }
+
         // Load htpasswd file if provided
         let htpasswd = if let Some(auth_file_path) = &config.auth_file {
             info!("Loading htpasswd file from: {}", auth_file_path);

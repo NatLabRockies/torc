@@ -21,6 +21,7 @@ pub mod ro_crate;
 pub mod scheduled_compute_nodes;
 pub mod slurm;
 pub mod table_format;
+pub mod tasks;
 pub mod user_data;
 pub mod watch;
 pub mod workflow_export;

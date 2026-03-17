@@ -24,6 +24,7 @@ use torc::client::commands::results::handle_result_commands;
 use torc::client::commands::ro_crate::handle_ro_crate_commands;
 use torc::client::commands::scheduled_compute_nodes::handle_scheduled_compute_node_commands;
 use torc::client::commands::slurm::handle_slurm_commands;
+use torc::client::commands::tasks::handle_tasks_commands;
 use torc::client::commands::user_data::handle_user_data_commands;
 use torc::client::commands::watch::{WatchArgs, run_watch};
 use torc::client::commands::workflows::handle_workflow_commands;
@@ -733,6 +734,9 @@ fn main() {
         }
         Commands::Results { command } => {
             handle_result_commands(&config, command, &format);
+        }
+        Commands::Tasks { command } => {
+            handle_tasks_commands(&config, command, &format);
         }
         Commands::UserData { command } => {
             handle_user_data_commands(&config, command, &format);

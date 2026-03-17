@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT enable_ro_crate FROM workflow WHERE id = $1",
+  "query": "SELECT enable_ro_crate FROM workflow WHERE id = ?",
   "describe": {
     "columns": [
       {
@@ -16,5 +16,5 @@
       true
     ]
   },
-  "hash": "54b2e7632900ecd51f86271c2b0c08b35ce3037f13641699b51d787a562e2ea9"
+  "hash": "5e9aa2c7c659ecc2f2000d6d2978def325cce42dee4110c49499f1f51e791578"
 }

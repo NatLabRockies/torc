@@ -4930,6 +4930,15 @@ paths:
           default: true
           type: boolean
         style: form
+      - description: Run initialization asynchronously and return a task ID.
+        explode: true
+        in: query
+        name: async
+        required: false
+        schema:
+          default: false
+          type: boolean
+        style: form
       requestBody:
         content:
           application/json:
@@ -4943,6 +4952,18 @@ paths:
               schema:
                 type: object
           description: Successful response
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/task_model"
+          description: Accepted - initialization task created
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/default_error_response"
+          description: Conflict - initialization already in progress
         "403":
           content:
             application/json:
@@ -4965,6 +4986,41 @@ paths:
       summary: Initialize job relationships based on file and user_data relationships.
       tags: []
       x-codegen-request-body-name: body
+  /tasks/{id}:
+    get:
+      description: Get the status of an asynchronous task.
+      operationId: get_task
+      parameters:
+      - description: Task ID
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: integer
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/task_model"
+          description: Successful response
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/not_found_error_response"
+          description: Not found error response
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/default_error_response"
+          description: Default error response
+      security: []
+      summary: Get the status of an asynchronous task.
+      tags: []
   /workflows/{id}/is_complete:
     get:
       description: Return true if all jobs in the workflow are complete.
@@ -8658,5 +8714,45 @@ components:
         - count
         - total_count
         - has_more
+      type: object
+    task_status:
+      description: Status of an asynchronous task.
+      enum:
+        - queued
+        - running
+        - succeeded
+        - failed
+      type: string
+    task_model:
+      description: Asynchronous task status record.
+      properties:
+        id:
+          type: integer
+        workflow_id:
+          type: integer
+        operation:
+          type: string
+        status:
+          $ref: "#/components/schemas/task_status"
+        created_at_ms:
+          type: integer
+        started_at_ms:
+          type:
+            - integer
+            - "null"
+        finished_at_ms:
+          type:
+            - integer
+            - "null"
+        error:
+          type:
+            - string
+            - "null"
+      required:
+        - id
+        - workflow_id
+        - operation
+        - status
+        - created_at_ms
       type: object
 x-original-swagger-version: "2.0"

@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT id\n            FROM async_handles\n            WHERE workflow_id = ?1\n              AND operation = 'initialize_jobs'\n              AND status IN ('queued', 'running')\n            ORDER BY id DESC\n            LIMIT 1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d28fa8c03f81bb73a137ad6f10c11d704b8fe23c697e118e9ea42b3785d07c19"
+}

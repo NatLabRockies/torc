@@ -24,6 +24,7 @@ use crate::client::commands::results::ResultCommands;
 use crate::client::commands::ro_crate::RoCrateCommands;
 use crate::client::commands::scheduled_compute_nodes::ScheduledComputeNodeCommands;
 use crate::client::commands::slurm::{GroupByStrategy, SlurmCommands};
+use crate::client::commands::tasks::TasksCommands;
 use crate::client::commands::user_data::UserDataCommands;
 use crate::client::commands::workflows::WorkflowCommands;
 use crate::plot_resources_cmd;
@@ -77,6 +78,7 @@ const HELP_TEMPLATE: &str = "\
 
 \x1b[1;32mConfiguration & Utilities:\x1b[0m
   \x1b[1;36mconfig\x1b[0m                   Manage configuration settings
+  \x1b[1;36mtasks\x1b[0m                    Wait for async tasks
   \x1b[1;36mplot-resources\x1b[0m           Generate HTML resource plots
   \x1b[1;36mcompletions\x1b[0m              Generate shell completions
   \x1b[1;36mhelp\x1b[0m                     Print help for a subcommand
@@ -681,6 +683,11 @@ EXAMPLES:
     Results {
         #[command(subcommand)]
         command: ResultCommands,
+    },
+    /// Task management commands
+    Tasks {
+        #[command(subcommand)]
+        command: TasksCommands,
     },
 
     // =========================================================================

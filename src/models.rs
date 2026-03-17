@@ -11361,3 +11361,89 @@ impl ListSlurmStatsResponse {
         }
     }
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TaskStatus {
+    Queued,
+    Running,
+    Succeeded,
+    Failed,
+}
+
+impl std::fmt::Display for TaskStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            TaskStatus::Queued => "queued",
+            TaskStatus::Running => "running",
+            TaskStatus::Succeeded => "succeeded",
+            TaskStatus::Failed => "failed",
+        };
+        write!(f, "{s}")
+    }
+}
+
+impl std::str::FromStr for TaskStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "queued" => Ok(TaskStatus::Queued),
+            "running" => Ok(TaskStatus::Running),
+            "succeeded" => Ok(TaskStatus::Succeeded),
+            "failed" => Ok(TaskStatus::Failed),
+            other => Err(format!("Unknown task status: {other}")),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct TaskModel {
+    #[serde(rename = "id")]
+    pub id: i64,
+
+    #[serde(rename = "workflow_id")]
+    pub workflow_id: i64,
+
+    #[serde(rename = "operation")]
+    pub operation: String,
+
+    #[serde(rename = "status")]
+    pub status: TaskStatus,
+
+    #[serde(rename = "created_at_ms")]
+    pub created_at_ms: i64,
+
+    #[serde(rename = "started_at_ms")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub started_at_ms: Option<i64>,
+
+    #[serde(rename = "finished_at_ms")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finished_at_ms: Option<i64>,
+
+    #[serde(rename = "error")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+impl TaskModel {
+    pub fn new(
+        id: i64,
+        workflow_id: i64,
+        operation: String,
+        status: TaskStatus,
+        created_at_ms: i64,
+    ) -> TaskModel {
+        TaskModel {
+            id,
+            workflow_id,
+            operation,
+            status,
+            created_at_ms,
+            started_at_ms: None,
+            finished_at_ms: None,
+            error: None,
+        }
+    }
+}

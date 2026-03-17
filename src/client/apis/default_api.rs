@@ -425,6 +425,14 @@ pub enum GetWorkflowStatusError {
     UnknownValue(serde_json::Value),
 }
 
+/// struct for typed errors of method [`get_task`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum GetTaskError {
+    Status500(models::ErrorResponse),
+    UnknownValue(serde_json::Value),
+}
+
 /// struct for typed errors of method [`initialize_jobs`]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -3361,6 +3369,61 @@ pub fn get_workflow_status(
     }
 }
 
+/// Get the status of an asynchronous task.
+pub fn get_task(
+    configuration: &configuration::Configuration,
+    id: i64,
+) -> Result<models::TaskModel, Error<GetTaskError>> {
+    let p_id = id;
+
+    let uri_str = format!("{}/tasks/{id}", configuration.base_path, id = p_id);
+    let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
+
+    if let Some(ref auth) = configuration.basic_auth {
+        req_builder = req_builder.basic_auth(&auth.0, auth.1.as_ref());
+    }
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+    if let Some(ref auth) = configuration.basic_auth {
+        req_builder = req_builder.basic_auth(&auth.0, auth.1.as_ref());
+    }
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req)?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text()?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => Err(Error::from(serde_json::Error::custom(
+                "Received `text/plain` content type response that cannot be converted to `models::TaskModel`",
+            ))),
+            ContentType::Unsupported(unknown_type) => {
+                Err(Error::from(serde_json::Error::custom(format!(
+                    "Received `{unknown_type}` content type response that cannot be converted to `models::TaskModel`"
+                ))))
+            }
+        }
+    } else {
+        let content = resp.text()?;
+        let entity: Option<GetTaskError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent {
+            status,
+            content,
+            entity,
+        }))
+    }
+}
+
 /// Initialize job relationships based on file and user_data relationships.
 pub fn initialize_jobs(
     configuration: &configuration::Configuration,
@@ -3369,10 +3432,30 @@ pub fn initialize_jobs(
     clear_ephemeral_user_data: Option<bool>,
     body: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, Error<InitializeJobsError>> {
+    initialize_jobs_with_async(
+        configuration,
+        id,
+        only_uninitialized,
+        clear_ephemeral_user_data,
+        None,
+        body,
+    )
+}
+
+/// Initialize job relationships based on file and user_data relationships.
+pub fn initialize_jobs_with_async(
+    configuration: &configuration::Configuration,
+    id: i64,
+    only_uninitialized: Option<bool>,
+    clear_ephemeral_user_data: Option<bool>,
+    async_: Option<bool>,
+    body: Option<serde_json::Value>,
+) -> Result<serde_json::Value, Error<InitializeJobsError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_id = id;
     let p_only_uninitialized = only_uninitialized;
     let p_clear_ephemeral_user_data = clear_ephemeral_user_data;
+    let p_async = async_;
     let p_body = body;
 
     let uri_str = format!(
@@ -3389,6 +3472,9 @@ pub fn initialize_jobs(
     }
     if let Some(ref param_value) = p_clear_ephemeral_user_data {
         req_builder = req_builder.query(&[("clear_ephemeral_user_data", &param_value.to_string())]);
+    }
+    if let Some(ref param_value) = p_async {
+        req_builder = req_builder.query(&[("async", &param_value.to_string())]);
     }
     if let Some(ref auth) = configuration.basic_auth {
         req_builder = req_builder.basic_auth(&auth.0, auth.1.as_ref());

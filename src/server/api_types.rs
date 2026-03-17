@@ -939,6 +939,23 @@ pub enum GetWorkflowStatusResponse {
 pub enum InitializeJobsResponse {
     /// Successful response
     SuccessfulResponse(serde_json::Value),
+    /// Accepted - initialization task created
+    AcceptedResponse(models::TaskModel),
+    /// Conflict - initialization already in progress
+    ConflictErrorResponse(models::ErrorResponse),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
+pub enum GetTaskResponse {
+    /// Successful response
+    SuccessfulResponse(models::TaskModel),
     /// Forbidden - user does not have access
     ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
@@ -2263,12 +2280,16 @@ pub trait Api<C: Send + Sync> {
         context: &C,
     ) -> Result<GetWorkflowStatusResponse, ApiError>;
 
+    /// Get the status of an asynchronous task.
+    async fn get_task(&self, id: i64, context: &C) -> Result<GetTaskResponse, ApiError>;
+
     /// Initialize job relationships based on file and user_data relationships.
     async fn initialize_jobs(
         &self,
         id: i64,
         only_uninitialized: Option<bool>,
         clear_ephemeral_user_data: Option<bool>,
+        async_: Option<bool>,
         body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<InitializeJobsResponse, ApiError>;
@@ -3104,12 +3125,16 @@ pub trait ApiNoContext<C: Send + Sync> {
     /// Return the workflow status.
     async fn get_workflow_status(&self, id: i64) -> Result<GetWorkflowStatusResponse, ApiError>;
 
+    /// Get the status of an asynchronous task.
+    async fn get_task(&self, id: i64) -> Result<GetTaskResponse, ApiError>;
+
     /// Initialize job relationships based on file and user_data relationships.
     async fn initialize_jobs(
         &self,
         id: i64,
         only_uninitialized: Option<bool>,
         clear_ephemeral_user_data: Option<bool>,
+        async_: Option<bool>,
         body: Option<serde_json::Value>,
     ) -> Result<InitializeJobsResponse, ApiError>;
 
@@ -4238,12 +4263,19 @@ impl<T: Api<C> + Send + Sync, C: Clone + Send + Sync> ApiNoContext<C> for Contex
         self.api().get_workflow_status(id, &context).await
     }
 
+    /// Get the status of an asynchronous task.
+    async fn get_task(&self, id: i64) -> Result<GetTaskResponse, ApiError> {
+        let context = self.context().clone();
+        self.api().get_task(id, &context).await
+    }
+
     /// Initialize job relationships based on file and user_data relationships.
     async fn initialize_jobs(
         &self,
         id: i64,
         only_uninitialized: Option<bool>,
         clear_ephemeral_user_data: Option<bool>,
+        async_: Option<bool>,
         body: Option<serde_json::Value>,
     ) -> Result<InitializeJobsResponse, ApiError> {
         let context = self.context().clone();
@@ -4252,6 +4284,7 @@ impl<T: Api<C> + Send + Sync, C: Clone + Send + Sync> ApiNoContext<C> for Contex
                 id,
                 only_uninitialized,
                 clear_ephemeral_user_data,
+                async_,
                 body,
                 &context,
             )

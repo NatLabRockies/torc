@@ -73,17 +73,18 @@ use crate::server::api_types::{
     GetFailureHandlerResponse, GetFileResponse, GetJobResponse, GetLocalSchedulerResponse,
     GetPendingActionsResponse, GetReadyJobRequirementsResponse, GetResourceRequirementsResponse,
     GetResultResponse, GetRoCrateEntityResponse, GetScheduledComputeNodeResponse,
-    GetSlurmSchedulerResponse, GetUserDataResponse, GetVersionResponse, GetWorkflowActionsResponse,
-    GetWorkflowResponse, GetWorkflowStatusResponse, InitializeJobsResponse,
-    IsWorkflowCompleteResponse, IsWorkflowUninitializedResponse, ListAccessGroupsApiResponse,
-    ListComputeNodesResponse, ListEventsResponse, ListFailureHandlersResponse, ListFilesResponse,
-    ListGroupMembersResponse, ListJobDependenciesResponse, ListJobFileRelationshipsResponse,
-    ListJobIdsResponse, ListJobUserDataRelationshipsResponse, ListJobsResponse,
-    ListLocalSchedulersResponse, ListMissingUserDataResponse, ListRemoteWorkersResponse,
-    ListRequiredExistingFilesResponse, ListResourceRequirementsResponse, ListResultsResponse,
-    ListRoCrateEntitiesResponse, ListScheduledComputeNodesResponse, ListSlurmSchedulersResponse,
-    ListSlurmStatsResponse, ListUserDataResponse, ListUserGroupsApiResponse,
-    ListWorkflowGroupsResponse, ListWorkflowsResponse, ManageStatusChangeResponse, PingResponse,
+    GetSlurmSchedulerResponse, GetTaskResponse, GetUserDataResponse, GetVersionResponse,
+    GetWorkflowActionsResponse, GetWorkflowResponse, GetWorkflowStatusResponse,
+    InitializeJobsResponse, IsWorkflowCompleteResponse, IsWorkflowUninitializedResponse,
+    ListAccessGroupsApiResponse, ListComputeNodesResponse, ListEventsResponse,
+    ListFailureHandlersResponse, ListFilesResponse, ListGroupMembersResponse,
+    ListJobDependenciesResponse, ListJobFileRelationshipsResponse, ListJobIdsResponse,
+    ListJobUserDataRelationshipsResponse, ListJobsResponse, ListLocalSchedulersResponse,
+    ListMissingUserDataResponse, ListRemoteWorkersResponse, ListRequiredExistingFilesResponse,
+    ListResourceRequirementsResponse, ListResultsResponse, ListRoCrateEntitiesResponse,
+    ListScheduledComputeNodesResponse, ListSlurmSchedulersResponse, ListSlurmStatsResponse,
+    ListUserDataResponse, ListUserGroupsApiResponse, ListWorkflowGroupsResponse,
+    ListWorkflowsResponse, ManageStatusChangeResponse, PingResponse,
     ProcessChangedJobInputsResponse, ReloadAuthResponse, RemoveUserFromGroupResponse,
     RemoveWorkflowFromGroupResponse, ResetJobStatusResponse, ResetWorkflowStatusResponse,
     RetryJobResponse, StartJobResponse, UpdateComputeNodeResponse, UpdateEventResponse,
@@ -176,7 +177,9 @@ mod paths {
             r"^/torc-service/v1/ro_crate_entities/(?P<id>[^/?#]*)$",
             r"^/torc-service/v1/workflows/(?P<id>[^/?#]*)/ro_crate_entities$",
             // Slurm stats route (index 71)
-            r"^/torc-service/v1/slurm_stats$"
+            r"^/torc-service/v1/slurm_stats$",
+            // Tasks route (index 72)
+            r"^/torc-service/v1/tasks/(?P<id>[^/?#]*)$"
         ])
         .expect("Unable to create global regex set");
     }
@@ -544,6 +547,13 @@ regex::Regex::new(
     }
     // Slurm stats
     pub(crate) static ID_SLURM_STATS: usize = 71;
+    // Tasks
+    pub(crate) static ID_TASKS_ID: usize = 72;
+    lazy_static! {
+        pub static ref REGEX_TASKS_ID: regex::Regex =
+            regex::Regex::new(r"^/torc-service/v1/tasks/(?P<id>[^/?#]*)$")
+                .expect("Unable to create regex for TASKS_ID");
+    }
 }
 
 pub struct MakeService<T, C>
@@ -2409,6 +2419,109 @@ where
                             *response.body_mut() = Body::from("An internal error occurred");
                         }
                     }
+                    Ok(response)
+                }
+
+                // GetTask - GET /tasks/{id}
+                hyper::Method::GET if path.matched(paths::ID_TASKS_ID) => {
+                    // Path parameters
+                    let path: &str = uri.path();
+                    let path_params = paths::REGEX_TASKS_ID.captures(path).unwrap_or_else(|| {
+                        panic!(
+                            "Path {} matched RE TASKS_ID in set but failed match against \"{}\"",
+                            path,
+                            paths::REGEX_TASKS_ID.as_str()
+                        )
+                    });
+
+                    let param_id = match percent_encoding::percent_decode(path_params["id"].as_bytes()).decode_utf8() {
+                        Ok(param_id) => match param_id.parse::<i64>() {
+                            Ok(param_id) => param_id,
+                            Err(e) => return Ok(Response::builder()
+                                            .status(StatusCode::BAD_REQUEST)
+                                            .body(Body::from(format!("Couldn't parse path parameter id: {}", e)))
+                                            .expect("Unable to create Bad Request response for invalid path parameter")),
+                        },
+                        Err(_) => return Ok(Response::builder()
+                                            .status(StatusCode::BAD_REQUEST)
+                                            .body(Body::from(format!("Couldn't percent-decode path parameter as UTF-8: {}", &path_params["id"])))
+                                            .expect("Unable to create Bad Request response for invalid percent decode"))
+                    };
+
+                    let result = api_impl.get_task(param_id, &context).await;
+
+                    let mut response = Response::new(Body::empty());
+                    response.headers_mut().insert(
+                        HeaderName::from_static("x-span-id"),
+                        HeaderValue::from_str(
+                            (&context as &dyn Has<XSpanIdString>)
+                                .get()
+                                .0
+                                .clone()
+                                .as_str(),
+                        )
+                        .expect("Unable to create X-Span-ID header value"),
+                    );
+
+                    match result {
+                        Ok(rsp) => {
+                            match rsp {
+                                GetTaskResponse::SuccessfulResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(200)
+                                        .expect("Unable to turn 200 into a StatusCode");
+                                    response.headers_mut().insert(
+                                    CONTENT_TYPE,
+                                    HeaderValue::from_str("application/json")
+                                        .expect("Unable to create Content-Type header for application/json"),
+                                );
+                                    let body_content = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body_content);
+                                }
+                                GetTaskResponse::ForbiddenErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(403)
+                                        .expect("Unable to turn 403 into a StatusCode");
+                                    response.headers_mut().insert(
+                                    CONTENT_TYPE,
+                                    HeaderValue::from_str("application/json")
+                                        .expect("Unable to create Content-Type header for application/json"),
+                                );
+                                    let body_content = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body_content);
+                                }
+                                GetTaskResponse::NotFoundErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(404)
+                                        .expect("Unable to turn 404 into a StatusCode");
+                                    response.headers_mut().insert(
+                                    CONTENT_TYPE,
+                                    HeaderValue::from_str("application/json")
+                                        .expect("Unable to create Content-Type header for application/json"),
+                                );
+                                    let body_content = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body_content);
+                                }
+                                GetTaskResponse::DefaultErrorResponse(body) => {
+                                    *response.status_mut() = StatusCode::from_u16(500)
+                                        .expect("Unable to turn 500 into a StatusCode");
+                                    response.headers_mut().insert(
+                                    CONTENT_TYPE,
+                                    HeaderValue::from_str("application/json")
+                                        .expect("Unable to create Content-Type header for application/json"),
+                                );
+                                    let body_content = serde_json::to_string(&body)
+                                        .expect("impossible to fail to serialize");
+                                    *response.body_mut() = Body::from(body_content);
+                                }
+                            }
+                        }
+                        Err(_) => {
+                            *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+                            *response.body_mut() = Body::from("An internal error occurred");
+                        }
+                    }
+
                     Ok(response)
                 }
 
@@ -9053,6 +9166,24 @@ where
                         }
                         None => None,
                     };
+                    let param_async = query_params
+                        .iter()
+                        .filter(|e| e.0 == "async")
+                        .map(|e| e.1.clone())
+                        .next();
+                    let param_async = match param_async {
+                        Some(param_async) => {
+                            let param_async = <bool as std::str::FromStr>::from_str(&param_async);
+                            match param_async {
+                            Ok(param_async) => Some(param_async),
+                            Err(e) => return Ok(Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body(Body::from(format!("Couldn't parse query parameter async - doesn't match schema: {}", e)))
+                                .expect("Unable to create Bad Request response for invalid query parameter async")),
+                        }
+                        }
+                        None => None,
+                    };
 
                     // Handle body parameters (note that non-required body parameters will ignore garbage
                     // values, rather than causing a 400 response). Produce warning header and logs for
@@ -9080,6 +9211,7 @@ where
                                     param_id,
                                     param_only_uninitialized,
                                     param_clear_ephemeral_user_data,
+                                    param_async,
                                     param_body,
                                     &context,
                                 )
@@ -9120,6 +9252,28 @@ where
                                                         HeaderValue::from_str("application/json")
                                                             .expect("Unable to create Content-Type header for application/json"));
                                         // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    InitializeJobsResponse::AcceptedResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(202)
+                                            .expect("Unable to turn 202 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
+                                    InitializeJobsResponse::ConflictErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(409)
+                                            .expect("Unable to turn 409 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
                                         let body = serde_json::to_string(&body)
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
@@ -19055,6 +19209,7 @@ where
                 _ if path.matched(paths::ID_WORKFLOWS_ID_EVENTS_STREAM) => method_not_allowed(),
                 _ if path.matched(paths::ID_ADMIN_RELOAD_AUTH) => method_not_allowed(),
                 _ if path.matched(paths::ID_SLURM_STATS) => method_not_allowed(),
+                _ if path.matched(paths::ID_TASKS_ID) => method_not_allowed(),
                 // Serve dashboard for non-API routes, 404 otherwise
                 _ => {
                     // Try to serve dashboard assets for non-API paths
@@ -19262,6 +19417,8 @@ impl<T> RequestParser<T> for ApiRequestParser {
             hyper::Method::GET if path.matched(paths::ID_WORKFLOWS_ID_STATUS) => {
                 Some("GetWorkflowStatus")
             }
+            // GetTask - GET /tasks/{id}
+            hyper::Method::GET if path.matched(paths::ID_TASKS_ID) => Some("GetTask"),
             // InitializeJobs - POST /workflows/{id}/initialize_jobs
             hyper::Method::POST if path.matched(paths::ID_WORKFLOWS_ID_INITIALIZE_JOBS) => {
                 Some("InitializeJobs")

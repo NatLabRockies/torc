@@ -128,6 +128,10 @@ fn start_process(db_url: &str, db_file: NamedTempFile) -> ServerProcess {
     let status = Command::new("cargo")
         .arg("build")
         .arg("--workspace")
+        .arg("--all-features")
+        // Use SQLx offline mode during compilation; metadata lives in `.sqlx/`.
+        // The runtime server is configured with `DATABASE_URL` separately.
+        .env("SQLX_OFFLINE", "true")
         .status()
         .expect("Failed to execute cargo build");
     if !status.success() {

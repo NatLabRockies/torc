@@ -1999,28 +1999,35 @@ fn handle_reinitialize(
                 }
             } else {
                 // Normal reinitialization (not dry-run)
-                match workflow_manager.reinitialize(force, dry_run) {
-                    Ok(()) => {
+                match workflow_manager.reinitialize_async(force, dry_run) {
+                    Ok(Some(task)) => {
                         if format == "json" {
                             let success_response = serde_json::json!({
                                 "status": "success",
-                                "message": format!("Successfully reinitialized workflow {}", selected_workflow_id),
-                                "workflow_id": selected_workflow_id
+                                "message": "Reinitialize task created",
+                                "workflow_id": selected_workflow_id,
+                                "task_id": task.id,
+                                "task_status": task.status,
+                                "task_operation": task.operation
                             });
                             println!(
                                 "{}",
                                 serde_json::to_string_pretty(&success_response).unwrap()
                             );
                         } else {
-                            eprintln!("Successfully reinitialized workflow:");
+                            eprintln!("Reinitialize task created:");
                             println!("  Workflow ID: {}", selected_workflow_id);
+                            println!("  Task ID: {}", task.id);
+                            println!("  Status: {}", task.status);
+                            println!("  Next: torc tasks wait {}", task.id);
                         }
                     }
+                    Ok(None) => unreachable!("dry_run=false should return a task"),
                     Err(e) => {
                         if format == "json" {
                             let error_response = serde_json::json!({
                                 "status": "error",
-                                "message": format!("Failed to reinitialize workflow: {}", e),
+                                "message": format!("Failed to create reinitialize task: {}", e),
                                 "workflow_id": selected_workflow_id
                             });
                             println!("{}", serde_json::to_string_pretty(&error_response).unwrap());
@@ -2163,33 +2170,42 @@ fn handle_initialize(
                         std::process::exit(1);
                     }
                 }
-                match workflow_manager.initialize(force) {
-                    Ok(()) => {
+                match workflow_manager.initialize_async(force) {
+                    Ok(task) => {
                         if format == "json" {
                             let success_response = serde_json::json!({
                                 "status": "success",
-                                "message": format!("Successfully started workflow {}", selected_workflow_id),
-                                "workflow_id": selected_workflow_id
+                                "message": "Initialization task created",
+                                "workflow_id": selected_workflow_id,
+                                "task_id": task.id,
+                                "task_status": task.status,
+                                "task_operation": task.operation
                             });
                             println!(
                                 "{}",
                                 serde_json::to_string_pretty(&success_response).unwrap()
                             );
                         } else {
-                            println!("Successfully started workflow:");
+                            println!("Initialization task created:");
                             println!("  Workflow ID: {}", selected_workflow_id);
+                            println!("  Task ID: {}", task.id);
+                            println!("  Status: {}", task.status);
+                            println!("  Next: torc tasks wait {}", task.id);
                         }
                     }
                     Err(e) => {
                         if format == "json" {
                             let error_response = serde_json::json!({
                                 "status": "error",
-                                "message": format!("Failed to start workflow: {}", e),
+                                "message": format!("Failed to create initialization task: {}", e),
                                 "workflow_id": selected_workflow_id
                             });
                             println!("{}", serde_json::to_string_pretty(&error_response).unwrap());
                         } else {
-                            eprintln!("Error starting workflow {}: {}", selected_workflow_id, e);
+                            eprintln!(
+                                "Error initializing workflow {}: {}",
+                                selected_workflow_id, e
+                            );
                         }
                         std::process::exit(1);
                     }
