@@ -44,7 +44,8 @@ class JobModel(BaseModel):
     scheduler_id: Optional[StrictInt] = Field(default=None, description="Optional database ID of scheduler needed by this job")
     failure_handler_id: Optional[StrictInt] = Field(default=None, description="Optional database ID of failure handler for this job")
     attempt_id: Optional[StrictInt] = Field(default=1, description="Current retry attempt number (starts at 1)")
-    __properties: ClassVar[List[str]] = ["id", "workflow_id", "name", "command", "invocation_script", "status", "cancel_on_blocking_job_failure", "supports_termination", "depends_on_job_ids", "input_file_ids", "output_file_ids", "input_user_data_ids", "output_user_data_ids", "resource_requirements_id", "scheduler_id", "failure_handler_id", "attempt_id"]
+    priority: Optional[StrictInt] = Field(default=0, description="Scheduling priority; higher values are submitted first. Minimum 0.")
+    __properties: ClassVar[List[str]] = ["id", "workflow_id", "name", "command", "invocation_script", "status", "cancel_on_blocking_job_failure", "supports_termination", "depends_on_job_ids", "input_file_ids", "output_file_ids", "input_user_data_ids", "output_user_data_ids", "resource_requirements_id", "scheduler_id", "failure_handler_id", "attempt_id", "priority"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -113,7 +114,8 @@ class JobModel(BaseModel):
             "resource_requirements_id": obj.get("resource_requirements_id"),
             "scheduler_id": obj.get("scheduler_id"),
             "failure_handler_id": obj.get("failure_handler_id"),
-            "attempt_id": obj.get("attempt_id") if obj.get("attempt_id") is not None else 1
+            "attempt_id": obj.get("attempt_id") if obj.get("attempt_id") is not None else 1,
+            "priority": obj.get("priority") if obj.get("priority") is not None else 0
         })
         return _obj
 
