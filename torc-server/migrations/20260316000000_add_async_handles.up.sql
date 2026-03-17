@@ -7,7 +7,7 @@ CREATE TABLE async_handles (
   id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
   workflow_id INTEGER NOT NULL,
   operation TEXT NOT NULL,
-  status TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'succeeded', 'failed')),
   created_at_ms INTEGER NOT NULL,
   started_at_ms INTEGER NULL,
   finished_at_ms INTEGER NULL,

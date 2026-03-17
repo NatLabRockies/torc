@@ -426,8 +426,7 @@ pub enum GetWorkflowStatusError {
 }
 
 /// struct for typed errors of method [`get_task`]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
+#[derive(Debug, Clone)]
 pub enum GetTaskError {
     Status404(models::ErrorResponse),
     Status500(models::ErrorResponse),
@@ -3416,7 +3415,27 @@ pub fn get_task(
         }
     } else {
         let content = resp.text()?;
-        let entity: Option<GetTaskError> = serde_json::from_str(&content).ok();
+        let entity = match status.as_u16() {
+            404 => serde_json::from_str::<models::ErrorResponse>(&content)
+                .ok()
+                .map(GetTaskError::Status404)
+                .or_else(|| {
+                    serde_json::from_str::<serde_json::Value>(&content)
+                        .ok()
+                        .map(GetTaskError::UnknownValue)
+                }),
+            500 => serde_json::from_str::<models::ErrorResponse>(&content)
+                .ok()
+                .map(GetTaskError::Status500)
+                .or_else(|| {
+                    serde_json::from_str::<serde_json::Value>(&content)
+                        .ok()
+                        .map(GetTaskError::UnknownValue)
+                }),
+            _ => serde_json::from_str::<serde_json::Value>(&content)
+                .ok()
+                .map(GetTaskError::UnknownValue),
+        };
         Err(Error::ResponseError(ResponseContent {
             status,
             content,

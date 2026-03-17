@@ -3,6 +3,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::client::apis::Error as ApiError;
 use crate::client::apis::configuration::Configuration;
 use crate::client::apis::default_api;
 use crate::client::sse_client::{SseConnection, SseError};
@@ -43,13 +44,10 @@ fn handle_wait(
     poll_interval_secs: u64,
     format: &str,
 ) {
-    let initial_task = match default_api::get_task(config, task_id) {
-        Ok(task) => task,
-        Err(e) => {
-            eprintln!("Error getting task {}: {}", task_id, e);
-            std::process::exit(1);
-        }
-    };
+    let start = Instant::now();
+    let deadline = timeout_secs.map(|limit| start + Duration::from_secs(limit));
+
+    let initial_task = get_task_with_retry(config, task_id, deadline);
 
     if is_task_terminal(&initial_task) {
         print_task_result(&initial_task, format);
@@ -95,10 +93,10 @@ fn handle_wait(
         }
     });
 
-    let start = Instant::now();
+    let mut backoff = Backoff::new(Duration::from_millis(200), Duration::from_secs(5));
     loop {
-        if let Some(limit) = timeout_secs
-            && start.elapsed() >= Duration::from_secs(limit)
+        if let Some(deadline) = deadline
+            && Instant::now() >= deadline
         {
             eprintln!("Timeout waiting for task {}", task_id);
             std::process::exit(1);
@@ -108,8 +106,18 @@ fn handle_wait(
         if rx.try_recv().is_ok() {
             match default_api::get_task(config, task_id) {
                 Ok(task) => {
+                    backoff.reset();
                     print_task_result(&task, format);
                     exit_for_task(&task);
+                }
+                Err(e) if is_retryable_get_task_error(&e) => {
+                    let delay = backoff.next_delay();
+                    eprintln!(
+                        "Warning: transient error getting task {} (SSE wake): {}; retrying in {:?}",
+                        task_id, e, delay
+                    );
+                    let _ = rx.recv_timeout(delay);
+                    continue;
                 }
                 Err(e) => {
                     eprintln!("Error getting task {}: {}", task_id, e);
@@ -120,10 +128,20 @@ fn handle_wait(
 
         match default_api::get_task(config, task_id) {
             Ok(task) => {
+                backoff.reset();
                 if is_task_terminal(&task) {
                     print_task_result(&task, format);
                     exit_for_task(&task);
                 }
+            }
+            Err(e) if is_retryable_get_task_error(&e) => {
+                let delay = backoff.next_delay();
+                eprintln!(
+                    "Warning: transient error getting task {}: {}; retrying in {:?}",
+                    task_id, e, delay
+                );
+                let _ = rx.recv_timeout(delay);
+                continue;
             }
             Err(e) => {
                 eprintln!("Error getting task {}: {}", task_id, e);
@@ -134,6 +152,78 @@ fn handle_wait(
         let wait = Duration::from_secs(poll_interval_secs.max(1));
         // If we can receive SSE completion within the interval, we wake early.
         let _ = rx.recv_timeout(wait);
+    }
+}
+
+#[derive(Debug, Clone)]
+struct Backoff {
+    initial: Duration,
+    max: Duration,
+    current: Duration,
+}
+
+impl Backoff {
+    fn new(initial: Duration, max: Duration) -> Self {
+        Self {
+            initial,
+            max,
+            current: initial,
+        }
+    }
+
+    fn reset(&mut self) {
+        self.current = self.initial;
+    }
+
+    fn next_delay(&mut self) -> Duration {
+        let delay = self.current;
+        self.current = std::cmp::min(self.max, self.current.saturating_mul(2));
+        delay
+    }
+}
+
+fn get_task_with_retry(
+    config: &Configuration,
+    task_id: i64,
+    deadline: Option<Instant>,
+) -> TaskModel {
+    let mut backoff = Backoff::new(Duration::from_millis(200), Duration::from_secs(5));
+    loop {
+        if let Some(deadline) = deadline
+            && Instant::now() >= deadline
+        {
+            eprintln!("Timeout waiting for task {}", task_id);
+            std::process::exit(1);
+        }
+
+        match default_api::get_task(config, task_id) {
+            Ok(task) => return task,
+            Err(e) if is_retryable_get_task_error(&e) => {
+                let delay = backoff.next_delay();
+                eprintln!(
+                    "Warning: transient error getting task {}: {}; retrying in {:?}",
+                    task_id, e, delay
+                );
+                thread::sleep(delay);
+            }
+            Err(e) => {
+                eprintln!("Error getting task {}: {}", task_id, e);
+                std::process::exit(1);
+            }
+        }
+    }
+}
+
+fn is_retryable_get_task_error(err: &ApiError<default_api::GetTaskError>) -> bool {
+    match err {
+        ApiError::Reqwest(_) | ApiError::Io(_) => true,
+        ApiError::Serde(_) => false,
+        ApiError::ResponseError(resp) => {
+            let status = resp.status;
+            status.is_server_error()
+                || status == reqwest::StatusCode::REQUEST_TIMEOUT
+                || status == reqwest::StatusCode::TOO_MANY_REQUESTS
+        }
     }
 }
 

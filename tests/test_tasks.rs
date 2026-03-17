@@ -6,9 +6,12 @@ use std::time::{Duration, Instant};
 use rstest::rstest;
 use serial_test::serial;
 mod common;
-use common::{ServerProcess, start_server};
+use common::{
+    AccessControlServerProcess, ServerProcess, start_server, start_server_with_access_control,
+};
 
 use torc::client::apis::Error as ApiError;
+use torc::client::apis::default_api::GetTaskError;
 use torc::client::default_api;
 use torc::client::sse_client::SseConnection;
 use torc::models::{EventSeverity, TaskModel, TaskStatus};
@@ -140,4 +143,50 @@ fn test_initialize_jobs_async_concurrent_requests_yield_conflict(start_server: &
 
     assert_eq!(ok_count, 1, "expected one successful task creation");
     assert_eq!(conflict_count, 1, "expected one conflict response");
+}
+
+#[rstest]
+#[serial]
+fn test_get_task_unauthorized_returns_404(
+    start_server_with_access_control: &AccessControlServerProcess,
+) {
+    let server = start_server_with_access_control;
+    let owner_config = server.config_for_user("owner_user");
+    let outsider_config = server.config_for_user("outsider");
+
+    let workflow = common::create_test_workflow_advanced(
+        &owner_config,
+        "tasks-test-unauthorized-404",
+        "owner_user",
+        None,
+    );
+    let workflow_id = workflow.id.unwrap();
+
+    let resp = default_api::initialize_jobs_with_async(
+        &owner_config,
+        workflow_id,
+        Some(false),
+        Some(false),
+        Some(true),
+        None,
+    )
+    .expect("initialize_jobs_with_async should return 202 task");
+
+    let task: TaskModel = serde_json::from_value(resp).expect("TaskModel response");
+
+    match default_api::get_task(&outsider_config, task.id) {
+        Ok(_) => panic!("expected 404 when unauthorized user queries a task"),
+        Err(ApiError::ResponseError(resp)) => {
+            assert_eq!(
+                resp.status.as_u16(),
+                404,
+                "expected 404 (not 403) to avoid task ID enumeration"
+            );
+            assert!(
+                matches!(resp.entity, Some(GetTaskError::Status404(_))),
+                "expected typed 404 entity for get_task"
+            );
+        }
+        Err(err) => panic!("unexpected error from get_task: {}", err),
+    }
 }
