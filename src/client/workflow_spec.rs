@@ -462,6 +462,9 @@ pub struct JobSpec {
     /// If set, overrides the workflow-level `execution_config.stdio` for this job.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stdio: Option<StdioConfig>,
+    /// Scheduling priority; higher values are submitted to workers first. Minimum 0, default 0.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub priority: Option<i64>,
 }
 
 impl JobSpec {
@@ -491,6 +494,7 @@ impl JobSpec {
             parameter_mode: None,
             use_parameters: None,
             stdio: None,
+            priority: None,
         }
     }
 
@@ -2777,6 +2781,10 @@ impl WorkflowSpec {
                         depends_on_ids.push(*dep_id);
                     }
                     job_model.depends_on_job_ids = Some(depends_on_ids);
+                }
+
+                if let Some(p) = job_spec.priority {
+                    job_model.priority = Some(p);
                 }
 
                 job_models.push(job_model);

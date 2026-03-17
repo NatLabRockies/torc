@@ -6892,6 +6892,11 @@ components:
           description: Current retry attempt number (starts at 1)
           type: integer
           default: 1
+        priority:
+          description: Scheduling priority; higher values are submitted first. Minimum 0.
+          type: integer
+          default: 0
+          minimum: 0
       required:
       - command
       - name

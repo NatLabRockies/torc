@@ -262,6 +262,9 @@ EXAMPLES:
 
     # Change resource requirements
     torc jobs update 456 --resource-requirements-id 10
+
+    # Set scheduling priority (higher = submitted first)
+    torc jobs update 456 --priority 10
 ")]
     Update {
         /// ID of the job to update
@@ -282,6 +285,9 @@ EXAMPLES:
         /// Resource requirements ID to assign to this job
         #[arg(long)]
         resource_requirements_id: Option<i64>,
+        /// Scheduling priority (0 or higher; higher = submitted first)
+        #[arg(long)]
+        priority: Option<i64>,
     },
     /// Delete one or more jobs
     #[command(after_long_help = "\
@@ -568,6 +574,7 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
             command,
             runtime,
             resource_requirements_id,
+            priority,
         } => {
             // First get the existing job
             match default_api::get_job(config, *id) {
@@ -581,6 +588,9 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                     }
                     if let Some(new_rr_id) = resource_requirements_id {
                         job.resource_requirements_id = Some(*new_rr_id);
+                    }
+                    if let Some(p) = priority {
+                        job.priority = Some(*p);
                     }
 
                     // Handle runtime update (requires updating resource requirements)

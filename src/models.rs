@@ -2937,6 +2937,11 @@ pub struct JobModel {
     #[serde(rename = "attempt_id")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub attempt_id: Option<i64>,
+
+    /// Scheduling priority; higher values are submitted to workers first. Minimum 0, default 0.
+    #[serde(rename = "priority")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub priority: Option<i64>,
 }
 
 impl JobModel {
@@ -2961,6 +2966,7 @@ impl JobModel {
             scheduler_id: None,
             failure_handler_id: None,
             attempt_id: Some(1),
+            priority: None,
         }
     }
 }
@@ -3113,6 +3119,7 @@ impl std::str::FromStr for JobModel {
             pub scheduler_id: Vec<i64>,
             pub failure_handler_id: Vec<i64>,
             pub attempt_id: Vec<i64>,
+            pub priority: Vec<i64>,
         }
 
         let mut intermediate_rep = IntermediateRep::default();
@@ -3208,6 +3215,9 @@ impl std::str::FromStr for JobModel {
                     "attempt_id" => intermediate_rep.attempt_id.push(
                         <i64 as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
                     ),
+                    "priority" => intermediate_rep.priority.push(
+                        <i64 as std::str::FromStr>::from_str(val).map_err(|x| x.to_string())?,
+                    ),
                     _ => {
                         return std::result::Result::Err(
                             "Unexpected key while parsing JobModel".to_string(),
@@ -3255,6 +3265,7 @@ impl std::str::FromStr for JobModel {
             scheduler_id: intermediate_rep.scheduler_id.into_iter().next(),
             failure_handler_id: intermediate_rep.failure_handler_id.into_iter().next(),
             attempt_id: intermediate_rep.attempt_id.into_iter().next(),
+            priority: intermediate_rep.priority.into_iter().next(),
         })
     }
 }
