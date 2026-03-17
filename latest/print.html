@@ -13528,6 +13528,42 @@ curl -s "$TORC_API_URL/workflows" | head
 # Exit the allocation
 exit
 </code></pre>
+<h2 id="large-scale-deployments"><a class="header" href="#large-scale-deployments">Large-Scale Deployments</a></h2>
+<h3 id="startup-jitter-thundering-herd-mitigation"><a class="header" href="#startup-jitter-thundering-herd-mitigation">Startup Jitter (Thundering Herd Mitigation)</a></h3>
+<p>When many Slurm allocations start simultaneously — for example, 1000 single-node jobs scheduled at
+once — all <code>torc-slurm-job-runner</code> processes may contact the server at the same instant. This
+"thundering herd" can overwhelm the server with concurrent requests, causing connection timeouts and
+SQLite lock contention.</p>
+<p>Torc mitigates this automatically. When <code>torc slurm schedule-nodes</code> generates sbatch scripts, it
+calculates a startup delay window based on the total number of runners that will start:</p>
+<div class="table-wrapper"><table><thead><tr><th>Total runners</th><th>Max startup delay</th></tr></thead><tbody>
+<tr><td>1</td><td>0 s (disabled)</td></tr>
+<tr><td>2–10</td><td>2–10 s</td></tr>
+<tr><td>11–100</td><td>10–60 s</td></tr>
+<tr><td>100+</td><td>60 s</td></tr>
+</tbody></table>
+</div>
+<p>Each runner picks a deterministic delay within this window (hashed from its hostname, Slurm job ID,
+node ID, and task PID), then sleeps before making its first API call. This spreads the initial burst
+of requests across the delay window.</p>
+<p>The delay is passed to <code>torc-slurm-job-runner</code> via the <code>--startup-delay-seconds</code> flag in the
+generated sbatch script. You can override it manually if needed:</p>
+<pre><code class="language-bash"># In a custom sbatch script: set a 120-second jitter window
+torc-slurm-job-runner $URL $WORKFLOW_ID $OUTPUT --startup-delay-seconds 120
+</code></pre>
+<p>When <code>start_one_worker_per_node</code> is enabled, the total runner count includes all nodes across all
+allocations (e.g., 10 allocations × 4 nodes = 40 runners), so the delay window scales appropriately.</p>
+<p>To disable staggered startup, set <code>staggered_start: false</code> in <code>execution_config</code>:</p>
+<pre><code class="language-yaml">execution_config:
+  staggered_start: false
+</code></pre>
+<h3 id="server-tuning-for-large-workflows"><a class="header" href="#server-tuning-for-large-workflows">Server Tuning for Large Workflows</a></h3>
+<p>For workflows with many concurrent compute nodes, consider increasing the server thread count to
+expand the database connection pool:</p>
+<pre><code class="language-bash"># Default is 1 thread (3 connections). For 100+ nodes, increase:
+torc-server run --threads 8 --database /scratch/$USER/torc.db --host $HOST --port $PORT
+</code></pre>
+<p>The connection pool size is <code>max(threads, 2) + 2</code>, so <code>--threads 8</code> gives 10 connections.</p>
 <h2 id="troubleshooting-6"><a class="header" href="#troubleshooting-6">Troubleshooting</a></h2>
 <h3 id="connection-refused-from-compute-nodes-1"><a class="header" href="#connection-refused-from-compute-nodes-1">"Connection refused" from compute nodes</a></h3>
 <ol>
