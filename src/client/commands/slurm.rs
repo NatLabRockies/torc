@@ -714,10 +714,6 @@ EXAMPLES:
         #[arg(short, long)]
         partition: Option<String>,
 
-        /// QOS to use
-        #[arg(short, long)]
-        qos: Option<String>,
-
         /// HPC profile to use (if not specified, tries to detect current system)
         #[arg(long)]
         profile: Option<String>,
@@ -1508,7 +1504,6 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
             workflow_file,
             account,
             partition,
-            qos: _,
             profile: profile_name,
             offline,
             skip_test_only,
@@ -3460,8 +3455,8 @@ fn compute_recommendations(
         // Look up cluster state by partition name; skip lookup if no partition is set
         let cluster_entry = partition_name.and_then(|p| cluster_state.get(p));
 
-        if offline || cluster_entry.is_none() {
-            // Offline mode or no partition/cluster state: just report the ideal plan
+        if offline {
+            // Offline mode: report the ideal plan with no estimates
             recommendations.push(AllocationRecommendation {
                 group_name: scheduler.resource_requirements.clone(),
                 partition: partition_name.map(|s| s.to_string()),
@@ -3480,16 +3475,20 @@ fn compute_recommendations(
             continue;
         }
 
-        let (avail, queue) = cluster_entry.unwrap();
-        let idle = avail.idle as i64;
-        let _mixed = avail.mixed as i64;
-        let total = avail.total as i64;
-
-        // Queue pressure: ratio of pending nodes to total nodes
-        let queue_pressure = if total > 0 {
-            queue.pending_nodes as f64 / total as f64
+        // Extract cluster state metrics, defaulting to zeros when partition is
+        // not explicitly set (Slurm default partition). Heuristics will fall
+        // through to the middle-ground path, but sbatch estimates (if present)
+        // can still refine the recommendation.
+        let (idle, _mixed, _total, queue_pressure) = if let Some((avail, queue)) = cluster_entry {
+            let total = avail.total as i64;
+            let pressure = if total > 0 {
+                queue.pending_nodes as f64 / total as f64
+            } else {
+                0.0
+            };
+            (avail.idle as i64, avail.mixed as i64, total, pressure)
         } else {
-            0.0
+            (0_i64, 0_i64, 0_i64, 0.0)
         };
 
         // Start with heuristic-based recommendation
