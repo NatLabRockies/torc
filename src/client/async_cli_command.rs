@@ -72,7 +72,14 @@ fn build_srun_command(params: &SrunParams) -> Result<Command, String> {
     // --exact tells srun to use exactly the requested CPUs/memory without
     // claiming the entire node exclusively. This allows concurrent steps
     // to share nodes in multi-node allocations.
-    srun.arg("--exact");
+    //
+    // When limit_resources is false, we omit --exact so the step inherits
+    // the full allocation's resources. Without --exact, srun defaults
+    // --cpus-per-task to 1, which would silently restrict multi-threaded
+    // jobs to a single core via cgroups.
+    if params.limit_resources {
+        srun.arg("--exact");
+    }
     srun.arg(format!("--job-name={}", params.step_name));
 
     // Pin the step to a specific node when the job runner has claimed

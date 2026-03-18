@@ -252,8 +252,14 @@ fn test_srun_no_resource_limits() {
     // Core srun flags should still be present
     assert!(args.contains("--jobid=99999"), "Missing --jobid: {}", args);
     assert!(args.contains("--ntasks=1"), "Missing --ntasks=1: {}", args);
-    assert!(args.contains("--exact"), "Missing --exact: {}", args);
     assert!(args.contains("--nodes=1"), "Missing --nodes=1: {}", args);
+
+    // --exact should be ABSENT so the step inherits the full allocation
+    assert!(
+        !args.contains("--exact"),
+        "Unexpected --exact with limit_resources=false: {}",
+        args
+    );
 
     // Resource-limiting flags should be ABSENT
     assert!(
@@ -708,6 +714,12 @@ fn test_srun_limit_resources_false_with_cpu_bind_and_signal() {
 
     cleanup_srun_env();
 
+    // --exact should be absent (limit_resources=false)
+    assert!(
+        !args.contains("--exact"),
+        "Unexpected --exact with limit_resources=false: {}",
+        args
+    );
     // Resource limits should be absent (limit_resources=false)
     assert!(
         !args.contains("--cpus-per-task"),
@@ -900,6 +912,12 @@ fn test_srun_gpus_with_limit_resources_false() {
 
     cleanup_srun_env();
 
+    // --exact should be absent (limit_resources=false)
+    assert!(
+        !args.contains("--exact"),
+        "Unexpected --exact with limit_resources=false: {}",
+        args
+    );
     // GPUs should STILL be requested even with limit_resources=false,
     // because GPU allocation is required for the job to access GPUs
     assert!(
