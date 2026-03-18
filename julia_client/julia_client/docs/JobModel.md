@@ -21,6 +21,7 @@ Name | Type | Description | Notes
 **scheduler_id** | **Int64** | Optional database ID of scheduler needed by this job | [optional] [default to nothing]
 **failure_handler_id** | **Int64** | Optional database ID of failure handler for this job | [optional] [default to nothing]
 **attempt_id** | **Int64** | Current retry attempt number (starts at 1) | [optional] [default to 1]
+**priority** | **Int64** | Scheduling priority; higher values are submitted first. Minimum 0. | [optional] [default to 0]
 
 
 [[Back to Model list]](../README.md#models) [[Back to API list]](../README.md#api-endpoints) [[Back to README]](../README.md)

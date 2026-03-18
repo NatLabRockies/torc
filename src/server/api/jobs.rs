@@ -1134,6 +1134,13 @@ where
         let invocation_script = job.invocation_script.clone();
         let cancel_on_blocking_job_failure = job.cancel_on_blocking_job_failure.unwrap_or(true);
         let supports_termination = job.supports_termination.unwrap_or(false);
+        let priority = job.priority.unwrap_or(0);
+        if priority < 0 {
+            let error_response = models::ErrorResponse::new(serde_json::json!({
+                "message": format!("priority must be >= 0, got {} for job '{}'", priority, job.name)
+            }));
+            return Ok(CreateJobResponse::UnprocessableContentErrorResponse(error_response));
+        }
         let status = JobStatus::Uninitialized;
         let status_int = status.to_int();
         job.status = Some(status);
@@ -1159,9 +1166,10 @@ where
                 invocation_script,
                 status,
                 scheduler_id,
-                failure_handler_id
+                failure_handler_id,
+                priority
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             RETURNING rowid
             "#,
             job.workflow_id,
@@ -1174,6 +1182,7 @@ where
             status_int,
             job.scheduler_id,
             job.failure_handler_id,
+            priority,
         )
         .fetch_all(&mut *tx)
         .await
@@ -1336,10 +1345,10 @@ where
             let priority = job.priority.unwrap_or(0);
             if priority < 0 {
                 let _ = transaction.rollback().await;
-                return Err(ApiError(format!(
-                    "priority must be >= 0, got {} for job '{}'",
-                    priority, job.name
-                )));
+                let error_response = models::ErrorResponse::new(serde_json::json!({
+                    "message": format!("priority must be >= 0, got {} for job '{}'", priority, job.name)
+                }));
+                return Ok(CreateJobsResponse::UnprocessableContentErrorResponse(error_response));
             }
             let status = JobStatus::Uninitialized;
             let status_int = status.to_int();

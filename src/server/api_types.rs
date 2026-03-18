@@ -81,6 +81,8 @@ pub enum CreateJobResponse {
     ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
+    /// Unprocessable content (e.g., invalid priority)
+    UnprocessableContentErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }

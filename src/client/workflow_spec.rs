@@ -2784,6 +2784,12 @@ impl WorkflowSpec {
                 }
 
                 if let Some(p) = job_spec.priority {
+                    if p < 0 {
+                        return Err(format!(
+                            "priority must be >= 0, got {} for job '{}'",
+                            p, job_spec.name
+                        ));
+                    }
                     job_model.priority = Some(p);
                 }
 

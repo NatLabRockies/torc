@@ -1203,6 +1203,18 @@ where
                                             .expect("impossible to fail to serialize");
                                         *response.body_mut() = Body::from(body);
                                     }
+                                    CreateJobResponse::UnprocessableContentErrorResponse(body) => {
+                                        *response.status_mut() = StatusCode::from_u16(422)
+                                            .expect("Unable to turn 422 into a StatusCode");
+                                        response.headers_mut().insert(
+                                                        CONTENT_TYPE,
+                                                        HeaderValue::from_str("application/json")
+                                                            .expect("Unable to create Content-Type header for application/json"));
+                                        // JSON Body
+                                        let body = serde_json::to_string(&body)
+                                            .expect("impossible to fail to serialize");
+                                        *response.body_mut() = Body::from(body);
+                                    }
                                     CreateJobResponse::DefaultErrorResponse(body) => {
                                         *response.status_mut() = StatusCode::from_u16(500)
                                             .expect("Unable to turn 500 into a StatusCode");

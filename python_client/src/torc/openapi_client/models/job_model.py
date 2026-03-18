@@ -19,6 +19,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
+from typing_extensions import Annotated
 from torc.openapi_client.models.job_status import JobStatus
 from typing import Optional, Set
 from typing_extensions import Self
@@ -44,7 +45,7 @@ class JobModel(BaseModel):
     scheduler_id: Optional[StrictInt] = Field(default=None, description="Optional database ID of scheduler needed by this job")
     failure_handler_id: Optional[StrictInt] = Field(default=None, description="Optional database ID of failure handler for this job")
     attempt_id: Optional[StrictInt] = Field(default=1, description="Current retry attempt number (starts at 1)")
-    priority: Optional[StrictInt] = Field(default=0, description="Scheduling priority; higher values are submitted first. Minimum 0.")
+    priority: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=0, description="Scheduling priority; higher values are submitted first. Minimum 0.")
     __properties: ClassVar[List[str]] = ["id", "workflow_id", "name", "command", "invocation_script", "status", "cancel_on_blocking_job_failure", "supports_termination", "depends_on_job_ids", "input_file_ids", "output_file_ids", "input_user_data_ids", "output_user_data_ids", "resource_requirements_id", "scheduler_id", "failure_handler_id", "attempt_id", "priority"]
 
     model_config = ConfigDict(

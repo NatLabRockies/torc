@@ -20,13 +20,15 @@ fi
 rm -rf "${JULIA_CLIENT}"
 mkdir "${JULIA_CLIENT}"
 
-"${CONTAINER_EXEC}" run \
+# MSYS_NO_PATHCONV=1 prevents Git Bash/MSYS2 on Windows from converting
+# container-internal paths like /data/config.json to C:/Program Files/Git/...
+MSYS_NO_PATHCONV=1 "${CONTAINER_EXEC}" run \
   -v "$(pwd)":/data \
   -v "${PYTHON_CLIENT}":/python_client \
   "docker.io/openapitools/openapi-generator-cli:${OPENAPI_CLI_VERSION}" \
   generate -g python --input-spec=/data/openapi.yaml -o /python_client -c /data/config.json
 
-"${CONTAINER_EXEC}" run \
+MSYS_NO_PATHCONV=1 "${CONTAINER_EXEC}" run \
   -v "$(pwd)":/data \
   -v "${JULIA_CLIENT}":/julia_client \
   "docker.io/openapitools/openapi-generator-cli:${OPENAPI_CLI_VERSION}" \

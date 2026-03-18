@@ -23,6 +23,8 @@ struct JobTableRow {
     name: String,
     #[tabled(rename = "Status")]
     status: String,
+    #[tabled(rename = "Priority")]
+    priority: i64,
     #[tabled(rename = "Command")]
     command: String,
 }
@@ -513,6 +515,7 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                                 id: job.id.unwrap_or(-1),
                                 name: job.name.clone(),
                                 status: job.status.expect("Job status is missing").to_string(),
+                                priority: job.priority.unwrap_or(0),
                                 command: job.command.clone(),
                             })
                             .collect();
