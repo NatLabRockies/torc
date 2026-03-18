@@ -124,11 +124,17 @@ step and are not shared with other jobs until the step completes. Torc passes
 allocation. The job receives the standard Slurm step environment (`SLURM_JOB_NODELIST`,
 `SLURM_NTASKS`, etc.), so MPI launchers and distributed frameworks work automatically.
 
-**Example**: An MPI training job that spans all 4 nodes in the allocation:
+**Important**: In slurm execution mode (the default), Torc wraps each job with `srun`. Do not use
+`srun` or `mpirun` in your command — this would create nested process managers that conflict over
+node and task placement. Just write the application command directly and let Torc handle the launch.
+If you need explicit control over the MPI launcher (e.g., `mpirun`), use direct execution mode
+instead (see example below).
+
+**Example (Slurm mode)**: A distributed training job that spans all 4 nodes in the allocation:
 
 ```yaml
 name: distributed_training
-description: MPI training across 4 nodes
+description: Distributed training across 4 nodes
 
 resource_requirements:
   - name: mpi_training
@@ -139,7 +145,7 @@ resource_requirements:
 
 jobs:
   - name: train
-    command: srun --mpi=pmix python -m torch.distributed.run train.py
+    command: python -m torch.distributed.run train.py
     resource_requirements: mpi_training
     scheduler: training_nodes
 
@@ -158,7 +164,45 @@ actions:
 ```
 
 Here `num_cpus: 32` and `memory: 128g` describe each of the 4 nodes. The total resources available
-to the job are 128 CPUs and 512 GB.
+to the job are 128 CPUs and 512 GB. Torc launches this as
+`srun --nodes=4 python -m torch.distributed.run train.py`.
+
+**Example (Direct mode)**: If you need to use `mpirun` or another MPI launcher explicitly, use
+direct execution mode so Torc does not wrap the command with `srun`:
+
+```yaml
+name: distributed_training_mpi
+description: MPI training across 4 nodes with explicit mpirun
+
+execution_config:
+  mode: direct
+
+resource_requirements:
+  - name: mpi_training
+    num_cpus: 32
+    memory: 128g
+    num_nodes: 4
+    runtime: PT8H
+
+jobs:
+  - name: train
+    command: mpirun python train.py
+    resource_requirements: mpi_training
+    scheduler: training_nodes
+
+slurm_schedulers:
+  - name: training_nodes
+    account: myproject
+    nodes: 4
+    walltime: "12:00:00"
+
+actions:
+  - trigger_type: on_workflow_start
+    action_type: schedule_nodes
+    scheduler: training_nodes
+    scheduler_type: slurm
+    num_allocations: 1
+```
 
 ## Choosing Between the Patterns
 
@@ -244,7 +288,7 @@ A workflow can combine both patterns, but the cleanest approach is to use separa
 separate allocations. Once a true multi-node step starts, Torc reserves whole nodes for it
 exclusively.
 
-For example, single-node preprocessing jobs followed by a multi-node MPI training step:
+For example, single-node preprocessing jobs followed by a multi-node training step:
 
 ```yaml
 name: preprocess_then_train
@@ -255,7 +299,7 @@ resource_requirements:
     memory: 16g
     runtime: PT30M
 
-  - name: mpi_training
+  - name: distributed_training
     num_cpus: 32
     memory: 128g
     num_nodes: 4
@@ -270,8 +314,8 @@ jobs:
       i: "1:8"
 
   - name: train
-    command: srun --mpi=pmix python train.py
-    resource_requirements: mpi_training
+    command: python -m torch.distributed.run train.py
+    resource_requirements: distributed_training
     scheduler: training_nodes
     depends_on: [prep_1, prep_2, prep_3, prep_4, prep_5, prep_6, prep_7, prep_8]
 
@@ -302,7 +346,8 @@ actions:
 ```
 
 The preprocessing jobs run across 2 nodes (Pattern 1). When they complete, a 4-node allocation is
-requested for the MPI training job (Pattern 2).
+requested for the training job (Pattern 2). Torc wraps the training command with `srun --nodes=4`
+automatically.
 
 ## `num_nodes`
 
@@ -333,6 +378,25 @@ resource_requirements:
     memory: 128g      # per node (512g total)
     num_nodes: 4
 ```
+
+### Using `srun` or `mpirun` in job commands with slurm execution mode
+
+In slurm mode (the default), Torc wraps each job with `srun`. Adding `srun` or `mpirun` to your
+command creates nested process managers that conflict over node and task placement.
+
+```yaml
+# WRONG: nested srun
+command: srun --mpi=pmix python train.py
+
+# WRONG: mpirun under Torc's srun
+command: mpirun python train.py
+
+# CORRECT: let Torc handle srun wrapping
+command: python train.py
+```
+
+If you need explicit control over `mpirun`, use `execution_config.mode: direct` so Torc does not
+wrap the command with `srun`.
 
 ### Using `num_nodes > 1` for independent jobs
 

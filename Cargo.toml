@@ -105,7 +105,7 @@ hyper-openssl = "0.9"
 openssl = "0.10"
 
 # MCP server
-rmcp = { version = "0.1", features = ["server", "client", "macros", "transport-io", "transport-child-process"] }
+rmcp = { version = "1.2", features = ["server", "client", "macros", "transport-io", "transport-child-process"] }
 schemars = "1.0"
 
 # Dashboard-specific

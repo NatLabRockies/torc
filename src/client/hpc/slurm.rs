@@ -274,7 +274,7 @@ pub fn parse_sinfo_string(input: &str) -> Result<Vec<SinfoPartition>, String> {
 }
 
 /// Parse timelimit string from Slurm format to seconds
-fn parse_slurm_timelimit(s: &str) -> u64 {
+pub fn parse_slurm_timelimit(s: &str) -> u64 {
     let s = s.trim();
 
     if s == "infinite" || s == "UNLIMITED" {
@@ -414,6 +414,320 @@ fn parse_gres(gres: &Option<String>) -> (Option<u32>, Option<String>) {
     (None, None)
 }
 
+// ============================================================================
+// Live cluster state queries
+// ============================================================================
+
+/// Node availability counts for a partition
+#[derive(Debug, Clone)]
+pub struct PartitionAvailability {
+    pub partition: String,
+    pub idle: u32,
+    pub mixed: u32,
+    pub allocated: u32,
+    pub down: u32,
+    pub total: u32,
+}
+
+/// Queue depth information for a partition
+#[derive(Debug, Clone)]
+pub struct QueueDepthInfo {
+    pub partition: String,
+    pub pending_jobs: u32,
+    pub pending_nodes: u32,
+    pub running_jobs: u32,
+}
+
+/// Query sinfo for node availability per partition.
+///
+/// If `partition` is Some, only queries that partition. Otherwise queries all.
+pub fn query_partition_availability(
+    partition: Option<&str>,
+) -> Result<Vec<PartitionAvailability>, String> {
+    let mut args = vec!["-e", "-o", "%P|%T|%D", "--noheader"];
+    let partition_arg;
+    if let Some(p) = partition {
+        partition_arg = p.to_string();
+        args.push("-p");
+        args.push(&partition_arg);
+    }
+
+    let output = Command::new(get_sinfo_exec())
+        .args(&args)
+        .output()
+        .map_err(|e| format!("Failed to run sinfo: {}", e))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "sinfo failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    parse_partition_availability(&stdout)
+}
+
+/// Parse sinfo output for node availability.
+/// Format: "%P|%T|%D" (partition|state|node_count)
+pub fn parse_partition_availability(input: &str) -> Result<Vec<PartitionAvailability>, String> {
+    let mut map: HashMap<String, PartitionAvailability> = HashMap::new();
+
+    for line in input.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = line.split('|').collect();
+        if parts.len() < 3 {
+            continue;
+        }
+
+        let name = parts[0].trim_end_matches('*').to_string();
+        let state = parts[1].to_lowercase();
+        let count: u32 = parts[2].parse().unwrap_or(0);
+
+        let entry = map.entry(name.clone()).or_insert(PartitionAvailability {
+            partition: name,
+            idle: 0,
+            mixed: 0,
+            allocated: 0,
+            down: 0,
+            total: 0,
+        });
+
+        entry.total += count;
+
+        if state.starts_with("idle") {
+            entry.idle += count;
+        } else if state.starts_with("mix") {
+            entry.mixed += count;
+        } else if state.starts_with("alloc") {
+            entry.allocated += count;
+        } else if state.starts_with("down")
+            || state.starts_with("drain")
+            || state.starts_with("not_responding")
+        {
+            entry.down += count;
+        }
+        // Other states (completing, reserved, etc.) count toward total only
+    }
+
+    Ok(map.into_values().collect())
+}
+
+/// Query squeue for queue depth on a partition.
+///
+/// If `partition` is Some, only queries that partition. Otherwise queries all.
+pub fn query_queue_depth(partition: Option<&str>) -> Result<Vec<QueueDepthInfo>, String> {
+    let squeue_exec = if cfg!(any(test, debug_assertions)) {
+        std::env::var("TORC_FAKE_SQUEUE").unwrap_or_else(|_| "squeue".to_string())
+    } else {
+        "squeue".to_string()
+    };
+
+    let mut args = vec!["--noheader", "-o", "%P|%T|%D"];
+    let partition_arg;
+    if let Some(p) = partition {
+        partition_arg = p.to_string();
+        args.push("-p");
+        args.push(&partition_arg);
+    }
+
+    let output = Command::new(&squeue_exec)
+        .args(&args)
+        .output()
+        .map_err(|e| format!("Failed to run squeue: {}", e))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "squeue failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    parse_queue_depth(&stdout)
+}
+
+/// Parse squeue output for queue depth.
+/// Format: "%P|%T|%D" (partition|state|nodes)
+pub fn parse_queue_depth(input: &str) -> Result<Vec<QueueDepthInfo>, String> {
+    let mut map: HashMap<String, QueueDepthInfo> = HashMap::new();
+
+    for line in input.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = line.split('|').collect();
+        if parts.len() < 3 {
+            continue;
+        }
+
+        let name = parts[0].trim_end_matches('*').to_string();
+        let state = parts[1].to_uppercase();
+        let nodes: u32 = parts[2].parse().unwrap_or(0);
+
+        let entry = map.entry(name.clone()).or_insert(QueueDepthInfo {
+            partition: name,
+            pending_jobs: 0,
+            pending_nodes: 0,
+            running_jobs: 0,
+        });
+
+        if state == "PENDING" || state == "CONFIGURING" {
+            entry.pending_jobs += 1;
+            entry.pending_nodes += nodes;
+        } else if state == "RUNNING" || state == "COMPLETING" {
+            entry.running_jobs += 1;
+        }
+    }
+
+    Ok(map.into_values().collect())
+}
+
+// ============================================================================
+// sbatch --test-only probes
+// ============================================================================
+
+/// Result of an `sbatch --test-only` probe
+#[derive(Debug, Clone)]
+pub struct SbatchTestResult {
+    /// Estimated start time from Slurm scheduler
+    pub estimated_start: Option<chrono::NaiveDateTime>,
+    /// Whether the probe succeeded
+    pub success: bool,
+    /// Error message if the probe failed
+    pub error_message: Option<String>,
+    /// Raw output from sbatch (for debugging)
+    pub raw_output: String,
+}
+
+/// Get the sbatch executable path (allows for testing with fake binary in dev/test builds)
+fn get_sbatch_exec() -> String {
+    if cfg!(any(test, debug_assertions)) {
+        std::env::var("TORC_FAKE_SBATCH").unwrap_or_else(|_| "sbatch".to_string())
+    } else {
+        "sbatch".to_string()
+    }
+}
+
+/// Run `sbatch --test-only` to get an estimated start time from Slurm.
+///
+/// This does NOT submit a job. It asks the scheduler when a job with the given
+/// parameters would start, without actually queuing it.
+pub fn run_sbatch_test_only(
+    account: &str,
+    partition: Option<&str>,
+    nodes: u32,
+    walltime: &str,
+    qos: Option<&str>,
+    gres: Option<&str>,
+) -> SbatchTestResult {
+    let sbatch = get_sbatch_exec();
+    let mut cmd = Command::new(&sbatch);
+
+    cmd.args([
+        "--test-only",
+        "--account",
+        account,
+        "--nodes",
+        &nodes.to_string(),
+        "--time",
+        walltime,
+        "--wrap",
+        "hostname",
+    ]);
+
+    if let Some(p) = partition {
+        cmd.args(["--partition", p]);
+    }
+    if let Some(q) = qos {
+        cmd.args(["--qos", q]);
+    }
+    if let Some(g) = gres {
+        cmd.args(["--gres", g]);
+    }
+
+    debug!(
+        "Running sbatch --test-only: account={} partition={} nodes={} walltime={}",
+        account,
+        partition.unwrap_or("<default>"),
+        nodes,
+        walltime
+    );
+
+    let output = match cmd.output() {
+        Ok(o) => o,
+        Err(e) => {
+            return SbatchTestResult {
+                estimated_start: None,
+                success: false,
+                error_message: Some(format!("Failed to run sbatch: {}", e)),
+                raw_output: String::new(),
+            };
+        }
+    };
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    let combined = format!("{}\n{}", stdout, stderr);
+
+    parse_sbatch_test_only(&combined)
+}
+
+/// Parse the output of `sbatch --test-only`.
+///
+/// Slurm outputs the estimated start time in stderr, in a format like:
+/// `sbatch: Job 12345 to start at 2026-03-17T14:30:00 using 167 processors on nodes ...`
+///
+/// Some Slurm versions use slightly different formats:
+/// `sbatch: Job 12345 to start at 2026-03-17T14:30:00 on nodes ...`
+pub fn parse_sbatch_test_only(output: &str) -> SbatchTestResult {
+    // Look for the estimated start time pattern
+    // Various Slurm versions may use slightly different formats
+    for line in output.lines() {
+        let line = line.trim();
+
+        // Match: "sbatch: Job NNNNN to start at YYYY-MM-DDTHH:MM:SS"
+        if let Some(idx) = line.find("to start at ") {
+            let after = &line[idx + "to start at ".len()..];
+            // Take the datetime portion (19 chars: YYYY-MM-DDTHH:MM:SS)
+            if after.len() >= 19 {
+                let datetime_str = &after[..19];
+                if let Ok(dt) =
+                    chrono::NaiveDateTime::parse_from_str(datetime_str, "%Y-%m-%dT%H:%M:%S")
+                {
+                    return SbatchTestResult {
+                        estimated_start: Some(dt),
+                        success: true,
+                        error_message: None,
+                        raw_output: output.to_string(),
+                    };
+                }
+            }
+        }
+
+        // Check for error messages
+        if line.contains("error:") || line.contains("Unable to allocate") {
+            return SbatchTestResult {
+                estimated_start: None,
+                success: false,
+                error_message: Some(line.to_string()),
+                raw_output: output.to_string(),
+            };
+        }
+    }
+
+    SbatchTestResult {
+        estimated_start: None,
+        success: false,
+        error_message: Some("Could not parse sbatch --test-only output".to_string()),
+        raw_output: output.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -478,5 +792,122 @@ mod tests {
             Some((4, "gpu".to_string()))
         );
         assert_eq!(infer_gpu_from_name("compute"), None);
+    }
+
+    #[test]
+    fn test_parse_partition_availability() {
+        let input = "\
+standard|idle|45
+standard|mixed|12
+standard|allocated|180
+standard|down|3
+gpu-h100|idle|2
+gpu-h100|mixed|1
+gpu-h100|allocated|15
+";
+        let result = parse_partition_availability(input).unwrap();
+        assert_eq!(result.len(), 2);
+
+        let std_part = result.iter().find(|p| p.partition == "standard").unwrap();
+        assert_eq!(std_part.idle, 45);
+        assert_eq!(std_part.mixed, 12);
+        assert_eq!(std_part.allocated, 180);
+        assert_eq!(std_part.down, 3);
+        assert_eq!(std_part.total, 240);
+
+        let gpu_part = result.iter().find(|p| p.partition == "gpu-h100").unwrap();
+        assert_eq!(gpu_part.idle, 2);
+        assert_eq!(gpu_part.mixed, 1);
+        assert_eq!(gpu_part.allocated, 15);
+        assert_eq!(gpu_part.total, 18);
+    }
+
+    #[test]
+    fn test_parse_partition_availability_with_default_marker() {
+        let input = "standard*|idle|10\nstandard*|allocated|50\n";
+        let result = parse_partition_availability(input).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].partition, "standard");
+        assert_eq!(result[0].idle, 10);
+    }
+
+    #[test]
+    fn test_parse_queue_depth() {
+        let input = "\
+standard|PENDING|4
+standard|PENDING|8
+standard|RUNNING|1
+standard|RUNNING|1
+gpu-h100|PENDING|2
+gpu-h100|RUNNING|1
+";
+        let result = parse_queue_depth(input).unwrap();
+        assert_eq!(result.len(), 2);
+
+        let std_q = result.iter().find(|q| q.partition == "standard").unwrap();
+        assert_eq!(std_q.pending_jobs, 2);
+        assert_eq!(std_q.pending_nodes, 12);
+        assert_eq!(std_q.running_jobs, 2);
+
+        let gpu_q = result.iter().find(|q| q.partition == "gpu-h100").unwrap();
+        assert_eq!(gpu_q.pending_jobs, 1);
+        assert_eq!(gpu_q.pending_nodes, 2);
+        assert_eq!(gpu_q.running_jobs, 1);
+    }
+
+    #[test]
+    fn test_parse_queue_depth_empty() {
+        let result = parse_queue_depth("").unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_parse_sbatch_test_only_success() {
+        let output = "sbatch: Job 12345 to start at 2026-03-17T14:30:00 using 167 processors on nodes node[001-167]";
+        let result = parse_sbatch_test_only(output);
+        assert!(result.success);
+        assert!(result.estimated_start.is_some());
+        let dt = result.estimated_start.unwrap();
+        assert_eq!(dt.to_string(), "2026-03-17 14:30:00");
+    }
+
+    #[test]
+    fn test_parse_sbatch_test_only_simple_format() {
+        // Some Slurm versions use a simpler format
+        let output = "sbatch: Job 99999 to start at 2026-04-01T08:00:00 on nodes compute-001";
+        let result = parse_sbatch_test_only(output);
+        assert!(result.success);
+        let dt = result.estimated_start.unwrap();
+        assert_eq!(dt.to_string(), "2026-04-01 08:00:00");
+    }
+
+    #[test]
+    fn test_parse_sbatch_test_only_error() {
+        let output = "sbatch: error: Batch job submission failed: Invalid account or account/partition combination specified";
+        let result = parse_sbatch_test_only(output);
+        assert!(!result.success);
+        assert!(result.estimated_start.is_none());
+        assert!(result.error_message.is_some());
+    }
+
+    #[test]
+    fn test_parse_sbatch_test_only_unparseable() {
+        let output = "some unexpected output";
+        let result = parse_sbatch_test_only(output);
+        assert!(!result.success);
+        assert!(result.estimated_start.is_none());
+    }
+
+    #[test]
+    fn test_parse_sbatch_test_only_multiline() {
+        // sbatch often writes to stderr with informational lines first
+        let output = "\
+sbatch: Pending job allocation 0
+sbatch: Job 54321 to start at 2026-03-18T09:15:00 using 4 processors on nodes node[100-103]
+";
+        let result = parse_sbatch_test_only(output);
+        assert!(result.success);
+        let dt = result.estimated_start.unwrap();
+        assert_eq!(dt.to_string(), "2026-03-18 09:15:00");
     }
 }

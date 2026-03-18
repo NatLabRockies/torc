@@ -215,6 +215,7 @@ impl HpcInterface for SlurmInterface {
         start_one_worker_per_node: bool,
         tls_ca_cert: Option<&str>,
         tls_insecure: bool,
+        startup_delay_seconds: u64,
     ) -> Result<()> {
         let mut script = format!(
             "#!/bin/bash\n\
@@ -271,6 +272,13 @@ impl HpcInterface for SlurmInterface {
         }
         if tls_insecure {
             command.push_str(" --tls-insecure");
+        }
+
+        if startup_delay_seconds > 0 {
+            command.push_str(&format!(
+                " --startup-delay-seconds {}",
+                startup_delay_seconds
+            ));
         }
 
         // Unset conflicting Slurm memory variables.

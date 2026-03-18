@@ -87,6 +87,12 @@ mod unix_main {
         /// Log level: error, warn, info, debug, trace
         #[arg(long)]
         log_level: Option<String>,
+
+        /// Maximum startup delay in seconds for thundering herd mitigation.
+        /// Each runner sleeps a deterministic jitter in [0, N) seconds before
+        /// contacting the server, spreading load when many nodes start at once.
+        #[arg(long, default_value = "0")]
+        startup_delay_seconds: u64,
     }
 
     fn workflow_has_multi_node_jobs(
@@ -242,6 +248,27 @@ mod unix_main {
             let username =
                 std::env::var("USER").unwrap_or_else(|_| std::env::var("USERNAME").unwrap());
             config.basic_auth = Some((username, Some(password.clone())));
+        }
+
+        // Stagger startup to avoid thundering herd when many compute nodes start
+        // simultaneously. The delay window is set by the caller (sbatch script)
+        // based on the number of concurrent allocations.
+        if args.startup_delay_seconds > 0 {
+            let jitter = {
+                use std::collections::hash_map::DefaultHasher;
+                use std::hash::{Hash, Hasher};
+                let mut hasher = DefaultHasher::new();
+                hostname.hash(&mut hasher);
+                job_id.hash(&mut hasher);
+                node_id.hash(&mut hasher);
+                task_pid.hash(&mut hasher);
+                hasher.finish() % args.startup_delay_seconds
+            };
+            info!(
+                "Startup jitter: sleeping {} seconds (window={})",
+                jitter, args.startup_delay_seconds
+            );
+            thread::sleep(std::time::Duration::from_secs(jitter));
         }
 
         // First, ping the server to ensure we can connect

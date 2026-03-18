@@ -1709,6 +1709,12 @@ fn test_update_jobs_if_output_files_are_missing_with_upstream_jobs_dry_run(
         &output_files1,
     );
 
+    // Wait for the background unblocking task to transition upstream_job to ready
+    assert!(
+        wait_for_job_status(&config, upstream_job_id, models::JobStatus::Ready, 10),
+        "upstream_job did not become ready after job1 completed"
+    );
+
     // Complete upstream job (no output files to create)
     default_api::manage_status_change(
         &config,

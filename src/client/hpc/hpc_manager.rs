@@ -137,6 +137,7 @@ impl HpcManager {
         keep_submission_script: bool,
         tls_ca_cert: Option<&str>,
         tls_insecure: bool,
+        startup_delay_seconds: u64,
     ) -> Result<String> {
         let filename = directory.join(format!("{}.sh", name));
 
@@ -152,6 +153,7 @@ impl HpcManager {
             start_one_worker_per_node,
             tls_ca_cert,
             tls_insecure,
+            startup_delay_seconds,
         )?;
 
         trace!("Created submission script {:?}", filename);

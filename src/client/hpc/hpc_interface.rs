@@ -57,6 +57,7 @@ pub trait HpcInterface: Send + Sync {
     /// * `start_one_worker_per_node` - Whether to launch one worker per node via srun
     /// * `tls_ca_cert` - Optional path to a PEM-encoded CA certificate
     /// * `tls_insecure` - Whether to skip certificate verification
+    /// * `startup_delay_seconds` - Maximum startup jitter in seconds (0 to disable)
     #[allow(clippy::too_many_arguments)]
     fn create_submission_script(
         &self,
@@ -71,6 +72,7 @@ pub trait HpcInterface: Send + Sync {
         start_one_worker_per_node: bool,
         tls_ca_cert: Option<&str>,
         tls_insecure: bool,
+        startup_delay_seconds: u64,
     ) -> Result<()>;
 
     /// Get the current HPC job ID from environment variables

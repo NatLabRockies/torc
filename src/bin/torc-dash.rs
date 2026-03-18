@@ -18,10 +18,9 @@ use axum::{
     routing::{get, post},
 };
 use clap::Parser;
-use rmcp::{ServiceExt, model::CallToolRequestParam, transport::child_process::TokioChildProcess};
+use rmcp::{ServiceExt, model::CallToolRequestParams, transport::child_process::TokioChildProcess};
 use rust_embed::Embed;
 use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
 use std::path::Path as FsPath;
 use std::process::Command as StdCommand;
 use std::sync::Arc;
@@ -2999,13 +2998,13 @@ async fn ensure_mcp_client(
         state.torc_mcp_server_bin, state.api_url
     );
 
-    let child_process = TokioChildProcess::new(
-        tokio::process::Command::new(&state.torc_mcp_server_bin)
-            .arg("--api-url")
-            .arg(&state.api_url)
-            .stderr(std::process::Stdio::inherit()),
-    )
-    .map_err(|e| anyhow::anyhow!("Failed to spawn torc-mcp-server: {}", e))?;
+    let mut command = tokio::process::Command::new(&state.torc_mcp_server_bin);
+    command
+        .arg("--api-url")
+        .arg(&state.api_url)
+        .stderr(std::process::Stdio::inherit());
+    let child_process = TokioChildProcess::new(command)
+        .map_err(|e| anyhow::anyhow!("Failed to spawn torc-mcp-server: {}", e))?;
 
     // Connect as MCP client
     let running_service: rmcp::service::RunningService<rmcp::service::RoleClient, _> = ()
@@ -3264,11 +3263,15 @@ async fn chat_handler(
 
                 let arguments = tool_input.cloned();
 
+                let request = arguments.map_or_else(
+                    || CallToolRequestParams::new(tool_name.to_string()),
+                    |arguments| {
+                        CallToolRequestParams::new(tool_name.to_string()).with_arguments(arguments)
+                    },
+                );
+
                 match peer
-                    .call_tool(CallToolRequestParam {
-                        name: Cow::Owned(tool_name.to_string()),
-                        arguments,
-                    })
+                    .call_tool(request)
                     .await
                 {
                     Ok(result) => {
