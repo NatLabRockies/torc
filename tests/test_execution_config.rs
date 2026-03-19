@@ -1361,6 +1361,246 @@ fn test_limit_resources_false_rejected_with_auto_mode_and_slurm_schedulers(
     );
 }
 
+// Helper to assert workflow creation fails with a message containing expected_substring.
+fn assert_spec_rejected(
+    config: &torc::client::apis::configuration::Configuration,
+    yaml: &str,
+    expected: &str,
+) {
+    let temp_file = NamedTempFile::new().expect("Failed to create temp file");
+    fs::write(temp_file.path(), yaml).expect("Failed to write workflow file");
+
+    let result = WorkflowSpec::create_workflow_from_spec(
+        config,
+        temp_file.path(),
+        "test_user",
+        false,
+        false,
+    );
+
+    assert!(
+        result.is_err(),
+        "Should reject spec, expected error containing: {expected}"
+    );
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains(expected),
+        "Error should mention '{expected}': {err}"
+    );
+}
+
+#[rstest]
+fn test_termination_signal_rejected_with_slurm_mode(start_server: &ServerProcess) {
+    assert_spec_rejected(
+        &start_server.config,
+        r#"
+            name: slurm_term_signal_rejected
+            user: test_user
+            jobs:
+              - name: job1
+                command: "echo test"
+            execution_config:
+                mode: slurm
+                termination_signal: SIGTERM
+        "#,
+        "termination_signal",
+    );
+}
+
+#[rstest]
+fn test_sigterm_lead_seconds_rejected_with_slurm_mode(start_server: &ServerProcess) {
+    assert_spec_rejected(
+        &start_server.config,
+        r#"
+            name: slurm_sigterm_lead_rejected
+            user: test_user
+            jobs:
+              - name: job1
+                command: "echo test"
+            execution_config:
+                mode: slurm
+                sigterm_lead_seconds: 30
+        "#,
+        "sigterm_lead_seconds",
+    );
+}
+
+#[rstest]
+fn test_oom_exit_code_rejected_with_slurm_mode(start_server: &ServerProcess) {
+    assert_spec_rejected(
+        &start_server.config,
+        r#"
+            name: slurm_oom_exit_rejected
+            user: test_user
+            jobs:
+              - name: job1
+                command: "echo test"
+            execution_config:
+                mode: slurm
+                oom_exit_code: 137
+        "#,
+        "oom_exit_code",
+    );
+}
+
+#[rstest]
+fn test_srun_termination_signal_rejected_with_direct_mode(start_server: &ServerProcess) {
+    assert_spec_rejected(
+        &start_server.config,
+        r#"
+            name: direct_srun_signal_rejected
+            user: test_user
+            jobs:
+              - name: job1
+                command: "echo test"
+            execution_config:
+                mode: direct
+                srun_termination_signal: "TERM@120"
+        "#,
+        "srun_termination_signal",
+    );
+}
+
+#[rstest]
+fn test_enable_cpu_bind_true_rejected_with_direct_mode(start_server: &ServerProcess) {
+    assert_spec_rejected(
+        &start_server.config,
+        r#"
+            name: direct_cpu_bind_rejected
+            user: test_user
+            jobs:
+              - name: job1
+                command: "echo test"
+            execution_config:
+                mode: direct
+                enable_cpu_bind: true
+        "#,
+        "enable_cpu_bind",
+    );
+}
+
+#[rstest]
+fn test_enable_cpu_bind_false_allowed_with_direct_mode(start_server: &ServerProcess) {
+    // enable_cpu_bind: false is the default and harmless, should not error
+    let yaml = r#"
+        name: direct_cpu_bind_false_ok
+        user: test_user
+        jobs:
+          - name: job1
+            command: "echo test"
+        execution_config:
+            mode: direct
+            enable_cpu_bind: false
+    "#;
+
+    let temp_file = NamedTempFile::new().expect("Failed to create temp file");
+    fs::write(temp_file.path(), yaml).expect("Failed to write workflow file");
+
+    let result = WorkflowSpec::create_workflow_from_spec(
+        &start_server.config,
+        temp_file.path(),
+        "test_user",
+        false,
+        false,
+    );
+
+    assert!(
+        result.is_ok(),
+        "enable_cpu_bind: false should be allowed in direct mode: {:?}",
+        result.err()
+    );
+}
+
+#[rstest]
+fn test_direct_fields_rejected_with_auto_mode_and_slurm_schedulers(start_server: &ServerProcess) {
+    assert_spec_rejected(
+        &start_server.config,
+        r#"
+            name: auto_slurm_direct_fields_rejected
+            user: test_user
+            jobs:
+              - name: job1
+                command: "echo test"
+                scheduler: my_scheduler
+            execution_config:
+                termination_signal: SIGTERM
+            slurm_schedulers:
+              - name: my_scheduler
+                account: test_account
+                partition: debug
+                nodes: 1
+                walltime: "00:10:00"
+            actions:
+              - trigger_type: "on_workflow_start"
+                action_type: "schedule_nodes"
+                scheduler: "my_scheduler"
+                scheduler_type: "slurm"
+                num_allocations: 1
+        "#,
+        "termination_signal",
+    );
+}
+
+#[rstest]
+fn test_slurm_fields_rejected_with_auto_mode_no_schedulers(start_server: &ServerProcess) {
+    assert_spec_rejected(
+        &start_server.config,
+        r#"
+            name: auto_no_slurm_srun_signal_rejected
+            user: test_user
+            jobs:
+              - name: job1
+                command: "echo test"
+            execution_config:
+                srun_termination_signal: "TERM@120"
+        "#,
+        "srun_termination_signal",
+    );
+}
+
+#[rstest]
+fn test_multiple_incompatible_fields_reported_together(start_server: &ServerProcess) {
+    // All direct-only fields with slurm mode should produce a single error mentioning all of them
+    let yaml = r#"
+        name: slurm_multiple_rejected
+        user: test_user
+        jobs:
+          - name: job1
+            command: "echo test"
+        execution_config:
+            mode: slurm
+            termination_signal: SIGTERM
+            sigterm_lead_seconds: 30
+            oom_exit_code: 137
+    "#;
+
+    let temp_file = NamedTempFile::new().expect("Failed to create temp file");
+    fs::write(temp_file.path(), yaml).expect("Failed to write workflow file");
+
+    let result = WorkflowSpec::create_workflow_from_spec(
+        &start_server.config,
+        temp_file.path(),
+        "test_user",
+        false,
+        false,
+    );
+
+    assert!(result.is_err(), "Should reject all incompatible fields");
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("termination_signal"),
+        "Should mention termination_signal: {err}"
+    );
+    assert!(
+        err.contains("sigterm_lead_seconds"),
+        "Should mention sigterm_lead_seconds: {err}"
+    );
+    assert!(
+        err.contains("oom_exit_code"),
+        "Should mention oom_exit_code: {err}"
+    );
+}
+
 #[rstest]
 fn test_direct_mode_custom_exit_codes(start_server: &ServerProcess) {
     // Test custom timeout and OOM exit codes

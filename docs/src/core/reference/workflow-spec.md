@@ -173,21 +173,41 @@ Defines a Slurm HPC job scheduler configuration.
 
 ## ExecutionConfig
 
-Controls how jobs are executed and terminated. Supports three modes for different execution
-environments.
+Controls how jobs are executed and terminated. Fields are grouped by which execution mode they apply
+to. Setting a field that doesn't match the effective mode produces a validation error at workflow
+creation time.
 
-| Name                       | Type                        | Default     | Description                                                          |
-| -------------------------- | --------------------------- | ----------- | -------------------------------------------------------------------- |
-| `mode`                     | string                      | `"auto"`    | Execution mode: `"direct"`, `"slurm"`, or `"auto"`                   |
-| `limit_resources`          | boolean                     | `true`      | Enforce memory limits in direct mode (not supported with slurm mode) |
-| `termination_signal`       | string                      | `"SIGTERM"` | Signal to send before SIGKILL (direct mode)                          |
-| `sigterm_lead_seconds`     | integer                     | `30`        | Seconds before SIGKILL to send termination signal                    |
-| `sigkill_headroom_seconds` | integer                     | `60`        | Seconds before end_time for SIGKILL or srun --time adjustment        |
-| `timeout_exit_code`        | integer                     | `152`       | Exit code for timed-out jobs (matches Slurm TIMEOUT)                 |
-| `oom_exit_code`            | integer                     | `137`       | Exit code for OOM-killed jobs (128 + SIGKILL)                        |
-| `srun_termination_signal`  | string                      | none        | Slurm signal spec for `srun --signal=<value>`                        |
-| `enable_cpu_bind`          | boolean                     | `false`     | Allow Slurm CPU binding                                              |
-| `stdio`                    | [StdioConfig](#stdioconfig) | see below   | Workflow-level default for stdout/stderr capture                     |
+### Shared fields (both modes)
+
+| Name                       | Type                        | Default   | Description                                            |
+| -------------------------- | --------------------------- | --------- | ------------------------------------------------------ |
+| `mode`                     | string                      | `"auto"`  | Execution mode: `"direct"`, `"slurm"`, or `"auto"`     |
+| `sigkill_headroom_seconds` | integer                     | `60`      | Seconds before end_time for SIGKILL or srun --time     |
+| `timeout_exit_code`        | integer                     | `152`     | Exit code for timed-out jobs (matches Slurm TIMEOUT)   |
+| `staggered_start`          | boolean                     | `true`    | Stagger job runner startup to mitigate thundering herd |
+| `stdio`                    | [StdioConfig](#stdioconfig) | see below | Workflow-level default for stdout/stderr capture       |
+
+### Direct mode fields
+
+These fields only apply when the effective mode is `direct`. Setting them with `mode: slurm` (or
+`mode: auto` with `slurm_schedulers`) produces a validation error.
+
+| Name                   | Type    | Default     | Description                                           |
+| ---------------------- | ------- | ----------- | ----------------------------------------------------- |
+| `limit_resources`      | boolean | `true`      | Monitor memory/CPU and kill jobs that exceed limits   |
+| `termination_signal`   | string  | `"SIGTERM"` | Signal to send before SIGKILL for graceful shutdown   |
+| `sigterm_lead_seconds` | integer | `30`        | Seconds before SIGKILL to send the termination signal |
+| `oom_exit_code`        | integer | `137`       | Exit code for OOM-killed jobs (128 + SIGKILL)         |
+
+### Slurm mode fields
+
+These fields only apply when the effective mode is `slurm`. Setting them with `mode: direct` (or
+`mode: auto` without `slurm_schedulers`) produces a validation error.
+
+| Name                      | Type    | Default | Description                             |
+| ------------------------- | ------- | ------- | --------------------------------------- |
+| `srun_termination_signal` | string  | none    | Signal spec for `srun --signal=<value>` |
+| `enable_cpu_bind`         | boolean | `false` | Allow Slurm CPU binding (`--cpu-bind`)  |
 
 ### StdioConfig
 

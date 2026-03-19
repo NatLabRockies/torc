@@ -700,24 +700,7 @@ pub struct ExecutionConfig {
     #[serde(default)]
     pub mode: ExecutionMode,
 
-    // ========== Direct mode settings ==========
-    /// When true (default), monitor memory/CPU usage and kill jobs that exceed
-    /// their resource requirements (OOM enforcement). Only applies in direct mode.
-    /// Setting this to false with slurm mode is an error — use direct mode instead.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub limit_resources: Option<bool>,
-
-    // ========== Direct mode settings (continued) ==========
-    /// Signal to send before SIGKILL for graceful termination.
-    /// Default: "SIGTERM". Other common values: "SIGINT", "SIGUSR1".
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub termination_signal: Option<String>,
-
-    /// Seconds before SIGKILL to send the termination signal.
-    /// Default: 30. This gives jobs time to handle the signal gracefully.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sigterm_lead_seconds: Option<i64>,
-
+    // ========== Shared settings (both modes) ==========
     /// Seconds before end_time to send SIGKILL (direct mode) or set srun --time (slurm mode).
     /// Default: 60.
     /// - Direct mode: After this time, any remaining jobs are force-killed with SIGKILL.
@@ -736,29 +719,49 @@ pub struct ExecutionConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timeout_exit_code: Option<i32>,
 
-    /// Exit code to use when a job is OOM-killed.
-    /// Default: 137 (128 + SIGKILL = 128 + 9).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub oom_exit_code: Option<i32>,
-
-    // ========== Slurm mode settings ==========
-    /// Signal specification for srun steps, passed as `srun --signal=<value>`.
-    /// Format: `<signal>@<seconds>` (e.g., `TERM@120` sends SIGTERM 120 seconds
-    /// before the step time limit).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub srun_termination_signal: Option<String>,
-
-    /// When true, allow Slurm to bind tasks to specific CPU cores. By default
-    /// (false), srun passes `--cpu-bind=none` to disable binding.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub enable_cpu_bind: Option<bool>,
-
-    // ========== HPC scheduling settings ==========
-    /// Enable staggered startup for Slurm job runners to mitigate thundering herd.
+    /// Enable staggered startup for job runners to mitigate thundering herd.
     /// When true (default), each runner sleeps a deterministic jitter before
     /// contacting the server, spreading load when many nodes start at once.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub staggered_start: Option<bool>,
+
+    // ========== Direct mode only ==========
+    /// When true (default), monitor memory/CPU usage and kill jobs that exceed
+    /// their resource requirements (OOM enforcement). Only applies in direct mode.
+    /// Setting this to false with slurm mode is an error — use direct mode instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit_resources: Option<bool>,
+
+    /// Signal to send before SIGKILL for graceful termination (direct mode only).
+    /// Default: "SIGTERM". Other common values: "SIGINT", "SIGUSR1".
+    /// In slurm mode, use `srun_termination_signal` instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub termination_signal: Option<String>,
+
+    /// Seconds before SIGKILL to send the termination signal (direct mode only).
+    /// Default: 30. This gives jobs time to handle the signal gracefully.
+    /// In slurm mode, termination timing is controlled by `srun_termination_signal`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sigterm_lead_seconds: Option<i64>,
+
+    /// Exit code to use when a job is OOM-killed (direct mode only).
+    /// Default: 137 (128 + SIGKILL = 128 + 9).
+    /// In slurm mode, Slurm manages OOM detection.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub oom_exit_code: Option<i32>,
+
+    // ========== Slurm mode only ==========
+    /// Signal specification for srun steps, passed as `srun --signal=<value>` (slurm mode only).
+    /// Format: `<signal>@<seconds>` (e.g., `TERM@120` sends SIGTERM 120 seconds
+    /// before the step time limit).
+    /// In direct mode, use `termination_signal` instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub srun_termination_signal: Option<String>,
+
+    /// When true, allow Slurm to bind tasks to specific CPU cores (slurm mode only).
+    /// By default (false), srun passes `--cpu-bind=none` to disable binding.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enable_cpu_bind: Option<bool>,
 
     // ========== Stdio settings ==========
     /// Workflow-level default for stdout/stderr capture.
@@ -2090,12 +2093,9 @@ impl WorkflowSpec {
             }
         }
 
-        // Reject limit_resources=false when the workflow will run under Slurm.
-        // This includes explicit mode=slurm and mode=auto with slurm schedulers,
-        // since auto resolves to slurm when SLURM_JOB_ID is set.
-        if let Some(ref ec) = spec.execution_config
-            && ec.limit_resources == Some(false)
-        {
+        // Validate that execution_config fields match the effective mode.
+        // For mode=auto, infer from slurm_schedulers presence.
+        if let Some(ref ec) = spec.execution_config {
             let will_use_slurm = match ec.mode {
                 ExecutionMode::Slurm => true,
                 ExecutionMode::Auto => spec
@@ -2104,11 +2104,65 @@ impl WorkflowSpec {
                     .is_some_and(|s| !s.is_empty()),
                 ExecutionMode::Direct => false,
             };
+            let will_use_direct = match ec.mode {
+                ExecutionMode::Direct => true,
+                ExecutionMode::Auto => !will_use_slurm,
+                ExecutionMode::Slurm => false,
+            };
+
+            let mut errors = Vec::new();
+
             if will_use_slurm {
-                return Err("limit_resources: false is only supported in direct mode. \
-                     Slurm mode requires resource limits for correct srun behavior. \
-                     Set execution_config.mode to 'direct' or remove limit_resources."
-                    .into());
+                if ec.limit_resources == Some(false) {
+                    errors.push(
+                        "limit_resources: false is only supported in direct mode. \
+                        Slurm mode requires resource limits for correct srun behavior."
+                            .to_string(),
+                    );
+                }
+                if ec.termination_signal.is_some() {
+                    errors.push(
+                        "termination_signal is only supported in direct mode. \
+                        In slurm mode, use srun_termination_signal instead."
+                            .to_string(),
+                    );
+                }
+                if ec.sigterm_lead_seconds.is_some() {
+                    errors.push(
+                        "sigterm_lead_seconds is only supported in direct mode. \
+                        In slurm mode, termination timing is controlled by \
+                        srun_termination_signal."
+                            .to_string(),
+                    );
+                }
+                if ec.oom_exit_code.is_some() {
+                    errors.push(
+                        "oom_exit_code is only supported in direct mode. \
+                        In slurm mode, Slurm manages OOM detection."
+                            .to_string(),
+                    );
+                }
+            }
+
+            if will_use_direct {
+                if ec.srun_termination_signal.is_some() {
+                    errors.push(
+                        "srun_termination_signal is only supported in slurm mode. \
+                        In direct mode, use termination_signal instead."
+                            .to_string(),
+                    );
+                }
+                if ec.enable_cpu_bind == Some(true) {
+                    errors.push(
+                        "enable_cpu_bind is only supported in slurm mode. \
+                        It has no effect in direct mode."
+                            .to_string(),
+                    );
+                }
+            }
+
+            if !errors.is_empty() {
+                return Err(errors.join(" ").into());
             }
         }
 
