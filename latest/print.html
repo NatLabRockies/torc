@@ -1840,22 +1840,16 @@ provides a good balance between detection speed and overhead.</p>
 <li><code>--signal</code>: Send a warning signal before step timeout (e.g., <code>TERM@120</code> sends SIGTERM 120s before)</li>
 </ul>
 <h3 id="resource-enforcement-in-slurm-mode"><a class="header" href="#resource-enforcement-in-slurm-mode">Resource Enforcement in Slurm Mode</a></h3>
-<p>When <code>limit_resources: true</code>:</p>
-<ul>
-<li><code>--cpus-per-task</code>, <code>--mem</code>, and <code>--gpus</code> are passed to srun</li>
-<li>Slurm's cgroups enforce these limits</li>
-<li>Jobs exceeding memory are killed by Slurm with exit code 137</li>
-</ul>
-<p>When <code>limit_resources: false</code>:</p>
-<ul>
-<li>CPU and memory flags are omitted</li>
-<li>Jobs can use any available resources in the allocation</li>
-<li>GPU flags are still passed (required for GPU access)</li>
-</ul>
+<p>Slurm mode always passes <code>--cpus-per-task</code>, <code>--mem</code>, and <code>--gpus</code> to srun. Slurm's cgroups enforce
+these limits: jobs exceeding memory are killed by Slurm with exit code 137.</p>
+<blockquote>
+<p><strong>Note</strong>: <code>limit_resources: false</code> is not supported in Slurm mode. If you need to run jobs without
+resource enforcement inside a Slurm allocation, use <code>mode: direct</code> instead. See
+<a href="core/concepts/execution-modes.html#disabling-resource-limits">Disabling Resource Limits</a> below.</p>
+</blockquote>
 <h3 id="slurm-mode-configuration"><a class="header" href="#slurm-mode-configuration">Slurm Mode Configuration</a></h3>
 <pre><code class="language-yaml">execution_config:
   mode: slurm
-  limit_resources: true            # Pass resource limits to srun
   srun_termination_signal: TERM@120  # Send SIGTERM 120s before step timeout
   sigkill_headroom_seconds: 180    # End steps 3 minutes before allocation ends
   enable_cpu_bind: false           # Set to true to enable Slurm CPU binding
@@ -1878,22 +1872,25 @@ provides a good balance between detection speed and overhead.</p>
 <li>The allocation doesn't end while jobs are still running</li>
 </ol>
 <h2 id="disabling-resource-limits"><a class="header" href="#disabling-resource-limits">Disabling Resource Limits</a></h2>
-<p>Set <code>limit_resources: false</code> to disable resource enforcement:</p>
+<p>Set <code>limit_resources: false</code> to disable resource enforcement in direct mode:</p>
 <pre><code class="language-yaml">execution_config:
-  mode: direct  # or slurm
+  mode: direct
   limit_resources: false
 </code></pre>
-<p>Effects:</p>
+<p>This is useful when exploring resource requirements for new jobs or during local development. Jobs
+can use any available system resources without being killed for exceeding their declared limits.</p>
+<p>Effects in direct mode:</p>
 <div class="table-wrapper"><table><thead><tr><th>Feature</th><th>limit_resources: true</th><th>limit_resources: false</th></tr></thead><tbody>
-<tr><td>Memory limits (direct)</td><td>OOM detection and SIGKILL</td><td>No enforcement</td></tr>
-<tr><td>Memory limits (slurm)</td><td>srun --mem passed</td><td>--mem omitted</td></tr>
-<tr><td>CPU limits (slurm)</td><td>srun --cpus-per-task</td><td>--cpus-per-task omitted</td></tr>
-<tr><td>GPU allocation</td><td>Always passed to srun</td><td>Always passed to srun</td></tr>
+<tr><td>Memory limits</td><td>OOM detection and SIGKILL</td><td>No enforcement</td></tr>
 <tr><td>Timeout termination</td><td>Enforced</td><td>Enforced</td></tr>
 </tbody></table>
 </div>
-<p>Note: GPU allocation is always requested regardless of <code>limit_resources</code> because jobs need explicit
-GPU access in Slurm.</p>
+<blockquote>
+<p><strong>Important</strong>: <code>limit_resources: false</code> is only supported in direct mode. Setting it with
+<code>mode: slurm</code> will produce an error at workflow creation time. Slurm mode relies on <code>srun</code> with
+<code>--exact</code>, <code>--cpus-per-task</code>, and <code>--mem</code> for correct concurrent job execution — omitting these
+flags causes jobs to run sequentially instead of in parallel.</p>
+</blockquote>
 <h2 id="exit-codes"><a class="header" href="#exit-codes">Exit Codes</a></h2>
 <p>Torc uses specific exit codes to identify termination reasons:</p>
 <div class="table-wrapper"><table><thead><tr><th>Exit Code</th><th>Meaning</th><th>Default</th><th>Configuration Key</th></tr></thead><tbody>
@@ -1912,7 +1909,6 @@ modes.</p>
 <h3 id="production-hpc"><a class="header" href="#production-hpc">Production HPC</a></h3>
 <pre><code class="language-yaml">execution_config:
   mode: auto  # Use slurm inside allocations
-  limit_resources: true
   srun_termination_signal: TERM@120
   sigkill_headroom_seconds: 300
 </code></pre>
@@ -3185,7 +3181,7 @@ modes:</p>
 <h3 id="yaml-example"><a class="header" href="#yaml-example">YAML Example</a></h3>
 <pre><code class="language-yaml">execution_config:
   mode: direct # Options: direct, slurm, auto
-  limit_resources: true # Enforce memory/CPU limits (default: true)
+  limit_resources: true # Enforce memory limits in direct mode (default: true)
 
   # Direct mode settings
   termination_signal: SIGTERM # Signal before SIGKILL (default: SIGTERM)
@@ -3219,7 +3215,7 @@ modes:</p>
 <h3 id="configuration-fields"><a class="header" href="#configuration-fields">Configuration Fields</a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>mode</code></td><td>string</td><td><code>auto</code></td><td>Execution mode: <code>direct</code>, <code>slurm</code>, or <code>auto</code></td></tr>
-<tr><td><code>limit_resources</code></td><td>bool</td><td><code>true</code></td><td>Enforce memory/CPU limits</td></tr>
+<tr><td><code>limit_resources</code></td><td>bool</td><td><code>true</code></td><td>Enforce memory limits in direct mode only</td></tr>
 <tr><td><code>termination_signal</code></td><td>string</td><td><code>SIGTERM</code></td><td>Signal to send before SIGKILL (direct mode)</td></tr>
 <tr><td><code>sigterm_lead_seconds</code></td><td>int</td><td><code>30</code></td><td>Seconds before SIGKILL to send termination signal</td></tr>
 <tr><td><code>sigkill_headroom_seconds</code></td><td>int</td><td><code>60</code></td><td>Seconds before end_time to send SIGKILL</td></tr>
@@ -3275,7 +3271,6 @@ limit_resources: true
 <pre><code class="language-yaml"># New style - use execution_config
 execution_config:
   mode: slurm # Replaces use_srun: true
-  limit_resources: true
   srun_termination_signal: "TERM@120"
   sigkill_headroom_seconds: 180 # New: controls srun --time headroom
 </code></pre>
@@ -3284,11 +3279,16 @@ execution_config:
 <tr><td><code>use_srun: true</code></td><td><code>mode: slurm</code></td></tr>
 <tr><td><code>use_srun: false</code></td><td><code>mode: direct</code></td></tr>
 <tr><td>(not set)</td><td><code>mode: auto</code> (default)</td></tr>
-<tr><td><code>limit_resources</code></td><td><code>limit_resources</code></td></tr>
+<tr><td><code>limit_resources: false</code></td><td><code>mode: direct</code> with <code>limit_resources: false</code></td></tr>
 <tr><td><code>srun_termination_signal</code></td><td><code>srun_termination_signal</code></td></tr>
 <tr><td><code>enable_cpu_bind</code></td><td><code>enable_cpu_bind</code></td></tr>
 </tbody></table>
 </div>
+<blockquote>
+<p><strong>Note</strong>: <code>limit_resources: false</code> is only supported with <code>mode: direct</code>. If you previously used
+<code>limit_resources: false</code> with srun, switch to <code>mode: direct</code> to get the same behavior (jobs run
+without resource enforcement).</p>
+</blockquote>
 <h2 id="common-features-across-all-formats"><a class="header" href="#common-features-across-all-formats">Common Features Across All Formats</a></h2>
 <h3 id="variable-substitution"><a class="header" href="#variable-substitution">Variable Substitution</a></h3>
 <p>All formats support the same variable substitution syntax:</p>
@@ -8270,7 +8270,7 @@ Default: <code>false</code></li>
 <ul>
 <li><code>-u</code>, <code>--user &lt;USER&gt;</code> — User to filter by (defaults to USER environment variable)</li>
 <li><code>--all-users</code> — List workflows for all users (overrides --user)</li>
-<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of workflows to return. Default: <code>10000</code></li>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of workflows to return. Default: <code>100000</code></li>
 <li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
 <li><code>--sort-by &lt;SORT_BY&gt;</code> — Field to sort by</li>
 <li><code>--reverse-sort</code> — Reverse sort order</li>
@@ -8589,7 +8589,7 @@ torc -f json workflows correct-resources 123 --dry-run
 </ul>
 <h6 id="options-24"><a class="header" href="#options-24"><strong>Options:</strong></a></h6>
 <ul>
-<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of compute nodes to return. Default: <code>10000</code></li>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of compute nodes to return. Default: <code>100000</code></li>
 <li><code>-o</code>, <code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
 <li><code>-s</code>, <code>--sort-by &lt;SORT_BY&gt;</code> — Field to sort by</li>
 <li><code>-r</code>, <code>--reverse-sort</code> — Reverse sort order. Default: <code>false</code></li>
@@ -8629,7 +8629,7 @@ torc -f json workflows correct-resources 123 --dry-run
 <h6 id="options-26"><a class="header" href="#options-26"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--produced-by-job-id &lt;PRODUCED_BY_JOB_ID&gt;</code> — Filter by job ID that produced the files</li>
-<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of files to return. Default: <code>10000</code></li>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of files to return. Default: <code>100000</code></li>
 <li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
 <li><code>--sort-by &lt;SORT_BY&gt;</code> — Field to sort by</li>
 <li><code>--reverse-sort</code> — Reverse sort order</li>
@@ -8733,7 +8733,7 @@ P0DT1M = 1 minute, P0DT30M = 30 minutes, P0DT2H = 2 hours, P1DT0H = 1 day. Defau
 <ul>
 <li><code>-s</code>, <code>--status &lt;STATUS&gt;</code> — Filter by job status</li>
 <li><code>--upstream-job-id &lt;UPSTREAM_JOB_ID&gt;</code> — Filter by upstream job ID (jobs that depend on this job)</li>
-<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of jobs to return. Default: <code>10000</code></li>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of jobs to return. Default: <code>100000</code></li>
 <li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
 <li><code>--sort-by &lt;SORT_BY&gt;</code> — Field to sort by</li>
 <li><code>--reverse-sort</code> — Reverse sort order</li>
@@ -8802,7 +8802,7 @@ file/user_data IDs) - slower but more complete</li>
 </ul>
 <h6 id="options-33"><a class="header" href="#options-33"><strong>Options:</strong></a></h6>
 <ul>
-<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of dependencies to return. Default: <code>10000</code></li>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of dependencies to return. Default: <code>100000</code></li>
 <li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
 </ul>
 <h2 id="torc-job-dependencies-job-file"><a class="header" href="#torc-job-dependencies-job-file"><code>torc job-dependencies job-file</code></a></h2>
@@ -8814,7 +8814,7 @@ file/user_data IDs) - slower but more complete</li>
 </ul>
 <h6 id="options-34"><a class="header" href="#options-34"><strong>Options:</strong></a></h6>
 <ul>
-<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of relationships to return. Default: <code>10000</code></li>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of relationships to return. Default: <code>100000</code></li>
 <li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
 </ul>
 <h2 id="torc-job-dependencies-job-user-data"><a class="header" href="#torc-job-dependencies-job-user-data"><code>torc job-dependencies job-user-data</code></a></h2>
@@ -8826,7 +8826,7 @@ file/user_data IDs) - slower but more complete</li>
 </ul>
 <h6 id="options-35"><a class="header" href="#options-35"><strong>Options:</strong></a></h6>
 <ul>
-<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of relationships to return. Default: <code>10000</code></li>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of relationships to return. Default: <code>100000</code></li>
 <li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
 </ul>
 <h2 id="torc-resource-requirements"><a class="header" href="#torc-resource-requirements"><code>torc resource-requirements</code></a></h2>
@@ -8867,7 +8867,7 @@ provided)</li>
 </ul>
 <h6 id="options-37"><a class="header" href="#options-37"><strong>Options:</strong></a></h6>
 <ul>
-<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of resource requirements to return. Default: <code>10000</code></li>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of resource requirements to return. Default: <code>100000</code></li>
 <li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
 <li><code>--sort-by &lt;SORT_BY&gt;</code> — Field to sort by</li>
 <li><code>--reverse-sort</code> — Reverse sort order</li>
@@ -8934,7 +8934,7 @@ provided)</li>
 <h6 id="options-40"><a class="header" href="#options-40"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-c</code>, <code>--category &lt;CATEGORY&gt;</code> — Filter events by category</li>
-<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of events to return. Default: <code>10000</code></li>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of events to return. Default: <code>100000</code></li>
 <li><code>-o</code>, <code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
 <li><code>-s</code>, <code>--sort-by &lt;SORT_BY&gt;</code> — Field to sort by</li>
 <li><code>-r</code>, <code>--reverse-sort</code> — Reverse sort order. Default: <code>false</code></li>
@@ -8991,7 +8991,7 @@ default, only lists results for the latest run of the workflow.</li>
 <li><code>--failed</code> — Show only failed jobs (non-zero return code)</li>
 <li><code>-s</code>, <code>--status &lt;STATUS&gt;</code> — Filter by job status (uninitialized, blocked, canceled, terminated,
 done, ready, scheduled, running, pending, disabled)</li>
-<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of results to return. Default: <code>10000</code></li>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of results to return. Default: <code>100000</code></li>
 <li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
 <li><code>--sort-by &lt;SORT_BY&gt;</code> — Field to sort by</li>
 <li><code>--reverse-sort</code> — Reverse sort order</li>
@@ -9166,7 +9166,7 @@ done, ready, scheduled, running, pending, disabled)</li>
 </ul>
 <h6 id="options-48"><a class="header" href="#options-48"><strong>Options:</strong></a></h6>
 <ul>
-<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of configs to return. Default: <code>10000</code></li>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of configs to return. Default: <code>100000</code></li>
 <li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
 </ul>
 <h2 id="torc-slurm-get"><a class="header" href="#torc-slurm-get"><code>torc slurm get</code></a></h2>
@@ -9453,7 +9453,7 @@ provided)</li>
 </ul>
 <h6 id="options-60"><a class="header" href="#options-60"><strong>Options:</strong></a></h6>
 <ul>
-<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of scheduled compute nodes to return. Default: <code>10000</code></li>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of scheduled compute nodes to return. Default: <code>100000</code></li>
 <li><code>-o</code>, <code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
 <li><code>-s</code>, <code>--sort-by &lt;SORT_BY&gt;</code> — Field to sort by</li>
 <li><code>-r</code>, <code>--reverse-sort</code> — Reverse sort order. Default: <code>false</code></li>
@@ -9792,19 +9792,34 @@ jobs:
 </tbody></table>
 </div>
 <h2 id="executionconfig"><a class="header" href="#executionconfig">ExecutionConfig</a></h2>
-<p>Controls how jobs are executed and terminated. Supports three modes for different execution
-environments.</p>
+<p>Controls how jobs are executed and terminated. Fields are grouped by which execution mode they apply
+to. Setting a field that doesn't match the effective mode produces a validation error at workflow
+creation time.</p>
+<h3 id="shared-fields-both-modes"><a class="header" href="#shared-fields-both-modes">Shared fields (both modes)</a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>mode</code></td><td>string</td><td><code>"auto"</code></td><td>Execution mode: <code>"direct"</code>, <code>"slurm"</code>, or <code>"auto"</code></td></tr>
-<tr><td><code>limit_resources</code></td><td>boolean</td><td><code>true</code></td><td>Enforce memory/CPU limits</td></tr>
-<tr><td><code>termination_signal</code></td><td>string</td><td><code>"SIGTERM"</code></td><td>Signal to send before SIGKILL (direct mode)</td></tr>
-<tr><td><code>sigterm_lead_seconds</code></td><td>integer</td><td><code>30</code></td><td>Seconds before SIGKILL to send termination signal</td></tr>
-<tr><td><code>sigkill_headroom_seconds</code></td><td>integer</td><td><code>60</code></td><td>Seconds before end_time for SIGKILL or srun --time adjustment</td></tr>
+<tr><td><code>sigkill_headroom_seconds</code></td><td>integer</td><td><code>60</code></td><td>Seconds before end_time for SIGKILL or srun --time</td></tr>
 <tr><td><code>timeout_exit_code</code></td><td>integer</td><td><code>152</code></td><td>Exit code for timed-out jobs (matches Slurm TIMEOUT)</td></tr>
-<tr><td><code>oom_exit_code</code></td><td>integer</td><td><code>137</code></td><td>Exit code for OOM-killed jobs (128 + SIGKILL)</td></tr>
-<tr><td><code>srun_termination_signal</code></td><td>string</td><td>none</td><td>Slurm signal spec for <code>srun --signal=&lt;value&gt;</code></td></tr>
-<tr><td><code>enable_cpu_bind</code></td><td>boolean</td><td><code>false</code></td><td>Allow Slurm CPU binding</td></tr>
+<tr><td><code>staggered_start</code></td><td>boolean</td><td><code>true</code></td><td>Stagger job runner startup to mitigate thundering herd</td></tr>
 <tr><td><code>stdio</code></td><td><a href="core/reference/workflow-spec.html#stdioconfig">StdioConfig</a></td><td>see below</td><td>Workflow-level default for stdout/stderr capture</td></tr>
+</tbody></table>
+</div>
+<h3 id="direct-mode-fields"><a class="header" href="#direct-mode-fields">Direct mode fields</a></h3>
+<p>These fields only apply when the effective mode is <code>direct</code>. Setting them with <code>mode: slurm</code> (or
+<code>mode: auto</code> with <code>slurm_schedulers</code>) produces a validation error.</p>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>limit_resources</code></td><td>boolean</td><td><code>true</code></td><td>Monitor memory/CPU and kill jobs that exceed limits</td></tr>
+<tr><td><code>termination_signal</code></td><td>string</td><td><code>"SIGTERM"</code></td><td>Signal to send before SIGKILL for graceful shutdown</td></tr>
+<tr><td><code>sigterm_lead_seconds</code></td><td>integer</td><td><code>30</code></td><td>Seconds before SIGKILL to send the termination signal</td></tr>
+<tr><td><code>oom_exit_code</code></td><td>integer</td><td><code>137</code></td><td>Exit code for OOM-killed jobs (128 + SIGKILL)</td></tr>
+</tbody></table>
+</div>
+<h3 id="slurm-mode-fields"><a class="header" href="#slurm-mode-fields">Slurm mode fields</a></h3>
+<p>These fields only apply when the effective mode is <code>slurm</code>. Setting them with <code>mode: direct</code> (or
+<code>mode: auto</code> without <code>slurm_schedulers</code>) produces a validation error.</p>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>srun_termination_signal</code></td><td>string</td><td>none</td><td>Signal spec for <code>srun --signal=&lt;value&gt;</code></td></tr>
+<tr><td><code>enable_cpu_bind</code></td><td>boolean</td><td><code>false</code></td><td>Allow Slurm CPU binding (<code>--cpu-bind</code>)</td></tr>
 </tbody></table>
 </div>
 <h3 id="stdioconfig"><a class="header" href="#stdioconfig">StdioConfig</a></h3>
@@ -12443,39 +12458,33 @@ automatically use all allocated nodes.</p>
 </ul>
 <p>This keeps job claiming and local resource accounting aligned with Slurm allocations.</p>
 <h3 id="resource-limit-enforcement"><a class="header" href="#resource-limit-enforcement">Resource Limit Enforcement</a></h3>
-<p>By default (<code>limit_resources = true</code>), Torc passes <code>--cpus-per-task</code> and <code>--mem</code> to <code>srun</code> so Slurm
-enforces the cgroup limits defined in each job's resource requirements. This is the recommended
-setting for production workflows to prevent runaway jobs from impacting other users.</p>
-<p>To disable cgroup enforcement while still using <code>srun</code> (useful when exploring resource requirements
-for new jobs), set <code>limit_resources: false</code> in your workflow specification:</p>
-<pre><code class="language-yaml">name: my_workflow
-limit_resources: false
-jobs:
-  ...
-</code></pre>
-<p>The setting is stored per-workflow in the database, so different workflows can have different
-enforcement policies. It can also be updated via the API after a workflow is created.</p>
+<p>In Slurm mode, Torc always passes <code>--cpus-per-task</code> and <code>--mem</code> to <code>srun</code> so Slurm enforces the
+cgroup limits defined in each job's resource requirements. These flags work together with <code>--exact</code>
+to allow multiple job steps to run concurrently on shared nodes.</p>
 <blockquote>
-<p><strong>Warning</strong>: With <code>limit_resources: false</code>, jobs can exceed their stated resource requirements. On
-shared clusters this may affect other users. Use this setting only for exploratory workloads.</p>
+<p><strong>Note</strong>: <code>limit_resources: false</code> is not supported in Slurm mode. If you need to run jobs without
+resource enforcement inside a Slurm allocation, use <code>mode: direct</code> instead:</p>
+<pre><code class="language-yaml">execution_config:
+  mode: direct
+  limit_resources: false
+</code></pre>
+<p>In direct mode, jobs run as plain processes without <code>srun</code> wrapping. This means you lose per-step
+<code>sacct</code> accounting and cgroup isolation, but jobs can use any available resources without
+restriction.</p>
 </blockquote>
 <h3 id="disabling-srun-wrapping"><a class="header" href="#disabling-srun-wrapping">Disabling srun Wrapping</a></h3>
-<p>By default (<code>use_srun = true</code>), Torc wraps every job command with <code>srun</code> when running inside a Slurm
-allocation. This creates a per-job cgroup step, enables <code>sacct</code> accounting, and gives HPC admins
-visibility into individual job steps.</p>
-<p>To disable srun wrapping entirely and run jobs via direct shell execution, set <code>use_srun: false</code> in
-your workflow specification:</p>
-<pre><code class="language-yaml">name: my_workflow
-use_srun: false
-jobs:
-  ...
+<p>To disable srun wrapping entirely and run jobs via direct shell execution inside a Slurm allocation,
+set <code>mode: direct</code> in your execution config:</p>
+<pre><code class="language-yaml">execution_config:
+  mode: direct
 </code></pre>
-<p>When <code>use_srun</code> is false, <code>limit_resources</code> is silently ignored because there is no srun to pass
-resource flags to. Slurm accounting (<code>sacct</code>) and live monitoring (<code>sstat</code>) are also unavailable
-since jobs do not run as Slurm steps.</p>
+<p>In direct mode, Slurm accounting (<code>sacct</code>) and live monitoring (<code>sstat</code>) are unavailable since jobs
+do not run as Slurm steps. However, Torc's own resource monitor can still track memory and CPU usage
+if enabled.</p>
 <blockquote>
-<p><strong>Note</strong>: <code>use_srun: false</code> is a safety valve for users who encounter compatibility issues with
-srun wrapping. For most workflows, the default (<code>use_srun: true</code>) is recommended.</p>
+<p><strong>Note</strong>: Direct mode inside a Slurm allocation is useful when <code>srun</code> has compatibility issues, or
+when you want to run jobs without resource limits (<code>limit_resources: false</code>). For most workflows,
+the default auto mode (which selects Slurm mode inside allocations) is recommended.</p>
 </blockquote>
 <h3 id="slurm-accounting-stats-1"><a class="header" href="#slurm-accounting-stats-1">Slurm Accounting Stats</a></h3>
 <p>After each job step exits, Torc calls <code>sacct</code> once to collect the following Slurm-native accounting
@@ -22663,8 +22672,8 @@ isolation.</p>
 <tr><td><code>--cpu-bind=none</code></td><td>Disables CPU affinity binding (default; omitted when <code>enable_cpu_bind: true</code>)</td></tr>
 <tr><td><code>--job-name</code></td><td>Sets the step name for sacct/sstat lookup</td></tr>
 <tr><td><code>--nodes</code></td><td>Number of nodes for this step (from <code>num_nodes</code>, default 1)</td></tr>
-<tr><td><code>--cpus-per-task</code></td><td>CPU cgroup limit (only when <code>limit_resources=true</code>)</td></tr>
-<tr><td><code>--mem</code></td><td>Memory cgroup limit in MB (only when <code>limit_resources=true</code>)</td></tr>
+<tr><td><code>--cpus-per-task</code></td><td>CPU cgroup limit (from job's resource requirements)</td></tr>
+<tr><td><code>--mem</code></td><td>Memory cgroup limit in MB (from job's resource requirements)</td></tr>
 <tr><td><code>--time</code></td><td>Per-step walltime from remaining allocation time (see below)</td></tr>
 <tr><td><code>--signal</code></td><td>Early warning signal before step timeout (see below)</td></tr>
 </tbody></table>
@@ -22679,11 +22688,15 @@ scheduler configuration.</p>
 </ul>
 <p>When <code>num_nodes &gt; 1</code>, Torc treats the job as consuming whole nodes exclusively for the lifetime of
 the step. This avoids ambiguous partial-node accounting for MPI and other true multi-node jobs.</p>
-<h3 id="the-limit_resources-flag"><a class="header" href="#the-limit_resources-flag">The <code>limit_resources</code> Flag</a></h3>
-<p>When <code>limit_resources</code> is enabled in the scheduler configuration, srun applies <code>--cpus-per-task</code> and
-<code>--mem</code> flags. This creates cgroup-enforced limits: jobs exceeding their memory allocation are
-killed by the OOM killer (exit code 137), and CPU usage is throttled.</p>
-<p>Without <code>limit_resources</code>, Slurm still creates per-step accounting but does not enforce hard limits.</p>
+<h3 id="resource-enforcement-1"><a class="header" href="#resource-enforcement-1">Resource Enforcement</a></h3>
+<p>In Slurm mode, srun always applies <code>--cpus-per-task</code> and <code>--mem</code> flags from the job's resource
+requirements. This creates cgroup-enforced limits: jobs exceeding their memory allocation are killed
+by the OOM killer (exit code 137), and CPU usage is throttled. These flags are also required for
+<code>--exact</code> to work correctly, allowing multiple job steps to run concurrently on shared nodes.</p>
+<blockquote>
+<p><strong>Note</strong>: The <code>limit_resources</code> setting only applies to direct mode (OOM enforcement). It is not
+supported in Slurm mode — use <code>mode: direct</code> if you need to disable resource enforcement.</p>
+</blockquote>
 <h3 id="per-step-walltime---time"><a class="header" href="#per-step-walltime---time">Per-Step Walltime (<code>--time</code>)</a></h3>
 <p>Torc sets <code>srun --time=&lt;remaining_minutes&gt;</code> on every step, where <code>remaining_minutes</code> is the time
 left in the Slurm allocation (rounded <strong>down</strong> to whole minutes, minimum 1). This ensures that when
@@ -22921,7 +22934,7 @@ numeric values.</p>
 </div>
 <h2 id="configuration-3"><a class="header" href="#configuration-3">Configuration</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Setting</th><th>Location</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>limit_resources</code></td><td>Scheduler config</td><td>Enable cgroup enforcement via srun <code>--mem</code>/<code>--cpus-per-task</code></td></tr>
+<tr><td><code>limit_resources</code></td><td>Execution config</td><td>Enable OOM enforcement in direct mode (not supported in slurm mode)</td></tr>
 <tr><td><code>num_nodes</code></td><td>Resource requirements</td><td>Number of nodes per job (default: 1)</td></tr>
 <tr><td><code>sample_interval_seconds</code></td><td>Resource monitor config</td><td>sstat polling interval</td></tr>
 <tr><td><code>TORC_FAKE_SRUN</code></td><td>Environment variable</td><td>Override srun binary path (testing)</td></tr>

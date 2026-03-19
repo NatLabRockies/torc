@@ -575,7 +575,7 @@ Default: <code>false</code></li>
 <ul>
 <li><code>-u</code>, <code>--user &lt;USER&gt;</code> — User to filter by (defaults to USER environment variable)</li>
 <li><code>--all-users</code> — List workflows for all users (overrides --user)</li>
-<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of workflows to return. Default: <code>10000</code></li>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of workflows to return. Default: <code>100000</code></li>
 <li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
 <li><code>--sort-by &lt;SORT_BY&gt;</code> — Field to sort by</li>
 <li><code>--reverse-sort</code> — Reverse sort order</li>
@@ -894,7 +894,7 @@ torc -f json workflows correct-resources 123 --dry-run
 </ul>
 <h6 id="options-24"><a class="header" href="#options-24"><strong>Options:</strong></a></h6>
 <ul>
-<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of compute nodes to return. Default: <code>10000</code></li>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of compute nodes to return. Default: <code>100000</code></li>
 <li><code>-o</code>, <code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
 <li><code>-s</code>, <code>--sort-by &lt;SORT_BY&gt;</code> — Field to sort by</li>
 <li><code>-r</code>, <code>--reverse-sort</code> — Reverse sort order. Default: <code>false</code></li>
@@ -934,7 +934,7 @@ torc -f json workflows correct-resources 123 --dry-run
 <h6 id="options-26"><a class="header" href="#options-26"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--produced-by-job-id &lt;PRODUCED_BY_JOB_ID&gt;</code> — Filter by job ID that produced the files</li>
-<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of files to return. Default: <code>10000</code></li>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of files to return. Default: <code>100000</code></li>
 <li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
 <li><code>--sort-by &lt;SORT_BY&gt;</code> — Field to sort by</li>
 <li><code>--reverse-sort</code> — Reverse sort order</li>
@@ -1038,7 +1038,7 @@ P0DT1M = 1 minute, P0DT30M = 30 minutes, P0DT2H = 2 hours, P1DT0H = 1 day. Defau
 <ul>
 <li><code>-s</code>, <code>--status &lt;STATUS&gt;</code> — Filter by job status</li>
 <li><code>--upstream-job-id &lt;UPSTREAM_JOB_ID&gt;</code> — Filter by upstream job ID (jobs that depend on this job)</li>
-<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of jobs to return. Default: <code>10000</code></li>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of jobs to return. Default: <code>100000</code></li>
 <li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
 <li><code>--sort-by &lt;SORT_BY&gt;</code> — Field to sort by</li>
 <li><code>--reverse-sort</code> — Reverse sort order</li>
@@ -1107,7 +1107,7 @@ file/user_data IDs) - slower but more complete</li>
 </ul>
 <h6 id="options-33"><a class="header" href="#options-33"><strong>Options:</strong></a></h6>
 <ul>
-<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of dependencies to return. Default: <code>10000</code></li>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of dependencies to return. Default: <code>100000</code></li>
 <li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
 </ul>
 <h2 id="torc-job-dependencies-job-file"><a class="header" href="#torc-job-dependencies-job-file"><code>torc job-dependencies job-file</code></a></h2>
@@ -1119,7 +1119,7 @@ file/user_data IDs) - slower but more complete</li>
 </ul>
 <h6 id="options-34"><a class="header" href="#options-34"><strong>Options:</strong></a></h6>
 <ul>
-<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of relationships to return. Default: <code>10000</code></li>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of relationships to return. Default: <code>100000</code></li>
 <li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
 </ul>
 <h2 id="torc-job-dependencies-job-user-data"><a class="header" href="#torc-job-dependencies-job-user-data"><code>torc job-dependencies job-user-data</code></a></h2>
@@ -1131,7 +1131,7 @@ file/user_data IDs) - slower but more complete</li>
 </ul>
 <h6 id="options-35"><a class="header" href="#options-35"><strong>Options:</strong></a></h6>
 <ul>
-<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of relationships to return. Default: <code>10000</code></li>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of relationships to return. Default: <code>100000</code></li>
 <li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
 </ul>
 <h2 id="torc-resource-requirements"><a class="header" href="#torc-resource-requirements"><code>torc resource-requirements</code></a></h2>
@@ -1172,7 +1172,7 @@ provided)</li>
 </ul>
 <h6 id="options-37"><a class="header" href="#options-37"><strong>Options:</strong></a></h6>
 <ul>
-<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of resource requirements to return. Default: <code>10000</code></li>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of resource requirements to return. Default: <code>100000</code></li>
 <li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
 <li><code>--sort-by &lt;SORT_BY&gt;</code> — Field to sort by</li>
 <li><code>--reverse-sort</code> — Reverse sort order</li>
@@ -1239,7 +1239,7 @@ provided)</li>
 <h6 id="options-40"><a class="header" href="#options-40"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-c</code>, <code>--category &lt;CATEGORY&gt;</code> — Filter events by category</li>
-<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of events to return. Default: <code>10000</code></li>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of events to return. Default: <code>100000</code></li>
 <li><code>-o</code>, <code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
 <li><code>-s</code>, <code>--sort-by &lt;SORT_BY&gt;</code> — Field to sort by</li>
 <li><code>-r</code>, <code>--reverse-sort</code> — Reverse sort order. Default: <code>false</code></li>
@@ -1296,7 +1296,7 @@ default, only lists results for the latest run of the workflow.</li>
 <li><code>--failed</code> — Show only failed jobs (non-zero return code)</li>
 <li><code>-s</code>, <code>--status &lt;STATUS&gt;</code> — Filter by job status (uninitialized, blocked, canceled, terminated,
 done, ready, scheduled, running, pending, disabled)</li>
-<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of results to return. Default: <code>10000</code></li>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of results to return. Default: <code>100000</code></li>
 <li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
 <li><code>--sort-by &lt;SORT_BY&gt;</code> — Field to sort by</li>
 <li><code>--reverse-sort</code> — Reverse sort order</li>
@@ -1471,7 +1471,7 @@ done, ready, scheduled, running, pending, disabled)</li>
 </ul>
 <h6 id="options-48"><a class="header" href="#options-48"><strong>Options:</strong></a></h6>
 <ul>
-<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of configs to return. Default: <code>10000</code></li>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of configs to return. Default: <code>100000</code></li>
 <li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
 </ul>
 <h2 id="torc-slurm-get"><a class="header" href="#torc-slurm-get"><code>torc slurm get</code></a></h2>
@@ -1758,7 +1758,7 @@ provided)</li>
 </ul>
 <h6 id="options-60"><a class="header" href="#options-60"><strong>Options:</strong></a></h6>
 <ul>
-<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of scheduled compute nodes to return. Default: <code>10000</code></li>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of scheduled compute nodes to return. Default: <code>100000</code></li>
 <li><code>-o</code>, <code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
 <li><code>-s</code>, <code>--sort-by &lt;SORT_BY&gt;</code> — Field to sort by</li>
 <li><code>-r</code>, <code>--reverse-sort</code> — Reverse sort order. Default: <code>false</code></li>

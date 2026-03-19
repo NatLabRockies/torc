@@ -413,7 +413,7 @@ modes:</p>
 <h3 id="yaml-example"><a class="header" href="#yaml-example">YAML Example</a></h3>
 <pre><code class="language-yaml">execution_config:
   mode: direct # Options: direct, slurm, auto
-  limit_resources: true # Enforce memory/CPU limits (default: true)
+  limit_resources: true # Enforce memory limits in direct mode (default: true)
 
   # Direct mode settings
   termination_signal: SIGTERM # Signal before SIGKILL (default: SIGTERM)
@@ -447,7 +447,7 @@ modes:</p>
 <h3 id="configuration-fields"><a class="header" href="#configuration-fields">Configuration Fields</a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>mode</code></td><td>string</td><td><code>auto</code></td><td>Execution mode: <code>direct</code>, <code>slurm</code>, or <code>auto</code></td></tr>
-<tr><td><code>limit_resources</code></td><td>bool</td><td><code>true</code></td><td>Enforce memory/CPU limits</td></tr>
+<tr><td><code>limit_resources</code></td><td>bool</td><td><code>true</code></td><td>Enforce memory limits in direct mode only</td></tr>
 <tr><td><code>termination_signal</code></td><td>string</td><td><code>SIGTERM</code></td><td>Signal to send before SIGKILL (direct mode)</td></tr>
 <tr><td><code>sigterm_lead_seconds</code></td><td>int</td><td><code>30</code></td><td>Seconds before SIGKILL to send termination signal</td></tr>
 <tr><td><code>sigkill_headroom_seconds</code></td><td>int</td><td><code>60</code></td><td>Seconds before end_time to send SIGKILL</td></tr>
@@ -503,7 +503,6 @@ limit_resources: true
 <pre><code class="language-yaml"># New style - use execution_config
 execution_config:
   mode: slurm # Replaces use_srun: true
-  limit_resources: true
   srun_termination_signal: "TERM@120"
   sigkill_headroom_seconds: 180 # New: controls srun --time headroom
 </code></pre>
@@ -512,11 +511,16 @@ execution_config:
 <tr><td><code>use_srun: true</code></td><td><code>mode: slurm</code></td></tr>
 <tr><td><code>use_srun: false</code></td><td><code>mode: direct</code></td></tr>
 <tr><td>(not set)</td><td><code>mode: auto</code> (default)</td></tr>
-<tr><td><code>limit_resources</code></td><td><code>limit_resources</code></td></tr>
+<tr><td><code>limit_resources: false</code></td><td><code>mode: direct</code> with <code>limit_resources: false</code></td></tr>
 <tr><td><code>srun_termination_signal</code></td><td><code>srun_termination_signal</code></td></tr>
 <tr><td><code>enable_cpu_bind</code></td><td><code>enable_cpu_bind</code></td></tr>
 </tbody></table>
 </div>
+<blockquote>
+<p><strong>Note</strong>: <code>limit_resources: false</code> is only supported with <code>mode: direct</code>. If you previously used
+<code>limit_resources: false</code> with srun, switch to <code>mode: direct</code> to get the same behavior (jobs run
+without resource enforcement).</p>
+</blockquote>
 <h2 id="common-features-across-all-formats"><a class="header" href="#common-features-across-all-formats">Common Features Across All Formats</a></h2>
 <h3 id="variable-substitution"><a class="header" href="#variable-substitution">Variable Substitution</a></h3>
 <p>All formats support the same variable substitution syntax:</p>

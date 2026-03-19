@@ -328,22 +328,16 @@ provides a good balance between detection speed and overhead.</p>
 <li><code>--signal</code>: Send a warning signal before step timeout (e.g., <code>TERM@120</code> sends SIGTERM 120s before)</li>
 </ul>
 <h3 id="resource-enforcement-in-slurm-mode"><a class="header" href="#resource-enforcement-in-slurm-mode">Resource Enforcement in Slurm Mode</a></h3>
-<p>When <code>limit_resources: true</code>:</p>
-<ul>
-<li><code>--cpus-per-task</code>, <code>--mem</code>, and <code>--gpus</code> are passed to srun</li>
-<li>Slurm's cgroups enforce these limits</li>
-<li>Jobs exceeding memory are killed by Slurm with exit code 137</li>
-</ul>
-<p>When <code>limit_resources: false</code>:</p>
-<ul>
-<li>CPU and memory flags are omitted</li>
-<li>Jobs can use any available resources in the allocation</li>
-<li>GPU flags are still passed (required for GPU access)</li>
-</ul>
+<p>Slurm mode always passes <code>--cpus-per-task</code>, <code>--mem</code>, and <code>--gpus</code> to srun. Slurm's cgroups enforce
+these limits: jobs exceeding memory are killed by Slurm with exit code 137.</p>
+<blockquote>
+<p><strong>Note</strong>: <code>limit_resources: false</code> is not supported in Slurm mode. If you need to run jobs without
+resource enforcement inside a Slurm allocation, use <code>mode: direct</code> instead. See
+<a href="#disabling-resource-limits">Disabling Resource Limits</a> below.</p>
+</blockquote>
 <h3 id="slurm-mode-configuration"><a class="header" href="#slurm-mode-configuration">Slurm Mode Configuration</a></h3>
 <pre><code class="language-yaml">execution_config:
   mode: slurm
-  limit_resources: true            # Pass resource limits to srun
   srun_termination_signal: TERM@120  # Send SIGTERM 120s before step timeout
   sigkill_headroom_seconds: 180    # End steps 3 minutes before allocation ends
   enable_cpu_bind: false           # Set to true to enable Slurm CPU binding
@@ -366,22 +360,25 @@ provides a good balance between detection speed and overhead.</p>
 <li>The allocation doesn't end while jobs are still running</li>
 </ol>
 <h2 id="disabling-resource-limits"><a class="header" href="#disabling-resource-limits">Disabling Resource Limits</a></h2>
-<p>Set <code>limit_resources: false</code> to disable resource enforcement:</p>
+<p>Set <code>limit_resources: false</code> to disable resource enforcement in direct mode:</p>
 <pre><code class="language-yaml">execution_config:
-  mode: direct  # or slurm
+  mode: direct
   limit_resources: false
 </code></pre>
-<p>Effects:</p>
+<p>This is useful when exploring resource requirements for new jobs or during local development. Jobs
+can use any available system resources without being killed for exceeding their declared limits.</p>
+<p>Effects in direct mode:</p>
 <div class="table-wrapper"><table><thead><tr><th>Feature</th><th>limit_resources: true</th><th>limit_resources: false</th></tr></thead><tbody>
-<tr><td>Memory limits (direct)</td><td>OOM detection and SIGKILL</td><td>No enforcement</td></tr>
-<tr><td>Memory limits (slurm)</td><td>srun --mem passed</td><td>--mem omitted</td></tr>
-<tr><td>CPU limits (slurm)</td><td>srun --cpus-per-task</td><td>--cpus-per-task omitted</td></tr>
-<tr><td>GPU allocation</td><td>Always passed to srun</td><td>Always passed to srun</td></tr>
+<tr><td>Memory limits</td><td>OOM detection and SIGKILL</td><td>No enforcement</td></tr>
 <tr><td>Timeout termination</td><td>Enforced</td><td>Enforced</td></tr>
 </tbody></table>
 </div>
-<p>Note: GPU allocation is always requested regardless of <code>limit_resources</code> because jobs need explicit
-GPU access in Slurm.</p>
+<blockquote>
+<p><strong>Important</strong>: <code>limit_resources: false</code> is only supported in direct mode. Setting it with
+<code>mode: slurm</code> will produce an error at workflow creation time. Slurm mode relies on <code>srun</code> with
+<code>--exact</code>, <code>--cpus-per-task</code>, and <code>--mem</code> for correct concurrent job execution — omitting these
+flags causes jobs to run sequentially instead of in parallel.</p>
+</blockquote>
 <h2 id="exit-codes"><a class="header" href="#exit-codes">Exit Codes</a></h2>
 <p>Torc uses specific exit codes to identify termination reasons:</p>
 <div class="table-wrapper"><table><thead><tr><th>Exit Code</th><th>Meaning</th><th>Default</th><th>Configuration Key</th></tr></thead><tbody>
@@ -400,7 +397,6 @@ modes.</p>
 <h3 id="production-hpc"><a class="header" href="#production-hpc">Production HPC</a></h3>
 <pre><code class="language-yaml">execution_config:
   mode: auto  # Use slurm inside allocations
-  limit_resources: true
   srun_termination_signal: TERM@120
   sigkill_headroom_seconds: 300
 </code></pre>

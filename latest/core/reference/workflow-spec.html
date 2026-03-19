@@ -332,19 +332,34 @@ jobs:
 </tbody></table>
 </div>
 <h2 id="executionconfig"><a class="header" href="#executionconfig">ExecutionConfig</a></h2>
-<p>Controls how jobs are executed and terminated. Supports three modes for different execution
-environments.</p>
+<p>Controls how jobs are executed and terminated. Fields are grouped by which execution mode they apply
+to. Setting a field that doesn't match the effective mode produces a validation error at workflow
+creation time.</p>
+<h3 id="shared-fields-both-modes"><a class="header" href="#shared-fields-both-modes">Shared fields (both modes)</a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>mode</code></td><td>string</td><td><code>"auto"</code></td><td>Execution mode: <code>"direct"</code>, <code>"slurm"</code>, or <code>"auto"</code></td></tr>
-<tr><td><code>limit_resources</code></td><td>boolean</td><td><code>true</code></td><td>Enforce memory/CPU limits</td></tr>
-<tr><td><code>termination_signal</code></td><td>string</td><td><code>"SIGTERM"</code></td><td>Signal to send before SIGKILL (direct mode)</td></tr>
-<tr><td><code>sigterm_lead_seconds</code></td><td>integer</td><td><code>30</code></td><td>Seconds before SIGKILL to send termination signal</td></tr>
-<tr><td><code>sigkill_headroom_seconds</code></td><td>integer</td><td><code>60</code></td><td>Seconds before end_time for SIGKILL or srun --time adjustment</td></tr>
+<tr><td><code>sigkill_headroom_seconds</code></td><td>integer</td><td><code>60</code></td><td>Seconds before end_time for SIGKILL or srun --time</td></tr>
 <tr><td><code>timeout_exit_code</code></td><td>integer</td><td><code>152</code></td><td>Exit code for timed-out jobs (matches Slurm TIMEOUT)</td></tr>
-<tr><td><code>oom_exit_code</code></td><td>integer</td><td><code>137</code></td><td>Exit code for OOM-killed jobs (128 + SIGKILL)</td></tr>
-<tr><td><code>srun_termination_signal</code></td><td>string</td><td>none</td><td>Slurm signal spec for <code>srun --signal=&lt;value&gt;</code></td></tr>
-<tr><td><code>enable_cpu_bind</code></td><td>boolean</td><td><code>false</code></td><td>Allow Slurm CPU binding</td></tr>
+<tr><td><code>staggered_start</code></td><td>boolean</td><td><code>true</code></td><td>Stagger job runner startup to mitigate thundering herd</td></tr>
 <tr><td><code>stdio</code></td><td><a href="#stdioconfig">StdioConfig</a></td><td>see below</td><td>Workflow-level default for stdout/stderr capture</td></tr>
+</tbody></table>
+</div>
+<h3 id="direct-mode-fields"><a class="header" href="#direct-mode-fields">Direct mode fields</a></h3>
+<p>These fields only apply when the effective mode is <code>direct</code>. Setting them with <code>mode: slurm</code> (or
+<code>mode: auto</code> with <code>slurm_schedulers</code>) produces a validation error.</p>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>limit_resources</code></td><td>boolean</td><td><code>true</code></td><td>Monitor memory/CPU and kill jobs that exceed limits</td></tr>
+<tr><td><code>termination_signal</code></td><td>string</td><td><code>"SIGTERM"</code></td><td>Signal to send before SIGKILL for graceful shutdown</td></tr>
+<tr><td><code>sigterm_lead_seconds</code></td><td>integer</td><td><code>30</code></td><td>Seconds before SIGKILL to send the termination signal</td></tr>
+<tr><td><code>oom_exit_code</code></td><td>integer</td><td><code>137</code></td><td>Exit code for OOM-killed jobs (128 + SIGKILL)</td></tr>
+</tbody></table>
+</div>
+<h3 id="slurm-mode-fields"><a class="header" href="#slurm-mode-fields">Slurm mode fields</a></h3>
+<p>These fields only apply when the effective mode is <code>slurm</code>. Setting them with <code>mode: direct</code> (or
+<code>mode: auto</code> without <code>slurm_schedulers</code>) produces a validation error.</p>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>srun_termination_signal</code></td><td>string</td><td>none</td><td>Signal spec for <code>srun --signal=&lt;value&gt;</code></td></tr>
+<tr><td><code>enable_cpu_bind</code></td><td>boolean</td><td><code>false</code></td><td>Allow Slurm CPU binding (<code>--cpu-bind</code>)</td></tr>
 </tbody></table>
 </div>
 <h3 id="stdioconfig"><a class="header" href="#stdioconfig">StdioConfig</a></h3>

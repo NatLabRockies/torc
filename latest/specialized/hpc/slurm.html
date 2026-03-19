@@ -478,39 +478,33 @@ automatically use all allocated nodes.</p>
 </ul>
 <p>This keeps job claiming and local resource accounting aligned with Slurm allocations.</p>
 <h3 id="resource-limit-enforcement"><a class="header" href="#resource-limit-enforcement">Resource Limit Enforcement</a></h3>
-<p>By default (<code>limit_resources = true</code>), Torc passes <code>--cpus-per-task</code> and <code>--mem</code> to <code>srun</code> so Slurm
-enforces the cgroup limits defined in each job's resource requirements. This is the recommended
-setting for production workflows to prevent runaway jobs from impacting other users.</p>
-<p>To disable cgroup enforcement while still using <code>srun</code> (useful when exploring resource requirements
-for new jobs), set <code>limit_resources: false</code> in your workflow specification:</p>
-<pre><code class="language-yaml">name: my_workflow
-limit_resources: false
-jobs:
-  ...
-</code></pre>
-<p>The setting is stored per-workflow in the database, so different workflows can have different
-enforcement policies. It can also be updated via the API after a workflow is created.</p>
+<p>In Slurm mode, Torc always passes <code>--cpus-per-task</code> and <code>--mem</code> to <code>srun</code> so Slurm enforces the
+cgroup limits defined in each job's resource requirements. These flags work together with <code>--exact</code>
+to allow multiple job steps to run concurrently on shared nodes.</p>
 <blockquote>
-<p><strong>Warning</strong>: With <code>limit_resources: false</code>, jobs can exceed their stated resource requirements. On
-shared clusters this may affect other users. Use this setting only for exploratory workloads.</p>
+<p><strong>Note</strong>: <code>limit_resources: false</code> is not supported in Slurm mode. If you need to run jobs without
+resource enforcement inside a Slurm allocation, use <code>mode: direct</code> instead:</p>
+<pre><code class="language-yaml">execution_config:
+  mode: direct
+  limit_resources: false
+</code></pre>
+<p>In direct mode, jobs run as plain processes without <code>srun</code> wrapping. This means you lose per-step
+<code>sacct</code> accounting and cgroup isolation, but jobs can use any available resources without
+restriction.</p>
 </blockquote>
 <h3 id="disabling-srun-wrapping"><a class="header" href="#disabling-srun-wrapping">Disabling srun Wrapping</a></h3>
-<p>By default (<code>use_srun = true</code>), Torc wraps every job command with <code>srun</code> when running inside a Slurm
-allocation. This creates a per-job cgroup step, enables <code>sacct</code> accounting, and gives HPC admins
-visibility into individual job steps.</p>
-<p>To disable srun wrapping entirely and run jobs via direct shell execution, set <code>use_srun: false</code> in
-your workflow specification:</p>
-<pre><code class="language-yaml">name: my_workflow
-use_srun: false
-jobs:
-  ...
+<p>To disable srun wrapping entirely and run jobs via direct shell execution inside a Slurm allocation,
+set <code>mode: direct</code> in your execution config:</p>
+<pre><code class="language-yaml">execution_config:
+  mode: direct
 </code></pre>
-<p>When <code>use_srun</code> is false, <code>limit_resources</code> is silently ignored because there is no srun to pass
-resource flags to. Slurm accounting (<code>sacct</code>) and live monitoring (<code>sstat</code>) are also unavailable
-since jobs do not run as Slurm steps.</p>
+<p>In direct mode, Slurm accounting (<code>sacct</code>) and live monitoring (<code>sstat</code>) are unavailable since jobs
+do not run as Slurm steps. However, Torc's own resource monitor can still track memory and CPU usage
+if enabled.</p>
 <blockquote>
-<p><strong>Note</strong>: <code>use_srun: false</code> is a safety valve for users who encounter compatibility issues with
-srun wrapping. For most workflows, the default (<code>use_srun: true</code>) is recommended.</p>
+<p><strong>Note</strong>: Direct mode inside a Slurm allocation is useful when <code>srun</code> has compatibility issues, or
+when you want to run jobs without resource limits (<code>limit_resources: false</code>). For most workflows,
+the default auto mode (which selects Slurm mode inside allocations) is recommended.</p>
 </blockquote>
 <h3 id="slurm-accounting-stats"><a class="header" href="#slurm-accounting-stats">Slurm Accounting Stats</a></h3>
 <p>After each job step exits, Torc calls <code>sacct</code> once to collect the following Slurm-native accounting

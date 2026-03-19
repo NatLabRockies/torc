@@ -275,8 +275,8 @@ isolation.</p>
 <tr><td><code>--cpu-bind=none</code></td><td>Disables CPU affinity binding (default; omitted when <code>enable_cpu_bind: true</code>)</td></tr>
 <tr><td><code>--job-name</code></td><td>Sets the step name for sacct/sstat lookup</td></tr>
 <tr><td><code>--nodes</code></td><td>Number of nodes for this step (from <code>num_nodes</code>, default 1)</td></tr>
-<tr><td><code>--cpus-per-task</code></td><td>CPU cgroup limit (only when <code>limit_resources=true</code>)</td></tr>
-<tr><td><code>--mem</code></td><td>Memory cgroup limit in MB (only when <code>limit_resources=true</code>)</td></tr>
+<tr><td><code>--cpus-per-task</code></td><td>CPU cgroup limit (from job's resource requirements)</td></tr>
+<tr><td><code>--mem</code></td><td>Memory cgroup limit in MB (from job's resource requirements)</td></tr>
 <tr><td><code>--time</code></td><td>Per-step walltime from remaining allocation time (see below)</td></tr>
 <tr><td><code>--signal</code></td><td>Early warning signal before step timeout (see below)</td></tr>
 </tbody></table>
@@ -291,11 +291,15 @@ scheduler configuration.</p>
 </ul>
 <p>When <code>num_nodes &gt; 1</code>, Torc treats the job as consuming whole nodes exclusively for the lifetime of
 the step. This avoids ambiguous partial-node accounting for MPI and other true multi-node jobs.</p>
-<h3 id="the-limit_resources-flag"><a class="header" href="#the-limit_resources-flag">The <code>limit_resources</code> Flag</a></h3>
-<p>When <code>limit_resources</code> is enabled in the scheduler configuration, srun applies <code>--cpus-per-task</code> and
-<code>--mem</code> flags. This creates cgroup-enforced limits: jobs exceeding their memory allocation are
-killed by the OOM killer (exit code 137), and CPU usage is throttled.</p>
-<p>Without <code>limit_resources</code>, Slurm still creates per-step accounting but does not enforce hard limits.</p>
+<h3 id="resource-enforcement"><a class="header" href="#resource-enforcement">Resource Enforcement</a></h3>
+<p>In Slurm mode, srun always applies <code>--cpus-per-task</code> and <code>--mem</code> flags from the job's resource
+requirements. This creates cgroup-enforced limits: jobs exceeding their memory allocation are killed
+by the OOM killer (exit code 137), and CPU usage is throttled. These flags are also required for
+<code>--exact</code> to work correctly, allowing multiple job steps to run concurrently on shared nodes.</p>
+<blockquote>
+<p><strong>Note</strong>: The <code>limit_resources</code> setting only applies to direct mode (OOM enforcement). It is not
+supported in Slurm mode — use <code>mode: direct</code> if you need to disable resource enforcement.</p>
+</blockquote>
 <h3 id="per-step-walltime---time"><a class="header" href="#per-step-walltime---time">Per-Step Walltime (<code>--time</code>)</a></h3>
 <p>Torc sets <code>srun --time=&lt;remaining_minutes&gt;</code> on every step, where <code>remaining_minutes</code> is the time
 left in the Slurm allocation (rounded <strong>down</strong> to whole minutes, minimum 1). This ensures that when
@@ -533,7 +537,7 @@ numeric values.</p>
 </div>
 <h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Setting</th><th>Location</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>limit_resources</code></td><td>Scheduler config</td><td>Enable cgroup enforcement via srun <code>--mem</code>/<code>--cpus-per-task</code></td></tr>
+<tr><td><code>limit_resources</code></td><td>Execution config</td><td>Enable OOM enforcement in direct mode (not supported in slurm mode)</td></tr>
 <tr><td><code>num_nodes</code></td><td>Resource requirements</td><td>Number of nodes per job (default: 1)</td></tr>
 <tr><td><code>sample_interval_seconds</code></td><td>Resource monitor config</td><td>sstat polling interval</td></tr>
 <tr><td><code>TORC_FAKE_SRUN</code></td><td>Environment variable</td><td>Override srun binary path (testing)</td></tr>
