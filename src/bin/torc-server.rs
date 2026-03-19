@@ -419,7 +419,12 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
             .journal_mode(SqliteJournalMode::Wal)
             .foreign_keys(true)
             .create_if_missing(true)
-            .busy_timeout(std::time::Duration::from_secs(45));
+            .busy_timeout(std::time::Duration::from_secs(45))
+            // NORMAL synchronous is safe with WAL and avoids fsync on every commit,
+            // reducing latency for concurrent claim/complete operations
+            .pragma("synchronous", "NORMAL")
+            // 16MB page cache (default is 2MB)
+            .pragma("cache_size", "-16000");
 
         // Set max_connections based on thread count to prevent pool starvation.
         // We add extra connections beyond the worker thread count to allow for:
