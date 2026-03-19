@@ -3,6 +3,7 @@
 #![allow(unused_imports)]
 #![allow(dead_code)]
 
+use crate::MAX_RECORD_TRANSFER_COUNT;
 use crate::models;
 use crate::server::api::AccessGroupsApiImpl;
 use crate::server::api::ComputeNodesApi;
@@ -63,8 +64,6 @@ const GIT_DIRTY: &str = env!("GIT_DIRTY");
 fn full_version() -> String {
     format!("{} ({}{})", TORC_VERSION, GIT_HASH, GIT_DIRTY)
 }
-
-use crate::MAX_RECORD_TRANSFER_COUNT;
 
 macro_rules! forbidden_error {
     ($reason:expr) => {
@@ -224,7 +223,8 @@ macro_rules! authorize_workflow_group {
 
 /// Process optional offset and limit parameters and return concrete values.
 /// Returns (offset, limit) where:
-/// - offset defaults to [`MAX_RECORD_TRANSFER_COUNT`] if not provided
+/// - offset defaults to 0 if not provided
+/// - limit defaults to [`MAX_RECORD_TRANSFER_COUNT`] if not provided
 /// - Returns an error if limit exceeds [`MAX_RECORD_TRANSFER_COUNT`]
 fn process_pagination_params(
     offset: Option<i64>,

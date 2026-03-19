@@ -80,10 +80,11 @@ fn build_srun_command(params: &SrunParams) -> Result<Command, String> {
         srun.arg(format!("--nodelist={}", node));
     }
 
-    // Add resource requirements
-    // Always pass resource requirements to srun. The limit_resources setting
-    // only applies to direct mode (OOM enforcement); in srun mode, resource
-    // args are always needed for --exact to work correctly.
+    // Add resource requirements to srun. The limit_resources setting only
+    // applies to direct mode (OOM enforcement); in srun mode, resource args
+    // are needed for --exact to work correctly. The "default" resource
+    // requirement is a placeholder with no real limits, so --cpus-per-task
+    // and --mem are omitted for it to avoid artificially constraining jobs.
     if let Some(rr) = params.resource_requirements {
         srun.arg(format!("--nodes={}", rr.num_nodes.max(1)));
         if rr.name != "default" {
