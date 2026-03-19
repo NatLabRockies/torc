@@ -1178,7 +1178,7 @@ pub fn create_job(
     }
 }
 
-/// Create jobs in bulk. Recommended max job count of 10,000.
+/// Create jobs in bulk.
 pub fn create_jobs(
     configuration: &configuration::Configuration,
     body: models::JobsModel,

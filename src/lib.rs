@@ -3,6 +3,10 @@
 //! This library provides shared functionality for the Torc workflow orchestration system.
 //! It includes data models, server implementation, and client utilities.
 
+/// Maximum number of records that can be transferred in a single API request or response.
+/// Used for both batch creation limits and pagination limits.
+pub const MAX_RECORD_TRANSFER_COUNT: i64 = 100_000;
+
 // Shared modules (always available)
 // models.rs is generated from OpenAPI spec - suppress clippy warnings for generated code patterns
 pub mod memory_utils;

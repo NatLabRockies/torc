@@ -1695,7 +1695,7 @@ pub trait Api<C: Send + Sync> {
         context: &C,
     ) -> Result<CreateJobResponse, ApiError>;
 
-    /// Create jobs in bulk. Recommended max job count of 10,000.
+    /// Create jobs in bulk.
     async fn create_jobs(
         &self,
         body: models::JobsModel,
@@ -2726,7 +2726,7 @@ pub trait ApiNoContext<C: Send + Sync> {
     /// Store a job.
     async fn create_job(&self, body: models::JobModel) -> Result<CreateJobResponse, ApiError>;
 
-    /// Create jobs in bulk. Recommended max job count of 10,000.
+    /// Create jobs in bulk.
     async fn create_jobs(&self, body: models::JobsModel) -> Result<CreateJobsResponse, ApiError>;
 
     /// Store a local scheduler.
@@ -3527,7 +3527,7 @@ impl<T: Api<C> + Send + Sync, C: Clone + Send + Sync> ApiNoContext<C> for Contex
         self.api().create_job(body, &context).await
     }
 
-    /// Create jobs in bulk. Recommended max job count of 10,000.
+    /// Create jobs in bulk.
     async fn create_jobs(&self, body: models::JobsModel) -> Result<CreateJobsResponse, ApiError> {
         let context = self.context().clone();
         self.api().create_jobs(body, &context).await

@@ -91,7 +91,7 @@ impl<T: Paginatable> PaginatedIterator<T> {
     /// # Arguments
     /// * `config` - API configuration
     /// * `params` - Resource-specific parameters
-    /// * `initial_limit` - Page size for each API call (default: 10,000)
+    /// * `initial_limit` - Page size for each API call (default: MAX_RECORD_TRANSFER_COUNT)
     pub fn new(
         config: apis::configuration::Configuration,
         params: T::Params,
@@ -102,7 +102,7 @@ impl<T: Paginatable> PaginatedIterator<T> {
             config,
             params,
             remaining_limit,
-            initial_limit: initial_limit.unwrap_or(10_000),
+            initial_limit: initial_limit.unwrap_or(crate::MAX_RECORD_TRANSFER_COUNT),
             current_page: Vec::new().into_iter(),
             finished: false,
         }
@@ -173,7 +173,7 @@ pub fn paginate<T: Paginatable>(
     config: &apis::configuration::Configuration,
     params: T::Params,
 ) -> Result<Vec<T>, apis::Error<T::ListError>> {
-    let initial_limit = params.limit().unwrap_or(10_000);
+    let initial_limit = params.limit().unwrap_or(crate::MAX_RECORD_TRANSFER_COUNT);
     let iter = PaginatedIterator::<T>::new(config.clone(), params, Some(initial_limit));
     iter.collect()
 }

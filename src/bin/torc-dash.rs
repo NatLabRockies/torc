@@ -1477,7 +1477,7 @@ async fn cli_run_stream_handler(
                 interval.tick().await;
 
                 // Fetch jobs from API and count statuses
-                let url = format!("{}/jobs?workflow_id={}&limit=10000", api_url_status, workflow_id_status);
+                let url = format!("{}/jobs?workflow_id={}&limit={}", api_url_status, workflow_id_status, torc::MAX_RECORD_TRANSFER_COUNT);
                 match http_client_status.get(&url).send().await {
                     Ok(resp) if resp.status().is_success() => {
                         if let Ok(json) = resp.json::<serde_json::Value>().await {

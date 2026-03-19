@@ -2723,7 +2723,7 @@ Name | Type | Description  | Notes
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **offset** | **Int64** |  | [default to 0]
- **limit** | **Int64** |  | [default to 10000]
+ **limit** | **Int64** |  | [default to 100000]
 
 ### Return type
 
@@ -3247,7 +3247,7 @@ Name | Type | Description  | Notes
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **offset** | **Int64** |  | [default to 0]
- **limit** | **Int64** |  | [default to 10000]
+ **limit** | **Int64** |  | [default to 100000]
 
 ### Return type
 
@@ -3375,7 +3375,7 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **job_id** | **Int64** | Return the stats for a specific job. | [default to nothing]
  **offset** | **Int64** |  | [default to 0]
- **limit** | **Int64** |  | [default to 10000]
+ **limit** | **Int64** |  | [default to 100000]
 
 ### Return type
 

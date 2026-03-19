@@ -1191,10 +1191,10 @@ pub fn create_jobs_from_file(
     }
 
     // Create jobs in batches using bulk API
-    const BATCH_SIZE: usize = 10000;
+    let batch_size = crate::MAX_RECORD_TRANSFER_COUNT as usize;
     let mut total_created = 0;
 
-    for batch in jobs.chunks(BATCH_SIZE) {
+    for batch in jobs.chunks(batch_size) {
         let jobs_model = models::JobsModel::new(batch.to_vec());
         let response = default_api::create_jobs(config, jobs_model)
             .map_err(|e| format!("Failed to create batch of jobs: {:?}", e))?;
@@ -1235,7 +1235,7 @@ pub fn get_existing_job_names(
 ) -> Result<HashSet<String>, Box<dyn std::error::Error>> {
     let mut names = HashSet::new();
     let mut offset = 0;
-    const PAGE_SIZE: i64 = 10_000;
+    let page_size = crate::MAX_RECORD_TRANSFER_COUNT;
 
     loop {
         let response = default_api::list_jobs(
@@ -1245,7 +1245,7 @@ pub fn get_existing_job_names(
             None, // needs_file_id
             None, // upstream_job_id
             Some(offset),
-            Some(PAGE_SIZE),
+            Some(page_size),
             None, // sort_by
             None, // reverse_sort
             None, // include_relationships
@@ -1262,7 +1262,7 @@ pub fn get_existing_job_names(
         if !response.has_more {
             break;
         }
-        offset += PAGE_SIZE;
+        offset += page_size;
     }
 
     Ok(names)

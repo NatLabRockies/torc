@@ -64,7 +64,7 @@ fn full_version() -> String {
     format!("{} ({}{})", TORC_VERSION, GIT_HASH, GIT_DIRTY)
 }
 
-const MAX_RECORD_TRANSFER_COUNT: i64 = 10_000;
+use crate::MAX_RECORD_TRANSFER_COUNT;
 
 macro_rules! forbidden_error {
     ($reason:expr) => {
@@ -224,22 +224,24 @@ macro_rules! authorize_workflow_group {
 
 /// Process optional offset and limit parameters and return concrete values.
 /// Returns (offset, limit) where:
-/// - offset defaults to 0 if not provided
-/// - limit defaults to 10000 if not provided
-/// - Returns an error if limit exceeds 10000
+/// - offset defaults to [`MAX_RECORD_TRANSFER_COUNT`] if not provided
+/// - Returns an error if limit exceeds [`MAX_RECORD_TRANSFER_COUNT`]
 fn process_pagination_params(
     offset: Option<i64>,
     limit: Option<i64>,
 ) -> Result<(i64, i64), ApiError> {
     let processed_offset = offset.unwrap_or(0);
-    let processed_limit = limit.unwrap_or(10000);
+    let processed_limit = limit.unwrap_or(MAX_RECORD_TRANSFER_COUNT);
 
-    if processed_limit > 10000 {
+    if processed_limit > MAX_RECORD_TRANSFER_COUNT {
         error!(
-            "Limit exceeds maximum allowed value: {} > 10000",
-            processed_limit
+            "Limit exceeds maximum allowed value: {} > {}",
+            processed_limit, MAX_RECORD_TRANSFER_COUNT
         );
-        return Err(ApiError("Limit cannot exceed 10000".to_string()));
+        return Err(ApiError(format!(
+            "Limit cannot exceed {}",
+            MAX_RECORD_TRANSFER_COUNT
+        )));
     }
 
     Ok((processed_offset, processed_limit))
@@ -2647,7 +2649,7 @@ where
         self.jobs_api.create_job(job, context).await
     }
 
-    /// Create jobs in bulk. Recommended max job count of 10,000.
+    /// Create jobs in bulk.
     async fn create_jobs(
         &self,
         mut body: models::JobsModel,

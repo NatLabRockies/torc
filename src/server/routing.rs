@@ -13,14 +13,14 @@ use swagger::{BodyExt, Has, RequestParser, XSpanIdString};
 use tokio::sync::broadcast;
 use url::form_urlencoded;
 
+use crate::MAX_RECORD_TRANSFER_COUNT;
 use crate::models;
 #[allow(unused_imports)]
 use crate::server::auth::AuthenticationApi;
 
-/// Default maximum allowed request body size (20 MiB).
-/// The largest realistic request is a batch of 10,000 jobs (~5 MiB).
+/// Default maximum allowed request body size (200 MiB).
 /// Override at runtime with TORC_MAX_REQUEST_BODY_MB (value in MiB).
-const DEFAULT_MAX_REQUEST_BODY_BYTES: u64 = 20 * 1024 * 1024;
+const DEFAULT_MAX_REQUEST_BODY_BYTES: u64 = 200 * 1024 * 1024;
 
 fn max_request_body_bytes() -> u64 {
     static CACHED: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
@@ -2285,7 +2285,7 @@ where
                                 .expect("Unable to create Bad Request response for invalid query parameter limit")),
                         }
                         }
-                        None => 10_000,
+                        None => MAX_RECORD_TRANSFER_COUNT,
                     };
 
                     let param_run_id = query_params

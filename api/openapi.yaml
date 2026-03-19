@@ -3051,7 +3051,7 @@ paths:
         name: limit
         required: false
         schema:
-          default: 10000
+          default: 100000
           type: integer
         style: form
       responses:
@@ -4169,7 +4169,7 @@ paths:
         name: limit
         required: false
         schema:
-          default: 10000
+          default: 100000
           type: integer
         style: form
       responses:
@@ -6388,7 +6388,7 @@ paths:
           name: limit
           required: false
           schema:
-            default: 10000
+            default: 100000
             type: integer
           style: form
       responses:

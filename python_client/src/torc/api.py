@@ -179,7 +179,7 @@ def send_api_command(
             return None
 
 
-def create_jobs(api: DefaultApi, jobs: list, max_transfer_size: int = 10_000) -> list[JobModel]:
+def create_jobs(api: DefaultApi, jobs: list, max_transfer_size: int = 100_000) -> list[JobModel]:
     """Create and add an iterable of jobs to the workflow.
 
     Parameters
@@ -189,7 +189,7 @@ def create_jobs(api: DefaultApi, jobs: list, max_transfer_size: int = 10_000) ->
     jobs : list
         Any iterable of JobModel.
     max_transfer_size : int, optional
-        Maximum number of jobs to add per API call, by default 10000.
+        Maximum number of jobs to add per API call, by default 100000.
 
     Returns
     -------

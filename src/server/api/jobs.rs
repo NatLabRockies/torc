@@ -33,7 +33,7 @@ pub trait JobsApi<C> {
         context: &C,
     ) -> Result<CreateJobResponse, ApiError>;
 
-    /// Create jobs in bulk. Recommended max job count of 10,000.
+    /// Create jobs in bulk.
     async fn create_jobs(
         &self,
         body: models::JobsModel,
@@ -1288,7 +1288,7 @@ where
         Ok(response)
     }
 
-    /// Create jobs in bulk. Recommended max job count of 10,000.
+    /// Create jobs in bulk.
     #[instrument(skip(self, body, context), fields(job_count = body.jobs.len()))]
     async fn create_jobs(
         &self,
@@ -1308,14 +1308,16 @@ where
         }
 
         // Check if we're within the recommended limit
-        if body.jobs.len() > 10_000 {
+        if body.jobs.len() > MAX_RECORD_TRANSFER_COUNT as usize {
             error!(
-                "Too many jobs in batch: {}. Recommended maximum is 10,000",
-                body.jobs.len()
+                "Too many jobs in batch: {}. Maximum is {}",
+                body.jobs.len(),
+                MAX_RECORD_TRANSFER_COUNT
             );
             return Err(ApiError(format!(
-                "Too many jobs in batch: {}. Recommended maximum is 10,000",
-                body.jobs.len()
+                "Too many jobs in batch: {}. Maximum is {}",
+                body.jobs.len(),
+                MAX_RECORD_TRANSFER_COUNT
             )));
         }
 
