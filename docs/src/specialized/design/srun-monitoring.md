@@ -107,8 +107,8 @@ flowchart LR
 | `--cpu-bind=none` | Disables CPU affinity binding (default; omitted when `enable_cpu_bind: true`) |
 | `--job-name`      | Sets the step name for sacct/sstat lookup                                     |
 | `--nodes`         | Number of nodes for this step (from `num_nodes`, default 1)                   |
-| `--cpus-per-task` | CPU cgroup limit (only when `limit_resources=true`)                           |
-| `--mem`           | Memory cgroup limit in MB (only when `limit_resources=true`)                  |
+| `--cpus-per-task` | CPU cgroup limit (from job's resource requirements)                           |
+| `--mem`           | Memory cgroup limit in MB (from job's resource requirements)                  |
 | `--time`          | Per-step walltime from remaining allocation time (see below)                  |
 | `--signal`        | Early warning signal before step timeout (see below)                          |
 
@@ -124,13 +124,15 @@ scheduler configuration.
 When `num_nodes > 1`, Torc treats the job as consuming whole nodes exclusively for the lifetime of
 the step. This avoids ambiguous partial-node accounting for MPI and other true multi-node jobs.
 
-### The `limit_resources` Flag
+### Resource Enforcement
 
-When `limit_resources` is enabled in the scheduler configuration, srun applies `--cpus-per-task` and
-`--mem` flags. This creates cgroup-enforced limits: jobs exceeding their memory allocation are
-killed by the OOM killer (exit code 137), and CPU usage is throttled.
+In Slurm mode, srun always applies `--cpus-per-task` and `--mem` flags from the job's resource
+requirements. This creates cgroup-enforced limits: jobs exceeding their memory allocation are killed
+by the OOM killer (exit code 137), and CPU usage is throttled. These flags are also required for
+`--exact` to work correctly, allowing multiple job steps to run concurrently on shared nodes.
 
-Without `limit_resources`, Slurm still creates per-step accounting but does not enforce hard limits.
+> **Note**: The `limit_resources` setting only applies to direct mode (OOM enforcement). It is not
+> supported in Slurm mode — use `mode: direct` if you need to disable resource enforcement.
 
 ### Per-Step Walltime (`--time`)
 
@@ -420,10 +422,10 @@ numeric values.
 
 ## Configuration
 
-| Setting                   | Location                | Description                                                  |
-| ------------------------- | ----------------------- | ------------------------------------------------------------ |
-| `limit_resources`         | Scheduler config        | Enable cgroup enforcement via srun `--mem`/`--cpus-per-task` |
-| `num_nodes`               | Resource requirements   | Number of nodes per job (default: 1)                         |
-| `sample_interval_seconds` | Resource monitor config | sstat polling interval                                       |
-| `TORC_FAKE_SRUN`          | Environment variable    | Override srun binary path (testing)                          |
-| `TORC_FAKE_SACCT`         | Environment variable    | Override sacct binary path (testing)                         |
+| Setting                   | Location                | Description                                                         |
+| ------------------------- | ----------------------- | ------------------------------------------------------------------- |
+| `limit_resources`         | Execution config        | Enable OOM enforcement in direct mode (not supported in slurm mode) |
+| `num_nodes`               | Resource requirements   | Number of nodes per job (default: 1)                                |
+| `sample_interval_seconds` | Resource monitor config | sstat polling interval                                              |
+| `TORC_FAKE_SRUN`          | Environment variable    | Override srun binary path (testing)                                 |
+| `TORC_FAKE_SACCT`         | Environment variable    | Override sacct binary path (testing)                                |

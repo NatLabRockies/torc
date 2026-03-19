@@ -250,7 +250,7 @@ modes:
 ```yaml
 execution_config:
   mode: direct # Options: direct, slurm, auto
-  limit_resources: true # Enforce memory/CPU limits (default: true)
+  limit_resources: true # Enforce memory limits in direct mode (default: true)
 
   # Direct mode settings
   termination_signal: SIGTERM # Signal before SIGKILL (default: SIGTERM)
@@ -293,7 +293,7 @@ execution_config {
 | Field                      | Type   | Default   | Description                                       |
 | -------------------------- | ------ | --------- | ------------------------------------------------- |
 | `mode`                     | string | `auto`    | Execution mode: `direct`, `slurm`, or `auto`      |
-| `limit_resources`          | bool   | `true`    | Enforce memory/CPU limits                         |
+| `limit_resources`          | bool   | `true`    | Enforce memory limits in direct mode only         |
 | `termination_signal`       | string | `SIGTERM` | Signal to send before SIGKILL (direct mode)       |
 | `sigterm_lead_seconds`     | int    | `30`      | Seconds before SIGKILL to send termination signal |
 | `sigkill_headroom_seconds` | int    | `60`      | Seconds before end_time to send SIGKILL           |
@@ -358,21 +358,24 @@ limit_resources: true
 # New style - use execution_config
 execution_config:
   mode: slurm # Replaces use_srun: true
-  limit_resources: true
   srun_termination_signal: "TERM@120"
   sigkill_headroom_seconds: 180 # New: controls srun --time headroom
 ```
 
 **Migration mapping:**
 
-| Old Field                 | New Field in execution_config |
-| ------------------------- | ----------------------------- |
-| `use_srun: true`          | `mode: slurm`                 |
-| `use_srun: false`         | `mode: direct`                |
-| (not set)                 | `mode: auto` (default)        |
-| `limit_resources`         | `limit_resources`             |
-| `srun_termination_signal` | `srun_termination_signal`     |
-| `enable_cpu_bind`         | `enable_cpu_bind`             |
+| Old Field                 | New Field in execution_config                |
+| ------------------------- | -------------------------------------------- |
+| `use_srun: true`          | `mode: slurm`                                |
+| `use_srun: false`         | `mode: direct`                               |
+| (not set)                 | `mode: auto` (default)                       |
+| `limit_resources: false`  | `mode: direct` with `limit_resources: false` |
+| `srun_termination_signal` | `srun_termination_signal`                    |
+| `enable_cpu_bind`         | `enable_cpu_bind`                            |
+
+> **Note**: `limit_resources: false` is only supported with `mode: direct`. If you previously used
+> `limit_resources: false` with srun, switch to `mode: direct` to get the same behavior (jobs run
+> without resource enforcement).
 
 ## Common Features Across All Formats
 

@@ -228,51 +228,8 @@ fn test_srun_default_single_node() {
     assert!(args.contains("bash -c"), "Missing 'bash -c': {}", args);
 }
 
-#[test]
-#[serial]
-fn test_srun_no_resource_limits() {
-    let temp_dir = TempDir::new().unwrap();
-    let args_log = setup_srun_env(&temp_dir);
-    let rr = make_rr("compute", 4, "8g", 1);
-
-    let args = run_and_capture_srun_args(
-        &temp_dir,
-        &args_log,
-        Some(&rr),
-        false,                // limit_resources = false
-        ExecutionMode::Slurm, // execution_mode
-        false,                // enable_cpu_bind
-        None,
-        None,
-    )
-    .expect("srun should have been invoked");
-
-    cleanup_srun_env();
-
-    // Core srun flags should still be present
-    assert!(args.contains("--jobid=99999"), "Missing --jobid: {}", args);
-    assert!(args.contains("--ntasks=1"), "Missing --ntasks=1: {}", args);
-    assert!(args.contains("--nodes=1"), "Missing --nodes=1: {}", args);
-
-    // --exact should be ABSENT so the step inherits the full allocation
-    assert!(
-        !args.contains("--exact"),
-        "Unexpected --exact with limit_resources=false: {}",
-        args
-    );
-
-    // Resource-limiting flags should be ABSENT
-    assert!(
-        !args.contains("--cpus-per-task"),
-        "Unexpected --cpus-per-task with limit_resources=false: {}",
-        args
-    );
-    assert!(
-        !args.contains("--mem="),
-        "Unexpected --mem with limit_resources=false: {}",
-        args
-    );
-}
+// NOTE: test_srun_no_resource_limits was removed because limit_resources=false
+// is now only valid in direct mode (which doesn't use srun).
 
 #[test]
 #[serial]
@@ -693,55 +650,8 @@ fn test_srun_step_name_format() {
     );
 }
 
-#[test]
-#[serial]
-fn test_srun_limit_resources_false_with_cpu_bind_and_signal() {
-    let temp_dir = TempDir::new().unwrap();
-    let args_log = setup_srun_env(&temp_dir);
-    let rr = make_rr("compute", 8, "16g", 2);
-
-    let args = run_and_capture_srun_args(
-        &temp_dir,
-        &args_log,
-        Some(&rr),
-        false,                // limit_resources = false
-        ExecutionMode::Slurm, // execution_mode
-        true,                 // enable_cpu_bind = true
-        None,                 // end_time
-        Some("TERM@300"),     // srun_termination_signal
-    )
-    .expect("srun should have been invoked");
-
-    cleanup_srun_env();
-
-    // --exact should be absent (limit_resources=false)
-    assert!(
-        !args.contains("--exact"),
-        "Unexpected --exact with limit_resources=false: {}",
-        args
-    );
-    // Resource limits should be absent (limit_resources=false)
-    assert!(
-        !args.contains("--cpus-per-task"),
-        "Unexpected --cpus-per-task: {}",
-        args
-    );
-    assert!(!args.contains("--mem="), "Unexpected --mem: {}", args);
-    // CPU bind should be absent (enable_cpu_bind=true)
-    assert!(
-        !args.contains("--cpu-bind"),
-        "Unexpected --cpu-bind: {}",
-        args
-    );
-    // Signal should be present
-    assert!(
-        args.contains("--signal=TERM@300"),
-        "Missing --signal=TERM@300: {}",
-        args
-    );
-    // num_nodes=2 should still be present
-    assert!(args.contains("--nodes=2"), "Missing --nodes=2: {}", args);
-}
+// NOTE: test_srun_limit_resources_false_with_cpu_bind_and_signal was removed because
+// limit_resources=false is now only valid in direct mode (which doesn't use srun).
 
 #[test]
 #[serial]
@@ -890,50 +800,5 @@ fn test_srun_zero_gpus_omits_flag() {
     );
 }
 
-#[test]
-#[serial]
-fn test_srun_gpus_with_limit_resources_false() {
-    let temp_dir = TempDir::new().unwrap();
-    let args_log = setup_srun_env(&temp_dir);
-    // Request 4 GPUs but with limit_resources=false
-    let rr = make_rr_with_gpus("gpu_compute", 8, "32g", 1, 4);
-
-    let args = run_and_capture_srun_args(
-        &temp_dir,
-        &args_log,
-        Some(&rr),
-        false,                // limit_resources = false
-        ExecutionMode::Slurm, // execution_mode
-        false,                // enable_cpu_bind
-        None,
-        None,
-    )
-    .expect("srun should have been invoked");
-
-    cleanup_srun_env();
-
-    // --exact should be absent (limit_resources=false)
-    assert!(
-        !args.contains("--exact"),
-        "Unexpected --exact with limit_resources=false: {}",
-        args
-    );
-    // GPUs should STILL be requested even with limit_resources=false,
-    // because GPU allocation is required for the job to access GPUs
-    assert!(
-        args.contains("--gpus=4"),
-        "Missing --gpus=4 - GPUs should be requested regardless of limit_resources: {}",
-        args
-    );
-    // CPU and memory should be omitted with limit_resources=false
-    assert!(
-        !args.contains("--cpus-per-task"),
-        "Unexpected --cpus-per-task with limit_resources=false: {}",
-        args
-    );
-    assert!(
-        !args.contains("--mem="),
-        "Unexpected --mem with limit_resources=false: {}",
-        args
-    );
-}
+// NOTE: test_srun_gpus_with_limit_resources_false was removed because
+// limit_resources=false is now only valid in direct mode (which doesn't use srun).

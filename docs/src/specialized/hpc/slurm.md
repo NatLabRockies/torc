@@ -360,48 +360,40 @@ This keeps job claiming and local resource accounting aligned with Slurm allocat
 
 ### Resource Limit Enforcement
 
-By default (`limit_resources = true`), Torc passes `--cpus-per-task` and `--mem` to `srun` so Slurm
-enforces the cgroup limits defined in each job's resource requirements. This is the recommended
-setting for production workflows to prevent runaway jobs from impacting other users.
+In Slurm mode, Torc always passes `--cpus-per-task` and `--mem` to `srun` so Slurm enforces the
+cgroup limits defined in each job's resource requirements. These flags work together with `--exact`
+to allow multiple job steps to run concurrently on shared nodes.
 
-To disable cgroup enforcement while still using `srun` (useful when exploring resource requirements
-for new jobs), set `limit_resources: false` in your workflow specification:
-
-```yaml
-name: my_workflow
-limit_resources: false
-jobs:
-  ...
-```
-
-The setting is stored per-workflow in the database, so different workflows can have different
-enforcement policies. It can also be updated via the API after a workflow is created.
-
-> **Warning**: With `limit_resources: false`, jobs can exceed their stated resource requirements. On
-> shared clusters this may affect other users. Use this setting only for exploratory workloads.
+> **Note**: `limit_resources: false` is not supported in Slurm mode. If you need to run jobs without
+> resource enforcement inside a Slurm allocation, use `mode: direct` instead:
+>
+> ```yaml
+> execution_config:
+>   mode: direct
+>   limit_resources: false
+> ```
+>
+> In direct mode, jobs run as plain processes without `srun` wrapping. This means you lose per-step
+> `sacct` accounting and cgroup isolation, but jobs can use any available resources without
+> restriction.
 
 ### Disabling srun Wrapping
 
-By default (`use_srun = true`), Torc wraps every job command with `srun` when running inside a Slurm
-allocation. This creates a per-job cgroup step, enables `sacct` accounting, and gives HPC admins
-visibility into individual job steps.
-
-To disable srun wrapping entirely and run jobs via direct shell execution, set `use_srun: false` in
-your workflow specification:
+To disable srun wrapping entirely and run jobs via direct shell execution inside a Slurm allocation,
+set `mode: direct` in your execution config:
 
 ```yaml
-name: my_workflow
-use_srun: false
-jobs:
-  ...
+execution_config:
+  mode: direct
 ```
 
-When `use_srun` is false, `limit_resources` is silently ignored because there is no srun to pass
-resource flags to. Slurm accounting (`sacct`) and live monitoring (`sstat`) are also unavailable
-since jobs do not run as Slurm steps.
+In direct mode, Slurm accounting (`sacct`) and live monitoring (`sstat`) are unavailable since jobs
+do not run as Slurm steps. However, Torc's own resource monitor can still track memory and CPU usage
+if enabled.
 
-> **Note**: `use_srun: false` is a safety valve for users who encounter compatibility issues with
-> srun wrapping. For most workflows, the default (`use_srun: true`) is recommended.
+> **Note**: Direct mode inside a Slurm allocation is useful when `srun` has compatibility issues, or
+> when you want to run jobs without resource limits (`limit_resources: false`). For most workflows,
+> the default auto mode (which selects Slurm mode inside allocations) is recommended.
 
 ### Slurm Accounting Stats
 

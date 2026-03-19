@@ -700,14 +700,14 @@ pub struct ExecutionConfig {
     #[serde(default)]
     pub mode: ExecutionMode,
 
-    // ========== Shared settings (both modes) ==========
-    /// When true (default), enforce memory/CPU limits.
-    /// - direct mode: monitor & kill if exceeded (OOM)
-    /// - slurm mode: pass --mem/--cpus to srun
+    // ========== Direct mode settings ==========
+    /// When true (default), monitor memory/CPU usage and kill jobs that exceed
+    /// their resource requirements (OOM enforcement). Only applies in direct mode.
+    /// Setting this to false with slurm mode is an error — use direct mode instead.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit_resources: Option<bool>,
 
-    // ========== Direct mode settings ==========
+    // ========== Direct mode settings (continued) ==========
     /// Signal to send before SIGKILL for graceful termination.
     /// Default: "SIGTERM". Other common values: "SIGINT", "SIGUSR1".
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2087,6 +2087,28 @@ impl WorkflowSpec {
                 let execution_config_json = serde_json::to_string(execution_config)
                     .map_err(|e| format!("Failed to serialize execution_config: {}", e))?;
                 workflow_model.execution_config = Some(execution_config_json);
+            }
+        }
+
+        // Reject limit_resources=false when the workflow will run under Slurm.
+        // This includes explicit mode=slurm and mode=auto with slurm schedulers,
+        // since auto resolves to slurm when SLURM_JOB_ID is set.
+        if let Some(ref ec) = spec.execution_config
+            && ec.limit_resources == Some(false)
+        {
+            let will_use_slurm = match ec.mode {
+                ExecutionMode::Slurm => true,
+                ExecutionMode::Auto => spec
+                    .slurm_schedulers
+                    .as_ref()
+                    .is_some_and(|s| !s.is_empty()),
+                ExecutionMode::Direct => false,
+            };
+            if will_use_slurm {
+                return Err("limit_resources: false is only supported in direct mode. \
+                     Slurm mode requires resource limits for correct srun behavior. \
+                     Set execution_config.mode to 'direct' or remove limit_resources."
+                    .into());
             }
         }
 

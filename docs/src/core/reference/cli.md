@@ -450,7 +450,7 @@ List workflows
 
 - `-u`, `--user <USER>` — User to filter by (defaults to USER environment variable)
 - `--all-users` — List workflows for all users (overrides --user)
-- `-l`, `--limit <LIMIT>` — Maximum number of workflows to return. Default: `10000`
+- `-l`, `--limit <LIMIT>` — Maximum number of workflows to return. Default: `100000`
 - `--offset <OFFSET>` — Offset for pagination (0-based). Default: `0`
 - `--sort-by <SORT_BY>` — Field to sort by
 - `--reverse-sort` — Reverse sort order
@@ -849,7 +849,7 @@ List compute nodes for a workflow
 
 ###### **Options:**
 
-- `-l`, `--limit <LIMIT>` — Maximum number of compute nodes to return. Default: `10000`
+- `-l`, `--limit <LIMIT>` — Maximum number of compute nodes to return. Default: `100000`
 - `-o`, `--offset <OFFSET>` — Offset for pagination (0-based). Default: `0`
 - `-s`, `--sort-by <SORT_BY>` — Field to sort by
 - `-r`, `--reverse-sort` — Reverse sort order. Default: `false`
@@ -898,7 +898,7 @@ List files
 ###### **Options:**
 
 - `--produced-by-job-id <PRODUCED_BY_JOB_ID>` — Filter by job ID that produced the files
-- `-l`, `--limit <LIMIT>` — Maximum number of files to return. Default: `10000`
+- `-l`, `--limit <LIMIT>` — Maximum number of files to return. Default: `100000`
 - `--offset <OFFSET>` — Offset for pagination (0-based). Default: `0`
 - `--sort-by <SORT_BY>` — Field to sort by
 - `--reverse-sort` — Reverse sort order
@@ -1030,7 +1030,7 @@ List jobs
 
 - `-s`, `--status <STATUS>` — Filter by job status
 - `--upstream-job-id <UPSTREAM_JOB_ID>` — Filter by upstream job ID (jobs that depend on this job)
-- `-l`, `--limit <LIMIT>` — Maximum number of jobs to return. Default: `10000`
+- `-l`, `--limit <LIMIT>` — Maximum number of jobs to return. Default: `100000`
 - `--offset <OFFSET>` — Offset for pagination (0-based). Default: `0`
 - `--sort-by <SORT_BY>` — Field to sort by
 - `--reverse-sort` — Reverse sort order
@@ -1120,7 +1120,7 @@ List job-to-job dependencies for a workflow
 
 ###### **Options:**
 
-- `-l`, `--limit <LIMIT>` — Maximum number of dependencies to return. Default: `10000`
+- `-l`, `--limit <LIMIT>` — Maximum number of dependencies to return. Default: `100000`
 - `--offset <OFFSET>` — Offset for pagination (0-based). Default: `0`
 
 ## `torc job-dependencies job-file`
@@ -1135,7 +1135,7 @@ List job-file relationships for a workflow
 
 ###### **Options:**
 
-- `-l`, `--limit <LIMIT>` — Maximum number of relationships to return. Default: `10000`
+- `-l`, `--limit <LIMIT>` — Maximum number of relationships to return. Default: `100000`
 - `--offset <OFFSET>` — Offset for pagination (0-based). Default: `0`
 
 ## `torc job-dependencies job-user-data`
@@ -1150,7 +1150,7 @@ List job-user_data relationships for a workflow
 
 ###### **Options:**
 
-- `-l`, `--limit <LIMIT>` — Maximum number of relationships to return. Default: `10000`
+- `-l`, `--limit <LIMIT>` — Maximum number of relationships to return. Default: `100000`
 - `--offset <OFFSET>` — Offset for pagination (0-based). Default: `0`
 
 ## `torc resource-requirements`
@@ -1200,7 +1200,7 @@ List resource requirements
 
 ###### **Options:**
 
-- `-l`, `--limit <LIMIT>` — Maximum number of resource requirements to return. Default: `10000`
+- `-l`, `--limit <LIMIT>` — Maximum number of resource requirements to return. Default: `100000`
 - `--offset <OFFSET>` — Offset for pagination (0-based). Default: `0`
 - `--sort-by <SORT_BY>` — Field to sort by
 - `--reverse-sort` — Reverse sort order
@@ -1285,7 +1285,7 @@ List events for a workflow
 ###### **Options:**
 
 - `-c`, `--category <CATEGORY>` — Filter events by category
-- `-l`, `--limit <LIMIT>` — Maximum number of events to return. Default: `10000`
+- `-l`, `--limit <LIMIT>` — Maximum number of events to return. Default: `100000`
 - `-o`, `--offset <OFFSET>` — Offset for pagination (0-based). Default: `0`
 - `-s`, `--sort-by <SORT_BY>` — Field to sort by
 - `-r`, `--reverse-sort` — Reverse sort order. Default: `false`
@@ -1357,7 +1357,7 @@ List results
 - `--failed` — Show only failed jobs (non-zero return code)
 - `-s`, `--status <STATUS>` — Filter by job status (uninitialized, blocked, canceled, terminated,
   done, ready, scheduled, running, pending, disabled)
-- `-l`, `--limit <LIMIT>` — Maximum number of results to return. Default: `10000`
+- `-l`, `--limit <LIMIT>` — Maximum number of results to return. Default: `100000`
 - `--offset <OFFSET>` — Offset for pagination (0-based). Default: `0`
 - `--sort-by <SORT_BY>` — Field to sort by
 - `--reverse-sort` — Reverse sort order
@@ -1574,7 +1574,7 @@ Show the current Slurm configs in the database
 
 ###### **Options:**
 
-- `-l`, `--limit <LIMIT>` — Maximum number of configs to return. Default: `10000`
+- `-l`, `--limit <LIMIT>` — Maximum number of configs to return. Default: `100000`
 - `--offset <OFFSET>` — Offset for pagination (0-based). Default: `0`
 
 ## `torc slurm get`
@@ -1930,7 +1930,7 @@ List scheduled compute nodes for a workflow
 
 ###### **Options:**
 
-- `-l`, `--limit <LIMIT>` — Maximum number of scheduled compute nodes to return. Default: `10000`
+- `-l`, `--limit <LIMIT>` — Maximum number of scheduled compute nodes to return. Default: `100000`
 - `-o`, `--offset <OFFSET>` — Offset for pagination (0-based). Default: `0`
 - `-s`, `--sort-by <SORT_BY>` — Field to sort by
 - `-r`, `--reverse-sort` — Reverse sort order. Default: `false`

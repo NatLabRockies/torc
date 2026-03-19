@@ -45,7 +45,6 @@ struct SrunParams<'a> {
     enable_cpu_bind: bool,
     target_node: Option<&'a str>,
     resource_requirements: Option<&'a ResourceRequirementsModel>,
-    limit_resources: bool,
     end_time: Option<DateTime<Utc>>,
     sigkill_headroom_seconds: i64,
     srun_termination_signal: Option<&'a str>,
@@ -72,14 +71,7 @@ fn build_srun_command(params: &SrunParams) -> Result<Command, String> {
     // --exact tells srun to use exactly the requested CPUs/memory without
     // claiming the entire node exclusively. This allows concurrent steps
     // to share nodes in multi-node allocations.
-    //
-    // When limit_resources is false, we omit --exact so the step inherits
-    // the full allocation's resources. Without --exact, srun defaults
-    // --cpus-per-task to 1, which would silently restrict multi-threaded
-    // jobs to a single core via cgroups.
-    if params.limit_resources {
-        srun.arg("--exact");
-    }
+    srun.arg("--exact");
     srun.arg(format!("--job-name={}", params.step_name));
 
     // Pin the step to a specific node when the job runner has claimed
@@ -89,9 +81,12 @@ fn build_srun_command(params: &SrunParams) -> Result<Command, String> {
     }
 
     // Add resource requirements
+    // Always pass resource requirements to srun. The limit_resources setting
+    // only applies to direct mode (OOM enforcement); in srun mode, resource
+    // args are always needed for --exact to work correctly.
     if let Some(rr) = params.resource_requirements {
         srun.arg(format!("--nodes={}", rr.num_nodes.max(1)));
-        if params.limit_resources && rr.name != "default" {
+        if rr.name != "default" {
             srun.arg(format!("--cpus-per-task={}", rr.num_cpus));
             match memory_string_to_mb(&rr.memory) {
                 Some(mem_mb) if mem_mb > 0 => {
@@ -111,9 +106,6 @@ fn build_srun_command(params: &SrunParams) -> Result<Command, String> {
                 }
             }
         }
-        // Request GPUs for this step if the job requires them.
-        // This is outside limit_resources check because GPU allocation is required
-        // for the job to access GPUs - without --gpus the step won't have GPU access.
         if rr.num_gpus > 0 {
             srun.arg(format!("--gpus={}", rr.num_gpus));
         }
@@ -322,7 +314,6 @@ impl AsyncCliCommand {
                 enable_cpu_bind,
                 target_node,
                 resource_requirements,
-                limit_resources,
                 end_time,
                 sigkill_headroom_seconds,
                 srun_termination_signal,

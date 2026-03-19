@@ -169,24 +169,18 @@ Key flags:
 
 ### Resource Enforcement in Slurm Mode
 
-When `limit_resources: true`:
+Slurm mode always passes `--cpus-per-task`, `--mem`, and `--gpus` to srun. Slurm's cgroups enforce
+these limits: jobs exceeding memory are killed by Slurm with exit code 137.
 
-- `--cpus-per-task`, `--mem`, and `--gpus` are passed to srun
-- Slurm's cgroups enforce these limits
-- Jobs exceeding memory are killed by Slurm with exit code 137
-
-When `limit_resources: false`:
-
-- CPU and memory flags are omitted
-- Jobs can use any available resources in the allocation
-- GPU flags are still passed (required for GPU access)
+> **Note**: `limit_resources: false` is not supported in Slurm mode. If you need to run jobs without
+> resource enforcement inside a Slurm allocation, use `mode: direct` instead. See
+> [Disabling Resource Limits](#disabling-resource-limits) below.
 
 ### Slurm Mode Configuration
 
 ```yaml
 execution_config:
   mode: slurm
-  limit_resources: true            # Pass resource limits to srun
   srun_termination_signal: TERM@120  # Send SIGTERM 120s before step timeout
   sigkill_headroom_seconds: 180    # End steps 3 minutes before allocation ends
   enable_cpu_bind: false           # Set to true to enable Slurm CPU binding
@@ -215,26 +209,28 @@ This ensures:
 
 ## Disabling Resource Limits
 
-Set `limit_resources: false` to disable resource enforcement:
+Set `limit_resources: false` to disable resource enforcement in direct mode:
 
 ```yaml
 execution_config:
-  mode: direct  # or slurm
+  mode: direct
   limit_resources: false
 ```
 
-Effects:
+This is useful when exploring resource requirements for new jobs or during local development. Jobs
+can use any available system resources without being killed for exceeding their declared limits.
 
-| Feature                | limit_resources: true     | limit_resources: false  |
-| ---------------------- | ------------------------- | ----------------------- |
-| Memory limits (direct) | OOM detection and SIGKILL | No enforcement          |
-| Memory limits (slurm)  | srun --mem passed         | --mem omitted           |
-| CPU limits (slurm)     | srun --cpus-per-task      | --cpus-per-task omitted |
-| GPU allocation         | Always passed to srun     | Always passed to srun   |
-| Timeout termination    | Enforced                  | Enforced                |
+Effects in direct mode:
 
-Note: GPU allocation is always requested regardless of `limit_resources` because jobs need explicit
-GPU access in Slurm.
+| Feature             | limit_resources: true     | limit_resources: false |
+| ------------------- | ------------------------- | ---------------------- |
+| Memory limits       | OOM detection and SIGKILL | No enforcement         |
+| Timeout termination | Enforced                  | Enforced               |
+
+> **Important**: `limit_resources: false` is only supported in direct mode. Setting it with
+> `mode: slurm` will produce an error at workflow creation time. Slurm mode relies on `srun` with
+> `--exact`, `--cpus-per-task`, and `--mem` for correct concurrent job execution — omitting these
+> flags causes jobs to run sequentially instead of in parallel.
 
 ## Exit Codes
 
@@ -263,7 +259,6 @@ execution_config:
 ```yaml
 execution_config:
   mode: auto  # Use slurm inside allocations
-  limit_resources: true
   srun_termination_signal: TERM@120
   sigkill_headroom_seconds: 300
 ```

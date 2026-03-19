@@ -5083,7 +5083,7 @@ fn handle_slurm_stats(
     format: &str,
 ) {
     let mut all_items: Vec<models::SlurmStatsModel> = Vec::new();
-    let limit = 10_000i64;
+    let limit = crate::MAX_RECORD_TRANSFER_COUNT;
     let mut offset = 0i64;
     loop {
         match default_api::list_slurm_stats(

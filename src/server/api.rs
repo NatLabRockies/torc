@@ -5,8 +5,7 @@ use sqlx::sqlite::SqlitePool;
 use std::sync::Arc;
 use swagger::ApiError;
 
-/// Common constants used across all API modules
-pub const MAX_RECORD_TRANSFER_COUNT: i64 = 10_000;
+pub use crate::MAX_RECORD_TRANSFER_COUNT;
 
 /// Shared server context that all API modules can use
 #[derive(Clone)]

@@ -1274,6 +1274,94 @@ fn test_direct_mode_disabled_resource_limits(start_server: &ServerProcess) {
 }
 
 #[rstest]
+fn test_limit_resources_false_rejected_with_slurm_mode(start_server: &ServerProcess) {
+    // limit_resources: false is only valid in direct mode
+    let yaml = r#"
+        name: slurm_no_limits_rejected
+        user: test_user
+        jobs:
+          - name: job1
+            command: "echo test"
+        execution_config:
+            mode: slurm
+            limit_resources: false
+    "#;
+
+    let temp_file = NamedTempFile::new().expect("Failed to create temp file");
+    fs::write(temp_file.path(), yaml).expect("Failed to write workflow file");
+
+    let result = WorkflowSpec::create_workflow_from_spec(
+        &start_server.config,
+        temp_file.path(),
+        "test_user",
+        false,
+        false,
+    );
+
+    assert!(
+        result.is_err(),
+        "Should reject limit_resources=false with slurm mode"
+    );
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("limit_resources"),
+        "Error should mention limit_resources: {}",
+        err
+    );
+}
+
+#[rstest]
+fn test_limit_resources_false_rejected_with_auto_mode_and_slurm_schedulers(
+    start_server: &ServerProcess,
+) {
+    // mode=auto (the default) with slurm_schedulers should also be rejected
+    let yaml = r#"
+        name: auto_slurm_no_limits_rejected
+        user: test_user
+        jobs:
+          - name: job1
+            command: "echo test"
+            scheduler: my_scheduler
+        execution_config:
+            limit_resources: false
+        slurm_schedulers:
+          - name: my_scheduler
+            account: test_account
+            partition: debug
+            nodes: 1
+            walltime: "00:10:00"
+        actions:
+          - trigger_type: "on_workflow_start"
+            action_type: "schedule_nodes"
+            scheduler: "my_scheduler"
+            scheduler_type: "slurm"
+            num_allocations: 1
+    "#;
+
+    let temp_file = NamedTempFile::new().expect("Failed to create temp file");
+    fs::write(temp_file.path(), yaml).expect("Failed to write workflow file");
+
+    let result = WorkflowSpec::create_workflow_from_spec(
+        &start_server.config,
+        temp_file.path(),
+        "test_user",
+        false,
+        false,
+    );
+
+    assert!(
+        result.is_err(),
+        "Should reject limit_resources=false with auto mode and slurm schedulers"
+    );
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("limit_resources"),
+        "Error should mention limit_resources: {}",
+        err
+    );
+}
+
+#[rstest]
 fn test_direct_mode_custom_exit_codes(start_server: &ServerProcess) {
     // Test custom timeout and OOM exit codes
     let yaml = r#"

@@ -176,18 +176,18 @@ Defines a Slurm HPC job scheduler configuration.
 Controls how jobs are executed and terminated. Supports three modes for different execution
 environments.
 
-| Name                       | Type                        | Default     | Description                                                   |
-| -------------------------- | --------------------------- | ----------- | ------------------------------------------------------------- |
-| `mode`                     | string                      | `"auto"`    | Execution mode: `"direct"`, `"slurm"`, or `"auto"`            |
-| `limit_resources`          | boolean                     | `true`      | Enforce memory/CPU limits                                     |
-| `termination_signal`       | string                      | `"SIGTERM"` | Signal to send before SIGKILL (direct mode)                   |
-| `sigterm_lead_seconds`     | integer                     | `30`        | Seconds before SIGKILL to send termination signal             |
-| `sigkill_headroom_seconds` | integer                     | `60`        | Seconds before end_time for SIGKILL or srun --time adjustment |
-| `timeout_exit_code`        | integer                     | `152`       | Exit code for timed-out jobs (matches Slurm TIMEOUT)          |
-| `oom_exit_code`            | integer                     | `137`       | Exit code for OOM-killed jobs (128 + SIGKILL)                 |
-| `srun_termination_signal`  | string                      | none        | Slurm signal spec for `srun --signal=<value>`                 |
-| `enable_cpu_bind`          | boolean                     | `false`     | Allow Slurm CPU binding                                       |
-| `stdio`                    | [StdioConfig](#stdioconfig) | see below   | Workflow-level default for stdout/stderr capture              |
+| Name                       | Type                        | Default     | Description                                                          |
+| -------------------------- | --------------------------- | ----------- | -------------------------------------------------------------------- |
+| `mode`                     | string                      | `"auto"`    | Execution mode: `"direct"`, `"slurm"`, or `"auto"`                   |
+| `limit_resources`          | boolean                     | `true`      | Enforce memory limits in direct mode (not supported with slurm mode) |
+| `termination_signal`       | string                      | `"SIGTERM"` | Signal to send before SIGKILL (direct mode)                          |
+| `sigterm_lead_seconds`     | integer                     | `30`        | Seconds before SIGKILL to send termination signal                    |
+| `sigkill_headroom_seconds` | integer                     | `60`        | Seconds before end_time for SIGKILL or srun --time adjustment        |
+| `timeout_exit_code`        | integer                     | `152`       | Exit code for timed-out jobs (matches Slurm TIMEOUT)                 |
+| `oom_exit_code`            | integer                     | `137`       | Exit code for OOM-killed jobs (128 + SIGKILL)                        |
+| `srun_termination_signal`  | string                      | none        | Slurm signal spec for `srun --signal=<value>`                        |
+| `enable_cpu_bind`          | boolean                     | `false`     | Allow Slurm CPU binding                                              |
+| `stdio`                    | [StdioConfig](#stdioconfig) | see below   | Workflow-level default for stdout/stderr capture                     |
 
 ### StdioConfig
 
