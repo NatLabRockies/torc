@@ -181,7 +181,10 @@ impl Configuration {
     pub fn apply_cookie_header_from_env(&mut self) -> Result<(), String> {
         if let Ok(cookie) = std::env::var("TORC_COOKIE_HEADER") {
             self.cookie_header = Some(cookie);
-            self.apply_cookie_header()?;
+            if let Err(e) = self.apply_cookie_header() {
+                self.cookie_header = None;
+                return Err(e);
+            }
         }
         Ok(())
     }

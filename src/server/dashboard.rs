@@ -23,7 +23,7 @@ const INFO_PAGE: &str = r#"<!DOCTYPE html>
 pub fn serve_dashboard(path: &str) -> Option<Response<Body>> {
     let path = path.trim_start_matches('/');
 
-    if path.is_empty() || path == "dashboard" || path == "dashboard/" || path == "favicon.ico" {
+    if path.is_empty() || path == "dashboard" || path == "dashboard/" {
         Some(
             Response::builder()
                 .status(StatusCode::OK)
