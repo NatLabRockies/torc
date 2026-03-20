@@ -90,7 +90,7 @@ impl std::fmt::Debug for Configuration {
                 &self
                     .basic_auth
                     .as_ref()
-                    .map(|(u, _)| (u, &Some("[REDACTED]"))),
+                    .map(|(u, _)| (u, Some("[REDACTED]"))),
             )
             .field(
                 "oauth_access_token",

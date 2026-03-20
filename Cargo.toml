@@ -180,6 +180,7 @@ server = [
     "dep:tracing",
     "dep:bcrypt",
     "dep:parking_lot",
+    "dep:mime_guess",
 ]
 client = [
     "dep:rayon",

@@ -31,7 +31,9 @@ fn check_server_connection(
     config.basic_auth = basic_auth.clone();
     if let Ok(cookie) = std::env::var("TORC_COOKIE_HEADER") {
         config.cookie_header = Some(cookie);
-        let _ = config.apply_cookie_header();
+        if let Err(e) = config.apply_cookie_header() {
+            log::warn!("Failed to apply TORC_COOKIE_HEADER: {e}");
+        }
     }
 
     default_api::ping(&config).is_ok()
