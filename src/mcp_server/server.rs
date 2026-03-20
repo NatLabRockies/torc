@@ -36,6 +36,10 @@ impl TorcMcpServer {
     pub fn new_with_tls(api_url: String, output_dir: PathBuf, tls: TlsConfig) -> Self {
         let mut config = Configuration::with_tls(tls);
         config.base_path = api_url;
+        if let Ok(cookie) = std::env::var("TORC_COOKIE_HEADER") {
+            config.cookie_header = Some(cookie);
+            config.apply_cookie_header();
+        }
 
         Self {
             config,
@@ -75,6 +79,11 @@ impl TorcMcpServer {
 
         if let (Some(user), Some(pass)) = (username, password) {
             config.basic_auth = Some((user, Some(pass)));
+        }
+
+        if let Ok(cookie) = std::env::var("TORC_COOKIE_HEADER") {
+            config.cookie_header = Some(cookie);
+            config.apply_cookie_header();
         }
 
         Self {

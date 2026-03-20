@@ -144,6 +144,12 @@ fn main() {
         config.basic_auth = Some((username, Some(password)));
     }
 
+    // Set cookie header for authentication (e.g., from browser-based MFA)
+    if let Some(cookie_header) = cli.cookie_header.clone() {
+        config.cookie_header = Some(cookie_header);
+        config.apply_cookie_header();
+    }
+
     // Check server version for commands that communicate with the server
     // Skip for local-only commands or if --skip-version-check is set
     let requires_server = !matches!(
@@ -240,6 +246,7 @@ fn main() {
                 password,
                 tls_ca_cert: tls_ca_cert.clone(),
                 tls_insecure,
+                cookie_header: config.cookie_header.clone(),
             };
 
             run_jobs_cmd::run(&args);

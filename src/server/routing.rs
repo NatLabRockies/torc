@@ -19055,9 +19055,8 @@ where
                 _ if path.matched(paths::ID_WORKFLOWS_ID_EVENTS_STREAM) => method_not_allowed(),
                 _ if path.matched(paths::ID_ADMIN_RELOAD_AUTH) => method_not_allowed(),
                 _ if path.matched(paths::ID_SLURM_STATS) => method_not_allowed(),
-                // Serve dashboard for non-API routes, 404 otherwise
+                // Serve info page for root/dashboard, 404 otherwise
                 _ => {
-                    // Try to serve dashboard assets for non-API paths
                     if let Some(response) = crate::server::dashboard::serve_dashboard(uri.path()) {
                         Ok(response)
                     } else {

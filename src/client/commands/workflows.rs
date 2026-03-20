@@ -2243,6 +2243,7 @@ fn handle_run(
             .as_ref()
             .map(|p| p.to_string_lossy().to_string()),
         tls_insecure: config.tls.insecure,
+        cookie_header: config.cookie_header.clone(),
     };
 
     crate::run_jobs_cmd::run(&args);

@@ -179,9 +179,7 @@ server = [
     "dep:sha2",
     "dep:tracing",
     "dep:bcrypt",
-    "dep:rust-embed",
     "dep:parking_lot",
-    "dep:mime_guess",
 ]
 client = [
     "dep:rayon",

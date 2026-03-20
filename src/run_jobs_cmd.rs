@@ -95,6 +95,9 @@ pub struct Args {
     /// Skip TLS certificate verification (for testing only)
     #[arg(long, env = "TORC_TLS_INSECURE")]
     pub tls_insecure: bool,
+    /// Cookie header value for authentication (e.g., from browser-based MFA)
+    #[arg(long, env = "TORC_COOKIE_HEADER", hide_env_values = true)]
+    pub cookie_header: Option<String>,
 }
 
 fn resolve_end_time(
@@ -133,6 +136,12 @@ pub fn run(args: &Args) {
     if let Some(ref password) = args.password {
         let username = get_env_user_name();
         config.basic_auth = Some((username, Some(password.clone())));
+    }
+
+    // Set cookie header for authentication (e.g., from browser-based MFA)
+    if let Some(ref cookie_header) = args.cookie_header {
+        config.cookie_header = Some(cookie_header.clone());
+        config.apply_cookie_header();
     }
     let user = get_env_user_name();
     let workflow_id = args.workflow_id.unwrap_or_else(|| {

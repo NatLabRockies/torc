@@ -29,6 +29,10 @@ fn check_server_connection(
     let mut config = crate::client::apis::configuration::Configuration::with_tls(tls.clone());
     config.base_path = base_url.to_string();
     config.basic_auth = basic_auth.clone();
+    if let Ok(cookie) = std::env::var("TORC_COOKIE_HEADER") {
+        config.cookie_header = Some(cookie);
+        config.apply_cookie_header();
+    }
 
     default_api::ping(&config).is_ok()
 }

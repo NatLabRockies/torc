@@ -1065,6 +1065,10 @@ impl App {
             crate::client::apis::configuration::Configuration::with_tls(self.tls.clone());
         config.base_path = self.server_url.clone();
         config.basic_auth = self.basic_auth.clone();
+        if let Ok(cookie) = std::env::var("TORC_COOKIE_HEADER") {
+            config.cookie_header = Some(cookie);
+            config.apply_cookie_header();
+        }
 
         let result = version_check::check_version(&config);
 
@@ -2234,6 +2238,10 @@ impl App {
             let mut config = crate::client::apis::configuration::Configuration::with_tls(tls);
             config.base_path = base_url;
             config.basic_auth = basic_auth;
+            if let Ok(cookie) = std::env::var("TORC_COOKIE_HEADER") {
+                config.cookie_header = Some(cookie);
+                config.apply_cookie_header();
+            }
 
             match crate::client::sse_client::SseConnection::connect(&config, workflow_id, None) {
                 Ok(mut connection) => {

@@ -77,6 +77,7 @@ pub struct Configuration {
     pub bearer_access_token: Option<String>,
     pub api_key: Option<ApiKey>,
     pub tls: TlsConfig,
+    pub cookie_header: Option<String>,
 }
 
 pub type BasicAuth = (String, Option<String>);
@@ -109,6 +110,27 @@ impl Configuration {
             bearer_access_token: None,
             api_key: None,
             tls,
+            cookie_header: None,
+        }
+    }
+
+    /// Rebuild the HTTP client with the cookie header set as a default header.
+    /// This must be called after setting `cookie_header` for it to take effect.
+    pub fn apply_cookie_header(&mut self) {
+        if let Some(ref cookie) = self.cookie_header {
+            let mut headers = reqwest::header::HeaderMap::new();
+            headers.insert(
+                reqwest::header::COOKIE,
+                reqwest::header::HeaderValue::from_str(cookie)
+                    .expect("Invalid cookie header value"),
+            );
+            self.client = self
+                .tls
+                .configure_blocking_builder(
+                    reqwest::blocking::Client::builder().default_headers(headers),
+                )
+                .build()
+                .expect("Failed to rebuild HTTP client with cookie header");
         }
     }
 }
@@ -124,6 +146,7 @@ impl Default for Configuration {
             bearer_access_token: None,
             api_key: None,
             tls: TlsConfig::default(),
+            cookie_header: None,
         }
     }
 }

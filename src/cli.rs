@@ -111,6 +111,9 @@ pub struct Cli {
     /// Skip TLS certificate verification (for testing only)
     #[arg(long, env = "TORC_TLS_INSECURE")]
     pub tls_insecure: bool,
+    /// Cookie header value for authentication (e.g., from browser-based MFA)
+    #[arg(long, env = "TORC_COOKIE_HEADER", hide_env_values = true)]
+    pub cookie_header: Option<String>,
     #[command(subcommand)]
     pub command: Commands,
 }

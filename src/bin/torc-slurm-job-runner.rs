@@ -250,6 +250,12 @@ mod unix_main {
             config.basic_auth = Some((username, Some(password.clone())));
         }
 
+        // Set cookie header for authentication (e.g., from browser-based MFA)
+        if let Ok(cookie) = std::env::var("TORC_COOKIE_HEADER") {
+            config.cookie_header = Some(cookie);
+            config.apply_cookie_header();
+        }
+
         // Stagger startup to avoid thundering herd when many compute nodes start
         // simultaneously. The delay window is set by the caller (sbatch script)
         // based on the number of concurrent allocations.
