@@ -251,12 +251,9 @@ mod unix_main {
         }
 
         // Set cookie header for authentication (e.g., from browser-based MFA)
-        if let Ok(cookie) = std::env::var("TORC_COOKIE_HEADER") {
-            config.cookie_header = Some(cookie);
-            if let Err(e) = config.apply_cookie_header() {
-                eprintln!("Error: {e}");
-                std::process::exit(1);
-            }
+        if let Err(e) = config.apply_cookie_header_from_env() {
+            eprintln!("Error: {e}");
+            std::process::exit(1);
         }
 
         // Stagger startup to avoid thundering herd when many compute nodes start

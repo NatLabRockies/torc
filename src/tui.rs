@@ -29,11 +29,9 @@ fn check_server_connection(
     let mut config = crate::client::apis::configuration::Configuration::with_tls(tls.clone());
     config.base_path = base_url.to_string();
     config.basic_auth = basic_auth.clone();
-    if let Ok(cookie) = std::env::var("TORC_COOKIE_HEADER") {
-        config.cookie_header = Some(cookie);
-        if let Err(e) = config.apply_cookie_header() {
-            log::warn!("Failed to apply TORC_COOKIE_HEADER: {e}");
-        }
+    if let Err(e) = config.apply_cookie_header_from_env() {
+        log::error!("Failed to apply TORC_COOKIE_HEADER: {e}");
+        return false;
     }
 
     default_api::ping(&config).is_ok()

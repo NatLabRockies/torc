@@ -22,7 +22,20 @@ impl<T> fmt::Display for Error<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (module, e) = match self {
             Error::Reqwest(e) => ("reqwest", e.to_string()),
-            Error::Serde(e) => ("serde", e.to_string()),
+            Error::Serde(e) => {
+                let msg = e.to_string();
+                // An HTML response instead of JSON typically means an auth gateway
+                // (reverse proxy, SSO, etc.) intercepted the request.
+                if msg.contains("text/html") {
+                    return write!(
+                        f,
+                        "server returned an HTML response instead of JSON \
+                         (possible authentication/proxy issue — check your credentials, \
+                         cookie header, and server URL)"
+                    );
+                }
+                ("serde", msg)
+            }
             Error::Io(e) => ("IO", e.to_string()),
             Error::ResponseError(e) => {
                 // Include response content to show the actual error message from the server

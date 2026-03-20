@@ -168,6 +168,23 @@ impl Configuration {
         }
         Ok(())
     }
+
+    /// Check the `TORC_COOKIE_HEADER` environment variable and, if set, apply it
+    /// as the default cookie header on this configuration's HTTP client.
+    ///
+    /// This centralizes the env-var lookup + apply pattern used across multiple
+    /// call sites (TUI, MCP server, slurm job runner, etc.).
+    ///
+    /// # Errors
+    /// Returns an error if the env var is set but contains an invalid header value
+    /// or if the HTTP client cannot be rebuilt.
+    pub fn apply_cookie_header_from_env(&mut self) -> Result<(), String> {
+        if let Ok(cookie) = std::env::var("TORC_COOKIE_HEADER") {
+            self.cookie_header = Some(cookie);
+            self.apply_cookie_header()?;
+        }
+        Ok(())
+    }
 }
 
 impl Default for Configuration {
@@ -261,6 +278,16 @@ mod tests {
     fn test_apply_cookie_header_none() {
         let mut config = Configuration::default();
         assert!(config.apply_cookie_header().is_ok());
+    }
+
+    #[test]
+    fn test_apply_cookie_header_from_env_unset() {
+        // When TORC_COOKIE_HEADER is not set, should be a no-op
+        // SAFETY: This test runs single-threaded via serial_test or cargo test -- --test-threads 1
+        unsafe { std::env::remove_var("TORC_COOKIE_HEADER") };
+        let mut config = Configuration::default();
+        assert!(config.apply_cookie_header_from_env().is_ok());
+        assert!(config.cookie_header.is_none());
     }
 
     #[test]

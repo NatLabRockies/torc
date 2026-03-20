@@ -34,13 +34,9 @@ impl TorcClient {
         config.base_path = base_url;
         config.basic_auth = basic_auth;
 
-        // Apply cookie header from environment if set
-        if let Ok(cookie) = std::env::var("TORC_COOKIE_HEADER") {
-            config.cookie_header = Some(cookie);
-            config
-                .apply_cookie_header()
-                .map_err(|e| anyhow::anyhow!(e))?;
-        }
+        config
+            .apply_cookie_header_from_env()
+            .map_err(|e| anyhow::anyhow!(e))?;
 
         Ok(Self { config })
     }
@@ -59,13 +55,9 @@ impl TorcClient {
         config.base_path = base_url;
         config.basic_auth = basic_auth;
 
-        // Apply cookie header from environment if set
-        if let Ok(cookie) = std::env::var("TORC_COOKIE_HEADER") {
-            config.cookie_header = Some(cookie);
-            config
-                .apply_cookie_header()
-                .map_err(|e| anyhow::anyhow!(e))?;
-        }
+        config
+            .apply_cookie_header_from_env()
+            .map_err(|e| anyhow::anyhow!(e))?;
 
         Ok(Self { config })
     }
