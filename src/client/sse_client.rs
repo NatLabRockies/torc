@@ -93,7 +93,7 @@ impl SseConnection {
             headers.insert(
                 reqwest::header::COOKIE,
                 reqwest::header::HeaderValue::from_str(cookie)
-                    .expect("Invalid cookie header value"),
+                    .map_err(|e| SseError::Parse(format!("Invalid cookie header value: {e}")))?,
             );
             builder = builder.default_headers(headers);
         }

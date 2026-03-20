@@ -145,9 +145,15 @@ fn main() {
     }
 
     // Set cookie header for authentication (e.g., from browser-based MFA)
-    if let Some(cookie_header) = cli.cookie_header.clone() {
-        config.cookie_header = Some(cookie_header);
-        config.apply_cookie_header();
+    if let Some(ref cookie_header) = cli.cookie_header {
+        config.cookie_header = Some(cookie_header.clone());
+        if let Err(e) = config.apply_cookie_header() {
+            eprintln!("Error: {e}");
+            std::process::exit(1);
+        }
+        // Also expose via env var so TUI and other subprocesses can pick it up
+        // SAFETY: This runs during single-threaded CLI initialization before any threads are spawned.
+        unsafe { std::env::set_var("TORC_COOKIE_HEADER", cookie_header) };
     }
 
     // Check server version for commands that communicate with the server

@@ -67,7 +67,7 @@ impl TlsConfig {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Configuration {
     pub base_path: String,
     pub user_agent: Option<String>,
@@ -78,6 +78,36 @@ pub struct Configuration {
     pub api_key: Option<ApiKey>,
     pub tls: TlsConfig,
     pub cookie_header: Option<String>,
+}
+
+impl std::fmt::Debug for Configuration {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Configuration")
+            .field("base_path", &self.base_path)
+            .field("user_agent", &self.user_agent)
+            .field(
+                "basic_auth",
+                &self
+                    .basic_auth
+                    .as_ref()
+                    .map(|(u, _)| (u, &Some("[REDACTED]"))),
+            )
+            .field(
+                "oauth_access_token",
+                &self.oauth_access_token.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field(
+                "bearer_access_token",
+                &self.bearer_access_token.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field("api_key", &self.api_key.as_ref().map(|_| "[REDACTED]"))
+            .field("tls", &self.tls)
+            .field(
+                "cookie_header",
+                &self.cookie_header.as_ref().map(|_| "[REDACTED]"),
+            )
+            .finish()
+    }
 }
 
 pub type BasicAuth = (String, Option<String>);
@@ -116,13 +146,17 @@ impl Configuration {
 
     /// Rebuild the HTTP client with the cookie header set as a default header.
     /// This must be called after setting `cookie_header` for it to take effect.
-    pub fn apply_cookie_header(&mut self) {
+    ///
+    /// # Errors
+    /// Returns an error if the cookie header value is invalid or if the HTTP client
+    /// cannot be rebuilt.
+    pub fn apply_cookie_header(&mut self) -> Result<(), String> {
         if let Some(ref cookie) = self.cookie_header {
             let mut headers = reqwest::header::HeaderMap::new();
             headers.insert(
                 reqwest::header::COOKIE,
                 reqwest::header::HeaderValue::from_str(cookie)
-                    .expect("Invalid cookie header value"),
+                    .map_err(|e| format!("Invalid cookie header value: {e}"))?,
             );
             self.client = self
                 .tls
@@ -130,8 +164,9 @@ impl Configuration {
                     reqwest::blocking::Client::builder().default_headers(headers),
                 )
                 .build()
-                .expect("Failed to rebuild HTTP client with cookie header");
+                .map_err(|e| format!("Failed to rebuild HTTP client with cookie header: {e}"))?;
         }
+        Ok(())
     }
 }
 
@@ -201,5 +236,43 @@ mod tests {
         };
         let client = tls.build_async_client();
         assert!(client.is_ok());
+    }
+
+    #[test]
+    fn test_apply_cookie_header_valid() {
+        let mut config = Configuration {
+            cookie_header: Some("session=abc123".to_string()),
+            ..Default::default()
+        };
+        assert!(config.apply_cookie_header().is_ok());
+    }
+
+    #[test]
+    fn test_apply_cookie_header_invalid() {
+        // Header values cannot contain non-visible ASCII characters
+        let mut config = Configuration {
+            cookie_header: Some("session=abc\x00123".to_string()),
+            ..Default::default()
+        };
+        assert!(config.apply_cookie_header().is_err());
+    }
+
+    #[test]
+    fn test_apply_cookie_header_none() {
+        let mut config = Configuration::default();
+        assert!(config.apply_cookie_header().is_ok());
+    }
+
+    #[test]
+    fn test_debug_redacts_sensitive_fields() {
+        let config = Configuration {
+            cookie_header: Some("session=secret".to_string()),
+            bearer_access_token: Some("my-token".to_string()),
+            ..Default::default()
+        };
+        let debug_output = format!("{:?}", config);
+        assert!(!debug_output.contains("secret"));
+        assert!(!debug_output.contains("my-token"));
+        assert!(debug_output.contains("[REDACTED]"));
     }
 }

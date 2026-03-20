@@ -38,7 +38,9 @@ impl TorcMcpServer {
         config.base_path = api_url;
         if let Ok(cookie) = std::env::var("TORC_COOKIE_HEADER") {
             config.cookie_header = Some(cookie);
-            config.apply_cookie_header();
+            if let Err(e) = config.apply_cookie_header() {
+                log::error!("Failed to apply cookie header: {e}");
+            }
         }
 
         Self {
@@ -83,7 +85,9 @@ impl TorcMcpServer {
 
         if let Ok(cookie) = std::env::var("TORC_COOKIE_HEADER") {
             config.cookie_header = Some(cookie);
-            config.apply_cookie_header();
+            if let Err(e) = config.apply_cookie_header() {
+                log::error!("Failed to apply cookie header: {e}");
+            }
         }
 
         Self {

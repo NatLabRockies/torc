@@ -37,7 +37,9 @@ impl TorcClient {
         // Apply cookie header from environment if set
         if let Ok(cookie) = std::env::var("TORC_COOKIE_HEADER") {
             config.cookie_header = Some(cookie);
-            config.apply_cookie_header();
+            config
+                .apply_cookie_header()
+                .map_err(|e| anyhow::anyhow!(e))?;
         }
 
         Ok(Self { config })
@@ -60,7 +62,9 @@ impl TorcClient {
         // Apply cookie header from environment if set
         if let Ok(cookie) = std::env::var("TORC_COOKIE_HEADER") {
             config.cookie_header = Some(cookie);
-            config.apply_cookie_header();
+            config
+                .apply_cookie_header()
+                .map_err(|e| anyhow::anyhow!(e))?;
         }
 
         Ok(Self { config })
