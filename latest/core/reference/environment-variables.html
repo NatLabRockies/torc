@@ -353,6 +353,15 @@ jobs:
 <li><code>TORC_ATTEMPT_ID</code> starts at 1 for the first execution and increments with each retry</li>
 <li><code>TORC_RETURN_CODE</code> is only available in recovery scripts, not during normal job execution</li>
 </ul>
+<h2 id="client-configuration-variables"><a class="header" href="#client-configuration-variables">Client Configuration Variables</a></h2>
+<h3 id="torc_username"><a class="header" href="#torc_username">TORC_USERNAME</a></h3>
+<p>Override the username for Torc API operations (workflow ownership, authentication).</p>
+<ul>
+<li><strong>Type</strong>: String</li>
+<li><strong>Default</strong>: <code>$USER</code> (Unix) or <code>$USERNAME</code> (Windows)</li>
+<li><strong>Use case</strong>: Service accounts or when system username differs from Torc identity</li>
+</ul>
+<p><strong>Note</strong>: Does not affect Slurm job submission, which always uses the real system user.</p>
 
                     </main>
 
