@@ -2801,7 +2801,8 @@ impl WorkflowSpec {
                         return Err(format!(
                             "priority must be >= 0, got {} for job '{}'",
                             p, job_spec.name
-                        ));
+                        )
+                        .into());
                     }
                     job_model.priority = Some(p);
                 }

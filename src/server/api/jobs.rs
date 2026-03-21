@@ -1139,7 +1139,9 @@ where
             let error_response = models::ErrorResponse::new(serde_json::json!({
                 "message": format!("priority must be >= 0, got {} for job '{}'", priority, job.name)
             }));
-            return Ok(CreateJobResponse::UnprocessableContentErrorResponse(error_response));
+            return Ok(CreateJobResponse::UnprocessableContentErrorResponse(
+                error_response,
+            ));
         }
         let status = JobStatus::Uninitialized;
         let status_int = status.to_int();
@@ -1348,7 +1350,9 @@ where
                 let error_response = models::ErrorResponse::new(serde_json::json!({
                     "message": format!("priority must be >= 0, got {} for job '{}'", priority, job.name)
                 }));
-                return Ok(CreateJobsResponse::UnprocessableContentErrorResponse(error_response));
+                return Ok(CreateJobsResponse::UnprocessableContentErrorResponse(
+                    error_response,
+                ));
             }
             let status = JobStatus::Uninitialized;
             let status_int = status.to_int();
