@@ -53,7 +53,7 @@ fn cleanup_slurm_env(preserve_user: bool, original_user: Option<String>) {
 #[case(16, "16384", 1, 4, None, 456, true, 4, 4.0, 0, 1)] // Subtask, 1 node (16GB / 4 workers = 4GB)
 #[case(32, "65536", 4, 8, Some("0,1,2,3"), 789, false, 32, 64.0, 4, 4)] // Large cluster, 4 nodes: per-node values (32 cpus, 64 GB, 4 gpus)
 #[case(8, "8192", 1, 2, Some("0"), 101, true, 2, 2.0, 1, 1)] // Small subtask, 1 node (8GB / 4 workers = 2GB)
-#[serial]
+#[serial(node_resources)]
 fn test_create_node_resources(
     #[case] cpus_on_node: usize,
     #[case] mem_per_node: &str,
@@ -101,7 +101,7 @@ fn test_create_node_resources(
 }
 
 #[rstest]
-#[serial]
+#[serial(node_resources)]
 fn test_create_node_resources_zero_values() {
     // Preserve existing USER environment variable
     let original_user = env::var("USER").ok();
@@ -137,7 +137,7 @@ fn test_create_node_resources_zero_values() {
 }
 
 #[rstest]
-#[serial]
+#[serial(node_resources)]
 fn test_create_node_resources_gpu_parsing() {
     // Preserve existing USER environment variable
     let original_user = env::var("USER").ok();

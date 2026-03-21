@@ -11,7 +11,7 @@ fn get_exe_path(name: &str) -> String {
 
 /// Admin can call reload-auth and get 200 with user count.
 #[test]
-#[serial]
+#[serial(auth)]
 fn test_reload_auth_success() {
     let server = common::start_server_with_required_auth();
     let admin_config = server.config_for_user("owner");
@@ -32,7 +32,7 @@ fn test_reload_auth_success() {
 
 /// Non-admin user gets 403 when calling reload-auth.
 #[test]
-#[serial]
+#[serial(auth)]
 fn test_reload_auth_forbidden() {
     let server = common::start_server_with_required_auth();
 
@@ -44,7 +44,7 @@ fn test_reload_auth_forbidden() {
 
 /// Add a user to htpasswd on disk, verify they can't auth yet, reload, then verify they can.
 #[test]
-#[serial]
+#[serial(auth)]
 fn test_reload_auth_new_user_can_authenticate() {
     let server = common::start_server_with_required_auth();
     let admin_config = server.config_for_user("owner");
@@ -86,7 +86,7 @@ fn test_reload_auth_new_user_can_authenticate() {
 
 /// Remove a user from htpasswd on disk, reload, verify they get 401.
 #[test]
-#[serial]
+#[serial(auth)]
 fn test_reload_auth_removed_user_rejected() {
     let server = common::start_server_with_required_auth();
     let admin_config = server.config_for_user("owner");
@@ -138,7 +138,7 @@ fn test_reload_auth_removed_user_rejected() {
 /// Credential cache is cleared after reload: changing a user's password and reloading
 /// should invalidate the old cached credentials.
 #[test]
-#[serial]
+#[serial(auth)]
 fn test_reload_auth_clears_credential_cache() {
     let server = common::start_server_with_required_auth();
     let admin_config = server.config_for_user("owner");
@@ -206,7 +206,7 @@ fn test_reload_auth_clears_credential_cache() {
 
 /// Server started without --auth-file returns error when reload-auth is called.
 #[test]
-#[serial]
+#[serial(auth)]
 fn test_reload_auth_no_auth_file() {
     // Use the standard server (no auth file configured)
     let server = common::start_server();

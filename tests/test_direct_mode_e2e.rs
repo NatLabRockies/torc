@@ -469,7 +469,7 @@ execution_config:
 // =============================================================================
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_auto_mode_runs_as_direct_outside_slurm(start_server: &ServerProcess) {
     // Ensure SLURM_JOB_ID is not set
     // SAFETY: Using serial_test to prevent concurrent access to env vars

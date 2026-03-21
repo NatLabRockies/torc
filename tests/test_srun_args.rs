@@ -174,7 +174,7 @@ fn run_and_capture_srun_args_with_headroom(
 // ---------------------------------------------------------------------------
 
 #[test]
-#[serial]
+#[serial(srun)]
 fn test_srun_default_single_node() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
@@ -232,7 +232,7 @@ fn test_srun_default_single_node() {
 // is now only valid in direct mode (which doesn't use srun).
 
 #[test]
-#[serial]
+#[serial(srun)]
 fn test_srun_cpu_bind_enabled() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
@@ -268,7 +268,7 @@ fn test_srun_cpu_bind_enabled() {
 }
 
 #[test]
-#[serial]
+#[serial(srun)]
 fn test_srun_termination_signal() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
@@ -296,7 +296,7 @@ fn test_srun_termination_signal() {
 }
 
 #[test]
-#[serial]
+#[serial(srun)]
 fn test_srun_termination_signal_usr1() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
@@ -324,7 +324,7 @@ fn test_srun_termination_signal_usr1() {
 }
 
 #[test]
-#[serial]
+#[serial(srun)]
 fn test_srun_multi_node_step() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
@@ -362,7 +362,7 @@ fn test_srun_multi_node_step() {
 }
 
 #[test]
-#[serial]
+#[serial(srun)]
 fn test_srun_with_end_time() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
@@ -397,7 +397,7 @@ fn test_srun_with_end_time() {
 }
 
 #[test]
-#[serial]
+#[serial(srun)]
 fn test_srun_with_end_time_insufficient_time_rejected() {
     let temp_dir = TempDir::new().unwrap();
     let _args_log = setup_srun_env(&temp_dir);
@@ -444,7 +444,7 @@ fn test_srun_with_end_time_insufficient_time_rejected() {
 }
 
 #[test]
-#[serial]
+#[serial(srun)]
 fn test_srun_use_srun_false() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
@@ -472,7 +472,7 @@ fn test_srun_use_srun_false() {
 }
 
 #[test]
-#[serial]
+#[serial(srun)]
 fn test_srun_default_resource_requirements_name() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
@@ -510,7 +510,7 @@ fn test_srun_default_resource_requirements_name() {
 }
 
 #[test]
-#[serial]
+#[serial(srun)]
 fn test_srun_no_resource_requirements() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
@@ -552,7 +552,7 @@ fn test_srun_no_resource_requirements() {
 }
 
 #[test]
-#[serial]
+#[serial(srun)]
 fn test_srun_all_options_set() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
@@ -607,7 +607,7 @@ fn test_srun_all_options_set() {
 }
 
 #[test]
-#[serial]
+#[serial(srun)]
 fn test_srun_step_name_format() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
@@ -654,7 +654,7 @@ fn test_srun_step_name_format() {
 // limit_resources=false is now only valid in direct mode (which doesn't use srun).
 
 #[test]
-#[serial]
+#[serial(srun)]
 fn test_srun_small_memory_rounds_up_to_1mb() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
@@ -689,7 +689,7 @@ fn test_srun_small_memory_rounds_up_to_1mb() {
 }
 
 #[test]
-#[serial]
+#[serial(srun)]
 fn test_srun_zero_memory_omits_mem() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
@@ -724,7 +724,7 @@ fn test_srun_zero_memory_omits_mem() {
 }
 
 #[test]
-#[serial]
+#[serial(srun)]
 fn test_srun_with_gpus() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
@@ -765,7 +765,7 @@ fn test_srun_with_gpus() {
 }
 
 #[test]
-#[serial]
+#[serial(srun)]
 fn test_srun_zero_gpus_omits_flag() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);

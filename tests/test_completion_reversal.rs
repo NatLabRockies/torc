@@ -12,7 +12,7 @@ use torc::models::JobStatus;
 /// This tests the update_jobs_from_completion_reversal functionality which should be triggered
 /// when a completed job is reset to a non-complete status.
 #[rstest]
-#[serial]
+#[serial(completion)]
 fn test_completion_reversal_resets_downstream_jobs(start_server: &ServerProcess) {
     let config = &start_server.config;
 
@@ -191,7 +191,7 @@ fn test_completion_reversal_resets_downstream_jobs(start_server: &ServerProcess)
 /// Test that completion reversal works with more complex dependency chains
 /// This creates a diamond-shaped dependency pattern to test recursive propagation
 #[rstest]
-#[serial]
+#[serial(completion)]
 fn test_completion_reversal_complex_dependencies(start_server: &ServerProcess) {
     let config = &start_server.config;
 
@@ -318,7 +318,7 @@ fn test_completion_reversal_complex_dependencies(start_server: &ServerProcess) {
 /// Test that completion reversal only affects jobs downstream of the reset job
 /// Jobs that are not downstream should remain in their current state
 #[rstest]
-#[serial]
+#[serial(completion)]
 fn test_completion_reversal_selective_reset(start_server: &ServerProcess) {
     let config = &start_server.config;
 

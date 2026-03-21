@@ -313,14 +313,24 @@ fn test_many_jobs_parameterized(
     let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
     let work_dir = temp_dir.path().to_path_buf();
 
-    // Create YAML workflow specification with 100 parameterized jobs
-    let yaml_content = r#"name: many_jobs_test
+    // Generate unique workflow name to avoid conflicts when running in parallel
+    let workflow_name = format!(
+        "many_jobs_test_{}",
+        max_parallel_jobs
+            .map(|n| n.to_string())
+            .unwrap_or("resources".to_string())
+    );
+
+    // Create YAML workflow specification with 30 parameterized jobs
+    // Note: {{i:03d}} and {{i}} are escaped for format! macro (becomes {i:03d} and {i} in output)
+    let yaml_content = format!(
+        r#"name: {}
 user: test_user
-description: Test workflow with 100 parameterized jobs
+description: Test workflow with 30 parameterized jobs
 
 jobs:
-  - name: job_{i:03d}
-    command: echo {i}
+  - name: job_{{i:03d}}
+    command: echo {{i}}
     resource_requirements: minimal
     parameters:
       i: "1:30"
@@ -332,7 +342,9 @@ resource_requirements:
     num_nodes: 1
     memory: 1m
     runtime: P0DT1M
-"#;
+"#,
+        workflow_name
+    );
 
     // Write YAML to temp file
     let yaml_path = work_dir.join("hundred_jobs_test.yaml");
@@ -358,14 +370,13 @@ resource_requirements:
     run_jobs_cli_command(&cli_args, start_server).expect("Failed to run jobs");
 
     // Get the workflow that was created by 'torc run'
-    // List workflows and find the one with name "hundred_jobs_test"
     let workflows = default_api::list_workflows(
         config,
         None,
         None,
         None,
         None,
-        Some("many_jobs_test"),
+        Some(&workflow_name),
         None,
         None,
         None,

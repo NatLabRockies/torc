@@ -1666,7 +1666,7 @@ fn test_generate_schedulers_cpu_vs_memory_constraint() {
 // ============== Dynamic Slurm Profile Tests ==============
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_detect_slurm_profile() {
     use std::path::Path;
     use torc::client::hpc::slurm::detect_slurm_profile;
@@ -1699,7 +1699,7 @@ fn test_detect_slurm_profile() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_registry_detect_dynamic_slurm() {
     use std::path::Path;
 
@@ -1724,7 +1724,7 @@ fn test_registry_detect_dynamic_slurm() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_registry_get_slurm() {
     use std::path::Path;
 
@@ -3001,7 +3001,7 @@ fn test_resolve_hpc_profile_unknown_name() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_resolve_hpc_profile_dynamic_slurm_fallback() {
     use std::path::Path;
 
@@ -3027,7 +3027,7 @@ fn test_resolve_hpc_profile_dynamic_slurm_fallback() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_resolve_hpc_profile_no_detection_no_slurm() {
     // Point fake executables to nonexistent paths so Slurm detection always fails
     let mut overrides = HashMap::new();
@@ -3044,7 +3044,7 @@ fn test_resolve_hpc_profile_no_detection_no_slurm() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_resolve_hpc_profile_slurm_special_name() {
     use std::path::Path;
 

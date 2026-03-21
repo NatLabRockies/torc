@@ -7,7 +7,7 @@ use serial_test::serial;
 use torc::client::commands::select_workflow_interactively;
 
 #[rstest]
-#[serial]
+#[serial(workflow_delete)]
 fn test_select_workflow_interactively_single_workflow(start_server: &ServerProcess) {
     let config = &start_server.config;
 
@@ -26,7 +26,7 @@ fn test_select_workflow_interactively_single_workflow(start_server: &ServerProce
 }
 
 #[rstest]
-#[serial]
+#[serial(workflow_delete)]
 fn test_select_workflow_interactively_user_isolation(start_server: &ServerProcess) {
     let config = &start_server.config;
 
@@ -119,7 +119,7 @@ fn test_select_workflow_interactively_user_isolation(start_server: &ServerProces
 }
 
 #[rstest]
-#[serial]
+#[serial(workflow_delete)]
 fn test_delete_all_workflows(start_server: &ServerProcess) {
     let config = &start_server.config;
 
@@ -210,7 +210,7 @@ fn test_delete_all_workflows(start_server: &ServerProcess) {
 }
 
 #[rstest]
-#[serial]
+#[serial(workflow_delete)]
 fn test_delete_all_workflows_strict_success_criteria(start_server: &ServerProcess) {
     let config = &start_server.config;
 
