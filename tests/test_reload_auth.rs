@@ -50,13 +50,15 @@ fn test_reload_auth_new_user_can_authenticate() {
     let admin_config = server.config_for_user("owner");
     let htpasswd_path = server.htpasswd_path();
 
-    // Add a new user "eve" to the htpasswd file
+    // Add a new user "eve" to the htpasswd file (cost 4 for fast tests)
     let status = Command::new(get_exe_path("./target/debug/torc-htpasswd"))
         .arg("add")
         .arg("--file")
         .arg(&htpasswd_path)
         .arg("--password")
         .arg("correct horse battery staple")
+        .arg("--cost")
+        .arg("4")
         .arg("eve")
         .status()
         .expect("Failed to run torc-htpasswd");
@@ -98,6 +100,8 @@ fn test_reload_auth_removed_user_rejected() {
         .arg(&htpasswd_path)
         .arg("--password")
         .arg("correct horse battery staple")
+        .arg("--cost")
+        .arg("4")
         .arg("carol")
         .status();
     let _ = default_api::reload_auth(&admin_config);
@@ -147,6 +151,8 @@ fn test_reload_auth_clears_credential_cache() {
         .arg(&htpasswd_path)
         .arg("--password")
         .arg("correct horse battery staple")
+        .arg("--cost")
+        .arg("4")
         .arg("bob")
         .status();
     let _ = default_api::reload_auth(&admin_config);
@@ -163,6 +169,8 @@ fn test_reload_auth_clears_credential_cache() {
         .arg(&htpasswd_path)
         .arg("--password")
         .arg("new super secret password!!")
+        .arg("--cost")
+        .arg("4")
         .arg("bob")
         .status()
         .expect("Failed to run torc-htpasswd");
