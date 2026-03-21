@@ -288,9 +288,7 @@ impl TorcClient {
 
     pub fn create_workflow_from_file(&self, path: &str) -> Result<i64> {
         // Get current user
-        let user = std::env::var("USER")
-            .or_else(|_| std::env::var("USERNAME"))
-            .unwrap_or_else(|_| "unknown".to_string());
+        let user = crate::get_username();
 
         // Create the workflow using the spec
         let workflow_id = WorkflowSpec::create_workflow_from_spec(

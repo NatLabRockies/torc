@@ -93,9 +93,7 @@ fn main() -> Result<()> {
     // which spawns its own tokio runtime. Creating it inside block_on would cause
     // nested runtime issues.
     let server = if args.password.is_some() {
-        let username = std::env::var("USER")
-            .or_else(|_| std::env::var("USERNAME"))
-            .unwrap_or_else(|_| "unknown".to_string());
+        let username = torc::get_username();
         TorcMcpServer::with_auth_and_tls(
             args.api_url,
             args.output_dir,

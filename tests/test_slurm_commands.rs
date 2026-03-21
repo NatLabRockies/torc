@@ -27,6 +27,37 @@ fn test_slurm_interface_new() {
 
 #[rstest]
 #[serial]
+fn test_slurm_interface_ignores_torc_username_override() {
+    let original_torc_username = env::var("TORC_USERNAME").ok();
+    let original_user = env::var("USER").ok();
+    let original_username = env::var("USERNAME").ok();
+
+    unsafe {
+        env::set_var("TORC_USERNAME", "torc-api-user");
+        env::set_var("USER", "scheduler-user");
+        env::remove_var("USERNAME");
+    }
+
+    let interface = SlurmInterface::new().expect("Failed to create SlurmInterface");
+    let scheduler_user = interface.get_user().expect("Failed to get scheduler user");
+    assert_eq!(scheduler_user, "scheduler-user");
+
+    match original_torc_username {
+        Some(value) => unsafe { env::set_var("TORC_USERNAME", value) },
+        None => unsafe { env::remove_var("TORC_USERNAME") },
+    }
+    match original_user {
+        Some(value) => unsafe { env::set_var("USER", value) },
+        None => unsafe { env::remove_var("USER") },
+    }
+    match original_username {
+        Some(value) => unsafe { env::set_var("USERNAME", value) },
+        None => unsafe { env::remove_var("USERNAME") },
+    }
+}
+
+#[rstest]
+#[serial]
 fn test_submit_job_success() {
     cleanup_fake_slurm_state();
     setup_fake_slurm_commands();

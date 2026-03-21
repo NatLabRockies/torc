@@ -7,6 +7,17 @@
 /// Used for both batch creation limits and pagination limits.
 pub const MAX_RECORD_TRANSFER_COUNT: i64 = 100_000;
 
+/// Get the current username from environment variables.
+///
+/// Checks in order: `TORC_USERNAME` (explicit override), `USER` (Unix),
+/// `USERNAME` (Windows). Returns `"unknown"` if none are set.
+pub fn get_username() -> String {
+    std::env::var("TORC_USERNAME")
+        .or_else(|_| std::env::var("USER"))
+        .or_else(|_| std::env::var("USERNAME"))
+        .unwrap_or_else(|_| "unknown".to_string())
+}
+
 // Shared modules (always available)
 // models.rs is generated from OpenAPI spec - suppress clippy warnings for generated code patterns
 pub mod memory_utils;

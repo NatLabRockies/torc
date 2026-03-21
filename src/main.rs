@@ -138,9 +138,7 @@ fn main() {
     };
 
     if let Some(password) = password {
-        let username = std::env::var("USER")
-            .or_else(|_| std::env::var("USERNAME"))
-            .unwrap_or_else(|_| "unknown".to_string());
+        let username = torc::get_username();
         config.basic_auth = Some((username, Some(password)));
     }
 
@@ -194,9 +192,7 @@ fn main() {
         } => {
             let workflow_id = if is_spec_file(workflow_spec_or_id) {
                 // Create workflow from spec file
-                let user = std::env::var("USER")
-                    .or_else(|_| std::env::var("USERNAME"))
-                    .unwrap_or_else(|_| "unknown".to_string());
+                let user = torc::get_username();
                 match WorkflowSpec::create_workflow_from_spec(
                     &config,
                     workflow_spec_or_id,
@@ -303,9 +299,7 @@ fn main() {
                 }
 
                 // Create workflow from spec
-                let user = std::env::var("USER")
-                    .or_else(|_| std::env::var("USERNAME"))
-                    .unwrap_or_else(|_| "unknown".to_string());
+                let user = torc::get_username();
 
                 match WorkflowSpec::create_workflow_from_spec(
                     &config,
@@ -510,9 +504,7 @@ fn main() {
                 .expect("Failed to write temporary workflow file");
 
             // Create workflow from spec
-            let user = std::env::var("USER")
-                .or_else(|_| std::env::var("USERNAME"))
-                .unwrap_or_else(|_| "unknown".to_string());
+            let user = torc::get_username();
 
             let workflow_id = match WorkflowSpec::create_workflow_from_spec(
                 &config,

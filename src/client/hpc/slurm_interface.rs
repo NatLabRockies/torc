@@ -28,6 +28,8 @@ pub struct SlurmInterface {
 impl SlurmInterface {
     /// Create a new Slurm interface
     pub fn new() -> Result<Self> {
+        // Use the real scheduler account, not TORC_USERNAME, which only overrides
+        // Torc API/workflow ownership.
         let user = env::var("USER").or_else(|_| env::var("USERNAME"))?;
         let sbatch_regex = Regex::new(r"Submitted batch job (\d+)")?;
 

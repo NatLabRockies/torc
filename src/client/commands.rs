@@ -26,7 +26,6 @@ pub mod watch;
 pub mod workflow_export;
 pub mod workflows;
 
-use std::env;
 use std::io::{self, Write};
 
 use crate::client::apis::configuration::Configuration;
@@ -118,9 +117,7 @@ pub fn get_user_name(user: &Option<String>) -> String {
 }
 
 pub fn get_env_user_name() -> String {
-    env::var("USER")
-        .or_else(|_| env::var("USERNAME"))
-        .unwrap_or_else(|_| "unknown".to_string())
+    crate::get_username()
 }
 
 /// Truncate string to specified length

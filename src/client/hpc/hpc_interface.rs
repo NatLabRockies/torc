@@ -176,7 +176,10 @@ pub trait HpcInterface: Send + Sync {
     /// Get the username for HPC operations
     ///
     /// # Returns
-    /// The current user's username
+    /// The current scheduler account username.
+    ///
+    /// This intentionally does not consult `TORC_USERNAME`, which is a Torc API
+    /// identity override and may differ from the Unix account running Slurm jobs.
     fn get_user(&self) -> Result<String> {
         Ok(std::env::var("USER").or_else(|_| std::env::var("USERNAME"))?)
     }

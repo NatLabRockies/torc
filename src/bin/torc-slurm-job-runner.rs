@@ -245,8 +245,7 @@ mod unix_main {
 
         // Set up authentication if password is provided
         if let Some(ref password) = args.password {
-            let username =
-                std::env::var("USER").unwrap_or_else(|_| std::env::var("USERNAME").unwrap());
+            let username = torc::get_username();
             config.basic_auth = Some((username, Some(password.clone())));
         }
 

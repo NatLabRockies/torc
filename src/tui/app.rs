@@ -324,9 +324,7 @@ impl App {
         let output_dir = TorcConfig::load().unwrap_or_default().client.run.output_dir;
 
         // Get current user from environment
-        let current_user = std::env::var("USER")
-            .or_else(|_| std::env::var("USERNAME"))
-            .unwrap_or_else(|_| "unknown".to_string());
+        let current_user = crate::get_username();
 
         let mut app = Self {
             client,

@@ -3030,7 +3030,7 @@ fn handle_create_slurm(
     dry_run: bool,
     format: &str,
 ) {
-    let user = std::env::var("USER").unwrap_or_else(|_| "unknown".to_string());
+    let user = crate::get_username();
     // Handle dry-run mode first
     if dry_run {
         let result = WorkflowSpec::validate_spec(file);
@@ -3336,9 +3336,7 @@ fn handle_sync_status(
 
 pub fn handle_workflow_commands(config: &Configuration, command: &WorkflowCommands, format: &str) {
     // Get the current user from environment
-    let current_user = std::env::var("USER")
-        .or_else(|_| std::env::var("USERNAME"))
-        .unwrap_or_else(|_| "unknown".to_string());
+    let current_user = crate::get_username();
 
     match command {
         WorkflowCommands::Create {

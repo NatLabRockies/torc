@@ -2834,9 +2834,7 @@ struct UserResponse {
 
 /// Return the current user from the environment
 async fn user_handler() -> impl IntoResponse {
-    let user = std::env::var("USER")
-        .or_else(|_| std::env::var("USERNAME"))
-        .unwrap_or_else(|_| "unknown".to_string());
+    let user = torc::get_username();
 
     Json(UserResponse { user })
 }

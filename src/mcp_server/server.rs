@@ -508,9 +508,7 @@ EXAMPLE - Fan-out/Fan-in with files (3 groups, 10 workers each, aggregation):
         let config = self.config.clone();
         let spec_json = serde_json::to_string(&params.spec_json)
             .map_err(|e| McpError::invalid_params(format!("Invalid spec JSON: {}", e), None))?;
-        let user = params
-            .user
-            .unwrap_or_else(|| std::env::var("USER").unwrap_or_else(|_| "unknown".to_string()));
+        let user = params.user.unwrap_or_else(crate::get_username);
         let action = params.action;
         let workflow_type = params.workflow_type;
         let account = params.account;
