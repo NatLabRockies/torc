@@ -105,6 +105,7 @@ fn test_hash_command_fails_without_username_or_env() {
         .arg("hash")
         .arg("--password")
         .arg(STRONG_PASSWORD)
+        .env_remove("TORC_USERNAME")
         .env_remove("USER")
         .env_remove("USERNAME")
         .output()
@@ -117,7 +118,7 @@ fn test_hash_command_fails_without_username_or_env() {
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("could not read from $USER or $USERNAME"),
+        stderr.contains("could not read from $TORC_USERNAME, $USER, or $USERNAME"),
         "stderr should contain error about missing username, got: {}",
         stderr
     );
