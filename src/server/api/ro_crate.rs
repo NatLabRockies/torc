@@ -13,10 +13,21 @@ use crate::server::api_types::{
 
 use crate::models;
 
-use sha2::{Digest, Sha256};
-use std::io::Read as IoRead;
-
 use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, database_error_with_msg};
+
+/// The current version of this binary, set at compile time.
+const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// The git commit hash of this binary, set at compile time via build.rs.
+const GIT_HASH: &str = env!("GIT_HASH");
+
+/// Suffix indicating if the build was from a dirty working directory.
+const GIT_DIRTY: &str = env!("GIT_DIRTY");
+
+/// Returns the full version string including git hash (e.g., "0.8.0 (abc1234)")
+fn full_version() -> String {
+    format!("{} ({}{})", SERVER_VERSION, GIT_HASH, GIT_DIRTY)
+}
 
 /// Trait defining RO-Crate entity-related API operations
 #[async_trait]
@@ -67,22 +78,6 @@ pub trait RoCrateApi<C> {
         body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteRoCrateEntitiesResponse, ApiError>;
-}
-
-/// Compute the SHA256 hash of a file, returning the hex string or None on error.
-fn compute_file_sha256(path: &str) -> Option<String> {
-    let file = std::fs::File::open(path).ok()?;
-    let mut reader = std::io::BufReader::new(file);
-    let mut hasher = Sha256::new();
-    let mut buffer = [0u8; 8192];
-    loop {
-        match reader.read(&mut buffer) {
-            Ok(0) => break,
-            Ok(n) => hasher.update(&buffer[..n]),
-            Err(_) => return None,
-        }
-    }
-    Some(format!("{:x}", hasher.finalize()))
 }
 
 /// Implementation of RO-Crate entity API for the server
@@ -279,30 +274,21 @@ impl RoCrateApiImpl {
             return Ok(());
         }
 
-        let version = env!("CARGO_PKG_VERSION");
+        // Use compile-time constants for version identification
+        let version = full_version();
         let exe_path = std::env::current_exe()
             .map(|p| p.display().to_string())
             .unwrap_or_else(|_| "unknown".to_string());
 
-        // Compute SHA256 of the server binary
-        let sha256 = compute_file_sha256(&exe_path);
-
-        let mut metadata = serde_json::json!({
+        let metadata = serde_json::json!({
             "@id": entity_id,
             "@type": "SoftwareApplication",
             "name": "torc-server",
             "version": version,
             "url": exe_path,
             "torc:run_id": run_id,
+            "torc:git_hash": GIT_HASH,
         });
-
-        if let Some(hash) = sha256 {
-            metadata["sha256"] = serde_json::json!(hash);
-        }
-
-        if let Ok(meta) = std::fs::metadata(&exe_path) {
-            metadata["contentSize"] = serde_json::json!(meta.len());
-        }
 
         let metadata_str = metadata.to_string();
         let entity_type = "SoftwareApplication";
