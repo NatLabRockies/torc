@@ -309,7 +309,7 @@ fn parse_results_query(query: Option<&str>) -> Result<ResultsQuery, String> {
         job_id: parse_optional_i64(&params, "job_id")?,
         run_id: parse_optional_i64(&params, "run_id")?,
         return_code: parse_optional_i64(&params, "return_code")?,
-        status: parse_optional_job_status(&params, "status")?,
+        status: parse_optional_job_status_name(&params, "status")?,
         compute_node_id: parse_optional_i64(&params, "compute_node_id")?,
         offset: parse_optional_i64(&params, "offset")?,
         limit: parse_optional_i64(&params, "limit")?,
@@ -593,20 +593,6 @@ fn parse_optional_bool(
         .map(|raw| {
             raw.parse::<bool>()
                 .map_err(|_| format!("Invalid boolean for query parameter: {key}"))
-        })
-        .transpose()
-}
-
-fn parse_optional_job_status(
-    params: &HashMap<String, String>,
-    key: &str,
-) -> Result<Option<models::JobStatus>, String> {
-    params
-        .get(key)
-        .map(|raw| {
-            raw.parse::<i32>()
-                .map_err(|_| format!("Invalid integer for query parameter: {key}"))
-                .and_then(models::JobStatus::from_int)
         })
         .transpose()
 }
