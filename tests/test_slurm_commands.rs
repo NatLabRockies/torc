@@ -11,8 +11,8 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
+use torc::client::apis;
 use torc::client::config::TorcConfig;
-use torc::client::default_api;
 use torc::client::hpc::common::HpcJobStatus;
 use torc::client::hpc::hpc_interface::HpcInterface;
 use torc::client::hpc::slurm_interface::SlurmInterface;
@@ -1537,7 +1537,7 @@ fn test_slurm_run_jobs(start_server: &ServerProcess) {
     let first_job = jobs.values().next().expect("Should have at least one job");
     let workflow_id = first_job.workflow_id;
 
-    let workflow = torc::client::default_api::get_workflow(config, workflow_id)
+    let workflow = torc::client::apis::workflows_api::get_workflow(config, workflow_id)
         .expect("Failed to get workflow");
     let torc_config = TorcConfig::default();
     let workflow_manager = WorkflowManager::new(config.clone(), torc_config, workflow);
@@ -1549,7 +1549,7 @@ fn test_slurm_run_jobs(start_server: &ServerProcess) {
         .expect("Failed to run slurm job runner command");
 
     // Verify all jobs completed successfully
-    let job_list = torc::client::default_api::list_jobs(
+    let job_list = torc::client::apis::jobs_api::list_jobs(
         config,
         workflow_id,
         None, // status
@@ -1576,7 +1576,7 @@ fn test_slurm_run_jobs(start_server: &ServerProcess) {
         );
     }
 
-    let results = torc::client::default_api::list_results(
+    let results = torc::client::apis::results_api::list_results(
         config,
         workflow_id,
         None, // job_id
@@ -1644,7 +1644,7 @@ fn create_test_slurm_scheduler(
         walltime: "01:00:00".to_string(),
         extra: None,
     };
-    default_api::create_slurm_scheduler(config, scheduler)
+    apis::slurm_schedulers_api::create_slurm_scheduler(config, scheduler)
         .expect("Failed to create Slurm scheduler")
 }
 
@@ -1661,7 +1661,7 @@ fn create_test_jobs(
             format!("test_job_{}", i),
             format!("echo 'Job {}'", i),
         );
-        let created_job = default_api::create_job(config, job)
+        let created_job = apis::jobs_api::create_job(config, job)
             .unwrap_or_else(|_| panic!("Failed to create job {}", i));
         jobs.push(created_job);
     }
@@ -1741,7 +1741,7 @@ fn test_cancel_workflow_with_slurm_scheduler(start_server: &ServerProcess) {
     }
 
     // Verify scheduled compute node was created
-    let scheduled_nodes = default_api::list_scheduled_compute_nodes(
+    let scheduled_nodes = apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
         config,
         workflow_id,
         Some(0),
@@ -1769,7 +1769,7 @@ fn test_cancel_workflow_with_slurm_scheduler(start_server: &ServerProcess) {
             updated_job.status = Some(models::JobStatus::Completed);
 
             let job_id = job.id.unwrap();
-            default_api::update_job(config, job_id, updated_job)
+            apis::jobs_api::update_job(config, job_id, updated_job)
                 .unwrap_or_else(|_| panic!("Failed to update job {}", i));
         }
     }
@@ -1809,12 +1809,12 @@ fn test_cancel_workflow_with_slurm_scheduler(start_server: &ServerProcess) {
     }
 
     // Verify workflow was canceled
-    let workflow_status = default_api::get_workflow_status(config, workflow_id)
+    let workflow_status = apis::workflows_api::get_workflow_status(config, workflow_id)
         .expect("Failed to get workflow status");
     assert!(workflow_status.is_canceled, "Workflow should be canceled");
 
     // Get the scheduled compute node
-    let scheduled_nodes = default_api::list_scheduled_compute_nodes(
+    let scheduled_nodes = apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
         config,
         workflow_id,
         Some(0),
@@ -1839,11 +1839,11 @@ fn test_cancel_workflow_with_slurm_scheduler(start_server: &ServerProcess) {
     // Simulate the job runner updating the node status to 'complete' after detecting cancellation
     let mut updated_node = node.clone();
     updated_node.status = "complete".to_string();
-    default_api::update_scheduled_compute_node(config, node_id, updated_node)
+    apis::scheduled_compute_nodes_api::update_scheduled_compute_node(config, node_id, updated_node)
         .expect("Failed to update scheduled compute node to complete");
 
     // Verify the node status is now 'complete'
-    let final_node = default_api::get_scheduled_compute_node(config, node_id)
+    let final_node = apis::scheduled_compute_nodes_api::get_scheduled_compute_node(config, node_id)
         .expect("Failed to get scheduled compute node");
     assert_eq!(
         final_node.status, "complete",
@@ -1851,7 +1851,7 @@ fn test_cancel_workflow_with_slurm_scheduler(start_server: &ServerProcess) {
     );
 
     // Verify that all jobs still exist
-    let all_jobs = default_api::list_jobs(
+    let all_jobs = apis::jobs_api::list_jobs(
         config,
         workflow_id,
         None,      // status

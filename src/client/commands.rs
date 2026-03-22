@@ -28,20 +28,20 @@ pub mod workflows;
 
 use std::io::{self, Write};
 
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 
 /// Helper function to prompt user to select a workflow when workflow_id is not provided
 pub fn select_workflow_interactively(
     config: &Configuration,
     user: &str,
 ) -> Result<i64, Box<dyn std::error::Error>> {
-    match default_api::list_workflows(
+    match apis::workflows_api::list_workflows(
         config,
         None,     // offset
+        Some(50), // limit
         None,     // sort_by
         None,     // reverse_sort
-        Some(50), // limit
         None,     // name filter
         Some(user),
         None,        // description filter

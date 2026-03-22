@@ -13,11 +13,13 @@ Current ownership is:
 - `api_responses.rs`
   - owned transport response enums used by the server contract and HTTP mapping layer
 - `http_transport.rs`
-  - live HTTP transport and route interception/dispatch
+  - live HTTP transport shell and route interception/dispatch
 - `http_server.rs`
   - `Server<C>` plus top-level transport delegation
 - `http_server/`
-  - domain transport helpers and non-transport support modules
+  - transport-facing server methods split by domain plus non-transport support modules
+- `http_transport/`
+  - HTTP handlers split by the same domain groupings as `http_server/`
 - `transport_types/`
   - request/auth/context support types for server transport code
 - `api/`

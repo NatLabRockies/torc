@@ -183,15 +183,24 @@ macro_rules! authorize_workflow_group {
 }
 
 mod access_checks;
-mod access_groups_transport;
-mod artifacts_transport;
+mod access_control_transport;
 mod bootstrap;
+mod compute_nodes_transport;
+mod files_transport;
 mod jobs_transport;
 mod lifecycle_support;
+mod local_schedulers_transport;
+mod remote_workers_transport;
+mod resource_requirements_transport;
+mod results_transport;
+mod ro_crate_transport;
 mod runtime_support;
-mod scheduling_transport;
+mod scheduled_compute_nodes_transport;
+mod slurm_schedulers_transport;
+mod slurm_stats_transport;
 mod system_transport;
 mod unblock_processing;
+mod user_data_transport;
 mod workflows_transport;
 
 /// Process optional offset and limit parameters and return concrete values.
@@ -324,8 +333,11 @@ impl<C> Server<C> {
 
     #[cfg(feature = "openapi-codegen")]
     pub fn openapi_app_state(&self) -> crate::openapi_codegen::OpenApiAppState {
-        self.shared
-            .openapi_app_state(full_version(), "0.11.0".to_string(), GIT_HASH.to_string())
+        self.shared.openapi_app_state(
+            full_version(),
+            API_VERSION.to_string(),
+            GIT_HASH.to_string(),
+        )
     }
 }
 

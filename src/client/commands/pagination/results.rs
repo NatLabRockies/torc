@@ -115,7 +115,7 @@ impl PaginationParams for ResultListParams {
 }
 
 impl Paginatable for ResultModel {
-    type ListError = apis::default_api::ListResultsError;
+    type ListError = apis::results_api::ListResultsError;
     type Params = ResultListParams;
 
     fn fetch_page(
@@ -123,7 +123,7 @@ impl Paginatable for ResultModel {
         params: &Self::Params,
         limit: i64,
     ) -> Result<PaginatedResponse<Self>, apis::Error<Self::ListError>> {
-        let response = apis::default_api::list_results(
+        let response = apis::results_api::list_results(
             config,
             params.workflow_id,
             params.job_id,
@@ -180,6 +180,6 @@ pub fn paginate_results(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: ResultListParams,
-) -> Result<Vec<ResultModel>, apis::Error<apis::default_api::ListResultsError>> {
+) -> Result<Vec<ResultModel>, apis::Error<apis::results_api::ListResultsError>> {
     iter_results(config, workflow_id, params).collect()
 }

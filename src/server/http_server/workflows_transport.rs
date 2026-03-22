@@ -497,4 +497,58 @@ where
 
         Ok(result)
     }
+    pub(super) async fn transport_claim_jobs_based_on_resources(
+        &self,
+        id: i64,
+        body: models::ComputeNodesResources,
+        limit: i64,
+        sort_method: Option<models::ClaimJobsSortMethod>,
+        strict_scheduler_match: Option<bool>,
+        context: &C,
+    ) -> Result<ClaimJobsBasedOnResources, ApiError> {
+        debug!(
+            "claim_jobs_based_on_resources({}, {:?}, {:?}, {:?}, strict_scheduler_match={:?}) - X-Span-ID: {:?}",
+            id,
+            body,
+            sort_method,
+            limit,
+            strict_scheduler_match,
+            Has::<XSpanIdString>::get(context).0.clone()
+        );
+
+        authorize_workflow!(self, id, context, ClaimJobsBasedOnResources);
+
+        let status = match self.get_workflow_status(id, context).await {
+            Ok(GetWorkflowStatusResponse::SuccessfulResponse(status)) => status,
+            Ok(_) => {
+                error!(
+                    "Unexpected response from get_workflow_status for workflow_id={}",
+                    id
+                );
+                return Err(ApiError(
+                    "Unexpected response from get_workflow_status".to_string(),
+                ));
+            }
+            Err(e) => return Err(e),
+        };
+
+        if status.is_canceled {
+            return Ok(ClaimJobsBasedOnResources::SuccessfulResponse(
+                models::ClaimJobsBasedOnResources {
+                    jobs: Some(vec![]),
+                    reason: Some("Workflow is canceled".to_string()),
+                },
+            ));
+        }
+
+        self.transport_prepare_ready_jobs(
+            id,
+            body,
+            sort_method,
+            limit,
+            strict_scheduler_match,
+            context,
+        )
+        .await
+    }
 }

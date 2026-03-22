@@ -2,7 +2,7 @@ mod common;
 
 use common::{ServerProcess, start_server};
 use rstest::rstest;
-use torc::client::default_api;
+use torc::client::apis;
 use torc::models;
 
 #[rstest]
@@ -35,7 +35,7 @@ fn test_create_workflow_with_project_and_metadata(start_server: &ServerProcess) 
 
     // Create the workflow
     let created =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
 
     // Verify fields are set
     assert_eq!(created.name, "test_metadata_project_workflow");
@@ -75,7 +75,7 @@ fn test_create_workflow_without_fields_then_update(start_server: &ServerProcess)
     };
 
     let created =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created.id.unwrap();
 
     // Verify fields are None initially
@@ -87,7 +87,7 @@ fn test_create_workflow_without_fields_then_update(start_server: &ServerProcess)
     update.project = Some("updated-project".to_string());
     update.metadata = Some(r#"{"updated":true}"#.to_string());
 
-    let updated = default_api::update_workflow(config, workflow_id, update)
+    let updated = apis::workflows_api::update_workflow(config, workflow_id, update)
         .expect("Failed to update workflow");
 
     // Verify fields are updated
@@ -124,7 +124,7 @@ fn test_create_workflow_with_fields_then_change(start_server: &ServerProcess) {
     };
 
     let created =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created.id.unwrap();
 
     // Verify initial values
@@ -136,7 +136,7 @@ fn test_create_workflow_with_fields_then_change(start_server: &ServerProcess) {
     update.project = Some("changed-project".to_string());
     update.metadata = Some(r#"{"version":"2.0","updated":true}"#.to_string());
 
-    let updated = default_api::update_workflow(config, workflow_id, update)
+    let updated = apis::workflows_api::update_workflow(config, workflow_id, update)
         .expect("Failed to update workflow");
 
     // Verify fields are changed
@@ -176,7 +176,7 @@ fn test_partial_update_preserves_fields(start_server: &ServerProcess) {
     };
 
     let created =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created.id.unwrap();
 
     // Update only project, leaving metadata as None (should preserve existing)
@@ -184,7 +184,7 @@ fn test_partial_update_preserves_fields(start_server: &ServerProcess) {
     update.project = Some("new-project".to_string());
     update.metadata = None; // Don't update metadata
 
-    let updated = default_api::update_workflow(config, workflow_id, update)
+    let updated = apis::workflows_api::update_workflow(config, workflow_id, update)
         .expect("Failed to update workflow");
 
     // Verify project changed but metadata preserved

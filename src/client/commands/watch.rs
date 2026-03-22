@@ -8,8 +8,8 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::utils;
 
 // Re-export shared recovery types and functions from the recover module
@@ -142,7 +142,7 @@ fn count_ready_retry_jobs(config: &Configuration, workflow_id: i64) -> Result<(i
 fn has_active_workers(config: &Configuration, workflow_id: i64) -> bool {
     // Check for active compute nodes (is_active=true)
     if let Ok(response) = send_with_retries(config, || {
-        default_api::list_compute_nodes(
+        apis::compute_nodes_api::list_compute_nodes(
             config,
             workflow_id,
             None,       // offset
@@ -168,7 +168,7 @@ fn has_active_workers(config: &Configuration, workflow_id: i64) -> bool {
 fn has_any_scheduled_compute_nodes(config: &Configuration, workflow_id: i64) -> bool {
     // Check for pending allocations
     if let Ok(response) = send_with_retries(config, || {
-        default_api::list_scheduled_compute_nodes(
+        apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
             config,
             workflow_id,
             None,            // offset
@@ -186,7 +186,7 @@ fn has_any_scheduled_compute_nodes(config: &Configuration, workflow_id: i64) -> 
 
     // Check for active allocations
     if let Ok(response) = send_with_retries(config, || {
-        default_api::list_scheduled_compute_nodes(
+        apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
             config,
             workflow_id,
             None,           // offset
@@ -217,7 +217,7 @@ fn has_valid_slurm_allocation(config: &Configuration, workflow_id: i64) -> bool 
 
     // First check for active allocations
     let active_nodes = send_with_retries(config, || {
-        default_api::list_scheduled_compute_nodes(
+        apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
             config,
             workflow_id,
             None,           // offset
@@ -253,7 +253,7 @@ fn has_valid_slurm_allocation(config: &Configuration, workflow_id: i64) -> bool 
 
     // Check for pending allocations
     let pending_nodes = send_with_retries(config, || {
-        default_api::list_scheduled_compute_nodes(
+        apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
             config,
             workflow_id,
             None,            // offset
@@ -327,7 +327,7 @@ fn poll_until_complete(
         // Check if workflow is complete
         if !workflow_complete {
             match send_with_retries(config, || {
-                default_api::is_workflow_complete(config, workflow_id)
+                apis::workflows_api::is_workflow_complete(config, workflow_id)
             }) {
                 Ok(response) => {
                     if response.is_complete {

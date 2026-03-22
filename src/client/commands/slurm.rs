@@ -42,8 +42,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::LazyLock;
 
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::commands::get_env_user_name;
 use crate::client::commands::hpc::create_registry_with_config_public;
 use crate::client::commands::pagination::{
@@ -1058,7 +1058,7 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
                 extra: extra.clone(),
             };
 
-            match default_api::create_slurm_scheduler(config, scheduler) {
+            match apis::slurm_schedulers_api::create_slurm_scheduler(config, scheduler) {
                 Ok(created) => {
                     if print_if_json(format, &created, "Slurm scheduler") {
                         // JSON was printed
@@ -1090,13 +1090,14 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
             walltime,
             extra,
         } => {
-            let mut scheduler = match default_api::get_slurm_scheduler(config, *scheduler_id) {
-                Ok(s) => s,
-                Err(e) => {
-                    print_error("getting Slurm scheduler", &e);
-                    std::process::exit(1);
-                }
-            };
+            let mut scheduler =
+                match apis::slurm_schedulers_api::get_slurm_scheduler(config, *scheduler_id) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        print_error("getting Slurm scheduler", &e);
+                        std::process::exit(1);
+                    }
+                };
 
             // Update fields if provided
             let mut changed = false;
@@ -1146,7 +1147,11 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
                 return;
             }
 
-            match default_api::update_slurm_scheduler(config, *scheduler_id, scheduler) {
+            match apis::slurm_schedulers_api::update_slurm_scheduler(
+                config,
+                *scheduler_id,
+                scheduler,
+            ) {
                 Ok(updated) => {
                     if print_if_json(format, &updated, "Slurm scheduler") {
                         // JSON was printed
@@ -1211,44 +1216,46 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
                 }
             }
         }
-        SlurmCommands::Get { id } => match default_api::get_slurm_scheduler(config, *id) {
-            Ok(scheduler) => {
-                if print_if_json(format, &scheduler, "Slurm scheduler") {
-                    // JSON was printed
-                } else {
-                    eprintln!("Slurm Config ID {}:", id);
-                    eprintln!("  Name: {}", scheduler.name.unwrap_or_default());
-                    eprintln!("  Workflow ID: {}", scheduler.workflow_id);
-                    eprintln!("  Account: {}", scheduler.account);
-                    eprintln!("  Nodes: {}", scheduler.nodes);
-                    eprintln!("  Walltime: {}", scheduler.walltime);
-                    eprintln!("  Partition: {}", scheduler.partition.unwrap_or_default());
-                    eprintln!("  QOS: {}", scheduler.qos.unwrap_or_default());
-                    eprintln!(
-                        "  GRES: {}",
-                        scheduler.gres.unwrap_or_else(|| "None".to_string())
-                    );
-                    eprintln!(
-                        "  Memory: {}",
-                        scheduler.mem.unwrap_or_else(|| "None".to_string())
-                    );
-                    eprintln!(
-                        "  Tmp: {}",
-                        scheduler.tmp.unwrap_or_else(|| "None".to_string())
-                    );
-                    eprintln!(
-                        "  Extra: {}",
-                        scheduler.extra.unwrap_or_else(|| "None".to_string())
-                    );
+        SlurmCommands::Get { id } => {
+            match apis::slurm_schedulers_api::get_slurm_scheduler(config, *id) {
+                Ok(scheduler) => {
+                    if print_if_json(format, &scheduler, "Slurm scheduler") {
+                        // JSON was printed
+                    } else {
+                        eprintln!("Slurm Config ID {}:", id);
+                        eprintln!("  Name: {}", scheduler.name.unwrap_or_default());
+                        eprintln!("  Workflow ID: {}", scheduler.workflow_id);
+                        eprintln!("  Account: {}", scheduler.account);
+                        eprintln!("  Nodes: {}", scheduler.nodes);
+                        eprintln!("  Walltime: {}", scheduler.walltime);
+                        eprintln!("  Partition: {}", scheduler.partition.unwrap_or_default());
+                        eprintln!("  QOS: {}", scheduler.qos.unwrap_or_default());
+                        eprintln!(
+                            "  GRES: {}",
+                            scheduler.gres.unwrap_or_else(|| "None".to_string())
+                        );
+                        eprintln!(
+                            "  Memory: {}",
+                            scheduler.mem.unwrap_or_else(|| "None".to_string())
+                        );
+                        eprintln!(
+                            "  Tmp: {}",
+                            scheduler.tmp.unwrap_or_else(|| "None".to_string())
+                        );
+                        eprintln!(
+                            "  Extra: {}",
+                            scheduler.extra.unwrap_or_else(|| "None".to_string())
+                        );
+                    }
+                }
+                Err(e) => {
+                    print_error("getting Slurm scheduler", &e);
+                    std::process::exit(1);
                 }
             }
-            Err(e) => {
-                print_error("getting Slurm scheduler", &e);
-                std::process::exit(1);
-            }
-        },
+        }
         SlurmCommands::Delete { id } => {
-            match default_api::delete_slurm_scheduler(config, *id, None) {
+            match apis::slurm_schedulers_api::delete_slurm_scheduler(config, *id, None) {
                 Ok(deleted_scheduler) => {
                     if print_if_json(format, &deleted_scheduler, "Slurm scheduler") {
                         // JSON was printed
@@ -1284,7 +1291,7 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
             });
 
             // Get the workflow object
-            let workflow = match default_api::get_workflow(config, wf_id) {
+            let workflow = match apis::workflows_api::get_workflow(config, wf_id) {
                 Ok(w) => w,
                 Err(e) => {
                     print_error("getting workflow", &e);
@@ -1293,7 +1300,7 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
             };
 
             // Check if all jobs are uninitialized and initialize the workflow if needed
-            match default_api::is_workflow_uninitialized(config, wf_id) {
+            match apis::workflows_api::is_workflow_uninitialized(config, wf_id) {
                 Ok(response) => {
                     if let Some(is_uninitialized) =
                         response.get("is_uninitialized").and_then(|v| v.as_bool())
@@ -1564,7 +1571,7 @@ pub fn schedule_slurm_nodes(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let scheduler = match utils::send_with_retries(
         config,
-        || default_api::get_slurm_scheduler(config, scheduler_config_id),
+        || apis::slurm_schedulers_api::get_slurm_scheduler(config, scheduler_config_id),
         WAIT_FOR_HEALTHY_DATABASE_MINUTES,
     ) {
         Ok(s) => s,
@@ -1576,7 +1583,7 @@ pub fn schedule_slurm_nodes(
     // Fetch workflow to get slurm_defaults
     let workflow = match utils::send_with_retries(
         config,
-        || default_api::get_workflow(config, workflow_id),
+        || apis::workflows_api::get_workflow(config, workflow_id),
         WAIT_FOR_HEALTHY_DATABASE_MINUTES,
     ) {
         Ok(w) => w,
@@ -1723,7 +1730,7 @@ pub fn schedule_slurm_nodes(
                 let created_scn = match utils::send_with_retries(
                     config,
                     || {
-                        default_api::create_scheduled_compute_node(
+                        apis::scheduled_compute_nodes_api::create_scheduled_compute_node(
                             config,
                             scheduled_compute_node.clone(),
                         )
@@ -1849,7 +1856,7 @@ pub fn create_compute_node(
 
     match utils::send_with_retries(
         config,
-        || default_api::create_compute_node(config, compute_node.clone()),
+        || apis::compute_nodes_api::create_compute_node(config, compute_node.clone()),
         WAIT_FOR_HEALTHY_DATABASE_MINUTES,
     ) {
         Ok(node) => node,
@@ -4446,7 +4453,7 @@ fn handle_regenerate(
 
         for &job_id in job_ids {
             if !existing_ids.contains(&job_id) {
-                match default_api::get_job(config, job_id) {
+                match apis::jobs_api::get_job(config, job_id) {
                     Ok(job) => {
                         pending_jobs.push(job);
                     }
@@ -4505,7 +4512,7 @@ fn handle_regenerate(
     // This is critical for recovery scenarios where original actions would otherwise fire again
     match utils::send_with_retries(
         config,
-        || default_api::get_workflow_actions(config, workflow_id),
+        || apis::final_surfaces_api::get_workflow_actions(config, workflow_id),
         WAIT_FOR_HEALTHY_DATABASE_MINUTES,
     ) {
         Ok(actions) => {
@@ -4519,7 +4526,7 @@ fn handle_regenerate(
                     match utils::send_with_retries(
                         config,
                         || {
-                            default_api::claim_action(
+                            apis::final_surfaces_api::claim_action(
                                 config,
                                 workflow_id,
                                 action_id,
@@ -4791,7 +4798,7 @@ fn handle_regenerate(
 
         let created_scheduler = match utils::send_with_retries(
             config,
-            || default_api::create_slurm_scheduler(config, scheduler.clone()),
+            || apis::slurm_schedulers_api::create_slurm_scheduler(config, scheduler.clone()),
             WAIT_FOR_HEALTHY_DATABASE_MINUTES,
         ) {
             Ok(s) => s,
@@ -4830,7 +4837,7 @@ fn handle_regenerate(
                 updated_job.status = None;
                 if let Err(e) = utils::send_with_retries(
                     config,
-                    || default_api::update_job(config, job_id, updated_job.clone()),
+                    || apis::jobs_api::update_job(config, job_id, updated_job.clone()),
                     WAIT_FOR_HEALTHY_DATABASE_MINUTES,
                 ) {
                     warnings.push(format!(
@@ -4901,7 +4908,13 @@ fn handle_regenerate(
 
         match utils::send_with_retries(
             config,
-            || default_api::create_workflow_action(config, workflow_id, action_body.clone()),
+            || {
+                apis::final_surfaces_api::create_workflow_action(
+                    config,
+                    workflow_id,
+                    action_body.clone(),
+                )
+            },
             WAIT_FOR_HEALTHY_DATABASE_MINUTES,
         ) {
             Ok(created_action) => {
@@ -5086,7 +5099,7 @@ fn handle_slurm_stats(
     let limit = crate::MAX_RECORD_TRANSFER_COUNT;
     let mut offset = 0i64;
     loop {
-        match default_api::list_slurm_stats(
+        match apis::admin_resources_api::list_slurm_stats(
             config,
             workflow_id,
             job_id,

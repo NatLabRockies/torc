@@ -1,8 +1,8 @@
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::commands::get_env_user_name;
 use crate::client::commands::output::{print_if_json, print_wrapped_if_json};
 use crate::client::commands::pagination::{RoCrateEntityListParams, paginate_ro_crate_entities};
@@ -153,7 +153,7 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
             );
             entity.file_id = *file_id;
 
-            match default_api::create_ro_crate_entity(config, entity) {
+            match apis::final_surfaces_api::create_ro_crate_entity(config, entity) {
                 Ok(created) => {
                     if print_if_json(format, &created, "RO-Crate entity") {
                         // JSON printed
@@ -231,7 +231,7 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
             }
         }
         RoCrateCommands::Get { id } => {
-            match default_api::get_ro_crate_entity(config, *id) {
+            match apis::final_surfaces_api::get_ro_crate_entity(config, *id) {
                 Ok(entity) => {
                     if print_if_json(format, &entity, "RO-Crate entity") {
                         // JSON printed
@@ -274,7 +274,7 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
             file_id,
         } => {
             // First fetch the existing entity
-            let existing = match default_api::get_ro_crate_entity(config, *id) {
+            let existing = match apis::final_surfaces_api::get_ro_crate_entity(config, *id) {
                 Ok(entity) => entity,
                 Err(e) => {
                     print_error("getting RO-Crate entity for update", &e);
@@ -298,7 +298,7 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
                 metadata: updated_metadata,
             };
 
-            match default_api::update_ro_crate_entity(config, *id, updated) {
+            match apis::final_surfaces_api::update_ro_crate_entity(config, *id, updated) {
                 Ok(result) => {
                     if print_if_json(format, &result, "RO-Crate entity") {
                         // JSON printed
@@ -312,15 +312,17 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
                 }
             }
         }
-        RoCrateCommands::Delete { id } => match default_api::delete_ro_crate_entity(config, *id) {
-            Ok(_) => {
-                println!("Deleted RO-Crate entity ID: {}", id);
+        RoCrateCommands::Delete { id } => {
+            match apis::final_surfaces_api::delete_ro_crate_entity(config, *id) {
+                Ok(_) => {
+                    println!("Deleted RO-Crate entity ID: {}", id);
+                }
+                Err(e) => {
+                    print_error("deleting RO-Crate entity", &e);
+                    std::process::exit(1);
+                }
             }
-            Err(e) => {
-                print_error("deleting RO-Crate entity", &e);
-                std::process::exit(1);
-            }
-        },
+        }
         RoCrateCommands::Export {
             workflow_id,
             output,
@@ -380,7 +382,7 @@ fn handle_export(
     format: &str,
 ) {
     // Fetch the workflow name for the root dataset
-    let workflow_name = match default_api::get_workflow(config, workflow_id) {
+    let workflow_name = match apis::workflows_api::get_workflow(config, workflow_id) {
         Ok(w) => w.name,
         Err(e) => {
             print_error("getting workflow", &e);
@@ -740,7 +742,7 @@ fn handle_add_dataset(
         metadata.to_string(),
     );
 
-    match default_api::create_ro_crate_entity(config, entity) {
+    match apis::final_surfaces_api::create_ro_crate_entity(config, entity) {
         Ok(created) => {
             if print_if_json(format, &created, "RO-Crate Dataset entity") {
                 // JSON printed

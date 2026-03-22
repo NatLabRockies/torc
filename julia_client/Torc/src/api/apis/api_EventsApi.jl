@@ -9,7 +9,7 @@ end
 The default API base path for APIs in `EventsApi`.
 This can be used to construct the `OpenAPI.Clients.Client` instance.
 """
-basepath(::Type{ EventsApi }) = "http://localhost"
+basepath(::Type{ EventsApi }) = "http://localhost/torc-service/v1"
 
 const _returntypes_create_event_EventsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => EventModel,

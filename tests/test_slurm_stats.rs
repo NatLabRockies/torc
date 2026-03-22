@@ -2,7 +2,7 @@ mod common;
 
 use common::{ServerProcess, create_test_job, create_test_workflow, start_server};
 use rstest::rstest;
-use torc::client::default_api;
+use torc::client::apis;
 use torc::models;
 
 fn create_test_slurm_stats(
@@ -18,7 +18,8 @@ fn create_test_slurm_stats(
     stats.max_disk_write_bytes = Some(52_428_800); // 50 MB
     stats.ave_cpu_seconds = Some(42.5);
     stats.node_list = Some("node001".to_string());
-    default_api::create_slurm_stats(config, stats).expect("Failed to create slurm_stats")
+    apis::admin_resources_api::create_slurm_stats(config, stats)
+        .expect("Failed to create slurm_stats")
 }
 
 #[rstest]
@@ -58,8 +59,16 @@ fn test_list_slurm_stats_by_workflow(start_server: &ServerProcess) {
     create_test_slurm_stats(config, workflow_id, job1.id.unwrap());
     create_test_slurm_stats(config, workflow_id, job2.id.unwrap());
 
-    let response = default_api::list_slurm_stats(config, workflow_id, None, None, None, None, None)
-        .expect("Failed to list slurm_stats");
+    let response = apis::admin_resources_api::list_slurm_stats(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list slurm_stats");
 
     assert_eq!(response.total_count, 2);
     let items = response.items;
@@ -80,9 +89,16 @@ fn test_list_slurm_stats_filter_by_job(start_server: &ServerProcess) {
     create_test_slurm_stats(config, workflow_id, job1_id);
     create_test_slurm_stats(config, workflow_id, job2.id.unwrap());
 
-    let response =
-        default_api::list_slurm_stats(config, workflow_id, Some(job1_id), None, None, None, None)
-            .expect("Failed to list slurm_stats filtered by job");
+    let response = apis::admin_resources_api::list_slurm_stats(
+        config,
+        workflow_id,
+        Some(job1_id),
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list slurm_stats filtered by job");
 
     assert_eq!(response.total_count, 1);
     let items = response.items;
@@ -97,8 +113,16 @@ fn test_list_slurm_stats_empty_workflow(start_server: &ServerProcess) {
     let workflow = create_test_workflow(config, "test_list_slurm_stats_empty");
     let workflow_id = workflow.id.unwrap();
 
-    let response = default_api::list_slurm_stats(config, workflow_id, None, None, None, None, None)
-        .expect("Failed to list slurm_stats for empty workflow");
+    let response = apis::admin_resources_api::list_slurm_stats(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list slurm_stats for empty workflow");
 
     assert_eq!(response.total_count, 0);
     assert!(response.items.is_empty());
@@ -118,16 +142,30 @@ fn test_list_slurm_stats_pagination(start_server: &ServerProcess) {
     }
 
     // Fetch first page of 2
-    let page1 =
-        default_api::list_slurm_stats(config, workflow_id, None, None, None, Some(0), Some(2))
-            .expect("Failed to list page 1");
+    let page1 = apis::admin_resources_api::list_slurm_stats(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        Some(0),
+        Some(2),
+    )
+    .expect("Failed to list page 1");
     assert_eq!(page1.total_count, 5);
     assert_eq!(page1.items.len(), 2);
 
     // Fetch second page
-    let page2 =
-        default_api::list_slurm_stats(config, workflow_id, None, None, None, Some(2), Some(2))
-            .expect("Failed to list page 2");
+    let page2 = apis::admin_resources_api::list_slurm_stats(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        Some(2),
+        Some(2),
+    )
+    .expect("Failed to list page 2");
     assert_eq!(page2.total_count, 5);
     assert_eq!(page2.items.len(), 2);
 }
@@ -142,8 +180,8 @@ fn test_slurm_stats_null_fields(start_server: &ServerProcess) {
 
     // Create stats with all optional fields null (e.g. sacct data unavailable)
     let minimal = models::SlurmStatsModel::new(workflow_id, job.id.unwrap(), 1, 1);
-    let created =
-        default_api::create_slurm_stats(config, minimal).expect("Failed to create minimal stats");
+    let created = apis::admin_resources_api::create_slurm_stats(config, minimal)
+        .expect("Failed to create minimal stats");
 
     assert!(created.id.is_some());
     assert!(created.slurm_job_id.is_none());

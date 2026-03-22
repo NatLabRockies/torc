@@ -1,5 +1,5 @@
+use crate::client::apis;
 use crate::client::apis::configuration::{BasicAuth, Configuration, TlsConfig};
-use crate::client::apis::default_api;
 use crate::client::config::TorcConfig;
 use crate::client::workflow_spec::WorkflowSpec;
 use crate::models::{
@@ -71,7 +71,7 @@ impl TorcClient {
     }
 
     pub fn list_workflows(&self) -> Result<Vec<WorkflowModel>> {
-        let response = default_api::list_workflows(
+        let response = apis::workflows_api::list_workflows(
             &self.config,
             None, // offset
             None, // sort_by
@@ -88,7 +88,7 @@ impl TorcClient {
     }
 
     pub fn list_workflows_for_user(&self, user: &str) -> Result<Vec<WorkflowModel>> {
-        let response = default_api::list_workflows(
+        let response = apis::workflows_api::list_workflows(
             &self.config,
             None,       // offset
             None,       // sort_by
@@ -105,7 +105,7 @@ impl TorcClient {
     }
 
     pub fn list_jobs(&self, workflow_id: i64) -> Result<Vec<JobModel>> {
-        let response = default_api::list_jobs(
+        let response = apis::jobs_api::list_jobs(
             &self.config,
             workflow_id,
             None, // status
@@ -124,7 +124,7 @@ impl TorcClient {
     }
 
     pub fn list_files(&self, workflow_id: i64) -> Result<Vec<FileModel>> {
-        let response = default_api::list_files(
+        let response = apis::files_api::list_files(
             &self.config,
             workflow_id,
             None, // produced_by_job_id
@@ -142,7 +142,7 @@ impl TorcClient {
     }
 
     pub fn list_results(&self, workflow_id: i64) -> Result<Vec<ResultModel>> {
-        let response = default_api::list_results(
+        let response = apis::results_api::list_results(
             &self.config,
             workflow_id,
             None, // job_id
@@ -162,7 +162,7 @@ impl TorcClient {
     }
 
     pub fn list_job_dependencies(&self, workflow_id: i64) -> Result<Vec<JobDependencyModel>> {
-        let response = default_api::list_job_dependencies(
+        let response = apis::workflows_api::list_job_dependencies(
             &self.config,
             workflow_id,
             None, // offset
@@ -174,7 +174,7 @@ impl TorcClient {
     }
 
     pub fn list_slurm_stats(&self, workflow_id: i64) -> Result<Vec<SlurmStatsModel>> {
-        let response = default_api::list_slurm_stats(
+        let response = apis::admin_resources_api::list_slurm_stats(
             &self.config,
             workflow_id,
             None, // job_id
@@ -192,7 +192,7 @@ impl TorcClient {
         &self,
         workflow_id: i64,
     ) -> Result<Vec<ScheduledComputeNodesModel>> {
-        let response = default_api::list_scheduled_compute_nodes(
+        let response = apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
             &self.config,
             workflow_id,
             None, // offset
@@ -219,21 +219,21 @@ impl TorcClient {
             "action_config": {}
         });
 
-        default_api::create_workflow_action(&self.config, workflow_id, action)
+        apis::final_surfaces_api::create_workflow_action(&self.config, workflow_id, action)
             .context("Failed to create submit action")?;
 
         Ok(())
     }
 
     pub fn delete_workflow(&self, workflow_id: i64) -> Result<()> {
-        default_api::delete_workflow(&self.config, workflow_id, None)
+        apis::workflows_api::delete_workflow(&self.config, workflow_id, None)
             .context("Failed to delete workflow")?;
 
         Ok(())
     }
 
     pub fn cancel_workflow(&self, workflow_id: i64) -> Result<()> {
-        default_api::cancel_workflow(&self.config, workflow_id, None)
+        apis::workflows_api::cancel_workflow(&self.config, workflow_id, None)
             .context("Failed to cancel workflow")?;
 
         Ok(())
@@ -243,7 +243,7 @@ impl TorcClient {
 
     /// Get a job by ID to update it
     fn get_job(&self, job_id: i64) -> Result<crate::models::JobModel> {
-        default_api::get_job(&self.config, job_id).context("Failed to get job")
+        apis::jobs_api::get_job(&self.config, job_id).context("Failed to get job")
     }
 
     pub fn cancel_job(&self, job_id: i64) -> Result<()> {
@@ -251,7 +251,7 @@ impl TorcClient {
         let mut job = self.get_job(job_id)?;
         job.status = Some(JobStatus::Canceled);
 
-        default_api::update_job(&self.config, job_id, job).context("Failed to cancel job")?;
+        apis::jobs_api::update_job(&self.config, job_id, job).context("Failed to cancel job")?;
 
         Ok(())
     }
@@ -260,7 +260,7 @@ impl TorcClient {
         let mut job = self.get_job(job_id)?;
         job.status = Some(JobStatus::Terminated);
 
-        default_api::update_job(&self.config, job_id, job).context("Failed to terminate job")?;
+        apis::jobs_api::update_job(&self.config, job_id, job).context("Failed to terminate job")?;
 
         Ok(())
     }
@@ -269,7 +269,7 @@ impl TorcClient {
         let mut job = self.get_job(job_id)?;
         job.status = Some(JobStatus::Ready);
 
-        default_api::update_job(&self.config, job_id, job).context("Failed to retry job")?;
+        apis::jobs_api::update_job(&self.config, job_id, job).context("Failed to retry job")?;
 
         Ok(())
     }

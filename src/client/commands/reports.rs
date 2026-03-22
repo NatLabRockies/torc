@@ -1,5 +1,5 @@
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::commands::output::print_json;
 use crate::client::commands::{
     get_env_user_name, pagination, print_error, select_workflow_interactively,
@@ -674,7 +674,7 @@ fn generate_results_report(
     };
 
     // Fetch workflow
-    let workflow = match default_api::get_workflow(config, wf_id) {
+    let workflow = match apis::workflows_api::get_workflow(config, wf_id) {
         Ok(wf) => wf,
         Err(e) => {
             print_error("fetching workflow", &e);
@@ -758,7 +758,7 @@ fn generate_results_report(
 
         // Get compute node and determine log file paths
         let compute_node_id = result.compute_node_id;
-        match default_api::get_compute_node(config, compute_node_id) {
+        match apis::compute_nodes_api::get_compute_node(config, compute_node_id) {
             Ok(compute_node) => {
                 compute_node_type = Some(compute_node.compute_node_type.clone());
 
@@ -871,7 +871,7 @@ fn generate_summary(config: &Configuration, workflow_id: Option<i64>, format: &s
     };
 
     // Fetch workflow info
-    let workflow = match default_api::get_workflow(config, workflow_id) {
+    let workflow = match apis::workflows_api::get_workflow(config, workflow_id) {
         Ok(wf) => wf,
         Err(e) => {
             print_error("fetching workflow", &e);
@@ -880,7 +880,7 @@ fn generate_summary(config: &Configuration, workflow_id: Option<i64>, format: &s
     };
 
     // Check if workflow is complete
-    let completion_status = match default_api::is_workflow_complete(config, workflow_id) {
+    let completion_status = match apis::workflows_api::is_workflow_complete(config, workflow_id) {
         Ok(status) => Some(status),
         Err(e) => {
             eprintln!("Warning: could not check workflow completion status: {}", e);
@@ -889,7 +889,7 @@ fn generate_summary(config: &Configuration, workflow_id: Option<i64>, format: &s
     };
 
     // Get active compute nodes count
-    let active_compute_nodes = match default_api::list_compute_nodes(
+    let active_compute_nodes = match apis::compute_nodes_api::list_compute_nodes(
         config,
         workflow_id,
         None,       // offset
@@ -905,36 +905,38 @@ fn generate_summary(config: &Configuration, workflow_id: Option<i64>, format: &s
     };
 
     // Get pending scheduled compute nodes count
-    let pending_scheduled_nodes = match default_api::list_scheduled_compute_nodes(
-        config,
-        workflow_id,
-        None,            // offset
-        Some(1),         // limit - we only need the count
-        None,            // sort_by
-        None,            // reverse_sort
-        None,            // scheduler_id
-        None,            // scheduler_config_id
-        Some("pending"), // status
-    ) {
-        Ok(response) => response.total_count,
-        Err(_) => 0,
-    };
+    let pending_scheduled_nodes =
+        match apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
+            config,
+            workflow_id,
+            None,            // offset
+            Some(1),         // limit - we only need the count
+            None,            // sort_by
+            None,            // reverse_sort
+            None,            // scheduler_id
+            None,            // scheduler_config_id
+            Some("pending"), // status
+        ) {
+            Ok(response) => response.total_count,
+            Err(_) => 0,
+        };
 
     // Get active scheduled compute nodes count
-    let active_scheduled_nodes = match default_api::list_scheduled_compute_nodes(
-        config,
-        workflow_id,
-        None,           // offset
-        Some(1),        // limit - we only need the count
-        None,           // sort_by
-        None,           // reverse_sort
-        None,           // scheduler_id
-        None,           // scheduler_config_id
-        Some("active"), // status
-    ) {
-        Ok(response) => response.total_count,
-        Err(_) => 0,
-    };
+    let active_scheduled_nodes =
+        match apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
+            config,
+            workflow_id,
+            None,           // offset
+            Some(1),        // limit - we only need the count
+            None,           // sort_by
+            None,           // reverse_sort
+            None,           // scheduler_id
+            None,           // scheduler_config_id
+            Some("active"), // status
+        ) {
+            Ok(response) => response.total_count,
+            Err(_) => 0,
+        };
 
     // Fetch all jobs to get total count
     let jobs =

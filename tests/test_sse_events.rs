@@ -6,7 +6,7 @@ use common::{
 use reqwest::StatusCode;
 use reqwest::blocking::Client;
 use rstest::rstest;
-use torc::client::{Configuration, default_api};
+use torc::client::{Configuration, apis};
 use torc::models;
 
 /// Helper to create a config with basic auth
@@ -34,7 +34,7 @@ fn create_workflow_with_user(
     user: &str,
 ) -> models::WorkflowModel {
     let workflow = models::WorkflowModel::new(name.to_string(), user.to_string());
-    default_api::create_workflow(config, workflow).expect("Failed to create workflow")
+    apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow")
 }
 
 // ============================================================================
@@ -162,7 +162,8 @@ fn test_sse_stream_receives_event(start_server: &ServerProcess) {
         "local".to_string(),
         None,
     );
-    default_api::create_compute_node(config, compute_node).expect("Failed to create compute node");
+    apis::compute_nodes_api::create_compute_node(config, compute_node)
+        .expect("Failed to create compute node");
 
     // Wait for event
     match rx.recv_timeout(std::time::Duration::from_secs(5)) {
@@ -265,7 +266,8 @@ fn test_sse_stream_shared_workflow_access(
         description: Some("Test group for SSE".to_string()),
         created_at: None,
     };
-    let group = default_api::create_access_group(config, group).expect("Failed to create group");
+    let group = apis::access_control_api::create_access_group(config, group)
+        .expect("Failed to create group");
     let group_id = group.id.unwrap();
 
     // Add bob to the group
@@ -276,7 +278,7 @@ fn test_sse_stream_shared_workflow_access(
         role: "member".to_string(),
         created_at: None,
     };
-    default_api::add_user_to_group(config, group_id, membership)
+    apis::access_control_api::add_user_to_group(config, group_id, membership)
         .expect("Failed to add bob to group");
 
     // Create a workflow owned by alice
@@ -285,7 +287,7 @@ fn test_sse_stream_shared_workflow_access(
     let workflow_id = workflow.id.unwrap();
 
     // Share the workflow with the group
-    default_api::add_workflow_to_group(config, workflow_id, group_id)
+    apis::access_control_api::add_workflow_to_group(config, workflow_id, group_id)
         .expect("Failed to share workflow");
 
     // Bob (group member) should now be able to access SSE endpoint

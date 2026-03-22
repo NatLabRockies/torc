@@ -34,8 +34,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::async_cli_command::AsyncCliCommand;
 use crate::client::resource_correction::format_duration_iso8601;
 use crate::client::resource_monitor::{ResourceMonitor, ResourceMonitorConfig};
@@ -655,7 +655,7 @@ impl JobRunner {
 
         loop {
             match self.send_with_retries(|| {
-                default_api::is_workflow_complete(&self.config, self.workflow_id)
+                apis::workflows_api::is_workflow_complete(&self.config, self.workflow_id)
             }) {
                 Ok(response) => {
                     if response.is_canceled {
@@ -822,7 +822,7 @@ impl JobRunner {
 
         // Fetch the existing compute node first to preserve all fields
         let mut update_model =
-            match default_api::get_compute_node(&self.config, self.compute_node_id) {
+            match apis::compute_nodes_api::get_compute_node(&self.config, self.compute_node_id) {
                 Ok(node) => node,
                 Err(e) => {
                     error!(
@@ -837,9 +837,11 @@ impl JobRunner {
         update_model.is_active = Some(false);
         update_model.duration_seconds = Some(duration_seconds);
 
-        if let Err(e) =
-            default_api::update_compute_node(&self.config, self.compute_node_id, update_model)
-        {
+        if let Err(e) = apis::compute_nodes_api::update_compute_node(
+            &self.config,
+            self.compute_node_id,
+            update_model,
+        ) {
             error!(
                 "Failed to deactivate compute node {}: {}",
                 self.compute_node_id, e
@@ -1220,16 +1222,17 @@ impl JobRunner {
 
         // Fetch file models and check existence
         for file_id in output_file_ids {
-            let file_model =
-                match self.send_with_retries(|| default_api::get_file(&self.config, *file_id)) {
-                    Ok(file) => file,
-                    Err(e) => {
-                        return Err(format!(
-                            "Failed to fetch file model for file_id {}: {}",
-                            file_id, e
-                        ));
-                    }
-                };
+            let file_model = match self
+                .send_with_retries(|| apis::files_api::get_file(&self.config, *file_id))
+            {
+                Ok(file) => file,
+                Err(e) => {
+                    return Err(format!(
+                        "Failed to fetch file model for file_id {}: {}",
+                        file_id, e
+                    ));
+                }
+            };
 
             let file_path = Path::new(&file_model.path);
 
@@ -1282,7 +1285,7 @@ impl JobRunner {
 
         for (file_id, st_mtime) in files_to_update {
             let mut file_model =
-                match self.send_with_retries(|| default_api::get_file(&self.config, file_id)) {
+                match self.send_with_retries(|| apis::files_api::get_file(&self.config, file_id)) {
                     Ok(file) => file,
                     Err(e) => {
                         error!(
@@ -1295,7 +1298,7 @@ impl JobRunner {
 
             file_model.st_mtime = Some(st_mtime);
             match self.send_with_retries(|| {
-                default_api::update_file(&self.config, file_id, file_model.clone())
+                apis::files_api::update_file(&self.config, file_id, file_model.clone())
             }) {
                 Ok(_) => {
                     debug!("Updated st_mtime for file_id {} to {}", file_id, st_mtime);
@@ -1345,7 +1348,7 @@ impl JobRunner {
         );
 
         // Fetch the job model to get job name for CreateAction
-        let job = match self.send_with_retries(|| default_api::get_job(&self.config, job_id)) {
+        let job = match self.send_with_retries(|| apis::jobs_api::get_job(&self.config, job_id)) {
             Ok(job) => job,
             Err(e) => {
                 warn!(
@@ -1482,7 +1485,7 @@ impl JobRunner {
 
         let status_str = format!("{:?}", final_result.status).to_lowercase();
         match self.send_with_retries(|| {
-            default_api::complete_job(
+            apis::jobs_api::complete_job(
                 &self.config,
                 job_id,
                 final_result.status,
@@ -1499,7 +1502,7 @@ impl JobRunner {
                 // slurm_stats was taken at the top of handle_job_completion so we could backfill
                 // resource fields into the result before reporting to the server.
                 if let Some(stats) = slurm_stats {
-                    match default_api::create_slurm_stats(&self.config, stats) {
+                    match apis::admin_resources_api::create_slurm_stats(&self.config, stats) {
                         Ok(_) => {
                             info!(
                                 "Stored slurm_stats workflow_id={} job_id={}",
@@ -1617,9 +1620,9 @@ impl JobRunner {
             None => return RecoveryOutcome::NoHandler,
         };
 
-        let handler = match self
-            .send_with_retries(|| default_api::get_failure_handler(&self.config, fh_id))
-        {
+        let handler = match self.send_with_retries(|| {
+            apis::admin_resources_api::get_failure_handler(&self.config, fh_id)
+        }) {
             Ok(h) => h,
             Err(e) => {
                 warn!(
@@ -1676,7 +1679,7 @@ impl JobRunner {
         // This ensures we don't run recovery scripts for retries that won't happen.
         // Pass max_retries for server-side validation.
         match self.send_with_retries(|| {
-            default_api::retry_job(&self.config, job_id, self.run_id, rule.max_retries)
+            apis::jobs_api::retry_job(&self.config, job_id, self.run_id, rule.max_retries)
         }) {
             Ok(_) => {
                 info!(
@@ -1923,7 +1926,7 @@ impl JobRunner {
         let limit = per_node.num_cpus;
         let strict_scheduler_match = self.torc_config.client.slurm.strict_scheduler_match;
         match self.send_with_retries(|| {
-            default_api::claim_jobs_based_on_resources(
+            apis::workflows_api::claim_jobs_based_on_resources(
                 &self.config,
                 self.workflow_id,
                 &per_node,
@@ -1960,7 +1963,7 @@ impl JobRunner {
                     let mut async_job = AsyncCliCommand::new(job);
 
                     let job_rr = match self.send_with_retries(|| {
-                        default_api::get_resource_requirements(&self.config, rr_id)
+                        apis::admin_resources_api::get_resource_requirements(&self.config, rr_id)
                     }) {
                         Ok(rr) => rr,
                         Err(e) => {
@@ -1973,7 +1976,7 @@ impl JobRunner {
                     };
 
                     match self.send_with_retries(|| {
-                        default_api::start_job(
+                        apis::jobs_api::start_job(
                             &self.config,
                             job_id,
                             self.run_id,
@@ -2070,7 +2073,7 @@ impl JobRunner {
             .expect("max_parallel_jobs must be set")
             - self.running_jobs.len() as i64;
         match self.send_with_retries(|| {
-            default_api::claim_next_jobs(&self.config, self.workflow_id, Some(limit), None)
+            apis::workflows_api::claim_next_jobs(&self.config, self.workflow_id, Some(limit), None)
         }) {
             Ok(response) => {
                 let jobs = response.jobs.unwrap_or_default();
@@ -2098,7 +2101,7 @@ impl JobRunner {
                     let mut async_job = AsyncCliCommand::new(job);
 
                     let job_rr = match self.send_with_retries(|| {
-                        default_api::get_resource_requirements(&self.config, rr_id)
+                        apis::admin_resources_api::get_resource_requirements(&self.config, rr_id)
                     }) {
                         Ok(rr) => rr,
                         Err(e) => {
@@ -2112,7 +2115,7 @@ impl JobRunner {
 
                     // Mark job as started in the database before actually starting it
                     match self.send_with_retries(|| {
-                        default_api::start_job(
+                        apis::jobs_api::start_job(
                             &self.config,
                             job_id,
                             self.run_id,
@@ -2197,7 +2200,7 @@ impl JobRunner {
     /// GPU devices that were reserved for the job.
     fn revert_job_to_ready(&mut self, job_id: i64) {
         match self.send_with_retries(|| {
-            default_api::manage_status_change(
+            apis::jobs_api::manage_status_change(
                 &self.config,
                 job_id,
                 JobStatus::Ready,
@@ -2236,7 +2239,7 @@ impl JobRunner {
         let trigger_type_owned = trigger_type.to_string();
         let pending_actions = match self.send_with_retries(
             || -> Result<Vec<crate::models::WorkflowActionModel>, Box<dyn std::error::Error>> {
-                let actions = default_api::get_pending_actions(
+                let actions = apis::final_surfaces_api::get_pending_actions(
                     &self.config,
                     self.workflow_id,
                     Some(vec![trigger_type_owned.clone()]),
@@ -2337,7 +2340,7 @@ impl JobRunner {
         // Get pending on_jobs_ready and on_jobs_complete actions
         let pending_actions = match self.send_with_retries(
             || -> Result<Vec<crate::models::WorkflowActionModel>, Box<dyn std::error::Error>> {
-                let actions = default_api::get_pending_actions(
+                let actions = apis::final_surfaces_api::get_pending_actions(
                     &self.config,
                     self.workflow_id,
                     Some(vec![
@@ -2426,7 +2429,8 @@ impl JobRunner {
         // Get ALL actions for this workflow (not just pending ones)
         match self.send_with_retries(
             || -> Result<Vec<crate::models::WorkflowActionModel>, Box<dyn std::error::Error>> {
-                let actions = default_api::get_workflow_actions(&self.config, self.workflow_id)?;
+                let actions =
+                    apis::final_surfaces_api::get_workflow_actions(&self.config, self.workflow_id)?;
                 Ok(actions)
             },
         ) {

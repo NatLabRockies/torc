@@ -9,7 +9,7 @@ end
 The default API base path for APIs in `FinalSurfacesApi`.
 This can be used to construct the `OpenAPI.Clients.Client` instance.
 """
-basepath(::Type{ FinalSurfacesApi }) = "http://localhost"
+basepath(::Type{ FinalSurfacesApi }) = "http://localhost/torc-service/v1"
 
 const _returntypes_claim_action_FinalSurfacesApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ClaimActionResponse,

@@ -9,12 +9,57 @@ from rmon.timing.timer_stats import Timer
 
 from torc.common import check_function, timer_stats_collector
 from torc.exceptions import DatabaseOffline
-from torc.openapi_client import ApiClient, DefaultApi
+from torc.openapi_client import (
+    AccessControlApi,
+    AdminResourcesApi,
+    ApiClient,
+    ComputeNodesApi,
+    EventsApi,
+    FilesApi,
+    FinalSurfacesApi,
+    JobsApi,
+    LocalSchedulersApi,
+    ResultsApi,
+    ScheduledComputeNodesApi,
+    SlurmSchedulersApi,
+    SystemApi,
+    UserDataApi,
+    WorkflowsApi,
+)
 from torc.openapi_client.configuration import Configuration
 from torc.openapi_client.models.job_model import JobModel
 from torc.openapi_client.models.jobs_model import JobsModel
 from torc.openapi_client.models.user_data_model import UserDataModel
 from torc.openapi_client.rest import ApiException
+
+
+class DefaultApi:
+    """Backward-compatible aggregate API wrapper over the tag-grouped generated APIs."""
+
+    def __init__(self, api_client: ApiClient):
+        self.api_client = api_client
+        self._apis = (
+            AccessControlApi(api_client),
+            AdminResourcesApi(api_client),
+            ComputeNodesApi(api_client),
+            EventsApi(api_client),
+            FilesApi(api_client),
+            FinalSurfacesApi(api_client),
+            JobsApi(api_client),
+            LocalSchedulersApi(api_client),
+            ResultsApi(api_client),
+            ScheduledComputeNodesApi(api_client),
+            SlurmSchedulersApi(api_client),
+            SystemApi(api_client),
+            UserDataApi(api_client),
+            WorkflowsApi(api_client),
+        )
+
+    def __getattr__(self, name: str) -> Any:
+        for api in self._apis:
+            if hasattr(api, name):
+                return getattr(api, name)
+        raise AttributeError(name)
 
 
 def make_api(database_url: str) -> DefaultApi:

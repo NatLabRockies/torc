@@ -9,7 +9,7 @@ end
 The default API base path for APIs in `LocalSchedulersApi`.
 This can be used to construct the `OpenAPI.Clients.Client` instance.
 """
-basepath(::Type{ LocalSchedulersApi }) = "http://localhost"
+basepath(::Type{ LocalSchedulersApi }) = "http://localhost/torc-service/v1"
 
 const _returntypes_create_local_scheduler_LocalSchedulersApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => LocalSchedulerModel,

@@ -16,8 +16,8 @@ Commands:
   emit      Emit api/openapi.codegen.yaml from Rust only.
   check     Emit a fresh Rust spec and verify checked-in specs are in sync.
   promote   Replace api/openapi.yaml with the Rust-emitted spec.
-  clients   Regenerate external clients from a selected spec.
-  all       Emit, verify, optionally promote, and regenerate clients.
+  clients   Regenerate Rust, Python, and Julia clients from a selected spec.
+  all       Emit, verify, optionally promote, and regenerate all clients.
 
 Options:
   --use-rust-spec  Generate clients from api/openapi.codegen.yaml.

@@ -1,5 +1,5 @@
+use crate::client::apis;
 use crate::client::apis::configuration::{Configuration, TlsConfig};
-use crate::client::apis::default_api;
 use crate::client::commands::get_env_user_name;
 use crate::client::commands::select_workflow_interactively;
 use crate::client::job_runner::JobRunner;
@@ -153,7 +153,7 @@ pub fn run(args: &Args) {
             std::process::exit(1);
         })
     });
-    let workflow = match default_api::get_workflow(&config, workflow_id) {
+    let workflow = match apis::workflows_api::get_workflow(&config, workflow_id) {
         Ok(workflow) => workflow,
         Err(e) => {
             eprintln!("Error getting workflow: {}", e);
@@ -162,7 +162,7 @@ pub fn run(args: &Args) {
     };
 
     // Check if all jobs are uninitialized and initialize the workflow if needed
-    match default_api::is_workflow_uninitialized(&config, workflow_id) {
+    match apis::workflows_api::is_workflow_uninitialized(&config, workflow_id) {
         Ok(response) => {
             if let Some(is_uninitialized) =
                 response.get("is_uninitialized").and_then(|v| v.as_bool())
@@ -194,7 +194,7 @@ pub fn run(args: &Args) {
         }
     }
 
-    let run_id = match default_api::get_workflow_status(&config, workflow_id) {
+    let run_id = match apis::workflows_api::get_workflow_status(&config, workflow_id) {
         Ok(status) => status.run_id,
         Err(e) => {
             eprintln!("Error getting workflow status: {}", e);
@@ -300,13 +300,14 @@ pub fn run(args: &Args) {
     );
     compute_node_model.is_active = Some(true);
 
-    let compute_node = match default_api::create_compute_node(&config, compute_node_model) {
-        Ok(node) => node,
-        Err(e) => {
-            error!("Error creating compute node: {}", e);
-            std::process::exit(1);
-        }
-    };
+    let compute_node =
+        match apis::compute_nodes_api::create_compute_node(&config, compute_node_model) {
+            Ok(node) => node,
+            Err(e) => {
+                error!("Error creating compute node: {}", e);
+                std::process::exit(1);
+            }
+        };
 
     let mut job_runner = JobRunner::new(
         config.clone(),

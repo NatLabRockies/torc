@@ -94,7 +94,7 @@ impl PaginationParams for ScheduledComputeNodeListParams {
 }
 
 impl Paginatable for ScheduledComputeNodesModel {
-    type ListError = apis::default_api::ListScheduledComputeNodesError;
+    type ListError = apis::scheduled_compute_nodes_api::ListScheduledComputeNodesError;
     type Params = ScheduledComputeNodeListParams;
 
     fn fetch_page(
@@ -102,7 +102,7 @@ impl Paginatable for ScheduledComputeNodesModel {
         params: &Self::Params,
         limit: i64,
     ) -> Result<PaginatedResponse<Self>, apis::Error<Self::ListError>> {
-        let response = apis::default_api::list_scheduled_compute_nodes(
+        let response = apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
             config,
             params.workflow_id,
             Some(params.offset),
@@ -158,7 +158,7 @@ pub fn paginate_scheduled_compute_nodes(
     params: ScheduledComputeNodeListParams,
 ) -> Result<
     Vec<ScheduledComputeNodesModel>,
-    apis::Error<apis::default_api::ListScheduledComputeNodesError>,
+    apis::Error<apis::scheduled_compute_nodes_api::ListScheduledComputeNodesError>,
 > {
     iter_scheduled_compute_nodes(config, workflow_id, params).collect()
 }

@@ -8,8 +8,8 @@
 //! without implying server incompatibility. The API version only bumps when the
 //! HTTP contract changes.
 
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 
 /// The current version of this binary, set at compile time.
 pub const CLIENT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -20,7 +20,7 @@ pub const CLIENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// - Patch: bug fix in an existing endpoint (response field fix, etc.)
 /// - Minor: new endpoint, new optional field, new query parameter
 /// - Major: removed endpoint, renamed field, changed semantics
-pub const CLIENT_API_VERSION: &str = "0.11.0";
+pub const CLIENT_API_VERSION: &str = crate::api_version::HTTP_API_VERSION;
 
 /// The git commit hash of this binary, set at compile time via build.rs.
 pub const GIT_HASH: &str = env!("GIT_HASH");
@@ -283,30 +283,11 @@ fn format_legacy_version_message(
 
 /// Fetches server information from the /version endpoint.
 pub fn get_server_info(config: &Configuration) -> Option<ServerInfo> {
-    match default_api::get_version(config) {
-        Ok(value) => {
-            if value.is_object() {
-                // New structured response: { "version": "...", "api_version": "...", ... }
-                let version = value
-                    .get("version")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string())?;
-                let api_version = value
-                    .get("api_version")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string());
-                Some(ServerInfo {
-                    version,
-                    api_version,
-                })
-            } else {
-                // Legacy response: plain string (pre-API-versioning server)
-                value.as_str().map(|version| ServerInfo {
-                    version: version.to_string(),
-                    api_version: None,
-                })
-            }
-        }
+    match apis::system_api::get_version(config) {
+        Ok(value) => Some(ServerInfo {
+            version: value.version,
+            api_version: Some(value.api_version),
+        }),
         Err(_) => None,
     }
 }

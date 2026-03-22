@@ -9,7 +9,7 @@ end
 The default API base path for APIs in `ComputeNodesApi`.
 This can be used to construct the `OpenAPI.Clients.Client` instance.
 """
-basepath(::Type{ ComputeNodesApi }) = "http://localhost"
+basepath(::Type{ ComputeNodesApi }) = "http://localhost/torc-service/v1"
 
 const _returntypes_create_compute_node_ComputeNodesApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ComputeNodeModel,

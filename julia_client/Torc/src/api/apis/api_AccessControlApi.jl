@@ -9,7 +9,7 @@ end
 The default API base path for APIs in `AccessControlApi`.
 This can be used to construct the `OpenAPI.Clients.Client` instance.
 """
-basepath(::Type{ AccessControlApi }) = "http://localhost"
+basepath(::Type{ AccessControlApi }) = "http://localhost/torc-service/v1"
 
 const _returntypes_add_user_to_group_AccessControlApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => UserGroupMembershipModel,

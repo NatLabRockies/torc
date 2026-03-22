@@ -108,6 +108,222 @@ where
     }
 }
 
+async fn handle_list_events<C, B>(
+    server: Server<C>,
+    request: Request<B>,
+    context: C,
+) -> Response<Body>
+where
+    C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
+{
+    let query = match parse_events_query(request.uri().query()) {
+        Ok(query) => query,
+        Err(message) => return error_response(StatusCode::BAD_REQUEST, message),
+    };
+
+    match server
+        .list_events(
+            query.workflow_id,
+            query.offset,
+            query.limit,
+            query.sort_by,
+            query.reverse_sort,
+            query.category,
+            query.after_timestamp,
+            &context,
+        )
+        .await
+    {
+        Ok(response) => list_events_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+async fn handle_get_event<C>(server: Server<C>, id: i64, context: C) -> Response<Body>
+where
+    C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
+{
+    match server.get_event(id, &context).await {
+        Ok(response) => get_event_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+async fn handle_create_event<C, B>(
+    server: Server<C>,
+    request: Request<B>,
+    context: C,
+) -> Response<Body>
+where
+    B: HttpBody + Send + 'static,
+    B::Data: Send,
+    B::Error: std::fmt::Display,
+    C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
+{
+    let body = match read_required_json_body::<B, models::EventModel>(request).await {
+        Ok(body) => body,
+        Err(response) => return response,
+    };
+
+    match server.create_event(body, &context).await {
+        Ok(response) => create_event_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+async fn handle_update_event<C, B>(
+    server: Server<C>,
+    id: i64,
+    request: Request<B>,
+    context: C,
+) -> Response<Body>
+where
+    B: HttpBody + Send + 'static,
+    B::Data: Send,
+    B::Error: std::fmt::Display,
+    C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
+{
+    let body = match read_required_json_body::<B, serde_json::Value>(request).await {
+        Ok(body) => body,
+        Err(response) => return response,
+    };
+
+    match server.update_event(id, body, &context).await {
+        Ok(response) => update_event_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+async fn handle_delete_events<C, B>(
+    server: Server<C>,
+    request: Request<B>,
+    context: C,
+) -> Response<Body>
+where
+    B: HttpBody + Send + 'static,
+    B::Data: Send,
+    B::Error: std::fmt::Display,
+    C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
+{
+    let query = match parse_delete_compute_nodes_query(request.uri().query()) {
+        Ok(query) => query,
+        Err(message) => return error_response(StatusCode::BAD_REQUEST, message),
+    };
+    let body = match read_optional_json_value(request).await {
+        Ok(body) => body,
+        Err(response) => return response,
+    };
+
+    match server
+        .delete_events(query.workflow_id, body, &context)
+        .await
+    {
+        Ok(response) => delete_events_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+async fn handle_delete_event<C, B>(
+    server: Server<C>,
+    id: i64,
+    request: Request<B>,
+    context: C,
+) -> Response<Body>
+where
+    B: HttpBody + Send + 'static,
+    B::Data: Send,
+    B::Error: std::fmt::Display,
+    C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
+{
+    let body = match read_optional_json_value(request).await {
+        Ok(body) => body,
+        Err(response) => return response,
+    };
+
+    match server.delete_event(id, body, &context).await {
+        Ok(response) => delete_event_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+async fn handle_create_failure_handler<C, B>(
+    server: Server<C>,
+    request: Request<B>,
+    context: C,
+) -> Response<Body>
+where
+    B: HttpBody + Send + 'static,
+    B::Data: Send,
+    B::Error: std::fmt::Display,
+    C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
+{
+    let body = match read_required_json_body::<B, models::FailureHandlerModel>(request).await {
+        Ok(body) => body,
+        Err(response) => return response,
+    };
+
+    match server.create_failure_handler(body, &context).await {
+        Ok(response) => create_failure_handler_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+async fn handle_get_failure_handler<C>(server: Server<C>, id: i64, context: C) -> Response<Body>
+where
+    C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
+{
+    match server.get_failure_handler(id, &context).await {
+        Ok(response) => get_failure_handler_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+async fn handle_delete_failure_handler<C, B>(
+    server: Server<C>,
+    id: i64,
+    request: Request<B>,
+    context: C,
+) -> Response<Body>
+where
+    B: HttpBody + Send + 'static,
+    B::Data: Send,
+    B::Error: std::fmt::Display,
+    C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
+{
+    let body = match read_optional_json_value(request).await {
+        Ok(body) => body,
+        Err(response) => return response,
+    };
+
+    match server.delete_failure_handler(id, body, &context).await {
+        Ok(response) => delete_failure_handler_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+async fn handle_list_failure_handlers<C, B>(
+    server: Server<C>,
+    workflow_id: i64,
+    request: Request<B>,
+    context: C,
+) -> Response<Body>
+where
+    C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
+{
+    let query = match parse_access_pagination_query(request.uri().query()) {
+        Ok(query) => query,
+        Err(message) => return error_response(StatusCode::BAD_REQUEST, message),
+    };
+
+    match server
+        .list_failure_handlers(workflow_id, query.offset, query.limit, &context)
+        .await
+    {
+        Ok(response) => list_failure_handlers_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
 async fn handle_get_workflow_actions<C>(
     server: Server<C>,
     workflow_id: i64,

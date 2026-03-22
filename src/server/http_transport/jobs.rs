@@ -54,6 +54,28 @@ where
     }
 }
 
+async fn handle_create_jobs<C, B>(
+    server: Server<C>,
+    request: Request<B>,
+    context: C,
+) -> Response<Body>
+where
+    B: HttpBody + Send + 'static,
+    B::Data: Send,
+    B::Error: std::fmt::Display,
+    C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
+{
+    let body = match read_required_json_body::<B, models::JobsModel>(request).await {
+        Ok(body) => body,
+        Err(response) => return response,
+    };
+
+    match server.create_jobs(body, &context).await {
+        Ok(response) => create_jobs_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
 async fn handle_delete_jobs<C, B>(
     server: Server<C>,
     request: Request<B>,

@@ -16,7 +16,7 @@ use rstest::rstest;
 use serde_json::Value;
 use std::fs;
 use tempfile::NamedTempFile;
-use torc::client::apis::default_api;
+use torc::client::apis;
 use torc::models::{FileModel, JobModel, JobStatus, UserDataModel, WorkflowModel};
 
 /// Helper to create a test workflow with job-job, job-file, and job-user_data dependencies
@@ -28,7 +28,7 @@ fn create_test_workflow_with_dependencies(
     // Create workflow
     let workflow = WorkflowModel::new(name.to_string(), user.to_string());
     let created_workflow =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     // Create files
@@ -38,7 +38,7 @@ fn create_test_workflow_with_dependencies(
         "/tmp/input.txt".to_string(),
     );
     let created_input_file =
-        default_api::create_file(config, input_file).expect("Failed to create input file");
+        apis::files_api::create_file(config, input_file).expect("Failed to create input file");
     let input_file_id = created_input_file.id.unwrap();
 
     let intermediate_file = FileModel::new(
@@ -46,7 +46,7 @@ fn create_test_workflow_with_dependencies(
         "intermediate.txt".to_string(),
         "/tmp/intermediate.txt".to_string(),
     );
-    let created_intermediate_file = default_api::create_file(config, intermediate_file)
+    let created_intermediate_file = apis::files_api::create_file(config, intermediate_file)
         .expect("Failed to create intermediate file");
     let intermediate_file_id = created_intermediate_file.id.unwrap();
 
@@ -56,20 +56,22 @@ fn create_test_workflow_with_dependencies(
         "/tmp/output.txt".to_string(),
     );
     let created_output_file =
-        default_api::create_file(config, output_file).expect("Failed to create output file");
+        apis::files_api::create_file(config, output_file).expect("Failed to create output file");
     let output_file_id = created_output_file.id.unwrap();
 
     // Create user_data
     let mut config_data = UserDataModel::new(workflow_id, "config".to_string());
     config_data.data = Some(serde_json::json!({"setting": "value"}));
-    let created_config_data = default_api::create_user_data(config, config_data, None, None)
-        .expect("Failed to create config user_data");
+    let created_config_data =
+        apis::user_data_api::create_user_data(config, config_data, None, None)
+            .expect("Failed to create config user_data");
     let config_data_id = created_config_data.id.unwrap();
 
     let mut result_data = UserDataModel::new(workflow_id, "result".to_string());
     result_data.data = Some(serde_json::json!({"result": "pending"}));
-    let created_result_data = default_api::create_user_data(config, result_data, None, None)
-        .expect("Failed to create result user_data");
+    let created_result_data =
+        apis::user_data_api::create_user_data(config, result_data, None, None)
+            .expect("Failed to create result user_data");
     let result_data_id = created_result_data.id.unwrap();
 
     // Create jobs with dependencies
@@ -82,7 +84,7 @@ fn create_test_workflow_with_dependencies(
     job1.input_file_ids = Some(vec![input_file_id]);
     job1.output_file_ids = Some(vec![intermediate_file_id]);
     job1.input_user_data_ids = Some(vec![config_data_id]);
-    let created_job1 = default_api::create_job(config, job1).expect("Failed to create job1");
+    let created_job1 = apis::jobs_api::create_job(config, job1).expect("Failed to create job1");
     let job1_id = created_job1.id.unwrap();
 
     // Job 2: depends on job1, reads intermediate file, produces output file and result data
@@ -94,12 +96,12 @@ fn create_test_workflow_with_dependencies(
     job2.input_file_ids = Some(vec![intermediate_file_id]);
     job2.output_file_ids = Some(vec![output_file_id]);
     job2.output_user_data_ids = Some(vec![result_data_id]);
-    let created_job2 = default_api::create_job(config, job2).expect("Failed to create job2");
+    let created_job2 = apis::jobs_api::create_job(config, job2).expect("Failed to create job2");
     let job2_id = created_job2.id.unwrap();
 
     // Job 3: depends on job2 (explicit dependency), no file dependencies
     let job3 = JobModel::new(workflow_id, "finalize".to_string(), "echo done".to_string());
-    let created_job3 = default_api::create_job(config, job3).expect("Failed to create job3");
+    let created_job3 = apis::jobs_api::create_job(config, job3).expect("Failed to create job3");
     let job3_id = created_job3.id.unwrap();
 
     // Add explicit dependency: job3 depends on job2
@@ -107,7 +109,7 @@ fn create_test_workflow_with_dependencies(
     let mut update_job3 =
         JobModel::new(workflow_id, "finalize".to_string(), "echo done".to_string());
     update_job3.depends_on_job_ids = Some(vec![job2_id]);
-    default_api::update_job(config, job3_id, update_job3)
+    apis::jobs_api::update_job(config, job3_id, update_job3)
         .expect("Failed to update job3 dependencies");
 
     (
@@ -166,13 +168,13 @@ fn test_export_import_basic(start_server: &ServerProcess) {
     assert_ne!(new_workflow_id, workflow_id);
 
     // Verify the imported workflow
-    let imported_workflow = default_api::get_workflow(config, new_workflow_id)
+    let imported_workflow = apis::workflows_api::get_workflow(config, new_workflow_id)
         .expect("Failed to get imported workflow");
     assert_eq!(imported_workflow.name, "imported_workflow");
     assert_eq!(imported_workflow.user, "test_user");
 
     // Verify jobs were imported with correct relationships
-    let jobs_response = default_api::list_jobs(
+    let jobs_response = apis::jobs_api::list_jobs(
         config,
         new_workflow_id,
         None,
@@ -214,7 +216,7 @@ fn test_export_import_basic(start_server: &ServerProcess) {
     }
 
     // Verify files were imported
-    let files_response = default_api::list_files(
+    let files_response = apis::files_api::list_files(
         config,
         new_workflow_id,
         None,
@@ -231,7 +233,7 @@ fn test_export_import_basic(start_server: &ServerProcess) {
     assert_eq!(imported_files.len(), 3);
 
     // Verify user_data was imported
-    let user_data_response = default_api::list_user_data(
+    let user_data_response = apis::user_data_api::list_user_data(
         config,
         new_workflow_id,
         None,
@@ -261,7 +263,7 @@ fn test_export_with_results(start_server: &ServerProcess) {
     // Create a simple workflow
     let workflow = WorkflowModel::new("results_test".to_string(), "test_user".to_string());
     let created_workflow =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     let job = JobModel::new(
@@ -269,7 +271,7 @@ fn test_export_with_results(start_server: &ServerProcess) {
         "test_job".to_string(),
         "echo hello".to_string(),
     );
-    let created_job = default_api::create_job(config, job).expect("Failed to create job");
+    let created_job = apis::jobs_api::create_job(config, job).expect("Failed to create job");
     let job_id = created_job.id.unwrap();
 
     // We need a compute node to create results
@@ -285,7 +287,7 @@ fn test_export_with_results(start_server: &ServerProcess) {
         "local".to_string(), // compute_node_type
         None,                // scheduler
     );
-    let created_compute_node = default_api::create_compute_node(config, compute_node)
+    let created_compute_node = apis::compute_nodes_api::create_compute_node(config, compute_node)
         .expect("Failed to create compute node");
     let compute_node_id = created_compute_node.id.unwrap();
 
@@ -301,7 +303,7 @@ fn test_export_with_results(start_server: &ServerProcess) {
         "2024-01-01T00:00:00Z".to_string(),
         JobStatus::Completed,
     );
-    default_api::create_result(config, result).expect("Failed to create result");
+    apis::results_api::create_result(config, result).expect("Failed to create result");
 
     // Export with results
     let export_file = NamedTempFile::new().expect("Failed to create temp file");
@@ -346,7 +348,7 @@ fn test_export_with_results(start_server: &ServerProcess) {
     assert_ne!(new_workflow_id, workflow_id);
 
     // Verify results were imported into the new workflow
-    let results_response = default_api::list_results(
+    let results_response = apis::results_api::list_results(
         config,
         new_workflow_id,
         None, // job_id
@@ -386,7 +388,7 @@ fn test_import_results_without_compute_nodes(start_server: &ServerProcess) {
     // Create a workflow with a job, compute node, and result
     let workflow = WorkflowModel::new("old_export_test".to_string(), "test_user".to_string());
     let created_workflow =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     let job = JobModel::new(
@@ -394,7 +396,7 @@ fn test_import_results_without_compute_nodes(start_server: &ServerProcess) {
         "test_job".to_string(),
         "echo hello".to_string(),
     );
-    let created_job = default_api::create_job(config, job).expect("Failed to create job");
+    let created_job = apis::jobs_api::create_job(config, job).expect("Failed to create job");
     let job_id = created_job.id.unwrap();
 
     let compute_node = torc::models::ComputeNodeModel::new(
@@ -409,7 +411,7 @@ fn test_import_results_without_compute_nodes(start_server: &ServerProcess) {
         "local".to_string(),
         None,
     );
-    let created_cn = default_api::create_compute_node(config, compute_node)
+    let created_cn = apis::compute_nodes_api::create_compute_node(config, compute_node)
         .expect("Failed to create compute node");
     let cn_id = created_cn.id.unwrap();
 
@@ -424,7 +426,7 @@ fn test_import_results_without_compute_nodes(start_server: &ServerProcess) {
         "2024-06-01T12:00:00Z".to_string(),
         JobStatus::Completed,
     );
-    default_api::create_result(config, result).expect("Failed to create result");
+    apis::results_api::create_result(config, result).expect("Failed to create result");
 
     // Export with results, then strip the compute_nodes field to simulate an old export
     let export_file = NamedTempFile::new().expect("Failed to create temp file");
@@ -465,7 +467,7 @@ fn test_import_results_without_compute_nodes(start_server: &ServerProcess) {
     let new_workflow_id = import_result["workflow_id"].as_i64().unwrap();
 
     // Verify results were imported
-    let results_response = default_api::list_results(
+    let results_response = apis::results_api::list_results(
         config,
         new_workflow_id,
         None,
@@ -498,7 +500,7 @@ fn test_export_with_events(start_server: &ServerProcess) {
     // Create a simple workflow
     let workflow = WorkflowModel::new("events_test".to_string(), "test_user".to_string());
     let created_workflow =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     // Create an event
@@ -506,7 +508,7 @@ fn test_export_with_events(start_server: &ServerProcess) {
         workflow_id,
         serde_json::json!({"type": "test_event", "message": "test"}),
     );
-    default_api::create_event(config, event).expect("Failed to create event");
+    apis::events_api::create_event(config, event).expect("Failed to create event");
 
     // Export with events
     let export_file = NamedTempFile::new().expect("Failed to create temp file");
@@ -539,12 +541,12 @@ fn test_export_without_results_or_events(start_server: &ServerProcess) {
     // Create workflow with an event
     let workflow = WorkflowModel::new("no_extras_test".to_string(), "test_user".to_string());
     let created_workflow =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     // Create an event
     let event = torc::models::EventModel::new(workflow_id, serde_json::json!({"type": "test"}));
-    default_api::create_event(config, event).expect("Failed to create event");
+    apis::events_api::create_event(config, event).expect("Failed to create event");
 
     // Export without --include-results or --include-events (default)
     let export_file = NamedTempFile::new().expect("Failed to create temp file");
@@ -605,7 +607,7 @@ fn test_import_id_remapping(start_server: &ServerProcess) {
     assert_ne!(workflow_id1, workflow_id2);
 
     // Verify each workflow has its own set of jobs, files, etc.
-    let jobs1 = default_api::list_jobs(
+    let jobs1 = apis::jobs_api::list_jobs(
         config,
         workflow_id1,
         None,
@@ -621,7 +623,7 @@ fn test_import_id_remapping(start_server: &ServerProcess) {
     .expect("Failed to list jobs 1")
     .items;
 
-    let jobs2 = default_api::list_jobs(
+    let jobs2 = apis::jobs_api::list_jobs(
         config,
         workflow_id2,
         None,
@@ -671,7 +673,7 @@ fn test_export_import_ro_crate_job_id_remapping(start_server: &ServerProcess) {
     // Create a workflow with a job and files
     let workflow = WorkflowModel::new("ro_crate_remap_test".to_string(), "test_user".to_string());
     let created_workflow =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     // Create an output file
@@ -681,7 +683,7 @@ fn test_export_import_ro_crate_job_id_remapping(start_server: &ServerProcess) {
         "data/output.csv".to_string(),
     );
     let created_file =
-        default_api::create_file(config, output_file).expect("Failed to create file");
+        apis::files_api::create_file(config, output_file).expect("Failed to create file");
     let file_id = created_file.id.unwrap();
 
     // Create a job
@@ -690,7 +692,7 @@ fn test_export_import_ro_crate_job_id_remapping(start_server: &ServerProcess) {
         "process_data".to_string(),
         "python process.py".to_string(),
     );
-    let created_job = default_api::create_job(config, job).expect("Failed to create job");
+    let created_job = apis::jobs_api::create_job(config, job).expect("Failed to create job");
     let job_id = created_job.id.unwrap();
 
     // Create RO-Crate entities with job ID references
@@ -712,7 +714,7 @@ fn test_export_import_ro_crate_job_id_remapping(start_server: &ServerProcess) {
         entity_type: "CreateAction".to_string(),
         metadata: create_action_metadata.to_string(),
     };
-    default_api::create_ro_crate_entity(config, create_action)
+    apis::final_surfaces_api::create_ro_crate_entity(config, create_action)
         .expect("Failed to create CreateAction entity");
 
     // 2. File entity with wasGeneratedBy reference to job
@@ -731,7 +733,8 @@ fn test_export_import_ro_crate_job_id_remapping(start_server: &ServerProcess) {
         entity_type: "File".to_string(),
         metadata: file_metadata.to_string(),
     };
-    default_api::create_ro_crate_entity(config, file_entity).expect("Failed to create File entity");
+    apis::final_surfaces_api::create_ro_crate_entity(config, file_entity)
+        .expect("Failed to create File entity");
 
     // Export the workflow
     let export_file = NamedTempFile::new().expect("Failed to create temp file");
@@ -770,7 +773,7 @@ fn test_export_import_ro_crate_job_id_remapping(start_server: &ServerProcess) {
     assert_ne!(new_workflow_id, workflow_id);
 
     // Get the new job ID
-    let jobs_response = default_api::list_jobs(
+    let jobs_response = apis::jobs_api::list_jobs(
         config,
         new_workflow_id,
         None,
@@ -791,7 +794,7 @@ fn test_export_import_ro_crate_job_id_remapping(start_server: &ServerProcess) {
 
     // Get the imported RO-Crate entities
     let entities_response =
-        default_api::list_ro_crate_entities(config, new_workflow_id, None, None)
+        apis::final_surfaces_api::list_ro_crate_entities(config, new_workflow_id, None, None)
             .expect("Failed to list RO-Crate entities");
     let imported_entities = entities_response.items;
     assert_eq!(imported_entities.len(), 2);
@@ -830,7 +833,7 @@ fn test_export_import_ro_crate_job_id_remapping(start_server: &ServerProcess) {
     );
 
     // Verify file_id was also remapped
-    let new_files_response = default_api::list_files(
+    let new_files_response = apis::files_api::list_files(
         config,
         new_workflow_id,
         None,

@@ -12,7 +12,7 @@
 //! // Retry API calls with automatic network error handling
 //! let response = send_with_retries(
 //!     config,
-//!     || default_api::ping(config),
+//!     || apis::system_api::ping(config),
 //!     5, // Wait up to 5 minutes for server recovery
 //! )?;
 //! # Ok(())
@@ -28,8 +28,8 @@ use std::process::Command;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 
 const PING_INTERVAL_SECONDS: u64 = 30;
 
@@ -123,7 +123,7 @@ where
                 thread::sleep(Duration::from_secs(PING_INTERVAL_SECONDS));
 
                 // Try to ping the server
-                match default_api::ping(config) {
+                match apis::system_api::ping(config) {
                     Ok(_) => {
                         info!("Server is back online. Retrying original API call.");
                         // Server is back, retry the original call
@@ -173,7 +173,7 @@ pub fn claim_action(
                 None => serde_json::json!({}),
             };
 
-            match default_api::claim_action(config, workflow_id, action_id, body) {
+            match apis::final_surfaces_api::claim_action(config, workflow_id, action_id, body) {
                 Ok(result) => {
                     let claimed = result
                         .get("claimed")

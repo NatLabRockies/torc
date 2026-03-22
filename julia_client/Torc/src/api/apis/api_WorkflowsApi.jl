@@ -9,7 +9,7 @@ end
 The default API base path for APIs in `WorkflowsApi`.
 This can be used to construct the `OpenAPI.Clients.Client` instance.
 """
-basepath(::Type{ WorkflowsApi }) = "http://localhost"
+basepath(::Type{ WorkflowsApi }) = "http://localhost/torc-service/v1"
 
 const _returntypes_cancel_workflow_WorkflowsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => Any,

@@ -99,7 +99,7 @@ impl PaginationParams for WorkflowListParams {
 }
 
 impl Paginatable for WorkflowModel {
-    type ListError = apis::default_api::ListWorkflowsError;
+    type ListError = apis::workflows_api::ListWorkflowsError;
     type Params = WorkflowListParams;
 
     fn fetch_page(
@@ -107,12 +107,12 @@ impl Paginatable for WorkflowModel {
         params: &Self::Params,
         limit: i64,
     ) -> Result<PaginatedResponse<Self>, apis::Error<Self::ListError>> {
-        let response = apis::default_api::list_workflows(
+        let response = apis::workflows_api::list_workflows(
             config,
             Some(params.offset),
+            Some(limit),
             params.sort_by.as_deref(),
             params.reverse_sort,
-            Some(limit),
             params.name.as_deref(),
             params.user.as_deref(),
             params.description.as_deref(),
@@ -155,6 +155,6 @@ pub fn iter_workflows(
 pub fn paginate_workflows(
     config: &apis::configuration::Configuration,
     params: WorkflowListParams,
-) -> Result<Vec<WorkflowModel>, apis::Error<apis::default_api::ListWorkflowsError>> {
+) -> Result<Vec<WorkflowModel>, apis::Error<apis::workflows_api::ListWorkflowsError>> {
     iter_workflows(config, params).collect()
 }

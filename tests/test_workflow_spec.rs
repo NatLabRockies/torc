@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use common::{ServerProcess, start_server};
 use rstest::rstest;
 use tempfile::NamedTempFile;
-use torc::client::default_api;
+use torc::client::apis;
 use torc::client::workflow_spec::{
     FileSpec, JobSpec, ResourceRequirementsSpec, SlurmSchedulerSpec, UserDataSpec, WorkflowSpec,
 };
@@ -494,7 +494,7 @@ fn test_create_workflow_from_json_file_minimal(start_server: &ServerProcess) {
     assert!(workflow_id > 0);
 
     // Verify workflow was created by fetching it
-    let created_workflow = default_api::get_workflow(&start_server.config, workflow_id)
+    let created_workflow = apis::workflows_api::get_workflow(&start_server.config, workflow_id)
         .expect("Failed to get created workflow");
 
     assert_eq!(created_workflow.name, "integration_test_workflow");
@@ -1425,12 +1425,12 @@ fn test_create_workflow_rollback_on_error(start_server: &ServerProcess) {
     );
 
     // Verify no workflow with this name exists (confirming rollback)
-    let workflows = default_api::list_workflows(
+    let workflows = apis::workflows_api::list_workflows(
         &start_server.config,
         None,
-        None,
-        None,
         Some(100),
+        None,
+        None,
         Some("rollback_test_workflow"),
         Some("rollback_user"),
         None,
@@ -1505,7 +1505,7 @@ fn test_create_workflow_with_regex_job_dependencies(start_server: &ServerProcess
     assert!(workflow_id > 0);
 
     // Verify that postprocess job has dependencies on all work_* jobs
-    let jobs = default_api::list_jobs(
+    let jobs = apis::jobs_api::list_jobs(
         &start_server.config,
         workflow_id,
         None,
@@ -1599,7 +1599,7 @@ fn test_create_workflow_with_regex_file_dependencies(start_server: &ServerProces
     assert!(workflow_id > 0);
 
     // Verify that aggregate job has all 3 data files as inputs
-    let jobs = default_api::list_jobs(
+    let jobs = apis::jobs_api::list_jobs(
         &start_server.config,
         workflow_id,
         None,
@@ -1686,7 +1686,7 @@ fn test_create_workflow_with_regex_user_data_dependencies(start_server: &ServerP
     assert!(workflow_id > 0);
 
     // Verify that process_all_configs job has only the config_* user data (not other_data)
-    let jobs = default_api::list_jobs(
+    let jobs = apis::jobs_api::list_jobs(
         &start_server.config,
         workflow_id,
         None,
@@ -1776,7 +1776,7 @@ fn test_create_workflow_with_mixed_exact_and_regex_dependencies(start_server: &S
     assert!(workflow_id > 0);
 
     // Verify that finalize job has dependencies on special + process_1 + process_2
-    let jobs = default_api::list_jobs(
+    let jobs = apis::jobs_api::list_jobs(
         &start_server.config,
         workflow_id,
         None,
@@ -1888,7 +1888,7 @@ fn test_create_workflows_from_all_example_files(start_server: &ServerProcess) {
         assert!(workflow_id > 0, "Invalid workflow ID for {:?}", spec_file);
 
         // Verify the workflow was created by fetching it
-        let created_workflow = default_api::get_workflow(&start_server.config, workflow_id)
+        let created_workflow = apis::workflows_api::get_workflow(&start_server.config, workflow_id)
             .unwrap_or_else(|e| {
                 panic!("Failed to get created workflow from {:?}: {}", spec_file, e)
             });
@@ -1910,7 +1910,7 @@ fn test_create_workflows_from_all_example_files(start_server: &ServerProcess) {
             created_workflow.name, workflow_id
         );
 
-        default_api::delete_workflow(&start_server.config, workflow_id, None)
+        apis::workflows_api::delete_workflow(&start_server.config, workflow_id, None)
             .expect("Warning: Failed to delete workflow");
     }
 }
@@ -2060,7 +2060,7 @@ fn test_scheduler_node_validation_passes_single_node_jobs_in_multi_node_allocati
     );
 
     if let Ok(workflow_id) = result {
-        let _ = default_api::delete_workflow(&start_server.config, workflow_id, None);
+        let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id, None);
     }
 }
 
@@ -2137,7 +2137,7 @@ fn test_scheduler_node_validation_passes_with_start_one_worker_per_node(
 
     // Clean up
     if let Ok(workflow_id) = result {
-        let _ = default_api::delete_workflow(&start_server.config, workflow_id, None);
+        let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id, None);
     }
 }
 
@@ -2346,7 +2346,7 @@ fn test_scheduler_node_validation_passes_with_matching_nodes(start_server: &Serv
 
     // Clean up
     if let Ok(workflow_id) = result {
-        let _ = default_api::delete_workflow(&start_server.config, workflow_id, None);
+        let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id, None);
     }
 }
 
@@ -2417,7 +2417,7 @@ fn test_scheduler_node_validation_skipped_with_skip_checks(start_server: &Server
 
     // Clean up
     if let Ok(workflow_id) = result {
-        let _ = default_api::delete_workflow(&start_server.config, workflow_id, None);
+        let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id, None);
     }
 }
 
@@ -2479,7 +2479,7 @@ fn test_scheduler_node_validation_passes_with_single_node_scheduler(start_server
 
     // Clean up
     if let Ok(workflow_id) = result {
-        let _ = default_api::delete_workflow(&start_server.config, workflow_id, None);
+        let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id, None);
     }
 }
 
@@ -3746,12 +3746,12 @@ fn test_create_subgraph_workflows_from_examples(start_server: &ServerProcess) {
         assert!(workflow_id > 0, "Invalid workflow ID for {}", filename);
 
         // Verify the workflow was created
-        let workflow = default_api::get_workflow(&start_server.config, workflow_id)
+        let workflow = apis::workflows_api::get_workflow(&start_server.config, workflow_id)
             .expect("Failed to get workflow");
         assert_eq!(workflow.name, "two_subgraph_pipeline");
 
         // Verify job count
-        let jobs = default_api::list_jobs(
+        let jobs = apis::jobs_api::list_jobs(
             &start_server.config,
             workflow_id,
             None,
@@ -3775,7 +3775,7 @@ fn test_create_subgraph_workflows_from_examples(start_server: &ServerProcess) {
 
         // Verify schedulers if present
         if has_schedulers {
-            let response = default_api::list_slurm_schedulers(
+            let response = apis::slurm_schedulers_api::list_slurm_schedulers(
                 &start_server.config,
                 workflow_id,
                 Some(0),  // offset
@@ -3812,7 +3812,7 @@ fn test_create_subgraph_workflows_from_examples(start_server: &ServerProcess) {
         }
 
         // Clean up
-        let _ = default_api::delete_workflow(&start_server.config, workflow_id, None);
+        let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id, None);
     }
 }
 
@@ -3924,10 +3924,10 @@ fn test_subgraph_workflow_execution_plan_from_database() {
     .expect("Failed to create workflow");
 
     // Fetch workflow, jobs (with relationships), and actions from server
-    let workflow = default_api::get_workflow(&start_server.config, workflow_id)
+    let workflow = apis::workflows_api::get_workflow(&start_server.config, workflow_id)
         .expect("Failed to get workflow");
 
-    let jobs = default_api::list_jobs(
+    let jobs = apis::jobs_api::list_jobs(
         &start_server.config,
         workflow_id,
         None,
@@ -3943,10 +3943,10 @@ fn test_subgraph_workflow_execution_plan_from_database() {
     .expect("Failed to list jobs")
     .items;
 
-    let actions = default_api::get_workflow_actions(&start_server.config, workflow_id)
+    let actions = apis::final_surfaces_api::get_workflow_actions(&start_server.config, workflow_id)
         .expect("Failed to get actions");
 
-    let slurm_schedulers = default_api::list_slurm_schedulers(
+    let slurm_schedulers = apis::slurm_schedulers_api::list_slurm_schedulers(
         &start_server.config,
         workflow_id,
         None,
@@ -3966,7 +3966,7 @@ fn test_subgraph_workflow_execution_plan_from_database() {
     .map(|r| r.items)
     .unwrap_or_default();
 
-    let resource_requirements = default_api::list_resource_requirements(
+    let resource_requirements = apis::admin_resources_api::list_resource_requirements(
         &start_server.config,
         workflow_id,
         None, // job_id
@@ -4063,7 +4063,7 @@ fn test_subgraph_workflow_execution_plan_from_database() {
     );
 
     // Clean up
-    let _ = default_api::delete_workflow(&start_server.config, workflow_id, None);
+    let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id, None);
 
     eprintln!("✓ Execution plan from database has correct 6 events (DAG structure)");
 }
@@ -4100,10 +4100,10 @@ fn test_subgraph_workflow_execution_plan_spec_vs_database() {
     .expect("Failed to create workflow");
 
     // Fetch workflow, jobs (with relationships), and actions from server
-    let workflow = default_api::get_workflow(&start_server.config, workflow_id)
+    let workflow = apis::workflows_api::get_workflow(&start_server.config, workflow_id)
         .expect("Failed to get workflow");
 
-    let jobs = default_api::list_jobs(
+    let jobs = apis::jobs_api::list_jobs(
         &start_server.config,
         workflow_id,
         None,
@@ -4119,10 +4119,10 @@ fn test_subgraph_workflow_execution_plan_spec_vs_database() {
     .expect("Failed to list jobs")
     .items;
 
-    let actions = default_api::get_workflow_actions(&start_server.config, workflow_id)
+    let actions = apis::final_surfaces_api::get_workflow_actions(&start_server.config, workflow_id)
         .expect("Failed to get actions");
 
-    let slurm_schedulers = default_api::list_slurm_schedulers(
+    let slurm_schedulers = apis::slurm_schedulers_api::list_slurm_schedulers(
         &start_server.config,
         workflow_id,
         None,
@@ -4142,7 +4142,7 @@ fn test_subgraph_workflow_execution_plan_spec_vs_database() {
     .map(|r| r.items)
     .unwrap_or_default();
 
-    let resource_requirements = default_api::list_resource_requirements(
+    let resource_requirements = apis::admin_resources_api::list_resource_requirements(
         &start_server.config,
         workflow_id,
         None, // job_id
@@ -4207,7 +4207,7 @@ fn test_subgraph_workflow_execution_plan_spec_vs_database() {
     );
 
     // Clean up
-    let _ = default_api::delete_workflow(&start_server.config, workflow_id, None);
+    let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id, None);
 
     eprintln!("✓ Execution plan from spec matches execution plan from database");
 }

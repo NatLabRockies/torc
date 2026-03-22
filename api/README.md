@@ -1,7 +1,7 @@
 # OpenAPI Workflow
 
-Torc uses a Rust-owned OpenAPI workflow. The server emits the authoritative spec, and external
-clients are generated from that emitted contract.
+Torc uses a Rust-owned OpenAPI workflow. The server emits the authoritative spec, and the Rust,
+Python, and Julia clients are generated from that emitted contract.
 
 ## Current State
 
@@ -18,14 +18,15 @@ cd api
 bash sync_openapi.sh check
 ```
 
-Regenerate external clients from the checked-in contract artifact:
+Regenerate Rust, Python, and Julia clients from the checked-in contract artifact:
 
 ```bash
 cd api
 bash sync_openapi.sh clients
 ```
 
-Regenerate external clients directly from the Rust-emitted spec without rewriting `openapi.yaml`:
+Regenerate Rust, Python, and Julia clients directly from the Rust-emitted spec without rewriting
+`openapi.yaml`:
 
 ```bash
 cd api
@@ -69,14 +70,14 @@ cd api
 bash sync_openapi.sh check
 ```
 
-Regenerate external clients from the checked-in contract:
+Regenerate Rust, Python, and Julia clients from the checked-in contract:
 
 ```bash
 cd api
 bash sync_openapi.sh clients
 ```
 
-Regenerate external clients from the Rust-emitted spec before promotion:
+Regenerate Rust, Python, and Julia clients from the Rust-emitted spec before promotion:
 
 ```bash
 cd api
@@ -88,4 +89,5 @@ bash sync_openapi.sh clients --use-rust-spec
 1. Add or change API endpoints in the Rust-owned server/OpenAPI code.
 2. Emit `openapi.codegen.yaml` from Rust and keep parity with `openapi.yaml`.
 3. Promote the Rust spec into `openapi.yaml` with `bash sync_openapi.sh all --promote` when ready.
-4. Generate external clients from the emitted spec instead of hand-editing client bindings.
+4. Generate Rust, Python, and Julia clients from the emitted spec instead of hand-editing client
+   bindings.

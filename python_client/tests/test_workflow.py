@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
-from torc.openapi_client.api.default_api import DefaultApi
+from torc.api import DefaultApi
 from torc.openapi_client.models.user_data_model import UserDataModel
 from torc.openapi_client.models.compute_node_model import ComputeNodeModel
 from torc.openapi_client.models.compute_nodes_resources import ComputeNodesResources

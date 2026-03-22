@@ -9,7 +9,7 @@ end
 The default API base path for APIs in `AdminResourcesApi`.
 This can be used to construct the `OpenAPI.Clients.Client` instance.
 """
-basepath(::Type{ AdminResourcesApi }) = "http://localhost"
+basepath(::Type{ AdminResourcesApi }) = "http://localhost/torc-service/v1"
 
 const _returntypes_create_failure_handler_AdminResourcesApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => FailureHandlerModel,

@@ -13,7 +13,7 @@ use common::{
 };
 use rstest::rstest;
 
-use torc::client::default_api;
+use torc::client::apis;
 use torc::models;
 
 /// Test claim_jobs_based_on_resources with resource constraint limiting job allocation
@@ -31,9 +31,15 @@ fn test_prepare_jobs_minimal_resources(start_server: &ServerProcess) {
     // Test with ComputeNodesResources that can support exactly 1 job
     let resources = models::ComputeNodesResources::new(1, 1.0, 0, 1);
 
-    let result =
-        default_api::claim_jobs_based_on_resources(config, workflow_id, &resources, 10, None, None)
-            .expect("claim_jobs_based_on_resources should succeed");
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        &resources,
+        10,
+        None,
+        None,
+    )
+    .expect("claim_jobs_based_on_resources should succeed");
 
     // Should return exactly 1 job (1 CPU available ÷ 1 CPU per job = 1 job must be returned)
     let returned_jobs = result.jobs.expect("Server must return jobs array");
@@ -66,7 +72,7 @@ fn test_prepare_jobs_high_cpu_resources(start_server: &ServerProcess) {
 
     let resources = models::ComputeNodesResources::new(64, 128.0, 0, 1);
 
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -107,7 +113,7 @@ fn test_prepare_jobs_high_memory_resources(start_server: &ServerProcess) {
 
     let resources = models::ComputeNodesResources::new(4, 512.0, 0, 1);
 
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -148,7 +154,7 @@ fn test_prepare_jobs_gpu_resources(start_server: &ServerProcess) {
 
     let resources = models::ComputeNodesResources::new(8, 32.0, 4, 1);
 
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -189,7 +195,7 @@ fn test_prepare_jobs_multi_node_resources(start_server: &ServerProcess) {
 
     let resources = models::ComputeNodesResources::new(16, 64.0, 0, 4);
 
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -231,7 +237,7 @@ fn test_prepare_jobs_maximum_resources(start_server: &ServerProcess) {
     let mut resources = models::ComputeNodesResources::new(128, 1024.0, 8, 8);
     resources.time_limit = Some("P0DT24H".to_string());
 
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -270,7 +276,7 @@ fn test_prepare_jobs_with_time_limits(start_server: &ServerProcess) {
     let mut resources = models::ComputeNodesResources::new(4, 16.0, 0, 1);
     resources.time_limit = Some("P0DT1H30M".to_string());
 
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -310,7 +316,7 @@ fn test_prepare_jobs_with_scheduler_config(start_server: &ServerProcess) {
     let mut resources = models::ComputeNodesResources::new(8, 32.0, 2, 1);
     resources.scheduler_config_id = Some(1);
 
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -352,7 +358,7 @@ fn test_prepare_jobs_different_limits(start_server: &ServerProcess, #[case] limi
 
     let resources = models::ComputeNodesResources::new(4, 8.0, 0, 1);
 
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -401,7 +407,7 @@ fn test_prepare_jobs_all_sort_methods(
 
     let resources = models::ComputeNodesResources::new(4, 8.0, 1, 1);
 
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -443,7 +449,7 @@ fn test_prepare_jobs_fractional_memory(start_server: &ServerProcess, #[case] mem
 
     let resources = models::ComputeNodesResources::new(2, memory_gb, 0, 1);
 
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -482,7 +488,7 @@ fn test_prepare_jobs_zero_gpus(start_server: &ServerProcess) {
 
     let resources = models::ComputeNodesResources::new(8, 16.0, 0, 1);
 
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -522,7 +528,7 @@ fn test_prepare_jobs_no_ready_jobs(start_server: &ServerProcess) {
 
     let resources = models::ComputeNodesResources::new(4, 8.0, 0, 1);
 
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -560,7 +566,7 @@ fn test_prepare_jobs_invalid_workflow(start_server: &ServerProcess) {
 
     let resources = models::ComputeNodesResources::new(4, 8.0, 0, 1);
 
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         invalid_workflow_id,
         &resources,
@@ -609,7 +615,7 @@ fn test_prepare_jobs_resource_combinations(
 
     let resources = models::ComputeNodesResources::new(num_cpus, memory_gb, num_gpus, num_nodes);
 
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -651,7 +657,7 @@ fn test_prepare_jobs_all_optional_fields(start_server: &ServerProcess) {
     resources.time_limit = Some("P0DT24H".to_string());
     resources.scheduler_config_id = Some(456);
 
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -690,7 +696,7 @@ fn test_prepare_jobs_response_validation(start_server: &ServerProcess) {
 
     let resources = models::ComputeNodesResources::new(4, 8.0, 0, 1);
 
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -764,7 +770,7 @@ fn test_prepare_jobs_integration_example(start_server: &ServerProcess) {
             .expect("Should have at least one job");
         let workflow_id = first_job.workflow_id;
 
-        let result = default_api::claim_jobs_based_on_resources(
+        let result = apis::workflows_api::claim_jobs_based_on_resources(
             config,
             workflow_id,
             &resources,
@@ -813,7 +819,7 @@ fn test_prepare_jobs_multiple_jobs_returned(start_server: &ServerProcess) {
     // Test with resources that can support all 4 jobs (4 CPU, 4GB total)
     let resources = models::ComputeNodesResources::new(4, 4.0, 0, 1);
 
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -857,7 +863,7 @@ fn test_prepare_jobs_resource_allocation_limits(start_server: &ServerProcess) {
     // Test with resources that can only support 2 jobs (4 CPU, 8GB total)
     let resources = models::ComputeNodesResources::new(4, 8.0, 0, 1);
 
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -899,7 +905,7 @@ fn test_prepare_jobs_gpu_resource_limits(start_server: &ServerProcess) {
     // Test with resources that have only 4 GPUs (can support 1 job)
     let resources = models::ComputeNodesResources::new(32, 128.0, 4, 1);
 
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -940,7 +946,7 @@ fn test_prepare_jobs_memory_resource_limits(start_server: &ServerProcess) {
     // Test with resources that have only 512GB total (can support 1 job)
     let resources = models::ComputeNodesResources::new(8, 512.0, 0, 1);
 
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -981,7 +987,7 @@ fn test_prepare_jobs_limit_parameter_restriction(start_server: &ServerProcess) {
     // Test with resources that can support all 4 jobs, but limit to 2
     let resources = models::ComputeNodesResources::new(8, 16.0, 0, 1);
 
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -1023,7 +1029,7 @@ fn test_prepare_jobs_node_resource_limits(start_server: &ServerProcess) {
     // Test with resources that have only 4 nodes total (can support 1 job)
     let resources = models::ComputeNodesResources::new(32, 128.0, 0, 4);
 
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -1065,7 +1071,7 @@ fn test_prepare_jobs_mixed_resource_limits(start_server: &ServerProcess) {
     // The limiting factor should be GPUs (4 available, jobs need 4 each = max 1 job)
     let resources = models::ComputeNodesResources::new(16, 96.0, 4, 1);
 
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -1106,7 +1112,7 @@ fn test_prepare_jobs_with_dependencies(start_server: &ServerProcess) {
     // Test with resources that could support all jobs
     let resources = models::ComputeNodesResources::new(12, 24.0, 0, 1);
 
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -1155,7 +1161,7 @@ fn test_prepare_jobs_limit_parameter_truncation(start_server: &ServerProcess) {
     // Test with resources that can support all 100 jobs (104 CPUs, 104GB total)
     let resources = models::ComputeNodesResources::new(104, 104.0, 0, 1);
 
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -1216,7 +1222,7 @@ fn test_prepare_jobs_limit_larger_than_available(start_server: &ServerProcess) {
     // Test with resources that can support all jobs, and limit higher than job count
     let resources = models::ComputeNodesResources::new(50, 50.0, 0, 1);
 
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -1262,7 +1268,7 @@ fn test_prepare_jobs_limit_very_restrictive(start_server: &ServerProcess) {
     // Test with abundant resources but very restrictive limit
     let resources = models::ComputeNodesResources::new(100, 100.0, 0, 1);
 
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -1304,7 +1310,7 @@ fn test_prepare_jobs_sort_gpus_runtime_memory(start_server: &ServerProcess) {
     // Use abundant resources so all jobs can potentially run (limited by job count)
     let resources = models::ComputeNodesResources::new(100, 500.0, 20, 1);
 
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -1330,7 +1336,7 @@ fn test_prepare_jobs_sort_gpus_runtime_memory(start_server: &ServerProcess) {
         let rr_id = job
             .resource_requirements_id
             .expect("Job should have resource requirements");
-        let rr = torc::client::default_api::get_resource_requirements(config, rr_id)
+        let rr = torc::client::apis::admin_resources_api::get_resource_requirements(config, rr_id)
             .expect("Should be able to get resource requirements");
 
         // Parse runtime from ISO8601 format (P0DT24H -> 24 hours, P0DT30M -> 0.5 hours)
@@ -1404,7 +1410,7 @@ fn test_prepare_jobs_sort_gpus_memory_runtime(start_server: &ServerProcess) {
     // Use abundant resources so all jobs can potentially run
     let resources = models::ComputeNodesResources::new(100, 500.0, 20, 1);
 
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -1430,7 +1436,7 @@ fn test_prepare_jobs_sort_gpus_memory_runtime(start_server: &ServerProcess) {
         let rr_id = job
             .resource_requirements_id
             .expect("Job should have resource requirements");
-        let rr = torc::client::default_api::get_resource_requirements(config, rr_id)
+        let rr = torc::client::apis::admin_resources_api::get_resource_requirements(config, rr_id)
             .expect("Should be able to get resource requirements");
 
         // Parse runtime from ISO8601 format
@@ -1504,7 +1510,7 @@ fn test_prepare_jobs_sort_none(start_server: &ServerProcess) {
     // Use abundant resources so all jobs can potentially run
     let resources = models::ComputeNodesResources::new(100, 500.0, 20, 1);
 
-    let result_none = default_api::claim_jobs_based_on_resources(
+    let result_none = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -1520,11 +1526,11 @@ fn test_prepare_jobs_sort_none(start_server: &ServerProcess) {
         "Should return at least some jobs"
     );
 
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
 
     // Also get results with sorting to compare
-    let result_sorted = default_api::claim_jobs_based_on_resources(
+    let result_sorted = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -1576,7 +1582,7 @@ fn test_prepare_jobs_different_sort_methods_different_orders(start_server: &Serv
     let resources = models::ComputeNodesResources::new(100, 500.0, 20, 1);
 
     // Get results with GpusRuntimeMemory sorting
-    let result1 = default_api::claim_jobs_based_on_resources(
+    let result1 = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -1586,11 +1592,11 @@ fn test_prepare_jobs_different_sort_methods_different_orders(start_server: &Serv
     )
     .expect("claim_jobs_based_on_resources should succeed");
 
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
 
     // Get results with GpusMemoryRuntime sorting
-    let result2 = default_api::claim_jobs_based_on_resources(
+    let result2 = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -1600,7 +1606,7 @@ fn test_prepare_jobs_different_sort_methods_different_orders(start_server: &Serv
     )
     .expect("claim_jobs_based_on_resources should succeed");
 
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
 
     let jobs1 = result1.jobs.expect("Server must return jobs array");
@@ -1697,7 +1703,7 @@ fn test_prepare_jobs_concurrent_allocation(start_server: &ServerProcess) {
             // Each thread keeps requesting jobs until none are available
             for _iteration in 1..=MAX_ITERATIONS {
                 // Request up to 10 jobs at a time
-                let result = default_api::claim_jobs_based_on_resources(
+                let result = apis::workflows_api::claim_jobs_based_on_resources(
                     &config_clone,
                     workflow_id,
                     &resources_clone,
@@ -1799,7 +1805,7 @@ fn test_claim_jobs_based_on_resources_returns_invocation_script(start_server: &S
         "test_user".to_string(),
     );
     let created_workflow =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     // Create resource requirements
@@ -1824,17 +1830,23 @@ fn test_claim_jobs_based_on_resources_returns_invocation_script(start_server: &S
     job.invocation_script = Some(invocation_script.clone());
     job.resource_requirements_id = Some(resource_req.id.unwrap());
 
-    let _created_job = default_api::create_job(config, job).expect("Failed to create job");
+    let _created_job = apis::jobs_api::create_job(config, job).expect("Failed to create job");
 
     // Initialize jobs
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
 
     // Claim the job with sufficient resources
     let resources = models::ComputeNodesResources::new(1, 1.0, 0, 1);
-    let result =
-        default_api::claim_jobs_based_on_resources(config, workflow_id, &resources, 10, None, None)
-            .expect("claim_jobs_based_on_resources should succeed");
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        &resources,
+        10,
+        None,
+        None,
+    )
+    .expect("claim_jobs_based_on_resources should succeed");
 
     let returned_jobs = result.jobs.expect("Server must return jobs array");
     assert_eq!(returned_jobs.len(), 1, "Should return exactly 1 job");
@@ -1861,7 +1873,7 @@ fn test_multi_node_reserves_whole_nodes(start_server: &ServerProcess) {
     let config = &start_server.config;
     let workflow = models::WorkflowModel::new("multi_node_test".to_string(), "user".to_string());
     let created_workflow =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     // Multi-node resource requirements: num_nodes=2
@@ -1872,7 +1884,7 @@ fn test_multi_node_reserves_whole_nodes(start_server: &ServerProcess) {
     multi_rr.num_nodes = 2;
     multi_rr.memory = "32g".to_string();
     multi_rr.runtime = "PT1H".to_string();
-    let multi_rr = default_api::create_resource_requirements(config, multi_rr)
+    let multi_rr = apis::admin_resources_api::create_resource_requirements(config, multi_rr)
         .expect("Failed to create multi-node RR");
 
     // Single-node resource requirements
@@ -1890,7 +1902,7 @@ fn test_multi_node_reserves_whole_nodes(start_server: &ServerProcess) {
     // Create 1 multi-node job
     let mut job = models::JobModel::new(workflow_id, "mpi_job".to_string(), "echo mpi".to_string());
     job.resource_requirements_id = Some(multi_rr.id.unwrap());
-    default_api::create_job(config, job).expect("Failed to create job");
+    apis::jobs_api::create_job(config, job).expect("Failed to create job");
 
     // Create 3 single-node jobs
     for i in 0..3 {
@@ -1900,15 +1912,15 @@ fn test_multi_node_reserves_whole_nodes(start_server: &ServerProcess) {
             format!("echo single {}", i),
         );
         job.resource_requirements_id = Some(single_rr.id.unwrap());
-        default_api::create_job(config, job).expect("Failed to create job");
+        apis::jobs_api::create_job(config, job).expect("Failed to create job");
     }
 
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
 
     // 4 nodes × 16 CPUs per node: multi-node takes 2 nodes, 3 single-node jobs fit on remaining 2
     let resources = models::ComputeNodesResources::new(16, 32.0, 0, 4);
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -1948,7 +1960,7 @@ fn test_multi_node_blocks_single_node_when_all_nodes_used(start_server: &ServerP
     let config = &start_server.config;
     let workflow = models::WorkflowModel::new("mn_blocks_sn_test".to_string(), "user".to_string());
     let created_workflow =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     // Multi-node RR: needs all 2 nodes
@@ -1959,7 +1971,7 @@ fn test_multi_node_blocks_single_node_when_all_nodes_used(start_server: &ServerP
     multi_rr.num_nodes = 2;
     multi_rr.memory = "32g".to_string();
     multi_rr.runtime = "PT2H".to_string(); // higher runtime so sorted first
-    let multi_rr = default_api::create_resource_requirements(config, multi_rr)
+    let multi_rr = apis::admin_resources_api::create_resource_requirements(config, multi_rr)
         .expect("Failed to create multi-node RR");
 
     // Single-node RR
@@ -1978,7 +1990,7 @@ fn test_multi_node_blocks_single_node_when_all_nodes_used(start_server: &ServerP
     let mut job =
         models::JobModel::new(workflow_id, "mpi_full".to_string(), "echo mpi".to_string());
     job.resource_requirements_id = Some(multi_rr.id.unwrap());
-    default_api::create_job(config, job).expect("Failed to create job");
+    apis::jobs_api::create_job(config, job).expect("Failed to create job");
 
     for i in 0..2 {
         let mut job = models::JobModel::new(
@@ -1987,15 +1999,15 @@ fn test_multi_node_blocks_single_node_when_all_nodes_used(start_server: &ServerP
             format!("echo {}", i),
         );
         job.resource_requirements_id = Some(single_rr.id.unwrap());
-        default_api::create_job(config, job).expect("Failed to create job");
+        apis::jobs_api::create_job(config, job).expect("Failed to create job");
     }
 
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
 
     // 2 nodes × 16 CPUs per node
     let resources = models::ComputeNodesResources::new(16, 32.0, 0, 2);
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
@@ -2025,7 +2037,7 @@ fn test_num_nodes_reserves_whole_nodes(start_server: &ServerProcess) {
     let workflow =
         models::WorkflowModel::new("num_nodes_reserve_test".to_string(), "user".to_string());
     let created_workflow =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     // RR with num_nodes=2
@@ -2035,7 +2047,8 @@ fn test_num_nodes_reserves_whole_nodes(start_server: &ServerProcess) {
     rr.num_nodes = 2;
     rr.memory = "16g".to_string();
     rr.runtime = "PT1H".to_string();
-    let rr = default_api::create_resource_requirements(config, rr).expect("Failed to create RR");
+    let rr = apis::admin_resources_api::create_resource_requirements(config, rr)
+        .expect("Failed to create RR");
 
     // Create 2 jobs with this RR
     for i in 0..2 {
@@ -2045,15 +2058,15 @@ fn test_num_nodes_reserves_whole_nodes(start_server: &ServerProcess) {
             format!("echo {}", i),
         );
         job.resource_requirements_id = Some(rr.id.unwrap());
-        default_api::create_job(config, job).expect("Failed to create job");
+        apis::jobs_api::create_job(config, job).expect("Failed to create job");
     }
 
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
 
     // 4 nodes: each job reserves 2 nodes, so only 2 jobs can fit
     let resources = models::ComputeNodesResources::new(16, 32.0, 0, 4);
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,

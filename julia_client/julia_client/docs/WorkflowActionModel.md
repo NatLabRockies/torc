@@ -9,7 +9,7 @@ Name | Type | Description | Notes
 **executed** | **Bool** |  | [default to nothing]
 **executed_at** | **String** |  | [optional] [default to nothing]
 **executed_by** | **Int64** |  | [optional] [default to nothing]
-**id** | **Int64** |  | [optional] [default to nothing]
+**id** | **Int64** |  | [default to nothing]
 **is_recovery** | **Bool** |  | [default to nothing]
 **job_ids** | **Vector{Int64}** |  | [optional] [default to nothing]
 **persistent** | **Bool** |  | [default to nothing]

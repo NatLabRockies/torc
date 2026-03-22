@@ -1,5 +1,5 @@
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::errors::TorcError;
 use crate::config::TorcConfig;
 use log::{self, debug, error, info, warn};
@@ -67,7 +67,8 @@ impl WorkflowManager {
     /// Get list of missing required input files (file paths)
     fn get_missing_required_files(&self) -> Result<Vec<String>, TorcError> {
         let response =
-            match default_api::list_required_existing_files(&self.config, self.workflow_id) {
+            match apis::workflows_api::list_required_existing_files(&self.config, self.workflow_id)
+            {
                 Ok(response) => response,
                 Err(err) => {
                     return Err(TorcError::ApiError(format!(
@@ -80,7 +81,7 @@ impl WorkflowManager {
         let mut missing_files = Vec::new();
 
         for file_id in response.files {
-            let file = match default_api::get_file(&self.config, file_id) {
+            let file = match apis::files_api::get_file(&self.config, file_id) {
                 Ok(file) => file,
                 Err(err) => {
                     return Err(TorcError::ApiError(format!(
@@ -135,7 +136,8 @@ impl WorkflowManager {
     pub fn initialize(&self, force: bool) -> Result<(), TorcError> {
         self.check_workflow(force)?;
         self.cleanup_output_files(false)?;
-        match default_api::reset_workflow_status(&self.config, self.workflow_id, None, None) {
+        match apis::workflows_api::reset_workflow_status(&self.config, self.workflow_id, None, None)
+        {
             Ok(_) => {}
             Err(err) => {
                 error!(
@@ -145,7 +147,12 @@ impl WorkflowManager {
                 return Err(TorcError::ApiError(err.to_string()));
             }
         }
-        match default_api::reset_job_status(&self.config, self.workflow_id, Some(false), None) {
+        match apis::workflows_api::reset_job_status(
+            &self.config,
+            self.workflow_id,
+            Some(false),
+            None,
+        ) {
             Ok(_) => {}
             Err(err) => {
                 error!(
@@ -171,7 +178,7 @@ impl WorkflowManager {
         poll_interval_override: Option<i32>,
     ) -> Result<(), TorcError> {
         // Check if workflow is uninitialized
-        match default_api::is_workflow_uninitialized(&self.config, self.workflow_id) {
+        match apis::workflows_api::is_workflow_uninitialized(&self.config, self.workflow_id) {
             Ok(response) => {
                 if let Some(is_uninitialized) =
                     response.get("is_uninitialized").and_then(|v| v.as_bool())
@@ -196,7 +203,7 @@ impl WorkflowManager {
         // Get pending on_workflow_start actions
         // Note: We don't create a compute node for the submission host (login node)
         // since it's not actually running jobs - it just submits to the scheduler
-        let actions = match default_api::get_pending_actions(
+        let actions = match apis::final_surfaces_api::get_pending_actions(
             &self.config,
             self.workflow_id,
             Some(vec!["on_workflow_start".to_string()]),
@@ -317,7 +324,12 @@ impl WorkflowManager {
         self.check_workflow(force)?;
         if !dry_run {
             self.bump_run_id()?;
-            match default_api::reset_workflow_status(&self.config, self.workflow_id, None, None) {
+            match apis::workflows_api::reset_workflow_status(
+                &self.config,
+                self.workflow_id,
+                None,
+                None,
+            ) {
                 Ok(_) => {
                     info!("Reset status of workflow_id={}", self.workflow_id);
                 }
@@ -337,12 +349,12 @@ impl WorkflowManager {
 
     /// Increment the run_id field of the workflow.
     pub fn bump_run_id(&self) -> Result<i64, TorcError> {
-        match default_api::get_workflow_status(&self.config, self.workflow_id) {
+        match apis::workflows_api::get_workflow_status(&self.config, self.workflow_id) {
             Ok(status) => {
                 let mut new_status = status.clone();
                 new_status.run_id += 1;
                 let new_run_id = new_status.run_id;
-                match default_api::update_workflow_status(
+                match apis::workflows_api::update_workflow_status(
                     &self.config,
                     self.workflow_id,
                     new_status,
@@ -386,8 +398,11 @@ impl WorkflowManager {
                             if needs_update {
                                 file.st_mtime = Some(mtime);
 
-                                match default_api::update_file(&self.config, file_id, file.clone())
-                                {
+                                match apis::files_api::update_file(
+                                    &self.config,
+                                    file_id,
+                                    file.clone(),
+                                ) {
                                     Ok(_) => {
                                         info!(
                                             "Updated file {} (id: {}) with mtime: {}",
@@ -480,7 +495,7 @@ impl WorkflowManager {
                         let mut updated_file = file.clone();
                         updated_file.st_mtime = None;
 
-                        match default_api::update_file(&self.config, file_id, updated_file) {
+                        match apis::files_api::update_file(&self.config, file_id, updated_file) {
                             Ok(_) => {
                                 debug!(
                                     "Updated st_mtime to None for deleted file {} (id: {})",
@@ -520,7 +535,7 @@ impl WorkflowManager {
     }
 
     pub fn get_run_id(&self) -> Result<i64, TorcError> {
-        match default_api::get_workflow_status(&self.config, self.workflow_id) {
+        match apis::workflows_api::get_workflow_status(&self.config, self.workflow_id) {
             Ok(status) => Ok(status.run_id),
             Err(err) => Err(TorcError::ApiError(err.to_string())),
         }
@@ -528,7 +543,7 @@ impl WorkflowManager {
 
     /// Check the condtions of the workflow.
     pub fn check_workflow(&self, force: bool) -> Result<(), TorcError> {
-        match default_api::get_workflow_status(&self.config, self.workflow_id) {
+        match apis::workflows_api::get_workflow_status(&self.config, self.workflow_id) {
             Ok(status) => {
                 if status.is_archived.unwrap_or(false) {
                     return Err(TorcError::OperationNotAllowed(format!(
@@ -545,7 +560,7 @@ impl WorkflowManager {
     }
 
     pub fn check_user_data(&self) -> Result<(), TorcError> {
-        match default_api::list_missing_user_data(&self.config, self.workflow_id) {
+        match apis::workflows_api::list_missing_user_data(&self.config, self.workflow_id) {
             Ok(response) => {
                 if !response.user_data.is_empty() {
                     let missing_ids = response
@@ -571,7 +586,7 @@ impl WorkflowManager {
 
     /// Change all uninitialized jobs to the ready state.
     pub fn initialize_jobs(&self, only_uninitialized: bool) -> Result<(), TorcError> {
-        match default_api::initialize_jobs(
+        match apis::workflows_api::initialize_jobs(
             &self.config,
             self.workflow_id,
             Some(only_uninitialized),
@@ -607,7 +622,7 @@ impl WorkflowManager {
     /// This is a non-blocking operation - warnings are logged but errors don't fail initialization.
     fn create_ro_crate_entities_for_input_files(&self) {
         // Fetch workflow to check enable_ro_crate flag
-        let workflow = match default_api::get_workflow(&self.config, self.workflow_id) {
+        let workflow = match apis::workflows_api::get_workflow(&self.config, self.workflow_id) {
             Ok(workflow) => workflow,
             Err(e) => {
                 debug!(
@@ -767,7 +782,8 @@ impl WorkflowManager {
                                 file.name, file_id, change_reason
                             );
                         } else {
-                            match default_api::update_file(&self.config, file_id, file.clone()) {
+                            match apis::files_api::update_file(&self.config, file_id, file.clone())
+                            {
                                 Ok(_) => {
                                     debug!(
                                         "Updated file {} (id: {}) - {}",
@@ -813,7 +829,7 @@ impl WorkflowManager {
             self.workflow_id
         );
 
-        match default_api::process_changed_job_inputs(
+        match apis::workflows_api::process_changed_job_inputs(
             &self.config,
             self.workflow_id,
             Some(dry_run),
@@ -938,7 +954,7 @@ impl WorkflowManager {
                             );
                         }
                     } else {
-                        match default_api::manage_status_change(
+                        match apis::jobs_api::manage_status_change(
                             &self.config,
                             job_id,
                             JobStatus::Uninitialized,
@@ -1049,7 +1065,7 @@ impl WorkflowManager {
                         );
                     }
                 } else {
-                    match default_api::manage_status_change(
+                    match apis::jobs_api::manage_status_change(
                         &self.config,
                         job_id,
                         JobStatus::Uninitialized,
@@ -1082,7 +1098,8 @@ impl WorkflowManager {
     pub fn check_workflow_files(&self, force: bool) -> Result<(), TorcError> {
         // Get list of required existing file IDs
         let response =
-            match default_api::list_required_existing_files(&self.config, self.workflow_id) {
+            match apis::workflows_api::list_required_existing_files(&self.config, self.workflow_id)
+            {
                 Ok(response) => response,
                 Err(err) => {
                     return Err(TorcError::ApiError(format!(
@@ -1096,7 +1113,7 @@ impl WorkflowManager {
         let file_count = response.files.len();
 
         for file_id in response.files {
-            let file = match default_api::get_file(&self.config, file_id) {
+            let file = match apis::files_api::get_file(&self.config, file_id) {
                 Ok(file) => file,
                 Err(err) => {
                     panic!("Failed to get file details for ID {}: {}", file_id, err);

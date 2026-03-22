@@ -192,17 +192,12 @@ fn maybe_reload_auth(reload_auth: bool, url: &Option<String>, server_password: &
         config.basic_auth = Some((username, Some(password.clone())));
     }
 
-    match torc::client::apis::default_api::reload_auth(&config) {
+    match torc::client::apis::final_surfaces_api::reload_auth(&config) {
         Ok(response) => {
-            let message = response
-                .get("message")
-                .and_then(|v| v.as_str())
-                .unwrap_or("Auth reloaded");
-            let user_count = response
-                .get("user_count")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0);
-            println!("Server: {} ({} users)", message, user_count);
+            println!(
+                "Server: {} ({} users)",
+                response.message, response.user_count
+            );
         }
         Err(e) => {
             eprintln!("Warning: Failed to reload auth on server: {e}");

@@ -42,6 +42,7 @@ use crate::api_models::{
     UserDataModel, UserGroupMembershipModel, WorkflowAccessGroupModel, WorkflowActionModel,
     WorkflowModel, WorkflowStatusModel,
 };
+use crate::api_version::HTTP_API_VERSION;
 use helpers::{check_component_properties, check_operation_id, check_schema_properties};
 
 #[derive(Debug, Clone)]
@@ -60,7 +61,7 @@ impl Default for OpenApiAppState {
                 let git_dirty = option_env!("GIT_DIRTY").unwrap_or("");
                 format!("{} ({}{})", env!("CARGO_PKG_VERSION"), git_hash, git_dirty)
             },
-            api_version: "0.11.0".to_string(),
+            api_version: HTTP_API_VERSION.to_string(),
             git_hash: option_env!("GIT_HASH").unwrap_or("unknown").to_string(),
             access_control_enabled: false,
         }
@@ -388,6 +389,7 @@ pub fn app_router(state: OpenApiAppState) -> Router {
 
 #[derive(OpenApi)]
 #[openapi(
+    servers((url = "/torc-service/v1", description = "Versioned Torc API base path")),
     paths(
         access_control::create_access_group,
         access_control::list_access_groups,
@@ -588,12 +590,39 @@ pub fn app_router(state: OpenApiAppState) -> Router {
 )]
 pub struct TorcOpenApi;
 
+fn openapi_doc() -> utoipa::openapi::OpenApi {
+    let mut doc = TorcOpenApi::openapi();
+    doc.info.version = HTTP_API_VERSION.to_string();
+
+    let workflow_action_required = vec![
+        "id".to_string(),
+        "workflow_id".to_string(),
+        "trigger_type".to_string(),
+        "action_type".to_string(),
+        "action_config".to_string(),
+        "trigger_count".to_string(),
+        "required_triggers".to_string(),
+        "executed".to_string(),
+        "persistent".to_string(),
+        "is_recovery".to_string(),
+    ];
+
+    if let Some(components) = doc.components.as_mut()
+        && let Some(schema) = components.schemas.get_mut("WorkflowActionModel")
+        && let utoipa::openapi::RefOr::T(utoipa::openapi::schema::Schema::Object(object)) = schema
+    {
+        object.required = workflow_action_required;
+    }
+
+    doc
+}
+
 pub fn openapi_value() -> Value {
-    serde_json::to_value(TorcOpenApi::openapi()).expect("OpenAPI document should serialize")
+    serde_json::to_value(openapi_doc()).expect("OpenAPI document should serialize")
 }
 
 pub fn render_openapi_yaml() -> Result<String, serde_yaml::Error> {
-    serde_yaml::to_string(&TorcOpenApi::openapi())
+    serde_yaml::to_string(&openapi_doc())
 }
 
 pub fn parity_report(source: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {

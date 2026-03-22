@@ -20,6 +20,7 @@ pub fn get_username() -> String {
 
 // Shared modules (always available)
 pub mod api_models;
+pub mod api_version;
 pub mod memory_utils;
 pub mod network_utils;
 pub mod time_utils;

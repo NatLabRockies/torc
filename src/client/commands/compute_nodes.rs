@@ -1,5 +1,5 @@
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::commands::get_env_user_name;
 use crate::client::commands::output::{print_if_json, print_wrapped_if_json};
 use crate::client::commands::pagination::{ComputeNodeListParams, paginate_compute_nodes};
@@ -95,38 +95,40 @@ pub fn handle_compute_node_commands(
     format: &str,
 ) {
     match command {
-        ComputeNodeCommands::Get { id } => match default_api::get_compute_node(config, *id) {
-            Ok(node) => {
-                if print_if_json(format, &node, "compute node") {
-                    // JSON was printed
-                } else {
-                    println!("Compute Node Details:");
-                    println!("  ID: {}", node.id.unwrap_or(-1));
-                    println!("  Workflow ID: {}", node.workflow_id);
-                    println!("  Hostname: {}", node.hostname);
-                    println!("  PID: {}", node.pid);
-                    println!("  CPUs: {}", node.num_cpus);
-                    println!("  Memory: {:.2} GB", node.memory_gb);
-                    println!("  GPUs: {}", node.num_gpus);
-                    println!(
-                        "  Active: {}",
-                        match node.is_active {
-                            Some(true) => "Yes",
-                            Some(false) => "No",
-                            None => "Unknown",
+        ComputeNodeCommands::Get { id } => {
+            match apis::compute_nodes_api::get_compute_node(config, *id) {
+                Ok(node) => {
+                    if print_if_json(format, &node, "compute node") {
+                        // JSON was printed
+                    } else {
+                        println!("Compute Node Details:");
+                        println!("  ID: {}", node.id.unwrap_or(-1));
+                        println!("  Workflow ID: {}", node.workflow_id);
+                        println!("  Hostname: {}", node.hostname);
+                        println!("  PID: {}", node.pid);
+                        println!("  CPUs: {}", node.num_cpus);
+                        println!("  Memory: {:.2} GB", node.memory_gb);
+                        println!("  GPUs: {}", node.num_gpus);
+                        println!(
+                            "  Active: {}",
+                            match node.is_active {
+                                Some(true) => "Yes",
+                                Some(false) => "No",
+                                None => "Unknown",
+                            }
+                        );
+                        println!("  Start Time: {}", node.start_time);
+                        if let Some(duration) = node.duration_seconds {
+                            println!("  Duration: {:.2} seconds", duration);
                         }
-                    );
-                    println!("  Start Time: {}", node.start_time);
-                    if let Some(duration) = node.duration_seconds {
-                        println!("  Duration: {:.2} seconds", duration);
                     }
                 }
+                Err(e) => {
+                    print_error("getting compute node", &e);
+                    std::process::exit(1);
+                }
             }
-            Err(e) => {
-                print_error("getting compute node", &e);
-                std::process::exit(1);
-            }
-        },
+        }
         ComputeNodeCommands::List {
             workflow_id,
             limit,

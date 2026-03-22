@@ -1,5 +1,5 @@
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::commands::output::print_if_json;
 use crate::client::commands::table_format::display_table_with_count;
 use crate::client::commands::{get_env_user_name, print_error, select_workflow_interactively};
@@ -112,7 +112,7 @@ pub fn handle_job_dependency_commands(
                 },
             };
 
-            match default_api::list_job_dependencies(
+            match apis::workflows_api::list_job_dependencies(
                 config,
                 selected_workflow_id,
                 Some(*offset),
@@ -158,7 +158,7 @@ pub fn handle_job_dependency_commands(
                 },
             };
 
-            match default_api::list_job_file_relationships(
+            match apis::workflows_api::list_job_file_relationships(
                 config,
                 selected_workflow_id,
                 Some(*offset),
@@ -218,7 +218,7 @@ pub fn handle_job_dependency_commands(
                 },
             };
 
-            match default_api::list_job_user_data_relationships(
+            match apis::workflows_api::list_job_user_data_relationships(
                 config,
                 selected_workflow_id,
                 Some(*offset),

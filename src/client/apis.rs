@@ -136,6 +136,18 @@ impl From<&str> for ContentType {
     }
 }
 
-pub mod default_api;
-
+pub mod access_control_api;
+pub mod admin_resources_api;
+pub mod compute_nodes_api;
 pub mod configuration;
+pub mod events_api;
+pub mod files_api;
+pub mod final_surfaces_api;
+pub mod jobs_api;
+pub mod local_schedulers_api;
+pub mod results_api;
+pub mod scheduled_compute_nodes_api;
+pub mod slurm_schedulers_api;
+pub mod system_api;
+pub mod user_data_api;
+pub mod workflows_api;

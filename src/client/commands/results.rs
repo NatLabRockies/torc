@@ -1,5 +1,5 @@
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::commands::get_env_user_name;
 use crate::client::commands::output::{print_if_json, print_wrapped_if_json};
 use crate::client::commands::{
@@ -276,7 +276,7 @@ pub fn handle_result_commands(config: &Configuration, command: &ResultCommands, 
                 }
             }
         }
-        ResultCommands::Get { id } => match default_api::get_result(config, *id) {
+        ResultCommands::Get { id } => match apis::results_api::get_result(config, *id) {
             Ok(result) => {
                 if print_if_json(format, &result, "result") {
                     // JSON was printed
@@ -317,21 +317,23 @@ pub fn handle_result_commands(config: &Configuration, command: &ResultCommands, 
                 std::process::exit(1);
             }
         },
-        ResultCommands::Delete { id } => match default_api::delete_result(config, *id, None) {
-            Ok(removed_result) => {
-                if print_if_json(format, &removed_result, "result") {
-                    // JSON was printed
-                } else {
-                    println!("Successfully removed result:");
-                    println!("  ID: {}", removed_result.id.unwrap_or(-1));
-                    println!("  Job ID: {}", removed_result.job_id);
-                    println!("  Workflow ID: {}", removed_result.workflow_id);
+        ResultCommands::Delete { id } => {
+            match apis::results_api::delete_result(config, *id, None) {
+                Ok(removed_result) => {
+                    if print_if_json(format, &removed_result, "result") {
+                        // JSON was printed
+                    } else {
+                        println!("Successfully removed result:");
+                        println!("  ID: {}", removed_result.id.unwrap_or(-1));
+                        println!("  Job ID: {}", removed_result.job_id);
+                        println!("  Workflow ID: {}", removed_result.workflow_id);
+                    }
+                }
+                Err(e) => {
+                    print_error("removing result", &e);
+                    std::process::exit(1);
                 }
             }
-            Err(e) => {
-                print_error("removing result", &e);
-                std::process::exit(1);
-            }
-        },
+        }
     }
 }

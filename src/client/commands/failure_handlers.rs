@@ -1,5 +1,5 @@
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::commands::get_env_user_name;
 use crate::client::commands::output::{print_if_json, print_wrapped_if_json};
 use crate::client::commands::{
@@ -56,7 +56,7 @@ pub fn handle_failure_handler_commands(
                 None => select_workflow_interactively(config, &user_name).unwrap(),
             };
 
-            match default_api::list_failure_handlers(
+            match apis::admin_resources_api::list_failure_handlers(
                 config,
                 selected_workflow_id,
                 Some(*offset),
@@ -100,7 +100,7 @@ pub fn handle_failure_handler_commands(
             }
         }
         FailureHandlerCommands::Get { id } => {
-            match default_api::get_failure_handler(config, *id) {
+            match apis::admin_resources_api::get_failure_handler(config, *id) {
                 Ok(handler) => {
                     if print_if_json(format, &handler, "failure handler") {
                         // JSON was printed

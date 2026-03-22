@@ -8,8 +8,8 @@ use crossterm::{
 };
 use ratatui::{Terminal, backend::CrosstermBackend};
 
+use crate::client::apis;
 use crate::client::apis::configuration::BasicAuth;
-use crate::client::apis::default_api;
 
 mod api;
 mod app;
@@ -34,7 +34,7 @@ fn check_server_connection(
         return false;
     }
 
-    default_api::ping(&config).is_ok()
+    apis::system_api::ping(&config).is_ok()
 }
 
 pub fn run(

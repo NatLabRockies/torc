@@ -1,5 +1,5 @@
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::commands::get_env_user_name;
 use crate::client::commands::output::{print_if_json, print_json, print_wrapped_if_json};
 use crate::client::commands::{
@@ -84,7 +84,7 @@ pub fn handle_scheduled_compute_node_commands(
 ) {
     match command {
         ScheduledComputeNodeCommands::Get { id } => {
-            match default_api::get_scheduled_compute_node(config, *id) {
+            match apis::scheduled_compute_nodes_api::get_scheduled_compute_node(config, *id) {
                 Ok(node) => {
                     if print_if_json(format, &node, "scheduled compute node") {
                         // JSON was printed
@@ -125,7 +125,7 @@ pub fn handle_scheduled_compute_node_commands(
                 },
             };
 
-            match default_api::list_scheduled_compute_nodes(
+            match apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
                 config,
                 selected_workflow_id,
                 Some(*offset),
@@ -172,18 +172,19 @@ pub fn handle_scheduled_compute_node_commands(
         }
         ScheduledComputeNodeCommands::ListJobs { id } => {
             // Step 1: Get the scheduled compute node to find the workflow_id
-            let scheduled_node = match default_api::get_scheduled_compute_node(config, *id) {
-                Ok(node) => node,
-                Err(e) => {
-                    print_error("getting scheduled compute node", &e);
-                    std::process::exit(1);
-                }
-            };
+            let scheduled_node =
+                match apis::scheduled_compute_nodes_api::get_scheduled_compute_node(config, *id) {
+                    Ok(node) => node,
+                    Err(e) => {
+                        print_error("getting scheduled compute node", &e);
+                        std::process::exit(1);
+                    }
+                };
 
             let workflow_id = scheduled_node.workflow_id;
 
             // Step 2: Get all compute nodes created by this scheduled compute node
-            let compute_nodes = match default_api::list_compute_nodes(
+            let compute_nodes = match apis::compute_nodes_api::list_compute_nodes(
                 config,
                 workflow_id,
                 None,      // offset
@@ -215,7 +216,7 @@ pub fn handle_scheduled_compute_node_commands(
 
             for compute_node in &compute_nodes {
                 if let Some(compute_node_id) = compute_node.id {
-                    match default_api::list_results(
+                    match apis::results_api::list_results(
                         config,
                         workflow_id,
                         None,                  // job_id

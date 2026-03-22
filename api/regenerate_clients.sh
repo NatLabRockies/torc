@@ -6,6 +6,9 @@ CONTAINER_EXEC="${CONTAINER_EXEC:-docker}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SPEC_PATH="${SCRIPT_DIR}/openapi.yaml"
+API_VERSION="$(
+  awk -F'"' '/pub const HTTP_API_VERSION:/ { print $2; exit }' "${REPO_ROOT}/src/api_version.rs"
+)"
 
 TMP_PYTHON_CLIENT="${TMP_PYTHON_CLIENT:-${SCRIPT_DIR}/python_client}"
 TMP_JULIA_CLIENT="${TMP_JULIA_CLIENT:-${SCRIPT_DIR}/julia_client}"
@@ -32,26 +35,46 @@ if [[ ! -f "${SPEC_PATH}" ]]; then
   exit 1
 fi
 
+if [[ -z "${API_VERSION}" ]]; then
+  echo "Failed to read HTTP API version from src/api_version.rs" >&2
+  exit 1
+fi
+
 SPEC_PATH="$(cd "$(dirname "${SPEC_PATH}")" && pwd)/$(basename "${SPEC_PATH}")"
 SPEC_DIR="$(dirname "${SPEC_PATH}")"
 SPEC_FILE="$(basename "${SPEC_PATH}")"
 
+docker_run() {
+  case "${OSTYPE:-}" in
+    msys*|cygwin*)
+      MSYS_NO_PATHCONV=1 "${CONTAINER_EXEC}" "$@"
+      ;;
+    *)
+      "${CONTAINER_EXEC}" "$@"
+      ;;
+  esac
+}
+
 rm -rf "${TMP_PYTHON_CLIENT}" "${TMP_JULIA_CLIENT}"
 mkdir -p "${TMP_PYTHON_CLIENT}" "${TMP_JULIA_CLIENT}"
 
-"${CONTAINER_EXEC}" run \
+bash "${SCRIPT_DIR}/regenerate_rust_client.sh" --spec "${SPEC_PATH}"
+
+docker_run run \
   -v "${SCRIPT_DIR}":/data \
   -v "${SPEC_DIR}":/spec \
   -v "${TMP_PYTHON_CLIENT}":/python_client \
   "docker.io/openapitools/openapi-generator-cli:${OPENAPI_CLI_VERSION}" \
-  generate -g python --input-spec="/spec/${SPEC_FILE}" -o /python_client -c /data/config.json
+  generate -g python --input-spec="/spec/${SPEC_FILE}" -o /python_client -c /data/config.json \
+  --additional-properties=packageVersion="${API_VERSION}"
 
-"${CONTAINER_EXEC}" run \
+docker_run run \
   -v "${SCRIPT_DIR}":/data \
   -v "${SPEC_DIR}":/spec \
   -v "${TMP_JULIA_CLIENT}":/julia_client \
   "docker.io/openapitools/openapi-generator-cli:${OPENAPI_CLI_VERSION}" \
-  generate -g julia-client --input-spec="/spec/${SPEC_FILE}" -o /julia_client
+  generate -g julia-client --input-spec="/spec/${SPEC_FILE}" -o /julia_client \
+  --additional-properties=packageVersion="${API_VERSION}"
 
 rm -rf "${REPO_ROOT}/python_client/src/torc/openapi_client"/*
 rm -rf "${REPO_ROOT}/julia_client/Torc/src/api"/*

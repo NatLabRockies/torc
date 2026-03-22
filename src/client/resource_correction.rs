@@ -9,8 +9,8 @@ use std::collections::{HashMap, HashSet};
 use log::{debug, info, warn};
 use serde::Serialize;
 
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::report_models::ResourceUtilizationReport;
 use crate::memory_utils::memory_string_to_bytes;
 use crate::models;
@@ -462,7 +462,7 @@ fn aggregate_violations(
         }
 
         // Get current job to find resource requirements
-        let job = match default_api::get_job(ctx.config, job_id) {
+        let job = match apis::jobs_api::get_job(ctx.config, job_id) {
             Ok(j) => j,
             Err(e) => {
                 warn!("Warning: couldn't get job {}: {}", job_id, e);
@@ -482,7 +482,7 @@ fn aggregate_violations(
         let adjustment = rr_adjustments.entry(rr_id).or_insert_with(|| {
             // Fetch current resource requirements (only once per rr_id)
             let (current_memory, current_runtime, current_cpus) =
-                match default_api::get_resource_requirements(ctx.config, rr_id) {
+                match apis::admin_resources_api::get_resource_requirements(ctx.config, rr_id) {
                     Ok(rr) => (rr.memory, rr.runtime, rr.num_cpus),
                     Err(e) => {
                         warn!(
@@ -591,7 +591,7 @@ fn apply_upscale_for_adjustment(
     let mut new_cpus_value = None;
 
     // Fetch current resource requirements for update
-    let rr = match default_api::get_resource_requirements(config, rr_id) {
+    let rr = match apis::admin_resources_api::get_resource_requirements(config, rr_id) {
         Ok(r) => r,
         Err(e) => {
             warn!(
@@ -776,7 +776,8 @@ fn apply_upscale_for_adjustment(
 
     // Update resource requirements if changed (only once per rr_id)
     if !opts.dry_run
-        && let Err(e) = default_api::update_resource_requirements(config, rr_id, new_rr)
+        && let Err(e) =
+            apis::admin_resources_api::update_resource_requirements(config, rr_id, new_rr)
     {
         warn!(
             "Warning: failed to update resource requirements {}: {}",
@@ -822,7 +823,7 @@ fn apply_downscale_for_candidate(
     const RUNTIME_THRESHOLD_SECS: i64 = 30 * 60; // 30 minutes
 
     let rr_id = candidate.rr_id;
-    let rr = match default_api::get_resource_requirements(config, rr_id) {
+    let rr = match apis::admin_resources_api::get_resource_requirements(config, rr_id) {
         Ok(r) => r,
         Err(e) => {
             warn!(
@@ -939,7 +940,8 @@ fn apply_downscale_for_candidate(
     }
 
     if !opts.dry_run
-        && let Err(e) = default_api::update_resource_requirements(config, rr_id, new_rr)
+        && let Err(e) =
+            apis::admin_resources_api::update_resource_requirements(config, rr_id, new_rr)
     {
         warn!(
             "Warning: failed to update resource requirements {}: {}",

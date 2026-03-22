@@ -15,7 +15,7 @@ use serial_test::serial;
 use std::collections::HashMap;
 use std::fs;
 use tempfile::NamedTempFile;
-use torc::client::default_api;
+use torc::client::apis;
 use torc::client::workflow_spec::{
     ExecutionConfig, ExecutionMode, StdioConfig, StdioMode, WorkflowSpec,
 };
@@ -837,7 +837,7 @@ fn test_create_workflow_with_execution_config(start_server: &ServerProcess) {
     assert!(workflow_id > 0);
 
     // Verify the execution_config was stored
-    let workflow = default_api::get_workflow(&start_server.config, workflow_id)
+    let workflow = apis::workflows_api::get_workflow(&start_server.config, workflow_id)
         .expect("Failed to get workflow");
     assert_eq!(workflow.name, "execution_config_test");
 
@@ -877,7 +877,7 @@ fn test_create_workflow_with_slurm_execution_config(start_server: &ServerProcess
     .expect("Failed to create workflow from spec file");
 
     // Verify the execution_config was stored correctly
-    let workflow = default_api::get_workflow(&start_server.config, workflow_id)
+    let workflow = apis::workflows_api::get_workflow(&start_server.config, workflow_id)
         .expect("Failed to get workflow");
 
     assert!(workflow.execution_config.is_some());
@@ -915,7 +915,7 @@ fn test_create_workflow_without_execution_config(start_server: &ServerProcess) {
     .expect("Failed to create workflow from spec file");
 
     // Workflow should be created successfully without execution_config
-    let workflow = default_api::get_workflow(&start_server.config, workflow_id)
+    let workflow = apis::workflows_api::get_workflow(&start_server.config, workflow_id)
         .expect("Failed to get workflow");
     assert_eq!(workflow.name, "no_execution_config_test");
     // execution_config may be None or empty
@@ -946,7 +946,7 @@ fn test_create_workflow_with_auto_mode(start_server: &ServerProcess) {
     )
     .expect("Failed to create workflow from spec file");
 
-    let workflow = default_api::get_workflow(&start_server.config, workflow_id)
+    let workflow = apis::workflows_api::get_workflow(&start_server.config, workflow_id)
         .expect("Failed to get workflow");
 
     assert!(workflow.execution_config.is_some());
@@ -1187,7 +1187,7 @@ fn test_direct_mode_simple_job_execution(start_server: &ServerProcess) {
     .expect("Failed to create workflow");
 
     // Verify workflow was created with direct mode execution_config
-    let workflow = default_api::get_workflow(&start_server.config, workflow_id)
+    let workflow = apis::workflows_api::get_workflow(&start_server.config, workflow_id)
         .expect("Failed to get workflow");
 
     assert!(workflow.execution_config.is_some());
@@ -1228,7 +1228,7 @@ fn test_direct_mode_with_resource_limits(start_server: &ServerProcess) {
     )
     .expect("Failed to create workflow");
 
-    let workflow = default_api::get_workflow(&start_server.config, workflow_id)
+    let workflow = apis::workflows_api::get_workflow(&start_server.config, workflow_id)
         .expect("Failed to get workflow");
 
     let exec_config: ExecutionConfig =
@@ -1264,7 +1264,7 @@ fn test_direct_mode_disabled_resource_limits(start_server: &ServerProcess) {
     )
     .expect("Failed to create workflow");
 
-    let workflow = default_api::get_workflow(&start_server.config, workflow_id)
+    let workflow = apis::workflows_api::get_workflow(&start_server.config, workflow_id)
         .expect("Failed to get workflow");
 
     let exec_config: ExecutionConfig =
@@ -1628,7 +1628,7 @@ fn test_direct_mode_custom_exit_codes(start_server: &ServerProcess) {
     )
     .expect("Failed to create workflow");
 
-    let workflow = default_api::get_workflow(&start_server.config, workflow_id)
+    let workflow = apis::workflows_api::get_workflow(&start_server.config, workflow_id)
         .expect("Failed to get workflow");
 
     let exec_config: ExecutionConfig =

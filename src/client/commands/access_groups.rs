@@ -1,7 +1,7 @@
 //! Access group management commands for team-based access control
 
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::commands::output::{print_if_json, print_json_wrapped};
 use crate::client::commands::table_format::display_table_with_count;
 use crate::models::{AccessGroupModel, UserGroupMembershipModel};
@@ -154,7 +154,7 @@ pub fn handle_access_group_commands(
             let mut group = AccessGroupModel::new(name.clone());
             group.description = description.clone();
 
-            match default_api::create_access_group(config, group) {
+            match apis::access_control_api::create_access_group(config, group) {
                 Ok(group) => {
                     if print_if_json(format, &group, "group") {
                         // JSON was printed
@@ -173,29 +173,32 @@ pub fn handle_access_group_commands(
                 }
             }
         }
-        AccessGroupCommands::Get { id } => match default_api::get_access_group(config, *id) {
-            Ok(group) => {
-                if print_if_json(format, &group, "group") {
-                    // JSON was printed
-                } else {
-                    println!("Access group:");
-                    println!("  ID: {}", group.id.unwrap_or(-1));
-                    println!("  Name: {}", group.name);
-                    if let Some(desc) = &group.description {
-                        println!("  Description: {}", desc);
-                    }
-                    if let Some(created) = &group.created_at {
-                        println!("  Created: {}", created);
+        AccessGroupCommands::Get { id } => {
+            match apis::access_control_api::get_access_group(config, *id) {
+                Ok(group) => {
+                    if print_if_json(format, &group, "group") {
+                        // JSON was printed
+                    } else {
+                        println!("Access group:");
+                        println!("  ID: {}", group.id.unwrap_or(-1));
+                        println!("  Name: {}", group.name);
+                        if let Some(desc) = &group.description {
+                            println!("  Description: {}", desc);
+                        }
+                        if let Some(created) = &group.created_at {
+                            println!("  Created: {}", created);
+                        }
                     }
                 }
+                Err(e) => {
+                    eprintln!("Error getting access group: {}", e);
+                    std::process::exit(1);
+                }
             }
-            Err(e) => {
-                eprintln!("Error getting access group: {}", e);
-                std::process::exit(1);
-            }
-        },
+        }
         AccessGroupCommands::List { limit, offset } => {
-            match default_api::list_access_groups(config, Some(*offset), Some(*limit)) {
+            match apis::access_control_api::list_access_groups(config, Some(*offset), Some(*limit))
+            {
                 Ok(response) => {
                     if format == "json" {
                         print_json_wrapped("groups", &response.items, "groups");
@@ -221,21 +224,23 @@ pub fn handle_access_group_commands(
                 }
             }
         }
-        AccessGroupCommands::Delete { id } => match default_api::delete_access_group(config, *id) {
-            Ok(group) => {
-                if print_if_json(format, &group, "group") {
-                    // JSON was printed
-                } else {
-                    println!("Successfully deleted access group:");
-                    println!("  ID: {}", group.id.unwrap_or(-1));
-                    println!("  Name: {}", group.name);
+        AccessGroupCommands::Delete { id } => {
+            match apis::access_control_api::delete_access_group(config, *id) {
+                Ok(group) => {
+                    if print_if_json(format, &group, "group") {
+                        // JSON was printed
+                    } else {
+                        println!("Successfully deleted access group:");
+                        println!("  ID: {}", group.id.unwrap_or(-1));
+                        println!("  Name: {}", group.name);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Error deleting access group: {}", e);
+                    std::process::exit(1);
                 }
             }
-            Err(e) => {
-                eprintln!("Error deleting access group: {}", e);
-                std::process::exit(1);
-            }
-        },
+        }
         AccessGroupCommands::AddUser {
             group_id,
             user_name,
@@ -244,7 +249,7 @@ pub fn handle_access_group_commands(
             let mut membership = UserGroupMembershipModel::new(user_name.clone(), *group_id);
             membership.role = role.clone();
 
-            match default_api::add_user_to_group(config, *group_id, membership) {
+            match apis::access_control_api::add_user_to_group(config, *group_id, membership) {
                 Ok(membership) => {
                     if print_if_json(format, &membership, "membership") {
                         // JSON was printed
@@ -264,7 +269,7 @@ pub fn handle_access_group_commands(
         AccessGroupCommands::RemoveUser {
             group_id,
             user_name,
-        } => match default_api::remove_user_from_group(config, *group_id, user_name) {
+        } => match apis::access_control_api::remove_user_from_group(config, *group_id, user_name) {
             Ok(_membership) => {
                 if format == "json" {
                     println!("{{\"success\": true}}");
@@ -285,7 +290,12 @@ pub fn handle_access_group_commands(
             limit,
             offset,
         } => {
-            match default_api::list_group_members(config, *group_id, Some(*offset), Some(*limit)) {
+            match apis::access_control_api::list_group_members(
+                config,
+                *group_id,
+                Some(*offset),
+                Some(*limit),
+            ) {
                 Ok(response) => {
                     if format == "json" {
                         print_json_wrapped("members", &response.items, "members");
@@ -315,7 +325,12 @@ pub fn handle_access_group_commands(
             user_name,
             limit,
             offset,
-        } => match default_api::list_user_groups(config, user_name, Some(*offset), Some(*limit)) {
+        } => match apis::access_control_api::list_user_groups(
+            config,
+            user_name,
+            Some(*offset),
+            Some(*limit),
+        ) {
             Ok(response) => {
                 if format == "json" {
                     print_json_wrapped("groups", &response.items, "groups");
@@ -344,7 +359,8 @@ pub fn handle_access_group_commands(
         AccessGroupCommands::AddWorkflow {
             workflow_id,
             group_id,
-        } => match default_api::add_workflow_to_group(config, *workflow_id, *group_id) {
+        } => match apis::access_control_api::add_workflow_to_group(config, *workflow_id, *group_id)
+        {
             Ok(association) => {
                 if print_if_json(format, &association, "association") {
                     // JSON was printed
@@ -362,7 +378,11 @@ pub fn handle_access_group_commands(
         AccessGroupCommands::RemoveWorkflow {
             workflow_id,
             group_id,
-        } => match default_api::remove_workflow_from_group(config, *workflow_id, *group_id) {
+        } => match apis::access_control_api::remove_workflow_from_group(
+            config,
+            *workflow_id,
+            *group_id,
+        ) {
             Ok(_association) => {
                 if format == "json" {
                     println!("{{\"success\": true}}");
@@ -379,7 +399,7 @@ pub fn handle_access_group_commands(
             }
         },
         AccessGroupCommands::ListWorkflowGroups { workflow_id } => {
-            match default_api::list_workflow_groups(config, *workflow_id, None, None) {
+            match apis::access_control_api::list_workflow_groups(config, *workflow_id, None, None) {
                 Ok(response) => {
                     if format == "json" {
                         print_json_wrapped("groups", &response.items, "groups");

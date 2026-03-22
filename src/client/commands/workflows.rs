@@ -44,8 +44,8 @@ const WORKFLOWS_HELP_TEMPLATE: &str = "\
   \x1b[1;36mimport\x1b[0m           Import a workflow from JSON
 {after-help}";
 
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::commands::hpc::create_registry_with_config_public;
 use crate::client::commands::pagination::{
     ComputeNodeListParams, EventListParams, FileListParams, JobListParams,
@@ -962,7 +962,7 @@ fn show_execution_plan_from_spec(file_path: &str, format: &str) {
 
 fn show_execution_plan_from_database(config: &Configuration, workflow_id: i64, format: &str) {
     // Fetch workflow from database
-    let workflow = match default_api::get_workflow(config, workflow_id) {
+    let workflow = match apis::workflows_api::get_workflow(config, workflow_id) {
         Ok(wf) => wf,
         Err(e) => {
             eprintln!("Error fetching workflow {}: {}", workflow_id, e);
@@ -984,7 +984,7 @@ fn show_execution_plan_from_database(config: &Configuration, workflow_id: i64, f
     };
 
     // Fetch workflow actions
-    let actions = match default_api::get_workflow_actions(config, workflow_id) {
+    let actions = match apis::final_surfaces_api::get_workflow_actions(config, workflow_id) {
         Ok(actions) => actions,
         Err(e) => {
             eprintln!("Error fetching actions for workflow {}: {}", workflow_id, e);
@@ -1109,7 +1109,7 @@ fn handle_list_actions(
         None => select_workflow_interactively(config, user).unwrap(),
     };
 
-    match default_api::get_workflow_actions(config, selected_workflow_id) {
+    match apis::final_surfaces_api::get_workflow_actions(config, selected_workflow_id) {
         Ok(actions) => {
             if format == "json" {
                 let output = serde_json::json!({
@@ -1543,7 +1543,7 @@ fn handle_cancel(config: &Configuration, workflow_id: &Option<i64>, format: &str
         None => select_workflow_interactively(config, &user_name).unwrap(),
     };
 
-    match default_api::cancel_workflow(config, selected_workflow_id, None) {
+    match apis::workflows_api::cancel_workflow(config, selected_workflow_id, None) {
         Ok(_) => {
             if format != "json" {
                 eprintln!("Successfully canceled workflow {}", selected_workflow_id);
@@ -1609,11 +1609,13 @@ fn handle_cancel(config: &Configuration, workflow_id: &Option<i64>, format: &str
                                     node.scheduler_type.clone(),
                                     "canceled".to_string(),
                                 );
-                                if let Err(e) = default_api::update_scheduled_compute_node(
-                                    config,
-                                    node_id,
-                                    updated_node,
-                                ) {
+                                if let Err(e) =
+                                    apis::scheduled_compute_nodes_api::update_scheduled_compute_node(
+                                        config,
+                                        node_id,
+                                        updated_node,
+                                    )
+                                {
                                     let error_msg =
                                         format!("Failed to update node {} status: {}", node_id, e);
                                     errors.push(error_msg.clone());
@@ -1729,7 +1731,12 @@ fn handle_reset_status(
     let force_param = if force { Some(true) } else { None };
 
     // Reset workflow status
-    match default_api::reset_workflow_status(config, selected_workflow_id, force_param, None) {
+    match apis::workflows_api::reset_workflow_status(
+        config,
+        selected_workflow_id,
+        force_param,
+        None,
+    ) {
         Ok(_) => {
             workflow_reset_success = true;
             if format != "json" {
@@ -1748,7 +1755,12 @@ fn handle_reset_status(
     }
 
     // Reset job status
-    match default_api::reset_job_status(config, selected_workflow_id, Some(failed_only), None) {
+    match apis::workflows_api::reset_job_status(
+        config,
+        selected_workflow_id,
+        Some(failed_only),
+        None,
+    ) {
         Ok(_) => {
             job_reset_success = true;
             if format != "json" {
@@ -1775,7 +1787,7 @@ fn handle_reset_status(
 
     // If reinitialize is true, reinitialize the workflow
     if reinitialize {
-        match default_api::get_workflow(config, selected_workflow_id) {
+        match apis::workflows_api::get_workflow(config, selected_workflow_id) {
             Ok(workflow) => {
                 let torc_config = TorcConfig::load().unwrap_or_default();
                 let workflow_manager = WorkflowManager::new(config.clone(), torc_config, workflow);
@@ -1883,7 +1895,7 @@ fn handle_status(config: &Configuration, workflow_id: &Option<i64>, user: &str, 
         None => select_workflow_interactively(config, user).unwrap(),
     };
 
-    match default_api::get_workflow_status(config, selected_workflow_id) {
+    match apis::workflows_api::get_workflow_status(config, selected_workflow_id) {
         Ok(status) => {
             if format == "json" {
                 match serde_json::to_string_pretty(&status) {
@@ -1926,7 +1938,7 @@ fn handle_reinitialize(
         None => select_workflow_interactively(config, &user_name).unwrap(),
     };
     // First get the workflow
-    match default_api::get_workflow(config, selected_workflow_id) {
+    match apis::workflows_api::get_workflow(config, selected_workflow_id) {
         Ok(workflow) => {
             let torc_config = TorcConfig::load().unwrap_or_default();
             let workflow_manager = WorkflowManager::new(config.clone(), torc_config, workflow);
@@ -2058,7 +2070,7 @@ fn handle_initialize(
     };
 
     // First get the workflow
-    match default_api::get_workflow(config, selected_workflow_id) {
+    match apis::workflows_api::get_workflow(config, selected_workflow_id) {
         Ok(workflow) => {
             let torc_config = TorcConfig::load().unwrap_or_default();
             let workflow_manager = WorkflowManager::new(config.clone(), torc_config, workflow);
@@ -2131,7 +2143,7 @@ fn handle_initialize(
                 }
             } else {
                 // Normal initialization (not dry-run)
-                match default_api::is_workflow_uninitialized(config, selected_workflow_id) {
+                match apis::workflows_api::is_workflow_uninitialized(config, selected_workflow_id) {
                     Ok(is_initialized) => {
                         if is_initialized.as_bool().unwrap_or(false)
                             && !no_prompts
@@ -2266,7 +2278,7 @@ fn handle_submit(
     };
 
     // Check if workflow has schedule_nodes actions
-    match default_api::get_workflow_actions(config, selected_workflow_id) {
+    match apis::final_surfaces_api::get_workflow_actions(config, selected_workflow_id) {
         Ok(actions) => {
             let has_schedule_nodes = actions.iter().any(|action| {
                 action.trigger_type == "on_workflow_start" && action.action_type == "schedule_nodes"
@@ -2307,7 +2319,7 @@ fn handle_submit(
     }
 
     // Get the workflow and submit it
-    match default_api::get_workflow(config, selected_workflow_id) {
+    match apis::workflows_api::get_workflow(config, selected_workflow_id) {
         Ok(workflow) => {
             let torc_config = TorcConfig::load().unwrap_or_default();
             let workflow_manager = WorkflowManager::new(config.clone(), torc_config, workflow);
@@ -2385,13 +2397,13 @@ fn handle_archive(config: &Configuration, is_archived: &str, workflow_ids: &[i64
 
     for workflow_id in ids_to_update {
         // First, get the current workflow status
-        match default_api::get_workflow_status(config, workflow_id) {
+        match apis::workflows_api::get_workflow_status(config, workflow_id) {
             Ok(mut status) => {
                 // Set is_archived to the specified value
                 status.is_archived = Some(is_archived_bool);
 
                 // Update the workflow status
-                match default_api::update_workflow_status(config, workflow_id, status) {
+                match apis::workflows_api::update_workflow_status(config, workflow_id, status) {
                     Ok(_) => {
                         updated_workflows.push(workflow_id);
                         if format != "json" {
@@ -2459,7 +2471,7 @@ fn handle_delete(config: &Configuration, ids: &[i64], no_prompts: bool, format: 
 
     for selected_id in workflow_ids {
         // Fetch workflow details to show what will be deleted
-        let workflow = match default_api::get_workflow(config, selected_id) {
+        let workflow = match apis::workflows_api::get_workflow(config, selected_id) {
             Ok(wf) => wf,
             Err(e) => {
                 failed_deletions.push((selected_id, format!("Failed to get workflow: {}", e)));
@@ -2478,7 +2490,7 @@ fn handle_delete(config: &Configuration, ids: &[i64], no_prompts: bool, format: 
         }
 
         // Count jobs in this workflow
-        let job_count = match default_api::list_jobs(
+        let job_count = match apis::jobs_api::list_jobs(
             config,
             selected_id,
             None,    // status
@@ -2532,7 +2544,7 @@ fn handle_delete(config: &Configuration, ids: &[i64], no_prompts: bool, format: 
         }
 
         // Proceed with deletion
-        match default_api::delete_workflow(config, selected_id, None) {
+        match apis::workflows_api::delete_workflow(config, selected_id, None) {
             Ok(removed_workflow) => {
                 deleted_workflows.push(removed_workflow);
             }
@@ -2612,7 +2624,7 @@ fn handle_update(
         None => select_workflow_interactively(config, &user_name).unwrap(),
     };
     // First get the existing workflow
-    match default_api::get_workflow(config, selected_id) {
+    match apis::workflows_api::get_workflow(config, selected_id) {
         Ok(mut workflow) => {
             // Update fields that were provided
             if let Some(new_name) = &updates.name {
@@ -2631,7 +2643,7 @@ fn handle_update(
                 workflow.metadata = updates.metadata.clone();
             }
 
-            match default_api::update_workflow(config, selected_id, workflow) {
+            match apis::workflows_api::update_workflow(config, selected_id, workflow) {
                 Ok(updated_workflow) => {
                     if format == "json" {
                         // Convert workflow to JSON value, parsing JSON string fields to objects
@@ -2674,7 +2686,7 @@ fn handle_get(config: &Configuration, id: &Option<i64>, user: &str, format: &str
         None => select_workflow_interactively(config, user).unwrap(),
     };
 
-    match default_api::get_workflow(config, selected_id) {
+    match apis::workflows_api::get_workflow(config, selected_id) {
         Ok(workflow) => {
             if format == "json" {
                 // Convert workflow to JSON value, parsing JSON string fields to objects
@@ -2841,7 +2853,7 @@ fn handle_new(
     let mut workflow = models::WorkflowModel::new(name.to_string(), user.to_string());
     workflow.description = description.clone();
 
-    match default_api::create_workflow(config, workflow) {
+    match apis::workflows_api::create_workflow(config, workflow) {
         Ok(created_workflow) => {
             if format == "json" {
                 // Convert workflow to JSON value, parsing JSON string fields to objects
@@ -3208,7 +3220,7 @@ fn handle_is_complete(config: &Configuration, id: Option<i64>, format: &str) {
         },
     };
 
-    match default_api::is_workflow_complete(config, id) {
+    match apis::workflows_api::is_workflow_complete(config, id) {
         Ok(response) => {
             if format == "json" {
                 match serde_json::to_string_pretty(&response) {
@@ -3598,7 +3610,7 @@ fn handle_export(
     };
 
     // Get workflow
-    let workflow = match default_api::get_workflow(config, workflow_id) {
+    let workflow = match apis::workflows_api::get_workflow(config, workflow_id) {
         Ok(w) => w,
         Err(e) => {
             print_error("getting workflow", &e);
@@ -3665,7 +3677,7 @@ fn handle_export(
     };
 
     // Get all local schedulers
-    export.local_schedulers = match default_api::list_local_schedulers(
+    export.local_schedulers = match apis::local_schedulers_api::list_local_schedulers(
         config,
         workflow_id,
         None,
@@ -3684,7 +3696,7 @@ fn handle_export(
 
     // Get all failure handlers
     export.failure_handlers =
-        match default_api::list_failure_handlers(config, workflow_id, None, None) {
+        match apis::admin_resources_api::list_failure_handlers(config, workflow_id, None, None) {
             Ok(response) => response.items,
             Err(e) => {
                 print_error("listing failure handlers", &e);
@@ -3694,7 +3706,7 @@ fn handle_export(
 
     // Get all RO-Crate entities
     export.ro_crate_entities =
-        match default_api::list_ro_crate_entities(config, workflow_id, None, None) {
+        match apis::final_surfaces_api::list_ro_crate_entities(config, workflow_id, None, None) {
             Ok(response) => response.items,
             Err(e) => {
                 print_error("listing RO-Crate entities", &e);
@@ -3717,13 +3729,14 @@ fn handle_export(
     };
 
     // Get workflow actions
-    export.workflow_actions = match default_api::get_workflow_actions(config, workflow_id) {
-        Ok(actions) => actions,
-        Err(e) => {
-            print_error("getting workflow actions", &e);
-            std::process::exit(1);
-        }
-    };
+    export.workflow_actions =
+        match apis::final_surfaces_api::get_workflow_actions(config, workflow_id) {
+            Ok(actions) => actions,
+            Err(e) => {
+                print_error("getting workflow actions", &e);
+                std::process::exit(1);
+            }
+        };
 
     // Optionally get results (and compute nodes, which results reference)
     if include_results {
@@ -3868,7 +3881,7 @@ fn handle_import(
     }
     new_workflow.user = current_user.to_string(); // Set current user as owner
 
-    let created_workflow = match default_api::create_workflow(config, new_workflow) {
+    let created_workflow = match apis::workflows_api::create_workflow(config, new_workflow) {
         Ok(w) => w,
         Err(e) => {
             print_error("creating workflow", &e);
@@ -3885,14 +3898,14 @@ fn handle_import(
         new_file.id = None;
         new_file.workflow_id = new_workflow_id;
 
-        match default_api::create_file(config, new_file) {
+        match apis::files_api::create_file(config, new_file) {
             Ok(created) => {
                 mappings.files.insert(old_id, created.id.unwrap());
             }
             Err(e) => {
                 print_error("creating file", &e);
                 // Clean up: delete the workflow we just created
-                let _ = default_api::delete_workflow(config, new_workflow_id, None);
+                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id, None);
                 std::process::exit(1);
             }
         }
@@ -3907,13 +3920,13 @@ fn handle_import(
         new_ud.id = None;
         new_ud.workflow_id = new_workflow_id;
 
-        match default_api::create_user_data(config, new_ud, None, None) {
+        match apis::user_data_api::create_user_data(config, new_ud, None, None) {
             Ok(created) => {
                 mappings.user_data.insert(old_id, created.id.unwrap());
             }
             Err(e) => {
                 print_error("creating user_data", &e);
-                let _ = default_api::delete_workflow(config, new_workflow_id, None);
+                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id, None);
                 std::process::exit(1);
             }
         }
@@ -3922,7 +3935,7 @@ fn handle_import(
     // Create resource requirements and build mapping
     // First, get the 'default' resource requirement that was auto-created with the workflow
     // so we can map old 'default' IDs to it
-    let default_rr = default_api::list_resource_requirements(
+    let default_rr = apis::admin_resources_api::list_resource_requirements(
         config,
         new_workflow_id,
         None,            // job_id
@@ -3965,7 +3978,7 @@ fn handle_import(
         new_rr.id = None;
         new_rr.workflow_id = new_workflow_id;
 
-        match default_api::create_resource_requirements(config, new_rr) {
+        match apis::admin_resources_api::create_resource_requirements(config, new_rr) {
             Ok(created) => {
                 mappings
                     .resource_requirements
@@ -3973,7 +3986,7 @@ fn handle_import(
             }
             Err(e) => {
                 print_error("creating resource requirements", &e);
-                let _ = default_api::delete_workflow(config, new_workflow_id, None);
+                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id, None);
                 std::process::exit(1);
             }
         }
@@ -3986,7 +3999,7 @@ fn handle_import(
         new_scheduler.id = None;
         new_scheduler.workflow_id = new_workflow_id;
 
-        match default_api::create_slurm_scheduler(config, new_scheduler) {
+        match apis::slurm_schedulers_api::create_slurm_scheduler(config, new_scheduler) {
             Ok(created) => {
                 mappings
                     .slurm_schedulers
@@ -3994,7 +4007,7 @@ fn handle_import(
             }
             Err(e) => {
                 print_error("creating slurm scheduler", &e);
-                let _ = default_api::delete_workflow(config, new_workflow_id, None);
+                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id, None);
                 std::process::exit(1);
             }
         }
@@ -4007,7 +4020,7 @@ fn handle_import(
         new_scheduler.id = None;
         new_scheduler.workflow_id = new_workflow_id;
 
-        match default_api::create_local_scheduler(config, new_scheduler) {
+        match apis::local_schedulers_api::create_local_scheduler(config, new_scheduler) {
             Ok(created) => {
                 mappings
                     .local_schedulers
@@ -4015,7 +4028,7 @@ fn handle_import(
             }
             Err(e) => {
                 print_error("creating local scheduler", &e);
-                let _ = default_api::delete_workflow(config, new_workflow_id, None);
+                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id, None);
                 std::process::exit(1);
             }
         }
@@ -4028,7 +4041,7 @@ fn handle_import(
         new_handler.id = None;
         new_handler.workflow_id = new_workflow_id;
 
-        match default_api::create_failure_handler(config, new_handler) {
+        match apis::admin_resources_api::create_failure_handler(config, new_handler) {
             Ok(created) => {
                 mappings
                     .failure_handlers
@@ -4036,7 +4049,7 @@ fn handle_import(
             }
             Err(e) => {
                 print_error("creating failure handler", &e);
-                let _ = default_api::delete_workflow(config, new_workflow_id, None);
+                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id, None);
                 std::process::exit(1);
             }
         }
@@ -4087,13 +4100,13 @@ fn handle_import(
         // based on dependencies and cannot be preserved through update_job API
         new_job.status = Some(JobStatus::Uninitialized);
 
-        match default_api::create_job(config, new_job) {
+        match apis::jobs_api::create_job(config, new_job) {
             Ok(created) => {
                 mappings.jobs.insert(old_id, created.id.unwrap());
             }
             Err(e) => {
                 print_error("creating job", &e);
-                let _ = default_api::delete_workflow(config, new_workflow_id, None);
+                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id, None);
                 std::process::exit(1);
             }
         }
@@ -4120,9 +4133,9 @@ fn handle_import(
             // Keep Uninitialized so we can modify depends_on_job_ids
             update_job.status = Some(JobStatus::Uninitialized);
 
-            if let Err(e) = default_api::update_job(config, *new_job_id, update_job) {
+            if let Err(e) = apis::jobs_api::update_job(config, *new_job_id, update_job) {
                 print_error("updating job dependencies", &e);
-                let _ = default_api::delete_workflow(config, new_workflow_id, None);
+                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id, None);
                 std::process::exit(1);
             }
         }
@@ -4146,11 +4159,11 @@ fn handle_import(
         new_entity.entity_id = new_entity_id;
         new_entity.metadata = new_metadata;
 
-        match default_api::create_ro_crate_entity(config, new_entity) {
+        match apis::final_surfaces_api::create_ro_crate_entity(config, new_entity) {
             Ok(_) => {}
             Err(e) => {
                 print_error("creating RO-Crate entity", &e);
-                let _ = default_api::delete_workflow(config, new_workflow_id, None);
+                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id, None);
                 std::process::exit(1);
             }
         }
@@ -4183,9 +4196,11 @@ fn handle_import(
         // Serialize to JSON Value for the API
         let action_json = serde_json::to_value(&new_action).unwrap_or_default();
 
-        if let Err(e) = default_api::create_workflow_action(config, new_workflow_id, action_json) {
+        if let Err(e) =
+            apis::final_surfaces_api::create_workflow_action(config, new_workflow_id, action_json)
+        {
             print_error("creating workflow action", &e);
-            let _ = default_api::delete_workflow(config, new_workflow_id, None);
+            let _ = apis::workflows_api::delete_workflow(config, new_workflow_id, None);
             std::process::exit(1);
         }
     }
@@ -4206,7 +4221,7 @@ fn handle_import(
             // Mark as inactive since this is historical data
             new_cn.is_active = Some(false);
 
-            match default_api::create_compute_node(config, new_cn) {
+            match apis::compute_nodes_api::create_compute_node(config, new_cn) {
                 Ok(created) => {
                     mappings.compute_nodes.insert(old_id, created.id.unwrap());
                     imported_compute_nodes += 1;
@@ -4237,7 +4252,7 @@ fn handle_import(
             "imported".to_string(), // compute_node_type
             None,                   // scheduler
         );
-        match default_api::create_compute_node(config, placeholder) {
+        match apis::compute_nodes_api::create_compute_node(config, placeholder) {
             Ok(created) => {
                 imported_compute_nodes += 1;
                 Some(created.id.unwrap())
@@ -4274,7 +4289,7 @@ fn handle_import(
                 continue;
             }
 
-            match default_api::create_result(config, new_result) {
+            match apis::results_api::create_result(config, new_result) {
                 Ok(_) => {
                     imported_results += 1;
                 }

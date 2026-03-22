@@ -188,6 +188,30 @@ impl Configuration {
         }
         Ok(())
     }
+
+    /// Apply configured authentication to a blocking request builder.
+    pub fn apply_auth(
+        &self,
+        mut req_builder: reqwest::blocking::RequestBuilder,
+    ) -> reqwest::blocking::RequestBuilder {
+        if let Some((ref username, ref password)) = self.basic_auth {
+            req_builder = req_builder.basic_auth(username, password.clone());
+        }
+        if let Some(ref token) = self.bearer_access_token {
+            req_builder = req_builder.bearer_auth(token);
+        } else if let Some(ref token) = self.oauth_access_token {
+            req_builder = req_builder.bearer_auth(token);
+        }
+        if let Some(ref api_key) = self.api_key {
+            let value = if let Some(ref prefix) = api_key.prefix {
+                format!("{prefix} {}", api_key.key)
+            } else {
+                api_key.key.clone()
+            };
+            req_builder = req_builder.header("X-API-Key", value);
+        }
+        req_builder
+    }
 }
 
 impl Default for Configuration {

@@ -106,7 +106,7 @@ impl PaginationParams for SlurmSchedulersListParams {
 }
 
 impl Paginatable for SlurmSchedulerModel {
-    type ListError = apis::default_api::ListSlurmSchedulersError;
+    type ListError = apis::slurm_schedulers_api::ListSlurmSchedulersError;
     type Params = SlurmSchedulersListParams;
 
     fn fetch_page(
@@ -114,7 +114,7 @@ impl Paginatable for SlurmSchedulerModel {
         params: &Self::Params,
         limit: i64,
     ) -> Result<PaginatedResponse<Self>, apis::Error<Self::ListError>> {
-        let response = apis::default_api::list_slurm_schedulers(
+        let response = apis::slurm_schedulers_api::list_slurm_schedulers(
             config,
             params.workflow_id,
             Some(params.offset),
@@ -174,6 +174,9 @@ pub fn paginate_slurm_schedulers(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: SlurmSchedulersListParams,
-) -> Result<Vec<SlurmSchedulerModel>, apis::Error<apis::default_api::ListSlurmSchedulersError>> {
+) -> Result<
+    Vec<SlurmSchedulerModel>,
+    apis::Error<apis::slurm_schedulers_api::ListSlurmSchedulersError>,
+> {
     iter_slurm_schedulers(config, workflow_id, params).collect()
 }

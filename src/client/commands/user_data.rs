@@ -1,8 +1,8 @@
 use clap::Subcommand;
 use serde_json;
 
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::commands::output::{print_if_json, print_json_wrapped};
 use crate::client::commands::{get_env_user_name, pagination};
 use crate::client::commands::{
@@ -161,7 +161,7 @@ pub fn handle_user_data_commands(config: &Configuration, command: &UserDataComma
 
             user_data.is_ephemeral = Some(*ephemeral);
 
-            match default_api::create_user_data(
+            match apis::user_data_api::create_user_data(
                 config,
                 user_data,
                 *consumer_job_id,
@@ -263,7 +263,7 @@ pub fn handle_user_data_commands(config: &Configuration, command: &UserDataComma
                 }
             }
         }
-        UserDataCommands::Get { id } => match default_api::get_user_data(config, *id) {
+        UserDataCommands::Get { id } => match apis::user_data_api::get_user_data(config, *id) {
             Ok(user_data) => {
                 if print_if_json(format, &user_data, "user data") {
                     // JSON was printed
@@ -294,7 +294,7 @@ pub fn handle_user_data_commands(config: &Configuration, command: &UserDataComma
             ephemeral,
         } => {
             // First get the existing user data
-            match default_api::get_user_data(config, *id) {
+            match apis::user_data_api::get_user_data(config, *id) {
                 Ok(mut user_data) => {
                     // Update fields that were provided
                     if let Some(new_name) = name {
@@ -317,7 +317,7 @@ pub fn handle_user_data_commands(config: &Configuration, command: &UserDataComma
                         user_data.is_ephemeral = Some(*new_ephemeral);
                     }
 
-                    match default_api::update_user_data(config, *id, user_data) {
+                    match apis::user_data_api::update_user_data(config, *id, user_data) {
                         Ok(updated_user_data) => {
                             if print_if_json(format, &updated_user_data, "user data") {
                                 // JSON was printed
@@ -347,24 +347,26 @@ pub fn handle_user_data_commands(config: &Configuration, command: &UserDataComma
                 }
             }
         }
-        UserDataCommands::Delete { id } => match default_api::delete_user_data(config, *id, None) {
-            Ok(removed_user_data) => {
-                if print_if_json(format, &removed_user_data, "user data") {
-                    // JSON was printed
-                } else {
-                    println!("Successfully removed user data:");
-                    println!("  ID: {}", removed_user_data.id.unwrap_or(-1));
-                    println!("  Workflow ID: {}", removed_user_data.workflow_id);
-                    println!("  Name: {:?}", removed_user_data.name);
+        UserDataCommands::Delete { id } => {
+            match apis::user_data_api::delete_user_data(config, *id, None) {
+                Ok(removed_user_data) => {
+                    if print_if_json(format, &removed_user_data, "user data") {
+                        // JSON was printed
+                    } else {
+                        println!("Successfully removed user data:");
+                        println!("  ID: {}", removed_user_data.id.unwrap_or(-1));
+                        println!("  Workflow ID: {}", removed_user_data.workflow_id);
+                        println!("  Name: {:?}", removed_user_data.name);
+                    }
+                }
+                Err(e) => {
+                    print_error("removing user data", &e);
+                    std::process::exit(1);
                 }
             }
-            Err(e) => {
-                print_error("removing user data", &e);
-                std::process::exit(1);
-            }
-        },
+        }
         UserDataCommands::DeleteAll { workflow_id } => {
-            match default_api::delete_all_user_data(config, *workflow_id, None) {
+            match apis::user_data_api::delete_all_user_data(config, *workflow_id, None) {
                 Ok(_) => {
                     if format == "json" {
                         println!(
@@ -385,7 +387,7 @@ pub fn handle_user_data_commands(config: &Configuration, command: &UserDataComma
             }
         }
         UserDataCommands::ListMissing { workflow_id } => {
-            match default_api::list_missing_user_data(config, *workflow_id) {
+            match apis::workflows_api::list_missing_user_data(config, *workflow_id) {
                 Ok(missing_data) => {
                     if print_if_json(format, &missing_data, "missing user data") {
                         // JSON was printed

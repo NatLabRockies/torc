@@ -61,6 +61,20 @@ pub struct ErrorResponse {
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PingResponse {
+    pub status: String,
+}
+
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct VersionResponse {
+    pub version: String,
+    pub api_version: String,
+    pub git_hash: String,
+}
+
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GetDotGraphResponse {
     pub graph: String,
 }
@@ -1514,6 +1528,68 @@ impl ResetJobStatusResponse {
     }
 }
 
+impl DeleteCountResponse {
+    pub fn get(&self, key: &str) -> Option<Value> {
+        match key {
+            "count" => Some(Value::from(self.count)),
+            _ => None,
+        }
+    }
+}
+
+impl VersionResponse {
+    pub fn is_object(&self) -> bool {
+        true
+    }
+
+    pub fn get(&self, key: &str) -> Option<Value> {
+        match key {
+            "version" => Some(Value::from(self.version.clone())),
+            "api_version" => Some(Value::from(self.api_version.clone())),
+            "git_hash" => Some(Value::from(self.git_hash.clone())),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> Option<&str> {
+        Some(self.version.as_str())
+    }
+}
+
+impl ClaimActionResponse {
+    pub fn get(&self, key: &str) -> Option<Value> {
+        match key {
+            "claimed" => Some(Value::from(self.success)),
+            "success" => Some(Value::from(self.success)),
+            "action_id" => Some(Value::from(self.action_id)),
+            _ => None,
+        }
+    }
+}
+
+impl ReloadAuthResponse {
+    pub fn get(&self, key: &str) -> Option<Value> {
+        match key {
+            "message" => Some(Value::from(self.message.clone())),
+            "user_count" => Some(Value::from(self.user_count)),
+            _ => None,
+        }
+    }
+}
+
+impl IsUninitializedResponse {
+    pub fn get(&self, key: &str) -> Option<Value> {
+        match key {
+            "is_uninitialized" => Some(Value::from(self.is_uninitialized)),
+            _ => None,
+        }
+    }
+
+    pub fn as_bool(&self) -> Option<bool> {
+        Some(self.is_uninitialized)
+    }
+}
+
 impl ListJobIdsResponse {
     pub fn new(job_ids: Vec<i64>) -> ListJobIdsResponse {
         let count = job_ids.len() as i64;
@@ -1641,6 +1717,7 @@ pub struct ClaimActionRequest {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ClaimActionResponse {
     pub action_id: i64,
+    #[serde(default, alias = "claimed")]
     pub success: bool,
 }
 

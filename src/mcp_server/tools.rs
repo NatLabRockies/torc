@@ -8,8 +8,8 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::commands::pagination::jobs::{JobListParams, paginate_jobs};
 use crate::client::commands::pagination::resource_requirements::{
     ResourceRequirementsListParams, paginate_resource_requirements,
@@ -35,7 +35,7 @@ pub fn get_workflow_status(
     workflow_id: i64,
 ) -> Result<CallToolResult, McpError> {
     // Get workflow info
-    let workflow = default_api::get_workflow(config, workflow_id)
+    let workflow = apis::workflows_api::get_workflow(config, workflow_id)
         .map_err(|e| internal_error(format!("Failed to get workflow: {}", e)))?;
 
     // Get all jobs
@@ -67,12 +67,12 @@ pub fn get_workflow_status(
 
 /// Get detailed job information.
 pub fn get_job_details(config: &Configuration, job_id: i64) -> Result<CallToolResult, McpError> {
-    let job = default_api::get_job(config, job_id)
+    let job = apis::jobs_api::get_job(config, job_id)
         .map_err(|e| internal_error(format!("Failed to get job: {}", e)))?;
 
     // Get resource requirements if available
     let resource_reqs = if let Some(req_id) = job.resource_requirements_id {
-        default_api::get_resource_requirements(config, req_id).ok()
+        apis::admin_resources_api::get_resource_requirements(config, req_id).ok()
     } else {
         None
     };
@@ -315,7 +315,7 @@ pub fn update_job_resources(
     runtime: Option<String>,
 ) -> Result<CallToolResult, McpError> {
     // Get the job to find its resource requirements ID
-    let job = default_api::get_job(config, job_id)
+    let job = apis::jobs_api::get_job(config, job_id)
         .map_err(|e| internal_error(format!("Failed to get job: {}", e)))?;
 
     let req_id = job
@@ -323,7 +323,7 @@ pub fn update_job_resources(
         .ok_or_else(|| invalid_params("Job does not have resource requirements to update"))?;
 
     // Get current requirements
-    let mut reqs = default_api::get_resource_requirements(config, req_id)
+    let mut reqs = apis::admin_resources_api::get_resource_requirements(config, req_id)
         .map_err(|e| internal_error(format!("Failed to get resource requirements: {}", e)))?;
 
     // Update fields if provided
@@ -338,7 +338,7 @@ pub fn update_job_resources(
     }
 
     // Update the resource requirements
-    let updated = default_api::update_resource_requirements(
+    let updated = apis::admin_resources_api::update_resource_requirements(
         config,
         req_id,
         ResourceRequirementsModel {
@@ -696,7 +696,7 @@ pub fn get_execution_plan(
     // Try to parse as workflow ID first
     if let Ok(workflow_id) = spec_or_id.parse::<i64>() {
         // Get execution plan for existing workflow from database
-        let workflow = default_api::get_workflow(config, workflow_id)
+        let workflow = apis::workflows_api::get_workflow(config, workflow_id)
             .map_err(|e| internal_error(format!("Failed to get workflow: {}", e)))?;
 
         let jobs = paginate_jobs(
@@ -706,7 +706,7 @@ pub fn get_execution_plan(
         )
         .map_err(|e| internal_error(format!("Failed to list jobs: {}", e)))?;
 
-        let actions = default_api::get_workflow_actions(config, workflow_id)
+        let actions = apis::final_surfaces_api::get_workflow_actions(config, workflow_id)
             .map_err(|e| internal_error(format!("Failed to get workflow actions: {}", e)))?;
 
         let slurm_schedulers =
@@ -1309,7 +1309,7 @@ pub fn classify_and_resolve_failures(
     dry_run: bool,
 ) -> Result<CallToolResult, McpError> {
     // Check if workflow has use_pending_failed enabled
-    let workflow = match default_api::get_workflow(config, workflow_id) {
+    let workflow = match apis::workflows_api::get_workflow(config, workflow_id) {
         Ok(w) => w,
         Err(e) => {
             return Err(internal_error(format!(
@@ -1343,7 +1343,7 @@ pub fn classify_and_resolve_failures(
         let action = classification.action.to_lowercase();
 
         // Validate the job exists and is in pending_failed status
-        let job = match default_api::get_job(config, job_id) {
+        let job = match apis::jobs_api::get_job(config, job_id) {
             Ok(j) => j,
             Err(e) => {
                 results.push(serde_json::json!({
@@ -1391,7 +1391,7 @@ pub fn classify_and_resolve_failures(
                 && action == "retry"
             {
                 if let Some(req_id) = job.resource_requirements_id {
-                    match default_api::get_resource_requirements(config, req_id) {
+                    match apis::admin_resources_api::get_resource_requirements(config, req_id) {
                         Ok(mut reqs) => {
                             if let Some(ref mem) = classification.memory {
                                 reqs.memory = mem.clone();
@@ -1399,7 +1399,7 @@ pub fn classify_and_resolve_failures(
                             if let Some(ref rt) = classification.runtime {
                                 reqs.runtime = rt.clone();
                             }
-                            match default_api::update_resource_requirements(
+                            match apis::admin_resources_api::update_resource_requirements(
                                 config,
                                 req_id,
                                 ResourceRequirementsModel {
@@ -1927,16 +1927,17 @@ pub fn regroup_job_resources(
             runtime: group.runtime.clone(),
         };
 
-        let created_rr = match default_api::create_resource_requirements(config, new_rr) {
-            Ok(rr) => rr,
-            Err(e) => {
-                apply_errors.push(format!(
-                    "Failed to create RR for group '{}': {}",
-                    group_name, e
-                ));
-                continue;
-            }
-        };
+        let created_rr =
+            match apis::admin_resources_api::create_resource_requirements(config, new_rr) {
+                Ok(rr) => rr,
+                Err(e) => {
+                    apply_errors.push(format!(
+                        "Failed to create RR for group '{}': {}",
+                        group_name, e
+                    ));
+                    continue;
+                }
+            };
 
         let new_rr_id = match created_rr.id {
             Some(id) => id,
@@ -1956,7 +1957,7 @@ pub fn regroup_job_resources(
             let mut updated_job = job.clone();
             updated_job.resource_requirements_id = Some(new_rr_id);
 
-            match default_api::update_job(config, job_id, updated_job) {
+            match apis::jobs_api::update_job(config, job_id, updated_job) {
                 Ok(_) => {
                     jobs_updated.push(job_id);
                     total_jobs_updated += 1;

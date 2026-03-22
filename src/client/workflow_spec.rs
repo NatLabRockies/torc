@@ -1,4 +1,4 @@
-use crate::client::apis::{configuration::Configuration, default_api};
+use crate::client::apis::{self, configuration::Configuration};
 use crate::client::parameter_expansion::{
     ParameterValue, cartesian_product, parse_parameter_value, substitute_parameters, zip_parameters,
 };
@@ -1946,7 +1946,7 @@ impl WorkflowSpec {
 
         // If any step fails, delete the workflow (which cascades to all other objects)
         let rollback = |workflow_id: i64| {
-            let _ = default_api::delete_workflow(config, workflow_id, None);
+            let _ = apis::workflows_api::delete_workflow(config, workflow_id, None);
         };
 
         // Step 3: Create supporting models and build name-to-id mappings
@@ -2204,7 +2204,7 @@ impl WorkflowSpec {
             workflow_model.metadata = Some(value.clone());
         }
 
-        let created_workflow = default_api::create_workflow(config, workflow_model)
+        let created_workflow = apis::workflows_api::create_workflow(config, workflow_model)
             .map_err(|e| format!("Failed to create workflow: {:?}", e))?;
 
         created_workflow
@@ -2248,7 +2248,7 @@ impl WorkflowSpec {
                     st_mtime,
                 };
 
-                let created_file = default_api::create_file(config, file_model)
+                let created_file = apis::files_api::create_file(config, file_model)
                     .map_err(|e| format!("Failed to create file {}: {:?}", file_spec.name, e))?;
 
                 let file_id = created_file.id.ok_or("Created file missing ID")?;
@@ -2284,7 +2284,7 @@ impl WorkflowSpec {
                     };
 
                     let created_user_data =
-                        default_api::create_user_data(config, user_data_model, None, None)
+                        apis::user_data_api::create_user_data(config, user_data_model, None, None)
                             .map_err(|e| format!("Failed to create user data {}: {:?}", name, e))?;
 
                     let user_data_id =
@@ -2327,15 +2327,16 @@ impl WorkflowSpec {
                     runtime: resource_req_spec.runtime.clone(),
                 };
 
-                let created_resource_req =
-                    default_api::create_resource_requirements(config, resource_req_model).map_err(
-                        |e| {
-                            format!(
-                                "Failed to create resource requirements {}: {:?}",
-                                resource_req_spec.name, e
-                            )
-                        },
-                    )?;
+                let created_resource_req = apis::admin_resources_api::create_resource_requirements(
+                    config,
+                    resource_req_model,
+                )
+                .map_err(|e| {
+                    format!(
+                        "Failed to create resource requirements {}: {:?}",
+                        resource_req_spec.name, e
+                    )
+                })?;
 
                 let resource_req_id = created_resource_req
                     .id
@@ -2380,9 +2381,10 @@ impl WorkflowSpec {
                     };
 
                     let created_scheduler =
-                        default_api::create_slurm_scheduler(config, scheduler_model).map_err(
-                            |e| format!("Failed to create slurm scheduler {}: {:?}", name, e),
-                        )?;
+                        apis::slurm_schedulers_api::create_slurm_scheduler(config, scheduler_model)
+                            .map_err(|e| {
+                                format!("Failed to create slurm scheduler {}: {:?}", name, e)
+                            })?;
 
                     let scheduler_id = created_scheduler
                         .id
@@ -2422,13 +2424,14 @@ impl WorkflowSpec {
                     rules_json,
                 );
 
-                let created_handler = default_api::create_failure_handler(config, handler_model)
-                    .map_err(|e| {
-                        format!(
-                            "Failed to create failure handler {}: {:?}",
-                            handler_spec.name, e
-                        )
-                    })?;
+                let created_handler =
+                    apis::admin_resources_api::create_failure_handler(config, handler_model)
+                        .map_err(|e| {
+                            format!(
+                                "Failed to create failure handler {}: {:?}",
+                                handler_spec.name, e
+                            )
+                        })?;
 
                 let handler_id = created_handler
                     .id
@@ -2555,7 +2558,7 @@ impl WorkflowSpec {
                     "persistent": action_spec.persistent.unwrap_or(false),
                 });
 
-                default_api::create_workflow_action(config, workflow_id, action_body)
+                apis::final_surfaces_api::create_workflow_action(config, workflow_id, action_body)
                     .map_err(|e| format!("Failed to create workflow action: {:?}", e))?;
             }
         }
@@ -2891,13 +2894,14 @@ impl WorkflowSpec {
             for (batch_index, batch) in job_models.chunks(batch_size).enumerate() {
                 let jobs_model = models::JobsModel::new(batch.to_vec());
 
-                let response = default_api::create_jobs(config, jobs_model).map_err(|e| {
-                    format!(
-                        "Failed to create batch {} of jobs: {:?}",
-                        batch_index + 1,
-                        e
-                    )
-                })?;
+                let response =
+                    apis::admin_resources_api::create_jobs(config, jobs_model).map_err(|e| {
+                        format!(
+                            "Failed to create batch {} of jobs: {:?}",
+                            batch_index + 1,
+                            e
+                        )
+                    })?;
 
                 let created_batch = response.jobs.ok_or("Create jobs response missing items")?;
 

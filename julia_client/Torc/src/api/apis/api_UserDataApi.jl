@@ -9,7 +9,7 @@ end
 The default API base path for APIs in `UserDataApi`.
 This can be used to construct the `OpenAPI.Clients.Client` instance.
 """
-basepath(::Type{ UserDataApi }) = "http://localhost"
+basepath(::Type{ UserDataApi }) = "http://localhost/torc-service/v1"
 
 const _returntypes_create_user_data_UserDataApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => UserDataModel,

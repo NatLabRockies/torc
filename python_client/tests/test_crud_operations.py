@@ -39,11 +39,11 @@ import os
 from datetime import datetime
 
 import pytest
+from torc.api import DefaultApi
 from torc.openapi_client import (
     ApiClient,
     ComputeNodeModel,
     Configuration,
-    DefaultApi,
     EventModel,
     FileModel,
     JobModel,

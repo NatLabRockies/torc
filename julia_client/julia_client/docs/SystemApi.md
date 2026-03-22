@@ -1,6 +1,6 @@
 # SystemApi
 
-All URIs are relative to *http://localhost*
+All URIs are relative to *http://localhost/torc-service/v1*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------

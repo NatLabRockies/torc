@@ -1,8 +1,19 @@
 //! Permanent HTTP transport for the live Torc server.
 
-include!("http_transport/artifacts.rs");
-include!("http_transport/scheduling_access_admin.rs");
+include!("http_transport/access_control.rs");
+include!("http_transport/files.rs");
 include!("http_transport/jobs.rs");
+include!("http_transport/results.rs");
+include!("http_transport/ro_crate.rs");
+include!("http_transport/compute_nodes.rs");
+include!("http_transport/local_schedulers.rs");
+include!("http_transport/resource_requirements.rs");
+include!("http_transport/remote_workers.rs");
+include!("http_transport/scheduled_compute_nodes.rs");
+include!("http_transport/slurm_schedulers.rs");
+include!("http_transport/slurm_stats.rs");
+include!("http_transport/system.rs");
+include!("http_transport/user_data.rs");
 include!("http_transport/workflows.rs");
 
 use crate::models;
@@ -1647,7 +1658,7 @@ mod http_transport_tests {
     #[test]
     fn parses_results_query() {
         let parsed = parse_results_query(Some(
-            "workflow_id=7&job_id=3&run_id=5&return_code=0&status=5&compute_node_id=9&offset=1&limit=2&sort_by=run_id&reverse_sort=true&all_runs=false",
+            "workflow_id=7&job_id=3&run_id=5&return_code=0&status=completed&compute_node_id=9&offset=1&limit=2&sort_by=run_id&reverse_sort=true&all_runs=false",
         ))
         .expect("valid query");
 

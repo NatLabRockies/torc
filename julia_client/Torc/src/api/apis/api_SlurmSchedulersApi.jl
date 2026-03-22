@@ -9,7 +9,7 @@ end
 The default API base path for APIs in `SlurmSchedulersApi`.
 This can be used to construct the `OpenAPI.Clients.Client` instance.
 """
-basepath(::Type{ SlurmSchedulersApi }) = "http://localhost"
+basepath(::Type{ SlurmSchedulersApi }) = "http://localhost/torc-service/v1"
 
 const _returntypes_create_slurm_scheduler_SlurmSchedulersApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => SlurmSchedulerModel,

@@ -1,8 +1,8 @@
 use clap::{CommandFactory, Parser};
 
 use torc::cli::{Cli, Commands};
+use torc::client::apis;
 use torc::client::apis::configuration::{Configuration, TlsConfig};
-use torc::client::apis::default_api;
 use torc::client::commands::access_groups::handle_access_group_commands;
 use torc::client::commands::admin::handle_admin_commands;
 use torc::client::commands::compute_nodes::handle_compute_node_commands;
@@ -333,7 +333,7 @@ fn main() {
 
             // Check if workflow has schedule_nodes actions (for existing workflows)
             if !is_spec_file(workflow_spec_or_id) {
-                match default_api::get_workflow_actions(&config, workflow_id) {
+                match apis::final_surfaces_api::get_workflow_actions(&config, workflow_id) {
                     Ok(actions) => {
                         let has_schedule_nodes = actions.iter().any(|action| {
                             action.trigger_type == "on_workflow_start"
@@ -363,7 +363,7 @@ fn main() {
             }
 
             // Submit the workflow
-            match default_api::get_workflow(&config, workflow_id) {
+            match apis::workflows_api::get_workflow(&config, workflow_id) {
                 Ok(workflow) => {
                     let torc_config = TorcConfig::load().unwrap_or_default();
                     let workflow_manager =
@@ -524,7 +524,7 @@ fn main() {
             };
 
             // Submit the workflow
-            match default_api::get_workflow(&config, workflow_id) {
+            match apis::workflows_api::get_workflow(&config, workflow_id) {
                 Ok(workflow) => {
                     let workflow_manager =
                         WorkflowManager::new(config.clone(), torc_config, workflow);
@@ -788,7 +788,7 @@ fn main() {
                 std::process::exit(1);
             }
         }
-        Commands::Ping => match default_api::ping(&config) {
+        Commands::Ping => match apis::system_api::ping(&config) {
             Ok(_) => {
                 if cli.format == "json" {
                     println!(r#"{{"status": "Server is running"}}"#);

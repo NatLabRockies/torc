@@ -2,11 +2,8 @@ import getpass
 import os
 
 from torc import make_api, map_function_to_jobs, setup_logging
-from torc.openapi_client import (
-    DefaultApi,
-    ResourceRequirementsModel,
-    WorkflowModel,
-)
+from torc.api import DefaultApi
+from torc.openapi_client import ResourceRequirementsModel, WorkflowModel
 
 
 TORC_API_URL = os.getenv("TORC_API_URL", "http://localhost:8080/torc-service/v1")

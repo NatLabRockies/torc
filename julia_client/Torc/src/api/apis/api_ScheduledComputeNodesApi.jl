@@ -9,7 +9,7 @@ end
 The default API base path for APIs in `ScheduledComputeNodesApi`.
 This can be used to construct the `OpenAPI.Clients.Client` instance.
 """
-basepath(::Type{ ScheduledComputeNodesApi }) = "http://localhost"
+basepath(::Type{ ScheduledComputeNodesApi }) = "http://localhost/torc-service/v1"
 
 const _returntypes_create_scheduled_compute_node_ScheduledComputeNodesApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ScheduledComputeNodesModel,

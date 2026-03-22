@@ -10,8 +10,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::commands::slurm::RegenerateDryRunResult;
 use crate::client::report_models::{ResourceUtilizationReport, ResultsReport};
 use crate::client::resource_correction::{
@@ -379,7 +379,7 @@ pub fn recover_workflow(
 /// - No active workers (compute nodes or scheduled compute nodes)
 fn check_recovery_preconditions(config: &Configuration, workflow_id: i64) -> Result<(), String> {
     // Check if workflow is complete
-    let is_complete = default_api::is_workflow_complete(config, workflow_id)
+    let is_complete = apis::workflows_api::is_workflow_complete(config, workflow_id)
         .map_err(|e| format!("Failed to check workflow completion status: {}", e))?;
 
     if !is_complete.is_complete && !is_complete.is_canceled {
@@ -389,7 +389,7 @@ fn check_recovery_preconditions(config: &Configuration, workflow_id: i64) -> Res
     }
 
     // Check for active compute nodes
-    let active_nodes = default_api::list_compute_nodes(
+    let active_nodes = apis::compute_nodes_api::list_compute_nodes(
         config,
         workflow_id,
         None,       // offset
@@ -409,7 +409,7 @@ fn check_recovery_preconditions(config: &Configuration, workflow_id: i64) -> Res
     }
 
     // Check for pending/active scheduled compute nodes
-    let pending_scn = default_api::list_scheduled_compute_nodes(
+    let pending_scn = apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
         config,
         workflow_id,
         None,            // offset
@@ -428,7 +428,7 @@ fn check_recovery_preconditions(config: &Configuration, workflow_id: i64) -> Res
             .to_string());
     }
 
-    let active_scn = default_api::list_scheduled_compute_nodes(
+    let active_scn = apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
         config,
         workflow_id,
         None,           // offset
@@ -450,7 +450,7 @@ fn check_recovery_preconditions(config: &Configuration, workflow_id: i64) -> Res
     }
 
     // Check that there are actually failed/terminated/canceled jobs to recover
-    let failed_jobs = default_api::list_jobs(
+    let failed_jobs = apis::jobs_api::list_jobs(
         config,
         workflow_id,
         Some(crate::models::JobStatus::Failed), // status
@@ -465,7 +465,7 @@ fn check_recovery_preconditions(config: &Configuration, workflow_id: i64) -> Res
     )
     .map_err(|e| format!("Failed to list failed jobs: {}", e))?;
 
-    let terminated_jobs = default_api::list_jobs(
+    let terminated_jobs = apis::jobs_api::list_jobs(
         config,
         workflow_id,
         Some(crate::models::JobStatus::Terminated), // status
@@ -620,7 +620,7 @@ pub fn invoke_ai_agent(workflow_id: i64, agent: &str, output_dir: &Path) -> Resu
 
 /// Count jobs in pending_failed status that need AI classification
 fn count_pending_failed_jobs(config: &Configuration, workflow_id: i64) -> Result<i64, String> {
-    let pending_failed_jobs = default_api::list_jobs(
+    let pending_failed_jobs = apis::jobs_api::list_jobs(
         config,
         workflow_id,
         Some(JobStatus::PendingFailed),

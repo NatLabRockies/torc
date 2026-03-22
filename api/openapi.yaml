@@ -7,7 +7,10 @@ info:
   license:
     name: BSD-3-Clause
     identifier: BSD-3-Clause
-  version: 0.21.0
+  version: 0.11.0
+servers:
+- url: /torc-service/v1
+  description: Versioned Torc API base path
 paths:
   /access_check/{workflow_id}/{user_name}:
     get:
@@ -5196,6 +5199,7 @@ components:
     WorkflowActionModel:
       type: object
       required:
+      - id
       - workflow_id
       - trigger_type
       - action_type

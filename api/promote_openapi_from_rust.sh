@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TMP_SPEC="$(mktemp "${SCRIPT_DIR}/openapi.promote.XXXXXX.yaml")"
+TMP_SPEC="$(mktemp "${TMPDIR:-/tmp}/torc-openapi-promote.XXXXXX.yaml")"
 trap 'rm -f "${TMP_SPEC}"' EXIT
 
 "${SCRIPT_DIR}/emit_openapi_from_rust.sh" "${TMP_SPEC}"
