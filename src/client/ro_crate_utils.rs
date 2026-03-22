@@ -465,29 +465,51 @@ pub fn create_entities_for_input_files(
     }
 }
 
+/// Find the path to a binary by name.
+///
+/// Looks for the binary in the same directory as the current executable first,
+/// then falls back to searching PATH. Returns None if the binary is not found.
+fn find_binary_path(name: &str) -> Option<String> {
+    // First, look in the same directory as the current executable
+    let path = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join(name)))
+        .filter(|p| p.is_file())
+        .or_else(|| {
+            // Fall back to searching PATH
+            std::env::var_os("PATH").and_then(|paths| {
+                std::env::split_paths(&paths)
+                    .map(|dir| dir.join(name))
+                    .find(|p| p.is_file())
+            })
+        });
+
+    path.map(|p| p.display().to_string())
+}
+
 /// Build a SoftwareApplication RO-Crate entity for a torc binary.
 ///
 /// Uses compile-time version and git hash instead of runtime SHA256 computation.
 /// The git hash uniquely identifies the build without the overhead of hashing
 /// large binaries at runtime.
-fn build_software_entity(workflow_id: i64, run_id: i64, name: &str) -> RoCrateEntityModel {
+fn build_software_entity(
+    workflow_id: i64,
+    run_id: i64,
+    name: &str,
+    binary_path: &str,
+) -> RoCrateEntityModel {
     let entity_id = format!("#software-{}-run-{}", name, run_id);
 
     // Use compile-time constants for version identification
     let version = version_check::full_version();
     let git_hash = version_check::GIT_HASH;
 
-    // Get binary path for reference
-    let exe_path = std::env::current_exe()
-        .map(|p| p.display().to_string())
-        .unwrap_or_else(|_| "unknown".to_string());
-
     let metadata = serde_json::json!({
         "@id": entity_id,
         "@type": "SoftwareApplication",
         "name": name,
         "version": version,
-        "url": exe_path,
+        "url": binary_path,
         "torc:run_id": run_id,
         "torc:git_hash": git_hash,
     });
@@ -546,7 +568,16 @@ pub fn create_software_entities(config: &Configuration, workflow_id: i64, run_id
             continue;
         }
 
-        let entity = build_software_entity(workflow_id, run_id, name);
+        // Only create entity if binary is found
+        let binary_path = match find_binary_path(name) {
+            Some(path) => path,
+            None => {
+                debug!("Binary '{}' not found, skipping RO-Crate entity", name);
+                continue;
+            }
+        };
+
+        let entity = build_software_entity(workflow_id, run_id, name, &binary_path);
         match default_api::create_ro_crate_entity(config, entity) {
             Ok(created) => {
                 debug!(
@@ -793,7 +824,7 @@ mod tests {
 
     #[test]
     fn test_build_software_entity() {
-        let entity = build_software_entity(100, 3, "torc");
+        let entity = build_software_entity(100, 3, "torc", "/usr/local/bin/torc");
 
         assert_eq!(entity.workflow_id, 100);
         assert_eq!(entity.file_id, None);
@@ -804,6 +835,7 @@ mod tests {
         assert_eq!(metadata["@id"], "#software-torc-run-3");
         assert_eq!(metadata["@type"], "SoftwareApplication");
         assert_eq!(metadata["name"], "torc");
+        assert_eq!(metadata["url"], "/usr/local/bin/torc");
         assert_eq!(metadata["torc:run_id"], 3);
         // Version and git_hash are compile-time constants
         assert!(metadata.get("version").is_some());
@@ -812,13 +844,14 @@ mod tests {
 
     #[test]
     fn test_build_software_entity_different_binary() {
-        let entity = build_software_entity(42, 1, "torc-server");
+        let entity = build_software_entity(42, 1, "torc-server", "/opt/torc/torc-server");
 
         assert_eq!(entity.entity_id, "#software-torc-server-run-1");
         assert_eq!(entity.entity_type, "SoftwareApplication");
 
         let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
         assert_eq!(metadata["name"], "torc-server");
+        assert_eq!(metadata["url"], "/opt/torc/torc-server");
         assert_eq!(metadata["torc:run_id"], 1);
     }
 }
