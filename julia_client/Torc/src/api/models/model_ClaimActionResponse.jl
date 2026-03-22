@@ -28,7 +28,6 @@ OpenAPI.property_type(::Type{ ClaimActionResponse }, name::Symbol) = Union{Nothi
 
 function OpenAPI.check_required(o::ClaimActionResponse)
     o.action_id === nothing && (return false)
-    o.success === nothing && (return false)
     true
 end
 

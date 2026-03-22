@@ -71,7 +71,6 @@ pub fn create_result(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
-    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_result_model);
 
     let req = req_builder.build()?;
@@ -128,7 +127,6 @@ pub fn delete_result(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
-    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
@@ -186,7 +184,6 @@ pub fn delete_results(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
-    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
@@ -239,7 +236,6 @@ pub fn get_result(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
-    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -342,7 +338,6 @@ pub fn list_results(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
-    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -396,7 +391,6 @@ pub fn update_result(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
-    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_result_model);
 
     let req = req_builder.build()?;

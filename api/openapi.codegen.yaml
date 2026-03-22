@@ -216,7 +216,8 @@ paths:
           description: Successful response
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: '#/components/schemas/UserGroupMembershipModel'
   /admin/reload-auth:
     post:
       tags:
@@ -2719,6 +2720,22 @@ paths:
         schema:
           type: integer
           format: int64
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type:
+          - integer
+          - 'null'
+          format: int64
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type:
+          - integer
+          - 'null'
+          format: int64
       responses:
         '200':
           description: Successful response
@@ -2780,7 +2797,8 @@ paths:
           description: Successful response
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: '#/components/schemas/WorkflowAccessGroupModel'
   /workflows/{id}/actions:
     get:
       tags:
@@ -3684,7 +3702,6 @@ components:
       type: object
       required:
       - action_id
-      - success
       properties:
         action_id:
           type: integer

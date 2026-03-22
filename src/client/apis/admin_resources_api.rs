@@ -120,7 +120,6 @@ pub fn create_failure_handler(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
-    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_failure_handler_model);
 
     let req = req_builder.build()?;
@@ -175,7 +174,6 @@ pub fn create_jobs(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
-    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_jobs_model);
 
     let req = req_builder.build()?;
@@ -230,7 +228,6 @@ pub fn create_resource_requirements(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
-    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_resource_requirements_model);
 
     let req = req_builder.build()?;
@@ -285,7 +282,6 @@ pub fn create_slurm_stats(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
-    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_slurm_stats_model);
 
     let req = req_builder.build()?;
@@ -346,7 +342,6 @@ pub fn delete_failure_handler(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
-    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
@@ -407,7 +402,6 @@ pub fn delete_resource_requirement(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
-    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
@@ -465,7 +459,6 @@ pub fn delete_resource_requirements(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
-    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
@@ -522,7 +515,6 @@ pub fn get_failure_handler(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
-    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -578,7 +570,6 @@ pub fn get_resource_requirements(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
-    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -644,7 +635,6 @@ pub fn list_failure_handlers(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
-    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -752,7 +742,6 @@ pub fn list_resource_requirements(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
-    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -830,7 +819,6 @@ pub fn list_slurm_stats(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
-    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -888,7 +876,6 @@ pub fn update_resource_requirements(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
-    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_resource_requirements_model);
 
     let req = req_builder.build()?;

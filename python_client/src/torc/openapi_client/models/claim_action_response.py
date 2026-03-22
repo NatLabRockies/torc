@@ -18,7 +18,7 @@ import re  # noqa: F401
 import json
 
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -27,7 +27,7 @@ class ClaimActionResponse(BaseModel):
     ClaimActionResponse
     """ # noqa: E501
     action_id: StrictInt
-    success: StrictBool
+    success: Optional[StrictBool] = None
     __properties: ClassVar[List[str]] = ["action_id", "success"]
 
     model_config = ConfigDict(

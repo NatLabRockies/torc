@@ -157,7 +157,7 @@ fn test_ro_crate_bulk_delete(start_server: &ServerProcess) {
     assert_eq!(list.items.len(), 3);
 
     // Bulk delete all entities for the workflow
-    let result = apis::final_surfaces_api::delete_ro_crate_entities(config, workflow_id)
+    let result = apis::final_surfaces_api::delete_ro_crate_entities(config, workflow_id, None)
         .expect("Failed to bulk delete");
     assert_eq!(result.deleted_count, 3);
 

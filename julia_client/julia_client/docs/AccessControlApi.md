@@ -300,8 +300,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **list_workflow_groups**
-> list_workflow_groups(_api::AccessControlApi, id::Int64; _mediaType=nothing) -> ListAccessGroupsResponse, OpenAPI.Clients.ApiResponse <br/>
-> list_workflow_groups(_api::AccessControlApi, response_stream::Channel, id::Int64; _mediaType=nothing) -> Channel{ ListAccessGroupsResponse }, OpenAPI.Clients.ApiResponse
+> list_workflow_groups(_api::AccessControlApi, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing) -> ListAccessGroupsResponse, OpenAPI.Clients.ApiResponse <br/>
+> list_workflow_groups(_api::AccessControlApi, response_stream::Channel, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing) -> Channel{ ListAccessGroupsResponse }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -311,6 +311,13 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **AccessControlApi** | API context | 
 **id** | **Int64** | ID of the workflow |
+
+### Optional Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **offset** | **Int64** |  | [default to nothing]
+ **limit** | **Int64** |  | [default to nothing]
 
 ### Return type
 
@@ -328,8 +335,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **remove_user_from_group**
-> remove_user_from_group(_api::AccessControlApi, id::Int64, user_name::String; body=nothing, _mediaType=nothing) -> Any, OpenAPI.Clients.ApiResponse <br/>
-> remove_user_from_group(_api::AccessControlApi, response_stream::Channel, id::Int64, user_name::String; body=nothing, _mediaType=nothing) -> Channel{ Any }, OpenAPI.Clients.ApiResponse
+> remove_user_from_group(_api::AccessControlApi, id::Int64, user_name::String; body=nothing, _mediaType=nothing) -> UserGroupMembershipModel, OpenAPI.Clients.ApiResponse <br/>
+> remove_user_from_group(_api::AccessControlApi, response_stream::Channel, id::Int64, user_name::String; body=nothing, _mediaType=nothing) -> Channel{ UserGroupMembershipModel }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -349,7 +356,7 @@ Name | Type | Description  | Notes
 
 ### Return type
 
-**Any**
+[**UserGroupMembershipModel**](UserGroupMembershipModel.md)
 
 ### Authorization
 
@@ -363,8 +370,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **remove_workflow_from_group**
-> remove_workflow_from_group(_api::AccessControlApi, id::Int64, group_id::Int64; body=nothing, _mediaType=nothing) -> Any, OpenAPI.Clients.ApiResponse <br/>
-> remove_workflow_from_group(_api::AccessControlApi, response_stream::Channel, id::Int64, group_id::Int64; body=nothing, _mediaType=nothing) -> Channel{ Any }, OpenAPI.Clients.ApiResponse
+> remove_workflow_from_group(_api::AccessControlApi, id::Int64, group_id::Int64; body=nothing, _mediaType=nothing) -> WorkflowAccessGroupModel, OpenAPI.Clients.ApiResponse <br/>
+> remove_workflow_from_group(_api::AccessControlApi, response_stream::Channel, id::Int64, group_id::Int64; body=nothing, _mediaType=nothing) -> Channel{ WorkflowAccessGroupModel }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -384,7 +391,7 @@ Name | Type | Description  | Notes
 
 ### Return type
 
-**Any**
+[**WorkflowAccessGroupModel**](WorkflowAccessGroupModel.md)
 
 ### Authorization
 

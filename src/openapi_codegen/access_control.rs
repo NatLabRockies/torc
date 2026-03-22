@@ -135,17 +135,19 @@ pub async fn list_group_members(
         ("user_name" = String, Path, description = "Username to remove")
     ),
     request_body = Option<Value>,
-    responses((status = 200, description = "Successful response", body = Value))
+    responses((status = 200, description = "Successful response", body = UserGroupMembershipModel))
 )]
 pub async fn remove_user_from_group(
     Path((id, user_name)): Path<(i64, String)>,
     Json(_body): Json<Option<Value>>,
-) -> Json<Value> {
-    Json(serde_json::json!({
-        "group_id": id,
-        "user_name": user_name,
-        "removed": true
-    }))
+) -> Json<UserGroupMembershipModel> {
+    Json(UserGroupMembershipModel {
+        id: Some(1),
+        user_name,
+        group_id: id,
+        role: "member".to_string(),
+        created_at: Some("2026-03-21T00:00:00Z".to_string()),
+    })
 }
 
 #[utoipa::path(
@@ -191,14 +193,20 @@ pub async fn add_workflow_to_group(
     get,
     path = "/workflows/{id}/access_groups",
     operation_id = "list_workflow_groups",
-    params(("id" = i64, Path, description = "ID of the workflow")),
+    params(
+        ("id" = i64, Path, description = "ID of the workflow"),
+        AccessPaginationQuery
+    ),
     responses((status = 200, description = "Successful response", body = ListAccessGroupsResponse))
 )]
-pub async fn list_workflow_groups(Path(_id): Path<i64>) -> Json<ListAccessGroupsResponse> {
+pub async fn list_workflow_groups(
+    Path(_id): Path<i64>,
+    Query(query): Query<AccessPaginationQuery>,
+) -> Json<ListAccessGroupsResponse> {
     Json(ListAccessGroupsResponse {
         items: vec![example_access_group(Some(1))],
-        offset: 0,
-        limit: 100,
+        offset: query.offset.unwrap_or(0),
+        limit: query.limit.unwrap_or(100),
         total_count: 1,
         has_more: false,
     })
@@ -213,17 +221,17 @@ pub async fn list_workflow_groups(Path(_id): Path<i64>) -> Json<ListAccessGroups
         ("group_id" = i64, Path, description = "ID of the access group")
     ),
     request_body = Option<Value>,
-    responses((status = 200, description = "Successful response", body = Value))
+    responses((status = 200, description = "Successful response", body = WorkflowAccessGroupModel))
 )]
 pub async fn remove_workflow_from_group(
     Path((id, group_id)): Path<(i64, i64)>,
     Json(_body): Json<Option<Value>>,
-) -> Json<Value> {
-    Json(serde_json::json!({
-        "workflow_id": id,
-        "group_id": group_id,
-        "removed": true
-    }))
+) -> Json<WorkflowAccessGroupModel> {
+    Json(WorkflowAccessGroupModel {
+        workflow_id: id,
+        group_id,
+        created_at: Some("2026-03-21T00:00:00Z".to_string()),
+    })
 }
 
 #[utoipa::path(
