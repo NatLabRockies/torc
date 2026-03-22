@@ -1,5 +1,7 @@
 // Build script to capture git commit hash at compile time
 
+use std::fs;
+use std::path::Path;
 use std::process::Command;
 
 fn main() {
@@ -34,4 +36,24 @@ fn main() {
     // Rerun if git HEAD changes or if any tracked files change
     println!("cargo:rerun-if-changed=.git/HEAD");
     println!("cargo:rerun-if-changed=.git/index");
+
+    // Ensure binaries embedding SQLx migrations rebuild whenever migrations change.
+    emit_rerun_if_changed_for_dir(Path::new("torc-server/migrations"));
+}
+
+fn emit_rerun_if_changed_for_dir(dir: &Path) {
+    println!("cargo:rerun-if-changed={}", dir.display());
+
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            emit_rerun_if_changed_for_dir(&path);
+        } else {
+            println!("cargo:rerun-if-changed={}", path.display());
+        }
+    }
 }

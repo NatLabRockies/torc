@@ -110,6 +110,19 @@ fn wait_for_server_ready(port: u16, timeout_secs: u64) -> Result<(), String> {
     ))
 }
 
+fn build_test_binaries() {
+    let status = Command::new("cargo")
+        .arg("build")
+        .arg("--workspace")
+        .arg("--features")
+        .arg("server-bin,slurm-runner")
+        .status()
+        .expect("Failed to execute cargo build");
+    if !status.success() {
+        panic!("cargo build failed with status: {}", status);
+    }
+}
+
 fn start_process(db_url: &str, db_file: NamedTempFile) -> ServerProcess {
     let port = find_available_port();
     println!("Setting up database with url: {}", db_url);
@@ -125,17 +138,10 @@ fn start_process(db_url: &str, db_file: NamedTempFile) -> ServerProcess {
     if !status.success() {
         panic!("sqlx database setup failed with status: {}", status);
     }
-    let status = Command::new("cargo")
-        .arg("build")
-        .arg("--workspace")
-        .status()
-        .expect("Failed to execute cargo build");
-    if !status.success() {
-        panic!("cargo build failed with status: {}", status);
-    }
+    build_test_binaries();
 
     // Ensure torc-slurm-job-runner binary is in the PATH for tests
-    // The binary is built as part of --workspace but we need to ensure it's accessible
+    // The binary is built by build_test_binaries but we need to ensure it's accessible.
     let slurm_runner_path = std::env::current_dir()
         .expect("Failed to get current dir")
         .join(get_exe_path("target/debug/torc-slurm-job-runner"));
@@ -1493,14 +1499,7 @@ fn start_process_with_access_control_impl(
     if !status.success() {
         panic!("sqlx database setup failed with status: {}", status);
     }
-    let status = Command::new("cargo")
-        .arg("build")
-        .arg("--workspace")
-        .status()
-        .expect("Failed to execute cargo build");
-    if !status.success() {
-        panic!("cargo build failed with status: {}", status);
-    }
+    build_test_binaries();
 
     eprintln!("Starting server with access control on port {}", port);
     let htpasswd_path = htpasswd_file.path().to_string_lossy().to_string();

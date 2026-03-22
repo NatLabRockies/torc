@@ -11,6 +11,18 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
+const fn default_trigger_count() -> i64 {
+    0
+}
+
+const fn default_required_triggers() -> i64 {
+    1
+}
+
+const fn default_false() -> bool {
+    false
+}
+
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,
@@ -1603,14 +1615,19 @@ pub struct WorkflowActionModel {
     pub action_config: Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub job_ids: Option<Vec<i64>>,
+    #[serde(default = "default_trigger_count")]
     pub trigger_count: i64,
+    #[serde(default = "default_required_triggers")]
     pub required_triggers: i64,
+    #[serde(default = "default_false")]
     pub executed: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub executed_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub executed_by: Option<i64>,
+    #[serde(default = "default_false")]
     pub persistent: bool,
+    #[serde(default = "default_false")]
     pub is_recovery: bool,
 }
 

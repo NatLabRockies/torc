@@ -1,3 +1,10 @@
+fn decode_path_segment(segment: &str) -> Option<String> {
+    percent_encoding::percent_decode_str(segment)
+        .decode_utf8()
+        .ok()
+        .map(|value| value.into_owned())
+}
+
 fn parse_required_i32(params: &HashMap<String, String>, key: &str) -> Result<i32, String> {
     let raw = params
         .get(key)
@@ -20,7 +27,7 @@ fn parse_group_member_path(path: &str) -> Option<(i64, String)> {
     if tail.contains('/') {
         return None;
     }
-    Some((group_id.parse::<i64>().ok()?, tail.to_string()))
+    Some((group_id.parse::<i64>().ok()?, decode_path_segment(tail)?))
 }
 
 fn parse_access_group_members_collection_path(path: &str) -> Option<i64> {
@@ -38,7 +45,7 @@ fn parse_user_groups_path(path: &str) -> Option<String> {
     if user_name.contains('/') {
         return None;
     }
-    Some(user_name.to_string())
+    decode_path_segment(user_name)
 }
 
 fn parse_workflow_access_groups_collection_path(path: &str) -> Option<i64> {
@@ -65,7 +72,7 @@ fn parse_access_check_path(path: &str) -> Option<(i64, String)> {
     if user_name.contains('/') {
         return None;
     }
-    Some((workflow_id.parse::<i64>().ok()?, user_name.to_string()))
+    Some((workflow_id.parse::<i64>().ok()?, decode_path_segment(user_name)?))
 }
 
 fn parse_workflow_failure_handlers_path(path: &str) -> Option<i64> {

@@ -1172,7 +1172,7 @@ where
                 priority
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            RETURNING rowid
+            RETURNING id
             "#,
         )
         .bind(job.workflow_id)
@@ -1196,7 +1196,7 @@ where
             }
         };
 
-        let job_id: i64 = job_result.get("rowid");
+        let job_id: i64 = job_result.get("id");
         job.id = Some(job_id);
 
         // Handle job dependencies
@@ -1374,7 +1374,7 @@ where
                     priority
                 )
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                RETURNING rowid
+                RETURNING id
                 "#,
             )
             .bind(job.workflow_id)
@@ -1401,7 +1401,7 @@ where
                 }
             };
 
-            let job_id: i64 = job_result.get("rowid");
+            let job_id: i64 = job_result.get("id");
             job.id = Some(job_id);
 
             // Handle job dependencies

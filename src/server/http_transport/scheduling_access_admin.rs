@@ -473,6 +473,21 @@ where
     }
 }
 
+async fn handle_add_workflow_to_group_by_path<C>(
+    server: Server<C>,
+    workflow_id: i64,
+    group_id: i64,
+    context: C,
+) -> Response<Body>
+where
+    C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
+{
+    match server.add_workflow_to_group(workflow_id, group_id, &context).await {
+        Ok(response) => add_workflow_to_group_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
 async fn handle_list_workflow_groups<C, B>(
     server: Server<C>,
     workflow_id: i64,

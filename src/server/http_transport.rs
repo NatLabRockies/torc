@@ -682,6 +682,19 @@ where
             });
         }
 
+        if request.method() == Method::POST
+            && let Some((workflow_id, group_id)) =
+                parse_workflow_access_group_item_path(request.uri().path())
+        {
+            let server = self.server.clone();
+            return Box::pin(async move {
+                Ok(
+                    handle_add_workflow_to_group_by_path(server, workflow_id, group_id, context)
+                        .await,
+                )
+            });
+        }
+
         if request.method() == Method::DELETE
             && let Some((workflow_id, group_id)) =
                 parse_workflow_access_group_item_path(request.uri().path())
