@@ -134,7 +134,7 @@ mod unix_main {
                 }
             };
 
-            let items = response.items.unwrap_or_default();
+            let items = response.items;
 
             if items.iter().any(|rr| rr.num_nodes > 1) {
                 return true;
@@ -541,7 +541,7 @@ mod unix_main {
             }
         };
 
-        let items = scheduled_nodes.items.unwrap_or_default();
+        let items = scheduled_nodes.items;
         if items.len() != 1 {
             error!(
                 "Expected exactly 1 scheduled compute node for Slurm job ID {}, found {}",

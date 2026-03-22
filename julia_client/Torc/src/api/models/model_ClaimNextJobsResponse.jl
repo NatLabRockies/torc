@@ -2,7 +2,7 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""claim_next_jobs_response
+@doc raw"""ClaimNextJobsResponse
 
     ClaimNextJobsResponse(;
         jobs=nothing,

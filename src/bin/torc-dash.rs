@@ -597,36 +597,8 @@ async fn main() -> Result<()> {
             socket_path.display()
         );
 
-        // TODO: axum 0.7's serve() only accepts TcpListener, so we use a manual
-        // accept loop with hyper-util for Unix socket connections. In axum 0.8+,
-        // serve() accepts a generic Listener trait that UnixListener implements,
-        // which would replace this entire block with just:
-        //
-        //   axum::serve(uds, app).await?;
-        //
-        // We're stuck on axum 0.7 because the swagger crate (used by
-        // torc-server) depends on hyper 0.14, while axum 0.8 requires hyper 1.4+.
-        // Removing the swagger dependency would unblock the upgrade.
-        let mut make_service = app.into_make_service();
-        loop {
-            let (stream, _addr) = uds.accept().await?;
-            let tower_service = tower::Service::call(&mut make_service, &stream)
-                .await
-                .unwrap_or_else(|e| match e {});
-            let hyper_service = hyper_util::service::TowerToHyperService::new(tower_service);
-
-            tokio::spawn(async move {
-                let io = hyper_util::rt::TokioIo::new(stream);
-                if let Err(err) = hyper_util::server::conn::auto::Builder::new(
-                    hyper_util::rt::TokioExecutor::new(),
-                )
-                .serve_connection(io, hyper_service)
-                .await
-                {
-                    error!("Error serving Unix socket connection: {err}");
-                }
-            });
-        }
+        axum::serve(uds, app).await?;
+        return Ok(());
     }
 
     // TCP path (default)

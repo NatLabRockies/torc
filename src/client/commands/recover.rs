@@ -402,9 +402,7 @@ fn check_recovery_preconditions(config: &Configuration, workflow_id: i64) -> Res
     )
     .map_err(|e| format!("Failed to check for active compute nodes: {}", e))?;
 
-    if let Some(nodes) = active_nodes.items
-        && !nodes.is_empty()
-    {
+    if !active_nodes.items.is_empty() {
         return Err("Cannot recover: there are still active compute nodes. \
              Wait for all workers to exit."
             .to_string());

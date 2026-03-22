@@ -1164,7 +1164,7 @@ pub fn delete_all_workflows(config: &Configuration) -> Result<(), Box<dyn std::e
         None, // is_archive filter
     )?;
 
-    let workflows = response.items.unwrap_or_default();
+    let workflows = response.items;
     let mut failed_deletions = Vec::new();
 
     // Delete each workflow, collecting any failures

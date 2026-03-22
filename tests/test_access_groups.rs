@@ -1351,7 +1351,7 @@ fn test_comprehensive_access_control_workflow_execution(
     )
     .expect("Failed to list jobs");
 
-    for job in jobs.items.unwrap() {
+    for job in jobs.items {
         assert_eq!(
             job.status.unwrap(),
             models::JobStatus::Completed,

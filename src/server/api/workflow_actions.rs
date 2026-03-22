@@ -1,11 +1,11 @@
 //! Workflow action-related API endpoints
 
+use crate::server::transport_types::context_types::{ApiError, Has, XSpanIdString};
 use async_trait::async_trait;
 use log::{debug, error, info};
 use sqlx::Row;
-use swagger::{ApiError, Has, XSpanIdString};
 
-use crate::server::api_types::{
+use crate::server::api_responses::{
     ClaimActionResponse, CreateWorkflowActionResponse, GetPendingActionsResponse,
     GetWorkflowActionsResponse,
 };

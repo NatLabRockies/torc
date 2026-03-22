@@ -63,7 +63,7 @@ pub fn handle_failure_handler_commands(
                 *limit,
             ) {
                 Ok(response) => {
-                    let handlers = response.items.unwrap_or_default();
+                    let handlers = response.items;
                     if print_wrapped_if_json(
                         format,
                         "failure_handlers",

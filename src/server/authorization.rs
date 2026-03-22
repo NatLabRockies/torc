@@ -3,11 +3,11 @@
 //! This module provides authorization utilities that can be used by API handlers
 //! to enforce access control based on user identity and group memberships.
 
+use crate::server::transport_types::auth_types::Authorization;
 use log::{debug, warn};
 use sqlx::Row;
 use sqlx::sqlite::SqlitePool;
 use std::sync::Arc;
-use swagger::auth::Authorization;
 
 /// Result type for authorization checks
 #[derive(Debug, Clone, PartialEq)]
@@ -619,7 +619,7 @@ mod tests {
     fn test_get_username_with_auth() {
         let auth = Some(Authorization {
             subject: "testuser".to_string(),
-            scopes: swagger::auth::Scopes::All,
+            scopes: crate::server::transport_types::auth_types::Scopes::All,
             issuer: None,
         });
         assert_eq!(AuthorizationService::get_username(&auth), Some("testuser"));
@@ -629,7 +629,7 @@ mod tests {
     fn test_get_username_anonymous() {
         let auth = Some(Authorization {
             subject: "anonymous".to_string(),
-            scopes: swagger::auth::Scopes::All,
+            scopes: crate::server::transport_types::auth_types::Scopes::All,
             issuer: None,
         });
         assert_eq!(AuthorizationService::get_username(&auth), None);

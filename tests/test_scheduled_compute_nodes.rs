@@ -197,7 +197,7 @@ fn test_list_scheduled_compute_nodes(start_server: &ServerProcess) {
     )
     .expect("Failed to list scheduled compute nodes");
 
-    let items = response.items.unwrap();
+    let items = response.items;
     assert_eq!(items.len(), 3);
 
     // Verify all nodes are present
@@ -251,7 +251,7 @@ fn test_list_scheduled_compute_nodes_filter_by_scheduler_id(start_server: &Serve
     )
     .expect("Failed to list scheduled compute nodes with filter");
 
-    let items = response.items.unwrap();
+    let items = response.items;
     assert_eq!(items.len(), 1);
     assert_eq!(items[0].scheduler_id, 99999);
 }
@@ -308,7 +308,7 @@ fn test_list_scheduled_compute_nodes_filter_by_status(start_server: &ServerProce
     )
     .expect("Failed to list scheduled compute nodes with status filter");
 
-    let items = response.items.unwrap();
+    let items = response.items;
     assert_eq!(items.len(), 2);
     assert!(items.iter().all(|n| n.status == "active"));
 }

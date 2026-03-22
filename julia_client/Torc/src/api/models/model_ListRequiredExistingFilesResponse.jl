@@ -2,16 +2,16 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""list_required_existing_files_response
+@doc raw"""ListRequiredExistingFilesResponse
 
     ListRequiredExistingFilesResponse(;
         files=nothing,
     )
 
-    - files::Vector{String}
+    - files::Vector{Int64}
 """
 Base.@kwdef mutable struct ListRequiredExistingFilesResponse <: OpenAPI.APIModel
-    files::Union{Nothing, Vector{String}} = nothing
+    files::Union{Nothing, Vector{Int64}} = nothing
 
     function ListRequiredExistingFilesResponse(files, )
         o = new(files, )
@@ -20,10 +20,11 @@ Base.@kwdef mutable struct ListRequiredExistingFilesResponse <: OpenAPI.APIModel
     end
 end # type ListRequiredExistingFilesResponse
 
-const _property_types_ListRequiredExistingFilesResponse = Dict{Symbol,String}(Symbol("files")=>"Vector{String}", )
+const _property_types_ListRequiredExistingFilesResponse = Dict{Symbol,String}(Symbol("files")=>"Vector{Int64}", )
 OpenAPI.property_type(::Type{ ListRequiredExistingFilesResponse }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_ListRequiredExistingFilesResponse[name]))}
 
 function OpenAPI.check_required(o::ListRequiredExistingFilesResponse)
+    o.files === nothing && (return false)
     true
 end
 

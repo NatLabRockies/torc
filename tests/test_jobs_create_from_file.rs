@@ -58,7 +58,7 @@ fn test_create_jobs_from_file_basic(start_server: &ServerProcess) {
     .expect("Failed to list jobs");
 
     assert_eq!(jobs.total_count, 3);
-    let job_list = jobs.items.as_ref().unwrap();
+    let job_list = &jobs.items;
 
     // Check job names are sequential
     assert_eq!(job_list[0].name, "job1");
@@ -128,7 +128,7 @@ echo 'job 3'
     .expect("Failed to list jobs");
 
     assert_eq!(jobs.total_count, 3);
-    let job_list = jobs.items.as_ref().unwrap();
+    let job_list = &jobs.items;
 
     // Check that resource requirements were created and assigned
     let first_job = &job_list[0];
@@ -214,7 +214,7 @@ fn test_create_jobs_from_file_with_existing_jobs(start_server: &ServerProcess) {
     .expect("Failed to list jobs");
 
     assert_eq!(jobs.total_count, 4);
-    let job_list = jobs.items.as_ref().unwrap();
+    let job_list = &jobs.items;
 
     // The new jobs should be named job3 and job4 (starting from existing count + 1)
     let new_jobs: Vec<_> = job_list
@@ -288,7 +288,7 @@ fn test_create_jobs_from_file_name_conflicts(start_server: &ServerProcess) {
     .expect("Failed to list jobs");
 
     assert_eq!(jobs.total_count, 2);
-    let job_list = jobs.items.as_ref().unwrap();
+    let job_list = &jobs.items;
 
     let new_job = job_list
         .iter()
@@ -463,7 +463,7 @@ ffmpeg -i input.mp4 -vcodec libx264 output.mp4"#;
     .expect("Failed to list jobs");
 
     assert_eq!(jobs.total_count, 5);
-    let job_list = jobs.items.as_ref().unwrap();
+    let job_list = &jobs.items;
 
     // Check that complex commands were preserved
     assert_eq!(job_list[0].command, r#"python -c "print('Hello World')""#);

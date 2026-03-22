@@ -29,12 +29,8 @@ fn test_list_job_file_relationships_empty(start_server: &ServerProcess) {
     // Verify response structure
     assert_eq!(result.total_count, 0, "Should have no relationships");
     assert_eq!(result.count, 0, "Count should be 0");
-    assert!(result.items.is_some(), "Items should be present");
-    assert_eq!(
-        result.items.unwrap().len(),
-        0,
-        "Items array should be empty"
-    );
+    assert!(result.items.is_empty(), "Items array should be empty");
+    assert_eq!(result.items.len(), 0, "Items array should be empty");
 }
 
 #[rstest]
@@ -65,7 +61,7 @@ fn test_list_job_file_relationships_workflow_inputs(start_server: &ServerProcess
 
     // Verify we have 2 relationships (one for each file)
     assert_eq!(result.total_count, 2, "Should have 2 relationships");
-    let items = result.items.unwrap();
+    let items = result.items;
     assert_eq!(items.len(), 2, "Should have 2 items");
 
     // Verify each relationship
@@ -137,7 +133,7 @@ fn test_list_job_file_relationships_workflow_outputs(start_server: &ServerProces
 
     // Verify we have 2 relationships
     assert_eq!(result.total_count, 2, "Should have 2 relationships");
-    let items = result.items.unwrap();
+    let items = result.items;
 
     // Verify each relationship
     for item in &items {
@@ -224,7 +220,7 @@ fn test_list_job_file_relationships_intermediate_files(start_server: &ServerProc
         result.total_count >= 2,
         "Should have at least 2 relationships"
     );
-    let items = result.items.unwrap();
+    let items = result.items;
 
     // Verify we have relationships with the producer
     let producer_relationships: Vec<_> = items
@@ -320,12 +316,8 @@ fn test_list_job_user_data_relationships_empty(start_server: &ServerProcess) {
     // Verify response structure
     assert_eq!(result.total_count, 0, "Should have no relationships");
     assert_eq!(result.count, 0, "Count should be 0");
-    assert!(result.items.is_some(), "Items should be present");
-    assert_eq!(
-        result.items.unwrap().len(),
-        0,
-        "Items array should be empty"
-    );
+    assert!(result.items.is_empty(), "Items array should be empty");
+    assert_eq!(result.items.len(), 0, "Items array should be empty");
 }
 
 #[rstest]
@@ -369,7 +361,7 @@ fn test_list_job_user_data_relationships_workflow_inputs(start_server: &ServerPr
 
     // Verify we have 2 relationships
     assert_eq!(result.total_count, 2, "Should have 2 relationships");
-    let items = result.items.unwrap();
+    let items = result.items;
     assert_eq!(items.len(), 2, "Should have 2 items");
 
     // Verify each relationship
@@ -443,7 +435,7 @@ fn test_list_job_user_data_relationships_workflow_outputs(start_server: &ServerP
 
     // Verify we have 1 relationship
     assert_eq!(result.total_count, 1, "Should have 1 relationship");
-    let items = result.items.unwrap();
+    let items = result.items;
     assert_eq!(items.len(), 1, "Should have 1 item");
 
     let item = &items[0];
@@ -527,7 +519,7 @@ fn test_list_job_user_data_relationships_intermediate_data(start_server: &Server
         result.total_count >= 1,
         "Should have at least 1 relationship"
     );
-    let items = result.items.unwrap();
+    let items = result.items;
 
     // Verify we have a relationship with the producer
     let has_producer = items
@@ -573,7 +565,7 @@ fn test_list_job_dependencies_for_comparison(start_server: &ServerProcess) {
 
     // Verify we have 1 dependency
     assert_eq!(result.total_count, 1, "Should have 1 dependency");
-    let items = result.items.unwrap();
+    let items = result.items;
     assert_eq!(items.len(), 1, "Should have 1 item");
 
     let dep = &items[0];

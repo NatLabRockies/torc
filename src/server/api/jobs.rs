@@ -4,15 +4,15 @@
 
 use std::collections::HashMap;
 
+use crate::server::transport_types::context_types::{ApiError, Has, XSpanIdString};
 use async_trait::async_trait;
 use chrono::Utc;
 use log::{debug, error, info};
 use sha2::{Digest, Sha256};
 use sqlx::Row;
-use swagger::{ApiError, Has, XSpanIdString};
 use tracing::instrument;
 
-use crate::server::api_types::{
+use crate::server::api_responses::{
     ClaimNextJobsResponse, CreateJobResponse, CreateJobsResponse, DeleteJobResponse,
     DeleteJobsResponse, GetJobResponse, GetReadyJobRequirementsResponse, ListJobIdsResponse,
     ListJobsResponse, ProcessChangedJobInputsResponse, ResetJobStatusResponse, RetryJobResponse,
@@ -1843,7 +1843,7 @@ where
 
         Ok(ListJobsResponse::SuccessfulResponse(
             models::ListJobsResponse {
-                items: Some(items),
+                items,
                 offset: offset_val,
                 max_limit: MAX_RECORD_TRANSFER_COUNT,
                 count: current_count,
@@ -2400,9 +2400,7 @@ where
             if dry_run { "would be" } else { "were" }
         );
 
-        let response = models::ProcessChangedJobInputsResponse {
-            reinitialized_jobs: Some(reinitialized_jobs),
-        };
+        let response = models::ProcessChangedJobInputsResponse { reinitialized_jobs };
 
         Ok(ProcessChangedJobInputsResponse::SuccessfulResponse(
             response,

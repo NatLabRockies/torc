@@ -332,7 +332,7 @@ fn test_start_workflow_basic(start_server: &ServerProcess) {
     // Check that an event was created
     let events = default_api::list_events(&config, workflow_id, None, None, None, None, None, None)
         .expect("Failed to list events");
-    assert!(!events.items.as_ref().unwrap().is_empty());
+    assert!(!events.items.is_empty());
 
     // Check that jobs were completed
     let jobs = default_api::list_jobs(
@@ -349,7 +349,7 @@ fn test_start_workflow_basic(start_server: &ServerProcess) {
         None, // active_compute_node_id
     )
     .expect("Failed to list jobs");
-    let job_items = jobs.items.as_ref().unwrap();
+    let job_items = &jobs.items;
     assert!(!job_items.is_empty());
     assert_eq!(
         job_items[0].status.as_ref().unwrap(),
@@ -1185,7 +1185,7 @@ fn test_workflow_manager_end_to_end(start_server: &ServerProcess) {
     // Check that everything was initialized properly
     let events = default_api::list_events(&config, workflow_id, None, None, None, None, None, None)
         .expect("Failed to list events");
-    assert!(!events.items.as_ref().unwrap().is_empty());
+    assert!(!events.items.is_empty());
 
     let jobs = default_api::list_jobs(
         &config,
@@ -1201,7 +1201,7 @@ fn test_workflow_manager_end_to_end(start_server: &ServerProcess) {
         None, // active_compute_node_id
     )
     .expect("Failed to list jobs");
-    let job_items = jobs.items.as_ref().unwrap();
+    let job_items = &jobs.items;
     assert!(!job_items.is_empty());
     assert_eq!(
         job_items[0].status.as_ref().unwrap(),
@@ -1221,7 +1221,7 @@ fn test_workflow_manager_end_to_end(start_server: &ServerProcess) {
         None, // is_output filter
     )
     .expect("Failed to list files");
-    let file_items = files.items.as_ref().unwrap();
+    let file_items = &files.items;
     assert!(!file_items.is_empty());
     for file in file_items {
         assert!(file.st_mtime.is_some());
@@ -2587,8 +2587,7 @@ fn test_reinitialize_with_file_change_depends_on_complete_job(start_server: &Ser
         None,
     )
     .expect("Failed to list f5")
-    .items
-    .unwrap()[0]
+    .items[0]
         .clone();
     f5_model.st_mtime = Some(f5_mtime);
     default_api::update_file(&config, f5_model.id.unwrap(), f5_model).expect("Failed to update f5");
@@ -2649,8 +2648,7 @@ fn test_reinitialize_with_file_change_depends_on_complete_job(start_server: &Ser
         None,
     )
     .expect("Failed to list f6")
-    .items
-    .unwrap()[0]
+    .items[0]
         .clone();
     f6_model.st_mtime = Some(f6_mtime);
     default_api::update_file(&config, f6_model.id.unwrap(), f6_model).expect("Failed to update f6");

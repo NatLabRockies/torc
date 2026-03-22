@@ -124,7 +124,6 @@ pub fn handle_job_dependency_commands(
                     } else {
                         let rows: Vec<JobDependencyTableRow> = response
                             .items
-                            .unwrap_or_default()
                             .iter()
                             .map(|dep| JobDependencyTableRow {
                                 job_id: dep.job_id,
@@ -171,7 +170,6 @@ pub fn handle_job_dependency_commands(
                     } else {
                         let rows: Vec<JobFileRelationshipTableRow> = response
                             .items
-                            .unwrap_or_default()
                             .iter()
                             .map(|rel| JobFileRelationshipTableRow {
                                 file_id: rel.file_id,
@@ -232,7 +230,6 @@ pub fn handle_job_dependency_commands(
                     } else {
                         let rows: Vec<JobUserDataRelationshipTableRow> = response
                             .items
-                            .unwrap_or_default()
                             .iter()
                             .map(|rel| JobUserDataRelationshipTableRow {
                                 user_data_id: rel.user_data_id,

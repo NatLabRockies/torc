@@ -223,13 +223,10 @@ pub fn find_entity_for_file(
     file_id: i64,
 ) -> Option<RoCrateEntityModel> {
     match default_api::list_ro_crate_entities(config, workflow_id, None, None) {
-        Ok(response) => {
-            if let Some(entities) = response.items {
-                entities.into_iter().find(|e| e.file_id == Some(file_id))
-            } else {
-                None
-            }
-        }
+        Ok(response) => response
+            .items
+            .into_iter()
+            .find(|e| e.file_id == Some(file_id)),
         Err(e) => {
             warn!("Failed to check for existing RO-Crate entities: {}", e);
             None
@@ -578,12 +575,7 @@ pub fn create_software_entities(config: &Configuration, workflow_id: i64, run_id
     // Check existing entities to avoid duplicates
     let existing_ids: std::collections::HashSet<String> =
         match default_api::list_ro_crate_entities(config, workflow_id, None, None) {
-            Ok(response) => response
-                .items
-                .unwrap_or_default()
-                .into_iter()
-                .map(|e| e.entity_id)
-                .collect(),
+            Ok(response) => response.items.into_iter().map(|e| e.entity_id).collect(),
             Err(e) => {
                 warn!(
                     "Failed to list existing RO-Crate entities for workflow {}: {}",

@@ -2,13 +2,13 @@
 
 #![allow(clippy::too_many_arguments)]
 
+use crate::server::transport_types::context_types::{ApiError, Has, XSpanIdString};
 use async_trait::async_trait;
 use chrono::Utc;
 use log::{debug, error, info};
 use sqlx::Row;
-use swagger::{ApiError, Has, XSpanIdString};
 
-use crate::server::api_types::{
+use crate::server::api_responses::{
     CancelWorkflowResponse, CreateWorkflowResponse, DeleteWorkflowResponse, GetWorkflowResponse,
     GetWorkflowStatusResponse, IsWorkflowCompleteResponse, IsWorkflowUninitializedResponse,
     ListJobDependenciesResponse, ListJobFileRelationshipsResponse,
@@ -351,7 +351,7 @@ impl WorkflowsApiImpl {
                 // No accessible workflows - return empty result
                 return Ok(ListWorkflowsResponse::SuccessfulResponse(
                     models::ListWorkflowsResponse {
-                        items: Some(Vec::new()),
+                        items: Vec::new(),
                         offset,
                         max_limit: MAX_RECORD_TRANSFER_COUNT,
                         count: 0,
@@ -537,7 +537,7 @@ impl WorkflowsApiImpl {
 
         Ok(ListWorkflowsResponse::SuccessfulResponse(
             models::ListWorkflowsResponse {
-                items: Some(items),
+                items,
                 offset: offset_val,
                 max_limit: MAX_RECORD_TRANSFER_COUNT,
                 count: current_count,
@@ -1924,7 +1924,7 @@ where
 
         Ok(ListJobDependenciesResponse::SuccessfulResponse(
             models::ListJobDependenciesResponse {
-                items: Some(dependencies),
+                items: dependencies,
                 offset: offset_val,
                 max_limit: MAX_RECORD_TRANSFER_COUNT,
                 count: current_count,
@@ -2034,7 +2034,7 @@ where
 
         Ok(ListJobFileRelationshipsResponse::SuccessfulResponse(
             models::ListJobFileRelationshipsResponse {
-                items: Some(relationships),
+                items: relationships,
                 offset: offset_val,
                 max_limit: MAX_RECORD_TRANSFER_COUNT,
                 count: current_count,
@@ -2142,7 +2142,7 @@ where
 
         Ok(ListJobUserDataRelationshipsResponse::SuccessfulResponse(
             models::ListJobUserDataRelationshipsResponse {
-                items: Some(relationships),
+                items: relationships,
                 offset: offset_val,
                 max_limit: MAX_RECORD_TRANSFER_COUNT,
                 count: current_count,

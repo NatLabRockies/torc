@@ -2,47 +2,46 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""job_file_relationship_model
-Represents a job-file relationship showing producer and consumer jobs for a file.
+@doc raw"""JobFileRelationshipModel
 
     JobFileRelationshipModel(;
+        consumer_job_id=nothing,
+        consumer_job_name=nothing,
         file_id=nothing,
         file_name=nothing,
         file_path=nothing,
         producer_job_id=nothing,
         producer_job_name=nothing,
-        consumer_job_id=nothing,
-        consumer_job_name=nothing,
         workflow_id=nothing,
     )
 
-    - file_id::Int64 : The file ID
-    - file_name::String : The name of the file
-    - file_path::String : The path of the file
-    - producer_job_id::Int64 : The job that produces this file (null for workflow inputs)
-    - producer_job_name::String : The name of the job that produces this file
-    - consumer_job_id::Int64 : The job that consumes this file (null for workflow outputs)
-    - consumer_job_name::String : The name of the job that consumes this file
-    - workflow_id::Int64 : The workflow containing the file and jobs
+    - consumer_job_id::Int64
+    - consumer_job_name::String
+    - file_id::Int64
+    - file_name::String
+    - file_path::String
+    - producer_job_id::Int64
+    - producer_job_name::String
+    - workflow_id::Int64
 """
 Base.@kwdef mutable struct JobFileRelationshipModel <: OpenAPI.APIModel
+    consumer_job_id::Union{Nothing, Int64} = nothing
+    consumer_job_name::Union{Nothing, String} = nothing
     file_id::Union{Nothing, Int64} = nothing
     file_name::Union{Nothing, String} = nothing
     file_path::Union{Nothing, String} = nothing
     producer_job_id::Union{Nothing, Int64} = nothing
     producer_job_name::Union{Nothing, String} = nothing
-    consumer_job_id::Union{Nothing, Int64} = nothing
-    consumer_job_name::Union{Nothing, String} = nothing
     workflow_id::Union{Nothing, Int64} = nothing
 
-    function JobFileRelationshipModel(file_id, file_name, file_path, producer_job_id, producer_job_name, consumer_job_id, consumer_job_name, workflow_id, )
-        o = new(file_id, file_name, file_path, producer_job_id, producer_job_name, consumer_job_id, consumer_job_name, workflow_id, )
+    function JobFileRelationshipModel(consumer_job_id, consumer_job_name, file_id, file_name, file_path, producer_job_id, producer_job_name, workflow_id, )
+        o = new(consumer_job_id, consumer_job_name, file_id, file_name, file_path, producer_job_id, producer_job_name, workflow_id, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type JobFileRelationshipModel
 
-const _property_types_JobFileRelationshipModel = Dict{Symbol,String}(Symbol("file_id")=>"Int64", Symbol("file_name")=>"String", Symbol("file_path")=>"String", Symbol("producer_job_id")=>"Int64", Symbol("producer_job_name")=>"String", Symbol("consumer_job_id")=>"Int64", Symbol("consumer_job_name")=>"String", Symbol("workflow_id")=>"Int64", )
+const _property_types_JobFileRelationshipModel = Dict{Symbol,String}(Symbol("consumer_job_id")=>"Int64", Symbol("consumer_job_name")=>"String", Symbol("file_id")=>"Int64", Symbol("file_name")=>"String", Symbol("file_path")=>"String", Symbol("producer_job_id")=>"Int64", Symbol("producer_job_name")=>"String", Symbol("workflow_id")=>"Int64", )
 OpenAPI.property_type(::Type{ JobFileRelationshipModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_JobFileRelationshipModel[name]))}
 
 function OpenAPI.check_required(o::JobFileRelationshipModel)
@@ -54,23 +53,35 @@ function OpenAPI.check_required(o::JobFileRelationshipModel)
 end
 
 function OpenAPI.validate_properties(o::JobFileRelationshipModel)
+    OpenAPI.validate_property(JobFileRelationshipModel, Symbol("consumer_job_id"), o.consumer_job_id)
+    OpenAPI.validate_property(JobFileRelationshipModel, Symbol("consumer_job_name"), o.consumer_job_name)
     OpenAPI.validate_property(JobFileRelationshipModel, Symbol("file_id"), o.file_id)
     OpenAPI.validate_property(JobFileRelationshipModel, Symbol("file_name"), o.file_name)
     OpenAPI.validate_property(JobFileRelationshipModel, Symbol("file_path"), o.file_path)
     OpenAPI.validate_property(JobFileRelationshipModel, Symbol("producer_job_id"), o.producer_job_id)
     OpenAPI.validate_property(JobFileRelationshipModel, Symbol("producer_job_name"), o.producer_job_name)
-    OpenAPI.validate_property(JobFileRelationshipModel, Symbol("consumer_job_id"), o.consumer_job_id)
-    OpenAPI.validate_property(JobFileRelationshipModel, Symbol("consumer_job_name"), o.consumer_job_name)
     OpenAPI.validate_property(JobFileRelationshipModel, Symbol("workflow_id"), o.workflow_id)
 end
 
 function OpenAPI.validate_property(::Type{ JobFileRelationshipModel }, name::Symbol, val)
 
+    if name === Symbol("consumer_job_id")
+        OpenAPI.validate_param(name, "JobFileRelationshipModel", :format, val, "int64")
+    end
+
+
+    if name === Symbol("file_id")
+        OpenAPI.validate_param(name, "JobFileRelationshipModel", :format, val, "int64")
+    end
 
 
 
+    if name === Symbol("producer_job_id")
+        OpenAPI.validate_param(name, "JobFileRelationshipModel", :format, val, "int64")
+    end
 
 
-
-
+    if name === Symbol("workflow_id")
+        OpenAPI.validate_param(name, "JobFileRelationshipModel", :format, val, "int64")
+    end
 end

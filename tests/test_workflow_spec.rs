@@ -1437,7 +1437,7 @@ fn test_create_workflow_rollback_on_error(start_server: &ServerProcess) {
     )
     .expect("Failed to list workflows");
 
-    assert_eq!(workflows.items.unwrap_or_default().len(), 0);
+    assert_eq!(workflows.items.len(), 0);
 }
 
 #[rstest]
@@ -1519,7 +1519,7 @@ fn test_create_workflow_with_regex_job_dependencies(start_server: &ServerProcess
     )
     .expect("Failed to list jobs");
 
-    let job_items = jobs.items.unwrap();
+    let job_items = jobs.items;
     let postprocess_job = job_items
         .iter()
         .find(|j| j.name == "postprocess")
@@ -1613,7 +1613,7 @@ fn test_create_workflow_with_regex_file_dependencies(start_server: &ServerProces
     )
     .expect("Failed to list jobs");
 
-    let job_items = jobs.items.unwrap();
+    let job_items = jobs.items;
     let aggregate_job = job_items
         .iter()
         .find(|j| j.name == "aggregate")
@@ -1700,7 +1700,7 @@ fn test_create_workflow_with_regex_user_data_dependencies(start_server: &ServerP
     )
     .expect("Failed to list jobs");
 
-    let job_items = jobs.items.unwrap();
+    let job_items = jobs.items;
     let process_job = job_items
         .iter()
         .find(|j| j.name == "process_all_configs")
@@ -1790,7 +1790,7 @@ fn test_create_workflow_with_mixed_exact_and_regex_dependencies(start_server: &S
     )
     .expect("Failed to list jobs");
 
-    let job_items = jobs.items.unwrap();
+    let job_items = jobs.items;
     let finalize_job = job_items
         .iter()
         .find(|j| j.name == "finalize")
@@ -3765,7 +3765,7 @@ fn test_create_subgraph_workflows_from_examples(start_server: &ServerProcess) {
         )
         .expect("Failed to list jobs");
 
-        let job_count = jobs.items.as_ref().map(|j| j.len()).unwrap_or(0);
+        let job_count = jobs.items.len();
         assert_eq!(
             job_count, 15,
             "Expected 15 jobs for {}, got {}",
@@ -3792,7 +3792,7 @@ fn test_create_subgraph_workflows_from_examples(start_server: &ServerProcess) {
                 None,     // walltime filter
             )
             .expect("Failed to list schedulers");
-            let sched_count = response.items.unwrap_or_default().len();
+            let sched_count = response.items.len();
             assert!(
                 sched_count > 0,
                 "Expected schedulers for {}, got {}",
@@ -3940,8 +3940,7 @@ fn test_subgraph_workflow_execution_plan_from_database() {
         None,       // active_compute_node_id
     )
     .expect("Failed to list jobs")
-    .items
-    .unwrap_or_default();
+    .items;
 
     let actions = default_api::get_workflow_actions(&start_server.config, workflow_id)
         .expect("Failed to get actions");
@@ -3963,7 +3962,7 @@ fn test_subgraph_workflow_execution_plan_from_database() {
         None,
         None,
     )
-    .map(|r| r.items.unwrap_or_default())
+    .map(|r| r.items)
     .unwrap_or_default();
 
     let resource_requirements = default_api::list_resource_requirements(
@@ -3981,7 +3980,7 @@ fn test_subgraph_workflow_execution_plan_from_database() {
         None, // num_nodes
         None, // runtime
     )
-    .map(|r| r.items.unwrap_or_default())
+    .map(|r| r.items)
     .unwrap_or_default();
 
     // Build execution plan from database models
@@ -4117,8 +4116,7 @@ fn test_subgraph_workflow_execution_plan_spec_vs_database() {
         None,       // active_compute_node_id
     )
     .expect("Failed to list jobs")
-    .items
-    .unwrap_or_default();
+    .items;
 
     let actions = default_api::get_workflow_actions(&start_server.config, workflow_id)
         .expect("Failed to get actions");
@@ -4140,7 +4138,7 @@ fn test_subgraph_workflow_execution_plan_spec_vs_database() {
         None,
         None,
     )
-    .map(|r| r.items.unwrap_or_default())
+    .map(|r| r.items)
     .unwrap_or_default();
 
     let resource_requirements = default_api::list_resource_requirements(
@@ -4158,7 +4156,7 @@ fn test_subgraph_workflow_execution_plan_spec_vs_database() {
         None, // num_nodes
         None, // runtime
     )
-    .map(|r| r.items.unwrap_or_default())
+    .map(|r| r.items)
     .unwrap_or_default();
 
     // Build execution plan from database models

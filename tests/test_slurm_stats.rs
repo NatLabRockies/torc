@@ -62,7 +62,7 @@ fn test_list_slurm_stats_by_workflow(start_server: &ServerProcess) {
         .expect("Failed to list slurm_stats");
 
     assert_eq!(response.total_count, 2);
-    let items = response.items.unwrap();
+    let items = response.items;
     assert_eq!(items.len(), 2);
     assert!(items.iter().all(|s| s.workflow_id == workflow_id));
 }
@@ -85,7 +85,7 @@ fn test_list_slurm_stats_filter_by_job(start_server: &ServerProcess) {
             .expect("Failed to list slurm_stats filtered by job");
 
     assert_eq!(response.total_count, 1);
-    let items = response.items.unwrap();
+    let items = response.items;
     assert_eq!(items.len(), 1);
     assert_eq!(items[0].job_id, job1_id);
 }
@@ -101,7 +101,7 @@ fn test_list_slurm_stats_empty_workflow(start_server: &ServerProcess) {
         .expect("Failed to list slurm_stats for empty workflow");
 
     assert_eq!(response.total_count, 0);
-    assert!(response.items.unwrap_or_default().is_empty());
+    assert!(response.items.is_empty());
 }
 
 #[rstest]
@@ -122,14 +122,14 @@ fn test_list_slurm_stats_pagination(start_server: &ServerProcess) {
         default_api::list_slurm_stats(config, workflow_id, None, None, None, Some(0), Some(2))
             .expect("Failed to list page 1");
     assert_eq!(page1.total_count, 5);
-    assert_eq!(page1.items.unwrap().len(), 2);
+    assert_eq!(page1.items.len(), 2);
 
     // Fetch second page
     let page2 =
         default_api::list_slurm_stats(config, workflow_id, None, None, None, Some(2), Some(2))
             .expect("Failed to list page 2");
     assert_eq!(page2.total_count, 5);
-    assert_eq!(page2.items.unwrap().len(), 2);
+    assert_eq!(page2.items.len(), 2);
 }
 
 #[rstest]

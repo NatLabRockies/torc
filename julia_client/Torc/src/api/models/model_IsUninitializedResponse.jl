@@ -2,7 +2,7 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""is_uninitialized_response
+@doc raw"""IsUninitializedResponse
 
     IsUninitializedResponse(;
         is_uninitialized=nothing,

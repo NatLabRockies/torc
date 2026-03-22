@@ -59,6 +59,11 @@ jobs:
       - name: Run Clippy
         run: cargo clippy --all --all-targets --all-features -- -D warnings
 
+      - name: Check Rust-owned OpenAPI artifacts
+        run: |
+          cargo test --lib --no-default-features --features openapi-codegen
+          bash api/check_openapi_codegen_parity.sh
+
       - name: Install dprint
         run: |
           curl -fsSL https://dprint.dev/install.sh | sh

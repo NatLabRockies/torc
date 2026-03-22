@@ -48,7 +48,7 @@ pub fn select_workflow_interactively(
         Some(false), // is_archived - exclude archived workflows
     ) {
         Ok(response) => {
-            let workflows = response.items.unwrap_or_default();
+            let workflows = response.items;
             if workflows.is_empty() {
                 eprintln!("No workflows found for user: {}", user);
                 std::process::exit(1);

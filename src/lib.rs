@@ -19,12 +19,11 @@ pub fn get_username() -> String {
 }
 
 // Shared modules (always available)
-// models.rs is generated from OpenAPI spec - suppress clippy warnings for generated code patterns
+pub mod api_models;
 pub mod memory_utils;
-#[allow(clippy::to_string_trait_impl, clippy::too_many_arguments)]
-pub mod models;
 pub mod network_utils;
 pub mod time_utils;
+pub use api_models as models;
 
 // Configuration module (requires config feature, enabled by client)
 #[cfg(feature = "config")]
@@ -56,16 +55,20 @@ pub mod plot_resources_cmd;
 #[cfg(feature = "mcp-server")]
 pub mod mcp_server;
 
+// Rust-owned OpenAPI emission
+#[cfg(feature = "openapi-codegen")]
+pub mod openapi_codegen;
+
 // CLI types module - requires all features for the unified CLI
 #[cfg(all(feature = "client", feature = "tui", feature = "plot_resources"))]
 pub mod cli;
 
 // Re-export model types explicitly
-pub use models::{
+pub use api_models::{
     ClaimJobsBasedOnResources, ClaimJobsSortMethod, ClaimNextJobsResponse, ComputeNodeModel,
     ComputeNodeSchedule, ComputeNodesResources, CreateJobsResponse, ErrorResponse, EventModel,
     FileModel, GetDotGraphResponse, GetReadyJobRequirementsResponse, IsCompleteResponse,
-    JobDependencyModel, JobFileRelationshipModel, JobModel, JobStatus, JobStatusMap,
+    JobDependencyModel, JobFileRelationshipModel, JobModel, JobStatus,
     JobUserDataRelationshipModel, JobsModel, ListComputeNodesResponse, ListEventsResponse,
     ListFilesResponse, ListJobDependenciesResponse, ListJobFileRelationshipsResponse,
     ListJobUserDataRelationshipsResponse, ListJobsResponse, ListLocalSchedulersResponse,

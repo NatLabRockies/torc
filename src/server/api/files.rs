@@ -2,12 +2,12 @@
 
 #![allow(clippy::too_many_arguments)]
 
+use crate::server::transport_types::context_types::{ApiError, Has, XSpanIdString};
 use async_trait::async_trait;
 use log::{debug, info};
 use sqlx::Row;
-use swagger::{ApiError, Has, XSpanIdString};
 
-use crate::server::api_types::{
+use crate::server::api_responses::{
     CreateFileResponse, DeleteFileResponse, DeleteFilesResponse, GetFileResponse,
     ListFilesResponse, ListRequiredExistingFilesResponse, UpdateFileResponse,
 };
@@ -405,7 +405,7 @@ where
 
         Ok(ListFilesResponse::SuccessfulResponse(
             models::ListFilesResponse {
-                items: Some(items),
+                items,
                 offset: offset_val,
                 max_limit: MAX_RECORD_TRANSFER_COUNT,
                 count: current_count,

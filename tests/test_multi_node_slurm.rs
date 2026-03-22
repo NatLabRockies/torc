@@ -100,8 +100,7 @@ fn test_two_node_allocation_single_worker_multi_node_step(start_server: &ServerP
         None, // runtime
     )
     .expect("Failed to list resource requirements")
-    .items
-    .unwrap_or_default();
+    .items;
 
     // Filter out the "default" RR that is auto-created for every workflow
     let rr_list: Vec<_> = rr_list
@@ -137,8 +136,7 @@ fn test_two_node_allocation_single_worker_multi_node_step(start_server: &ServerP
         None,
     )
     .expect("Failed to list slurm schedulers")
-    .items
-    .unwrap_or_default();
+    .items;
 
     assert_eq!(schedulers.len(), 1, "Expected 1 scheduler");
     assert_eq!(schedulers[0].nodes, 2, "Scheduler should have 2 nodes");
@@ -282,8 +280,7 @@ fn test_two_node_allocation_one_worker_per_node_parallel_jobs(start_server: &Ser
         None,
     )
     .expect("Failed to list resource requirements")
-    .items
-    .unwrap_or_default();
+    .items;
 
     // Filter out the "default" RR that is auto-created for every workflow
     let rr_list: Vec<_> = rr_list
@@ -320,8 +317,7 @@ fn test_two_node_allocation_one_worker_per_node_parallel_jobs(start_server: &Ser
         None, // active_compute_node_id
     )
     .expect("Failed to list jobs")
-    .items
-    .unwrap_or_default();
+    .items;
 
     assert_eq!(jobs.len(), 4, "Expected 4 jobs");
 

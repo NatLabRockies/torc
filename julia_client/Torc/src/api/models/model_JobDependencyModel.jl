@@ -2,61 +2,69 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""job_dependency_model
-Represents a blocking relationship between two jobs in the job_depends_on table.
+@doc raw"""JobDependencyModel
 
     JobDependencyModel(;
-        job_id=nothing,
-        job_name=nothing,
         depends_on_job_id=nothing,
         depends_on_job_name=nothing,
+        job_id=nothing,
+        job_name=nothing,
         workflow_id=nothing,
     )
 
-    - job_id::Int64 : The job that is blocked
-    - job_name::String : The name of the job that is blocked
-    - depends_on_job_id::Int64 : The job that must complete first
-    - depends_on_job_name::String : The name of the job that must complete first
-    - workflow_id::Int64 : The workflow containing both jobs
+    - depends_on_job_id::Int64
+    - depends_on_job_name::String
+    - job_id::Int64
+    - job_name::String
+    - workflow_id::Int64
 """
 Base.@kwdef mutable struct JobDependencyModel <: OpenAPI.APIModel
-    job_id::Union{Nothing, Int64} = nothing
-    job_name::Union{Nothing, String} = nothing
     depends_on_job_id::Union{Nothing, Int64} = nothing
     depends_on_job_name::Union{Nothing, String} = nothing
+    job_id::Union{Nothing, Int64} = nothing
+    job_name::Union{Nothing, String} = nothing
     workflow_id::Union{Nothing, Int64} = nothing
 
-    function JobDependencyModel(job_id, job_name, depends_on_job_id, depends_on_job_name, workflow_id, )
-        o = new(job_id, job_name, depends_on_job_id, depends_on_job_name, workflow_id, )
+    function JobDependencyModel(depends_on_job_id, depends_on_job_name, job_id, job_name, workflow_id, )
+        o = new(depends_on_job_id, depends_on_job_name, job_id, job_name, workflow_id, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type JobDependencyModel
 
-const _property_types_JobDependencyModel = Dict{Symbol,String}(Symbol("job_id")=>"Int64", Symbol("job_name")=>"String", Symbol("depends_on_job_id")=>"Int64", Symbol("depends_on_job_name")=>"String", Symbol("workflow_id")=>"Int64", )
+const _property_types_JobDependencyModel = Dict{Symbol,String}(Symbol("depends_on_job_id")=>"Int64", Symbol("depends_on_job_name")=>"String", Symbol("job_id")=>"Int64", Symbol("job_name")=>"String", Symbol("workflow_id")=>"Int64", )
 OpenAPI.property_type(::Type{ JobDependencyModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_JobDependencyModel[name]))}
 
 function OpenAPI.check_required(o::JobDependencyModel)
-    o.job_id === nothing && (return false)
-    o.job_name === nothing && (return false)
     o.depends_on_job_id === nothing && (return false)
     o.depends_on_job_name === nothing && (return false)
+    o.job_id === nothing && (return false)
+    o.job_name === nothing && (return false)
     o.workflow_id === nothing && (return false)
     true
 end
 
 function OpenAPI.validate_properties(o::JobDependencyModel)
-    OpenAPI.validate_property(JobDependencyModel, Symbol("job_id"), o.job_id)
-    OpenAPI.validate_property(JobDependencyModel, Symbol("job_name"), o.job_name)
     OpenAPI.validate_property(JobDependencyModel, Symbol("depends_on_job_id"), o.depends_on_job_id)
     OpenAPI.validate_property(JobDependencyModel, Symbol("depends_on_job_name"), o.depends_on_job_name)
+    OpenAPI.validate_property(JobDependencyModel, Symbol("job_id"), o.job_id)
+    OpenAPI.validate_property(JobDependencyModel, Symbol("job_name"), o.job_name)
     OpenAPI.validate_property(JobDependencyModel, Symbol("workflow_id"), o.workflow_id)
 end
 
 function OpenAPI.validate_property(::Type{ JobDependencyModel }, name::Symbol, val)
 
+    if name === Symbol("depends_on_job_id")
+        OpenAPI.validate_param(name, "JobDependencyModel", :format, val, "int64")
+    end
 
 
+    if name === Symbol("job_id")
+        OpenAPI.validate_param(name, "JobDependencyModel", :format, val, "int64")
+    end
 
 
+    if name === Symbol("workflow_id")
+        OpenAPI.validate_param(name, "JobDependencyModel", :format, val, "int64")
+    end
 end

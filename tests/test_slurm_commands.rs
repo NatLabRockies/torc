@@ -1564,7 +1564,7 @@ fn test_slurm_run_jobs(start_server: &ServerProcess) {
     )
     .expect("Failed to list jobs");
 
-    let job_items = job_list.items.unwrap();
+    let job_items = job_list.items;
     assert_eq!(job_items.len(), 4, "Should have 4 jobs in the workflow");
 
     for job in job_items {
@@ -1592,7 +1592,7 @@ fn test_slurm_run_jobs(start_server: &ServerProcess) {
     )
     .expect("Failed to list results");
 
-    let result_items = results.items.unwrap();
+    let result_items = results.items;
     assert_eq!(
         result_items.len(),
         4,
@@ -1754,7 +1754,7 @@ fn test_cancel_workflow_with_slurm_scheduler(start_server: &ServerProcess) {
     )
     .expect("Failed to list scheduled compute nodes");
 
-    let nodes = scheduled_nodes.items.unwrap();
+    let nodes = scheduled_nodes.items;
     assert_eq!(nodes.len(), 1, "Expected 1 scheduled compute node");
     let node = &nodes[0];
     // assert_eq!(node.scheduler_id, 12345);  // TODO: this isn't synced with the fake script
@@ -1827,7 +1827,7 @@ fn test_cancel_workflow_with_slurm_scheduler(start_server: &ServerProcess) {
     )
     .expect("Failed to list scheduled compute nodes after cancel");
 
-    let nodes = scheduled_nodes.items.unwrap();
+    let nodes = scheduled_nodes.items;
     assert_eq!(
         nodes.len(),
         1,
@@ -1866,11 +1866,7 @@ fn test_cancel_workflow_with_slurm_scheduler(start_server: &ServerProcess) {
     )
     .expect("Failed to list jobs");
 
-    assert_eq!(
-        all_jobs.items.unwrap().len(),
-        5,
-        "All 5 jobs should still exist"
-    );
+    assert_eq!(all_jobs.items.len(), 5, "All 5 jobs should still exist");
 }
 
 fn setup_fake_slurm_commands() -> (PathBuf, PathBuf, PathBuf, PathBuf, PathBuf) {

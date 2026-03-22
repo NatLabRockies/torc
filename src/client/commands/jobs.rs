@@ -1253,10 +1253,8 @@ pub fn get_existing_job_names(
         )
         .map_err(|e| format!("Failed to get existing job names: {:?}", e))?;
 
-        if let Some(jobs) = response.items {
-            for job in jobs {
-                names.insert(job.name);
-            }
+        for job in response.items {
+            names.insert(job.name);
         }
 
         if !response.has_more {

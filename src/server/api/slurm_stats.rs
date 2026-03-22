@@ -1,11 +1,11 @@
 //! Slurm accounting stats API endpoints
 
+use crate::server::transport_types::context_types::{ApiError, Has, XSpanIdString};
 use async_trait::async_trait;
 use log::debug;
-use swagger::{ApiError, Has, XSpanIdString};
 
 use crate::models;
-use crate::server::api_types::{CreateSlurmStatsResponse, ListSlurmStatsResponse};
+use crate::server::api_responses::{CreateSlurmStatsResponse, ListSlurmStatsResponse};
 
 use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, database_error_with_msg};
 
@@ -197,7 +197,7 @@ impl<C: Send + Sync + Has<XSpanIdString>> SlurmStatsApi<C> for SlurmStatsApiImpl
                     total_count,
                     has_more,
                 );
-                response.items = Some(items);
+                response.items = items;
                 Ok(ListSlurmStatsResponse::SuccessfulResponse(response))
             }
             Err(e) => Err(database_error_with_msg(e, "Failed to list slurm_stats")),

@@ -820,25 +820,24 @@ impl WorkflowManager {
             None,
         ) {
             Ok(response) => {
-                if let Some(ref reinitialized_jobs) = response.reinitialized_jobs {
-                    if !reinitialized_jobs.is_empty() {
-                        if dry_run {
-                            info!(
-                                "Dry run: {} jobs would be reset due to changed inputs",
-                                reinitialized_jobs.len()
-                            );
-                            for job_name in reinitialized_jobs {
-                                info!("  - {}", job_name);
-                            }
-                        } else {
-                            info!(
-                                "Reset {} jobs due to changed inputs",
-                                reinitialized_jobs.len()
-                            );
+                if !response.reinitialized_jobs.is_empty() {
+                    let reinitialized_jobs = &response.reinitialized_jobs;
+                    if dry_run {
+                        info!(
+                            "Dry run: {} jobs would be reset due to changed inputs",
+                            reinitialized_jobs.len()
+                        );
+                        for job_name in reinitialized_jobs {
+                            info!("  - {}", job_name);
                         }
                     } else {
-                        debug!("No jobs need to be reset due to changed inputs");
+                        info!(
+                            "Reset {} jobs due to changed inputs",
+                            reinitialized_jobs.len()
+                        );
                     }
+                } else {
+                    debug!("No jobs need to be reset due to changed inputs");
                 }
                 Ok(())
             }

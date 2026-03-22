@@ -123,7 +123,7 @@ fn test_start_job_sets_active_compute_node_id(start_server: &ServerProcess) {
     )
     .expect("Failed to list jobs");
 
-    let jobs = jobs_response.items.unwrap();
+    let jobs = jobs_response.items;
     assert_eq!(jobs.len(), 1);
     assert_eq!(jobs[0].id, Some(job_id));
     assert_eq!(jobs[0].name, "test_job");
@@ -195,7 +195,7 @@ fn test_complete_job_clears_active_compute_node_id(start_server: &ServerProcess)
         Some(compute_node_id),
     )
     .expect("Failed to list jobs before completion");
-    assert_eq!(jobs_before.items.unwrap().len(), 1);
+    assert_eq!(jobs_before.items.len(), 1);
 
     // Complete the job
     let result = models::ResultModel::new(
@@ -227,7 +227,7 @@ fn test_complete_job_clears_active_compute_node_id(start_server: &ServerProcess)
         Some(compute_node_id),
     )
     .expect("Failed to list jobs after completion");
-    assert_eq!(jobs_after.items.unwrap().len(), 0);
+    assert_eq!(jobs_after.items.len(), 0);
 }
 
 /// Test simulating an orphaned job scenario:
@@ -318,7 +318,7 @@ fn test_orphaned_job_simulation(start_server: &ServerProcess) {
     )
     .expect("Failed to list orphaned jobs");
 
-    let items = orphaned_jobs.items.unwrap();
+    let items = orphaned_jobs.items;
     assert_eq!(items.len(), 2);
 
     // Simulate orphan detection: fail the jobs with return code -128 (ORPHANED_JOB_RETURN_CODE)
@@ -356,7 +356,7 @@ fn test_orphaned_job_simulation(start_server: &ServerProcess) {
         None,
     )
     .expect("Failed to list failed jobs");
-    assert_eq!(failed_jobs.items.unwrap().len(), 2);
+    assert_eq!(failed_jobs.items.len(), 2);
 
     // Verify no jobs with active_compute_node_id (they were cleared by complete_job)
     let active_jobs = default_api::list_jobs(
@@ -373,7 +373,7 @@ fn test_orphaned_job_simulation(start_server: &ServerProcess) {
         Some(compute_node_id),
     )
     .expect("Failed to list active jobs");
-    assert_eq!(active_jobs.items.unwrap().len(), 0);
+    assert_eq!(active_jobs.items.len(), 0);
 
     // Simulate marking compute node as inactive
     let mut updated_node = compute_node.clone();
@@ -439,7 +439,7 @@ fn test_list_jobs_no_active_compute_node(start_server: &ServerProcess) {
     )
     .expect("Failed to list jobs");
 
-    assert_eq!(jobs.items.unwrap().len(), 0);
+    assert_eq!(jobs.items.len(), 0);
 }
 
 /// Test multiple compute nodes with different jobs running
@@ -535,7 +535,7 @@ fn test_multiple_compute_nodes_job_tracking(start_server: &ServerProcess) {
         Some(cn1_id),
     )
     .expect("Failed to list cn1 jobs");
-    let cn1_items = cn1_jobs.items.unwrap();
+    let cn1_items = cn1_jobs.items;
     assert_eq!(cn1_items.len(), 2);
     let cn1_names: Vec<&str> = cn1_items.iter().map(|j| j.name.as_str()).collect();
     assert!(cn1_names.contains(&"multi_job_1"));
@@ -556,7 +556,7 @@ fn test_multiple_compute_nodes_job_tracking(start_server: &ServerProcess) {
         Some(cn2_id),
     )
     .expect("Failed to list cn2 jobs");
-    let cn2_items = cn2_jobs.items.unwrap();
+    let cn2_items = cn2_jobs.items;
     assert_eq!(cn2_items.len(), 2);
     let cn2_names: Vec<&str> = cn2_items.iter().map(|j| j.name.as_str()).collect();
     assert!(cn2_names.contains(&"multi_job_3"));
@@ -595,7 +595,7 @@ fn test_multiple_compute_nodes_job_tracking(start_server: &ServerProcess) {
         Some(cn1_id),
     )
     .expect("Failed to list cn1 jobs after");
-    assert_eq!(cn1_after.items.unwrap().len(), 0);
+    assert_eq!(cn1_after.items.len(), 0);
 
     // Verify compute_node2 still has its jobs running
     let cn2_after = default_api::list_jobs(
@@ -612,7 +612,7 @@ fn test_multiple_compute_nodes_job_tracking(start_server: &ServerProcess) {
         Some(cn2_id),
     )
     .expect("Failed to list cn2 jobs after");
-    assert_eq!(cn2_after.items.unwrap().len(), 2);
+    assert_eq!(cn2_after.items.len(), 2);
 }
 
 /// Test reset_job_status clears active_compute_node_id
@@ -680,7 +680,7 @@ fn test_reset_job_clears_active_compute_node_id(start_server: &ServerProcess) {
         Some(compute_node_id),
     )
     .expect("Failed to list before reset");
-    assert_eq!(before_reset.items.unwrap().len(), 1);
+    assert_eq!(before_reset.items.len(), 1);
 
     // Reset job status
     default_api::reset_job_status(config, workflow_id, None, None)
@@ -701,5 +701,5 @@ fn test_reset_job_clears_active_compute_node_id(start_server: &ServerProcess) {
         Some(compute_node_id),
     )
     .expect("Failed to list after reset");
-    assert_eq!(after_reset.items.unwrap().len(), 0);
+    assert_eq!(after_reset.items.len(), 0);
 }

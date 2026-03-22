@@ -60,7 +60,7 @@ fn verify_all_jobs_completed(server: &ServerProcess, workflow_id: i64) {
     )
     .expect("Failed to list jobs");
 
-    for job in jobs.items.unwrap() {
+    for job in jobs.items {
         assert_eq!(
             job.status.unwrap(),
             JobStatus::Completed,
@@ -88,7 +88,7 @@ fn verify_all_jobs_return_code(server: &ServerProcess, workflow_id: i64, expecte
     )
     .expect("Failed to list results");
 
-    for result in results.items.unwrap() {
+    for result in results.items {
         assert_eq!(
             result.return_code, expected_code,
             "Job ID {} should have return code {}, got {}",
@@ -113,11 +113,7 @@ fn get_job_return_code(server: &ServerProcess, workflow_id: i64, job_name: &str)
     )
     .expect("Failed to list jobs");
 
-    let job = jobs
-        .items
-        .unwrap()
-        .into_iter()
-        .find(|j| j.name == job_name)?;
+    let job = jobs.items.into_iter().find(|j| j.name == job_name)?;
 
     let results = default_api::list_results(
         &server.config,
@@ -135,7 +131,7 @@ fn get_job_return_code(server: &ServerProcess, workflow_id: i64, job_name: &str)
     )
     .expect("Failed to list results");
 
-    results.items?.first().map(|r| r.return_code)
+    results.items.first().map(|r| r.return_code)
 }
 
 // =============================================================================
@@ -1258,7 +1254,6 @@ execution_config:
 
     let job = jobs
         .items
-        .unwrap()
         .into_iter()
         .find(|j| j.name == "long_running_job")
         .expect("Job not found");
@@ -1359,7 +1354,6 @@ execution_config:
 
     let job = jobs
         .items
-        .unwrap()
         .into_iter()
         .find(|j| j.name == "long_job")
         .expect("Job not found");
@@ -1459,7 +1453,6 @@ execution_config:
 
     let job = jobs
         .items
-        .unwrap()
         .into_iter()
         .find(|j| j.name == "signal_handler_job")
         .expect("Job not found");

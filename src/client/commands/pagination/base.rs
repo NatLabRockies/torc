@@ -40,7 +40,7 @@ pub trait PaginationParams {
 /// This wraps the API response with the essential pagination metadata.
 pub struct PaginatedResponse<T> {
     /// The items in this page (None if empty)
-    pub items: Option<Vec<T>>,
+    pub items: Vec<T>,
     /// Whether there are more pages available
     pub has_more: bool,
 }
@@ -116,31 +116,26 @@ impl<T: Paginatable> PaginatedIterator<T> {
         let page_limit = std::cmp::min(self.remaining_limit, self.initial_limit);
         let response = T::fetch_page(&self.config, &self.params, page_limit)?;
 
-        if let Some(items) = response.items {
-            let items_to_take = if self.remaining_limit == i64::MAX {
-                items.len()
-            } else {
-                std::cmp::min(items.len() as i64, self.remaining_limit) as usize
-            };
-            let taken_items: Vec<T> = items.into_iter().take(items_to_take).collect();
-
-            if self.remaining_limit != i64::MAX {
-                self.remaining_limit -= taken_items.len() as i64;
-            }
-
-            let new_offset = self.params.offset() + taken_items.len() as i64;
-            self.params.set_offset(new_offset);
-            self.current_page = taken_items.into_iter();
-
-            if !response.has_more || (self.remaining_limit != i64::MAX && self.remaining_limit <= 0)
-            {
-                self.finished = true;
-            }
-            Ok(true)
+        let items = response.items;
+        let items_to_take = if self.remaining_limit == i64::MAX {
+            items.len()
         } else {
-            self.finished = true;
-            Ok(false)
+            std::cmp::min(items.len() as i64, self.remaining_limit) as usize
+        };
+        let taken_items: Vec<T> = items.into_iter().take(items_to_take).collect();
+
+        if self.remaining_limit != i64::MAX {
+            self.remaining_limit -= taken_items.len() as i64;
         }
+
+        let new_offset = self.params.offset() + taken_items.len() as i64;
+        self.params.set_offset(new_offset);
+        self.current_page = taken_items.into_iter();
+
+        if !response.has_more || (self.remaining_limit != i64::MAX && self.remaining_limit <= 0) {
+            self.finished = true;
+        }
+        Ok(!self.current_page.as_slice().is_empty())
     }
 }
 

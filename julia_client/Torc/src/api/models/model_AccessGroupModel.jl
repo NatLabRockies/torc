@@ -2,35 +2,34 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""access_group_model
-Access group for team-based access control
+@doc raw"""AccessGroupModel
 
     AccessGroupModel(;
+        created_at=nothing,
+        description=nothing,
         id=nothing,
         name=nothing,
-        description=nothing,
-        created_at=nothing,
     )
 
+    - created_at::String
+    - description::String
     - id::Int64
     - name::String
-    - description::String
-    - created_at::String
 """
 Base.@kwdef mutable struct AccessGroupModel <: OpenAPI.APIModel
+    created_at::Union{Nothing, String} = nothing
+    description::Union{Nothing, String} = nothing
     id::Union{Nothing, Int64} = nothing
     name::Union{Nothing, String} = nothing
-    description::Union{Nothing, String} = nothing
-    created_at::Union{Nothing, String} = nothing
 
-    function AccessGroupModel(id, name, description, created_at, )
-        o = new(id, name, description, created_at, )
+    function AccessGroupModel(created_at, description, id, name, )
+        o = new(created_at, description, id, name, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type AccessGroupModel
 
-const _property_types_AccessGroupModel = Dict{Symbol,String}(Symbol("id")=>"Int64", Symbol("name")=>"String", Symbol("description")=>"String", Symbol("created_at")=>"String", )
+const _property_types_AccessGroupModel = Dict{Symbol,String}(Symbol("created_at")=>"String", Symbol("description")=>"String", Symbol("id")=>"Int64", Symbol("name")=>"String", )
 OpenAPI.property_type(::Type{ AccessGroupModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_AccessGroupModel[name]))}
 
 function OpenAPI.check_required(o::AccessGroupModel)
@@ -39,15 +38,18 @@ function OpenAPI.check_required(o::AccessGroupModel)
 end
 
 function OpenAPI.validate_properties(o::AccessGroupModel)
+    OpenAPI.validate_property(AccessGroupModel, Symbol("created_at"), o.created_at)
+    OpenAPI.validate_property(AccessGroupModel, Symbol("description"), o.description)
     OpenAPI.validate_property(AccessGroupModel, Symbol("id"), o.id)
     OpenAPI.validate_property(AccessGroupModel, Symbol("name"), o.name)
-    OpenAPI.validate_property(AccessGroupModel, Symbol("description"), o.description)
-    OpenAPI.validate_property(AccessGroupModel, Symbol("created_at"), o.created_at)
 end
 
 function OpenAPI.validate_property(::Type{ AccessGroupModel }, name::Symbol, val)
 
 
 
+    if name === Symbol("id")
+        OpenAPI.validate_param(name, "AccessGroupModel", :format, val, "int64")
+    end
 
 end

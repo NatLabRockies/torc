@@ -571,17 +571,7 @@ fn fail_orphaned_running_jobs(
         None,    // is_active - any status
         None,    // scheduled_compute_node_id
     ) {
-        Ok(response) => {
-            if let Some(nodes) = response.items {
-                if let Some(node) = nodes.first() {
-                    node.id.unwrap_or(0)
-                } else {
-                    0
-                }
-            } else {
-                0
-            }
-        }
+        Ok(response) => response.items.first().and_then(|node| node.id).unwrap_or(0),
         Err(_) => 0,
     };
 

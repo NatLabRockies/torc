@@ -84,7 +84,7 @@ impl TorcClient {
         )
         .context("Failed to list workflows")?;
 
-        Ok(response.items.unwrap_or_default())
+        Ok(response.items)
     }
 
     pub fn list_workflows_for_user(&self, user: &str) -> Result<Vec<WorkflowModel>> {
@@ -101,7 +101,7 @@ impl TorcClient {
         )
         .context("Failed to list workflows")?;
 
-        Ok(response.items.unwrap_or_default())
+        Ok(response.items)
     }
 
     pub fn list_jobs(&self, workflow_id: i64) -> Result<Vec<JobModel>> {
@@ -120,7 +120,7 @@ impl TorcClient {
         )
         .context("Failed to list jobs")?;
 
-        Ok(response.items.unwrap_or_default())
+        Ok(response.items)
     }
 
     pub fn list_files(&self, workflow_id: i64) -> Result<Vec<FileModel>> {
@@ -138,7 +138,7 @@ impl TorcClient {
         )
         .context("Failed to list files")?;
 
-        Ok(response.items.unwrap_or_default())
+        Ok(response.items)
     }
 
     pub fn list_results(&self, workflow_id: i64) -> Result<Vec<ResultModel>> {
@@ -158,7 +158,7 @@ impl TorcClient {
         )
         .context("Failed to list results")?;
 
-        Ok(response.items.unwrap_or_default())
+        Ok(response.items)
     }
 
     pub fn list_job_dependencies(&self, workflow_id: i64) -> Result<Vec<JobDependencyModel>> {
@@ -170,7 +170,7 @@ impl TorcClient {
         )
         .context("Failed to list job dependencies")?;
 
-        Ok(response.items.unwrap_or_default())
+        Ok(response.items)
     }
 
     pub fn list_slurm_stats(&self, workflow_id: i64) -> Result<Vec<SlurmStatsModel>> {
@@ -185,7 +185,7 @@ impl TorcClient {
         )
         .context("Failed to list Slurm stats")?;
 
-        Ok(response.items.unwrap_or_default())
+        Ok(response.items)
     }
 
     pub fn list_scheduled_compute_nodes(
@@ -205,7 +205,7 @@ impl TorcClient {
         )
         .context("Failed to list scheduled compute nodes")?;
 
-        Ok(response.items.unwrap_or_default())
+        Ok(response.items)
     }
 
     // === Workflow Actions ===

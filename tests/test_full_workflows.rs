@@ -95,7 +95,7 @@ fn verify_diamond_workflow_completion(
     )
     .expect("Failed to list jobs");
 
-    for job in jobs.items.unwrap() {
+    for job in jobs.items {
         assert_eq!(
             job.status.unwrap(),
             models::JobStatus::Completed,
@@ -122,7 +122,7 @@ fn verify_diamond_workflow_completion(
     )
     .expect("Failed to list results");
 
-    let result_items = results.items.unwrap();
+    let result_items = results.items;
 
     for result in result_items {
         assert_eq!(
@@ -258,9 +258,9 @@ fn test_events(start_server: &ServerProcess) {
         None,
     )
     .expect("Failed to list events");
-    assert_eq!(events.items.as_ref().unwrap().len(), 2);
+    assert_eq!(events.items.len(), 2);
     assert_eq!(
-        events.items.as_ref().unwrap()[1].data,
+        events.items[1].data,
         serde_json::json!({"key3": 3, "key4": 4})
     );
     default_api::delete_event(config, event_id1, None).expect("Failed to delete event");
@@ -276,7 +276,7 @@ fn test_events(start_server: &ServerProcess) {
         None,
     )
     .expect("Failed to list events");
-    assert!(events.items.as_ref().unwrap().is_empty());
+    assert!(events.items.is_empty());
 }
 
 fn check_diamond_workflow_init_job_statuses(
@@ -372,11 +372,7 @@ resource_requirements:
     )
     .expect("Failed to list workflows");
 
-    let workflow = workflows
-        .items
-        .as_ref()
-        .and_then(|items| items.first())
-        .expect("Workflow not found");
+    let workflow = workflows.items.first().expect("Workflow not found");
     let workflow_id = workflow.id.unwrap();
 
     // Verify all 100 jobs completed successfully
@@ -406,7 +402,7 @@ fn verify_many_jobs_completion(
     )
     .expect("Failed to list jobs");
 
-    let job_items = jobs.items.unwrap();
+    let job_items = jobs.items;
     assert_eq!(
         job_items.len(),
         num_jobs,
@@ -442,7 +438,7 @@ fn verify_many_jobs_completion(
     )
     .expect("Failed to list results");
 
-    let result_items = results.items.unwrap();
+    let result_items = results.items;
     assert_eq!(
         result_items.len(),
         num_jobs,
@@ -572,11 +568,7 @@ resource_requirements:
     )
     .expect("Failed to list workflows");
 
-    let workflow = workflows
-        .items
-        .as_ref()
-        .and_then(|items| items.first())
-        .expect("Workflow not found");
+    let workflow = workflows.items.first().expect("Workflow not found");
     let workflow_id = workflow.id.unwrap();
 
     // Verify job statuses after first run
@@ -595,7 +587,7 @@ resource_requirements:
     )
     .expect("Failed to list jobs");
 
-    let job_items = jobs.items.unwrap();
+    let job_items = jobs.items;
     let job_statuses: HashMap<String, models::JobStatus> = job_items
         .iter()
         .map(|j| (j.name.clone(), j.status.unwrap()))
@@ -649,7 +641,7 @@ resource_requirements:
     )
     .expect("Failed to list results");
 
-    let result_items = results.items.unwrap();
+    let result_items = results.items;
 
     // We should have 4 results (setup, work_a, work_b, work_fail)
     // finalize was canceled so it shouldn't have a result
@@ -707,7 +699,7 @@ resource_requirements:
     )
     .expect("Failed to list jobs after reset");
 
-    let job_items = jobs.items.unwrap();
+    let job_items = jobs.items;
     let job_statuses: HashMap<String, models::JobStatus> = job_items
         .iter()
         .map(|j| (j.name.clone(), j.status.unwrap()))
@@ -780,7 +772,7 @@ resource_requirements:
     )
     .expect("Failed to list jobs after second run");
 
-    let job_items = jobs.items.unwrap();
+    let job_items = jobs.items;
     for job in &job_items {
         assert_eq!(
             job.status.unwrap(),
@@ -809,7 +801,7 @@ resource_requirements:
     )
     .expect("Failed to list all results");
 
-    let result_items = results.items.unwrap();
+    let result_items = results.items;
 
     // Find the latest run_id for work_fail job
     let work_fail_job = job_items.iter().find(|j| j.name == "work_fail").unwrap();
@@ -953,11 +945,7 @@ resource_requirements:
     )
     .expect("Failed to list workflows");
 
-    let workflow = workflows
-        .items
-        .as_ref()
-        .and_then(|items| items.first())
-        .expect("Workflow not found");
+    let workflow = workflows.items.first().expect("Workflow not found");
     let workflow_id = workflow.id.unwrap();
 
     // Verify job statuses after first run
@@ -976,7 +964,7 @@ resource_requirements:
     )
     .expect("Failed to list jobs");
 
-    let job_items = jobs.items.unwrap();
+    let job_items = jobs.items;
     let job_statuses: HashMap<String, models::JobStatus> = job_items
         .iter()
         .map(|j| (j.name.clone(), j.status.unwrap()))
@@ -1046,7 +1034,7 @@ resource_requirements:
     )
     .expect("Failed to list jobs after reinitialize");
 
-    let job_items = jobs.items.unwrap();
+    let job_items = jobs.items;
     let job_statuses: HashMap<String, models::JobStatus> = job_items
         .iter()
         .map(|j| (j.name.clone(), j.status.unwrap()))
@@ -1115,7 +1103,7 @@ resource_requirements:
     )
     .expect("Failed to list jobs after second run");
 
-    let job_items = jobs.items.unwrap();
+    let job_items = jobs.items;
     for job in &job_items {
         assert_eq!(
             job.status.unwrap(),
@@ -1144,7 +1132,7 @@ resource_requirements:
     )
     .expect("Failed to list all results");
 
-    let result_items = results.items.unwrap();
+    let result_items = results.items;
 
     // Find the latest run_id for work_fail job
     let work_fail_job = job_items.iter().find(|j| j.name == "work_fail").unwrap();

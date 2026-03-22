@@ -2,43 +2,45 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""list_job_ids_response
-Response containing job IDs for a workflow
+@doc raw"""ListJobIdsResponse
 
     ListJobIdsResponse(;
-        job_ids=nothing,
         count=nothing,
+        job_ids=nothing,
     )
 
-    - job_ids::Vector{Int64} : List of job IDs in the workflow
-    - count::Int64 : The number of job IDs returned
+    - count::Int64
+    - job_ids::Vector{Int64}
 """
 Base.@kwdef mutable struct ListJobIdsResponse <: OpenAPI.APIModel
-    job_ids::Union{Nothing, Vector{Int64}} = nothing
     count::Union{Nothing, Int64} = nothing
+    job_ids::Union{Nothing, Vector{Int64}} = nothing
 
-    function ListJobIdsResponse(job_ids, count, )
-        o = new(job_ids, count, )
+    function ListJobIdsResponse(count, job_ids, )
+        o = new(count, job_ids, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type ListJobIdsResponse
 
-const _property_types_ListJobIdsResponse = Dict{Symbol,String}(Symbol("job_ids")=>"Vector{Int64}", Symbol("count")=>"Int64", )
+const _property_types_ListJobIdsResponse = Dict{Symbol,String}(Symbol("count")=>"Int64", Symbol("job_ids")=>"Vector{Int64}", )
 OpenAPI.property_type(::Type{ ListJobIdsResponse }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_ListJobIdsResponse[name]))}
 
 function OpenAPI.check_required(o::ListJobIdsResponse)
-    o.job_ids === nothing && (return false)
     o.count === nothing && (return false)
+    o.job_ids === nothing && (return false)
     true
 end
 
 function OpenAPI.validate_properties(o::ListJobIdsResponse)
-    OpenAPI.validate_property(ListJobIdsResponse, Symbol("job_ids"), o.job_ids)
     OpenAPI.validate_property(ListJobIdsResponse, Symbol("count"), o.count)
+    OpenAPI.validate_property(ListJobIdsResponse, Symbol("job_ids"), o.job_ids)
 end
 
 function OpenAPI.validate_property(::Type{ ListJobIdsResponse }, name::Symbol, val)
 
+    if name === Symbol("count")
+        OpenAPI.validate_param(name, "ListJobIdsResponse", :format, val, "int64")
+    end
 
 end

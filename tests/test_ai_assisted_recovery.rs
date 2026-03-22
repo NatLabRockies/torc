@@ -167,10 +167,7 @@ fn test_list_pending_failed_jobs(start_server: &ServerProcess) {
     .expect("Failed to list pending_failed jobs");
 
     assert_eq!(pending_failed_jobs.total_count, 1);
-    assert_eq!(
-        pending_failed_jobs.items.as_ref().unwrap()[0].id,
-        Some(job1_id)
-    );
+    assert_eq!(pending_failed_jobs.items[0].id, Some(job1_id));
 }
 
 /// Test that reset_workflow_status includes pending_failed jobs

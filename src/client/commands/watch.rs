@@ -153,8 +153,7 @@ fn has_active_workers(config: &Configuration, workflow_id: i64) -> bool {
             Some(true), // is_active = true
             None,       // scheduled_compute_node_id
         )
-    }) && let Some(nodes) = response.items
-        && !nodes.is_empty()
+    }) && !response.items.is_empty()
     {
         return true;
     }
@@ -180,8 +179,7 @@ fn has_any_scheduled_compute_nodes(config: &Configuration, workflow_id: i64) -> 
             None,            // scheduler_config_id
             Some("pending"), // status
         )
-    }) && let Some(nodes) = response.items
-        && !nodes.is_empty()
+    }) && !response.items.is_empty()
     {
         return true;
     }
@@ -199,8 +197,7 @@ fn has_any_scheduled_compute_nodes(config: &Configuration, workflow_id: i64) -> 
             None,           // scheduler_config_id
             Some("active"), // status
         )
-    }) && let Some(nodes) = response.items
-        && !nodes.is_empty()
+    }) && !response.items.is_empty()
     {
         return true;
     }
@@ -233,10 +230,8 @@ fn has_valid_slurm_allocation(config: &Configuration, workflow_id: i64) -> bool 
         )
     });
 
-    if let Ok(response) = active_nodes
-        && let Some(nodes) = response.items
-    {
-        for node in nodes {
+    if let Ok(response) = active_nodes {
+        for node in response.items {
             if node.scheduler_type.to_lowercase() == "slurm" {
                 // Check if this Slurm job is still running
                 if let Ok(slurm) = SlurmInterface::new() {
@@ -271,10 +266,8 @@ fn has_valid_slurm_allocation(config: &Configuration, workflow_id: i64) -> bool 
         )
     });
 
-    if let Ok(response) = pending_nodes
-        && let Some(nodes) = response.items
-    {
-        for node in nodes {
+    if let Ok(response) = pending_nodes {
+        for node in response.items {
             if node.scheduler_type.to_lowercase() == "slurm" {
                 // Check if this Slurm job is still queued
                 if let Ok(slurm) = SlurmInterface::new() {

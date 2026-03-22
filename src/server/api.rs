@@ -1,9 +1,9 @@
 //! Common API module with shared imports and traits
 
+use crate::server::transport_types::context_types::ApiError;
 use log::{debug, error, info};
 use sqlx::sqlite::SqlitePool;
 use std::sync::Arc;
-use swagger::ApiError;
 
 pub use crate::MAX_RECORD_TRANSFER_COUNT;
 
@@ -150,7 +150,7 @@ pub mod workflow_actions;
 pub mod workflows;
 
 // Re-export API traits and implementations
-pub use access_groups::AccessGroupsApiImpl;
+pub use access_groups::{AccessGroupsApi, AccessGroupsApiImpl};
 pub use compute_nodes::{ComputeNodesApi, ComputeNodesApiImpl};
 pub use events::{EventsApi, EventsApiImpl};
 pub use failure_handlers::{FailureHandlersApi, FailureHandlersApiImpl};

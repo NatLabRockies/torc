@@ -2,54 +2,59 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""reset_job_status_response
-Response from resetting job statuses
+@doc raw"""ResetJobStatusResponse
 
     ResetJobStatusResponse(;
-        workflow_id=nothing,
-        updated_count=nothing,
-        status=nothing,
         reset_type=nothing,
+        status=nothing,
+        updated_count=nothing,
+        workflow_id=nothing,
     )
 
-    - workflow_id::Int64 : The workflow ID for which jobs were reset
-    - updated_count::Int64 : The number of jobs that were updated
-    - status::String : The status that jobs were reset to
-    - reset_type::String : The type of reset performed (e.g., \&quot;all\&quot; or \&quot;failed_only\&quot;)
+    - reset_type::String
+    - status::String
+    - updated_count::Int64
+    - workflow_id::Int64
 """
 Base.@kwdef mutable struct ResetJobStatusResponse <: OpenAPI.APIModel
-    workflow_id::Union{Nothing, Int64} = nothing
-    updated_count::Union{Nothing, Int64} = nothing
-    status::Union{Nothing, String} = nothing
     reset_type::Union{Nothing, String} = nothing
+    status::Union{Nothing, String} = nothing
+    updated_count::Union{Nothing, Int64} = nothing
+    workflow_id::Union{Nothing, Int64} = nothing
 
-    function ResetJobStatusResponse(workflow_id, updated_count, status, reset_type, )
-        o = new(workflow_id, updated_count, status, reset_type, )
+    function ResetJobStatusResponse(reset_type, status, updated_count, workflow_id, )
+        o = new(reset_type, status, updated_count, workflow_id, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type ResetJobStatusResponse
 
-const _property_types_ResetJobStatusResponse = Dict{Symbol,String}(Symbol("workflow_id")=>"Int64", Symbol("updated_count")=>"Int64", Symbol("status")=>"String", Symbol("reset_type")=>"String", )
+const _property_types_ResetJobStatusResponse = Dict{Symbol,String}(Symbol("reset_type")=>"String", Symbol("status")=>"String", Symbol("updated_count")=>"Int64", Symbol("workflow_id")=>"Int64", )
 OpenAPI.property_type(::Type{ ResetJobStatusResponse }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_ResetJobStatusResponse[name]))}
 
 function OpenAPI.check_required(o::ResetJobStatusResponse)
-    o.workflow_id === nothing && (return false)
-    o.updated_count === nothing && (return false)
     o.status === nothing && (return false)
+    o.updated_count === nothing && (return false)
+    o.workflow_id === nothing && (return false)
     true
 end
 
 function OpenAPI.validate_properties(o::ResetJobStatusResponse)
-    OpenAPI.validate_property(ResetJobStatusResponse, Symbol("workflow_id"), o.workflow_id)
-    OpenAPI.validate_property(ResetJobStatusResponse, Symbol("updated_count"), o.updated_count)
-    OpenAPI.validate_property(ResetJobStatusResponse, Symbol("status"), o.status)
     OpenAPI.validate_property(ResetJobStatusResponse, Symbol("reset_type"), o.reset_type)
+    OpenAPI.validate_property(ResetJobStatusResponse, Symbol("status"), o.status)
+    OpenAPI.validate_property(ResetJobStatusResponse, Symbol("updated_count"), o.updated_count)
+    OpenAPI.validate_property(ResetJobStatusResponse, Symbol("workflow_id"), o.workflow_id)
 end
 
 function OpenAPI.validate_property(::Type{ ResetJobStatusResponse }, name::Symbol, val)
 
 
 
+    if name === Symbol("updated_count")
+        OpenAPI.validate_param(name, "ResetJobStatusResponse", :format, val, "int64")
+    end
 
+    if name === Symbol("workflow_id")
+        OpenAPI.validate_param(name, "ResetJobStatusResponse", :format, val, "int64")
+    end
 end

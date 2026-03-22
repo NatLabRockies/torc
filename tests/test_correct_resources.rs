@@ -110,7 +110,7 @@ fn test_correct_resources_memory_violation_dry_run(start_server: &ServerProcess)
     )
     .expect("Failed to list results");
 
-    let items = violations.items.expect("Should have items");
+    let items = violations.items;
     assert!(!items.is_empty(), "Should have results");
     let result = &items[0];
     assert_eq!(result.return_code, 137, "Should have OOM return code");
@@ -202,7 +202,7 @@ fn test_correct_resources_cpu_violation_dry_run(start_server: &ServerProcess) {
     )
     .expect("Failed to list results");
 
-    let items = violations.items.expect("Should have items");
+    let items = violations.items;
     assert!(!items.is_empty(), "Should have results");
     let result = &items[0];
     assert_eq!(result.return_code, 0, "Should have success return code");
@@ -292,7 +292,7 @@ fn test_correct_resources_runtime_violation_dry_run(start_server: &ServerProcess
     )
     .expect("Failed to list results");
 
-    let items = violations.items.expect("Should have items");
+    let items = violations.items;
     assert!(!items.is_empty(), "Should have results");
     let result = &items[0];
     assert_eq!(result.return_code, 0, "Should have success return code");
@@ -443,7 +443,7 @@ fn test_correct_resources_multiple_violations(start_server: &ServerProcess) {
     )
     .expect("Failed to list results");
 
-    let items = results.items.expect("Should have items");
+    let items = results.items;
     assert_eq!(items.len(), 3, "Should have 3 results");
 
     // Verify each violation type - find by job_id instead of assuming order
@@ -673,7 +673,7 @@ fn test_correct_resources_dry_run_mode(start_server: &ServerProcess) {
     )
     .expect("Failed to list results");
 
-    let items = violations.items.expect("Should have items");
+    let items = violations.items;
     assert_eq!(items.len(), 1, "Should have 1 result with violations");
 
     // Verify the violations are present (OOM, memory, CPU, runtime)
@@ -782,7 +782,7 @@ fn test_correct_resources_memory_violation_successful_job(start_server: &ServerP
     )
     .expect("Failed to list results");
 
-    let items = results.items.expect("Should have items");
+    let items = results.items;
     assert_eq!(items.len(), 1, "Should have 1 result");
     let result = &items[0];
     assert_eq!(result.return_code, 0, "Should have success return code");
@@ -827,7 +827,6 @@ fn fetch_results(
     )
     .expect("Failed to list results")
     .items
-    .unwrap_or_default()
 }
 
 /// Helper: fetch all jobs for a workflow
@@ -847,7 +846,6 @@ fn fetch_jobs(config: &torc::client::Configuration, workflow_id: i64) -> Vec<mod
     )
     .expect("Failed to list jobs")
     .items
-    .unwrap_or_default()
 }
 
 /// Helper: fetch all resource requirements for a workflow
@@ -872,7 +870,6 @@ fn fetch_resource_requirements(
     )
     .expect("Failed to list resource requirements")
     .items
-    .unwrap_or_default()
 }
 
 /// Helper: create a job and assign it an RR. Returns the job_id.

@@ -310,26 +310,23 @@ pub fn handle_event_commands(config: &Configuration, command: &EventCommands, fo
                 None,              // after_timestamp
             ) {
                 Ok(response) => {
-                    if let Some(events) = response.items {
-                        if let Some(latest_event) = events.first() {
-                            let json_event = EventJsonOutput::from(latest_event);
-                            if print_if_json(format, &json_event, "event") {
-                                // JSON was printed
-                            } else {
-                                println!("Latest event for workflow {}:", selected_workflow_id);
-                                println!("  ID: {}", latest_event.id.unwrap_or(-1));
-                                println!(
-                                    "  Timestamp: {}",
-                                    format_timestamp_ms(latest_event.timestamp)
-                                );
-                                println!(
-                                    "  Data: {}",
-                                    serde_json::to_string_pretty(&latest_event.data)
-                                        .unwrap_or_else(|_| "Unable to display data".to_string())
-                                );
-                            }
+                    let events = response.items;
+                    if let Some(latest_event) = events.first() {
+                        let json_event = EventJsonOutput::from(latest_event);
+                        if print_if_json(format, &json_event, "event") {
+                            // JSON was printed
                         } else {
-                            println!("No events found for workflow {}", selected_workflow_id);
+                            println!("Latest event for workflow {}:", selected_workflow_id);
+                            println!("  ID: {}", latest_event.id.unwrap_or(-1));
+                            println!(
+                                "  Timestamp: {}",
+                                format_timestamp_ms(latest_event.timestamp)
+                            );
+                            println!(
+                                "  Data: {}",
+                                serde_json::to_string_pretty(&latest_event.data)
+                                    .unwrap_or_else(|_| "Unable to display data".to_string())
+                            );
                         }
                     } else {
                         println!("No events found for workflow {}", selected_workflow_id);

@@ -266,7 +266,7 @@ fn get_scheduler_count(config: &Configuration, workflow_id: i64) -> usize {
         None,
     )
     .expect("Failed to list schedulers");
-    response.items.unwrap_or_default().len()
+    response.items.len()
 }
 
 // ============== Basic Regenerate Tests ==============
@@ -601,7 +601,7 @@ fn test_regenerate_uses_existing_account(start_server: &ServerProcess) {
     )
     .expect("Failed to list schedulers");
 
-    let schedulers = response.items.unwrap_or_default();
+    let schedulers = response.items;
     // Should have 2 schedulers now (original + regenerated)
     assert!(schedulers.len() >= 2);
 

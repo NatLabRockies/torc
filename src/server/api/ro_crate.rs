@@ -2,11 +2,11 @@
 
 #![allow(clippy::too_many_arguments)]
 
+use crate::server::transport_types::context_types::{ApiError, Has, XSpanIdString};
 use async_trait::async_trait;
 use log::{debug, info};
-use swagger::{ApiError, Has, XSpanIdString};
 
-use crate::server::api_types::{
+use crate::server::api_responses::{
     CreateRoCrateEntityResponse, DeleteRoCrateEntitiesResponse, DeleteRoCrateEntityResponse,
     GetRoCrateEntityResponse, ListRoCrateEntitiesResponse, UpdateRoCrateEntityResponse,
 };
@@ -515,7 +515,7 @@ where
 
         Ok(ListRoCrateEntitiesResponse::SuccessfulResponse(
             models::ListRoCrateEntitiesResponse {
-                items: Some(items),
+                items,
                 offset,
                 max_limit: MAX_RECORD_TRANSFER_COUNT,
                 count,

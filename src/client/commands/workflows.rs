@@ -3675,7 +3675,7 @@ fn handle_export(
         None,
         None,
     ) {
-        Ok(response) => response.items.unwrap_or_default(),
+        Ok(response) => response.items,
         Err(e) => {
             print_error("listing local schedulers", &e);
             std::process::exit(1);
@@ -3685,7 +3685,7 @@ fn handle_export(
     // Get all failure handlers
     export.failure_handlers =
         match default_api::list_failure_handlers(config, workflow_id, None, None) {
-            Ok(response) => response.items.unwrap_or_default(),
+            Ok(response) => response.items,
             Err(e) => {
                 print_error("listing failure handlers", &e);
                 std::process::exit(1);
@@ -3695,7 +3695,7 @@ fn handle_export(
     // Get all RO-Crate entities
     export.ro_crate_entities =
         match default_api::list_ro_crate_entities(config, workflow_id, None, None) {
-            Ok(response) => response.items.unwrap_or_default(),
+            Ok(response) => response.items,
             Err(e) => {
                 print_error("listing RO-Crate entities", &e);
                 std::process::exit(1);
@@ -3938,7 +3938,7 @@ fn handle_import(
         None,            // runtime
     )
     .ok()
-    .and_then(|response| response.items)
+    .map(|response| response.items)
     .and_then(|items| items.into_iter().next());
 
     for rr_model in &export.resource_requirements {

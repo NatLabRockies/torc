@@ -180,12 +180,7 @@ fn test_list_required_existing_files_missing_job_outputs(start_server: &ServerPr
     )
     .expect("Failed to list files");
 
-    let _existing_file_ids: Vec<i64> = files_response
-        .items
-        .unwrap_or_default()
-        .iter()
-        .filter_map(|f| f.id)
-        .collect();
+    let _existing_file_ids: Vec<i64> = files_response.items.iter().filter_map(|f| f.id).collect();
 
     // For this test, we simulate that the job completed successfully but the output files
     // were not actually created (perhaps due to a job implementation bug or file system issue).

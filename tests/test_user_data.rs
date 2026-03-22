@@ -624,7 +624,7 @@ fn test_user_data_delete_workflow_command_json(start_server: &ServerProcess) {
     );
 
     if let Ok(response) = list_result {
-        let items = response.items.unwrap_or_default();
+        let items = response.items;
         assert!(items.is_empty(), "All user data should be deleted");
     }
 }

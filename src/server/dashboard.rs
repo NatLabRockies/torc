@@ -3,7 +3,8 @@
 //! The full dashboard is provided by the `torc-dash` binary.
 //! This module serves a simple message directing users to use `torc-dash`.
 
-use hyper::{Body, Response, StatusCode};
+use axum::body::Body;
+use axum::http::{Response, StatusCode};
 
 const INFO_PAGE: &str = r#"<!DOCTYPE html>
 <html>

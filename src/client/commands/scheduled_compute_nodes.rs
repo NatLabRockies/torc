@@ -137,7 +137,7 @@ pub fn handle_scheduled_compute_node_commands(
                 status.as_deref(),
             ) {
                 Ok(response) => {
-                    let nodes = response.items.unwrap_or_default();
+                    let nodes = response.items;
 
                     if print_wrapped_if_json(
                         format,
@@ -194,7 +194,7 @@ pub fn handle_scheduled_compute_node_commands(
                 None,      // is_active
                 Some(*id), // scheduled_compute_node_id
             ) {
-                Ok(response) => response.items.unwrap_or_default(),
+                Ok(response) => response.items,
                 Err(e) => {
                     print_error("listing compute nodes", &e);
                     std::process::exit(1);
@@ -230,10 +230,8 @@ pub fn handle_scheduled_compute_node_commands(
                         Some(compute_node_id), // compute_node_id filter
                     ) {
                         Ok(response) => {
-                            if let Some(items) = response.items {
-                                for result in items {
-                                    job_ids.insert(result.job_id);
-                                }
+                            for result in response.items {
+                                job_ids.insert(result.job_id);
                             }
                         }
                         Err(e) => {

@@ -198,7 +198,7 @@ fn test_auto_ro_crate_input_files_on_initialize(start_server: &ServerProcess) {
     let entities_before =
         default_api::list_ro_crate_entities(config, workflow_id, None, None).unwrap();
     assert_eq!(
-        entities_before.items.unwrap_or_default().len(),
+        entities_before.items.len(),
         0,
         "No RO-Crate entities should exist before initialization"
     );
@@ -210,7 +210,7 @@ fn test_auto_ro_crate_input_files_on_initialize(start_server: &ServerProcess) {
     // Verify RO-Crate entity was created for the input file
     let entities_after =
         default_api::list_ro_crate_entities(config, workflow_id, None, None).unwrap();
-    let items = entities_after.items.unwrap();
+    let items = entities_after.items;
 
     // Should have at least one entity (for the input file)
     assert!(
@@ -291,7 +291,7 @@ fn test_auto_ro_crate_output_files_on_job_completion(start_server: &ServerProces
     // Verify RO-Crate entities were created
     let entities = default_api::list_ro_crate_entities(config, workflow_id, None, None)
         .expect("Failed to list RO-Crate entities");
-    let items = entities.items.unwrap();
+    let items = entities.items;
 
     // Should have entities for both input and output files, plus a CreateAction
     assert!(
@@ -387,7 +387,7 @@ fn test_auto_ro_crate_disabled_by_default(start_server: &ServerProcess) {
 
     // Verify no file-based RO-Crate entities were created (only the SoftwareApplication for torc-server)
     let entities = default_api::list_ro_crate_entities(config, workflow_id, None, None).unwrap();
-    let items = entities.items.unwrap_or_default();
+    let items = entities.items;
     let file_entities: Vec<_> = items
         .iter()
         .filter(|e| e.entity_type != "SoftwareApplication")
@@ -419,7 +419,7 @@ fn test_auto_ro_crate_diamond_workflow(start_server: &ServerProcess) {
     // Verify input file entity was created
     let entities_after_init =
         default_api::list_ro_crate_entities(config, workflow_id, None, None).unwrap();
-    let items = entities_after_init.items.unwrap();
+    let items = entities_after_init.items;
 
     let input_entity = items.iter().find(|e| e.file_id == Some(input_file_ids[0]));
     assert!(
@@ -458,7 +458,7 @@ fn test_auto_ro_crate_diamond_workflow(start_server: &ServerProcess) {
     )
     .expect("Failed to list jobs");
 
-    for job in jobs.items.unwrap() {
+    for job in jobs.items {
         assert_eq!(
             job.status,
             Some(models::JobStatus::Completed),
@@ -475,7 +475,7 @@ fn test_auto_ro_crate_diamond_workflow(start_server: &ServerProcess) {
     // Verify RO-Crate entities were created for output files
     let final_entities =
         default_api::list_ro_crate_entities(config, workflow_id, None, None).unwrap();
-    let final_items = final_entities.items.unwrap();
+    let final_items = final_entities.items;
 
     // Should have entities for:
     // - 1 input file (f1)
@@ -574,7 +574,7 @@ fn test_auto_ro_crate_second_run_replaces_entities(start_server: &ServerProcess)
     // Capture first run RO-Crate entities
     let entities_run1 =
         default_api::list_ro_crate_entities(config, workflow_id, None, None).unwrap();
-    let items_run1 = entities_run1.items.unwrap();
+    let items_run1 = entities_run1.items;
 
     let file_entities_run1: Vec<_> = items_run1
         .iter()
@@ -640,7 +640,7 @@ fn test_auto_ro_crate_second_run_replaces_entities(start_server: &ServerProcess)
 
     let entities_run2 =
         default_api::list_ro_crate_entities(config, workflow_id, None, None).unwrap();
-    let items_run2 = entities_run2.items.unwrap();
+    let items_run2 = entities_run2.items;
 
     let file_entities_run2: Vec<_> = items_run2
         .iter()

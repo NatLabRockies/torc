@@ -2,114 +2,141 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""compute_node_model
+@doc raw"""ComputeNodeModel
 
     ComputeNodeModel(;
-        id=nothing,
-        workflow_id=nothing,
-        hostname=nothing,
-        pid=nothing,
-        start_time=nothing,
+        compute_node_type=nothing,
         duration_seconds=nothing,
+        hostname=nothing,
+        id=nothing,
         is_active=nothing,
-        num_cpus=nothing,
         memory_gb=nothing,
+        num_cpus=nothing,
         num_gpus=nothing,
         num_nodes=nothing,
-        time_limit=nothing,
-        scheduler_config_id=nothing,
-        compute_node_type=nothing,
+        pid=nothing,
         scheduler=nothing,
+        scheduler_config_id=nothing,
+        start_time=nothing,
+        time_limit=nothing,
+        workflow_id=nothing,
     )
 
-    - id::Int64
-    - workflow_id::Int64
-    - hostname::String
-    - pid::Int64
-    - start_time::String
+    - compute_node_type::String
     - duration_seconds::Float64
+    - hostname::String
+    - id::Int64
     - is_active::Bool
-    - num_cpus::Int64
     - memory_gb::Float64
+    - num_cpus::Int64
     - num_gpus::Int64
     - num_nodes::Int64
-    - time_limit::String
-    - scheduler_config_id::Int64
-    - compute_node_type::String
+    - pid::Int64
     - scheduler::Any
+    - scheduler_config_id::Int64
+    - start_time::String
+    - time_limit::String
+    - workflow_id::Int64
 """
 Base.@kwdef mutable struct ComputeNodeModel <: OpenAPI.APIModel
-    id::Union{Nothing, Int64} = nothing
-    workflow_id::Union{Nothing, Int64} = nothing
-    hostname::Union{Nothing, String} = nothing
-    pid::Union{Nothing, Int64} = nothing
-    start_time::Union{Nothing, String} = nothing
+    compute_node_type::Union{Nothing, String} = nothing
     duration_seconds::Union{Nothing, Float64} = nothing
+    hostname::Union{Nothing, String} = nothing
+    id::Union{Nothing, Int64} = nothing
     is_active::Union{Nothing, Bool} = nothing
-    num_cpus::Union{Nothing, Int64} = nothing
     memory_gb::Union{Nothing, Float64} = nothing
+    num_cpus::Union{Nothing, Int64} = nothing
     num_gpus::Union{Nothing, Int64} = nothing
     num_nodes::Union{Nothing, Int64} = nothing
-    time_limit::Union{Nothing, String} = nothing
-    scheduler_config_id::Union{Nothing, Int64} = nothing
-    compute_node_type::Union{Nothing, String} = nothing
+    pid::Union{Nothing, Int64} = nothing
     scheduler::Union{Nothing, Any} = nothing
+    scheduler_config_id::Union{Nothing, Int64} = nothing
+    start_time::Union{Nothing, String} = nothing
+    time_limit::Union{Nothing, String} = nothing
+    workflow_id::Union{Nothing, Int64} = nothing
 
-    function ComputeNodeModel(id, workflow_id, hostname, pid, start_time, duration_seconds, is_active, num_cpus, memory_gb, num_gpus, num_nodes, time_limit, scheduler_config_id, compute_node_type, scheduler, )
-        o = new(id, workflow_id, hostname, pid, start_time, duration_seconds, is_active, num_cpus, memory_gb, num_gpus, num_nodes, time_limit, scheduler_config_id, compute_node_type, scheduler, )
+    function ComputeNodeModel(compute_node_type, duration_seconds, hostname, id, is_active, memory_gb, num_cpus, num_gpus, num_nodes, pid, scheduler, scheduler_config_id, start_time, time_limit, workflow_id, )
+        o = new(compute_node_type, duration_seconds, hostname, id, is_active, memory_gb, num_cpus, num_gpus, num_nodes, pid, scheduler, scheduler_config_id, start_time, time_limit, workflow_id, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type ComputeNodeModel
 
-const _property_types_ComputeNodeModel = Dict{Symbol,String}(Symbol("id")=>"Int64", Symbol("workflow_id")=>"Int64", Symbol("hostname")=>"String", Symbol("pid")=>"Int64", Symbol("start_time")=>"String", Symbol("duration_seconds")=>"Float64", Symbol("is_active")=>"Bool", Symbol("num_cpus")=>"Int64", Symbol("memory_gb")=>"Float64", Symbol("num_gpus")=>"Int64", Symbol("num_nodes")=>"Int64", Symbol("time_limit")=>"String", Symbol("scheduler_config_id")=>"Int64", Symbol("compute_node_type")=>"String", Symbol("scheduler")=>"Any", )
+const _property_types_ComputeNodeModel = Dict{Symbol,String}(Symbol("compute_node_type")=>"String", Symbol("duration_seconds")=>"Float64", Symbol("hostname")=>"String", Symbol("id")=>"Int64", Symbol("is_active")=>"Bool", Symbol("memory_gb")=>"Float64", Symbol("num_cpus")=>"Int64", Symbol("num_gpus")=>"Int64", Symbol("num_nodes")=>"Int64", Symbol("pid")=>"Int64", Symbol("scheduler")=>"Any", Symbol("scheduler_config_id")=>"Int64", Symbol("start_time")=>"String", Symbol("time_limit")=>"String", Symbol("workflow_id")=>"Int64", )
 OpenAPI.property_type(::Type{ ComputeNodeModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_ComputeNodeModel[name]))}
 
 function OpenAPI.check_required(o::ComputeNodeModel)
-    o.workflow_id === nothing && (return false)
+    o.compute_node_type === nothing && (return false)
     o.hostname === nothing && (return false)
-    o.pid === nothing && (return false)
-    o.start_time === nothing && (return false)
-    o.num_cpus === nothing && (return false)
     o.memory_gb === nothing && (return false)
+    o.num_cpus === nothing && (return false)
     o.num_gpus === nothing && (return false)
     o.num_nodes === nothing && (return false)
-    o.compute_node_type === nothing && (return false)
+    o.pid === nothing && (return false)
+    o.start_time === nothing && (return false)
+    o.workflow_id === nothing && (return false)
     true
 end
 
 function OpenAPI.validate_properties(o::ComputeNodeModel)
-    OpenAPI.validate_property(ComputeNodeModel, Symbol("id"), o.id)
-    OpenAPI.validate_property(ComputeNodeModel, Symbol("workflow_id"), o.workflow_id)
-    OpenAPI.validate_property(ComputeNodeModel, Symbol("hostname"), o.hostname)
-    OpenAPI.validate_property(ComputeNodeModel, Symbol("pid"), o.pid)
-    OpenAPI.validate_property(ComputeNodeModel, Symbol("start_time"), o.start_time)
+    OpenAPI.validate_property(ComputeNodeModel, Symbol("compute_node_type"), o.compute_node_type)
     OpenAPI.validate_property(ComputeNodeModel, Symbol("duration_seconds"), o.duration_seconds)
+    OpenAPI.validate_property(ComputeNodeModel, Symbol("hostname"), o.hostname)
+    OpenAPI.validate_property(ComputeNodeModel, Symbol("id"), o.id)
     OpenAPI.validate_property(ComputeNodeModel, Symbol("is_active"), o.is_active)
-    OpenAPI.validate_property(ComputeNodeModel, Symbol("num_cpus"), o.num_cpus)
     OpenAPI.validate_property(ComputeNodeModel, Symbol("memory_gb"), o.memory_gb)
+    OpenAPI.validate_property(ComputeNodeModel, Symbol("num_cpus"), o.num_cpus)
     OpenAPI.validate_property(ComputeNodeModel, Symbol("num_gpus"), o.num_gpus)
     OpenAPI.validate_property(ComputeNodeModel, Symbol("num_nodes"), o.num_nodes)
-    OpenAPI.validate_property(ComputeNodeModel, Symbol("time_limit"), o.time_limit)
-    OpenAPI.validate_property(ComputeNodeModel, Symbol("scheduler_config_id"), o.scheduler_config_id)
-    OpenAPI.validate_property(ComputeNodeModel, Symbol("compute_node_type"), o.compute_node_type)
+    OpenAPI.validate_property(ComputeNodeModel, Symbol("pid"), o.pid)
     OpenAPI.validate_property(ComputeNodeModel, Symbol("scheduler"), o.scheduler)
+    OpenAPI.validate_property(ComputeNodeModel, Symbol("scheduler_config_id"), o.scheduler_config_id)
+    OpenAPI.validate_property(ComputeNodeModel, Symbol("start_time"), o.start_time)
+    OpenAPI.validate_property(ComputeNodeModel, Symbol("time_limit"), o.time_limit)
+    OpenAPI.validate_property(ComputeNodeModel, Symbol("workflow_id"), o.workflow_id)
 end
 
 function OpenAPI.validate_property(::Type{ ComputeNodeModel }, name::Symbol, val)
 
 
+    if name === Symbol("duration_seconds")
+        OpenAPI.validate_param(name, "ComputeNodeModel", :format, val, "double")
+    end
+
+
+    if name === Symbol("id")
+        OpenAPI.validate_param(name, "ComputeNodeModel", :format, val, "int64")
+    end
+
+
+    if name === Symbol("memory_gb")
+        OpenAPI.validate_param(name, "ComputeNodeModel", :format, val, "double")
+    end
+
+    if name === Symbol("num_cpus")
+        OpenAPI.validate_param(name, "ComputeNodeModel", :format, val, "int64")
+    end
+
+    if name === Symbol("num_gpus")
+        OpenAPI.validate_param(name, "ComputeNodeModel", :format, val, "int64")
+    end
+
+    if name === Symbol("num_nodes")
+        OpenAPI.validate_param(name, "ComputeNodeModel", :format, val, "int64")
+    end
+
+    if name === Symbol("pid")
+        OpenAPI.validate_param(name, "ComputeNodeModel", :format, val, "int64")
+    end
+
+
+    if name === Symbol("scheduler_config_id")
+        OpenAPI.validate_param(name, "ComputeNodeModel", :format, val, "int64")
+    end
 
 
 
-
-
-
-
-
-
-
-
-
-
+    if name === Symbol("workflow_id")
+        OpenAPI.validate_param(name, "ComputeNodeModel", :format, val, "int64")
+    end
 end

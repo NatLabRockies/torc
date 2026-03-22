@@ -119,7 +119,7 @@ fn test_no_schedulers_with_ready_jobs_scenario(start_server: &ServerProcess) {
     )
     .expect("Failed to list scheduled compute nodes");
 
-    let scheduled_nodes = scn_response.items.unwrap_or_default();
+    let scheduled_nodes = scn_response.items;
     assert!(
         scheduled_nodes.is_empty(),
         "Should have no scheduled compute nodes"
@@ -141,7 +141,7 @@ fn test_no_schedulers_with_ready_jobs_scenario(start_server: &ServerProcess) {
     )
     .expect("Failed to list jobs");
 
-    let ready_jobs = jobs.items.unwrap_or_default();
+    let ready_jobs = jobs.items;
     assert_eq!(
         ready_jobs.len(),
         job_ids.len(),
@@ -195,7 +195,7 @@ fn test_count_jobs_by_attempt_id(start_server: &ServerProcess) {
     )
     .expect("Failed to list jobs");
 
-    let ready_jobs = jobs.items.unwrap_or_default();
+    let ready_jobs = jobs.items;
     let total_ready = ready_jobs.len();
     let retry_count = ready_jobs
         .iter()
@@ -260,7 +260,7 @@ fn test_create_slurm_scheduler(start_server: &ServerProcess) {
     )
     .expect("Failed to list schedulers");
 
-    let schedulers = response.items.unwrap_or_default();
+    let schedulers = response.items;
     assert_eq!(schedulers.len(), 1, "Should have 1 scheduler");
 }
 
@@ -322,7 +322,7 @@ fn test_create_scheduled_compute_node(start_server: &ServerProcess) {
     )
     .expect("Failed to list SCNs");
 
-    let scns = response.items.unwrap_or_default();
+    let scns = response.items;
     assert_eq!(scns.len(), 1, "Should have 1 pending SCN");
 }
 

@@ -100,7 +100,37 @@ cargo test test_get_ready_jobs -- --nocapture
 - Async Tokio runtime
 - SQLite with write locks for safe job claiming
 - Foreign key cascades for workflow deletion
-- OpenAPI-generated base types and routing
+- Rust-owned OpenAPI contract emitted from `src/openapi_codegen*.rs`
+- Live HTTP transport in `src/server/http_transport.rs`
+
+### OpenAPI Workflow
+
+- Do not hand-edit `api/openapi.yaml` or generated client outputs.
+- Emit and verify the spec from Rust with:
+
+```bash
+cd api
+bash sync_openapi.sh check
+```
+
+- Promote the Rust-emitted spec and regenerate external clients with:
+
+```bash
+cd api
+bash sync_openapi.sh all --promote
+```
+
+- Regenerate external clients from the current checked-in spec with:
+
+```bash
+cd api
+bash sync_openapi.sh clients
+```
+
+### Documentation
+
+- Build user docs from `docs/` with `mdbook build`
+- The generated HTML under `docs/book/` should be refreshed when doc sources change
 
 ### Client
 

@@ -2,58 +2,64 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""user_group_membership_model
-User membership in an access group
+@doc raw"""UserGroupMembershipModel
 
     UserGroupMembershipModel(;
-        id=nothing,
-        user_name=nothing,
-        group_id=nothing,
-        role="member",
         created_at=nothing,
+        group_id=nothing,
+        id=nothing,
+        role=nothing,
+        user_name=nothing,
     )
 
-    - id::Int64
-    - user_name::String
-    - group_id::Int64
-    - role::String
     - created_at::String
+    - group_id::Int64
+    - id::Int64
+    - role::String
+    - user_name::String
 """
 Base.@kwdef mutable struct UserGroupMembershipModel <: OpenAPI.APIModel
-    id::Union{Nothing, Int64} = nothing
-    user_name::Union{Nothing, String} = nothing
-    group_id::Union{Nothing, Int64} = nothing
-    role::Union{Nothing, String} = "member"
     created_at::Union{Nothing, String} = nothing
+    group_id::Union{Nothing, Int64} = nothing
+    id::Union{Nothing, Int64} = nothing
+    role::Union{Nothing, String} = nothing
+    user_name::Union{Nothing, String} = nothing
 
-    function UserGroupMembershipModel(id, user_name, group_id, role, created_at, )
-        o = new(id, user_name, group_id, role, created_at, )
+    function UserGroupMembershipModel(created_at, group_id, id, role, user_name, )
+        o = new(created_at, group_id, id, role, user_name, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type UserGroupMembershipModel
 
-const _property_types_UserGroupMembershipModel = Dict{Symbol,String}(Symbol("id")=>"Int64", Symbol("user_name")=>"String", Symbol("group_id")=>"Int64", Symbol("role")=>"String", Symbol("created_at")=>"String", )
+const _property_types_UserGroupMembershipModel = Dict{Symbol,String}(Symbol("created_at")=>"String", Symbol("group_id")=>"Int64", Symbol("id")=>"Int64", Symbol("role")=>"String", Symbol("user_name")=>"String", )
 OpenAPI.property_type(::Type{ UserGroupMembershipModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_UserGroupMembershipModel[name]))}
 
 function OpenAPI.check_required(o::UserGroupMembershipModel)
-    o.user_name === nothing && (return false)
     o.group_id === nothing && (return false)
+    o.role === nothing && (return false)
+    o.user_name === nothing && (return false)
     true
 end
 
 function OpenAPI.validate_properties(o::UserGroupMembershipModel)
-    OpenAPI.validate_property(UserGroupMembershipModel, Symbol("id"), o.id)
-    OpenAPI.validate_property(UserGroupMembershipModel, Symbol("user_name"), o.user_name)
-    OpenAPI.validate_property(UserGroupMembershipModel, Symbol("group_id"), o.group_id)
-    OpenAPI.validate_property(UserGroupMembershipModel, Symbol("role"), o.role)
     OpenAPI.validate_property(UserGroupMembershipModel, Symbol("created_at"), o.created_at)
+    OpenAPI.validate_property(UserGroupMembershipModel, Symbol("group_id"), o.group_id)
+    OpenAPI.validate_property(UserGroupMembershipModel, Symbol("id"), o.id)
+    OpenAPI.validate_property(UserGroupMembershipModel, Symbol("role"), o.role)
+    OpenAPI.validate_property(UserGroupMembershipModel, Symbol("user_name"), o.user_name)
 end
 
 function OpenAPI.validate_property(::Type{ UserGroupMembershipModel }, name::Symbol, val)
 
 
+    if name === Symbol("group_id")
+        OpenAPI.validate_param(name, "UserGroupMembershipModel", :format, val, "int64")
+    end
 
+    if name === Symbol("id")
+        OpenAPI.validate_param(name, "UserGroupMembershipModel", :format, val, "int64")
+    end
 
 
 end

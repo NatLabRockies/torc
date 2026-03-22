@@ -5096,7 +5096,7 @@ fn handle_slurm_stats(
             Some(limit),
         ) {
             Ok(response) => {
-                let items = response.items.unwrap_or_default();
+                let items = response.items;
                 if items.is_empty() {
                     break;
                 }

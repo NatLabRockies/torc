@@ -325,18 +325,34 @@ cascade-delete the entire database contents.
 
 ### OpenAPI Code Generation
 
-- Server and client originally used OpenAPI-generated code for base types and routing but we are now
-  manually updating the code.
+- `api/openapi.codegen.yaml` is emitted from the code-first Rust scaffold via
+  `cargo run --no-default-features --features openapi-codegen --bin torc-openapi`.
+- `api/openapi.yaml` is now a checked-in artifact that should be refreshed from Rust with
+  `cd api && bash sync_openapi.sh all --promote`.
+- `api/sync_openapi.sh` is the preferred developer entrypoint for emit/check/promote/client sync.
+- The retired wrappers `make_api_clients.sh` and `regenerate_openapi_artifacts.sh` should not be
+  reintroduced.
+- `api/check_openapi_codegen_parity.sh` validates migrated endpoints against `api/openapi.yaml`.
+- Generated Rust surfaces should not be hand-edited. Keep deterministic post-processing under the
+  Rust-owned OpenAPI workflow under `api/sync_openapi.sh`.
 - Implement business logic in non-generated modules (e.g., `server/src/bin/server/api/*.rs`)
+
+### Documentation Build
+
+- User docs live under `docs/src/` and are built from `docs/` with `mdbook build`.
+- If source docs change, refresh the generated site in `docs/book/`.
 
 ## Common Tasks
 
 ### Adding a New API Endpoint
 
-1. Update OpenAPI spec (api/openapi.yaml)
-2. Regenerate API code (`cd api && bash make_api_clients.sh`)
-3. Add implementation in appropriate `src/server/api/*.rs` module
-4. Update client API in `src/client/apis/`
+1. Add the endpoint to the Rust-owned scaffold and model layer (`src/openapi_codegen*.rs`,
+   `src/api_models.rs`)
+2. Regenerate API artifacts (`cd api && bash sync_openapi.sh clients --use-rust-spec`)
+3. Promote the Rust spec when the change is ready to become the checked-in contract
+   (`cd api && bash sync_openapi.sh all --promote`)
+4. Add implementation in appropriate `src/server/api/*.rs` module if the live server still uses the
+   generated surface
 5. Add CLI command handler if needed in `src/client/commands/`
 
 **API Implementation Checklist:**
@@ -344,7 +360,7 @@ cascade-delete the entire database contents.
 - [ ] **Authorization**: Use `authorize_workflow!` or `authorize_resource!` macros in
       `http_server.rs`
 - [ ] **Error responses**: Return 404 for not found, 422 for validation errors, 403 for forbidden
-- [ ] **OpenAPI spec**: Validate with `npx @redocly/cli lint api/openapi.yaml` - fix all errors
+- [ ] **OpenAPI spec**: Validate emitted/checked-in OpenAPI as needed - fix all errors
   - Use `type: [integer, "null"]` instead of `nullable: true` (OpenAPI 3.1)
   - Use direct `$ref:` without `schema:` wrapper
   - Ensure examples match schema (use `error: {}` not `error: "{}"`)

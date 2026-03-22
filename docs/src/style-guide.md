@@ -204,25 +204,37 @@ libraries.
 1. **Modify the OpenAPI spec:**
 
    ```bash
-   # Edit the specification
-   vim api/openapi.yaml
+   # Update the Rust-owned API scaffold and models
+   vim src/openapi_codegen.rs
    ```
 
 2. **Regenerate API clients:**
 
    ```bash
    cd api
-   bash make_api_clients.sh
+   bash sync_openapi.sh clients --use-rust-spec
    ```
 
    This regenerates:
    - Python client: `python_client/src/torc/openapi_client/`
    - Julia client: `julia_client/Torc/src/api/`
+   - Rust-emitted spec: `api/openapi.codegen.yaml`
+   - Parity check against the checked-in artifact: `api/openapi.yaml`
 
-3. **Update Rust client code:**
+   When the Rust-emitted spec should become the checked-in contract artifact, run:
 
-   The Rust client in `src/client/apis/` is generated separately. After modifying the OpenAPI spec,
-   regenerate with the OpenAPI generator for Rust.
+   ```bash
+   cd api
+   bash sync_openapi.sh all --promote
+   ```
+
+   That updates both spec artifacts from Rust and regenerates external clients from the promoted
+   contract.
+
+3. **Update Rust generation assets as needed:**
+
+   The Rust client and server still have legacy generated files in `src/`. Do not hand-edit those
+   generated surfaces. Keep OpenAPI/client generation deterministic through `api/sync_openapi.sh`.
 
 4. **Test all clients:**
 
@@ -249,13 +261,14 @@ libraries.
 When implementing a user-facing feature, ensure it is exposed through the appropriate interfaces.
 The following table shows where features should be implemented:
 
-| Interface  | Location               | Primary Use Case                         |
-| ---------- | ---------------------- | ---------------------------------------- |
-| CLI        | `src/client/commands/` | Command-line automation, scripting       |
-| HTTP API   | `api/openapi.yaml`     | Python/Julia integration, external tools |
-| Dashboard  | `torc-dash/src/`       | Web-based monitoring and management      |
-| TUI        | `src/tui/`             | Interactive terminal monitoring          |
-| MCP Server | `torc-mcp-server/src/` | AI assistant integration                 |
+| Interface        | Location                                       | Primary Use Case                                                         |
+| ---------------- | ---------------------------------------------- | ------------------------------------------------------------------------ |
+| CLI              | `src/client/commands/`                         | Command-line automation, scripting                                       |
+| HTTP API         | `src/openapi_codegen*.rs`, `src/api_models.rs` | Rust-owned API contract source                                           |
+| OpenAPI artifact | `api/openapi.yaml`                             | Checked-in emitted contract for Python/Julia integration, external tools |
+| Dashboard        | `torc-dash/src/`                               | Web-based monitoring and management                                      |
+| TUI              | `src/tui/`                                     | Interactive terminal monitoring                                          |
+| MCP Server       | `torc-mcp-server/src/`                         | AI assistant integration                                                 |
 
 ### CLI Implementation
 
@@ -300,12 +313,13 @@ pub fn handle_feature_commands(
 
 ### HTTP API (Python/Julia)
 
-After updating `api/openapi.yaml`, the Python and Julia clients are auto-generated. Ensure:
+After updating the Rust-owned API contract and promoting the emitted spec, the Python and Julia
+clients are auto-generated. Ensure:
 
 1. All new endpoints have proper request/response schemas
 2. Query parameters are documented
 3. Error responses are specified
-4. Run `make_api_clients.sh` to regenerate clients
+4. Run `sync_openapi.sh clients` to regenerate clients
 
 ### Dashboard (torc-dash)
 
@@ -577,6 +591,6 @@ Before submitting a pull request, verify:
 - [ ] New features have tests using `rstest`
 - [ ] Documentation added in appropriate Diataxis category
 - [ ] Design decisions documented in `docs/src/explanation/design/` if applicable
-- [ ] API changes reflected in `api/openapi.yaml`
-- [ ] Client libraries regenerated with `api/make_api_clients.sh`
+- [ ] API changes reflected in the Rust-owned OpenAPI scaffold and promoted `api/openapi.yaml`
+- [ ] Client libraries regenerated with `api/sync_openapi.sh clients`
 - [ ] Feature exposed through appropriate interfaces (CLI, API, TUI, etc.)

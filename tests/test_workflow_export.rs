@@ -186,7 +186,7 @@ fn test_export_import_basic(start_server: &ServerProcess) {
         None,
     )
     .expect("Failed to list imported jobs");
-    let imported_jobs = jobs_response.items.unwrap();
+    let imported_jobs = jobs_response.items;
     assert_eq!(imported_jobs.len(), 3);
 
     // Find job by name and verify its relationships
@@ -227,7 +227,7 @@ fn test_export_import_basic(start_server: &ServerProcess) {
         None,
     )
     .expect("Failed to list imported files");
-    let imported_files = files_response.items.unwrap();
+    let imported_files = files_response.items;
     assert_eq!(imported_files.len(), 3);
 
     // Verify user_data was imported
@@ -244,7 +244,7 @@ fn test_export_import_basic(start_server: &ServerProcess) {
         None,
     )
     .expect("Failed to list imported user_data");
-    let imported_user_data = user_data_response.items.unwrap();
+    let imported_user_data = user_data_response.items;
     assert_eq!(imported_user_data.len(), 2);
 }
 
@@ -362,7 +362,7 @@ fn test_export_with_results(start_server: &ServerProcess) {
     )
     .expect("Failed to list imported results");
 
-    let imported_results = results_response.items.unwrap();
+    let imported_results = results_response.items;
     assert_eq!(imported_results.len(), 1, "Expected 1 result after import");
 
     let imported_result = &imported_results[0];
@@ -481,7 +481,7 @@ fn test_import_results_without_compute_nodes(start_server: &ServerProcess) {
     )
     .expect("Failed to list imported results");
 
-    let imported_results = results_response.items.unwrap();
+    let imported_results = results_response.items;
     assert_eq!(
         imported_results.len(),
         1,
@@ -619,8 +619,7 @@ fn test_import_id_remapping(start_server: &ServerProcess) {
         None,
     )
     .expect("Failed to list jobs 1")
-    .items
-    .unwrap();
+    .items;
 
     let jobs2 = default_api::list_jobs(
         config,
@@ -636,8 +635,7 @@ fn test_import_id_remapping(start_server: &ServerProcess) {
         None,
     )
     .expect("Failed to list jobs 2")
-    .items
-    .unwrap();
+    .items;
 
     // Job IDs should all be different
     let job_ids1: Vec<i64> = jobs1.iter().map(|j| j.id.unwrap()).collect();
@@ -786,7 +784,7 @@ fn test_export_import_ro_crate_job_id_remapping(start_server: &ServerProcess) {
         None,
     )
     .expect("Failed to list imported jobs");
-    let imported_jobs = jobs_response.items.unwrap();
+    let imported_jobs = jobs_response.items;
     assert_eq!(imported_jobs.len(), 1);
     let new_job_id = imported_jobs[0].id.unwrap();
     assert_ne!(new_job_id, job_id, "New job should have different ID");
@@ -795,7 +793,7 @@ fn test_export_import_ro_crate_job_id_remapping(start_server: &ServerProcess) {
     let entities_response =
         default_api::list_ro_crate_entities(config, new_workflow_id, None, None)
             .expect("Failed to list RO-Crate entities");
-    let imported_entities = entities_response.items.unwrap();
+    let imported_entities = entities_response.items;
     assert_eq!(imported_entities.len(), 2);
 
     // Find the CreateAction entity and verify its entity_id was remapped
@@ -845,7 +843,7 @@ fn test_export_import_ro_crate_job_id_remapping(start_server: &ServerProcess) {
         None,
     )
     .expect("Failed to list imported files");
-    let new_files = new_files_response.items.unwrap();
+    let new_files = new_files_response.items;
     let new_file_id = new_files[0].id.unwrap();
     assert_ne!(new_file_id, file_id, "New file should have different ID");
     assert_eq!(

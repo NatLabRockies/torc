@@ -54,7 +54,7 @@ fn test_ro_crate_crud(start_server: &ServerProcess) {
     // List entities
     let list_response = default_api::list_ro_crate_entities(config, workflow_id, None, None)
         .expect("Failed to list entities");
-    let items = list_response.items.unwrap();
+    let items = list_response.items;
     assert_eq!(items.len(), 1);
     assert_eq!(items[0].entity_type, "Dataset");
 
@@ -64,7 +64,7 @@ fn test_ro_crate_crud(start_server: &ServerProcess) {
     // Verify it's gone
     let list_response = default_api::list_ro_crate_entities(config, workflow_id, None, None)
         .expect("Failed to list entities after delete");
-    let items = list_response.items.unwrap();
+    let items = list_response.items;
     assert_eq!(items.len(), 0);
 }
 
@@ -149,7 +149,7 @@ fn test_ro_crate_bulk_delete(start_server: &ServerProcess) {
     // Verify all three exist
     let list = default_api::list_ro_crate_entities(config, workflow_id, None, None)
         .expect("Failed to list");
-    assert_eq!(list.items.unwrap().len(), 3);
+    assert_eq!(list.items.len(), 3);
 
     // Bulk delete all entities for the workflow
     let result =
@@ -159,7 +159,7 @@ fn test_ro_crate_bulk_delete(start_server: &ServerProcess) {
     // Verify all are gone
     let list = default_api::list_ro_crate_entities(config, workflow_id, None, None)
         .expect("Failed to list after delete");
-    assert_eq!(list.items.unwrap().len(), 0);
+    assert_eq!(list.items.len(), 0);
 }
 
 #[rstest]
@@ -181,7 +181,7 @@ fn test_ro_crate_cascade_delete(start_server: &ServerProcess) {
     // Verify it exists
     let list = default_api::list_ro_crate_entities(config, workflow_id, None, None)
         .expect("Failed to list");
-    assert_eq!(list.items.unwrap().len(), 1);
+    assert_eq!(list.items.len(), 1);
 
     // Delete the workflow (should cascade delete RO-Crate entities)
     default_api::delete_workflow(config, workflow_id, None).expect("Failed to delete workflow");
@@ -191,7 +191,7 @@ fn test_ro_crate_cascade_delete(start_server: &ServerProcess) {
     // Either the list returns empty (workflow gone, no entities) or an error
     match result {
         Ok(response) => {
-            let items = response.items.unwrap_or_default();
+            let items = response.items;
             assert_eq!(items.len(), 0);
         }
         Err(_) => {

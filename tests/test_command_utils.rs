@@ -65,7 +65,7 @@ fn test_select_workflow_interactively_user_isolation(start_server: &ServerProces
     )
     .expect("Should list workflows for user1");
 
-    let user1_workflows = list_response.items.unwrap_or_default();
+    let user1_workflows = list_response.items;
 
     // User1 should see at least their workflow
     assert!(
@@ -101,7 +101,7 @@ fn test_select_workflow_interactively_user_isolation(start_server: &ServerProces
     )
     .expect("Should list workflows for user2");
 
-    let user2_workflows = list_response2.items.unwrap_or_default();
+    let user2_workflows = list_response2.items;
 
     // User2 should see at least their workflow
     assert!(
@@ -152,7 +152,7 @@ fn test_delete_all_workflows(start_server: &ServerProcess) {
     )
     .expect("Should list workflows before deletion");
 
-    let workflows_before = list_response_before.items.unwrap_or_default();
+    let workflows_before = list_response_before.items;
     assert!(
         workflows_before.len() >= 3,
         "Should have at least 3 workflows before deletion"
@@ -179,7 +179,7 @@ fn test_delete_all_workflows(start_server: &ServerProcess) {
     )
     .expect("Should list workflows after deletion");
 
-    let workflows_after = list_response_after.items.unwrap_or_default();
+    let workflows_after = list_response_after.items;
     assert!(
         workflows_after.is_empty(),
         "Should have no workflows after deletion"
@@ -200,7 +200,7 @@ fn test_delete_all_workflows(start_server: &ServerProcess) {
         )
         .expect("Should list user workflows after deletion");
 
-        let user_workflow_list = user_workflows.items.unwrap_or_default();
+        let user_workflow_list = user_workflows.items;
         assert!(
             user_workflow_list.is_empty(),
             "User {} should have no workflows after deletion",
@@ -239,7 +239,7 @@ fn test_delete_all_workflows_strict_success_criteria(start_server: &ServerProces
     )
     .expect("Should list workflows before deletion test");
 
-    let workflows_before = list_response_before.items.unwrap_or_default();
+    let workflows_before = list_response_before.items;
     assert!(
         workflows_before.len() >= 2,
         "Should have at least 2 workflows before test"
@@ -259,7 +259,7 @@ fn test_delete_all_workflows_strict_success_criteria(start_server: &ServerProces
     )
     .expect("Should list workflows after successful deletion");
 
-    let workflows_after = list_response_after.items.unwrap_or_default();
+    let workflows_after = list_response_after.items;
     assert!(
         workflows_after.is_empty(),
         "Should have no workflows after successful deletion"
