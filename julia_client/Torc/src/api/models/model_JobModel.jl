@@ -17,6 +17,7 @@
         name=nothing,
         output_file_ids=nothing,
         output_user_data_ids=nothing,
+        priority=0,
         resource_requirements_id=nothing,
         schedule_compute_nodes=nothing,
         scheduler_id=nothing,
@@ -37,6 +38,7 @@
     - name::String
     - output_file_ids::Vector{Int64}
     - output_user_data_ids::Vector{Int64}
+    - priority::Int64 : Scheduling priority; higher values are submitted first. Minimum 0, default 0.
     - resource_requirements_id::Int64
     - schedule_compute_nodes::ComputeNodeSchedule
     - scheduler_id::Int64
@@ -57,6 +59,7 @@ Base.@kwdef mutable struct JobModel <: OpenAPI.APIModel
     name::Union{Nothing, String} = nothing
     output_file_ids::Union{Nothing, Vector{Int64}} = nothing
     output_user_data_ids::Union{Nothing, Vector{Int64}} = nothing
+    priority::Union{Nothing, Int64} = 0
     resource_requirements_id::Union{Nothing, Int64} = nothing
     schedule_compute_nodes = nothing # spec type: Union{ Nothing, ComputeNodeSchedule }
     scheduler_id::Union{Nothing, Int64} = nothing
@@ -64,14 +67,14 @@ Base.@kwdef mutable struct JobModel <: OpenAPI.APIModel
     supports_termination::Union{Nothing, Bool} = nothing
     workflow_id::Union{Nothing, Int64} = nothing
 
-    function JobModel(attempt_id, cancel_on_blocking_job_failure, command, depends_on_job_ids, failure_handler_id, id, input_file_ids, input_user_data_ids, invocation_script, name, output_file_ids, output_user_data_ids, resource_requirements_id, schedule_compute_nodes, scheduler_id, status, supports_termination, workflow_id, )
-        o = new(attempt_id, cancel_on_blocking_job_failure, command, depends_on_job_ids, failure_handler_id, id, input_file_ids, input_user_data_ids, invocation_script, name, output_file_ids, output_user_data_ids, resource_requirements_id, schedule_compute_nodes, scheduler_id, status, supports_termination, workflow_id, )
+    function JobModel(attempt_id, cancel_on_blocking_job_failure, command, depends_on_job_ids, failure_handler_id, id, input_file_ids, input_user_data_ids, invocation_script, name, output_file_ids, output_user_data_ids, priority, resource_requirements_id, schedule_compute_nodes, scheduler_id, status, supports_termination, workflow_id, )
+        o = new(attempt_id, cancel_on_blocking_job_failure, command, depends_on_job_ids, failure_handler_id, id, input_file_ids, input_user_data_ids, invocation_script, name, output_file_ids, output_user_data_ids, priority, resource_requirements_id, schedule_compute_nodes, scheduler_id, status, supports_termination, workflow_id, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type JobModel
 
-const _property_types_JobModel = Dict{Symbol,String}(Symbol("attempt_id")=>"Int64", Symbol("cancel_on_blocking_job_failure")=>"Bool", Symbol("command")=>"String", Symbol("depends_on_job_ids")=>"Vector{Int64}", Symbol("failure_handler_id")=>"Int64", Symbol("id")=>"Int64", Symbol("input_file_ids")=>"Vector{Int64}", Symbol("input_user_data_ids")=>"Vector{Int64}", Symbol("invocation_script")=>"String", Symbol("name")=>"String", Symbol("output_file_ids")=>"Vector{Int64}", Symbol("output_user_data_ids")=>"Vector{Int64}", Symbol("resource_requirements_id")=>"Int64", Symbol("schedule_compute_nodes")=>"ComputeNodeSchedule", Symbol("scheduler_id")=>"Int64", Symbol("status")=>"JobStatus", Symbol("supports_termination")=>"Bool", Symbol("workflow_id")=>"Int64", )
+const _property_types_JobModel = Dict{Symbol,String}(Symbol("attempt_id")=>"Int64", Symbol("cancel_on_blocking_job_failure")=>"Bool", Symbol("command")=>"String", Symbol("depends_on_job_ids")=>"Vector{Int64}", Symbol("failure_handler_id")=>"Int64", Symbol("id")=>"Int64", Symbol("input_file_ids")=>"Vector{Int64}", Symbol("input_user_data_ids")=>"Vector{Int64}", Symbol("invocation_script")=>"String", Symbol("name")=>"String", Symbol("output_file_ids")=>"Vector{Int64}", Symbol("output_user_data_ids")=>"Vector{Int64}", Symbol("priority")=>"Int64", Symbol("resource_requirements_id")=>"Int64", Symbol("schedule_compute_nodes")=>"ComputeNodeSchedule", Symbol("scheduler_id")=>"Int64", Symbol("status")=>"JobStatus", Symbol("supports_termination")=>"Bool", Symbol("workflow_id")=>"Int64", )
 OpenAPI.property_type(::Type{ JobModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_JobModel[name]))}
 
 function OpenAPI.check_required(o::JobModel)
@@ -94,6 +97,7 @@ function OpenAPI.validate_properties(o::JobModel)
     OpenAPI.validate_property(JobModel, Symbol("name"), o.name)
     OpenAPI.validate_property(JobModel, Symbol("output_file_ids"), o.output_file_ids)
     OpenAPI.validate_property(JobModel, Symbol("output_user_data_ids"), o.output_user_data_ids)
+    OpenAPI.validate_property(JobModel, Symbol("priority"), o.priority)
     OpenAPI.validate_property(JobModel, Symbol("resource_requirements_id"), o.resource_requirements_id)
     OpenAPI.validate_property(JobModel, Symbol("schedule_compute_nodes"), o.schedule_compute_nodes)
     OpenAPI.validate_property(JobModel, Symbol("scheduler_id"), o.scheduler_id)
@@ -124,6 +128,13 @@ function OpenAPI.validate_property(::Type{ JobModel }, name::Symbol, val)
 
 
 
+
+    if name === Symbol("priority")
+        OpenAPI.validate_param(name, "JobModel", :format, val, "int64")
+    end
+    if name === Symbol("priority")
+        OpenAPI.validate_param(name, "JobModel", :minimum, val, 0, false)
+    end
 
     if name === Symbol("resource_requirements_id")
         OpenAPI.validate_param(name, "JobModel", :format, val, "int64")

@@ -412,6 +412,7 @@ class JobsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "JobModel",
+            '422': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -478,6 +479,7 @@ class JobsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "JobModel",
+            '422': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -544,6 +546,7 @@ class JobsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "JobModel",
+            '422': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,

@@ -429,7 +429,8 @@ where
                 supports_termination,
                 resource_requirements_id,
                 failure_handler_id,
-                attempt_id
+                attempt_id,
+                priority
             FROM job
             WHERE workflow_id = $1 AND status = $2
             LIMIT $3
@@ -482,6 +483,7 @@ where
                 scheduler_id: None,
                 failure_handler_id: row.get("failure_handler_id"),
                 attempt_id: row.get("attempt_id"),
+                priority: row.try_get("priority").ok(),
             };
 
             selected_jobs.push(job);
@@ -1489,6 +1491,7 @@ where
                     scheduler_id: None,
                     failure_handler_id: row.get("failure_handler_id"),
                     attempt_id: row.get("attempt_id"),
+                    priority: row.try_get("priority").ok(),
                 };
 
                 selected_jobs.push(job);

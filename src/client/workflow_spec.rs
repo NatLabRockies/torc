@@ -462,6 +462,9 @@ pub struct JobSpec {
     /// If set, overrides the workflow-level `execution_config.stdio` for this job.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stdio: Option<StdioConfig>,
+    /// Scheduling priority; higher values are submitted to workers first. Minimum 0, default 0.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub priority: Option<i64>,
 }
 
 impl JobSpec {
@@ -491,6 +494,7 @@ impl JobSpec {
             parameter_mode: None,
             use_parameters: None,
             stdio: None,
+            priority: None,
         }
     }
 
@@ -2868,6 +2872,17 @@ impl WorkflowSpec {
                     job_model.depends_on_job_ids = Some(depends_on_ids);
                 }
 
+                if let Some(p) = job_spec.priority {
+                    if p < 0 {
+                        return Err(format!(
+                            "priority must be >= 0, got {} for job '{}'",
+                            p, job_spec.name
+                        )
+                        .into());
+                    }
+                    job_model.priority = Some(p);
+                }
+
                 job_models.push(job_model);
                 job_spec_mapping.push(job_spec);
             }
@@ -5234,6 +5249,7 @@ job "train_lr{lr:.4f}_bs{batch_size}" {
                 use_parameters: None,
                 failure_handler: None,
                 stdio: None,
+                priority: None,
             }],
             files: Some(vec![{
                 let mut file =

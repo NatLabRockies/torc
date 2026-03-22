@@ -1,0 +1,53 @@
+# Nextest configuration for test serialization
+# Tests with #[serial] attributes need to be grouped here since
+# nextest runs tests in separate processes.
+
+[profile.default]
+# Retry flaky tests up to 2 times
+retries = 2
+
+[test-groups]
+# Slurm mock tests - modify PATH and mock executables
+serial-slurm = { max-threads = 1 }
+# Groups for tests that explicitly use #[serial] in the code
+serial-entities = { max-threads = 1 }
+serial-workflows = { max-threads = 1 }
+serial-auth = { max-threads = 1 }
+serial-jobs = { max-threads = 1 }
+serial-ro-crate = { max-threads = 1 }
+serial-compute = { max-threads = 1 }
+
+# Slurm mock tests
+[[profile.default.overrides]]
+filter = 'binary_id(torc::test_slurm_commands) | binary_id(torc::test_srun_args) | binary_id(torc::test_hpc) | binary_id(torc::test_direct_mode_e2e) | binary_id(torc::test_execution_config) | binary_id(torc::test_multi_node_slurm) | binary_id(torc::test_slurm_regenerate) | binary_id(torc::test_slurm_stats)'
+test-group = 'serial-slurm'
+
+# Entity CRUD tests
+[[profile.default.overrides]]
+filter = 'binary_id(torc::test_files) | binary_id(torc::test_user_data) | binary_id(torc::test_resource_requirements) | binary_id(torc::test_events) | binary_id(torc::test_results)'
+test-group = 'serial-entities'
+
+# Jobs tests
+[[profile.default.overrides]]
+filter = 'binary_id(torc::test_jobs) | binary_id(torc::test_jobs_create_from_file) | binary_id(torc::test_jobs_list_resource_requirements)'
+test-group = 'serial-jobs'
+
+# Workflow tests
+[[profile.default.overrides]]
+filter = 'binary_id(torc::test_workflows) | binary_id(torc::test_full_workflows) | binary_id(torc::test_workflow_spec) | binary_id(torc::test_workflow_manager) | binary_id(torc::test_workflow_actions_integration) | binary_id(torc::test_workflow_export) | binary_id(torc::test_auto_schedule) | binary_id(torc::test_log_bundles)'
+test-group = 'serial-workflows'
+
+# Compute node and job claiming tests
+[[profile.default.overrides]]
+filter = 'binary_id(torc::test_completion_reversal) | binary_id(torc::test_claim_next_jobs) | binary_id(torc::test_claim_jobs_based_on_resources) | binary_id(torc::test_orphaned_jobs) | binary_id(torc::test_scheduled_compute_nodes) | binary_id(torc::test_create_node_resources) | binary_id(torc::test_list_required_existing_files) | binary_id(torc::test_correct_resources) | binary_id(torc::test_remote_workers) | binary_id(torc::test_ai_assisted_recovery)'
+test-group = 'serial-compute'
+
+# Auth and access control tests
+[[profile.default.overrides]]
+filter = 'binary_id(torc::test_access_groups) | binary_id(torc::test_reload_auth) | binary_id(torc::test_htpasswd) | binary_id(torc::test_tls) | binary_id(torc::test_sse_events) | binary_id(torc::test_command_utils)'
+test-group = 'serial-auth'
+
+# RO-Crate tests
+[[profile.default.overrides]]
+filter = 'binary_id(torc::test_auto_ro_crate) | binary_id(torc::test_ro_crate) | binary_id(torc::test_ro_crate_dataset)'
+test-group = 'serial-ro-crate'

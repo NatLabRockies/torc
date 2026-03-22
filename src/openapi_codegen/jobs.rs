@@ -8,7 +8,9 @@ use serde::Deserialize;
 use serde_json::Value;
 use utoipa::IntoParams;
 
-use crate::api_models::{DeleteCountResponse, JobModel, JobStatus, ListJobsResponse, ResultModel};
+use crate::api_models::{
+    DeleteCountResponse, ErrorResponse, JobModel, JobStatus, ListJobsResponse, ResultModel,
+};
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize, IntoParams)]
@@ -45,7 +47,10 @@ pub struct DeleteJobsQuery {
     path = "/jobs",
     operation_id = "create_job",
     request_body = JobModel,
-    responses((status = 200, description = "Successful response", body = JobModel))
+    responses(
+        (status = 200, description = "Successful response", body = JobModel),
+        (status = 422, description = "Unprocessable content (e.g., invalid priority)", body = ErrorResponse)
+    )
 )]
 pub async fn create_job(Json(mut body): Json<JobModel>) -> Json<JobModel> {
     if body.id.is_none() {
@@ -230,5 +235,6 @@ pub fn example_job(id: Option<i64>) -> JobModel {
         scheduler_id: Some(4),
         failure_handler_id: Some(8),
         attempt_id: Some(1),
+        priority: Some(0),
     }
 }

@@ -201,7 +201,7 @@ fn test_effective_mode_slurm() {
 }
 
 #[test]
-#[serial]
+#[serial(slurm)]
 fn test_effective_mode_auto_without_slurm_env() {
     // Save original value
     let original = std::env::var("SLURM_JOB_ID").ok();
@@ -227,7 +227,7 @@ fn test_effective_mode_auto_without_slurm_env() {
 }
 
 #[test]
-#[serial]
+#[serial(slurm)]
 fn test_effective_mode_auto_with_slurm_env() {
     // Save original value
     let original = std::env::var("SLURM_JOB_ID").ok();

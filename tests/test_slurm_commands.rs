@@ -26,7 +26,7 @@ fn test_slurm_interface_new() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_slurm_interface_ignores_torc_username_override() {
     let original_torc_username = env::var("TORC_USERNAME").ok();
     let original_user = env::var("USER").ok();
@@ -57,7 +57,7 @@ fn test_slurm_interface_ignores_torc_username_override() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_submit_job_success() {
     cleanup_fake_slurm_state();
     setup_fake_slurm_commands();
@@ -92,7 +92,7 @@ fn test_submit_job_success() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 #[ignore] // This is a slow test and we don't need to continue running it.
 fn test_submit_job_failure() {
     cleanup_fake_slurm_state();
@@ -123,7 +123,7 @@ fn test_submit_job_failure() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_get_status_pending_job() {
     cleanup_fake_slurm_state();
     setup_fake_slurm_commands();
@@ -151,7 +151,7 @@ fn test_get_status_pending_job() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_get_status_running_job() {
     cleanup_fake_slurm_state();
     setup_fake_slurm_commands();
@@ -183,7 +183,7 @@ fn test_get_status_running_job() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_get_status_completed_job() {
     cleanup_fake_slurm_state();
     setup_fake_slurm_commands();
@@ -215,7 +215,7 @@ fn test_get_status_completed_job() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_get_status_invalid_job_id() {
     cleanup_fake_slurm_state();
     setup_fake_slurm_commands();
@@ -235,7 +235,7 @@ fn test_get_status_invalid_job_id() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_get_statuses_multiple_jobs() {
     cleanup_fake_slurm_state();
     setup_fake_slurm_commands();
@@ -281,7 +281,7 @@ fn test_get_statuses_multiple_jobs() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_cancel_job_success() {
     cleanup_fake_slurm_state();
     let (_, _, _, scancel, _) = setup_fake_slurm_commands();
@@ -312,7 +312,7 @@ fn test_cancel_job_success() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_get_job_stats() {
     cleanup_fake_slurm_state();
     let (_, _, sacct, _, _) = setup_fake_slurm_commands();
@@ -696,7 +696,7 @@ fn test_create_submission_script_without_startup_delay() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_status_mapping() {
     cleanup_fake_slurm_state();
     setup_fake_slurm_commands();
@@ -755,7 +755,7 @@ fn test_status_mapping() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_squeue_output_parsing() {
     cleanup_fake_slurm_state();
     setup_fake_slurm_commands();
@@ -790,7 +790,7 @@ fn test_squeue_output_parsing() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_sbatch_regex_parsing() {
     cleanup_fake_slurm_state();
     setup_fake_slurm_commands();
@@ -816,7 +816,7 @@ fn test_sbatch_regex_parsing() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_get_statuses_empty() {
     cleanup_fake_slurm_state();
     setup_fake_slurm_commands();
@@ -835,7 +835,7 @@ fn test_get_statuses_empty() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_incremental_job_ids() {
     cleanup_fake_slurm_state();
     setup_fake_slurm_commands();
@@ -1523,7 +1523,7 @@ fn test_slurm_delete_config(start_server: &ServerProcess) {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_slurm_run_jobs(start_server: &ServerProcess) {
     let config = &start_server.config;
     // Create a temporary directory for job output

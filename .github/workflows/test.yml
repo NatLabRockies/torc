@@ -46,7 +46,10 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-        
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
       - name: Ensure cargo in PATH (Windows)
         if: matrix.os == 'windows-latest'
         run: echo "$HOME/.cargo/bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
@@ -93,7 +96,7 @@ jobs:
 
       - name: Run tests (Windows - limited test set)
         if: matrix.os == 'windows-latest'
-        run: cargo test --all-features --test test_full_workflows test_many_jobs_parameterized -- --test-threads 1
+        run: cargo nextest run --all-features -E 'test(test_many_jobs_parameterized)'
         env:
           RUST_BACKTRACE: 1
           CARGO_INCREMENTAL: 0
@@ -105,7 +108,7 @@ jobs:
 
       - name: Run tests (Unix - full test suite)
         if: matrix.os != 'windows-latest'
-        run: cargo test --all-features -- --test-threads 1
+        run: cargo nextest run --all-features
         env:
           RUST_BACKTRACE: 1
           CARGO_INCREMENTAL: 0

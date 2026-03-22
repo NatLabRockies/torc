@@ -45,6 +45,7 @@ end
 
 const _returntypes_create_job_JobsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => JobModel,
+    Regex("^" * replace("422", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_create_job(_api::JobsApi, job_model::JobModel; _mediaType=nothing)

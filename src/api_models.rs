@@ -200,6 +200,10 @@ pub struct JobModel {
     pub failure_handler_id: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub attempt_id: Option<i64>,
+    /// Scheduling priority; higher values are submitted first. Minimum 0, default 0.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi-codegen", schema(minimum = 0, default = 0))]
+    pub priority: Option<i64>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -1033,6 +1037,7 @@ impl JobModel {
             scheduler_id: None,
             failure_handler_id: None,
             attempt_id: Some(1),
+            priority: None,
         }
     }
 }
@@ -1800,6 +1805,7 @@ mod tests {
             scheduler_id: Some(2),
             failure_handler_id: None,
             attempt_id: Some(1),
+            priority: Some(0),
         };
         let result = ResultModel {
             id: Some(1),

@@ -919,6 +919,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/JobModel'
+        '422':
+          description: Unprocessable content (e.g., invalid priority)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
       - jobs
@@ -3854,6 +3860,26 @@ components:
           format: int64
         message:
           type: string
+    ErrorResponse:
+      type: object
+      required:
+      - error
+      properties:
+        code:
+          type:
+          - integer
+          - 'null'
+          format: int64
+        error: {}
+        errorMessage:
+          type:
+          - string
+          - 'null'
+        errorNum:
+          type:
+          - integer
+          - 'null'
+          format: int64
     EventModel:
       type: object
       required:
@@ -4090,6 +4116,14 @@ components:
           items:
             type: integer
             format: int64
+        priority:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          description: Scheduling priority; higher values are submitted first. Minimum 0, default 0.
+          default: 0
+          minimum: 0
         resource_requirements_id:
           type:
           - integer

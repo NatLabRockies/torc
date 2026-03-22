@@ -160,6 +160,7 @@ Class | Method
  - [CreateJobsResponse](docs/CreateJobsResponse.md)
  - [DeleteCountResponse](docs/DeleteCountResponse.md)
  - [DeleteRoCrateEntitiesResponse](docs/DeleteRoCrateEntitiesResponse.md)
+ - [ErrorResponse](docs/ErrorResponse.md)
  - [EventModel](docs/EventModel.md)
  - [FailureHandlerModel](docs/FailureHandlerModel.md)
  - [FileModel](docs/FileModel.md)

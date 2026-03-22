@@ -277,7 +277,7 @@ impl JobsApiImpl {
             r#"
                 SELECT id, workflow_id, name, command, resource_requirements_id, invocation_script,
                        status, cancel_on_blocking_job_failure, supports_termination, scheduler_id,
-                       failure_handler_id, attempt_id
+                       failure_handler_id, attempt_id, priority
                 FROM job
                 WHERE id = ?
             "#,
@@ -447,6 +447,7 @@ impl JobsApiImpl {
             schedule_compute_nodes: None, // This field is not stored in the database
             failure_handler_id: record.try_get("failure_handler_id").ok(),
             attempt_id: record.try_get("attempt_id").ok(),
+            priority: record.try_get("priority").ok(),
         })
     }
 
@@ -1133,6 +1134,15 @@ where
         let invocation_script = job.invocation_script.clone();
         let cancel_on_blocking_job_failure = job.cancel_on_blocking_job_failure.unwrap_or(true);
         let supports_termination = job.supports_termination.unwrap_or(false);
+        let priority = job.priority.unwrap_or(0);
+        if priority < 0 {
+            let error_response = models::ErrorResponse::new(serde_json::json!({
+                "message": format!("priority must be >= 0, got {} for job '{}'", priority, job.name)
+            }));
+            return Ok(CreateJobResponse::UnprocessableContentErrorResponse(
+                error_response,
+            ));
+        }
         let status = JobStatus::Uninitialized;
         let status_int = status.to_int();
         job.status = Some(status);
@@ -1145,7 +1155,7 @@ where
             }
         };
 
-        let job_result = match sqlx::query!(
+        let job_result = match sqlx::query(
             r#"
             INSERT INTO job
             (
@@ -1158,23 +1168,25 @@ where
                 invocation_script,
                 status,
                 scheduler_id,
-                failure_handler_id
+                failure_handler_id,
+                priority
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING rowid
             "#,
-            job.workflow_id,
-            job.name,
-            job.command,
-            cancel_on_blocking_job_failure,
-            supports_termination,
-            job.resource_requirements_id,
-            invocation_script,
-            status_int,
-            job.scheduler_id,
-            job.failure_handler_id,
         )
-        .fetch_all(&mut *tx)
+        .bind(job.workflow_id)
+        .bind(&job.name)
+        .bind(&job.command)
+        .bind(cancel_on_blocking_job_failure)
+        .bind(supports_termination)
+        .bind(job.resource_requirements_id)
+        .bind(&invocation_script)
+        .bind(status_int)
+        .bind(job.scheduler_id)
+        .bind(job.failure_handler_id)
+        .bind(priority)
+        .fetch_one(&mut *tx)
         .await
         {
             Ok(job_result) => job_result,
@@ -1184,18 +1196,14 @@ where
             }
         };
 
-        job.id = Some(job_result[0].id);
+        let job_id: i64 = job_result.get("rowid");
+        job.id = Some(job_id);
 
         // Handle job dependencies
         if let Some(depends_on_job_ids) = &job.depends_on_job_ids {
             for blocking_id in depends_on_job_ids {
                 if let Err(e) = self
-                    .add_depends_on_association(
-                        &mut *tx,
-                        job_result[0].id,
-                        *blocking_id,
-                        job.workflow_id,
-                    )
+                    .add_depends_on_association(&mut *tx, job_id, *blocking_id, job.workflow_id)
                     .await
                 {
                     let _ = tx.rollback().await;
@@ -1210,7 +1218,7 @@ where
                 if let Err(e) = self
                     .add_job_file_association(
                         &mut *tx,
-                        job_result[0].id,
+                        job_id,
                         *file_id,
                         job.workflow_id,
                         "job_input_file",
@@ -1229,7 +1237,7 @@ where
                 if let Err(e) = self
                     .add_job_file_association(
                         &mut *tx,
-                        job_result[0].id,
+                        job_id,
                         *file_id,
                         job.workflow_id,
                         "job_output_file",
@@ -1248,7 +1256,7 @@ where
                 if let Err(e) = self
                     .add_job_user_data_association(
                         &mut *tx,
-                        job_result[0].id,
+                        job_id,
                         *user_data_id,
                         "job_input_user_data",
                     )
@@ -1266,7 +1274,7 @@ where
                 if let Err(e) = self
                     .add_job_user_data_association(
                         &mut *tx,
-                        job_result[0].id,
+                        job_id,
                         *user_data_id,
                         "job_output_user_data",
                     )
@@ -1283,7 +1291,7 @@ where
             return Err(database_error_with_msg(e, "Failed to commit transaction"));
         }
 
-        debug!("Created job with id: {:?}", job_result[0].id);
+        debug!("Created job with id: {:?}", job_id);
         let response = CreateJobResponse::SuccessfulResponse(job);
         Ok(response)
     }
@@ -1334,12 +1342,22 @@ where
             let invocation_script = job.invocation_script.clone();
             let cancel_on_blocking_job_failure = job.cancel_on_blocking_job_failure.unwrap_or(true);
             let supports_termination = job.supports_termination.unwrap_or(false);
+            let priority = job.priority.unwrap_or(0);
+            if priority < 0 {
+                let _ = transaction.rollback().await;
+                let error_response = models::ErrorResponse::new(serde_json::json!({
+                    "message": format!("priority must be >= 0, got {} for job '{}'", priority, job.name)
+                }));
+                return Ok(CreateJobsResponse::UnprocessableContentErrorResponse(
+                    error_response,
+                ));
+            }
             let status = JobStatus::Uninitialized;
             let status_int = status.to_int();
             job.status = Some(status);
 
             // Insert the job
-            let job_result = match sqlx::query!(
+            let job_result = match sqlx::query(
                 r#"
                 INSERT INTO job
                 (
@@ -1352,22 +1370,24 @@ where
                     invocation_script,
                     status,
                     scheduler_id,
-                    failure_handler_id
+                    failure_handler_id,
+                    priority
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 RETURNING rowid
                 "#,
-                job.workflow_id,
-                job.name,
-                job.command,
-                cancel_on_blocking_job_failure,
-                supports_termination,
-                job.resource_requirements_id,
-                invocation_script,
-                status_int,
-                job.scheduler_id,
-                job.failure_handler_id,
             )
+            .bind(job.workflow_id)
+            .bind(&job.name)
+            .bind(&job.command)
+            .bind(cancel_on_blocking_job_failure)
+            .bind(supports_termination)
+            .bind(job.resource_requirements_id)
+            .bind(&invocation_script)
+            .bind(status_int)
+            .bind(job.scheduler_id)
+            .bind(job.failure_handler_id)
+            .bind(priority)
             .fetch_one(&mut *transaction)
             .await
             {
@@ -1381,7 +1401,7 @@ where
                 }
             };
 
-            let job_id = job_result.id;
+            let job_id: i64 = job_result.get("rowid");
             job.id = Some(job_id);
 
             // Handle job dependencies
@@ -1660,7 +1680,7 @@ where
         );
 
         // Build base query
-        let base_query = "SELECT id, workflow_id, name, command, resource_requirements_id, invocation_script, status, cancel_on_blocking_job_failure, supports_termination, scheduler_id, failure_handler_id, attempt_id FROM job".to_string();
+        let base_query = "SELECT id, workflow_id, name, command, resource_requirements_id, invocation_script, status, cancel_on_blocking_job_failure, supports_termination, scheduler_id, failure_handler_id, attempt_id, priority FROM job".to_string();
 
         // Build WHERE clause conditions
         let mut where_conditions = vec!["workflow_id = ?".to_string()];
@@ -1798,6 +1818,7 @@ where
                     schedule_compute_nodes: None,
                     failure_handler_id: record.try_get("failure_handler_id").ok(),
                     attempt_id: record.try_get("attempt_id").ok(),
+                    priority: record.try_get("priority").ok(),
                 });
             }
         }
@@ -2092,30 +2113,43 @@ where
         // Update the job (only non-relationship fields)
         let status_int = body.status.map(|s| s.to_int());
 
-        let result = match sqlx::query!(
+        if let Some(p) = body.priority
+            && p < 0
+        {
+            let error_response = models::ErrorResponse::new(serde_json::json!({
+                "message": format!("priority must be >= 0, got {}", p)
+            }));
+            return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
+                error_response,
+            ));
+        }
+
+        let result = match sqlx::query(
             r#"
             UPDATE job
             SET
-                name = COALESCE($1, name)
-                ,status = COALESCE($2, status)
-                ,command = COALESCE($3, command)
-                ,invocation_script = COALESCE($4, invocation_script)
-                ,cancel_on_blocking_job_failure = COALESCE($5, cancel_on_blocking_job_failure)
-                ,supports_termination = COALESCE($6, supports_termination)
-                ,resource_requirements_id = COALESCE($7, resource_requirements_id)
-                ,scheduler_id = COALESCE($8, scheduler_id)
-            WHERE id = $9
+                name = COALESCE(?, name)
+                ,status = COALESCE(?, status)
+                ,command = COALESCE(?, command)
+                ,invocation_script = COALESCE(?, invocation_script)
+                ,cancel_on_blocking_job_failure = COALESCE(?, cancel_on_blocking_job_failure)
+                ,supports_termination = COALESCE(?, supports_termination)
+                ,resource_requirements_id = COALESCE(?, resource_requirements_id)
+                ,scheduler_id = COALESCE(?, scheduler_id)
+                ,priority = COALESCE(?, priority)
+            WHERE id = ?
         "#,
-            body.name,
-            status_int,
-            body.command,
-            body.invocation_script,
-            body.cancel_on_blocking_job_failure,
-            body.supports_termination,
-            body.resource_requirements_id,
-            body.scheduler_id,
-            id,
         )
+        .bind(body.name)
+        .bind(status_int)
+        .bind(body.command)
+        .bind(body.invocation_script)
+        .bind(body.cancel_on_blocking_job_failure)
+        .bind(body.supports_termination)
+        .bind(body.resource_requirements_id)
+        .bind(body.scheduler_id)
+        .bind(body.priority)
+        .bind(id)
         .execute(self.context.pool.as_ref())
         .await
         {
@@ -2582,7 +2616,7 @@ where
             r#"
             SELECT j.id, j.workflow_id, j.name, j.command, j.status, j.failure_handler_id, j.attempt_id,
                    j.invocation_script, j.cancel_on_blocking_job_failure, j.supports_termination,
-                   j.resource_requirements_id, j.scheduler_id,
+                   j.resource_requirements_id, j.scheduler_id, j.priority,
                    ws.run_id as workflow_run_id
             FROM job j
             JOIN workflow w ON j.workflow_id = w.id
@@ -2751,6 +2785,7 @@ where
 
         // Return updated job model
         let status = JobStatus::Ready;
+        let priority: Option<i64> = job_record.get("priority");
         let job_model = models::JobModel {
             id: Some(job_id),
             workflow_id,
@@ -2770,6 +2805,7 @@ where
             scheduler_id,
             failure_handler_id,
             attempt_id: Some(new_attempt),
+            priority,
         };
 
         Ok(RetryJobResponse::SuccessfulResponse(job_model))

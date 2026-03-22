@@ -1460,6 +1460,9 @@ fn create_job_response(response: CreateJobResponse) -> Response<Body> {
         CreateJobResponse::NotFoundErrorResponse(body) => {
             json_response_with_status(&body, StatusCode::NOT_FOUND)
         }
+        CreateJobResponse::UnprocessableContentErrorResponse(body) => {
+            json_response_with_status(&body, StatusCode::UNPROCESSABLE_ENTITY)
+        }
         CreateJobResponse::DefaultErrorResponse(body) => {
             json_response_with_status(&body, StatusCode::INTERNAL_SERVER_ERROR)
         }

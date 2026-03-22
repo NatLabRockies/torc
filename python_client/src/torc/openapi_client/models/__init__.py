@@ -26,6 +26,7 @@ from torc.openapi_client.models.compute_nodes_resources import ComputeNodesResou
 from torc.openapi_client.models.create_jobs_response import CreateJobsResponse
 from torc.openapi_client.models.delete_count_response import DeleteCountResponse
 from torc.openapi_client.models.delete_ro_crate_entities_response import DeleteRoCrateEntitiesResponse
+from torc.openapi_client.models.error_response import ErrorResponse
 from torc.openapi_client.models.event_model import EventModel
 from torc.openapi_client.models.failure_handler_model import FailureHandlerModel
 from torc.openapi_client.models.file_model import FileModel

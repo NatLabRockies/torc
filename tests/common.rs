@@ -1407,6 +1407,7 @@ fn create_htpasswd_file(users: &[&str]) -> NamedTempFile {
     let htpasswd_path = htpasswd_file.path().to_string_lossy().to_string();
 
     // Create each user with a strong password using torc-htpasswd add
+    // Use cost 4 (minimum) for fast test execution - cost 12 default takes ~250ms per hash
     for user in users.iter() {
         let status = Command::new(get_exe_path("./target/debug/torc-htpasswd"))
             .arg("add")
@@ -1414,6 +1415,8 @@ fn create_htpasswd_file(users: &[&str]) -> NamedTempFile {
             .arg(&htpasswd_path)
             .arg("--password")
             .arg("correct horse battery staple")
+            .arg("--cost")
+            .arg("4")
             .arg(user)
             .status()
             .expect("Failed to run torc-htpasswd");

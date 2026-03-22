@@ -17,8 +17,9 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
+from typing_extensions import Annotated
 from torc.openapi_client.models.compute_node_schedule import ComputeNodeSchedule
 from torc.openapi_client.models.job_status import JobStatus
 from typing import Optional, Set
@@ -40,13 +41,14 @@ class JobModel(BaseModel):
     name: StrictStr
     output_file_ids: Optional[List[StrictInt]] = None
     output_user_data_ids: Optional[List[StrictInt]] = None
+    priority: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=0, description="Scheduling priority; higher values are submitted first. Minimum 0, default 0.")
     resource_requirements_id: Optional[StrictInt] = None
     schedule_compute_nodes: Optional[ComputeNodeSchedule] = None
     scheduler_id: Optional[StrictInt] = None
     status: Optional[JobStatus] = None
     supports_termination: Optional[StrictBool] = None
     workflow_id: StrictInt
-    __properties: ClassVar[List[str]] = ["attempt_id", "cancel_on_blocking_job_failure", "command", "depends_on_job_ids", "failure_handler_id", "id", "input_file_ids", "input_user_data_ids", "invocation_script", "name", "output_file_ids", "output_user_data_ids", "resource_requirements_id", "schedule_compute_nodes", "scheduler_id", "status", "supports_termination", "workflow_id"]
+    __properties: ClassVar[List[str]] = ["attempt_id", "cancel_on_blocking_job_failure", "command", "depends_on_job_ids", "failure_handler_id", "id", "input_file_ids", "input_user_data_ids", "invocation_script", "name", "output_file_ids", "output_user_data_ids", "priority", "resource_requirements_id", "schedule_compute_nodes", "scheduler_id", "status", "supports_termination", "workflow_id"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -140,6 +142,11 @@ class JobModel(BaseModel):
         if self.output_user_data_ids is None and "output_user_data_ids" in self.model_fields_set:
             _dict['output_user_data_ids'] = None
 
+        # set to None if priority (nullable) is None
+        # and model_fields_set contains the field
+        if self.priority is None and "priority" in self.model_fields_set:
+            _dict['priority'] = None
+
         # set to None if resource_requirements_id (nullable) is None
         # and model_fields_set contains the field
         if self.resource_requirements_id is None and "resource_requirements_id" in self.model_fields_set:
@@ -189,6 +196,7 @@ class JobModel(BaseModel):
             "name": obj.get("name"),
             "output_file_ids": obj.get("output_file_ids"),
             "output_user_data_ids": obj.get("output_user_data_ids"),
+            "priority": obj.get("priority") if obj.get("priority") is not None else 0,
             "resource_requirements_id": obj.get("resource_requirements_id"),
             "schedule_compute_nodes": ComputeNodeSchedule.from_dict(obj["schedule_compute_nodes"]) if obj.get("schedule_compute_nodes") is not None else None,
             "scheduler_id": obj.get("scheduler_id"),

@@ -695,6 +695,68 @@ fn test_prepare_next_jobs_zero_limit(start_server: &ServerProcess) {
     );
 }
 
+/// Test that claim_next_jobs returns jobs in priority order (higher priority first)
+#[rstest]
+fn test_claim_next_jobs_priority_ordering(start_server: &ServerProcess) {
+    let config = &start_server.config;
+
+    // Create workflow
+    let workflow = models::WorkflowModel::new(
+        "priority_ordering_test".to_string(),
+        "test_user".to_string(),
+    );
+    let created_workflow =
+        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+    let workflow_id = created_workflow.id.unwrap();
+
+    // Create jobs with different priorities: 0, 5, 10
+    let priorities = [0i64, 5, 10];
+    for p in priorities {
+        let mut job = models::JobModel::new(
+            workflow_id,
+            format!("priority_job_{p}"),
+            format!("echo priority {p}"),
+        );
+        job.priority = Some(p);
+        default_api::create_job(config, job).expect("Failed to create job");
+    }
+
+    // Initialize jobs so they become ready
+    default_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to initialize jobs");
+
+    // Claim one job at a time and verify descending priority order
+    let first = default_api::claim_next_jobs(config, workflow_id, Some(1), None)
+        .expect("claim_next_jobs should succeed");
+    let first_jobs = first.jobs.expect("Server must return jobs array");
+    assert_eq!(first_jobs.len(), 1);
+    assert_eq!(
+        first_jobs[0].priority,
+        Some(10),
+        "Highest priority job (10) should be claimed first"
+    );
+
+    let second = default_api::claim_next_jobs(config, workflow_id, Some(1), None)
+        .expect("claim_next_jobs should succeed");
+    let second_jobs = second.jobs.expect("Server must return jobs array");
+    assert_eq!(second_jobs.len(), 1);
+    assert_eq!(
+        second_jobs[0].priority,
+        Some(5),
+        "Second highest priority job (5) should be claimed second"
+    );
+
+    let third = default_api::claim_next_jobs(config, workflow_id, Some(1), None)
+        .expect("claim_next_jobs should succeed");
+    let third_jobs = third.jobs.expect("Server must return jobs array");
+    assert_eq!(third_jobs.len(), 1);
+    assert_eq!(
+        third_jobs[0].priority,
+        Some(0),
+        "Lowest priority job (0) should be claimed last"
+    );
+}
+
 /// Test that claim_next_jobs returns invocation_script when set on a job
 #[rstest]
 fn test_claim_next_jobs_returns_invocation_script(start_server: &ServerProcess) {

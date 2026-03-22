@@ -137,7 +137,7 @@ HTPASSWD="$WORK_DIR/torc-passwd"
 
 CURRENT_USER="${USER:-$(whoami)}"
 for user in "$CURRENT_USER" alice bob carol dave; do
-  torc-htpasswd add --file "$HTPASSWD" "$user" --password "$PASSWORD"
+  torc-htpasswd add --file "$HTPASSWD" "$user" --password "$PASSWORD" --cost 4
   echo "  Created user: $user"
 done
 echo ""
@@ -355,7 +355,7 @@ echo ""
 echo "=== Step 9: Testing hot-reload of auth credentials ==="
 
 # Add a new user "eve" to the htpasswd file
-torc-htpasswd add --file "$HTPASSWD" --password "$PASSWORD" eve
+torc-htpasswd add --file "$HTPASSWD" --password "$PASSWORD" --cost 4 eve
 echo "  Added eve to htpasswd file"
 
 # Eve should be rejected before the server reloads credentials

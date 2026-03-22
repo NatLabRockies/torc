@@ -16,6 +16,7 @@ Name | Type | Description | Notes
 **name** | **String** |  | [default to nothing]
 **output_file_ids** | **Vector{Int64}** |  | [optional] [default to nothing]
 **output_user_data_ids** | **Vector{Int64}** |  | [optional] [default to nothing]
+**priority** | **Int64** | Scheduling priority; higher values are submitted first. Minimum 0, default 0. | [optional] [default to 0]
 **resource_requirements_id** | **Int64** |  | [optional] [default to nothing]
 **schedule_compute_nodes** | [***ComputeNodeSchedule**](ComputeNodeSchedule.md) |  | [optional] [default to nothing]
 **scheduler_id** | **Int64** |  | [optional] [default to nothing]

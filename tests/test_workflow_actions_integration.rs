@@ -1004,8 +1004,13 @@ actions:
         })
         .collect();
 
-    // Wait for all workers to complete and execute the action
-    thread::sleep(Duration::from_secs(5));
+    // Wait for all workers to complete before checking results
+    for handle in handles {
+        let _ = handle.join();
+    }
+
+    // Small delay to ensure file writes are flushed
+    thread::sleep(Duration::from_millis(500));
 
     // Verify the action was executed by ALL workers
     assert!(
@@ -1026,11 +1031,6 @@ actions:
         num_workers,
         line_count
     );
-
-    // Clean up threads
-    for handle in handles {
-        let _ = handle.join();
-    }
 }
 
 #[rstest]
