@@ -29,8 +29,8 @@ When adding a new endpoint:
 2. Add or update the transport handler in `http_transport.rs`.
 3. Put transport-specific implementation in the matching `http_server/*.rs` domain module.
 4. Reuse the lower-level domain API implementation in `src/server/api/` where possible.
-5. Import response enums through `response_types.rs`, not `api_responses.rs`, unless you are
-   editing the underlying transport enum definitions.
+5. Import response enums through `response_types.rs`, not `api_responses.rs`, unless you are editing
+   the underlying transport enum definitions.
 
 Validation for server transport work:
 
