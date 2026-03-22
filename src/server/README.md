@@ -37,7 +37,7 @@ When adding a new endpoint:
 Validation for server transport work:
 
 ```bash
-cargo test --lib --no-default-features --features server-bin http_transport
+cargo nextest run --lib --no-default-features --features server-bin -E 'test(http_transport)'
 bash api/check_openapi_codegen_parity.sh
 CARGO_HUSKY_DONT_INSTALL_HOOKS=1 cargo clippy --all --all-targets --all-features -- -D warnings
 ```

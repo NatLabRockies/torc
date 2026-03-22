@@ -39,7 +39,7 @@ sqlx migrate run --source torc-server/migrations
 
 ```bash
 cargo build
-cargo test
+cargo nextest run --all-features
 ```
 
 ## Making Changes
@@ -65,10 +65,10 @@ All new functionality should include tests:
 
 ```bash
 # Run specific test
-cargo test test_name -- --nocapture
+cargo nextest run -E 'test(test_name)'
 
 # Run with logging
-RUST_LOG=debug cargo test -- --nocapture
+RUST_LOG=debug cargo nextest run -E 'test(test_name)'
 ```
 
 ### Database Migrations
@@ -106,7 +106,7 @@ git commit -m "Add feature: description"
 3. **Ensure all tests pass:**
 
 ```bash
-cargo test
+cargo nextest run --all-features
 cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 ```

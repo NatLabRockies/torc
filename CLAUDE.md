@@ -143,10 +143,10 @@ export TORC_API_URL="http://localhost:8080/torc-service/v1"
 ./target/release/torc jobs list <workflow_id>          # View job status
 
 # Run tests
-cargo test  -- --test-threads 1
+cargo nextest run
 
 # Run specific test
-cargo test test_get_ready_jobs -- --nocapture
+cargo nextest run -E 'test(test_get_ready_jobs)'
 ```
 
 ### Feature-Gated Binaries
@@ -221,7 +221,7 @@ enable log parsing tools.
 - Integration tests in `tests/`
 - Use `serial_test` attribute for tests that modify shared state
 - Test utilities in `tests/common/`
-- Run with: `cargo test` from rust-client directory
+- Run with: `cargo nextest run` from rust-client directory
 
 ## Important Notes
 

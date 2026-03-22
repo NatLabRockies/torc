@@ -271,13 +271,13 @@ using Torc
 # Run all tests
 
 ```bash
-cargo test -- --test-threads=1
+cargo nextest run --all-features
 
 # Run specific test
-cargo test --test test_workflow_manager test_initialize_files_with_updated_files
+cargo nextest run -E 'test(test_initialize_files_with_updated_files)'
 
 # Run with debug logging
-RUST_LOG=debug cargo test -- --nocapture
+RUST_LOG=debug cargo nextest run -E 'test(test_initialize_files_with_updated_files)'
 ```
 
 ### Setting Up the Server

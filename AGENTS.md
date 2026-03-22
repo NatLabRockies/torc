@@ -87,10 +87,10 @@ torc/
 cargo build --workspace --release
 
 # Run tests
-cargo test -- --test-threads 1
+cargo nextest run --all-features
 
 # Run a specific test
-cargo test test_get_ready_jobs -- --nocapture
+cargo nextest run -E 'test(test_get_ready_jobs)'
 ```
 
 ## Architecture Notes

@@ -240,7 +240,7 @@ libraries.
 
    ```bash
    # Rust
-   cargo test
+   cargo nextest run --all-features
 
    # Python
    cd python_client && pytest
@@ -587,7 +587,7 @@ Before submitting a pull request, verify:
 - [ ] `cargo fmt --check` passes
 - [ ] `cargo clippy --all --all-targets --all-features -- -D warnings` passes
 - [ ] `dprint check` passes (for Markdown changes)
-- [ ] All tests pass with `cargo test`
+- [ ] All tests pass with `cargo nextest run --all-features`
 - [ ] New features have tests using `rstest`
 - [ ] Documentation added in appropriate Diataxis category
 - [ ] Design decisions documented in `docs/src/explanation/design/` if applicable
