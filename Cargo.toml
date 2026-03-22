@@ -101,7 +101,7 @@ native-tls = "0.2"
 hyper-tls = "0.6"
 
 # Platform-specific (Linux/other)
-hyper-openssl = "0.9"
+hyper-openssl = "0.10"
 openssl = "0.10"
 
 # MCP server
