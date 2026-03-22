@@ -550,14 +550,14 @@ pub fn get_pending_actions(
         req_builder = match "multi" {
             "multi" => req_builder.query(
                 &param_value
-                    .into_iter()
+                    .iter()
                     .map(|p| ("trigger_type".to_owned(), p.to_string()))
                     .collect::<Vec<(std::string::String, std::string::String)>>(),
             ),
             _ => req_builder.query(&[(
                 "trigger_type",
                 &param_value
-                    .into_iter()
+                    .iter()
                     .map(|p| p.to_string())
                     .collect::<Vec<String>>()
                     .join(",")

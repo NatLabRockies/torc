@@ -6,8 +6,8 @@ use std::thread;
 
 use common::{
     ServerProcess, create_custom_resources_workflow, create_dependency_chain_workflow,
-    create_diverse_jobs_workflow, create_gpu_workflow, create_high_cpu_workflow,
-    create_high_memory_workflow, create_many_jobs_workflow, create_maximum_resources_workflow,
+    create_gpu_workflow, create_high_cpu_workflow, create_high_memory_workflow,
+    create_many_jobs_workflow, create_maximum_resources_workflow,
     create_minimal_resources_workflow, create_multi_node_workflow,
     create_test_resource_requirements, start_server,
 };
@@ -1297,367 +1297,85 @@ fn test_prepare_jobs_limit_very_restrictive(start_server: &ServerProcess) {
     );
 }
 
-/// Test ClaimJobsSortMethod::GpusRuntimeMemory sorting behavior
-/// Jobs should be sorted by: GPU count (desc), then runtime (desc), then memory (desc)
+/// Test that claim_jobs_based_on_resources returns jobs in priority order
+/// and includes priority in the response regardless of the requested sort method.
 #[rstest]
-fn test_prepare_jobs_sort_gpus_runtime_memory(start_server: &ServerProcess) {
+fn test_claim_jobs_based_on_resources_priority_ordering(start_server: &ServerProcess) {
     let config = &start_server.config;
-    // Create workflow with diverse jobs having different GPU, runtime, memory requirements
-    let jobs = create_diverse_jobs_workflow(config, true);
-    let job = jobs.values().next().expect("Should have at least one job");
-    let workflow_id = job.workflow_id;
 
-    // Use abundant resources so all jobs can potentially run (limited by job count)
-    let resources = models::ComputeNodesResources::new(100, 500.0, 20, 1);
+    let workflow = models::WorkflowModel::new(
+        "priority_resources_test".to_string(),
+        "test_user".to_string(),
+    );
+    let created_workflow =
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
+    let workflow_id = created_workflow.id.unwrap();
 
-    let result = apis::workflows_api::claim_jobs_based_on_resources(
+    let resource_requirements = create_test_resource_requirements(
         config,
         workflow_id,
-        &resources,
-        10, // Get multiple jobs to test sorting
-        Some(models::ClaimJobsSortMethod::GpusRuntimeMemory),
-        None,
-    )
-    .expect("claim_jobs_based_on_resources should succeed");
-
-    let returned_jobs = result.jobs.expect("Server must return jobs array");
-    assert!(
-        !returned_jobs.is_empty(),
-        "Should return at least some jobs for sorting test"
+        "priority_resources_rr",
+        1,
+        0,
+        1,
+        "1g",
+        "PT1M",
     );
 
-    // Get resource requirements for each returned job to verify sorting
-    let mut job_specs = Vec::new();
-    for job in &returned_jobs {
-        assert_eq!(
-            job.status.expect("Job status should be present"),
-            models::JobStatus::Pending
+    for priority in [0i64, 5, 10] {
+        let mut job = models::JobModel::new(
+            workflow_id,
+            format!("priority_job_{priority}"),
+            format!("echo priority {priority}"),
         );
-        let rr_id = job
-            .resource_requirements_id
-            .expect("Job should have resource requirements");
-        let rr = torc::client::apis::admin_resources_api::get_resource_requirements(config, rr_id)
-            .expect("Should be able to get resource requirements");
-
-        // Parse runtime from ISO8601 format (P0DT24H -> 24 hours, P0DT30M -> 0.5 hours)
-        let runtime_hours = if rr.runtime.contains("H") {
-            let h_pos = rr.runtime.find("H").unwrap();
-            let t_pos = rr.runtime.find("T").unwrap();
-            rr.runtime[t_pos + 1..h_pos].parse::<f64>().unwrap_or(0.0)
-        } else if rr.runtime.contains("M") {
-            let m_pos = rr.runtime.find("M").unwrap();
-            let t_pos = rr.runtime.find("T").unwrap();
-            rr.runtime[t_pos + 1..m_pos].parse::<f64>().unwrap_or(0.0) / 60.0
-        } else {
-            0.0
-        };
-
-        // Parse memory from format like "32g" -> 32
-        let memory_gb = rr.memory.trim_end_matches('g').parse::<i64>().unwrap_or(0);
-
-        job_specs.push((job.name.clone(), rr.num_gpus, runtime_hours, memory_gb));
+        job.priority = Some(priority);
+        job.resource_requirements_id = Some(resource_requirements.id.unwrap());
+        apis::jobs_api::create_job(config, job).expect("Failed to create job");
     }
 
-    // Verify sorting: GPUs desc, then runtime desc, then memory desc
-    for i in 1..job_specs.len() {
-        let (prev_name, prev_gpus, prev_runtime, prev_memory) = &job_specs[i - 1];
-        let (curr_name, curr_gpus, curr_runtime, curr_memory) = &job_specs[i];
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to initialize jobs");
 
-        // Primary sort: GPUs descending
-        if prev_gpus != curr_gpus {
-            assert!(
-                prev_gpus > curr_gpus,
-                "Jobs should be sorted by GPUs (desc): job '{}' has {} GPUs, but job '{}' has {} GPUs",
-                prev_name,
-                prev_gpus,
-                curr_name,
-                curr_gpus
-            );
-        } else if prev_runtime != curr_runtime {
-            // Secondary sort: Runtime descending (when GPUs are equal)
-            assert!(
-                prev_runtime >= curr_runtime,
-                "Jobs with equal GPUs should be sorted by runtime (desc): job '{}' has {}h runtime, but job '{}' has {}h runtime",
-                prev_name,
-                prev_runtime,
-                curr_name,
-                curr_runtime
-            );
-        } else {
-            // Tertiary sort: Memory descending (when GPUs and runtime are equal)
-            assert!(
-                prev_memory >= curr_memory,
-                "Jobs with equal GPUs and runtime should be sorted by memory (desc): job '{}' has {}GB, but job '{}' has {}GB",
-                prev_name,
-                prev_memory,
-                curr_name,
-                curr_memory
-            );
-        }
-    }
-}
+    let resources = models::ComputeNodesResources::new(1, 1.0, 0, 1);
 
-/// Test ClaimJobsSortMethod::GpusMemoryRuntime sorting behavior
-/// Jobs should be sorted by: GPU count (desc), then memory (desc), then runtime (desc)
-#[rstest]
-fn test_prepare_jobs_sort_gpus_memory_runtime(start_server: &ServerProcess) {
-    let config = &start_server.config;
-    // Create workflow with diverse jobs having different GPU, memory, runtime requirements
-    let jobs = create_diverse_jobs_workflow(config, true);
-    let job = jobs.values().next().expect("Should have at least one job");
-    let workflow_id = job.workflow_id;
-
-    // Use abundant resources so all jobs can potentially run
-    let resources = models::ComputeNodesResources::new(100, 500.0, 20, 1);
-
-    let result = apis::workflows_api::claim_jobs_based_on_resources(
+    let first = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
-        10, // Get multiple jobs to test sorting
-        Some(models::ClaimJobsSortMethod::GpusMemoryRuntime),
-        None,
-    )
-    .expect("claim_jobs_based_on_resources should succeed");
-
-    let returned_jobs = result.jobs.expect("Server must return jobs array");
-    assert!(
-        !returned_jobs.is_empty(),
-        "Should return at least some jobs for sorting test"
-    );
-
-    // Get resource requirements for each returned job to verify sorting
-    let mut job_specs = Vec::new();
-    for job in &returned_jobs {
-        assert_eq!(
-            job.status.expect("Job status should be present"),
-            models::JobStatus::Pending
-        );
-        let rr_id = job
-            .resource_requirements_id
-            .expect("Job should have resource requirements");
-        let rr = torc::client::apis::admin_resources_api::get_resource_requirements(config, rr_id)
-            .expect("Should be able to get resource requirements");
-
-        // Parse runtime from ISO8601 format
-        let runtime_hours = if rr.runtime.contains("H") {
-            let h_pos = rr.runtime.find("H").unwrap();
-            let t_pos = rr.runtime.find("T").unwrap();
-            rr.runtime[t_pos + 1..h_pos].parse::<f64>().unwrap_or(0.0)
-        } else if rr.runtime.contains("M") {
-            let m_pos = rr.runtime.find("M").unwrap();
-            let t_pos = rr.runtime.find("T").unwrap();
-            rr.runtime[t_pos + 1..m_pos].parse::<f64>().unwrap_or(0.0) / 60.0
-        } else {
-            0.0
-        };
-
-        // Parse memory from format like "32g" -> 32
-        let memory_gb = rr.memory.trim_end_matches('g').parse::<i64>().unwrap_or(0);
-
-        job_specs.push((job.name.clone(), rr.num_gpus, memory_gb, runtime_hours));
-    }
-
-    // Verify sorting: GPUs desc, then memory desc, then runtime desc
-    for i in 1..job_specs.len() {
-        let (prev_name, prev_gpus, prev_memory, prev_runtime) = &job_specs[i - 1];
-        let (curr_name, curr_gpus, curr_memory, curr_runtime) = &job_specs[i];
-
-        // Primary sort: GPUs descending
-        if prev_gpus != curr_gpus {
-            assert!(
-                prev_gpus > curr_gpus,
-                "Jobs should be sorted by GPUs (desc): job '{}' has {} GPUs, but job '{}' has {} GPUs",
-                prev_name,
-                prev_gpus,
-                curr_name,
-                curr_gpus
-            );
-        } else if prev_memory != curr_memory {
-            // Secondary sort: Memory descending (when GPUs are equal)
-            assert!(
-                prev_memory >= curr_memory,
-                "Jobs with equal GPUs should be sorted by memory (desc): job '{}' has {}GB, but job '{}' has {}GB",
-                prev_name,
-                prev_memory,
-                curr_name,
-                curr_memory
-            );
-        } else {
-            // Tertiary sort: Runtime descending (when GPUs and memory are equal)
-            assert!(
-                prev_runtime >= curr_runtime,
-                "Jobs with equal GPUs and memory should be sorted by runtime (desc): job '{}' has {}h runtime, but job '{}' has {}h runtime",
-                prev_name,
-                prev_runtime,
-                curr_name,
-                curr_runtime
-            );
-        }
-    }
-}
-
-/// Test ClaimJobsSortMethod::None - no sorting should be applied
-/// Jobs should be returned in their natural order (not sorted by resource requirements)
-#[rstest]
-fn test_prepare_jobs_sort_none(start_server: &ServerProcess) {
-    let config = &start_server.config;
-    // Create workflow with diverse jobs
-    let jobs = create_diverse_jobs_workflow(config, true);
-    let job = jobs.values().next().expect("Should have at least one job");
-    let workflow_id = job.workflow_id;
-
-    // Use abundant resources so all jobs can potentially run
-    let resources = models::ComputeNodesResources::new(100, 500.0, 20, 1);
-
-    let result_none = apis::workflows_api::claim_jobs_based_on_resources(
-        config,
-        workflow_id,
-        &resources,
-        10,
+        1,
         Some(models::ClaimJobsSortMethod::None),
         None,
     )
     .expect("claim_jobs_based_on_resources should succeed");
+    let first_jobs = first.jobs.expect("Server must return jobs array");
+    assert_eq!(first_jobs.len(), 1);
+    assert_eq!(first_jobs[0].priority, Some(10));
 
-    let returned_jobs_none = result_none.jobs.expect("Server must return jobs array");
-    assert!(
-        !returned_jobs_none.is_empty(),
-        "Should return at least some jobs"
-    );
-
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
-        .expect("Failed to initialize jobs");
-
-    // Also get results with sorting to compare
-    let result_sorted = apis::workflows_api::claim_jobs_based_on_resources(
+    let second = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
-        10,
+        1,
         Some(models::ClaimJobsSortMethod::GpusRuntimeMemory),
         None,
     )
     .expect("claim_jobs_based_on_resources should succeed");
+    let second_jobs = second.jobs.expect("Server must return jobs array");
+    assert_eq!(second_jobs.len(), 1);
+    assert_eq!(second_jobs[0].priority, Some(5));
 
-    let returned_jobs_sorted = result_sorted.jobs.expect("Server must return jobs array");
-
-    // The None method should not necessarily match the sorted order
-    // We can't easily test the "natural order" without knowing the server's internal ordering,
-    // but we can at least verify that jobs are returned and have valid resource requirements
-    for job in &returned_jobs_none {
-        assert!(job.id.is_some());
-        assert!(job.workflow_id == workflow_id);
-        assert!(!job.name.is_empty());
-        assert!(job.resource_requirements_id.is_some());
-        assert_eq!(
-            job.status.expect("Job status should be present"),
-            models::JobStatus::Pending
-        );
-    }
-
-    // Verify we get the same jobs in both cases (just potentially different order)
-    let mut names_none: Vec<_> = returned_jobs_none.iter().map(|j| &j.name).collect();
-    let mut names_sorted: Vec<_> = returned_jobs_sorted.iter().map(|j| &j.name).collect();
-    names_none.sort();
-    names_sorted.sort();
-
-    assert_eq!(
-        names_none, names_sorted,
-        "Both sort methods should return the same jobs, just in different order"
-    );
-}
-
-/// Test that different sort methods can return the same jobs in different orders
-/// This validates that sorting actually changes the order of returned jobs
-#[rstest]
-fn test_prepare_jobs_different_sort_methods_different_orders(start_server: &ServerProcess) {
-    let config = &start_server.config;
-    // Create workflow with diverse jobs that will sort differently
-    let jobs = create_diverse_jobs_workflow(config, true);
-    let job = jobs.values().next().expect("Should have at least one job");
-    let workflow_id = job.workflow_id;
-
-    // Use abundant resources so all jobs can run
-    let resources = models::ComputeNodesResources::new(100, 500.0, 20, 1);
-
-    // Get results with GpusRuntimeMemory sorting
-    let result1 = apis::workflows_api::claim_jobs_based_on_resources(
+    let third = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
         &resources,
-        10,
-        Some(models::ClaimJobsSortMethod::GpusRuntimeMemory),
-        None,
-    )
-    .expect("claim_jobs_based_on_resources should succeed");
-
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
-        .expect("Failed to initialize jobs");
-
-    // Get results with GpusMemoryRuntime sorting
-    let result2 = apis::workflows_api::claim_jobs_based_on_resources(
-        config,
-        workflow_id,
-        &resources,
-        10,
+        1,
         Some(models::ClaimJobsSortMethod::GpusMemoryRuntime),
         None,
     )
     .expect("claim_jobs_based_on_resources should succeed");
-
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
-        .expect("Failed to initialize jobs");
-
-    let jobs1 = result1.jobs.expect("Server must return jobs array");
-    let jobs2 = result2.jobs.expect("Server must return jobs array");
-
-    assert!(
-        !jobs1.is_empty(),
-        "Should return jobs for first sort method"
-    );
-    assert!(
-        !jobs2.is_empty(),
-        "Should return jobs for second sort method"
-    );
-
-    // Both should return the same job set
-    let names1: Vec<_> = jobs1.iter().map(|j| &j.name).collect();
-    let names2: Vec<_> = jobs2.iter().map(|j| &j.name).collect();
-    let names1_sorted = {
-        let mut temp = names1.clone();
-        temp.sort();
-        temp
-    };
-    let names2_sorted = {
-        let mut temp = names2.clone();
-        temp.sort();
-        temp
-    };
-
-    assert_eq!(
-        names1_sorted, names2_sorted,
-        "Both sort methods should return the same jobs"
-    );
-
-    // The order should potentially be different (unless jobs happen to sort the same way)
-    // We can't guarantee they'll be different, but we can at least verify the sorting logic works
-    for (i, job) in jobs1.iter().enumerate() {
-        assert!(job.id.is_some());
-        assert!(job.workflow_id == workflow_id);
-        assert!(!job.name.is_empty());
-        // Job names should follow pattern diverse_job_N
-        assert!(
-            job.name.starts_with("diverse_job_"),
-            "Job {} should have name starting with 'diverse_job_', got {}",
-            i,
-            job.name
-        );
-        assert_eq!(
-            job.status.expect("Job status should be present"),
-            models::JobStatus::Pending
-        );
-    }
+    let third_jobs = third.jobs.expect("Server must return jobs array");
+    assert_eq!(third_jobs.len(), 1);
+    assert_eq!(third_jobs[0].priority, Some(0));
 }
 
 /// Test concurrent job allocation to verify database locking and mutual exclusion

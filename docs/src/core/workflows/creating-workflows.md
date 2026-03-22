@@ -299,7 +299,7 @@ The dry-run performs comprehensive validation:
 **Scheduler Configuration:**
 
 - Slurm scheduler node requirements are valid
-- Warns about heterogeneous schedulers without `jobs_sort_method` (see below)
+- Warns about heterogeneous schedulers when jobs lack explicit scheduler assignments (see below)
 
 #### Heterogeneous Scheduler Warning
 
@@ -310,11 +310,9 @@ suboptimal job-to-node matching:
 ```
 Warnings (1):
   - Workflow has 3 schedulers with different memory (mem), walltime but 10 job(s)
-    have no explicit scheduler assignment and jobs_sort_method is not set. The
-    default sort method 'gpus_runtime_memory' will be used (jobs sorted by GPUs,
-    then runtime, then memory). If this doesn't match your workload, consider
-    setting jobs_sort_method explicitly to 'gpus_memory_runtime' (prioritize
-    memory over runtime) or 'none' (no sorting).
+    have no explicit scheduler assignment. These jobs can be claimed by any
+    compatible runner, which may lead to suboptimal placement on heterogeneous
+    schedulers.
 ```
 
 This warning helps you avoid situations where:
@@ -325,9 +323,9 @@ This warning helps you avoid situations where:
 
 **Solutions:**
 
-1. Set `jobs_sort_method` explicitly in your workflow spec
-2. Assign jobs to specific schedulers using the `scheduler` field on each job
-3. Accept the default `gpus_runtime_memory` sorting if it matches your workload
+1. Assign jobs to specific schedulers using the `scheduler` field on each job
+2. Use job `priority` to prefer more important work when multiple jobs are ready
+3. Accept flexible placement if any compatible runner is an acceptable target
 
 #### Bypassing Validation
 

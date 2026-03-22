@@ -29,7 +29,6 @@ The top-level container for a complete workflow definition.
 | `compute_node_wait_for_new_jobs_seconds`         | integer                                                 | none         | Compute nodes wait for new jobs this long before exiting                  |
 | `compute_node_ignore_workflow_completion`        | boolean                                                 | false        | Compute nodes hold allocations even after workflow completes              |
 | `compute_node_wait_for_healthy_database_minutes` | integer                                                 | none         | Compute nodes wait this many minutes for database recovery                |
-| `jobs_sort_method`                               | [ClaimJobsSortMethod](#claimjobssortmethod)             | `none`       | Method for sorting jobs when claiming them                                |
 | `enable_ro_crate`                                | boolean                                                 | false        | Enable automatic [RO-Crate](../concepts/ro-crate.md) provenance tracking  |
 
 ### Examples with project and metadata
@@ -78,6 +77,7 @@ Defines a single computational task within a workflow.
 | -------------------------------- | --------------------------- | ----------- | ---------------------------------------------------------------------- |
 | `name`                           | string                      | _required_  | Name of the job                                                        |
 | `command`                        | string                      | _required_  | Command to execute for this job                                        |
+| `priority`                       | integer                     | `0`         | Scheduling priority; higher values are claimed before lower values     |
 | `invocation_script`              | string                      | none        | Optional script for job invocation                                     |
 | `resource_requirements`          | string                      | none        | Name of a [ResourceRequirementsSpec](#resourcerequirementsspec) to use |
 | `failure_handler`                | string                      | none        | Name of a [FailureHandlerSpec](#failurehandlerspec) to use             |
@@ -361,15 +361,27 @@ Enum specifying the level of detail for resource monitoring.
 | `Summary`    | Collect summary statistics only   |
 | `TimeSeries` | Collect detailed time series data |
 
-## ClaimJobsSortMethod
+## Job Priority
 
-Enum specifying how jobs are sorted when being claimed by workers.
+Use `priority` when some ready jobs should be claimed before others.
 
-| Value                 | Description                             |
-| --------------------- | --------------------------------------- |
-| `none`                | No sorting (default)                    |
-| `gpus_runtime_memory` | Sort by GPUs, then runtime, then memory |
-| `gpus_memory_runtime` | Sort by GPUs, then memory, then runtime |
+- Higher values are preferred over lower values
+- The default is `0`
+- Jobs with the same priority are returned in a stable order
+- Priority affects both `claim_next_jobs` and `claim_jobs_based_on_resources`
+
+Example:
+
+```yaml
+jobs:
+  - name: urgent_step
+    command: ./run_urgent.sh
+    priority: 100
+
+  - name: background_step
+    command: ./run_background.sh
+    priority: 10
+```
 
 ## Parameter Formats
 

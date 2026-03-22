@@ -1693,10 +1693,7 @@ where
     ///    - num_gpus <= resources.num_gpus
     ///    - num_nodes <= resources.num_nodes (only multi-node jobs consume dedicated nodes)
     ///    - runtime_s < resources.time_limit (converted to seconds using duration_string_to_seconds)
-    /// 3. Sorts results according to the sort_method:
-    ///    - None: No sorting applied
-    ///    - GpusRuntimeMemory: Sort by num_gpus DESC, runtime_s DESC, memory_bytes DESC
-    ///    - GpusMemoryRuntime: Sort by num_gpus DESC, memory_bytes DESC, runtime_s DESC
+    /// 3. Sorts results by job priority descending
     /// 4. Loops through returned records and accumulates resource consumption
     /// 5. Selects jobs that can fit within total available resources
     /// 6. Atomically updates selected jobs to "pending" status
@@ -1704,7 +1701,7 @@ where
     /// # Parameters
     /// - `workflow_id`: ID of the workflow to get jobs for
     /// - `resources`: Available compute resources (CPUs, memory, GPUs, nodes, time limit)
-    /// - `sort_method`: Optional sorting method for job prioritization
+    /// - `sort_method`: Legacy request parameter; ignored for scheduling order
     /// - `limit`: Maximum number of jobs to return
     ///
     /// # Returns

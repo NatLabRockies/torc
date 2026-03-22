@@ -102,7 +102,7 @@ pub fn complete_job(
         "{}/jobs/{id}/complete_job/{status}/{run_id}",
         configuration.base_path,
         id = p_path_id,
-        status = p_path_status.to_string(),
+        status = p_path_status,
         run_id = p_path_run_id
     );
     let mut req_builder = configuration
@@ -489,7 +489,7 @@ pub fn manage_status_change(
         "{}/jobs/{id}/manage_status_change/{status}/{run_id}",
         configuration.base_path,
         id = p_path_id,
-        status = p_path_status.to_string(),
+        status = p_path_status,
         run_id = p_path_run_id
     );
     let mut req_builder = configuration.client.request(reqwest::Method::PUT, &uri_str);

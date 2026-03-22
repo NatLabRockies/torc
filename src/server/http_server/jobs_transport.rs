@@ -1214,12 +1214,11 @@ where
                 ApiError("Database lock error".to_string())
             })?;
 
-        let actual_sort_method = sort_method.unwrap_or(models::ClaimJobsSortMethod::None);
         debug!(
-            "get_ready_jobs: workflow_id={}, limit={}, sort_method={:?}, resources={:?} - X-Span-ID: {:?}",
+            "get_ready_jobs: workflow_id={}, limit={}, requested_sort_method={:?}, resources={:?} - X-Span-ID: {:?}",
             workflow_id,
             limit,
-            actual_sort_method,
+            sort_method,
             resources,
             Has::<XSpanIdString>::get(context).0.clone()
         );
@@ -1269,15 +1268,7 @@ where
         let memory_bytes = (resources.memory_gb * 1024.0 * 1024.0 * 1024.0) as i64;
 
         let ready_status = models::JobStatus::Ready.to_int();
-        let order_by_clause = match actual_sort_method {
-            models::ClaimJobsSortMethod::None => "",
-            models::ClaimJobsSortMethod::GpusRuntimeMemory => {
-                "ORDER BY rr.num_gpus DESC, rr.runtime_s DESC, rr.memory_bytes DESC"
-            }
-            models::ClaimJobsSortMethod::GpusMemoryRuntime => {
-                "ORDER BY rr.num_gpus DESC, rr.memory_bytes DESC, rr.runtime_s DESC"
-            }
-        };
+        let order_by_clause = "ORDER BY job.priority DESC, job.id ASC";
 
         let query_with_scheduler = format!(
             r#"
@@ -1292,6 +1283,7 @@ where
                 job.supports_termination,
                 job.failure_handler_id,
                 job.attempt_id,
+                job.priority,
                 rr.id AS resource_requirements_id,
                 rr.memory_bytes,
                 rr.num_cpus,
@@ -1349,6 +1341,7 @@ where
                     job.supports_termination,
                     job.failure_handler_id,
                     job.attempt_id,
+                    job.priority,
                     rr.id AS resource_requirements_id,
                     rr.memory_bytes,
                     rr.num_cpus,
@@ -1491,7 +1484,7 @@ where
                     scheduler_id: None,
                     failure_handler_id: row.get("failure_handler_id"),
                     attempt_id: row.get("attempt_id"),
-                    priority: row.try_get("priority").ok(),
+                    priority: Some(row.get("priority")),
                 };
 
                 selected_jobs.push(job);
