@@ -7,14 +7,7 @@ all-features = true
 # Vulnerability scanning via RustSec advisory database
 [advisories]
 ignore = [
-    # Transitive deps from swagger via hyper-old-types - can't fix without upstream update
-    { id = "RUSTSEC-2024-0370", reason = "proc-macro-error via validator_derive" },
-    { id = "RUSTSEC-2023-0081", reason = "safemem via swagger -> hyper-old-types" },
-    { id = "RUSTSEC-2020-0071", reason = "time 0.1 via swagger -> hyper-old-types" },
     # Transitive deps we can't directly upgrade
-    { id = "RUSTSEC-2024-0421", reason = "idna 0.4 via validator - needs validator upgrade" },
-    { id = "RUSTSEC-2020-0168", reason = "mach via quanta -> tracing-timing" },
-    { id = "RUSTSEC-2024-0436", reason = "paste via ratatui and rmcp - no maintained fork in use yet" },
     { id = "RUSTSEC-2025-0069", reason = "daemonize - no alternative available yet" },
     { id = "RUSTSEC-2025-0057", reason = "fxhash via tracing-timing - needs upstream update" },
 ]

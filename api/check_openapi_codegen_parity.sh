@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-TMP_SPEC="$(mktemp -t torc-openapi-check)"
+TMP_SPEC="$(mktemp -t torc-openapi-check.XXXXXX)"
 trap 'rm -f "${TMP_SPEC}"' EXIT
 
 cd "${REPO_ROOT}"
