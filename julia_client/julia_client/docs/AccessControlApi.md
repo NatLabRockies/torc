@@ -5,7 +5,7 @@ All URIs are relative to *http://localhost/torc-service/v1*
 Method | HTTP request | Description
 ------------- | ------------- | -------------
 [**add_user_to_group**](AccessControlApi.md#add_user_to_group) | **POST** /access_groups/{id}/members | 
-[**add_workflow_to_group**](AccessControlApi.md#add_workflow_to_group) | **POST** /workflows/{id}/access_groups | 
+[**add_workflow_to_group**](AccessControlApi.md#add_workflow_to_group) | **POST** /workflows/{id}/access_groups/{group_id} | 
 [**check_workflow_access**](AccessControlApi.md#check_workflow_access) | **GET** /access_check/{workflow_id}/{user_name} | 
 [**create_access_group**](AccessControlApi.md#create_access_group) | **POST** /access_groups | 
 [**delete_access_group**](AccessControlApi.md#delete_access_group) | **DELETE** /access_groups/{id} | 
@@ -48,8 +48,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **add_workflow_to_group**
-> add_workflow_to_group(_api::AccessControlApi, id::Int64, workflow_access_group_model::WorkflowAccessGroupModel; _mediaType=nothing) -> WorkflowAccessGroupModel, OpenAPI.Clients.ApiResponse <br/>
-> add_workflow_to_group(_api::AccessControlApi, response_stream::Channel, id::Int64, workflow_access_group_model::WorkflowAccessGroupModel; _mediaType=nothing) -> Channel{ WorkflowAccessGroupModel }, OpenAPI.Clients.ApiResponse
+> add_workflow_to_group(_api::AccessControlApi, id::Int64, group_id::Int64; _mediaType=nothing) -> WorkflowAccessGroupModel, OpenAPI.Clients.ApiResponse <br/>
+> add_workflow_to_group(_api::AccessControlApi, response_stream::Channel, id::Int64, group_id::Int64; _mediaType=nothing) -> Channel{ WorkflowAccessGroupModel }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -59,7 +59,7 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **AccessControlApi** | API context | 
 **id** | **Int64** | ID of the workflow |
-**workflow_access_group_model** | [**WorkflowAccessGroupModel**](WorkflowAccessGroupModel.md) |  |
+**group_id** | **Int64** | ID of the access group |
 
 ### Return type
 
@@ -71,7 +71,7 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: application/json
+ - **Content-Type**: Not defined
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
@@ -134,8 +134,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **delete_access_group**
-> delete_access_group(_api::AccessControlApi, id::Int64; body=nothing, _mediaType=nothing) -> AccessGroupModel, OpenAPI.Clients.ApiResponse <br/>
-> delete_access_group(_api::AccessControlApi, response_stream::Channel, id::Int64; body=nothing, _mediaType=nothing) -> Channel{ AccessGroupModel }, OpenAPI.Clients.ApiResponse
+> delete_access_group(_api::AccessControlApi, id::Int64; _mediaType=nothing) -> AccessGroupModel, OpenAPI.Clients.ApiResponse <br/>
+> delete_access_group(_api::AccessControlApi, response_stream::Channel, id::Int64; _mediaType=nothing) -> Channel{ AccessGroupModel }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -145,12 +145,6 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **AccessControlApi** | API context | 
 **id** | **Int64** | ID of the access group |
-
-### Optional Parameters
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
 
 ### Return type
 
@@ -162,7 +156,7 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: application/json
+ - **Content-Type**: Not defined
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
@@ -335,8 +329,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **remove_user_from_group**
-> remove_user_from_group(_api::AccessControlApi, id::Int64, user_name::String; body=nothing, _mediaType=nothing) -> UserGroupMembershipModel, OpenAPI.Clients.ApiResponse <br/>
-> remove_user_from_group(_api::AccessControlApi, response_stream::Channel, id::Int64, user_name::String; body=nothing, _mediaType=nothing) -> Channel{ UserGroupMembershipModel }, OpenAPI.Clients.ApiResponse
+> remove_user_from_group(_api::AccessControlApi, id::Int64, user_name::String; _mediaType=nothing) -> UserGroupMembershipModel, OpenAPI.Clients.ApiResponse <br/>
+> remove_user_from_group(_api::AccessControlApi, response_stream::Channel, id::Int64, user_name::String; _mediaType=nothing) -> Channel{ UserGroupMembershipModel }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -348,12 +342,6 @@ Name | Type | Description  | Notes
 **id** | **Int64** | ID of the access group |
 **user_name** | **String** | Username to remove |
 
-### Optional Parameters
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
-
 ### Return type
 
 [**UserGroupMembershipModel**](UserGroupMembershipModel.md)
@@ -364,14 +352,14 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: application/json
+ - **Content-Type**: Not defined
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **remove_workflow_from_group**
-> remove_workflow_from_group(_api::AccessControlApi, id::Int64, group_id::Int64; body=nothing, _mediaType=nothing) -> WorkflowAccessGroupModel, OpenAPI.Clients.ApiResponse <br/>
-> remove_workflow_from_group(_api::AccessControlApi, response_stream::Channel, id::Int64, group_id::Int64; body=nothing, _mediaType=nothing) -> Channel{ WorkflowAccessGroupModel }, OpenAPI.Clients.ApiResponse
+> remove_workflow_from_group(_api::AccessControlApi, id::Int64, group_id::Int64; _mediaType=nothing) -> WorkflowAccessGroupModel, OpenAPI.Clients.ApiResponse <br/>
+> remove_workflow_from_group(_api::AccessControlApi, response_stream::Channel, id::Int64, group_id::Int64; _mediaType=nothing) -> Channel{ WorkflowAccessGroupModel }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -383,12 +371,6 @@ Name | Type | Description  | Notes
 **id** | **Int64** | ID of the workflow |
 **group_id** | **Int64** | ID of the access group |
 
-### Optional Parameters
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
-
 ### Return type
 
 [**WorkflowAccessGroupModel**](WorkflowAccessGroupModel.md)
@@ -399,7 +381,7 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: application/json
+ - **Content-Type**: Not defined
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)

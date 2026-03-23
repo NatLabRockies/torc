@@ -1146,15 +1146,15 @@ class ResultsApi:
         self,
         workflow_id: StrictInt,
         job_id: Optional[StrictInt] = None,
+        run_id: Optional[StrictInt] = None,
+        return_code: Optional[StrictInt] = None,
+        status: Optional[JobStatus] = None,
+        compute_node_id: Optional[StrictInt] = None,
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
         sort_by: Optional[StrictStr] = None,
         reverse_sort: Optional[StrictBool] = None,
-        run_id: Optional[StrictInt] = None,
-        return_code: Optional[StrictInt] = None,
-        status: Optional[JobStatus] = None,
         all_runs: Optional[StrictBool] = None,
-        compute_node_id: Optional[StrictInt] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1175,6 +1175,14 @@ class ResultsApi:
         :type workflow_id: int
         :param job_id:
         :type job_id: int
+        :param run_id:
+        :type run_id: int
+        :param return_code:
+        :type return_code: int
+        :param status:
+        :type status: JobStatus
+        :param compute_node_id:
+        :type compute_node_id: int
         :param offset:
         :type offset: int
         :param limit:
@@ -1183,16 +1191,8 @@ class ResultsApi:
         :type sort_by: str
         :param reverse_sort:
         :type reverse_sort: bool
-        :param run_id:
-        :type run_id: int
-        :param return_code:
-        :type return_code: int
-        :param status:
-        :type status: JobStatus
         :param all_runs:
         :type all_runs: bool
-        :param compute_node_id:
-        :type compute_node_id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1218,15 +1218,15 @@ class ResultsApi:
         _param = self._list_results_serialize(
             workflow_id=workflow_id,
             job_id=job_id,
+            run_id=run_id,
+            return_code=return_code,
+            status=status,
+            compute_node_id=compute_node_id,
             offset=offset,
             limit=limit,
             sort_by=sort_by,
             reverse_sort=reverse_sort,
-            run_id=run_id,
-            return_code=return_code,
-            status=status,
             all_runs=all_runs,
-            compute_node_id=compute_node_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1252,15 +1252,15 @@ class ResultsApi:
         self,
         workflow_id: StrictInt,
         job_id: Optional[StrictInt] = None,
+        run_id: Optional[StrictInt] = None,
+        return_code: Optional[StrictInt] = None,
+        status: Optional[JobStatus] = None,
+        compute_node_id: Optional[StrictInt] = None,
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
         sort_by: Optional[StrictStr] = None,
         reverse_sort: Optional[StrictBool] = None,
-        run_id: Optional[StrictInt] = None,
-        return_code: Optional[StrictInt] = None,
-        status: Optional[JobStatus] = None,
         all_runs: Optional[StrictBool] = None,
-        compute_node_id: Optional[StrictInt] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1281,6 +1281,14 @@ class ResultsApi:
         :type workflow_id: int
         :param job_id:
         :type job_id: int
+        :param run_id:
+        :type run_id: int
+        :param return_code:
+        :type return_code: int
+        :param status:
+        :type status: JobStatus
+        :param compute_node_id:
+        :type compute_node_id: int
         :param offset:
         :type offset: int
         :param limit:
@@ -1289,16 +1297,8 @@ class ResultsApi:
         :type sort_by: str
         :param reverse_sort:
         :type reverse_sort: bool
-        :param run_id:
-        :type run_id: int
-        :param return_code:
-        :type return_code: int
-        :param status:
-        :type status: JobStatus
         :param all_runs:
         :type all_runs: bool
-        :param compute_node_id:
-        :type compute_node_id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1324,15 +1324,15 @@ class ResultsApi:
         _param = self._list_results_serialize(
             workflow_id=workflow_id,
             job_id=job_id,
+            run_id=run_id,
+            return_code=return_code,
+            status=status,
+            compute_node_id=compute_node_id,
             offset=offset,
             limit=limit,
             sort_by=sort_by,
             reverse_sort=reverse_sort,
-            run_id=run_id,
-            return_code=return_code,
-            status=status,
             all_runs=all_runs,
-            compute_node_id=compute_node_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1358,15 +1358,15 @@ class ResultsApi:
         self,
         workflow_id: StrictInt,
         job_id: Optional[StrictInt] = None,
+        run_id: Optional[StrictInt] = None,
+        return_code: Optional[StrictInt] = None,
+        status: Optional[JobStatus] = None,
+        compute_node_id: Optional[StrictInt] = None,
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
         sort_by: Optional[StrictStr] = None,
         reverse_sort: Optional[StrictBool] = None,
-        run_id: Optional[StrictInt] = None,
-        return_code: Optional[StrictInt] = None,
-        status: Optional[JobStatus] = None,
         all_runs: Optional[StrictBool] = None,
-        compute_node_id: Optional[StrictInt] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1387,6 +1387,14 @@ class ResultsApi:
         :type workflow_id: int
         :param job_id:
         :type job_id: int
+        :param run_id:
+        :type run_id: int
+        :param return_code:
+        :type return_code: int
+        :param status:
+        :type status: JobStatus
+        :param compute_node_id:
+        :type compute_node_id: int
         :param offset:
         :type offset: int
         :param limit:
@@ -1395,16 +1403,8 @@ class ResultsApi:
         :type sort_by: str
         :param reverse_sort:
         :type reverse_sort: bool
-        :param run_id:
-        :type run_id: int
-        :param return_code:
-        :type return_code: int
-        :param status:
-        :type status: JobStatus
         :param all_runs:
         :type all_runs: bool
-        :param compute_node_id:
-        :type compute_node_id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1430,15 +1430,15 @@ class ResultsApi:
         _param = self._list_results_serialize(
             workflow_id=workflow_id,
             job_id=job_id,
+            run_id=run_id,
+            return_code=return_code,
+            status=status,
+            compute_node_id=compute_node_id,
             offset=offset,
             limit=limit,
             sort_by=sort_by,
             reverse_sort=reverse_sort,
-            run_id=run_id,
-            return_code=return_code,
-            status=status,
             all_runs=all_runs,
-            compute_node_id=compute_node_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1459,15 +1459,15 @@ class ResultsApi:
         self,
         workflow_id,
         job_id,
+        run_id,
+        return_code,
+        status,
+        compute_node_id,
         offset,
         limit,
         sort_by,
         reverse_sort,
-        run_id,
-        return_code,
-        status,
         all_runs,
-        compute_node_id,
         _request_auth,
         _content_type,
         _headers,
@@ -1498,6 +1498,22 @@ class ResultsApi:
             
             _query_params.append(('job_id', job_id))
             
+        if run_id is not None:
+            
+            _query_params.append(('run_id', run_id))
+            
+        if return_code is not None:
+            
+            _query_params.append(('return_code', return_code))
+            
+        if status is not None:
+            
+            _query_params.append(('status', status.value))
+            
+        if compute_node_id is not None:
+            
+            _query_params.append(('compute_node_id', compute_node_id))
+            
         if offset is not None:
             
             _query_params.append(('offset', offset))
@@ -1514,25 +1530,9 @@ class ResultsApi:
             
             _query_params.append(('reverse_sort', reverse_sort))
             
-        if run_id is not None:
-            
-            _query_params.append(('run_id', run_id))
-            
-        if return_code is not None:
-            
-            _query_params.append(('return_code', return_code))
-            
-        if status is not None:
-            
-            _query_params.append(('status', status.value))
-            
         if all_runs is not None:
             
             _query_params.append(('all_runs', all_runs))
-            
-        if compute_node_id is not None:
-            
-            _query_params.append(('compute_node_id', compute_node_id))
             
         # process the header parameters
         # process the form parameters

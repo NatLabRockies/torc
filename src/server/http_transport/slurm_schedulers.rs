@@ -1,4 +1,6 @@
-async fn handle_list_slurm_schedulers<C, B>(
+use super::*;
+
+pub(super) async fn handle_list_slurm_schedulers<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -36,7 +38,7 @@ where
     }
 }
 
-async fn handle_create_slurm_scheduler<C, B>(
+pub(super) async fn handle_create_slurm_scheduler<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -58,7 +60,11 @@ where
     }
 }
 
-async fn handle_get_slurm_scheduler<C>(server: Server<C>, id: i64, context: C) -> Response<Body>
+pub(super) async fn handle_get_slurm_scheduler<C>(
+    server: Server<C>,
+    id: i64,
+    context: C,
+) -> Response<Body>
 where
     C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
 {
@@ -68,7 +74,7 @@ where
     }
 }
 
-async fn handle_update_slurm_scheduler<C, B>(
+pub(super) async fn handle_update_slurm_scheduler<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,
@@ -91,7 +97,7 @@ where
     }
 }
 
-async fn handle_delete_slurm_schedulers<C, B>(
+pub(super) async fn handle_delete_slurm_schedulers<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -120,7 +126,7 @@ where
     }
 }
 
-async fn handle_delete_slurm_scheduler<C, B>(
+pub(super) async fn handle_delete_slurm_scheduler<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,
@@ -142,4 +148,3 @@ where
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
 }
-

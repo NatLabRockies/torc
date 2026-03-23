@@ -64,8 +64,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **claim_jobs_based_on_resources**
-> claim_jobs_based_on_resources(_api::WorkflowsApi, id::Int64, limit::Int64, compute_nodes_resources::ComputeNodesResources; sort_method=nothing, strict_scheduler_match=nothing, _mediaType=nothing) -> ClaimJobsBasedOnResources, OpenAPI.Clients.ApiResponse <br/>
-> claim_jobs_based_on_resources(_api::WorkflowsApi, response_stream::Channel, id::Int64, limit::Int64, compute_nodes_resources::ComputeNodesResources; sort_method=nothing, strict_scheduler_match=nothing, _mediaType=nothing) -> Channel{ ClaimJobsBasedOnResources }, OpenAPI.Clients.ApiResponse
+> claim_jobs_based_on_resources(_api::WorkflowsApi, id::Int64, limit::Int64, compute_nodes_resources::ComputeNodesResources; strict_scheduler_match=nothing, _mediaType=nothing) -> ClaimJobsBasedOnResources, OpenAPI.Clients.ApiResponse <br/>
+> claim_jobs_based_on_resources(_api::WorkflowsApi, response_stream::Channel, id::Int64, limit::Int64, compute_nodes_resources::ComputeNodesResources; strict_scheduler_match=nothing, _mediaType=nothing) -> Channel{ ClaimJobsBasedOnResources }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -82,7 +82,6 @@ Name | Type | Description  | Notes
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **sort_method** | [**ClaimJobsSortMethod**](.md) |  | [default to nothing]
  **strict_scheduler_match** | **Bool** |  | [default to nothing]
 
 ### Return type
@@ -380,8 +379,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **list_job_dependencies**
-> list_job_dependencies(_api::WorkflowsApi, id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, _mediaType=nothing) -> ListJobDependenciesResponse, OpenAPI.Clients.ApiResponse <br/>
-> list_job_dependencies(_api::WorkflowsApi, response_stream::Channel, id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, _mediaType=nothing) -> Channel{ ListJobDependenciesResponse }, OpenAPI.Clients.ApiResponse
+> list_job_dependencies(_api::WorkflowsApi, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing) -> ListJobDependenciesResponse, OpenAPI.Clients.ApiResponse <br/>
+> list_job_dependencies(_api::WorkflowsApi, response_stream::Channel, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing) -> Channel{ ListJobDependenciesResponse }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -398,8 +397,6 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **offset** | **Int64** |  | [default to nothing]
  **limit** | **Int64** |  | [default to nothing]
- **sort_by** | **String** |  | [default to nothing]
- **reverse_sort** | **Bool** |  | [default to nothing]
 
 ### Return type
 
@@ -417,8 +414,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **list_job_file_relationships**
-> list_job_file_relationships(_api::WorkflowsApi, id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, _mediaType=nothing) -> ListJobFileRelationshipsResponse, OpenAPI.Clients.ApiResponse <br/>
-> list_job_file_relationships(_api::WorkflowsApi, response_stream::Channel, id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, _mediaType=nothing) -> Channel{ ListJobFileRelationshipsResponse }, OpenAPI.Clients.ApiResponse
+> list_job_file_relationships(_api::WorkflowsApi, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing) -> ListJobFileRelationshipsResponse, OpenAPI.Clients.ApiResponse <br/>
+> list_job_file_relationships(_api::WorkflowsApi, response_stream::Channel, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing) -> Channel{ ListJobFileRelationshipsResponse }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -435,8 +432,6 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **offset** | **Int64** |  | [default to nothing]
  **limit** | **Int64** |  | [default to nothing]
- **sort_by** | **String** |  | [default to nothing]
- **reverse_sort** | **Bool** |  | [default to nothing]
 
 ### Return type
 
@@ -482,8 +477,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **list_job_user_data_relationships**
-> list_job_user_data_relationships(_api::WorkflowsApi, id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, _mediaType=nothing) -> ListJobUserDataRelationshipsResponse, OpenAPI.Clients.ApiResponse <br/>
-> list_job_user_data_relationships(_api::WorkflowsApi, response_stream::Channel, id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, _mediaType=nothing) -> Channel{ ListJobUserDataRelationshipsResponse }, OpenAPI.Clients.ApiResponse
+> list_job_user_data_relationships(_api::WorkflowsApi, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing) -> ListJobUserDataRelationshipsResponse, OpenAPI.Clients.ApiResponse <br/>
+> list_job_user_data_relationships(_api::WorkflowsApi, response_stream::Channel, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing) -> Channel{ ListJobUserDataRelationshipsResponse }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -500,8 +495,6 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **offset** | **Int64** |  | [default to nothing]
  **limit** | **Int64** |  | [default to nothing]
- **sort_by** | **String** |  | [default to nothing]
- **reverse_sort** | **Bool** |  | [default to nothing]
 
 ### Return type
 

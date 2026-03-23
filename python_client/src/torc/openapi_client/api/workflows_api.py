@@ -20,7 +20,6 @@ from pydantic import Field, StrictBool, StrictInt, StrictStr
 from typing import Any, Optional
 from typing_extensions import Annotated
 from torc.openapi_client.models.claim_jobs_based_on_resources import ClaimJobsBasedOnResources
-from torc.openapi_client.models.claim_jobs_sort_method import ClaimJobsSortMethod
 from torc.openapi_client.models.claim_next_jobs_response import ClaimNextJobsResponse
 from torc.openapi_client.models.compute_nodes_resources import ComputeNodesResources
 from torc.openapi_client.models.get_ready_job_requirements_response import GetReadyJobRequirementsResponse
@@ -347,7 +346,6 @@ class WorkflowsApi:
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         limit: Annotated[StrictInt, Field(description="Maximum number of jobs to claim")],
         compute_nodes_resources: ComputeNodesResources,
-        sort_method: Optional[ClaimJobsSortMethod] = None,
         strict_scheduler_match: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
@@ -371,8 +369,6 @@ class WorkflowsApi:
         :type limit: int
         :param compute_nodes_resources: (required)
         :type compute_nodes_resources: ComputeNodesResources
-        :param sort_method:
-        :type sort_method: ClaimJobsSortMethod
         :param strict_scheduler_match:
         :type strict_scheduler_match: bool
         :param _request_timeout: timeout setting for this request. If one
@@ -401,7 +397,6 @@ class WorkflowsApi:
             id=id,
             limit=limit,
             compute_nodes_resources=compute_nodes_resources,
-            sort_method=sort_method,
             strict_scheduler_match=strict_scheduler_match,
             _request_auth=_request_auth,
             _content_type=_content_type,
@@ -429,7 +424,6 @@ class WorkflowsApi:
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         limit: Annotated[StrictInt, Field(description="Maximum number of jobs to claim")],
         compute_nodes_resources: ComputeNodesResources,
-        sort_method: Optional[ClaimJobsSortMethod] = None,
         strict_scheduler_match: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
@@ -453,8 +447,6 @@ class WorkflowsApi:
         :type limit: int
         :param compute_nodes_resources: (required)
         :type compute_nodes_resources: ComputeNodesResources
-        :param sort_method:
-        :type sort_method: ClaimJobsSortMethod
         :param strict_scheduler_match:
         :type strict_scheduler_match: bool
         :param _request_timeout: timeout setting for this request. If one
@@ -483,7 +475,6 @@ class WorkflowsApi:
             id=id,
             limit=limit,
             compute_nodes_resources=compute_nodes_resources,
-            sort_method=sort_method,
             strict_scheduler_match=strict_scheduler_match,
             _request_auth=_request_auth,
             _content_type=_content_type,
@@ -511,7 +502,6 @@ class WorkflowsApi:
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         limit: Annotated[StrictInt, Field(description="Maximum number of jobs to claim")],
         compute_nodes_resources: ComputeNodesResources,
-        sort_method: Optional[ClaimJobsSortMethod] = None,
         strict_scheduler_match: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
@@ -535,8 +525,6 @@ class WorkflowsApi:
         :type limit: int
         :param compute_nodes_resources: (required)
         :type compute_nodes_resources: ComputeNodesResources
-        :param sort_method:
-        :type sort_method: ClaimJobsSortMethod
         :param strict_scheduler_match:
         :type strict_scheduler_match: bool
         :param _request_timeout: timeout setting for this request. If one
@@ -565,7 +553,6 @@ class WorkflowsApi:
             id=id,
             limit=limit,
             compute_nodes_resources=compute_nodes_resources,
-            sort_method=sort_method,
             strict_scheduler_match=strict_scheduler_match,
             _request_auth=_request_auth,
             _content_type=_content_type,
@@ -588,7 +575,6 @@ class WorkflowsApi:
         id,
         limit,
         compute_nodes_resources,
-        sort_method,
         strict_scheduler_match,
         _request_auth,
         _content_type,
@@ -616,10 +602,6 @@ class WorkflowsApi:
         if limit is not None:
             _path_params['limit'] = limit
         # process the query parameters
-        if sort_method is not None:
-            
-            _query_params.append(('sort_method', sort_method.value))
-            
         if strict_scheduler_match is not None:
             
             _query_params.append(('strict_scheduler_match', strict_scheduler_match))
@@ -3159,8 +3141,6 @@ class WorkflowsApi:
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
-        sort_by: Optional[StrictStr] = None,
-        reverse_sort: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -3183,10 +3163,6 @@ class WorkflowsApi:
         :type offset: int
         :param limit:
         :type limit: int
-        :param sort_by:
-        :type sort_by: str
-        :param reverse_sort:
-        :type reverse_sort: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -3213,8 +3189,6 @@ class WorkflowsApi:
             id=id,
             offset=offset,
             limit=limit,
-            sort_by=sort_by,
-            reverse_sort=reverse_sort,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -3241,8 +3215,6 @@ class WorkflowsApi:
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
-        sort_by: Optional[StrictStr] = None,
-        reverse_sort: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -3265,10 +3237,6 @@ class WorkflowsApi:
         :type offset: int
         :param limit:
         :type limit: int
-        :param sort_by:
-        :type sort_by: str
-        :param reverse_sort:
-        :type reverse_sort: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -3295,8 +3263,6 @@ class WorkflowsApi:
             id=id,
             offset=offset,
             limit=limit,
-            sort_by=sort_by,
-            reverse_sort=reverse_sort,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -3323,8 +3289,6 @@ class WorkflowsApi:
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
-        sort_by: Optional[StrictStr] = None,
-        reverse_sort: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -3347,10 +3311,6 @@ class WorkflowsApi:
         :type offset: int
         :param limit:
         :type limit: int
-        :param sort_by:
-        :type sort_by: str
-        :param reverse_sort:
-        :type reverse_sort: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -3377,8 +3337,6 @@ class WorkflowsApi:
             id=id,
             offset=offset,
             limit=limit,
-            sort_by=sort_by,
-            reverse_sort=reverse_sort,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -3400,8 +3358,6 @@ class WorkflowsApi:
         id,
         offset,
         limit,
-        sort_by,
-        reverse_sort,
         _request_auth,
         _content_type,
         _headers,
@@ -3433,14 +3389,6 @@ class WorkflowsApi:
         if limit is not None:
             
             _query_params.append(('limit', limit))
-            
-        if sort_by is not None:
-            
-            _query_params.append(('sort_by', sort_by))
-            
-        if reverse_sort is not None:
-            
-            _query_params.append(('reverse_sort', reverse_sort))
             
         # process the header parameters
         # process the form parameters
@@ -3484,8 +3432,6 @@ class WorkflowsApi:
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
-        sort_by: Optional[StrictStr] = None,
-        reverse_sort: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -3508,10 +3454,6 @@ class WorkflowsApi:
         :type offset: int
         :param limit:
         :type limit: int
-        :param sort_by:
-        :type sort_by: str
-        :param reverse_sort:
-        :type reverse_sort: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -3538,8 +3480,6 @@ class WorkflowsApi:
             id=id,
             offset=offset,
             limit=limit,
-            sort_by=sort_by,
-            reverse_sort=reverse_sort,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -3566,8 +3506,6 @@ class WorkflowsApi:
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
-        sort_by: Optional[StrictStr] = None,
-        reverse_sort: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -3590,10 +3528,6 @@ class WorkflowsApi:
         :type offset: int
         :param limit:
         :type limit: int
-        :param sort_by:
-        :type sort_by: str
-        :param reverse_sort:
-        :type reverse_sort: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -3620,8 +3554,6 @@ class WorkflowsApi:
             id=id,
             offset=offset,
             limit=limit,
-            sort_by=sort_by,
-            reverse_sort=reverse_sort,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -3648,8 +3580,6 @@ class WorkflowsApi:
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
-        sort_by: Optional[StrictStr] = None,
-        reverse_sort: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -3672,10 +3602,6 @@ class WorkflowsApi:
         :type offset: int
         :param limit:
         :type limit: int
-        :param sort_by:
-        :type sort_by: str
-        :param reverse_sort:
-        :type reverse_sort: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -3702,8 +3628,6 @@ class WorkflowsApi:
             id=id,
             offset=offset,
             limit=limit,
-            sort_by=sort_by,
-            reverse_sort=reverse_sort,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -3725,8 +3649,6 @@ class WorkflowsApi:
         id,
         offset,
         limit,
-        sort_by,
-        reverse_sort,
         _request_auth,
         _content_type,
         _headers,
@@ -3758,14 +3680,6 @@ class WorkflowsApi:
         if limit is not None:
             
             _query_params.append(('limit', limit))
-            
-        if sort_by is not None:
-            
-            _query_params.append(('sort_by', sort_by))
-            
-        if reverse_sort is not None:
-            
-            _query_params.append(('reverse_sort', reverse_sort))
             
         # process the header parameters
         # process the form parameters
@@ -4066,8 +3980,6 @@ class WorkflowsApi:
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
-        sort_by: Optional[StrictStr] = None,
-        reverse_sort: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -4090,10 +4002,6 @@ class WorkflowsApi:
         :type offset: int
         :param limit:
         :type limit: int
-        :param sort_by:
-        :type sort_by: str
-        :param reverse_sort:
-        :type reverse_sort: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -4120,8 +4028,6 @@ class WorkflowsApi:
             id=id,
             offset=offset,
             limit=limit,
-            sort_by=sort_by,
-            reverse_sort=reverse_sort,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -4148,8 +4054,6 @@ class WorkflowsApi:
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
-        sort_by: Optional[StrictStr] = None,
-        reverse_sort: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -4172,10 +4076,6 @@ class WorkflowsApi:
         :type offset: int
         :param limit:
         :type limit: int
-        :param sort_by:
-        :type sort_by: str
-        :param reverse_sort:
-        :type reverse_sort: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -4202,8 +4102,6 @@ class WorkflowsApi:
             id=id,
             offset=offset,
             limit=limit,
-            sort_by=sort_by,
-            reverse_sort=reverse_sort,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -4230,8 +4128,6 @@ class WorkflowsApi:
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
-        sort_by: Optional[StrictStr] = None,
-        reverse_sort: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -4254,10 +4150,6 @@ class WorkflowsApi:
         :type offset: int
         :param limit:
         :type limit: int
-        :param sort_by:
-        :type sort_by: str
-        :param reverse_sort:
-        :type reverse_sort: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -4284,8 +4176,6 @@ class WorkflowsApi:
             id=id,
             offset=offset,
             limit=limit,
-            sort_by=sort_by,
-            reverse_sort=reverse_sort,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -4307,8 +4197,6 @@ class WorkflowsApi:
         id,
         offset,
         limit,
-        sort_by,
-        reverse_sort,
         _request_auth,
         _content_type,
         _headers,
@@ -4340,14 +4228,6 @@ class WorkflowsApi:
         if limit is not None:
             
             _query_params.append(('limit', limit))
-            
-        if sort_by is not None:
-            
-            _query_params.append(('sort_by', sort_by))
-            
-        if reverse_sort is not None:
-            
-            _query_params.append(('reverse_sort', reverse_sort))
             
         # process the header parameters
         # process the form parameters

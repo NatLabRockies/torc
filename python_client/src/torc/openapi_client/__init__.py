@@ -46,7 +46,6 @@ __all__ = [
     "ClaimActionRequest",
     "ClaimActionResponse",
     "ClaimJobsBasedOnResources",
-    "ClaimJobsSortMethod",
     "ClaimNextJobsResponse",
     "ComputeNodeModel",
     "ComputeNodeSchedule",
@@ -144,7 +143,6 @@ from torc.openapi_client.models.access_group_model import AccessGroupModel as Ac
 from torc.openapi_client.models.claim_action_request import ClaimActionRequest as ClaimActionRequest
 from torc.openapi_client.models.claim_action_response import ClaimActionResponse as ClaimActionResponse
 from torc.openapi_client.models.claim_jobs_based_on_resources import ClaimJobsBasedOnResources as ClaimJobsBasedOnResources
-from torc.openapi_client.models.claim_jobs_sort_method import ClaimJobsSortMethod as ClaimJobsSortMethod
 from torc.openapi_client.models.claim_next_jobs_response import ClaimNextJobsResponse as ClaimNextJobsResponse
 from torc.openapi_client.models.compute_node_model import ComputeNodeModel as ComputeNodeModel
 from torc.openapi_client.models.compute_node_schedule import ComputeNodeSchedule as ComputeNodeSchedule

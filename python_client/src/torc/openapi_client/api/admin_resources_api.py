@@ -2793,10 +2793,6 @@ class AdminResourcesApi:
     def list_resource_requirements(
         self,
         workflow_id: StrictInt,
-        offset: Optional[StrictInt] = None,
-        limit: Optional[StrictInt] = None,
-        sort_by: Optional[StrictStr] = None,
-        reverse_sort: Optional[StrictBool] = None,
         job_id: Optional[StrictInt] = None,
         name: Optional[StrictStr] = None,
         memory: Optional[StrictStr] = None,
@@ -2804,6 +2800,10 @@ class AdminResourcesApi:
         num_gpus: Optional[StrictInt] = None,
         num_nodes: Optional[StrictInt] = None,
         runtime: Optional[StrictInt] = None,
+        offset: Optional[StrictInt] = None,
+        limit: Optional[StrictInt] = None,
+        sort_by: Optional[StrictStr] = None,
+        reverse_sort: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2822,14 +2822,6 @@ class AdminResourcesApi:
 
         :param workflow_id: (required)
         :type workflow_id: int
-        :param offset:
-        :type offset: int
-        :param limit:
-        :type limit: int
-        :param sort_by:
-        :type sort_by: str
-        :param reverse_sort:
-        :type reverse_sort: bool
         :param job_id:
         :type job_id: int
         :param name:
@@ -2844,6 +2836,14 @@ class AdminResourcesApi:
         :type num_nodes: int
         :param runtime:
         :type runtime: int
+        :param offset:
+        :type offset: int
+        :param limit:
+        :type limit: int
+        :param sort_by:
+        :type sort_by: str
+        :param reverse_sort:
+        :type reverse_sort: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2868,10 +2868,6 @@ class AdminResourcesApi:
 
         _param = self._list_resource_requirements_serialize(
             workflow_id=workflow_id,
-            offset=offset,
-            limit=limit,
-            sort_by=sort_by,
-            reverse_sort=reverse_sort,
             job_id=job_id,
             name=name,
             memory=memory,
@@ -2879,6 +2875,10 @@ class AdminResourcesApi:
             num_gpus=num_gpus,
             num_nodes=num_nodes,
             runtime=runtime,
+            offset=offset,
+            limit=limit,
+            sort_by=sort_by,
+            reverse_sort=reverse_sort,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2903,10 +2903,6 @@ class AdminResourcesApi:
     def list_resource_requirements_with_http_info(
         self,
         workflow_id: StrictInt,
-        offset: Optional[StrictInt] = None,
-        limit: Optional[StrictInt] = None,
-        sort_by: Optional[StrictStr] = None,
-        reverse_sort: Optional[StrictBool] = None,
         job_id: Optional[StrictInt] = None,
         name: Optional[StrictStr] = None,
         memory: Optional[StrictStr] = None,
@@ -2914,6 +2910,10 @@ class AdminResourcesApi:
         num_gpus: Optional[StrictInt] = None,
         num_nodes: Optional[StrictInt] = None,
         runtime: Optional[StrictInt] = None,
+        offset: Optional[StrictInt] = None,
+        limit: Optional[StrictInt] = None,
+        sort_by: Optional[StrictStr] = None,
+        reverse_sort: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2932,14 +2932,6 @@ class AdminResourcesApi:
 
         :param workflow_id: (required)
         :type workflow_id: int
-        :param offset:
-        :type offset: int
-        :param limit:
-        :type limit: int
-        :param sort_by:
-        :type sort_by: str
-        :param reverse_sort:
-        :type reverse_sort: bool
         :param job_id:
         :type job_id: int
         :param name:
@@ -2954,6 +2946,14 @@ class AdminResourcesApi:
         :type num_nodes: int
         :param runtime:
         :type runtime: int
+        :param offset:
+        :type offset: int
+        :param limit:
+        :type limit: int
+        :param sort_by:
+        :type sort_by: str
+        :param reverse_sort:
+        :type reverse_sort: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2978,10 +2978,6 @@ class AdminResourcesApi:
 
         _param = self._list_resource_requirements_serialize(
             workflow_id=workflow_id,
-            offset=offset,
-            limit=limit,
-            sort_by=sort_by,
-            reverse_sort=reverse_sort,
             job_id=job_id,
             name=name,
             memory=memory,
@@ -2989,6 +2985,10 @@ class AdminResourcesApi:
             num_gpus=num_gpus,
             num_nodes=num_nodes,
             runtime=runtime,
+            offset=offset,
+            limit=limit,
+            sort_by=sort_by,
+            reverse_sort=reverse_sort,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -3013,10 +3013,6 @@ class AdminResourcesApi:
     def list_resource_requirements_without_preload_content(
         self,
         workflow_id: StrictInt,
-        offset: Optional[StrictInt] = None,
-        limit: Optional[StrictInt] = None,
-        sort_by: Optional[StrictStr] = None,
-        reverse_sort: Optional[StrictBool] = None,
         job_id: Optional[StrictInt] = None,
         name: Optional[StrictStr] = None,
         memory: Optional[StrictStr] = None,
@@ -3024,6 +3020,10 @@ class AdminResourcesApi:
         num_gpus: Optional[StrictInt] = None,
         num_nodes: Optional[StrictInt] = None,
         runtime: Optional[StrictInt] = None,
+        offset: Optional[StrictInt] = None,
+        limit: Optional[StrictInt] = None,
+        sort_by: Optional[StrictStr] = None,
+        reverse_sort: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -3042,14 +3042,6 @@ class AdminResourcesApi:
 
         :param workflow_id: (required)
         :type workflow_id: int
-        :param offset:
-        :type offset: int
-        :param limit:
-        :type limit: int
-        :param sort_by:
-        :type sort_by: str
-        :param reverse_sort:
-        :type reverse_sort: bool
         :param job_id:
         :type job_id: int
         :param name:
@@ -3064,6 +3056,14 @@ class AdminResourcesApi:
         :type num_nodes: int
         :param runtime:
         :type runtime: int
+        :param offset:
+        :type offset: int
+        :param limit:
+        :type limit: int
+        :param sort_by:
+        :type sort_by: str
+        :param reverse_sort:
+        :type reverse_sort: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -3088,10 +3088,6 @@ class AdminResourcesApi:
 
         _param = self._list_resource_requirements_serialize(
             workflow_id=workflow_id,
-            offset=offset,
-            limit=limit,
-            sort_by=sort_by,
-            reverse_sort=reverse_sort,
             job_id=job_id,
             name=name,
             memory=memory,
@@ -3099,6 +3095,10 @@ class AdminResourcesApi:
             num_gpus=num_gpus,
             num_nodes=num_nodes,
             runtime=runtime,
+            offset=offset,
+            limit=limit,
+            sort_by=sort_by,
+            reverse_sort=reverse_sort,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -3118,10 +3118,6 @@ class AdminResourcesApi:
     def _list_resource_requirements_serialize(
         self,
         workflow_id,
-        offset,
-        limit,
-        sort_by,
-        reverse_sort,
         job_id,
         name,
         memory,
@@ -3129,6 +3125,10 @@ class AdminResourcesApi:
         num_gpus,
         num_nodes,
         runtime,
+        offset,
+        limit,
+        sort_by,
+        reverse_sort,
         _request_auth,
         _content_type,
         _headers,
@@ -3154,22 +3154,6 @@ class AdminResourcesApi:
         if workflow_id is not None:
             
             _query_params.append(('workflow_id', workflow_id))
-            
-        if offset is not None:
-            
-            _query_params.append(('offset', offset))
-            
-        if limit is not None:
-            
-            _query_params.append(('limit', limit))
-            
-        if sort_by is not None:
-            
-            _query_params.append(('sort_by', sort_by))
-            
-        if reverse_sort is not None:
-            
-            _query_params.append(('reverse_sort', reverse_sort))
             
         if job_id is not None:
             
@@ -3198,6 +3182,22 @@ class AdminResourcesApi:
         if runtime is not None:
             
             _query_params.append(('runtime', runtime))
+            
+        if offset is not None:
+            
+            _query_params.append(('offset', offset))
+            
+        if limit is not None:
+            
+            _query_params.append(('limit', limit))
+            
+        if sort_by is not None:
+            
+            _query_params.append(('sort_by', sort_by))
+            
+        if reverse_sort is not None:
+            
+            _query_params.append(('reverse_sort', reverse_sort))
             
         # process the header parameters
         # process the form parameters
@@ -3240,6 +3240,8 @@ class AdminResourcesApi:
         self,
         workflow_id: StrictInt,
         job_id: Optional[StrictInt] = None,
+        run_id: Optional[StrictInt] = None,
+        attempt_id: Optional[StrictInt] = None,
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
         _request_timeout: Union[
@@ -3262,6 +3264,10 @@ class AdminResourcesApi:
         :type workflow_id: int
         :param job_id:
         :type job_id: int
+        :param run_id:
+        :type run_id: int
+        :param attempt_id:
+        :type attempt_id: int
         :param offset:
         :type offset: int
         :param limit:
@@ -3291,6 +3297,8 @@ class AdminResourcesApi:
         _param = self._list_slurm_stats_serialize(
             workflow_id=workflow_id,
             job_id=job_id,
+            run_id=run_id,
+            attempt_id=attempt_id,
             offset=offset,
             limit=limit,
             _request_auth=_request_auth,
@@ -3318,6 +3326,8 @@ class AdminResourcesApi:
         self,
         workflow_id: StrictInt,
         job_id: Optional[StrictInt] = None,
+        run_id: Optional[StrictInt] = None,
+        attempt_id: Optional[StrictInt] = None,
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
         _request_timeout: Union[
@@ -3340,6 +3350,10 @@ class AdminResourcesApi:
         :type workflow_id: int
         :param job_id:
         :type job_id: int
+        :param run_id:
+        :type run_id: int
+        :param attempt_id:
+        :type attempt_id: int
         :param offset:
         :type offset: int
         :param limit:
@@ -3369,6 +3383,8 @@ class AdminResourcesApi:
         _param = self._list_slurm_stats_serialize(
             workflow_id=workflow_id,
             job_id=job_id,
+            run_id=run_id,
+            attempt_id=attempt_id,
             offset=offset,
             limit=limit,
             _request_auth=_request_auth,
@@ -3396,6 +3412,8 @@ class AdminResourcesApi:
         self,
         workflow_id: StrictInt,
         job_id: Optional[StrictInt] = None,
+        run_id: Optional[StrictInt] = None,
+        attempt_id: Optional[StrictInt] = None,
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
         _request_timeout: Union[
@@ -3418,6 +3436,10 @@ class AdminResourcesApi:
         :type workflow_id: int
         :param job_id:
         :type job_id: int
+        :param run_id:
+        :type run_id: int
+        :param attempt_id:
+        :type attempt_id: int
         :param offset:
         :type offset: int
         :param limit:
@@ -3447,6 +3469,8 @@ class AdminResourcesApi:
         _param = self._list_slurm_stats_serialize(
             workflow_id=workflow_id,
             job_id=job_id,
+            run_id=run_id,
+            attempt_id=attempt_id,
             offset=offset,
             limit=limit,
             _request_auth=_request_auth,
@@ -3469,6 +3493,8 @@ class AdminResourcesApi:
         self,
         workflow_id,
         job_id,
+        run_id,
+        attempt_id,
         offset,
         limit,
         _request_auth,
@@ -3500,6 +3526,14 @@ class AdminResourcesApi:
         if job_id is not None:
             
             _query_params.append(('job_id', job_id))
+            
+        if run_id is not None:
+            
+            _query_params.append(('run_id', run_id))
+            
+        if attempt_id is not None:
+            
+            _query_params.append(('attempt_id', attempt_id))
             
         if offset is not None:
             

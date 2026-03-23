@@ -19,7 +19,6 @@ import json
 
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
-from torc.openapi_client.models.claim_jobs_sort_method import ClaimJobsSortMethod
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -36,7 +35,6 @@ class WorkflowModel(BaseModel):
     enable_ro_crate: Optional[StrictBool] = None
     execution_config: Optional[StrictStr] = None
     id: Optional[StrictInt] = None
-    jobs_sort_method: Optional[ClaimJobsSortMethod] = None
     metadata: Optional[StrictStr] = None
     name: StrictStr
     project: Optional[StrictStr] = None
@@ -47,7 +45,7 @@ class WorkflowModel(BaseModel):
     timestamp: Optional[StrictStr] = None
     use_pending_failed: Optional[StrictBool] = None
     user: StrictStr
-    __properties: ClassVar[List[str]] = ["compute_node_expiration_buffer_seconds", "compute_node_ignore_workflow_completion", "compute_node_min_time_for_new_jobs_seconds", "compute_node_wait_for_healthy_database_minutes", "compute_node_wait_for_new_jobs_seconds", "description", "enable_ro_crate", "execution_config", "id", "jobs_sort_method", "metadata", "name", "project", "resource_monitor_config", "slurm_config", "slurm_defaults", "status_id", "timestamp", "use_pending_failed", "user"]
+    __properties: ClassVar[List[str]] = ["compute_node_expiration_buffer_seconds", "compute_node_ignore_workflow_completion", "compute_node_min_time_for_new_jobs_seconds", "compute_node_wait_for_healthy_database_minutes", "compute_node_wait_for_new_jobs_seconds", "description", "enable_ro_crate", "execution_config", "id", "metadata", "name", "project", "resource_monitor_config", "slurm_config", "slurm_defaults", "status_id", "timestamp", "use_pending_failed", "user"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -133,11 +131,6 @@ class WorkflowModel(BaseModel):
         if self.id is None and "id" in self.model_fields_set:
             _dict['id'] = None
 
-        # set to None if jobs_sort_method (nullable) is None
-        # and model_fields_set contains the field
-        if self.jobs_sort_method is None and "jobs_sort_method" in self.model_fields_set:
-            _dict['jobs_sort_method'] = None
-
         # set to None if metadata (nullable) is None
         # and model_fields_set contains the field
         if self.metadata is None and "metadata" in self.model_fields_set:
@@ -199,7 +192,6 @@ class WorkflowModel(BaseModel):
             "enable_ro_crate": obj.get("enable_ro_crate"),
             "execution_config": obj.get("execution_config"),
             "id": obj.get("id"),
-            "jobs_sort_method": obj.get("jobs_sort_method"),
             "metadata": obj.get("metadata"),
             "name": obj.get("name"),
             "project": obj.get("project"),

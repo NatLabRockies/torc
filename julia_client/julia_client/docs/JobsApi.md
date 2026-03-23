@@ -250,8 +250,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **retry_job**
-> retry_job(_api::JobsApi, id::Int64, run_id::Int64; body=nothing, _mediaType=nothing) -> JobModel, OpenAPI.Clients.ApiResponse <br/>
-> retry_job(_api::JobsApi, response_stream::Channel, id::Int64, run_id::Int64; body=nothing, _mediaType=nothing) -> Channel{ JobModel }, OpenAPI.Clients.ApiResponse
+> retry_job(_api::JobsApi, id::Int64, run_id::Int64, max_retries::Int64; _mediaType=nothing) -> JobModel, OpenAPI.Clients.ApiResponse <br/>
+> retry_job(_api::JobsApi, response_stream::Channel, id::Int64, run_id::Int64, max_retries::Int64; _mediaType=nothing) -> Channel{ JobModel }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -262,12 +262,7 @@ Name | Type | Description  | Notes
  **_api** | **JobsApi** | API context | 
 **id** | **Int64** | Job ID |
 **run_id** | **Int64** | Current workflow run ID |
-
-### Optional Parameters
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+**max_retries** | **Int64** |  |
 
 ### Return type
 
@@ -279,7 +274,7 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: application/json
+ - **Content-Type**: Not defined
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)

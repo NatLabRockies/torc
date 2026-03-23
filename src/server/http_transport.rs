@@ -1,20 +1,24 @@
 //! Permanent HTTP transport for the live Torc server.
 
-include!("http_transport/access_control.rs");
-include!("http_transport/files.rs");
-include!("http_transport/jobs.rs");
-include!("http_transport/results.rs");
-include!("http_transport/ro_crate.rs");
-include!("http_transport/compute_nodes.rs");
-include!("http_transport/local_schedulers.rs");
-include!("http_transport/resource_requirements.rs");
-include!("http_transport/remote_workers.rs");
-include!("http_transport/scheduled_compute_nodes.rs");
-include!("http_transport/slurm_schedulers.rs");
-include!("http_transport/slurm_stats.rs");
-include!("http_transport/system.rs");
-include!("http_transport/user_data.rs");
-include!("http_transport/workflows.rs");
+mod access_control;
+mod compute_nodes;
+mod files;
+mod jobs;
+mod local_schedulers;
+mod path_parsing;
+mod query_parsing;
+mod remote_workers;
+mod request_parsing;
+mod resource_requirements;
+mod response_mapping;
+mod results;
+mod ro_crate;
+mod scheduled_compute_nodes;
+mod slurm_schedulers;
+mod slurm_stats;
+mod system;
+mod user_data;
+mod workflows;
 
 use crate::models;
 use crate::openapi_codegen::{OpenApiAppState, PingResponse, VersionResponse};
@@ -36,6 +40,26 @@ use std::collections::HashMap;
 use std::task::{Context, Poll};
 use tower::Service;
 use url::form_urlencoded;
+
+use self::access_control::*;
+use self::compute_nodes::*;
+use self::files::*;
+use self::jobs::*;
+use self::local_schedulers::*;
+use self::path_parsing::*;
+use self::query_parsing::*;
+use self::remote_workers::*;
+use self::request_parsing::*;
+use self::resource_requirements::*;
+use self::response_mapping::*;
+use self::results::*;
+use self::ro_crate::*;
+use self::scheduled_compute_nodes::*;
+use self::slurm_schedulers::*;
+use self::slurm_stats::*;
+use self::system::*;
+use self::user_data::*;
+use self::workflows::*;
 
 #[derive(Clone)]
 pub struct MakeHttpFallbackService;
@@ -1295,11 +1319,6 @@ where
         Box::pin(self.inner.call((request, context)))
     }
 }
-
-include!("http_transport/query_parsing.rs");
-include!("http_transport/path_parsing.rs");
-include!("http_transport/request_parsing.rs");
-include!("http_transport/response_mapping.rs");
 
 #[cfg(test)]
 mod http_transport_tests {

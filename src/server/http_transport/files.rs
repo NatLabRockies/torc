@@ -1,4 +1,6 @@
-async fn handle_list_files<C, B>(
+use super::*;
+
+pub(super) async fn handle_list_files<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -31,7 +33,7 @@ where
     }
 }
 
-async fn handle_get_file<C>(server: Server<C>, id: i64, context: C) -> Response<Body>
+pub(super) async fn handle_get_file<C>(server: Server<C>, id: i64, context: C) -> Response<Body>
 where
     C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
 {
@@ -41,7 +43,7 @@ where
     }
 }
 
-async fn handle_create_file<C, B>(
+pub(super) async fn handle_create_file<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -63,7 +65,7 @@ where
     }
 }
 
-async fn handle_update_file<C, B>(
+pub(super) async fn handle_update_file<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,
@@ -86,7 +88,7 @@ where
     }
 }
 
-async fn handle_delete_files<C, B>(
+pub(super) async fn handle_delete_files<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -112,7 +114,7 @@ where
     }
 }
 
-async fn handle_delete_file<C, B>(
+pub(super) async fn handle_delete_file<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,
@@ -134,4 +136,3 @@ where
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
 }
-

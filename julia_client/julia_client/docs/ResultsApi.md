@@ -137,8 +137,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **list_results**
-> list_results(_api::ResultsApi, workflow_id::Int64; job_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, run_id=nothing, return_code=nothing, status=nothing, all_runs=nothing, compute_node_id=nothing, _mediaType=nothing) -> ListResultsResponse, OpenAPI.Clients.ApiResponse <br/>
-> list_results(_api::ResultsApi, response_stream::Channel, workflow_id::Int64; job_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, run_id=nothing, return_code=nothing, status=nothing, all_runs=nothing, compute_node_id=nothing, _mediaType=nothing) -> Channel{ ListResultsResponse }, OpenAPI.Clients.ApiResponse
+> list_results(_api::ResultsApi, workflow_id::Int64; job_id=nothing, run_id=nothing, return_code=nothing, status=nothing, compute_node_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, all_runs=nothing, _mediaType=nothing) -> ListResultsResponse, OpenAPI.Clients.ApiResponse <br/>
+> list_results(_api::ResultsApi, response_stream::Channel, workflow_id::Int64; job_id=nothing, run_id=nothing, return_code=nothing, status=nothing, compute_node_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, all_runs=nothing, _mediaType=nothing) -> Channel{ ListResultsResponse }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -154,15 +154,15 @@ Name | Type | Description  | Notes
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **job_id** | **Int64** |  | [default to nothing]
+ **run_id** | **Int64** |  | [default to nothing]
+ **return_code** | **Int64** |  | [default to nothing]
+ **status** | [**JobStatus**](.md) |  | [default to nothing]
+ **compute_node_id** | **Int64** |  | [default to nothing]
  **offset** | **Int64** |  | [default to nothing]
  **limit** | **Int64** |  | [default to nothing]
  **sort_by** | **String** |  | [default to nothing]
  **reverse_sort** | **Bool** |  | [default to nothing]
- **run_id** | **Int64** |  | [default to nothing]
- **return_code** | **Int64** |  | [default to nothing]
- **status** | [**JobStatus**](.md) |  | [default to nothing]
  **all_runs** | **Bool** |  | [default to nothing]
- **compute_node_id** | **Int64** |  | [default to nothing]
 
 ### Return type
 

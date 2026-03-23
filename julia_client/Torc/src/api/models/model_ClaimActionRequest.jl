@@ -24,7 +24,6 @@ const _property_types_ClaimActionRequest = Dict{Symbol,String}(Symbol("compute_n
 OpenAPI.property_type(::Type{ ClaimActionRequest }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_ClaimActionRequest[name]))}
 
 function OpenAPI.check_required(o::ClaimActionRequest)
-    o.compute_node_id === nothing && (return false)
     true
 end
 

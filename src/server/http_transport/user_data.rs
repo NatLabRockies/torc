@@ -1,4 +1,6 @@
-async fn handle_list_user_data<C, B>(
+use super::*;
+
+pub(super) async fn handle_list_user_data<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -31,7 +33,11 @@ where
     }
 }
 
-async fn handle_get_user_data<C>(server: Server<C>, id: i64, context: C) -> Response<Body>
+pub(super) async fn handle_get_user_data<C>(
+    server: Server<C>,
+    id: i64,
+    context: C,
+) -> Response<Body>
 where
     C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
 {
@@ -41,7 +47,7 @@ where
     }
 }
 
-async fn handle_create_user_data<C, B>(
+pub(super) async fn handle_create_user_data<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -75,7 +81,7 @@ where
     }
 }
 
-async fn handle_update_user_data<C, B>(
+pub(super) async fn handle_update_user_data<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,
@@ -98,7 +104,7 @@ where
     }
 }
 
-async fn handle_delete_all_user_data<C, B>(
+pub(super) async fn handle_delete_all_user_data<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -127,7 +133,7 @@ where
     }
 }
 
-async fn handle_delete_user_data<C, B>(
+pub(super) async fn handle_delete_user_data<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,
@@ -149,4 +155,3 @@ where
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
 }
-

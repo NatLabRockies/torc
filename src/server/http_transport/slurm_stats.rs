@@ -1,4 +1,6 @@
-async fn handle_create_slurm_stats<C, B>(
+use super::*;
+
+pub(super) async fn handle_create_slurm_stats<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -20,7 +22,7 @@ where
     }
 }
 
-async fn handle_list_slurm_stats<C, B>(
+pub(super) async fn handle_list_slurm_stats<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -49,4 +51,3 @@ where
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
 }
-

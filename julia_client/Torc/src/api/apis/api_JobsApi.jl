@@ -234,29 +234,30 @@ const _returntypes_retry_job_JobsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => JobModel,
 )
 
-function _oacinternal_retry_job(_api::JobsApi, id::Int64, run_id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_retry_job_JobsApi, "/jobs/{id}/retry/{run_id}", [], body)
+function _oacinternal_retry_job(_api::JobsApi, id::Int64, run_id::Int64, max_retries::Int64; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_retry_job_JobsApi, "/jobs/{id}/retry/{run_id}", [])
     OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
     OpenAPI.Clients.set_param(_ctx.path, "run_id", run_id)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "max_retries", max_retries; style="form", is_explode=true)  # type Int64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
-    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
 end
 
 @doc raw"""Params:
 - id::Int64 (required)
 - run_id::Int64 (required)
-- body::Any
+- max_retries::Int64 (required)
 
 Return: JobModel, OpenAPI.Clients.ApiResponse
 """
-function retry_job(_api::JobsApi, id::Int64, run_id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_retry_job(_api, id, run_id; body=body, _mediaType=_mediaType)
+function retry_job(_api::JobsApi, id::Int64, run_id::Int64, max_retries::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_retry_job(_api, id, run_id, max_retries; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function retry_job(_api::JobsApi, response_stream::Channel, id::Int64, run_id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_retry_job(_api, id, run_id; body=body, _mediaType=_mediaType)
+function retry_job(_api::JobsApi, response_stream::Channel, id::Int64, run_id::Int64, max_retries::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_retry_job(_api, id, run_id, max_retries; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 

@@ -94,12 +94,12 @@ pub fn app_router(state: OpenApiAppState) -> Router {
         )
         .route(
             "/torc-service/v1/workflows/{id}/access_groups",
-            axum::routing::post(access_control::add_workflow_to_group)
-                .get(access_control::list_workflow_groups),
+            get(access_control::list_workflow_groups),
         )
         .route(
             "/torc-service/v1/workflows/{id}/access_groups/{group_id}",
-            axum::routing::delete(access_control::remove_workflow_from_group),
+            axum::routing::post(access_control::add_workflow_to_group)
+                .delete(access_control::remove_workflow_from_group),
         )
         .route(
             "/torc-service/v1/access_check/{workflow_id}/{user_name}",
@@ -724,7 +724,7 @@ pub fn parity_report(source: &str) -> Result<Vec<String>, Box<dyn std::error::Er
     check_operation_id(
         source,
         &emitted,
-        "/workflows/{id}/access_groups",
+        "/workflows/{id}/access_groups/{group_id}",
         "post",
         "add_workflow_to_group",
         &mut issues,

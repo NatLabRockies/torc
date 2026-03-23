@@ -22,7 +22,7 @@ Documentation is also embedded in Julia which can be used with a Julia specific 
 Class | Method
 ------------ | -------------
 *AccessControlApi* | [**add_user_to_group**](docs/AccessControlApi.md#add_user_to_group)<br/>**POST** /access_groups/{id}/members<br/>
-*AccessControlApi* | [**add_workflow_to_group**](docs/AccessControlApi.md#add_workflow_to_group)<br/>**POST** /workflows/{id}/access_groups<br/>
+*AccessControlApi* | [**add_workflow_to_group**](docs/AccessControlApi.md#add_workflow_to_group)<br/>**POST** /workflows/{id}/access_groups/{group_id}<br/>
 *AccessControlApi* | [**check_workflow_access**](docs/AccessControlApi.md#check_workflow_access)<br/>**GET** /access_check/{workflow_id}/{user_name}<br/>
 *AccessControlApi* | [**create_access_group**](docs/AccessControlApi.md#create_access_group)<br/>**POST** /access_groups<br/>
 *AccessControlApi* | [**delete_access_group**](docs/AccessControlApi.md#delete_access_group)<br/>**DELETE** /access_groups/{id}<br/>
@@ -152,7 +152,6 @@ Class | Method
  - [ClaimActionRequest](docs/ClaimActionRequest.md)
  - [ClaimActionResponse](docs/ClaimActionResponse.md)
  - [ClaimJobsBasedOnResources](docs/ClaimJobsBasedOnResources.md)
- - [ClaimJobsSortMethod](docs/ClaimJobsSortMethod.md)
  - [ClaimNextJobsResponse](docs/ClaimNextJobsResponse.md)
  - [ComputeNodeModel](docs/ComputeNodeModel.md)
  - [ComputeNodeSchedule](docs/ComputeNodeSchedule.md)

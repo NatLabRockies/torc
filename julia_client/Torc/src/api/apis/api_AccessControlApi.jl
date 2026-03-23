@@ -43,27 +43,28 @@ const _returntypes_add_workflow_to_group_AccessControlApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => WorkflowAccessGroupModel,
 )
 
-function _oacinternal_add_workflow_to_group(_api::AccessControlApi, id::Int64, workflow_access_group_model::WorkflowAccessGroupModel; _mediaType=nothing)
-    _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_add_workflow_to_group_AccessControlApi, "/workflows/{id}/access_groups", [], workflow_access_group_model)
+function _oacinternal_add_workflow_to_group(_api::AccessControlApi, id::Int64, group_id::Int64; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_add_workflow_to_group_AccessControlApi, "/workflows/{id}/access_groups/{group_id}", [])
     OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.path, "group_id", group_id)  # type Int64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
-    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
 end
 
 @doc raw"""Params:
 - id::Int64 (required)
-- workflow_access_group_model::WorkflowAccessGroupModel (required)
+- group_id::Int64 (required)
 
 Return: WorkflowAccessGroupModel, OpenAPI.Clients.ApiResponse
 """
-function add_workflow_to_group(_api::AccessControlApi, id::Int64, workflow_access_group_model::WorkflowAccessGroupModel; _mediaType=nothing)
-    _ctx = _oacinternal_add_workflow_to_group(_api, id, workflow_access_group_model; _mediaType=_mediaType)
+function add_workflow_to_group(_api::AccessControlApi, id::Int64, group_id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_add_workflow_to_group(_api, id, group_id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function add_workflow_to_group(_api::AccessControlApi, response_stream::Channel, id::Int64, workflow_access_group_model::WorkflowAccessGroupModel; _mediaType=nothing)
-    _ctx = _oacinternal_add_workflow_to_group(_api, id, workflow_access_group_model; _mediaType=_mediaType)
+function add_workflow_to_group(_api::AccessControlApi, response_stream::Channel, id::Int64, group_id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_add_workflow_to_group(_api, id, group_id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
@@ -126,27 +127,26 @@ const _returntypes_delete_access_group_AccessControlApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => AccessGroupModel,
 )
 
-function _oacinternal_delete_access_group(_api::AccessControlApi, id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_delete_access_group_AccessControlApi, "/access_groups/{id}", [], body)
+function _oacinternal_delete_access_group(_api::AccessControlApi, id::Int64; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_delete_access_group_AccessControlApi, "/access_groups/{id}", [])
     OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
-    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
 end
 
 @doc raw"""Params:
 - id::Int64 (required)
-- body::Any
 
 Return: AccessGroupModel, OpenAPI.Clients.ApiResponse
 """
-function delete_access_group(_api::AccessControlApi, id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_delete_access_group(_api, id; body=body, _mediaType=_mediaType)
+function delete_access_group(_api::AccessControlApi, id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_delete_access_group(_api, id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function delete_access_group(_api::AccessControlApi, response_stream::Channel, id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_delete_access_group(_api, id; body=body, _mediaType=_mediaType)
+function delete_access_group(_api::AccessControlApi, response_stream::Channel, id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_delete_access_group(_api, id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
@@ -303,29 +303,28 @@ const _returntypes_remove_user_from_group_AccessControlApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => UserGroupMembershipModel,
 )
 
-function _oacinternal_remove_user_from_group(_api::AccessControlApi, id::Int64, user_name::String; body=nothing, _mediaType=nothing)
-    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_remove_user_from_group_AccessControlApi, "/access_groups/{id}/members/{user_name}", [], body)
+function _oacinternal_remove_user_from_group(_api::AccessControlApi, id::Int64, user_name::String; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_remove_user_from_group_AccessControlApi, "/access_groups/{id}/members/{user_name}", [])
     OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
     OpenAPI.Clients.set_param(_ctx.path, "user_name", user_name)  # type String
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
-    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
 end
 
 @doc raw"""Params:
 - id::Int64 (required)
 - user_name::String (required)
-- body::Any
 
 Return: UserGroupMembershipModel, OpenAPI.Clients.ApiResponse
 """
-function remove_user_from_group(_api::AccessControlApi, id::Int64, user_name::String; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_remove_user_from_group(_api, id, user_name; body=body, _mediaType=_mediaType)
+function remove_user_from_group(_api::AccessControlApi, id::Int64, user_name::String; _mediaType=nothing)
+    _ctx = _oacinternal_remove_user_from_group(_api, id, user_name; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function remove_user_from_group(_api::AccessControlApi, response_stream::Channel, id::Int64, user_name::String; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_remove_user_from_group(_api, id, user_name; body=body, _mediaType=_mediaType)
+function remove_user_from_group(_api::AccessControlApi, response_stream::Channel, id::Int64, user_name::String; _mediaType=nothing)
+    _ctx = _oacinternal_remove_user_from_group(_api, id, user_name; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
@@ -333,29 +332,28 @@ const _returntypes_remove_workflow_from_group_AccessControlApi = Dict{Regex,Type
     Regex("^" * replace("200", "x"=>".") * "\$") => WorkflowAccessGroupModel,
 )
 
-function _oacinternal_remove_workflow_from_group(_api::AccessControlApi, id::Int64, group_id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_remove_workflow_from_group_AccessControlApi, "/workflows/{id}/access_groups/{group_id}", [], body)
+function _oacinternal_remove_workflow_from_group(_api::AccessControlApi, id::Int64, group_id::Int64; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_remove_workflow_from_group_AccessControlApi, "/workflows/{id}/access_groups/{group_id}", [])
     OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
     OpenAPI.Clients.set_param(_ctx.path, "group_id", group_id)  # type Int64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
-    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
 end
 
 @doc raw"""Params:
 - id::Int64 (required)
 - group_id::Int64 (required)
-- body::Any
 
 Return: WorkflowAccessGroupModel, OpenAPI.Clients.ApiResponse
 """
-function remove_workflow_from_group(_api::AccessControlApi, id::Int64, group_id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_remove_workflow_from_group(_api, id, group_id; body=body, _mediaType=_mediaType)
+function remove_workflow_from_group(_api::AccessControlApi, id::Int64, group_id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_remove_workflow_from_group(_api, id, group_id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function remove_workflow_from_group(_api::AccessControlApi, response_stream::Channel, id::Int64, group_id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_remove_workflow_from_group(_api, id, group_id; body=body, _mediaType=_mediaType)
+function remove_workflow_from_group(_api::AccessControlApi, response_stream::Channel, id::Int64, group_id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_remove_workflow_from_group(_api, id, group_id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 

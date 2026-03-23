@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from typing_extensions import Annotated
 
 from pydantic import Field, StrictInt, StrictStr
-from typing import Any, Optional
+from typing import Optional
 from typing_extensions import Annotated
 from torc.openapi_client.models.access_check_response import AccessCheckResponse
 from torc.openapi_client.models.access_group_model import AccessGroupModel
@@ -333,7 +333,7 @@ class AccessControlApi:
     def add_workflow_to_group(
         self,
         id: Annotated[StrictInt, Field(description="ID of the workflow")],
-        workflow_access_group_model: WorkflowAccessGroupModel,
+        group_id: Annotated[StrictInt, Field(description="ID of the access group")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -352,8 +352,8 @@ class AccessControlApi:
 
         :param id: ID of the workflow (required)
         :type id: int
-        :param workflow_access_group_model: (required)
-        :type workflow_access_group_model: WorkflowAccessGroupModel
+        :param group_id: ID of the access group (required)
+        :type group_id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -378,7 +378,7 @@ class AccessControlApi:
 
         _param = self._add_workflow_to_group_serialize(
             id=id,
-            workflow_access_group_model=workflow_access_group_model,
+            group_id=group_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -403,7 +403,7 @@ class AccessControlApi:
     def add_workflow_to_group_with_http_info(
         self,
         id: Annotated[StrictInt, Field(description="ID of the workflow")],
-        workflow_access_group_model: WorkflowAccessGroupModel,
+        group_id: Annotated[StrictInt, Field(description="ID of the access group")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -422,8 +422,8 @@ class AccessControlApi:
 
         :param id: ID of the workflow (required)
         :type id: int
-        :param workflow_access_group_model: (required)
-        :type workflow_access_group_model: WorkflowAccessGroupModel
+        :param group_id: ID of the access group (required)
+        :type group_id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -448,7 +448,7 @@ class AccessControlApi:
 
         _param = self._add_workflow_to_group_serialize(
             id=id,
-            workflow_access_group_model=workflow_access_group_model,
+            group_id=group_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -473,7 +473,7 @@ class AccessControlApi:
     def add_workflow_to_group_without_preload_content(
         self,
         id: Annotated[StrictInt, Field(description="ID of the workflow")],
-        workflow_access_group_model: WorkflowAccessGroupModel,
+        group_id: Annotated[StrictInt, Field(description="ID of the access group")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -492,8 +492,8 @@ class AccessControlApi:
 
         :param id: ID of the workflow (required)
         :type id: int
-        :param workflow_access_group_model: (required)
-        :type workflow_access_group_model: WorkflowAccessGroupModel
+        :param group_id: ID of the access group (required)
+        :type group_id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -518,7 +518,7 @@ class AccessControlApi:
 
         _param = self._add_workflow_to_group_serialize(
             id=id,
-            workflow_access_group_model=workflow_access_group_model,
+            group_id=group_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -538,7 +538,7 @@ class AccessControlApi:
     def _add_workflow_to_group_serialize(
         self,
         id,
-        workflow_access_group_model,
+        group_id,
         _request_auth,
         _content_type,
         _headers,
@@ -562,12 +562,12 @@ class AccessControlApi:
         # process the path parameters
         if id is not None:
             _path_params['id'] = id
+        if group_id is not None:
+            _path_params['group_id'] = group_id
         # process the query parameters
         # process the header parameters
         # process the form parameters
         # process the body parameter
-        if workflow_access_group_model is not None:
-            _body_params = workflow_access_group_model
 
 
         # set the HTTP header `Accept`
@@ -578,19 +578,6 @@ class AccessControlApi:
                 ]
             )
 
-        # set the HTTP header `Content-Type`
-        if _content_type:
-            _header_params['Content-Type'] = _content_type
-        else:
-            _default_content_type = (
-                self.api_client.select_header_content_type(
-                    [
-                        'application/json'
-                    ]
-                )
-            )
-            if _default_content_type is not None:
-                _header_params['Content-Type'] = _default_content_type
 
         # authentication setting
         _auth_settings: List[str] = [
@@ -598,7 +585,7 @@ class AccessControlApi:
 
         return self.api_client.param_serialize(
             method='POST',
-            resource_path='/workflows/{id}/access_groups',
+            resource_path='/workflows/{id}/access_groups/{group_id}',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -1160,7 +1147,6 @@ class AccessControlApi:
     def delete_access_group(
         self,
         id: Annotated[StrictInt, Field(description="ID of the access group")],
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1179,8 +1165,6 @@ class AccessControlApi:
 
         :param id: ID of the access group (required)
         :type id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1205,7 +1189,6 @@ class AccessControlApi:
 
         _param = self._delete_access_group_serialize(
             id=id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1230,7 +1213,6 @@ class AccessControlApi:
     def delete_access_group_with_http_info(
         self,
         id: Annotated[StrictInt, Field(description="ID of the access group")],
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1249,8 +1231,6 @@ class AccessControlApi:
 
         :param id: ID of the access group (required)
         :type id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1275,7 +1255,6 @@ class AccessControlApi:
 
         _param = self._delete_access_group_serialize(
             id=id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1300,7 +1279,6 @@ class AccessControlApi:
     def delete_access_group_without_preload_content(
         self,
         id: Annotated[StrictInt, Field(description="ID of the access group")],
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1319,8 +1297,6 @@ class AccessControlApi:
 
         :param id: ID of the access group (required)
         :type id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1345,7 +1321,6 @@ class AccessControlApi:
 
         _param = self._delete_access_group_serialize(
             id=id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1365,7 +1340,6 @@ class AccessControlApi:
     def _delete_access_group_serialize(
         self,
         id,
-        body,
         _request_auth,
         _content_type,
         _headers,
@@ -1393,8 +1367,6 @@ class AccessControlApi:
         # process the header parameters
         # process the form parameters
         # process the body parameter
-        if body is not None:
-            _body_params = body
 
 
         # set the HTTP header `Accept`
@@ -1405,19 +1377,6 @@ class AccessControlApi:
                 ]
             )
 
-        # set the HTTP header `Content-Type`
-        if _content_type:
-            _header_params['Content-Type'] = _content_type
-        else:
-            _default_content_type = (
-                self.api_client.select_header_content_type(
-                    [
-                        'application/json'
-                    ]
-                )
-            )
-            if _default_content_type is not None:
-                _header_params['Content-Type'] = _default_content_type
 
         # authentication setting
         _auth_settings: List[str] = [
@@ -2852,7 +2811,6 @@ class AccessControlApi:
         self,
         id: Annotated[StrictInt, Field(description="ID of the access group")],
         user_name: Annotated[StrictStr, Field(description="Username to remove")],
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2873,8 +2831,6 @@ class AccessControlApi:
         :type id: int
         :param user_name: Username to remove (required)
         :type user_name: str
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2900,7 +2856,6 @@ class AccessControlApi:
         _param = self._remove_user_from_group_serialize(
             id=id,
             user_name=user_name,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2926,7 +2881,6 @@ class AccessControlApi:
         self,
         id: Annotated[StrictInt, Field(description="ID of the access group")],
         user_name: Annotated[StrictStr, Field(description="Username to remove")],
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2947,8 +2901,6 @@ class AccessControlApi:
         :type id: int
         :param user_name: Username to remove (required)
         :type user_name: str
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2974,7 +2926,6 @@ class AccessControlApi:
         _param = self._remove_user_from_group_serialize(
             id=id,
             user_name=user_name,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -3000,7 +2951,6 @@ class AccessControlApi:
         self,
         id: Annotated[StrictInt, Field(description="ID of the access group")],
         user_name: Annotated[StrictStr, Field(description="Username to remove")],
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -3021,8 +2971,6 @@ class AccessControlApi:
         :type id: int
         :param user_name: Username to remove (required)
         :type user_name: str
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -3048,7 +2996,6 @@ class AccessControlApi:
         _param = self._remove_user_from_group_serialize(
             id=id,
             user_name=user_name,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -3069,7 +3016,6 @@ class AccessControlApi:
         self,
         id,
         user_name,
-        body,
         _request_auth,
         _content_type,
         _headers,
@@ -3099,8 +3045,6 @@ class AccessControlApi:
         # process the header parameters
         # process the form parameters
         # process the body parameter
-        if body is not None:
-            _body_params = body
 
 
         # set the HTTP header `Accept`
@@ -3111,19 +3055,6 @@ class AccessControlApi:
                 ]
             )
 
-        # set the HTTP header `Content-Type`
-        if _content_type:
-            _header_params['Content-Type'] = _content_type
-        else:
-            _default_content_type = (
-                self.api_client.select_header_content_type(
-                    [
-                        'application/json'
-                    ]
-                )
-            )
-            if _default_content_type is not None:
-                _header_params['Content-Type'] = _default_content_type
 
         # authentication setting
         _auth_settings: List[str] = [
@@ -3152,7 +3083,6 @@ class AccessControlApi:
         self,
         id: Annotated[StrictInt, Field(description="ID of the workflow")],
         group_id: Annotated[StrictInt, Field(description="ID of the access group")],
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -3173,8 +3103,6 @@ class AccessControlApi:
         :type id: int
         :param group_id: ID of the access group (required)
         :type group_id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -3200,7 +3128,6 @@ class AccessControlApi:
         _param = self._remove_workflow_from_group_serialize(
             id=id,
             group_id=group_id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -3226,7 +3153,6 @@ class AccessControlApi:
         self,
         id: Annotated[StrictInt, Field(description="ID of the workflow")],
         group_id: Annotated[StrictInt, Field(description="ID of the access group")],
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -3247,8 +3173,6 @@ class AccessControlApi:
         :type id: int
         :param group_id: ID of the access group (required)
         :type group_id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -3274,7 +3198,6 @@ class AccessControlApi:
         _param = self._remove_workflow_from_group_serialize(
             id=id,
             group_id=group_id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -3300,7 +3223,6 @@ class AccessControlApi:
         self,
         id: Annotated[StrictInt, Field(description="ID of the workflow")],
         group_id: Annotated[StrictInt, Field(description="ID of the access group")],
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -3321,8 +3243,6 @@ class AccessControlApi:
         :type id: int
         :param group_id: ID of the access group (required)
         :type group_id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -3348,7 +3268,6 @@ class AccessControlApi:
         _param = self._remove_workflow_from_group_serialize(
             id=id,
             group_id=group_id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -3369,7 +3288,6 @@ class AccessControlApi:
         self,
         id,
         group_id,
-        body,
         _request_auth,
         _content_type,
         _headers,
@@ -3399,8 +3317,6 @@ class AccessControlApi:
         # process the header parameters
         # process the form parameters
         # process the body parameter
-        if body is not None:
-            _body_params = body
 
 
         # set the HTTP header `Accept`
@@ -3411,19 +3327,6 @@ class AccessControlApi:
                 ]
             )
 
-        # set the HTTP header `Content-Type`
-        if _content_type:
-            _header_params['Content-Type'] = _content_type
-        else:
-            _default_content_type = (
-                self.api_client.select_header_content_type(
-                    [
-                        'application/json'
-                    ]
-                )
-            )
-            if _default_content_type is not None:
-                _header_params['Content-Type'] = _default_content_type
 
         # authentication setting
         _auth_settings: List[str] = [

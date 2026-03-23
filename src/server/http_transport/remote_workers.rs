@@ -1,4 +1,6 @@
-async fn handle_list_remote_workers<C>(
+use super::*;
+
+pub(super) async fn handle_list_remote_workers<C>(
     server: Server<C>,
     workflow_id: i64,
     context: C,
@@ -12,7 +14,7 @@ where
     }
 }
 
-async fn handle_create_remote_workers<C, B>(
+pub(super) async fn handle_create_remote_workers<C, B>(
     server: Server<C>,
     workflow_id: i64,
     request: Request<B>,
@@ -38,7 +40,7 @@ where
     }
 }
 
-async fn handle_delete_remote_worker<C>(
+pub(super) async fn handle_delete_remote_worker<C>(
     server: Server<C>,
     workflow_id: i64,
     worker: String,

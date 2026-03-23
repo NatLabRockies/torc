@@ -1,4 +1,6 @@
-async fn handle_list_jobs<C, B>(
+use super::*;
+
+pub(super) async fn handle_list_jobs<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -32,7 +34,7 @@ where
     }
 }
 
-async fn handle_create_job<C, B>(
+pub(super) async fn handle_create_job<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -54,7 +56,7 @@ where
     }
 }
 
-async fn handle_create_jobs<C, B>(
+pub(super) async fn handle_create_jobs<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -76,7 +78,7 @@ where
     }
 }
 
-async fn handle_delete_jobs<C, B>(
+pub(super) async fn handle_delete_jobs<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -102,7 +104,7 @@ where
     }
 }
 
-async fn handle_get_job<C>(server: Server<C>, id: i64, context: C) -> Response<Body>
+pub(super) async fn handle_get_job<C>(server: Server<C>, id: i64, context: C) -> Response<Body>
 where
     C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
 {
@@ -112,7 +114,7 @@ where
     }
 }
 
-async fn handle_update_job<C, B>(
+pub(super) async fn handle_update_job<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,
@@ -135,7 +137,7 @@ where
     }
 }
 
-async fn handle_delete_job<C, B>(
+pub(super) async fn handle_delete_job<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,
@@ -158,7 +160,7 @@ where
     }
 }
 
-async fn handle_complete_job<C, B>(
+pub(super) async fn handle_complete_job<C, B>(
     server: Server<C>,
     id: i64,
     status: models::JobStatus,
@@ -186,7 +188,7 @@ where
     }
 }
 
-async fn handle_manage_status_change<C, B>(
+pub(super) async fn handle_manage_status_change<C, B>(
     server: Server<C>,
     id: i64,
     status: models::JobStatus,
@@ -214,7 +216,7 @@ where
     }
 }
 
-async fn handle_start_job<C, B>(
+pub(super) async fn handle_start_job<C, B>(
     server: Server<C>,
     id: i64,
     run_id: i64,
@@ -242,7 +244,7 @@ where
     }
 }
 
-async fn handle_retry_job<C, B>(
+pub(super) async fn handle_retry_job<C, B>(
     server: Server<C>,
     id: i64,
     run_id: i64,

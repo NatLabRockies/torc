@@ -1,4 +1,6 @@
-async fn read_required_json_body<B, T>(request: Request<B>) -> Result<T, Response<Body>>
+use super::*;
+
+pub(super) async fn read_required_json_body<B, T>(request: Request<B>) -> Result<T, Response<Body>>
 where
     B: HttpBody + Send + 'static,
     B::Data: Send,
@@ -21,7 +23,7 @@ where
         .map_err(|err| error_response(StatusCode::BAD_REQUEST, err.to_string()))
 }
 
-async fn read_optional_json_value<B>(
+pub(super) async fn read_optional_json_value<B>(
     request: Request<B>,
 ) -> Result<Option<serde_json::Value>, Response<Body>>
 where

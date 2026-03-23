@@ -2192,7 +2192,7 @@ class JobsApi:
         self,
         id: Annotated[StrictInt, Field(description="Job ID")],
         run_id: Annotated[StrictInt, Field(description="Current workflow run ID")],
-        body: Optional[Any] = None,
+        max_retries: StrictInt,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2213,8 +2213,8 @@ class JobsApi:
         :type id: int
         :param run_id: Current workflow run ID (required)
         :type run_id: int
-        :param body:
-        :type body: object
+        :param max_retries: (required)
+        :type max_retries: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2240,7 +2240,7 @@ class JobsApi:
         _param = self._retry_job_serialize(
             id=id,
             run_id=run_id,
-            body=body,
+            max_retries=max_retries,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2266,7 +2266,7 @@ class JobsApi:
         self,
         id: Annotated[StrictInt, Field(description="Job ID")],
         run_id: Annotated[StrictInt, Field(description="Current workflow run ID")],
-        body: Optional[Any] = None,
+        max_retries: StrictInt,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2287,8 +2287,8 @@ class JobsApi:
         :type id: int
         :param run_id: Current workflow run ID (required)
         :type run_id: int
-        :param body:
-        :type body: object
+        :param max_retries: (required)
+        :type max_retries: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2314,7 +2314,7 @@ class JobsApi:
         _param = self._retry_job_serialize(
             id=id,
             run_id=run_id,
-            body=body,
+            max_retries=max_retries,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2340,7 +2340,7 @@ class JobsApi:
         self,
         id: Annotated[StrictInt, Field(description="Job ID")],
         run_id: Annotated[StrictInt, Field(description="Current workflow run ID")],
-        body: Optional[Any] = None,
+        max_retries: StrictInt,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2361,8 +2361,8 @@ class JobsApi:
         :type id: int
         :param run_id: Current workflow run ID (required)
         :type run_id: int
-        :param body:
-        :type body: object
+        :param max_retries: (required)
+        :type max_retries: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2388,7 +2388,7 @@ class JobsApi:
         _param = self._retry_job_serialize(
             id=id,
             run_id=run_id,
-            body=body,
+            max_retries=max_retries,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2409,7 +2409,7 @@ class JobsApi:
         self,
         id,
         run_id,
-        body,
+        max_retries,
         _request_auth,
         _content_type,
         _headers,
@@ -2436,11 +2436,13 @@ class JobsApi:
         if run_id is not None:
             _path_params['run_id'] = run_id
         # process the query parameters
+        if max_retries is not None:
+            
+            _query_params.append(('max_retries', max_retries))
+            
         # process the header parameters
         # process the form parameters
         # process the body parameter
-        if body is not None:
-            _body_params = body
 
 
         # set the HTTP header `Accept`
@@ -2451,19 +2453,6 @@ class JobsApi:
                 ]
             )
 
-        # set the HTTP header `Content-Type`
-        if _content_type:
-            _header_params['Content-Type'] = _content_type
-        else:
-            _default_content_type = (
-                self.api_client.select_header_content_type(
-                    [
-                        'application/json'
-                    ]
-                )
-            )
-            if _default_content_type is not None:
-                _header_params['Content-Type'] = _default_content_type
 
         # authentication setting
         _auth_settings: List[str] = [

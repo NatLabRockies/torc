@@ -18,7 +18,7 @@ import re  # noqa: F401
 import json
 
 from pydantic import BaseModel, ConfigDict, StrictInt
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -26,7 +26,7 @@ class ClaimActionRequest(BaseModel):
     """
     ClaimActionRequest
     """ # noqa: E501
-    compute_node_id: StrictInt
+    compute_node_id: Optional[StrictInt] = None
     __properties: ClassVar[List[str]] = ["compute_node_id"]
 
     model_config = ConfigDict(
@@ -68,6 +68,11 @@ class ClaimActionRequest(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if compute_node_id (nullable) is None
+        # and model_fields_set contains the field
+        if self.compute_node_id is None and "compute_node_id" in self.model_fields_set:
+            _dict['compute_node_id'] = None
+
         return _dict
 
     @classmethod

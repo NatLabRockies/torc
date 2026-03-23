@@ -325,8 +325,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **list_resource_requirements**
-> list_resource_requirements(_api::AdminResourcesApi, workflow_id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, job_id=nothing, name=nothing, memory=nothing, num_cpus=nothing, num_gpus=nothing, num_nodes=nothing, runtime=nothing, _mediaType=nothing) -> ListResourceRequirementsResponse, OpenAPI.Clients.ApiResponse <br/>
-> list_resource_requirements(_api::AdminResourcesApi, response_stream::Channel, workflow_id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, job_id=nothing, name=nothing, memory=nothing, num_cpus=nothing, num_gpus=nothing, num_nodes=nothing, runtime=nothing, _mediaType=nothing) -> Channel{ ListResourceRequirementsResponse }, OpenAPI.Clients.ApiResponse
+> list_resource_requirements(_api::AdminResourcesApi, workflow_id::Int64; job_id=nothing, name=nothing, memory=nothing, num_cpus=nothing, num_gpus=nothing, num_nodes=nothing, runtime=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, _mediaType=nothing) -> ListResourceRequirementsResponse, OpenAPI.Clients.ApiResponse <br/>
+> list_resource_requirements(_api::AdminResourcesApi, response_stream::Channel, workflow_id::Int64; job_id=nothing, name=nothing, memory=nothing, num_cpus=nothing, num_gpus=nothing, num_nodes=nothing, runtime=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, _mediaType=nothing) -> Channel{ ListResourceRequirementsResponse }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -341,10 +341,6 @@ Name | Type | Description  | Notes
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **offset** | **Int64** |  | [default to nothing]
- **limit** | **Int64** |  | [default to nothing]
- **sort_by** | **String** |  | [default to nothing]
- **reverse_sort** | **Bool** |  | [default to nothing]
  **job_id** | **Int64** |  | [default to nothing]
  **name** | **String** |  | [default to nothing]
  **memory** | **String** |  | [default to nothing]
@@ -352,6 +348,10 @@ Name | Type | Description  | Notes
  **num_gpus** | **Int64** |  | [default to nothing]
  **num_nodes** | **Int64** |  | [default to nothing]
  **runtime** | **Int64** |  | [default to nothing]
+ **offset** | **Int64** |  | [default to nothing]
+ **limit** | **Int64** |  | [default to nothing]
+ **sort_by** | **String** |  | [default to nothing]
+ **reverse_sort** | **Bool** |  | [default to nothing]
 
 ### Return type
 
@@ -369,8 +369,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **list_slurm_stats**
-> list_slurm_stats(_api::AdminResourcesApi, workflow_id::Int64; job_id=nothing, offset=nothing, limit=nothing, _mediaType=nothing) -> ListSlurmStatsResponse, OpenAPI.Clients.ApiResponse <br/>
-> list_slurm_stats(_api::AdminResourcesApi, response_stream::Channel, workflow_id::Int64; job_id=nothing, offset=nothing, limit=nothing, _mediaType=nothing) -> Channel{ ListSlurmStatsResponse }, OpenAPI.Clients.ApiResponse
+> list_slurm_stats(_api::AdminResourcesApi, workflow_id::Int64; job_id=nothing, run_id=nothing, attempt_id=nothing, offset=nothing, limit=nothing, _mediaType=nothing) -> ListSlurmStatsResponse, OpenAPI.Clients.ApiResponse <br/>
+> list_slurm_stats(_api::AdminResourcesApi, response_stream::Channel, workflow_id::Int64; job_id=nothing, run_id=nothing, attempt_id=nothing, offset=nothing, limit=nothing, _mediaType=nothing) -> Channel{ ListSlurmStatsResponse }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -386,6 +386,8 @@ Name | Type | Description  | Notes
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **job_id** | **Int64** |  | [default to nothing]
+ **run_id** | **Int64** |  | [default to nothing]
+ **attempt_id** | **Int64** |  | [default to nothing]
  **offset** | **Int64** |  | [default to nothing]
  **limit** | **Int64** |  | [default to nothing]
 

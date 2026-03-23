@@ -1,4 +1,6 @@
-async fn handle_list_access_groups<C, B>(
+use super::*;
+
+pub(super) async fn handle_list_access_groups<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -20,7 +22,7 @@ where
     }
 }
 
-async fn handle_create_access_group<C, B>(
+pub(super) async fn handle_create_access_group<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -42,7 +44,11 @@ where
     }
 }
 
-async fn handle_get_access_group<C>(server: Server<C>, id: i64, context: C) -> Response<Body>
+pub(super) async fn handle_get_access_group<C>(
+    server: Server<C>,
+    id: i64,
+    context: C,
+) -> Response<Body>
 where
     C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
 {
@@ -52,7 +58,11 @@ where
     }
 }
 
-async fn handle_delete_access_group<C>(server: Server<C>, id: i64, context: C) -> Response<Body>
+pub(super) async fn handle_delete_access_group<C>(
+    server: Server<C>,
+    id: i64,
+    context: C,
+) -> Response<Body>
 where
     C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
 {
@@ -62,7 +72,7 @@ where
     }
 }
 
-async fn handle_add_user_to_group<C, B>(
+pub(super) async fn handle_add_user_to_group<C, B>(
     server: Server<C>,
     group_id: i64,
     request: Request<B>,
@@ -74,11 +84,10 @@ where
     B::Error: std::fmt::Display,
     C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
 {
-    let body =
-        match read_required_json_body::<B, models::UserGroupMembershipModel>(request).await {
-            Ok(body) => body,
-            Err(response) => return response,
-        };
+    let body = match read_required_json_body::<B, models::UserGroupMembershipModel>(request).await {
+        Ok(body) => body,
+        Err(response) => return response,
+    };
 
     match server.add_user_to_group(group_id, body, &context).await {
         Ok(response) => add_user_to_group_response(response),
@@ -86,7 +95,7 @@ where
     }
 }
 
-async fn handle_list_group_members<C, B>(
+pub(super) async fn handle_list_group_members<C, B>(
     server: Server<C>,
     group_id: i64,
     request: Request<B>,
@@ -109,7 +118,7 @@ where
     }
 }
 
-async fn handle_remove_user_from_group<C>(
+pub(super) async fn handle_remove_user_from_group<C>(
     server: Server<C>,
     group_id: i64,
     user_name: String,
@@ -127,7 +136,7 @@ where
     }
 }
 
-async fn handle_list_user_groups<C, B>(
+pub(super) async fn handle_list_user_groups<C, B>(
     server: Server<C>,
     user_name: String,
     request: Request<B>,
@@ -150,7 +159,7 @@ where
     }
 }
 
-async fn handle_add_workflow_to_group<C, B>(
+pub(super) async fn handle_add_workflow_to_group<C, B>(
     server: Server<C>,
     workflow_id: i64,
     request: Request<B>,
@@ -162,11 +171,10 @@ where
     B::Error: std::fmt::Display,
     C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
 {
-    let body =
-        match read_required_json_body::<B, models::WorkflowAccessGroupModel>(request).await {
-            Ok(body) => body,
-            Err(response) => return response,
-        };
+    let body = match read_required_json_body::<B, models::WorkflowAccessGroupModel>(request).await {
+        Ok(body) => body,
+        Err(response) => return response,
+    };
 
     match server
         .add_workflow_to_group(workflow_id, body.group_id, &context)
@@ -177,7 +185,7 @@ where
     }
 }
 
-async fn handle_add_workflow_to_group_by_path<C>(
+pub(super) async fn handle_add_workflow_to_group_by_path<C>(
     server: Server<C>,
     workflow_id: i64,
     group_id: i64,
@@ -186,13 +194,16 @@ async fn handle_add_workflow_to_group_by_path<C>(
 where
     C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
 {
-    match server.add_workflow_to_group(workflow_id, group_id, &context).await {
+    match server
+        .add_workflow_to_group(workflow_id, group_id, &context)
+        .await
+    {
         Ok(response) => add_workflow_to_group_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
 }
 
-async fn handle_list_workflow_groups<C, B>(
+pub(super) async fn handle_list_workflow_groups<C, B>(
     server: Server<C>,
     workflow_id: i64,
     request: Request<B>,
@@ -215,7 +226,7 @@ where
     }
 }
 
-async fn handle_remove_workflow_from_group<C>(
+pub(super) async fn handle_remove_workflow_from_group<C>(
     server: Server<C>,
     workflow_id: i64,
     group_id: i64,
@@ -233,7 +244,7 @@ where
     }
 }
 
-async fn handle_check_workflow_access<C>(
+pub(super) async fn handle_check_workflow_access<C>(
     server: Server<C>,
     workflow_id: i64,
     user_name: String,

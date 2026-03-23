@@ -1,4 +1,6 @@
-async fn handle_reload_auth<C>(server: Server<C>, context: C) -> Response<Body>
+use super::*;
+
+pub(super) async fn handle_reload_auth<C>(server: Server<C>, context: C) -> Response<Body>
 where
     C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
 {

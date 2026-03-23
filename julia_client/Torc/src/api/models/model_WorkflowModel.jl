@@ -14,7 +14,6 @@
         enable_ro_crate=nothing,
         execution_config=nothing,
         id=nothing,
-        jobs_sort_method=nothing,
         metadata=nothing,
         name=nothing,
         project=nothing,
@@ -36,7 +35,6 @@
     - enable_ro_crate::Bool
     - execution_config::String
     - id::Int64
-    - jobs_sort_method::ClaimJobsSortMethod
     - metadata::String
     - name::String
     - project::String
@@ -58,7 +56,6 @@ Base.@kwdef mutable struct WorkflowModel <: OpenAPI.APIModel
     enable_ro_crate::Union{Nothing, Bool} = nothing
     execution_config::Union{Nothing, String} = nothing
     id::Union{Nothing, Int64} = nothing
-    jobs_sort_method = nothing # spec type: Union{ Nothing, ClaimJobsSortMethod }
     metadata::Union{Nothing, String} = nothing
     name::Union{Nothing, String} = nothing
     project::Union{Nothing, String} = nothing
@@ -70,14 +67,14 @@ Base.@kwdef mutable struct WorkflowModel <: OpenAPI.APIModel
     use_pending_failed::Union{Nothing, Bool} = nothing
     user::Union{Nothing, String} = nothing
 
-    function WorkflowModel(compute_node_expiration_buffer_seconds, compute_node_ignore_workflow_completion, compute_node_min_time_for_new_jobs_seconds, compute_node_wait_for_healthy_database_minutes, compute_node_wait_for_new_jobs_seconds, description, enable_ro_crate, execution_config, id, jobs_sort_method, metadata, name, project, resource_monitor_config, slurm_config, slurm_defaults, status_id, timestamp, use_pending_failed, user, )
-        o = new(compute_node_expiration_buffer_seconds, compute_node_ignore_workflow_completion, compute_node_min_time_for_new_jobs_seconds, compute_node_wait_for_healthy_database_minutes, compute_node_wait_for_new_jobs_seconds, description, enable_ro_crate, execution_config, id, jobs_sort_method, metadata, name, project, resource_monitor_config, slurm_config, slurm_defaults, status_id, timestamp, use_pending_failed, user, )
+    function WorkflowModel(compute_node_expiration_buffer_seconds, compute_node_ignore_workflow_completion, compute_node_min_time_for_new_jobs_seconds, compute_node_wait_for_healthy_database_minutes, compute_node_wait_for_new_jobs_seconds, description, enable_ro_crate, execution_config, id, metadata, name, project, resource_monitor_config, slurm_config, slurm_defaults, status_id, timestamp, use_pending_failed, user, )
+        o = new(compute_node_expiration_buffer_seconds, compute_node_ignore_workflow_completion, compute_node_min_time_for_new_jobs_seconds, compute_node_wait_for_healthy_database_minutes, compute_node_wait_for_new_jobs_seconds, description, enable_ro_crate, execution_config, id, metadata, name, project, resource_monitor_config, slurm_config, slurm_defaults, status_id, timestamp, use_pending_failed, user, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type WorkflowModel
 
-const _property_types_WorkflowModel = Dict{Symbol,String}(Symbol("compute_node_expiration_buffer_seconds")=>"Int64", Symbol("compute_node_ignore_workflow_completion")=>"Bool", Symbol("compute_node_min_time_for_new_jobs_seconds")=>"Int64", Symbol("compute_node_wait_for_healthy_database_minutes")=>"Int64", Symbol("compute_node_wait_for_new_jobs_seconds")=>"Int64", Symbol("description")=>"String", Symbol("enable_ro_crate")=>"Bool", Symbol("execution_config")=>"String", Symbol("id")=>"Int64", Symbol("jobs_sort_method")=>"ClaimJobsSortMethod", Symbol("metadata")=>"String", Symbol("name")=>"String", Symbol("project")=>"String", Symbol("resource_monitor_config")=>"String", Symbol("slurm_config")=>"String", Symbol("slurm_defaults")=>"String", Symbol("status_id")=>"Int64", Symbol("timestamp")=>"String", Symbol("use_pending_failed")=>"Bool", Symbol("user")=>"String", )
+const _property_types_WorkflowModel = Dict{Symbol,String}(Symbol("compute_node_expiration_buffer_seconds")=>"Int64", Symbol("compute_node_ignore_workflow_completion")=>"Bool", Symbol("compute_node_min_time_for_new_jobs_seconds")=>"Int64", Symbol("compute_node_wait_for_healthy_database_minutes")=>"Int64", Symbol("compute_node_wait_for_new_jobs_seconds")=>"Int64", Symbol("description")=>"String", Symbol("enable_ro_crate")=>"Bool", Symbol("execution_config")=>"String", Symbol("id")=>"Int64", Symbol("metadata")=>"String", Symbol("name")=>"String", Symbol("project")=>"String", Symbol("resource_monitor_config")=>"String", Symbol("slurm_config")=>"String", Symbol("slurm_defaults")=>"String", Symbol("status_id")=>"Int64", Symbol("timestamp")=>"String", Symbol("use_pending_failed")=>"Bool", Symbol("user")=>"String", )
 OpenAPI.property_type(::Type{ WorkflowModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_WorkflowModel[name]))}
 
 function OpenAPI.check_required(o::WorkflowModel)
@@ -96,7 +93,6 @@ function OpenAPI.validate_properties(o::WorkflowModel)
     OpenAPI.validate_property(WorkflowModel, Symbol("enable_ro_crate"), o.enable_ro_crate)
     OpenAPI.validate_property(WorkflowModel, Symbol("execution_config"), o.execution_config)
     OpenAPI.validate_property(WorkflowModel, Symbol("id"), o.id)
-    OpenAPI.validate_property(WorkflowModel, Symbol("jobs_sort_method"), o.jobs_sort_method)
     OpenAPI.validate_property(WorkflowModel, Symbol("metadata"), o.metadata)
     OpenAPI.validate_property(WorkflowModel, Symbol("name"), o.name)
     OpenAPI.validate_property(WorkflowModel, Symbol("project"), o.project)
@@ -134,7 +130,6 @@ function OpenAPI.validate_property(::Type{ WorkflowModel }, name::Symbol, val)
     if name === Symbol("id")
         OpenAPI.validate_param(name, "WorkflowModel", :format, val, "int64")
     end
-
 
 
 

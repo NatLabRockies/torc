@@ -13,7 +13,6 @@ Name | Type | Description | Notes
 **enable_ro_crate** | **Bool** |  | [optional] [default to nothing]
 **execution_config** | **String** |  | [optional] [default to nothing]
 **id** | **Int64** |  | [optional] [default to nothing]
-**jobs_sort_method** | [***ClaimJobsSortMethod**](ClaimJobsSortMethod.md) |  | [optional] [default to nothing]
 **metadata** | **String** |  | [optional] [default to nothing]
 **name** | **String** |  | [default to nothing]
 **project** | **String** |  | [optional] [default to nothing]

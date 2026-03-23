@@ -16,7 +16,7 @@ from pydantic import validate_call, Field, StrictFloat, StrictStr, StrictInt
 from typing import Any, Dict, List, Optional, Tuple, Union
 from typing_extensions import Annotated
 
-from pydantic import Field, StrictBool, StrictInt, StrictStr
+from pydantic import Field, StrictInt, StrictStr
 from typing import Any, List, Optional
 from typing_extensions import Annotated
 from torc.openapi_client.models.claim_action_request import ClaimActionRequest
@@ -1749,7 +1749,6 @@ class FinalSurfacesApi:
     def delete_ro_crate_entity(
         self,
         id: Annotated[StrictInt, Field(description="Entity ID")],
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1768,8 +1767,6 @@ class FinalSurfacesApi:
 
         :param id: Entity ID (required)
         :type id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1794,7 +1791,6 @@ class FinalSurfacesApi:
 
         _param = self._delete_ro_crate_entity_serialize(
             id=id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1819,7 +1815,6 @@ class FinalSurfacesApi:
     def delete_ro_crate_entity_with_http_info(
         self,
         id: Annotated[StrictInt, Field(description="Entity ID")],
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1838,8 +1833,6 @@ class FinalSurfacesApi:
 
         :param id: Entity ID (required)
         :type id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1864,7 +1857,6 @@ class FinalSurfacesApi:
 
         _param = self._delete_ro_crate_entity_serialize(
             id=id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1889,7 +1881,6 @@ class FinalSurfacesApi:
     def delete_ro_crate_entity_without_preload_content(
         self,
         id: Annotated[StrictInt, Field(description="Entity ID")],
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1908,8 +1899,6 @@ class FinalSurfacesApi:
 
         :param id: Entity ID (required)
         :type id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1934,7 +1923,6 @@ class FinalSurfacesApi:
 
         _param = self._delete_ro_crate_entity_serialize(
             id=id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1954,7 +1942,6 @@ class FinalSurfacesApi:
     def _delete_ro_crate_entity_serialize(
         self,
         id,
-        body,
         _request_auth,
         _content_type,
         _headers,
@@ -1982,8 +1969,6 @@ class FinalSurfacesApi:
         # process the header parameters
         # process the form parameters
         # process the body parameter
-        if body is not None:
-            _body_params = body
 
 
         # set the HTTP header `Accept`
@@ -1994,19 +1979,6 @@ class FinalSurfacesApi:
                 ]
             )
 
-        # set the HTTP header `Content-Type`
-        if _content_type:
-            _header_params['Content-Type'] = _content_type
-        else:
-            _default_content_type = (
-                self.api_client.select_header_content_type(
-                    [
-                        'application/json'
-                    ]
-                )
-            )
-            if _default_content_type is not None:
-                _header_params['Content-Type'] = _default_content_type
 
         # authentication setting
         _auth_settings: List[str] = [
@@ -3082,8 +3054,6 @@ class FinalSurfacesApi:
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
-        sort_by: Optional[StrictStr] = None,
-        reverse_sort: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -3106,10 +3076,6 @@ class FinalSurfacesApi:
         :type offset: int
         :param limit:
         :type limit: int
-        :param sort_by:
-        :type sort_by: str
-        :param reverse_sort:
-        :type reverse_sort: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -3136,8 +3102,6 @@ class FinalSurfacesApi:
             id=id,
             offset=offset,
             limit=limit,
-            sort_by=sort_by,
-            reverse_sort=reverse_sort,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -3164,8 +3128,6 @@ class FinalSurfacesApi:
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
-        sort_by: Optional[StrictStr] = None,
-        reverse_sort: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -3188,10 +3150,6 @@ class FinalSurfacesApi:
         :type offset: int
         :param limit:
         :type limit: int
-        :param sort_by:
-        :type sort_by: str
-        :param reverse_sort:
-        :type reverse_sort: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -3218,8 +3176,6 @@ class FinalSurfacesApi:
             id=id,
             offset=offset,
             limit=limit,
-            sort_by=sort_by,
-            reverse_sort=reverse_sort,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -3246,8 +3202,6 @@ class FinalSurfacesApi:
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
-        sort_by: Optional[StrictStr] = None,
-        reverse_sort: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -3270,10 +3224,6 @@ class FinalSurfacesApi:
         :type offset: int
         :param limit:
         :type limit: int
-        :param sort_by:
-        :type sort_by: str
-        :param reverse_sort:
-        :type reverse_sort: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -3300,8 +3250,6 @@ class FinalSurfacesApi:
             id=id,
             offset=offset,
             limit=limit,
-            sort_by=sort_by,
-            reverse_sort=reverse_sort,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -3323,8 +3271,6 @@ class FinalSurfacesApi:
         id,
         offset,
         limit,
-        sort_by,
-        reverse_sort,
         _request_auth,
         _content_type,
         _headers,
@@ -3356,14 +3302,6 @@ class FinalSurfacesApi:
         if limit is not None:
             
             _query_params.append(('limit', limit))
-            
-        if sort_by is not None:
-            
-            _query_params.append(('sort_by', sort_by))
-            
-        if reverse_sort is not None:
-            
-            _query_params.append(('reverse_sort', reverse_sort))
             
         # process the header parameters
         # process the form parameters

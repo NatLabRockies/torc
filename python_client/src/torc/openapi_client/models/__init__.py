@@ -18,7 +18,6 @@ from torc.openapi_client.models.access_group_model import AccessGroupModel
 from torc.openapi_client.models.claim_action_request import ClaimActionRequest
 from torc.openapi_client.models.claim_action_response import ClaimActionResponse
 from torc.openapi_client.models.claim_jobs_based_on_resources import ClaimJobsBasedOnResources
-from torc.openapi_client.models.claim_jobs_sort_method import ClaimJobsSortMethod
 from torc.openapi_client.models.claim_next_jobs_response import ClaimNextJobsResponse
 from torc.openapi_client.models.compute_node_model import ComputeNodeModel
 from torc.openapi_client.models.compute_node_schedule import ComputeNodeSchedule

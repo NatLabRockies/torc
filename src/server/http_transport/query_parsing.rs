@@ -1,221 +1,223 @@
+use super::*;
+
 #[derive(Debug, PartialEq)]
-struct ComputeNodesQuery {
-    workflow_id: i64,
-    offset: Option<i64>,
-    limit: Option<i64>,
-    sort_by: Option<String>,
-    reverse_sort: Option<bool>,
-    hostname: Option<String>,
-    is_active: Option<bool>,
-    scheduled_compute_node_id: Option<i64>,
+pub(super) struct ComputeNodesQuery {
+    pub(super) workflow_id: i64,
+    pub(super) offset: Option<i64>,
+    pub(super) limit: Option<i64>,
+    pub(super) sort_by: Option<String>,
+    pub(super) reverse_sort: Option<bool>,
+    pub(super) hostname: Option<String>,
+    pub(super) is_active: Option<bool>,
+    pub(super) scheduled_compute_node_id: Option<i64>,
 }
 
 #[derive(Debug, PartialEq)]
-struct DeleteComputeNodesQuery {
-    workflow_id: i64,
+pub(super) struct DeleteComputeNodesQuery {
+    pub(super) workflow_id: i64,
 }
 
 #[derive(Debug, PartialEq)]
-struct EventsQuery {
-    workflow_id: i64,
-    offset: Option<i64>,
-    limit: Option<i64>,
-    sort_by: Option<String>,
-    reverse_sort: Option<bool>,
-    category: Option<String>,
-    after_timestamp: Option<i64>,
+pub(super) struct EventsQuery {
+    pub(super) workflow_id: i64,
+    pub(super) offset: Option<i64>,
+    pub(super) limit: Option<i64>,
+    pub(super) sort_by: Option<String>,
+    pub(super) reverse_sort: Option<bool>,
+    pub(super) category: Option<String>,
+    pub(super) after_timestamp: Option<i64>,
 }
 
 #[derive(Debug, PartialEq)]
-struct FilesQuery {
-    workflow_id: i64,
-    produced_by_job_id: Option<i64>,
-    offset: Option<i64>,
-    limit: Option<i64>,
-    sort_by: Option<String>,
-    reverse_sort: Option<bool>,
-    name: Option<String>,
-    path: Option<String>,
-    is_output: Option<bool>,
+pub(super) struct FilesQuery {
+    pub(super) workflow_id: i64,
+    pub(super) produced_by_job_id: Option<i64>,
+    pub(super) offset: Option<i64>,
+    pub(super) limit: Option<i64>,
+    pub(super) sort_by: Option<String>,
+    pub(super) reverse_sort: Option<bool>,
+    pub(super) name: Option<String>,
+    pub(super) path: Option<String>,
+    pub(super) is_output: Option<bool>,
 }
 
 #[derive(Debug, PartialEq)]
-struct LocalSchedulersQuery {
-    workflow_id: i64,
-    offset: Option<i64>,
-    limit: Option<i64>,
-    sort_by: Option<String>,
-    reverse_sort: Option<bool>,
-    memory: Option<String>,
-    num_cpus: Option<i64>,
+pub(super) struct LocalSchedulersQuery {
+    pub(super) workflow_id: i64,
+    pub(super) offset: Option<i64>,
+    pub(super) limit: Option<i64>,
+    pub(super) sort_by: Option<String>,
+    pub(super) reverse_sort: Option<bool>,
+    pub(super) memory: Option<String>,
+    pub(super) num_cpus: Option<i64>,
 }
 
 #[derive(Debug, PartialEq)]
-struct ResultsQuery {
-    workflow_id: i64,
-    job_id: Option<i64>,
-    run_id: Option<i64>,
-    return_code: Option<i64>,
-    status: Option<models::JobStatus>,
-    compute_node_id: Option<i64>,
-    offset: Option<i64>,
-    limit: Option<i64>,
-    sort_by: Option<String>,
-    reverse_sort: Option<bool>,
-    all_runs: Option<bool>,
+pub(super) struct ResultsQuery {
+    pub(super) workflow_id: i64,
+    pub(super) job_id: Option<i64>,
+    pub(super) run_id: Option<i64>,
+    pub(super) return_code: Option<i64>,
+    pub(super) status: Option<models::JobStatus>,
+    pub(super) compute_node_id: Option<i64>,
+    pub(super) offset: Option<i64>,
+    pub(super) limit: Option<i64>,
+    pub(super) sort_by: Option<String>,
+    pub(super) reverse_sort: Option<bool>,
+    pub(super) all_runs: Option<bool>,
 }
 
 #[derive(Debug, PartialEq)]
-struct UserDataQuery {
-    workflow_id: i64,
-    consumer_job_id: Option<i64>,
-    producer_job_id: Option<i64>,
-    offset: Option<i64>,
-    limit: Option<i64>,
-    sort_by: Option<String>,
-    reverse_sort: Option<bool>,
-    name: Option<String>,
-    is_ephemeral: Option<bool>,
+pub(super) struct UserDataQuery {
+    pub(super) workflow_id: i64,
+    pub(super) consumer_job_id: Option<i64>,
+    pub(super) producer_job_id: Option<i64>,
+    pub(super) offset: Option<i64>,
+    pub(super) limit: Option<i64>,
+    pub(super) sort_by: Option<String>,
+    pub(super) reverse_sort: Option<bool>,
+    pub(super) name: Option<String>,
+    pub(super) is_ephemeral: Option<bool>,
 }
 
 #[derive(Debug, PartialEq)]
-struct UserDataCreateQuery {
-    consumer_job_id: Option<i64>,
-    producer_job_id: Option<i64>,
+pub(super) struct UserDataCreateQuery {
+    pub(super) consumer_job_id: Option<i64>,
+    pub(super) producer_job_id: Option<i64>,
 }
 
 #[derive(Debug, PartialEq)]
-struct ScheduledComputeNodesQuery {
-    workflow_id: i64,
-    offset: Option<i64>,
-    limit: Option<i64>,
-    sort_by: Option<String>,
-    reverse_sort: Option<bool>,
-    scheduler_id: Option<String>,
-    scheduler_config_id: Option<String>,
-    status: Option<String>,
+pub(super) struct ScheduledComputeNodesQuery {
+    pub(super) workflow_id: i64,
+    pub(super) offset: Option<i64>,
+    pub(super) limit: Option<i64>,
+    pub(super) sort_by: Option<String>,
+    pub(super) reverse_sort: Option<bool>,
+    pub(super) scheduler_id: Option<String>,
+    pub(super) scheduler_config_id: Option<String>,
+    pub(super) status: Option<String>,
 }
 
 #[derive(Debug, PartialEq)]
-struct SlurmSchedulersQuery {
-    workflow_id: i64,
-    offset: Option<i64>,
-    limit: Option<i64>,
-    sort_by: Option<String>,
-    reverse_sort: Option<bool>,
+pub(super) struct SlurmSchedulersQuery {
+    pub(super) workflow_id: i64,
+    pub(super) offset: Option<i64>,
+    pub(super) limit: Option<i64>,
+    pub(super) sort_by: Option<String>,
+    pub(super) reverse_sort: Option<bool>,
 }
 
 #[derive(Debug, PartialEq)]
-struct AccessPaginationQuery {
-    offset: Option<i64>,
-    limit: Option<i64>,
+pub(super) struct AccessPaginationQuery {
+    pub(super) offset: Option<i64>,
+    pub(super) limit: Option<i64>,
 }
 
 #[derive(Debug, PartialEq)]
-struct ResourceRequirementsQuery {
-    workflow_id: i64,
-    job_id: Option<i64>,
-    name: Option<String>,
-    memory: Option<String>,
-    num_cpus: Option<i64>,
-    num_gpus: Option<i64>,
-    num_nodes: Option<i64>,
-    runtime: Option<i64>,
-    offset: Option<i64>,
-    limit: Option<i64>,
-    sort_by: Option<String>,
-    reverse_sort: Option<bool>,
+pub(super) struct ResourceRequirementsQuery {
+    pub(super) workflow_id: i64,
+    pub(super) job_id: Option<i64>,
+    pub(super) name: Option<String>,
+    pub(super) memory: Option<String>,
+    pub(super) num_cpus: Option<i64>,
+    pub(super) num_gpus: Option<i64>,
+    pub(super) num_nodes: Option<i64>,
+    pub(super) runtime: Option<i64>,
+    pub(super) offset: Option<i64>,
+    pub(super) limit: Option<i64>,
+    pub(super) sort_by: Option<String>,
+    pub(super) reverse_sort: Option<bool>,
 }
 
 #[derive(Debug, PartialEq)]
-struct SlurmStatsQuery {
-    workflow_id: i64,
-    job_id: Option<i64>,
-    run_id: Option<i64>,
-    attempt_id: Option<i64>,
-    offset: Option<i64>,
-    limit: Option<i64>,
+pub(super) struct SlurmStatsQuery {
+    pub(super) workflow_id: i64,
+    pub(super) job_id: Option<i64>,
+    pub(super) run_id: Option<i64>,
+    pub(super) attempt_id: Option<i64>,
+    pub(super) offset: Option<i64>,
+    pub(super) limit: Option<i64>,
 }
 
 #[derive(Debug, PartialEq)]
-struct JobsQuery {
-    workflow_id: i64,
-    status: Option<models::JobStatus>,
-    needs_file_id: Option<i64>,
-    upstream_job_id: Option<i64>,
-    offset: Option<i64>,
-    limit: Option<i64>,
-    sort_by: Option<String>,
-    reverse_sort: Option<bool>,
-    include_relationships: Option<bool>,
-    active_compute_node_id: Option<i64>,
+pub(super) struct JobsQuery {
+    pub(super) workflow_id: i64,
+    pub(super) status: Option<models::JobStatus>,
+    pub(super) needs_file_id: Option<i64>,
+    pub(super) upstream_job_id: Option<i64>,
+    pub(super) offset: Option<i64>,
+    pub(super) limit: Option<i64>,
+    pub(super) sort_by: Option<String>,
+    pub(super) reverse_sort: Option<bool>,
+    pub(super) include_relationships: Option<bool>,
+    pub(super) active_compute_node_id: Option<i64>,
 }
 
 #[derive(Debug, PartialEq)]
-struct WorkflowsQuery {
-    offset: Option<i64>,
-    sort_by: Option<String>,
-    reverse_sort: Option<bool>,
-    limit: Option<i64>,
-    name: Option<String>,
-    user: Option<String>,
-    description: Option<String>,
-    is_archived: Option<bool>,
+pub(super) struct WorkflowsQuery {
+    pub(super) offset: Option<i64>,
+    pub(super) sort_by: Option<String>,
+    pub(super) reverse_sort: Option<bool>,
+    pub(super) limit: Option<i64>,
+    pub(super) name: Option<String>,
+    pub(super) user: Option<String>,
+    pub(super) description: Option<String>,
+    pub(super) is_archived: Option<bool>,
 }
 
 #[derive(Debug, PartialEq)]
-struct WorkflowRelationshipsQuery {
-    offset: Option<i64>,
-    limit: Option<i64>,
+pub(super) struct WorkflowRelationshipsQuery {
+    pub(super) offset: Option<i64>,
+    pub(super) limit: Option<i64>,
 }
 
 #[derive(Debug, PartialEq)]
-struct PendingActionsQuery {
-    trigger_type: Option<Vec<String>>,
+pub(super) struct PendingActionsQuery {
+    pub(super) trigger_type: Option<Vec<String>>,
 }
 
 #[derive(Debug, PartialEq)]
-struct InitializeJobsQuery {
-    only_uninitialized: Option<bool>,
-    clear_ephemeral_user_data: Option<bool>,
+pub(super) struct InitializeJobsQuery {
+    pub(super) only_uninitialized: Option<bool>,
+    pub(super) clear_ephemeral_user_data: Option<bool>,
 }
 
 #[derive(Debug, PartialEq)]
-struct ClaimJobsBasedOnResourcesQuery {
-    strict_scheduler_match: Option<bool>,
+pub(super) struct ClaimJobsBasedOnResourcesQuery {
+    pub(super) strict_scheduler_match: Option<bool>,
 }
 
 #[derive(Debug, PartialEq)]
-struct ClaimNextJobsQuery {
-    limit: Option<i64>,
+pub(super) struct ClaimNextJobsQuery {
+    pub(super) limit: Option<i64>,
 }
 
 #[derive(Debug, PartialEq)]
-struct ProcessChangedJobInputsQuery {
-    dry_run: Option<bool>,
+pub(super) struct ProcessChangedJobInputsQuery {
+    pub(super) dry_run: Option<bool>,
 }
 
 #[derive(Debug, PartialEq)]
-struct GetReadyJobRequirementsQuery {
-    scheduler_config_id: Option<i64>,
+pub(super) struct GetReadyJobRequirementsQuery {
+    pub(super) scheduler_config_id: Option<i64>,
 }
 
 #[derive(Debug, PartialEq)]
-struct ResetJobStatusQuery {
-    failed_only: Option<bool>,
+pub(super) struct ResetJobStatusQuery {
+    pub(super) failed_only: Option<bool>,
 }
 
 #[derive(Debug, PartialEq)]
-struct ResetWorkflowStatusQuery {
-    force: Option<bool>,
+pub(super) struct ResetWorkflowStatusQuery {
+    pub(super) force: Option<bool>,
 }
 
 #[derive(Debug, PartialEq)]
-struct RetryJobQuery {
-    max_retries: i32,
+pub(super) struct RetryJobQuery {
+    pub(super) max_retries: i32,
 }
 
-fn parse_compute_nodes_query(query: Option<&str>) -> Result<ComputeNodesQuery, String> {
+pub(super) fn parse_compute_nodes_query(query: Option<&str>) -> Result<ComputeNodesQuery, String> {
     let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
         .into_owned()
         .collect();
@@ -233,7 +235,7 @@ fn parse_compute_nodes_query(query: Option<&str>) -> Result<ComputeNodesQuery, S
     })
 }
 
-fn parse_delete_compute_nodes_query(
+pub(super) fn parse_delete_compute_nodes_query(
     query: Option<&str>,
 ) -> Result<DeleteComputeNodesQuery, String> {
     let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
@@ -244,7 +246,7 @@ fn parse_delete_compute_nodes_query(
     })
 }
 
-fn parse_events_query(query: Option<&str>) -> Result<EventsQuery, String> {
+pub(super) fn parse_events_query(query: Option<&str>) -> Result<EventsQuery, String> {
     let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
         .into_owned()
         .collect();
@@ -261,7 +263,7 @@ fn parse_events_query(query: Option<&str>) -> Result<EventsQuery, String> {
     })
 }
 
-fn parse_files_query(query: Option<&str>) -> Result<FilesQuery, String> {
+pub(super) fn parse_files_query(query: Option<&str>) -> Result<FilesQuery, String> {
     let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
         .into_owned()
         .collect();
@@ -280,7 +282,9 @@ fn parse_files_query(query: Option<&str>) -> Result<FilesQuery, String> {
     })
 }
 
-fn parse_local_schedulers_query(query: Option<&str>) -> Result<LocalSchedulersQuery, String> {
+pub(super) fn parse_local_schedulers_query(
+    query: Option<&str>,
+) -> Result<LocalSchedulersQuery, String> {
     let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
         .into_owned()
         .collect();
@@ -297,7 +301,7 @@ fn parse_local_schedulers_query(query: Option<&str>) -> Result<LocalSchedulersQu
     })
 }
 
-fn parse_results_query(query: Option<&str>) -> Result<ResultsQuery, String> {
+pub(super) fn parse_results_query(query: Option<&str>) -> Result<ResultsQuery, String> {
     let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
         .into_owned()
         .collect();
@@ -318,7 +322,7 @@ fn parse_results_query(query: Option<&str>) -> Result<ResultsQuery, String> {
     })
 }
 
-fn parse_user_data_query(query: Option<&str>) -> Result<UserDataQuery, String> {
+pub(super) fn parse_user_data_query(query: Option<&str>) -> Result<UserDataQuery, String> {
     let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
         .into_owned()
         .collect();
@@ -337,7 +341,9 @@ fn parse_user_data_query(query: Option<&str>) -> Result<UserDataQuery, String> {
     })
 }
 
-fn parse_user_data_create_query(query: Option<&str>) -> Result<UserDataCreateQuery, String> {
+pub(super) fn parse_user_data_create_query(
+    query: Option<&str>,
+) -> Result<UserDataCreateQuery, String> {
     let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
         .into_owned()
         .collect();
@@ -347,7 +353,7 @@ fn parse_user_data_create_query(query: Option<&str>) -> Result<UserDataCreateQue
     })
 }
 
-fn parse_scheduled_compute_nodes_query(
+pub(super) fn parse_scheduled_compute_nodes_query(
     query: Option<&str>,
 ) -> Result<ScheduledComputeNodesQuery, String> {
     let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
@@ -365,7 +371,9 @@ fn parse_scheduled_compute_nodes_query(
     })
 }
 
-fn parse_slurm_schedulers_query(query: Option<&str>) -> Result<SlurmSchedulersQuery, String> {
+pub(super) fn parse_slurm_schedulers_query(
+    query: Option<&str>,
+) -> Result<SlurmSchedulersQuery, String> {
     let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
         .into_owned()
         .collect();
@@ -378,7 +386,9 @@ fn parse_slurm_schedulers_query(query: Option<&str>) -> Result<SlurmSchedulersQu
     })
 }
 
-fn parse_access_pagination_query(query: Option<&str>) -> Result<AccessPaginationQuery, String> {
+pub(super) fn parse_access_pagination_query(
+    query: Option<&str>,
+) -> Result<AccessPaginationQuery, String> {
     let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
         .into_owned()
         .collect();
@@ -388,7 +398,7 @@ fn parse_access_pagination_query(query: Option<&str>) -> Result<AccessPagination
     })
 }
 
-fn parse_resource_requirements_query(
+pub(super) fn parse_resource_requirements_query(
     query: Option<&str>,
 ) -> Result<ResourceRequirementsQuery, String> {
     let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
@@ -410,7 +420,7 @@ fn parse_resource_requirements_query(
     })
 }
 
-fn parse_slurm_stats_query(query: Option<&str>) -> Result<SlurmStatsQuery, String> {
+pub(super) fn parse_slurm_stats_query(query: Option<&str>) -> Result<SlurmStatsQuery, String> {
     let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
         .into_owned()
         .collect();
@@ -424,7 +434,7 @@ fn parse_slurm_stats_query(query: Option<&str>) -> Result<SlurmStatsQuery, Strin
     })
 }
 
-fn parse_jobs_query(query: Option<&str>) -> Result<JobsQuery, String> {
+pub(super) fn parse_jobs_query(query: Option<&str>) -> Result<JobsQuery, String> {
     let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
         .into_owned()
         .collect();
@@ -442,7 +452,7 @@ fn parse_jobs_query(query: Option<&str>) -> Result<JobsQuery, String> {
     })
 }
 
-fn parse_workflows_query(query: Option<&str>) -> Result<WorkflowsQuery, String> {
+pub(super) fn parse_workflows_query(query: Option<&str>) -> Result<WorkflowsQuery, String> {
     let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
         .into_owned()
         .collect();
@@ -458,7 +468,7 @@ fn parse_workflows_query(query: Option<&str>) -> Result<WorkflowsQuery, String> 
     })
 }
 
-fn parse_workflow_relationships_query(
+pub(super) fn parse_workflow_relationships_query(
     query: Option<&str>,
 ) -> Result<WorkflowRelationshipsQuery, String> {
     let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
@@ -470,7 +480,9 @@ fn parse_workflow_relationships_query(
     })
 }
 
-fn parse_pending_actions_query(query: Option<&str>) -> Result<PendingActionsQuery, String> {
+pub(super) fn parse_pending_actions_query(
+    query: Option<&str>,
+) -> Result<PendingActionsQuery, String> {
     let pairs: Vec<(String, String)> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
         .into_owned()
         .collect();
@@ -483,7 +495,9 @@ fn parse_pending_actions_query(query: Option<&str>) -> Result<PendingActionsQuer
     })
 }
 
-fn parse_initialize_jobs_query(query: Option<&str>) -> Result<InitializeJobsQuery, String> {
+pub(super) fn parse_initialize_jobs_query(
+    query: Option<&str>,
+) -> Result<InitializeJobsQuery, String> {
     let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
         .into_owned()
         .collect();
@@ -493,7 +507,7 @@ fn parse_initialize_jobs_query(query: Option<&str>) -> Result<InitializeJobsQuer
     })
 }
 
-fn parse_claim_jobs_based_on_resources_query(
+pub(super) fn parse_claim_jobs_based_on_resources_query(
     query: Option<&str>,
 ) -> Result<ClaimJobsBasedOnResourcesQuery, String> {
     let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
@@ -504,7 +518,9 @@ fn parse_claim_jobs_based_on_resources_query(
     })
 }
 
-fn parse_claim_next_jobs_query(query: Option<&str>) -> Result<ClaimNextJobsQuery, String> {
+pub(super) fn parse_claim_next_jobs_query(
+    query: Option<&str>,
+) -> Result<ClaimNextJobsQuery, String> {
     let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
         .into_owned()
         .collect();
@@ -513,7 +529,7 @@ fn parse_claim_next_jobs_query(query: Option<&str>) -> Result<ClaimNextJobsQuery
     })
 }
 
-fn parse_process_changed_job_inputs_query(
+pub(super) fn parse_process_changed_job_inputs_query(
     query: Option<&str>,
 ) -> Result<ProcessChangedJobInputsQuery, String> {
     let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
@@ -524,7 +540,7 @@ fn parse_process_changed_job_inputs_query(
     })
 }
 
-fn parse_get_ready_job_requirements_query(
+pub(super) fn parse_get_ready_job_requirements_query(
     query: Option<&str>,
 ) -> Result<GetReadyJobRequirementsQuery, String> {
     let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
@@ -535,7 +551,9 @@ fn parse_get_ready_job_requirements_query(
     })
 }
 
-fn parse_reset_job_status_query(query: Option<&str>) -> Result<ResetJobStatusQuery, String> {
+pub(super) fn parse_reset_job_status_query(
+    query: Option<&str>,
+) -> Result<ResetJobStatusQuery, String> {
     let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
         .into_owned()
         .collect();
@@ -544,7 +562,7 @@ fn parse_reset_job_status_query(query: Option<&str>) -> Result<ResetJobStatusQue
     })
 }
 
-fn parse_reset_workflow_status_query(
+pub(super) fn parse_reset_workflow_status_query(
     query: Option<&str>,
 ) -> Result<ResetWorkflowStatusQuery, String> {
     let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
@@ -555,7 +573,7 @@ fn parse_reset_workflow_status_query(
     })
 }
 
-fn parse_retry_job_query(query: Option<&str>) -> Result<RetryJobQuery, String> {
+pub(super) fn parse_retry_job_query(query: Option<&str>) -> Result<RetryJobQuery, String> {
     let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
         .into_owned()
         .collect();
@@ -564,7 +582,10 @@ fn parse_retry_job_query(query: Option<&str>) -> Result<RetryJobQuery, String> {
     })
 }
 
-fn parse_required_i64(params: &HashMap<String, String>, key: &str) -> Result<i64, String> {
+pub(super) fn parse_required_i64(
+    params: &HashMap<String, String>,
+    key: &str,
+) -> Result<i64, String> {
     let raw = params
         .get(key)
         .ok_or_else(|| format!("Missing required query parameter: {key}"))?;
@@ -572,7 +593,10 @@ fn parse_required_i64(params: &HashMap<String, String>, key: &str) -> Result<i64
         .map_err(|_| format!("Invalid integer for query parameter: {key}"))
 }
 
-fn parse_optional_i64(params: &HashMap<String, String>, key: &str) -> Result<Option<i64>, String> {
+pub(super) fn parse_optional_i64(
+    params: &HashMap<String, String>,
+    key: &str,
+) -> Result<Option<i64>, String> {
     params
         .get(key)
         .map(|raw| {
@@ -582,7 +606,7 @@ fn parse_optional_i64(params: &HashMap<String, String>, key: &str) -> Result<Opt
         .transpose()
 }
 
-fn parse_optional_bool(
+pub(super) fn parse_optional_bool(
     params: &HashMap<String, String>,
     key: &str,
 ) -> Result<Option<bool>, String> {
@@ -595,7 +619,7 @@ fn parse_optional_bool(
         .transpose()
 }
 
-fn parse_optional_job_status_name(
+pub(super) fn parse_optional_job_status_name(
     params: &HashMap<String, String>,
     key: &str,
 ) -> Result<Option<models::JobStatus>, String> {
@@ -608,7 +632,7 @@ fn parse_optional_job_status_name(
         .transpose()
 }
 
-fn parse_event_stream_level(query: Option<&str>) -> models::EventSeverity {
+pub(super) fn parse_event_stream_level(query: Option<&str>) -> models::EventSeverity {
     query
         .and_then(|query| {
             form_urlencoded::parse(query.as_bytes())
@@ -619,7 +643,7 @@ fn parse_event_stream_level(query: Option<&str>) -> models::EventSeverity {
         .unwrap_or(models::EventSeverity::Info)
 }
 
-fn is_known_api_path(path: &str) -> bool {
+pub(super) fn is_known_api_path(path: &str) -> bool {
     matches!(
         path,
         "/torc-service/v1/ping"

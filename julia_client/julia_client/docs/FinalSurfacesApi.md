@@ -200,8 +200,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **delete_ro_crate_entity**
-> delete_ro_crate_entity(_api::FinalSurfacesApi, id::Int64; body=nothing, _mediaType=nothing) -> MessageResponse, OpenAPI.Clients.ApiResponse <br/>
-> delete_ro_crate_entity(_api::FinalSurfacesApi, response_stream::Channel, id::Int64; body=nothing, _mediaType=nothing) -> Channel{ MessageResponse }, OpenAPI.Clients.ApiResponse
+> delete_ro_crate_entity(_api::FinalSurfacesApi, id::Int64; _mediaType=nothing) -> MessageResponse, OpenAPI.Clients.ApiResponse <br/>
+> delete_ro_crate_entity(_api::FinalSurfacesApi, response_stream::Channel, id::Int64; _mediaType=nothing) -> Channel{ MessageResponse }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -211,12 +211,6 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **FinalSurfacesApi** | API context | 
 **id** | **Int64** | Entity ID |
-
-### Optional Parameters
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
 
 ### Return type
 
@@ -228,7 +222,7 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: application/json
+ - **Content-Type**: Not defined
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
@@ -352,8 +346,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **list_ro_crate_entities**
-> list_ro_crate_entities(_api::FinalSurfacesApi, id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, _mediaType=nothing) -> ListRoCrateEntitiesResponse, OpenAPI.Clients.ApiResponse <br/>
-> list_ro_crate_entities(_api::FinalSurfacesApi, response_stream::Channel, id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, _mediaType=nothing) -> Channel{ ListRoCrateEntitiesResponse }, OpenAPI.Clients.ApiResponse
+> list_ro_crate_entities(_api::FinalSurfacesApi, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing) -> ListRoCrateEntitiesResponse, OpenAPI.Clients.ApiResponse <br/>
+> list_ro_crate_entities(_api::FinalSurfacesApi, response_stream::Channel, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing) -> Channel{ ListRoCrateEntitiesResponse }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -370,8 +364,6 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **offset** | **Int64** |  | [default to nothing]
  **limit** | **Int64** |  | [default to nothing]
- **sort_by** | **String** |  | [default to nothing]
- **reverse_sort** | **Bool** |  | [default to nothing]
 
 ### Return type
 
