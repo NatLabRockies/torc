@@ -230,7 +230,7 @@ impl TorcClient {
             is_recovery: false,
         };
 
-        apis::final_surfaces_api::create_workflow_action(&self.config, workflow_id, action)
+        apis::workflow_actions_api::create_workflow_action(&self.config, workflow_id, action)
             .context("Failed to create submit action")?;
 
         Ok(())

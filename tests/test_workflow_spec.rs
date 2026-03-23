@@ -3817,8 +3817,9 @@ fn test_subgraph_workflow_execution_plan_from_database() {
     .expect("Failed to list jobs")
     .items;
 
-    let actions = apis::final_surfaces_api::get_workflow_actions(&start_server.config, workflow_id)
-        .expect("Failed to get actions");
+    let actions =
+        apis::workflow_actions_api::get_workflow_actions(&start_server.config, workflow_id)
+            .expect("Failed to get actions");
 
     let slurm_schedulers = apis::slurm_schedulers_api::list_slurm_schedulers(
         &start_server.config,
@@ -3993,8 +3994,9 @@ fn test_subgraph_workflow_execution_plan_spec_vs_database() {
     .expect("Failed to list jobs")
     .items;
 
-    let actions = apis::final_surfaces_api::get_workflow_actions(&start_server.config, workflow_id)
-        .expect("Failed to get actions");
+    let actions =
+        apis::workflow_actions_api::get_workflow_actions(&start_server.config, workflow_id)
+            .expect("Failed to get actions");
 
     let slurm_schedulers = apis::slurm_schedulers_api::list_slurm_schedulers(
         &start_server.config,

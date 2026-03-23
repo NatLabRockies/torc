@@ -171,7 +171,7 @@ pub fn claim_action(
         || -> Result<bool, Box<dyn std::error::Error>> {
             let body = models::ClaimActionRequest { compute_node_id };
 
-            match apis::final_surfaces_api::claim_action(config, workflow_id, action_id, body) {
+            match apis::workflow_actions_api::claim_action(config, workflow_id, action_id, body) {
                 Ok(result) => Ok(result.success),
                 Err(err) => {
                     // Check if it's a Conflict (already claimed by another compute node)

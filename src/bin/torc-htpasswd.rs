@@ -192,7 +192,7 @@ fn maybe_reload_auth(reload_auth: bool, url: &Option<String>, server_password: &
         config.basic_auth = Some((username, Some(password.clone())));
     }
 
-    match torc::client::apis::final_surfaces_api::reload_auth(&config) {
+    match torc::client::apis::access_control_api::reload_auth(&config) {
         Ok(response) => {
             println!(
                 "Server: {} ({} users)",

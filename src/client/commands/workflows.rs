@@ -984,7 +984,7 @@ fn show_execution_plan_from_database(config: &Configuration, workflow_id: i64, f
     };
 
     // Fetch workflow actions
-    let actions = match apis::final_surfaces_api::get_workflow_actions(config, workflow_id) {
+    let actions = match apis::workflow_actions_api::get_workflow_actions(config, workflow_id) {
         Ok(actions) => actions,
         Err(e) => {
             eprintln!("Error fetching actions for workflow {}: {}", workflow_id, e);
@@ -1109,7 +1109,7 @@ fn handle_list_actions(
         None => select_workflow_interactively(config, user).unwrap(),
     };
 
-    match apis::final_surfaces_api::get_workflow_actions(config, selected_workflow_id) {
+    match apis::workflow_actions_api::get_workflow_actions(config, selected_workflow_id) {
         Ok(actions) => {
             if format == "json" {
                 let output = serde_json::json!({
@@ -2278,7 +2278,7 @@ fn handle_submit(
     };
 
     // Check if workflow has schedule_nodes actions
-    match apis::final_surfaces_api::get_workflow_actions(config, selected_workflow_id) {
+    match apis::workflow_actions_api::get_workflow_actions(config, selected_workflow_id) {
         Ok(actions) => {
             let has_schedule_nodes = actions.iter().any(|action| {
                 action.trigger_type == "on_workflow_start" && action.action_type == "schedule_nodes"
@@ -3705,7 +3705,7 @@ fn handle_export(
         };
 
     // Get all RO-Crate entities
-    export.ro_crate_entities = match apis::final_surfaces_api::list_ro_crate_entities(
+    export.ro_crate_entities = match apis::ro_crate_api::list_ro_crate_entities(
         config,
         workflow_id,
         None,
@@ -3736,7 +3736,7 @@ fn handle_export(
 
     // Get workflow actions
     export.workflow_actions =
-        match apis::final_surfaces_api::get_workflow_actions(config, workflow_id) {
+        match apis::workflow_actions_api::get_workflow_actions(config, workflow_id) {
             Ok(actions) => actions,
             Err(e) => {
                 print_error("getting workflow actions", &e);
@@ -4165,7 +4165,7 @@ fn handle_import(
         new_entity.entity_id = new_entity_id;
         new_entity.metadata = new_metadata;
 
-        match apis::final_surfaces_api::create_ro_crate_entity(config, new_entity) {
+        match apis::ro_crate_api::create_ro_crate_entity(config, new_entity) {
             Ok(_) => {}
             Err(e) => {
                 print_error("creating RO-Crate entity", &e);
@@ -4200,7 +4200,7 @@ fn handle_import(
         }
 
         if let Err(e) =
-            apis::final_surfaces_api::create_workflow_action(config, new_workflow_id, new_action)
+            apis::workflow_actions_api::create_workflow_action(config, new_workflow_id, new_action)
         {
             print_error("creating workflow action", &e);
             let _ = apis::workflows_api::delete_workflow(config, new_workflow_id, None);

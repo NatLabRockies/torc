@@ -299,6 +299,31 @@ function list_workflow_groups(_api::AccessControlApi, response_stream::Channel, 
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
+const _returntypes_reload_auth_AccessControlApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => ReloadAuthResponse,
+)
+
+function _oacinternal_reload_auth(_api::AccessControlApi; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_reload_auth_AccessControlApi, "/admin/reload-auth", [])
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Params:
+
+Return: ReloadAuthResponse, OpenAPI.Clients.ApiResponse
+"""
+function reload_auth(_api::AccessControlApi; _mediaType=nothing)
+    _ctx = _oacinternal_reload_auth(_api; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function reload_auth(_api::AccessControlApi, response_stream::Channel; _mediaType=nothing)
+    _ctx = _oacinternal_reload_auth(_api; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
 const _returntypes_remove_user_from_group_AccessControlApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => UserGroupMembershipModel,
 )
@@ -367,5 +392,6 @@ export list_access_groups
 export list_group_members
 export list_user_groups
 export list_workflow_groups
+export reload_auth
 export remove_user_from_group
 export remove_workflow_from_group

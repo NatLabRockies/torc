@@ -142,8 +142,9 @@ fn test_two_node_allocation_single_worker_multi_node_step(start_server: &ServerP
     assert_eq!(schedulers[0].nodes, 2, "Scheduler should have 2 nodes");
 
     // --- Verify schedule_nodes action was created ---
-    let actions = apis::final_surfaces_api::get_workflow_actions(&start_server.config, workflow_id)
-        .expect("Failed to get workflow actions");
+    let actions =
+        apis::workflow_actions_api::get_workflow_actions(&start_server.config, workflow_id)
+            .expect("Failed to get workflow actions");
 
     let schedule_actions: Vec<_> = actions
         .into_iter()
@@ -249,8 +250,9 @@ fn test_two_node_allocation_one_worker_per_node_parallel_jobs(start_server: &Ser
     let workflow_id = result.unwrap();
 
     // --- Verify schedule_nodes action was created ---
-    let actions = apis::final_surfaces_api::get_workflow_actions(&start_server.config, workflow_id)
-        .expect("Failed to get workflow actions");
+    let actions =
+        apis::workflow_actions_api::get_workflow_actions(&start_server.config, workflow_id)
+            .expect("Failed to get workflow actions");
 
     let schedule_actions: Vec<_> = actions
         .into_iter()

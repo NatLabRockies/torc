@@ -4512,7 +4512,7 @@ fn handle_regenerate(
     // This is critical for recovery scenarios where original actions would otherwise fire again
     match utils::send_with_retries(
         config,
-        || apis::final_surfaces_api::get_workflow_actions(config, workflow_id),
+        || apis::workflow_actions_api::get_workflow_actions(config, workflow_id),
         WAIT_FOR_HEALTHY_DATABASE_MINUTES,
     ) {
         Ok(actions) => {
@@ -4526,7 +4526,7 @@ fn handle_regenerate(
                     match utils::send_with_retries(
                         config,
                         || {
-                            apis::final_surfaces_api::claim_action(
+                            apis::workflow_actions_api::claim_action(
                                 config,
                                 workflow_id,
                                 action_id,
@@ -4917,7 +4917,7 @@ fn handle_regenerate(
         match utils::send_with_retries(
             config,
             || {
-                apis::final_surfaces_api::create_workflow_action(
+                apis::workflow_actions_api::create_workflow_action(
                     config,
                     workflow_id,
                     action_body.clone(),

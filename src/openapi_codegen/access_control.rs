@@ -9,7 +9,8 @@ use utoipa::IntoParams;
 
 use crate::models::{
     AccessCheckResponse, AccessGroupModel, ListAccessGroupsResponse,
-    ListUserGroupMembershipsResponse, UserGroupMembershipModel, WorkflowAccessGroupModel,
+    ListUserGroupMembershipsResponse, ReloadAuthResponse, UserGroupMembershipModel,
+    WorkflowAccessGroupModel,
 };
 
 #[allow(dead_code)]
@@ -247,6 +248,19 @@ pub async fn check_workflow_access(
         user_name,
         workflow_id,
         reason: None,
+    })
+}
+
+#[utoipa::path(
+    post,
+    path = "/admin/reload-auth",
+    operation_id = "reload_auth",
+    responses((status = 200, description = "Successful response", body = ReloadAuthResponse))
+)]
+pub async fn reload_auth() -> Json<ReloadAuthResponse> {
+    Json(ReloadAuthResponse {
+        message: "Authentication data reloaded".to_string(),
+        user_count: 1,
     })
 }
 

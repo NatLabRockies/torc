@@ -148,3 +148,69 @@ fn test_claim_jobs_based_on_resources_skips_high_priority_job_that_does_not_fit(
     assert_eq!(returned_jobs[0].name, "lower_priority_cpu");
     assert_eq!(returned_jobs[0].priority, Some(10));
 }
+
+#[rstest]
+fn test_claim_jobs_based_on_resources_strict_scheduler_match_controls_fallback(
+    start_server: &ServerProcess,
+) {
+    let config = &start_server.config;
+    let workflow = models::WorkflowModel::new(
+        "strict_scheduler_match_test".to_string(),
+        "test_user".to_string(),
+    );
+    let created_workflow =
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
+    let workflow_id = created_workflow.id.unwrap();
+
+    let rr = create_test_resource_requirements(
+        config,
+        workflow_id,
+        "strict_scheduler_rr",
+        1,
+        0,
+        1,
+        "1g",
+        "PT5M",
+    );
+
+    let mut job = models::JobModel::new(
+        workflow_id,
+        "scheduler_bound_job".to_string(),
+        "echo scheduler".to_string(),
+    );
+    job.resource_requirements_id = Some(rr.id.unwrap());
+    job.scheduler_id = Some(7);
+    apis::jobs_api::create_job(config, job).expect("Failed to create job");
+
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to initialize jobs");
+
+    let mut resources = models::ComputeNodesResources::new(1, 1.0, 0, 1);
+    resources.scheduler_config_id = Some(99);
+
+    let strict = apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        1,
+        resources.clone(),
+        Some(true),
+    )
+    .expect("strict claim should succeed");
+    assert_eq!(
+        strict.jobs.expect("Server must return jobs array").len(),
+        0,
+        "strict scheduler matching should not fall back to jobs with a different scheduler_id",
+    );
+
+    let relaxed = apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        1,
+        resources,
+        Some(false),
+    )
+    .expect("relaxed claim should succeed");
+    let returned_jobs = relaxed.jobs.expect("Server must return jobs array");
+    assert_eq!(returned_jobs.len(), 1);
+    assert_eq!(returned_jobs[0].name, "scheduler_bound_job");
+}

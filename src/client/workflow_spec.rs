@@ -2488,8 +2488,12 @@ impl WorkflowSpec {
                     is_recovery: false,
                 };
 
-                apis::final_surfaces_api::create_workflow_action(config, workflow_id, action_body)
-                    .map_err(|e| format!("Failed to create workflow action: {:?}", e))?;
+                apis::workflow_actions_api::create_workflow_action(
+                    config,
+                    workflow_id,
+                    action_body,
+                )
+                .map_err(|e| format!("Failed to create workflow action: {:?}", e))?;
             }
         }
 

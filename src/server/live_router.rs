@@ -11,6 +11,7 @@ use crate::server::transport_types::context_types::{EmptyContext, Push, XSpanIdS
 use axum::Router;
 use axum::body::Body;
 use axum::extract::{Path, Request, State};
+use axum::http::header::{HeaderName, HeaderValue};
 use axum::http::{Response, StatusCode};
 use axum::middleware::{self, Next};
 use axum::routing::{delete, get, post, put};
@@ -1054,20 +1055,39 @@ async fn inject_request_context(
     );
 
     if state.require_auth && authorization.is_none() {
-        return Response::builder()
+        let mut response = Response::builder()
             .status(StatusCode::UNAUTHORIZED)
             .header("WWW-Authenticate", "Basic realm=\"Torc\"")
             .body(Body::from("Unauthorized"))
             .unwrap();
+        add_standard_response_headers(&mut response, &span_id);
+        return response;
     }
 
     let context = EmptyContext::default()
-        .push(span_id)
+        .push(span_id.clone())
         .push(None::<AuthData>)
         .push(authorization);
     request.extensions_mut().insert(context);
 
-    next.run(request).await
+    let mut response = next.run(request).await;
+    add_standard_response_headers(&mut response, &span_id);
+    response
+}
+
+fn add_standard_response_headers(response: &mut Response<Body>, span_id: &XSpanIdString) {
+    response.headers_mut().insert(
+        HeaderName::from_static("x-span-id"),
+        HeaderValue::from_str(&span_id.0).expect("span id should be a valid header value"),
+    );
+    response.headers_mut().insert(
+        HeaderName::from_static("x-content-type-options"),
+        HeaderValue::from_static("nosniff"),
+    );
+    response.headers_mut().insert(
+        HeaderName::from_static("x-frame-options"),
+        HeaderValue::from_static("DENY"),
+    );
 }
 
 fn resolve_authorization(
@@ -1173,6 +1193,15 @@ mod live_router_tests {
             .expect("router response");
 
         assert_eq!(response.status(), StatusCode::OK);
+        assert!(response.headers().get("x-span-id").is_some());
+        assert_eq!(
+            response.headers().get("x-content-type-options"),
+            Some(&HeaderValue::from_static("nosniff"))
+        );
+        assert_eq!(
+            response.headers().get("x-frame-options"),
+            Some(&HeaderValue::from_static("DENY"))
+        );
     }
 
     #[tokio::test]

@@ -706,7 +706,7 @@ pub fn get_execution_plan(
         )
         .map_err(|e| internal_error(format!("Failed to list jobs: {}", e)))?;
 
-        let actions = apis::final_surfaces_api::get_workflow_actions(config, workflow_id)
+        let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
             .map_err(|e| internal_error(format!("Failed to get workflow actions: {}", e)))?;
 
         let slurm_schedulers =

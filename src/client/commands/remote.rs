@@ -427,7 +427,7 @@ fn handle_run(
         // Add only valid workers to the database
         println!("Adding {} worker(s) to database...", valid_workers.len());
 
-        match apis::final_surfaces_api::create_remote_workers(config, workflow_id, valid_workers) {
+        match apis::remote_workers_api::create_remote_workers(config, workflow_id, valid_workers) {
             Ok(created) => {
                 info!(
                     "Added {} workers from {}",
@@ -1120,7 +1120,7 @@ fn delete_worker_logs(worker: &WorkerEntry, remote_output_dir: &str) -> RemoteOp
 
 /// List remote workers stored in the database for a workflow.
 fn handle_list_workers(config: &Configuration, workflow_id: i64) {
-    match apis::final_surfaces_api::list_remote_workers(config, workflow_id) {
+    match apis::remote_workers_api::list_remote_workers(config, workflow_id) {
         Ok(workers) => {
             if workers.is_empty() {
                 println!("No remote workers stored for workflow {}", workflow_id);
@@ -1250,7 +1250,7 @@ fn handle_add_workers(
         }
     };
 
-    match apis::final_surfaces_api::create_remote_workers(config, workflow_id, valid_workers) {
+    match apis::remote_workers_api::create_remote_workers(config, workflow_id, valid_workers) {
         Ok(created) => {
             if created.is_empty() {
                 println!("All workers already exist for workflow {}", workflow_id);
@@ -1308,7 +1308,7 @@ fn handle_add_workers_from_file(
         }
     };
 
-    match apis::final_surfaces_api::create_remote_workers(config, workflow_id, valid_workers) {
+    match apis::remote_workers_api::create_remote_workers(config, workflow_id, valid_workers) {
         Ok(created) => {
             println!(
                 "Added {} worker(s) from {} to workflow {}",
@@ -1329,7 +1329,7 @@ fn handle_add_workers_from_file(
 
 /// Remove a remote worker from the database.
 fn handle_remove_worker(config: &Configuration, worker: &str, workflow_id: i64) {
-    match apis::final_surfaces_api::delete_remote_worker(config, workflow_id, worker) {
+    match apis::remote_workers_api::delete_remote_worker(config, workflow_id, worker) {
         Ok(_) => {
             println!("Removed worker {} from workflow {}", worker, workflow_id);
         }
@@ -1342,7 +1342,7 @@ fn handle_remove_worker(config: &Configuration, worker: &str, workflow_id: i64) 
 
 /// Fetch workers from the database and convert to WorkerEntry.
 fn fetch_workers_from_db(config: &Configuration, workflow_id: i64) -> Vec<WorkerEntry> {
-    match apis::final_surfaces_api::list_remote_workers(config, workflow_id) {
+    match apis::remote_workers_api::list_remote_workers(config, workflow_id) {
         Ok(workers) => {
             workers
                 .iter()

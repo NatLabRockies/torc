@@ -32,7 +32,6 @@ use axum::body::Body;
 use axum::http::header::{CONTENT_TYPE, HeaderValue};
 use axum::http::{Request, Response, StatusCode};
 use http_body::Body as HttpBody;
-use http_body_util::BodyExt;
 use std::collections::HashMap;
 use url::form_urlencoded;
 

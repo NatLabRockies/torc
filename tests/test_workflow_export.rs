@@ -714,7 +714,7 @@ fn test_export_import_ro_crate_job_id_remapping(start_server: &ServerProcess) {
         entity_type: "CreateAction".to_string(),
         metadata: create_action_metadata.to_string(),
     };
-    apis::final_surfaces_api::create_ro_crate_entity(config, create_action)
+    apis::ro_crate_api::create_ro_crate_entity(config, create_action)
         .expect("Failed to create CreateAction entity");
 
     // 2. File entity with wasGeneratedBy reference to job
@@ -733,7 +733,7 @@ fn test_export_import_ro_crate_job_id_remapping(start_server: &ServerProcess) {
         entity_type: "File".to_string(),
         metadata: file_metadata.to_string(),
     };
-    apis::final_surfaces_api::create_ro_crate_entity(config, file_entity)
+    apis::ro_crate_api::create_ro_crate_entity(config, file_entity)
         .expect("Failed to create File entity");
 
     // Export the workflow
@@ -793,15 +793,9 @@ fn test_export_import_ro_crate_job_id_remapping(start_server: &ServerProcess) {
     assert_ne!(new_job_id, job_id, "New job should have different ID");
 
     // Get the imported RO-Crate entities
-    let entities_response = apis::final_surfaces_api::list_ro_crate_entities(
-        config,
-        new_workflow_id,
-        None,
-        None,
-        None,
-        None,
-    )
-    .expect("Failed to list RO-Crate entities");
+    let entities_response =
+        apis::ro_crate_api::list_ro_crate_entities(config, new_workflow_id, None, None, None, None)
+            .expect("Failed to list RO-Crate entities");
     let imported_entities = entities_response.items;
     assert_eq!(imported_entities.len(), 2);
 

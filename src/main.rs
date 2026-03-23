@@ -333,7 +333,7 @@ fn main() {
 
             // Check if workflow has schedule_nodes actions (for existing workflows)
             if !is_spec_file(workflow_spec_or_id) {
-                match apis::final_surfaces_api::get_workflow_actions(&config, workflow_id) {
+                match apis::workflow_actions_api::get_workflow_actions(&config, workflow_id) {
                     Ok(actions) => {
                         let has_schedule_nodes = actions.iter().any(|action| {
                             action.trigger_type == "on_workflow_start"

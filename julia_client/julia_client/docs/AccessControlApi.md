@@ -14,6 +14,7 @@ Method | HTTP request | Description
 [**list_group_members**](AccessControlApi.md#list_group_members) | **GET** /access_groups/{id}/members | 
 [**list_user_groups**](AccessControlApi.md#list_user_groups) | **GET** /users/{user_name}/groups | 
 [**list_workflow_groups**](AccessControlApi.md#list_workflow_groups) | **GET** /workflows/{id}/access_groups | 
+[**reload_auth**](AccessControlApi.md#reload_auth) | **POST** /admin/reload-auth | 
 [**remove_user_from_group**](AccessControlApi.md#remove_user_from_group) | **DELETE** /access_groups/{id}/members/{user_name} | 
 [**remove_workflow_from_group**](AccessControlApi.md#remove_workflow_from_group) | **DELETE** /workflows/{id}/access_groups/{group_id} | 
 
@@ -316,6 +317,30 @@ Name | Type | Description  | Notes
 ### Return type
 
 [**ListAccessGroupsResponse**](ListAccessGroupsResponse.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+# **reload_auth**
+> reload_auth(_api::AccessControlApi; _mediaType=nothing) -> ReloadAuthResponse, OpenAPI.Clients.ApiResponse <br/>
+> reload_auth(_api::AccessControlApi, response_stream::Channel; _mediaType=nothing) -> Channel{ ReloadAuthResponse }, OpenAPI.Clients.ApiResponse
+
+
+
+### Required Parameters
+This endpoint does not need any parameter.
+
+### Return type
+
+[**ReloadAuthResponse**](ReloadAuthResponse.md)
 
 ### Authorization
 

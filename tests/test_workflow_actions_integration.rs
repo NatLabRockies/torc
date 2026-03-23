@@ -72,7 +72,7 @@ actions:
             .expect("Failed to create workflow from spec");
 
     // Verify action was created
-    let actions = apis::final_surfaces_api::get_workflow_actions(config, workflow_id)
+    let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
         .expect("Failed to get actions");
     assert_eq!(actions.len(), 1);
     assert_eq!(&actions[0].trigger_type, "on_workflow_start");
@@ -141,8 +141,9 @@ actions:
     // Wait for the action to be claimed and executed
     let action_executed = wait_for(
         || {
-            let actions = apis::final_surfaces_api::get_pending_actions(config, workflow_id, None)
-                .unwrap_or_default();
+            let actions =
+                apis::workflow_actions_api::get_pending_actions(config, workflow_id, None)
+                    .unwrap_or_default();
             actions.is_empty() // Action should no longer be pending
         },
         10,
@@ -212,7 +213,7 @@ actions:
             .expect("Failed to create workflow from spec");
 
     // Verify action was created
-    let actions = apis::final_surfaces_api::get_workflow_actions(config, workflow_id)
+    let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
         .expect("Failed to get actions");
     assert_eq!(actions.len(), 1);
 
@@ -433,7 +434,7 @@ actions:
             .expect("Failed to create workflow from spec");
 
     // Verify action was created with correct job_ids (should match 3 training jobs)
-    let actions = apis::final_surfaces_api::get_workflow_actions(config, workflow_id)
+    let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
         .expect("Failed to get actions");
     assert_eq!(actions.len(), 1);
 
@@ -550,7 +551,7 @@ actions:
             .expect("Failed to create workflow from spec");
 
     // Verify all 3 actions were created
-    let actions = apis::final_surfaces_api::get_workflow_actions(config, workflow_id)
+    let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
         .expect("Failed to get actions");
     assert_eq!(actions.len(), 3);
 
@@ -797,7 +798,7 @@ actions:
             .expect("Failed to create workflow from spec");
 
     // Verify action was created with persistent=true
-    let actions = apis::final_surfaces_api::get_workflow_actions(config, workflow_id)
+    let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
         .expect("Failed to get actions");
     assert_eq!(actions.len(), 1);
     assert_eq!(&actions[0].trigger_type, "on_worker_start");
@@ -937,7 +938,7 @@ actions:
             .expect("Failed to create workflow from spec");
 
     // Verify action was created with persistent=true
-    let actions = apis::final_surfaces_api::get_workflow_actions(config, workflow_id)
+    let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
         .expect("Failed to get actions");
     assert_eq!(actions.len(), 1);
     assert_eq!(&actions[0].trigger_type, "on_worker_complete");
@@ -1076,7 +1077,7 @@ actions:
             .expect("Failed to create workflow from spec");
 
     // Verify action was created with persistent=false (default)
-    let actions = apis::final_surfaces_api::get_workflow_actions(config, workflow_id)
+    let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
         .expect("Failed to get actions");
     assert_eq!(actions.len(), 1);
     assert!(!actions[0].persistent, "Action should not be persistent");
@@ -1217,7 +1218,7 @@ actions:
             .expect("Failed to create workflow from spec");
 
     // Verify action was created
-    let actions = apis::final_surfaces_api::get_workflow_actions(config, workflow_id)
+    let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
         .expect("Failed to get actions");
     assert_eq!(actions.len(), 1);
     assert_eq!(&actions[0].trigger_type, "on_workflow_complete");

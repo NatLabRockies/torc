@@ -59,7 +59,7 @@ impl PaginationParams for RoCrateEntityListParams {
 }
 
 impl Paginatable for RoCrateEntityModel {
-    type ListError = apis::final_surfaces_api::ListRoCrateEntitiesError;
+    type ListError = apis::ro_crate_api::ListRoCrateEntitiesError;
     type Params = RoCrateEntityListParams;
 
     fn fetch_page(
@@ -67,7 +67,7 @@ impl Paginatable for RoCrateEntityModel {
         params: &Self::Params,
         limit: i64,
     ) -> Result<PaginatedResponse<Self>, apis::Error<Self::ListError>> {
-        let response = apis::final_surfaces_api::list_ro_crate_entities(
+        let response = apis::ro_crate_api::list_ro_crate_entities(
             config,
             params.workflow_id,
             Some(params.offset),
@@ -120,7 +120,6 @@ pub fn paginate_ro_crate_entities(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: RoCrateEntityListParams,
-) -> Result<Vec<RoCrateEntityModel>, apis::Error<apis::final_surfaces_api::ListRoCrateEntitiesError>>
-{
+) -> Result<Vec<RoCrateEntityModel>, apis::Error<apis::ro_crate_api::ListRoCrateEntitiesError>> {
     iter_ro_crate_entities(config, workflow_id, params).collect()
 }

@@ -6,13 +6,15 @@ from torc.openapi_client.api.admin_resources_api import AdminResourcesApi
 from torc.openapi_client.api.compute_nodes_api import ComputeNodesApi
 from torc.openapi_client.api.events_api import EventsApi
 from torc.openapi_client.api.files_api import FilesApi
-from torc.openapi_client.api.final_surfaces_api import FinalSurfacesApi
 from torc.openapi_client.api.jobs_api import JobsApi
 from torc.openapi_client.api.local_schedulers_api import LocalSchedulersApi
+from torc.openapi_client.api.remote_workers_api import RemoteWorkersApi
 from torc.openapi_client.api.results_api import ResultsApi
+from torc.openapi_client.api.ro_crate_api import RoCrateApi
 from torc.openapi_client.api.scheduled_compute_nodes_api import ScheduledComputeNodesApi
 from torc.openapi_client.api.slurm_schedulers_api import SlurmSchedulersApi
 from torc.openapi_client.api.system_api import SystemApi
 from torc.openapi_client.api.user_data_api import UserDataApi
+from torc.openapi_client.api.workflow_actions_api import WorkflowActionsApi
 from torc.openapi_client.api.workflows_api import WorkflowsApi
 

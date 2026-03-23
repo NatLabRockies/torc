@@ -203,7 +203,7 @@ impl WorkflowManager {
         // Get pending on_workflow_start actions
         // Note: We don't create a compute node for the submission host (login node)
         // since it's not actually running jobs - it just submits to the scheduler
-        let actions = match apis::final_surfaces_api::get_pending_actions(
+        let actions = match apis::workflow_actions_api::get_pending_actions(
             &self.config,
             self.workflow_id,
             Some(vec!["on_workflow_start".to_string()]),

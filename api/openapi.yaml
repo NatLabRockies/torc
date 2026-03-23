@@ -213,7 +213,7 @@ paths:
   /admin/reload-auth:
     post:
       tags:
-      - final_surfaces
+      - access_control
       operationId: reload_auth
       responses:
         '200':
@@ -1756,7 +1756,7 @@ paths:
   /ro_crate_entities:
     post:
       tags:
-      - final_surfaces
+      - ro_crate
       operationId: create_ro_crate_entity
       requestBody:
         content:
@@ -1774,7 +1774,7 @@ paths:
   /ro_crate_entities/{id}:
     get:
       tags:
-      - final_surfaces
+      - ro_crate
       operationId: get_ro_crate_entity
       parameters:
       - name: id
@@ -1793,7 +1793,7 @@ paths:
                 $ref: '#/components/schemas/RoCrateEntityModel'
     put:
       tags:
-      - final_surfaces
+      - ro_crate
       operationId: update_ro_crate_entity
       parameters:
       - name: id
@@ -1818,7 +1818,7 @@ paths:
                 $ref: '#/components/schemas/RoCrateEntityModel'
     delete:
       tags:
-      - final_surfaces
+      - ro_crate
       operationId: delete_ro_crate_entity
       parameters:
       - name: id
@@ -2805,7 +2805,7 @@ paths:
   /workflows/{id}/actions:
     get:
       tags:
-      - final_surfaces
+      - workflow_actions
       operationId: get_workflow_actions
       parameters:
       - name: id
@@ -2826,7 +2826,7 @@ paths:
                   $ref: '#/components/schemas/WorkflowActionModel'
     post:
       tags:
-      - final_surfaces
+      - workflow_actions
       operationId: create_workflow_action
       parameters:
       - name: id
@@ -2852,7 +2852,7 @@ paths:
   /workflows/{id}/actions/pending:
     get:
       tags:
-      - final_surfaces
+      - workflow_actions
       operationId: get_pending_actions
       parameters:
       - name: id
@@ -2883,7 +2883,7 @@ paths:
   /workflows/{id}/actions/{action_id}/claim:
     post:
       tags:
-      - final_surfaces
+      - workflow_actions
       operationId: claim_action
       parameters:
       - name: id
@@ -3373,7 +3373,7 @@ paths:
   /workflows/{id}/remote_workers:
     get:
       tags:
-      - final_surfaces
+      - remote_workers
       operationId: list_remote_workers
       parameters:
       - name: id
@@ -3394,7 +3394,7 @@ paths:
                   $ref: '#/components/schemas/RemoteWorkerModel'
     post:
       tags:
-      - final_surfaces
+      - remote_workers
       operationId: create_remote_workers
       parameters:
       - name: id
@@ -3424,7 +3424,7 @@ paths:
   /workflows/{id}/remote_workers/{worker}:
     delete:
       tags:
-      - final_surfaces
+      - remote_workers
       operationId: delete_remote_worker
       parameters:
       - name: id
@@ -3531,7 +3531,7 @@ paths:
   /workflows/{id}/ro_crate_entities:
     get:
       tags:
-      - final_surfaces
+      - ro_crate
       operationId: list_ro_crate_entities
       parameters:
       - name: id
@@ -3580,7 +3580,7 @@ paths:
                 $ref: '#/components/schemas/ListRoCrateEntitiesResponse'
     delete:
       tags:
-      - final_surfaces
+      - ro_crate
       operationId: delete_ro_crate_entities
       parameters:
       - name: id

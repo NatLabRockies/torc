@@ -28,7 +28,7 @@ fn test_ro_crate_crud(start_server: &ServerProcess) {
         metadata: serde_json::to_string(&metadata).unwrap(),
     };
 
-    let created = apis::final_surfaces_api::create_ro_crate_entity(config, entity)
+    let created = apis::ro_crate_api::create_ro_crate_entity(config, entity)
         .expect("Failed to create entity");
     assert!(created.id.is_some());
     assert_eq!(created.workflow_id, workflow_id);
@@ -37,8 +37,8 @@ fn test_ro_crate_crud(start_server: &ServerProcess) {
     let entity_id = created.id.unwrap();
 
     // Get the entity
-    let fetched = apis::final_surfaces_api::get_ro_crate_entity(config, entity_id)
-        .expect("Failed to get entity");
+    let fetched =
+        apis::ro_crate_api::get_ro_crate_entity(config, entity_id).expect("Failed to get entity");
     assert_eq!(fetched.entity_id, "data/output.parquet");
     assert_eq!(fetched.entity_type, "File");
     assert!(fetched.file_id.is_none());
@@ -46,39 +46,26 @@ fn test_ro_crate_crud(start_server: &ServerProcess) {
     // Update the entity
     let mut updated = fetched.clone();
     updated.entity_type = "Dataset".to_string();
-    let result = apis::final_surfaces_api::update_ro_crate_entity(config, entity_id, updated)
+    let result = apis::ro_crate_api::update_ro_crate_entity(config, entity_id, updated)
         .expect("Failed to update entity");
     assert_eq!(result.entity_type, "Dataset");
     assert_eq!(result.entity_id, "data/output.parquet");
 
     // List entities
-    let list_response = apis::final_surfaces_api::list_ro_crate_entities(
-        config,
-        workflow_id,
-        None,
-        None,
-        None,
-        None,
-    )
-    .expect("Failed to list entities");
+    let list_response =
+        apis::ro_crate_api::list_ro_crate_entities(config, workflow_id, None, None, None, None)
+            .expect("Failed to list entities");
     let items = list_response.items;
     assert_eq!(items.len(), 1);
     assert_eq!(items[0].entity_type, "Dataset");
 
     // Delete the entity
-    apis::final_surfaces_api::delete_ro_crate_entity(config, entity_id)
-        .expect("Failed to delete entity");
+    apis::ro_crate_api::delete_ro_crate_entity(config, entity_id).expect("Failed to delete entity");
 
     // Verify it's gone
-    let list_response = apis::final_surfaces_api::list_ro_crate_entities(
-        config,
-        workflow_id,
-        None,
-        None,
-        None,
-        None,
-    )
-    .expect("Failed to list entities after delete");
+    let list_response =
+        apis::ro_crate_api::list_ro_crate_entities(config, workflow_id, None, None, None, None)
+            .expect("Failed to list entities after delete");
     let items = list_response.items;
     assert_eq!(items.len(), 0);
 }
@@ -110,7 +97,7 @@ fn test_ro_crate_with_file_id(start_server: &ServerProcess) {
         metadata: json!({"name": "Output CSV"}).to_string(),
     };
 
-    let created = apis::final_surfaces_api::create_ro_crate_entity(config, entity)
+    let created = apis::ro_crate_api::create_ro_crate_entity(config, entity)
         .expect("Failed to create entity");
     assert_eq!(created.file_id, Some(file_id));
 }
@@ -137,7 +124,7 @@ fn test_ro_crate_external_entity(start_server: &ServerProcess) {
         .to_string(),
     };
 
-    let created = apis::final_surfaces_api::create_ro_crate_entity(config, entity)
+    let created = apis::ro_crate_api::create_ro_crate_entity(config, entity)
         .expect("Failed to create entity");
     assert_eq!(created.entity_id, "https://example.com/software/v1.0");
     assert_eq!(created.entity_type, "SoftwareApplication");
@@ -159,37 +146,25 @@ fn test_ro_crate_bulk_delete(start_server: &ServerProcess) {
             "File".to_string(),
             json!({"name": format!("File {}", i)}).to_string(),
         );
-        apis::final_surfaces_api::create_ro_crate_entity(config, entity)
+        apis::ro_crate_api::create_ro_crate_entity(config, entity)
             .expect("Failed to create entity");
     }
 
     // Verify all three exist
-    let list = apis::final_surfaces_api::list_ro_crate_entities(
-        config,
-        workflow_id,
-        None,
-        None,
-        None,
-        None,
-    )
-    .expect("Failed to list");
+    let list =
+        apis::ro_crate_api::list_ro_crate_entities(config, workflow_id, None, None, None, None)
+            .expect("Failed to list");
     assert_eq!(list.items.len(), 3);
 
     // Bulk delete all entities for the workflow
-    let result = apis::final_surfaces_api::delete_ro_crate_entities(config, workflow_id, None)
+    let result = apis::ro_crate_api::delete_ro_crate_entities(config, workflow_id, None)
         .expect("Failed to bulk delete");
     assert_eq!(result.deleted_count, 3);
 
     // Verify all are gone
-    let list = apis::final_surfaces_api::list_ro_crate_entities(
-        config,
-        workflow_id,
-        None,
-        None,
-        None,
-        None,
-    )
-    .expect("Failed to list after delete");
+    let list =
+        apis::ro_crate_api::list_ro_crate_entities(config, workflow_id, None, None, None, None)
+            .expect("Failed to list after delete");
     assert_eq!(list.items.len(), 0);
 }
 
@@ -207,19 +182,12 @@ fn test_ro_crate_cascade_delete(start_server: &ServerProcess) {
         "File".to_string(),
         json!({"name": "Result"}).to_string(),
     );
-    apis::final_surfaces_api::create_ro_crate_entity(config, entity)
-        .expect("Failed to create entity");
+    apis::ro_crate_api::create_ro_crate_entity(config, entity).expect("Failed to create entity");
 
     // Verify it exists
-    let list = apis::final_surfaces_api::list_ro_crate_entities(
-        config,
-        workflow_id,
-        None,
-        None,
-        None,
-        None,
-    )
-    .expect("Failed to list");
+    let list =
+        apis::ro_crate_api::list_ro_crate_entities(config, workflow_id, None, None, None, None)
+            .expect("Failed to list");
     assert_eq!(list.items.len(), 1);
 
     // Delete the workflow (should cascade delete RO-Crate entities)
@@ -227,14 +195,8 @@ fn test_ro_crate_cascade_delete(start_server: &ServerProcess) {
         .expect("Failed to delete workflow");
 
     // The workflow is gone, so listing should fail or return error
-    let result = apis::final_surfaces_api::list_ro_crate_entities(
-        config,
-        workflow_id,
-        None,
-        None,
-        None,
-        None,
-    );
+    let result =
+        apis::ro_crate_api::list_ro_crate_entities(config, workflow_id, None, None, None, None);
     // Either the list returns empty (workflow gone, no entities) or an error
     match result {
         Ok(response) => {
@@ -267,7 +229,7 @@ fn test_ro_crate_directory_entity(start_server: &ServerProcess) {
         .to_string(),
     );
 
-    let created = apis::final_surfaces_api::create_ro_crate_entity(config, entity)
+    let created = apis::ro_crate_api::create_ro_crate_entity(config, entity)
         .expect("Failed to create entity");
     assert_eq!(created.entity_id, "data/partitioned_table/");
     assert_eq!(created.entity_type, "Dataset");

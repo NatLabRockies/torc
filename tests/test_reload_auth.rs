@@ -16,7 +16,7 @@ fn test_reload_auth_success() {
     let server = common::start_server_with_required_auth();
     let admin_config = server.config_for_user("owner");
 
-    let result = apis::final_surfaces_api::reload_auth(&admin_config);
+    let result = apis::access_control_api::reload_auth(&admin_config);
     assert!(result.is_ok(), "reload_auth should succeed for admin");
 
     let body = result.unwrap();
@@ -32,7 +32,7 @@ fn test_reload_auth_forbidden() {
 
     // "dave" is not in the admin group
     let dave_config = server.config_for_user("dave");
-    let result = apis::final_surfaces_api::reload_auth(&dave_config);
+    let result = apis::access_control_api::reload_auth(&dave_config);
     assert!(result.is_err(), "reload_auth should fail for non-admin");
 }
 
@@ -67,7 +67,7 @@ fn test_reload_auth_new_user_can_authenticate() {
     );
 
     // Admin reloads auth
-    let reload_result = apis::final_surfaces_api::reload_auth(&admin_config);
+    let reload_result = apis::access_control_api::reload_auth(&admin_config);
     assert!(reload_result.is_ok(), "reload_auth should succeed");
 
     // Now eve can authenticate
@@ -98,7 +98,7 @@ fn test_reload_auth_removed_user_rejected() {
         .arg("4")
         .arg("carol")
         .status();
-    let _ = apis::final_surfaces_api::reload_auth(&admin_config);
+    let _ = apis::access_control_api::reload_auth(&admin_config);
 
     let carol_config = server.config_for_user("carol");
     let carol_result = apis::system_api::ping(&carol_config);
@@ -118,7 +118,7 @@ fn test_reload_auth_removed_user_rejected() {
     assert!(status.success(), "torc-htpasswd remove should succeed");
 
     // Admin reloads auth
-    let reload_result = apis::final_surfaces_api::reload_auth(&admin_config);
+    let reload_result = apis::access_control_api::reload_auth(&admin_config);
     assert!(reload_result.is_ok(), "reload_auth should succeed");
 
     // Carol can no longer authenticate
@@ -149,7 +149,7 @@ fn test_reload_auth_clears_credential_cache() {
         .arg("4")
         .arg("bob")
         .status();
-    let _ = apis::final_surfaces_api::reload_auth(&admin_config);
+    let _ = apis::access_control_api::reload_auth(&admin_config);
 
     // Bob authenticates successfully (caches credentials)
     let bob_config = server.config_for_user("bob");
@@ -174,7 +174,7 @@ fn test_reload_auth_clears_credential_cache() {
     );
 
     // Admin reloads auth (clears cache)
-    let reload_result = apis::final_surfaces_api::reload_auth(&admin_config);
+    let reload_result = apis::access_control_api::reload_auth(&admin_config);
     assert!(reload_result.is_ok(), "reload_auth should succeed");
 
     // Bob's old password should no longer work
@@ -204,7 +204,7 @@ fn test_reload_auth_clears_credential_cache() {
 fn test_reload_auth_no_auth_file() {
     // Use the standard server (no auth file configured)
     let server = common::start_server();
-    let result = apis::final_surfaces_api::reload_auth(&server.config);
+    let result = apis::access_control_api::reload_auth(&server.config);
     // Without access control, any user can call admin endpoints but reload will fail
     // because there's no auth file configured
     assert!(result.is_err(), "reload_auth should fail without auth file");

@@ -23,7 +23,7 @@ EXAMPLES:
 
 pub fn handle_admin_commands(config: &Configuration, command: &AdminCommands, format: &str) {
     match command {
-        AdminCommands::ReloadAuth => match apis::final_surfaces_api::reload_auth(config) {
+        AdminCommands::ReloadAuth => match apis::access_control_api::reload_auth(config) {
             Ok(response) => {
                 if format == "json" {
                     println!("{}", serde_json::to_string_pretty(&response).unwrap());

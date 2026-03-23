@@ -2237,7 +2237,7 @@ impl JobRunner {
         let trigger_type_owned = trigger_type.to_string();
         let pending_actions = match self.send_with_retries(
             || -> Result<Vec<crate::models::WorkflowActionModel>, Box<dyn std::error::Error>> {
-                let actions = apis::final_surfaces_api::get_pending_actions(
+                let actions = apis::workflow_actions_api::get_pending_actions(
                     &self.config,
                     self.workflow_id,
                     Some(vec![trigger_type_owned.clone()]),
@@ -2338,7 +2338,7 @@ impl JobRunner {
         // Get pending on_jobs_ready and on_jobs_complete actions
         let pending_actions = match self.send_with_retries(
             || -> Result<Vec<crate::models::WorkflowActionModel>, Box<dyn std::error::Error>> {
-                let actions = apis::final_surfaces_api::get_pending_actions(
+                let actions = apis::workflow_actions_api::get_pending_actions(
                     &self.config,
                     self.workflow_id,
                     Some(vec![
@@ -2427,8 +2427,10 @@ impl JobRunner {
         // Get ALL actions for this workflow (not just pending ones)
         match self.send_with_retries(
             || -> Result<Vec<crate::models::WorkflowActionModel>, Box<dyn std::error::Error>> {
-                let actions =
-                    apis::final_surfaces_api::get_workflow_actions(&self.config, self.workflow_id)?;
+                let actions = apis::workflow_actions_api::get_workflow_actions(
+                    &self.config,
+                    self.workflow_id,
+                )?;
                 Ok(actions)
             },
         ) {

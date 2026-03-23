@@ -5,15 +5,17 @@ mod admin_resources;
 mod compute_nodes;
 mod events;
 mod files;
-mod final_surfaces;
 mod helpers;
 mod jobs;
 mod local_schedulers;
+mod remote_workers;
 mod results;
+mod ro_crate;
 mod scheduled_compute_nodes;
 mod slurm_schedulers;
 mod system;
 mod user_data;
+mod workflow_actions;
 mod workflows;
 
 use axum::{Router, routing::get};
@@ -186,16 +188,16 @@ pub fn app_router(state: OpenApiAppState) -> Router {
         )
         .route(
             "/torc-service/v1/workflows/{id}/actions",
-            axum::routing::post(final_surfaces::create_workflow_action)
-                .get(final_surfaces::get_workflow_actions),
+            axum::routing::post(workflow_actions::create_workflow_action)
+                .get(workflow_actions::get_workflow_actions),
         )
         .route(
             "/torc-service/v1/workflows/{id}/actions/pending",
-            get(final_surfaces::get_pending_actions),
+            get(workflow_actions::get_pending_actions),
         )
         .route(
             "/torc-service/v1/workflows/{id}/actions/{action_id}/claim",
-            axum::routing::post(final_surfaces::claim_action),
+            axum::routing::post(workflow_actions::claim_action),
         )
         .route(
             "/torc-service/v1/jobs",
@@ -280,31 +282,30 @@ pub fn app_router(state: OpenApiAppState) -> Router {
         )
         .route(
             "/torc-service/v1/workflows/{id}/remote_workers",
-            axum::routing::post(final_surfaces::create_remote_workers)
-                .get(final_surfaces::list_remote_workers),
+            axum::routing::post(remote_workers::create_remote_workers)
+                .get(remote_workers::list_remote_workers),
         )
         .route(
             "/torc-service/v1/workflows/{id}/remote_workers/{worker}",
-            axum::routing::delete(final_surfaces::delete_remote_worker),
+            axum::routing::delete(remote_workers::delete_remote_worker),
         )
         .route(
             "/torc-service/v1/ro_crate_entities",
-            axum::routing::post(final_surfaces::create_ro_crate_entity),
+            axum::routing::post(ro_crate::create_ro_crate_entity),
         )
         .route(
             "/torc-service/v1/ro_crate_entities/{id}",
-            get(final_surfaces::get_ro_crate_entity)
-                .put(final_surfaces::update_ro_crate_entity)
-                .delete(final_surfaces::delete_ro_crate_entity),
+            get(ro_crate::get_ro_crate_entity)
+                .put(ro_crate::update_ro_crate_entity)
+                .delete(ro_crate::delete_ro_crate_entity),
         )
         .route(
             "/torc-service/v1/workflows/{id}/ro_crate_entities",
-            get(final_surfaces::list_ro_crate_entities)
-                .delete(final_surfaces::delete_ro_crate_entities),
+            get(ro_crate::list_ro_crate_entities).delete(ro_crate::delete_ro_crate_entities),
         )
         .route(
             "/torc-service/v1/admin/reload-auth",
-            axum::routing::post(final_surfaces::reload_auth),
+            axum::routing::post(access_control::reload_auth),
         )
         .route(
             "/torc-service/v1/workflows",
@@ -450,10 +451,10 @@ pub fn app_router(state: OpenApiAppState) -> Router {
         admin_resources::get_failure_handler,
         admin_resources::delete_failure_handler,
         admin_resources::list_failure_handlers,
-        final_surfaces::create_workflow_action,
-        final_surfaces::get_workflow_actions,
-        final_surfaces::get_pending_actions,
-        final_surfaces::claim_action,
+        workflow_actions::create_workflow_action,
+        workflow_actions::get_workflow_actions,
+        workflow_actions::get_pending_actions,
+        workflow_actions::claim_action,
         results::create_result,
         results::delete_results,
         results::list_results,
@@ -474,16 +475,16 @@ pub fn app_router(state: OpenApiAppState) -> Router {
         slurm_schedulers::update_slurm_scheduler,
         admin_resources::create_slurm_stats,
         admin_resources::list_slurm_stats,
-        final_surfaces::create_remote_workers,
-        final_surfaces::list_remote_workers,
-        final_surfaces::delete_remote_worker,
-        final_surfaces::create_ro_crate_entity,
-        final_surfaces::get_ro_crate_entity,
-        final_surfaces::update_ro_crate_entity,
-        final_surfaces::delete_ro_crate_entity,
-        final_surfaces::list_ro_crate_entities,
-        final_surfaces::delete_ro_crate_entities,
-        final_surfaces::reload_auth,
+        remote_workers::create_remote_workers,
+        remote_workers::list_remote_workers,
+        remote_workers::delete_remote_worker,
+        ro_crate::create_ro_crate_entity,
+        ro_crate::get_ro_crate_entity,
+        ro_crate::update_ro_crate_entity,
+        ro_crate::delete_ro_crate_entity,
+        ro_crate::list_ro_crate_entities,
+        ro_crate::delete_ro_crate_entities,
+        access_control::reload_auth,
         workflows::list_workflows,
         workflows::create_workflow,
         workflows::delete_workflow,

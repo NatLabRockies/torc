@@ -92,8 +92,9 @@ fn test_create_workflow_action_run_commands(start_server: &ServerProcess) {
         None,
     );
 
-    let result = apis::final_surfaces_api::create_workflow_action(config, workflow_id, action_body)
-        .expect("Failed to create workflow action");
+    let result =
+        apis::workflow_actions_api::create_workflow_action(config, workflow_id, action_body)
+            .expect("Failed to create workflow action");
 
     assert!(result.id.is_some());
     assert_eq!(result.workflow_id, workflow_id);
@@ -123,8 +124,9 @@ fn test_create_workflow_action_schedule_nodes(start_server: &ServerProcess) {
         None,
     );
 
-    let result = apis::final_surfaces_api::create_workflow_action(config, workflow_id, action_body)
-        .expect("Failed to create schedule_nodes action");
+    let result =
+        apis::workflow_actions_api::create_workflow_action(config, workflow_id, action_body)
+            .expect("Failed to create schedule_nodes action");
 
     assert!(result.id.is_some());
     assert_eq!(result.action_type.as_str(), "schedule_nodes");
@@ -150,12 +152,12 @@ fn test_get_workflow_actions(start_server: &ServerProcess) {
             None,
         );
 
-        apis::final_surfaces_api::create_workflow_action(config, workflow_id, action_body)
+        apis::workflow_actions_api::create_workflow_action(config, workflow_id, action_body)
             .expect("Failed to create action");
     }
 
     // Get all actions
-    let actions = apis::final_surfaces_api::get_workflow_actions(config, workflow_id)
+    let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
         .expect("Failed to get workflow actions");
 
     assert_eq!(actions.len(), 3);
@@ -184,7 +186,7 @@ fn test_get_pending_actions(start_server: &ServerProcess) {
         None,
     );
 
-    apis::final_surfaces_api::create_workflow_action(config, workflow_id, action_body)
+    apis::workflow_actions_api::create_workflow_action(config, workflow_id, action_body)
         .expect("Failed to create action");
 
     // Initialize the workflow to trigger on_workflow_start actions
@@ -192,8 +194,9 @@ fn test_get_pending_actions(start_server: &ServerProcess) {
         .expect("Failed to initialize workflow");
 
     // Get pending actions (should include the newly created action)
-    let pending_actions = apis::final_surfaces_api::get_pending_actions(config, workflow_id, None)
-        .expect("Failed to get pending actions");
+    let pending_actions =
+        apis::workflow_actions_api::get_pending_actions(config, workflow_id, None)
+            .expect("Failed to get pending actions");
 
     assert_eq!(pending_actions.len(), 1);
     assert!(!pending_actions[0].executed);
@@ -221,7 +224,7 @@ fn test_claim_action_success(start_server: &ServerProcess) {
     );
 
     let created_action =
-        apis::final_surfaces_api::create_workflow_action(config, workflow_id, action_body)
+        apis::workflow_actions_api::create_workflow_action(config, workflow_id, action_body)
             .expect("Failed to create action");
     let action_id = created_action.id.unwrap();
 
@@ -235,15 +238,16 @@ fn test_claim_action_success(start_server: &ServerProcess) {
     };
 
     let claim_result =
-        apis::final_surfaces_api::claim_action(config, workflow_id, action_id, claim_body)
+        apis::workflow_actions_api::claim_action(config, workflow_id, action_id, claim_body)
             .expect("Failed to claim action");
 
     assert!(claim_result.success);
     assert_eq!(claim_result.action_id, action_id);
 
     // Verify the action is no longer pending
-    let pending_actions = apis::final_surfaces_api::get_pending_actions(config, workflow_id, None)
-        .expect("Failed to get pending actions");
+    let pending_actions =
+        apis::workflow_actions_api::get_pending_actions(config, workflow_id, None)
+            .expect("Failed to get pending actions");
     assert_eq!(pending_actions.len(), 0);
 }
 
@@ -271,7 +275,7 @@ fn test_claim_action_already_claimed(start_server: &ServerProcess) {
     );
 
     let created_action =
-        apis::final_surfaces_api::create_workflow_action(config, workflow_id, action_body)
+        apis::workflow_actions_api::create_workflow_action(config, workflow_id, action_body)
             .expect("Failed to create action");
     let action_id = created_action.id.unwrap();
 
@@ -285,7 +289,7 @@ fn test_claim_action_already_claimed(start_server: &ServerProcess) {
     };
 
     let claim_result1 =
-        apis::final_surfaces_api::claim_action(config, workflow_id, action_id, claim_body1)
+        apis::workflow_actions_api::claim_action(config, workflow_id, action_id, claim_body1)
             .expect("Failed to claim action first time");
     assert!(claim_result1.success);
 
@@ -295,7 +299,7 @@ fn test_claim_action_already_claimed(start_server: &ServerProcess) {
     };
 
     let claim_result2 =
-        apis::final_surfaces_api::claim_action(config, workflow_id, action_id, claim_body2);
+        apis::workflow_actions_api::claim_action(config, workflow_id, action_id, claim_body2);
 
     match claim_result2 {
         Err(torc::client::apis::Error::ResponseError(ref response_content)) => {
@@ -336,7 +340,7 @@ fn test_action_with_job_names(start_server: &ServerProcess) {
     );
 
     let created_action =
-        apis::final_surfaces_api::create_workflow_action(config, workflow_id, action_body)
+        apis::workflow_actions_api::create_workflow_action(config, workflow_id, action_body)
             .expect("Failed to create action");
 
     // Verify job_ids were set correctly
@@ -377,7 +381,7 @@ fn test_action_with_job_name_regexes(start_server: &ServerProcess) {
     );
 
     let created_action =
-        apis::final_surfaces_api::create_workflow_action(config, workflow_id, action_body)
+        apis::workflow_actions_api::create_workflow_action(config, workflow_id, action_body)
             .expect("Failed to create action");
 
     // Verify job_ids were set correctly
@@ -415,7 +419,7 @@ fn test_action_with_combined_patterns_and_regexes(start_server: &ServerProcess) 
     );
 
     let created_action =
-        apis::final_surfaces_api::create_workflow_action(config, workflow_id, action_body)
+        apis::workflow_actions_api::create_workflow_action(config, workflow_id, action_body)
             .expect("Failed to create action");
 
     // Verify job_ids were set correctly
@@ -448,12 +452,12 @@ fn test_multiple_actions_different_triggers(start_server: &ServerProcess) {
         let action_body =
             workflow_action(workflow_id, trigger, "run_commands", action_config, None);
 
-        apis::final_surfaces_api::create_workflow_action(config, workflow_id, action_body)
+        apis::workflow_actions_api::create_workflow_action(config, workflow_id, action_body)
             .unwrap_or_else(|_| panic!("Failed to create action for trigger: {}", trigger));
     }
 
     // Verify all actions were created
-    let actions = apis::final_surfaces_api::get_workflow_actions(config, workflow_id)
+    let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
         .expect("Failed to get workflow actions");
 
     assert_eq!(actions.len(), 4);
@@ -488,7 +492,7 @@ fn test_action_status_lifecycle(start_server: &ServerProcess) {
     );
 
     let created_action =
-        apis::final_surfaces_api::create_workflow_action(config, workflow_id, action_body)
+        apis::workflow_actions_api::create_workflow_action(config, workflow_id, action_body)
             .expect("Failed to create action");
     let action_id = created_action.id.unwrap();
 
@@ -505,11 +509,11 @@ fn test_action_status_lifecycle(start_server: &ServerProcess) {
         compute_node_id: Some(compute_node_id),
     };
 
-    apis::final_surfaces_api::claim_action(config, workflow_id, action_id, claim_body)
+    apis::workflow_actions_api::claim_action(config, workflow_id, action_id, claim_body)
         .expect("Failed to claim action");
 
     // Get all actions and verify status changed
-    let actions = apis::final_surfaces_api::get_workflow_actions(config, workflow_id)
+    let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
         .expect("Failed to get workflow actions");
 
     let claimed_action = actions
@@ -521,8 +525,9 @@ fn test_action_status_lifecycle(start_server: &ServerProcess) {
     assert_eq!(claimed_action.executed_by.unwrap(), compute_node_id);
 
     // Verify it's no longer in pending actions
-    let pending_actions = apis::final_surfaces_api::get_pending_actions(config, workflow_id, None)
-        .expect("Failed to get pending actions");
+    let pending_actions =
+        apis::workflow_actions_api::get_pending_actions(config, workflow_id, None)
+            .expect("Failed to get pending actions");
     assert_eq!(pending_actions.len(), 0);
 }
 
@@ -583,7 +588,7 @@ fn test_action_executed_flag_reset_on_reinitialize(start_server: &ServerProcess)
         Some(vec![postprocess_job_id]),
     );
     let created_action =
-        apis::final_surfaces_api::create_workflow_action(config, workflow_id, action_body)
+        apis::workflow_actions_api::create_workflow_action(config, workflow_id, action_body)
             .expect("Failed to create workflow action");
     let action_id = created_action.id.unwrap();
 
@@ -648,8 +653,9 @@ fn test_action_executed_flag_reset_on_reinitialize(start_server: &ServerProcess)
     let start = std::time::Instant::now();
     let mut pending_actions;
     loop {
-        pending_actions = apis::final_surfaces_api::get_pending_actions(config, workflow_id, None)
-            .expect("Failed to get pending actions");
+        pending_actions =
+            apis::workflow_actions_api::get_pending_actions(config, workflow_id, None)
+                .expect("Failed to get pending actions");
         if !pending_actions.is_empty() {
             break;
         }
@@ -669,11 +675,11 @@ fn test_action_executed_flag_reset_on_reinitialize(start_server: &ServerProcess)
     let claim_body = ClaimActionRequest {
         compute_node_id: Some(compute_node_id),
     };
-    apis::final_surfaces_api::claim_action(config, workflow_id, action_id, claim_body)
+    apis::workflow_actions_api::claim_action(config, workflow_id, action_id, claim_body)
         .expect("Failed to claim action");
 
     // Verify action is executed
-    let actions = apis::final_surfaces_api::get_workflow_actions(config, workflow_id)
+    let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
         .expect("Failed to get workflow actions");
     let action = actions.iter().find(|a| a.id.unwrap() == action_id).unwrap();
     assert!(action.executed, "Action should be executed after claiming");
@@ -714,7 +720,7 @@ fn test_action_executed_flag_reset_on_reinitialize(start_server: &ServerProcess)
     );
 
     // Check action state after reinitialize - should be reset
-    let actions_after = apis::final_surfaces_api::get_workflow_actions(config, workflow_id)
+    let actions_after = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
         .expect("Failed to get workflow actions");
     let action_after = actions_after
         .iter()
@@ -734,7 +740,7 @@ fn test_action_executed_flag_reset_on_reinitialize(start_server: &ServerProcess)
     );
 
     // Action should not be pending yet (postprocess_job is blocked)
-    let pending_after = apis::final_surfaces_api::get_pending_actions(config, workflow_id, None)
+    let pending_after = apis::workflow_actions_api::get_pending_actions(config, workflow_id, None)
         .expect("Failed to get pending actions");
     assert_eq!(
         pending_after.len(),
@@ -775,7 +781,7 @@ fn test_action_executed_flag_reset_on_reinitialize(start_server: &ServerProcess)
     let start = std::time::Instant::now();
     let mut pending_final;
     loop {
-        pending_final = apis::final_surfaces_api::get_pending_actions(config, workflow_id, None)
+        pending_final = apis::workflow_actions_api::get_pending_actions(config, workflow_id, None)
             .expect("Failed to get pending actions");
         if !pending_final.is_empty() {
             break;
@@ -803,7 +809,7 @@ fn test_action_executed_flag_reset_on_reinitialize(start_server: &ServerProcess)
     );
 
     // Verify action state
-    let actions_final = apis::final_surfaces_api::get_workflow_actions(config, workflow_id)
+    let actions_final = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
         .expect("Failed to get workflow actions");
     let action_final = actions_final
         .iter()
