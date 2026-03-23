@@ -319,9 +319,12 @@ bash sync_openapi.sh all --promote
 
 When adding a new feature that should be exposed to users:
 
-1. **Start with the API**: Define the endpoint in `api/openapi.yaml` with proper schemas
+1. **Start with the Rust-owned API contract**: Define the endpoint in `src/openapi_codegen*.rs` and
+   `src/models.rs`
 2. **Implement server-side**: Add handler in `src/server/api/`
-3. **Regenerate clients**: Run `api/sync_openapi.sh clients`
+3. **Promote and regenerate**: Run `api/sync_openapi.sh all --promote` when the contract is ready,
+   or `api/sync_openapi.sh clients --use-rust-spec` for local client iteration against the
+   Rust-emitted spec
 4. **Add CLI command**: Create handler in `src/client/commands/`
 5. **Update TUI if applicable**: Add to relevant view in `src/tui/`
 6. **Update Dashboard if applicable**: Add route in `torc-dash/src/`

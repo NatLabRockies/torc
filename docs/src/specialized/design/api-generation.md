@@ -104,6 +104,9 @@ The generated Rust client is tag-grouped. Current generated modules include doma
 - `src/client/apis/workflows_api.rs`
 - `src/client/apis/jobs_api.rs`
 - `src/client/apis/access_control_api.rs`
+- `src/client/apis/workflow_actions_api.rs`
+- `src/client/apis/remote_workers_api.rs`
+- `src/client/apis/ro_crate_api.rs`
 - `src/client/apis/system_api.rs`
 
 The rest of the Rust codebase now calls those grouped generated modules directly.
