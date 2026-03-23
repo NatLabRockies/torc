@@ -28,15 +28,15 @@ class WorkflowActionModel(BaseModel):
     """ # noqa: E501
     action_config: Optional[Any]
     action_type: StrictStr
-    executed: StrictBool
+    executed: Optional[StrictBool] = False
     executed_at: Optional[StrictStr] = None
     executed_by: Optional[StrictInt] = None
-    id: Optional[StrictInt]
-    is_recovery: StrictBool
+    id: Optional[StrictInt] = None
+    is_recovery: Optional[StrictBool] = False
     job_ids: Optional[List[StrictInt]] = None
-    persistent: StrictBool
-    required_triggers: StrictInt
-    trigger_count: StrictInt
+    persistent: Optional[StrictBool] = False
+    required_triggers: Optional[StrictInt] = 1
+    trigger_count: Optional[StrictInt] = 0
     trigger_type: StrictStr
     workflow_id: StrictInt
     __properties: ClassVar[List[str]] = ["action_config", "action_type", "executed", "executed_at", "executed_by", "id", "is_recovery", "job_ids", "persistent", "required_triggers", "trigger_count", "trigger_type", "workflow_id"]
@@ -119,15 +119,15 @@ class WorkflowActionModel(BaseModel):
         _obj = cls.model_validate({
             "action_config": obj.get("action_config"),
             "action_type": obj.get("action_type"),
-            "executed": obj.get("executed"),
+            "executed": obj.get("executed") if obj.get("executed") is not None else False,
             "executed_at": obj.get("executed_at"),
             "executed_by": obj.get("executed_by"),
             "id": obj.get("id"),
-            "is_recovery": obj.get("is_recovery"),
+            "is_recovery": obj.get("is_recovery") if obj.get("is_recovery") is not None else False,
             "job_ids": obj.get("job_ids"),
-            "persistent": obj.get("persistent"),
-            "required_triggers": obj.get("required_triggers"),
-            "trigger_count": obj.get("trigger_count"),
+            "persistent": obj.get("persistent") if obj.get("persistent") is not None else False,
+            "required_triggers": obj.get("required_triggers") if obj.get("required_triggers") is not None else 1,
+            "trigger_count": obj.get("trigger_count") if obj.get("trigger_count") is not None else 0,
             "trigger_type": obj.get("trigger_type"),
             "workflow_id": obj.get("workflow_id")
         })

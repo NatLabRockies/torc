@@ -6,12 +6,12 @@
 
     ResourceRequirementsModel(;
         id=nothing,
-        memory=nothing,
+        memory="1m",
         name=nothing,
-        num_cpus=nothing,
-        num_gpus=nothing,
-        num_nodes=nothing,
-        runtime=nothing,
+        num_cpus=1,
+        num_gpus=1,
+        num_nodes=1,
+        runtime="PT1M",
         workflow_id=nothing,
     )
 
@@ -26,12 +26,12 @@
 """
 Base.@kwdef mutable struct ResourceRequirementsModel <: OpenAPI.APIModel
     id::Union{Nothing, Int64} = nothing
-    memory::Union{Nothing, String} = nothing
+    memory::Union{Nothing, String} = "1m"
     name::Union{Nothing, String} = nothing
-    num_cpus::Union{Nothing, Int64} = nothing
-    num_gpus::Union{Nothing, Int64} = nothing
-    num_nodes::Union{Nothing, Int64} = nothing
-    runtime::Union{Nothing, String} = nothing
+    num_cpus::Union{Nothing, Int64} = 1
+    num_gpus::Union{Nothing, Int64} = 1
+    num_nodes::Union{Nothing, Int64} = 1
+    runtime::Union{Nothing, String} = "PT1M"
     workflow_id::Union{Nothing, Int64} = nothing
 
     function ResourceRequirementsModel(id, memory, name, num_cpus, num_gpus, num_nodes, runtime, workflow_id, )
@@ -45,12 +45,7 @@ const _property_types_ResourceRequirementsModel = Dict{Symbol,String}(Symbol("id
 OpenAPI.property_type(::Type{ ResourceRequirementsModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_ResourceRequirementsModel[name]))}
 
 function OpenAPI.check_required(o::ResourceRequirementsModel)
-    o.memory === nothing && (return false)
     o.name === nothing && (return false)
-    o.num_cpus === nothing && (return false)
-    o.num_gpus === nothing && (return false)
-    o.num_nodes === nothing && (return false)
-    o.runtime === nothing && (return false)
     o.workflow_id === nothing && (return false)
     true
 end

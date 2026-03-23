@@ -3648,6 +3648,7 @@ components:
           format: int64
         success:
           type: boolean
+          default: false
     ClaimJobsBasedOnResources:
       type: object
       properties:
@@ -4812,11 +4813,6 @@ components:
       required:
       - workflow_id
       - name
-      - num_cpus
-      - num_gpus
-      - num_nodes
-      - memory
-      - runtime
       properties:
         id:
           type:
@@ -4825,19 +4821,24 @@ components:
           format: int64
         memory:
           type: string
+          default: 1m
         name:
           type: string
         num_cpus:
           type: integer
           format: int64
+          default: 1
         num_gpus:
           type: integer
           format: int64
+          default: 1
         num_nodes:
           type: integer
           format: int64
+          default: 1
         runtime:
           type: string
+          default: PT1M
         workflow_id:
           type: integer
           format: int64
@@ -5150,22 +5151,17 @@ components:
     WorkflowActionModel:
       type: object
       required:
-      - id
       - workflow_id
       - trigger_type
       - action_type
       - action_config
-      - trigger_count
-      - required_triggers
-      - executed
-      - persistent
-      - is_recovery
       properties:
         action_config: {}
         action_type:
           type: string
         executed:
           type: boolean
+          default: false
         executed_at:
           type:
           - string
@@ -5182,6 +5178,7 @@ components:
           format: int64
         is_recovery:
           type: boolean
+          default: false
         job_ids:
           type:
           - array
@@ -5191,12 +5188,15 @@ components:
             format: int64
         persistent:
           type: boolean
+          default: false
         required_triggers:
           type: integer
           format: int64
+          default: 1
         trigger_count:
           type: integer
           format: int64
+          default: 0
         trigger_type:
           type: string
         workflow_id:

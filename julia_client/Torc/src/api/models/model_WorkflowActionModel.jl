@@ -7,15 +7,15 @@
     WorkflowActionModel(;
         action_config=nothing,
         action_type=nothing,
-        executed=nothing,
+        executed=false,
         executed_at=nothing,
         executed_by=nothing,
         id=nothing,
-        is_recovery=nothing,
+        is_recovery=false,
         job_ids=nothing,
-        persistent=nothing,
-        required_triggers=nothing,
-        trigger_count=nothing,
+        persistent=false,
+        required_triggers=1,
+        trigger_count=0,
         trigger_type=nothing,
         workflow_id=nothing,
     )
@@ -37,15 +37,15 @@
 Base.@kwdef mutable struct WorkflowActionModel <: OpenAPI.APIModel
     action_config::Union{Nothing, Any} = nothing
     action_type::Union{Nothing, String} = nothing
-    executed::Union{Nothing, Bool} = nothing
+    executed::Union{Nothing, Bool} = false
     executed_at::Union{Nothing, String} = nothing
     executed_by::Union{Nothing, Int64} = nothing
     id::Union{Nothing, Int64} = nothing
-    is_recovery::Union{Nothing, Bool} = nothing
+    is_recovery::Union{Nothing, Bool} = false
     job_ids::Union{Nothing, Vector{Int64}} = nothing
-    persistent::Union{Nothing, Bool} = nothing
-    required_triggers::Union{Nothing, Int64} = nothing
-    trigger_count::Union{Nothing, Int64} = nothing
+    persistent::Union{Nothing, Bool} = false
+    required_triggers::Union{Nothing, Int64} = 1
+    trigger_count::Union{Nothing, Int64} = 0
     trigger_type::Union{Nothing, String} = nothing
     workflow_id::Union{Nothing, Int64} = nothing
 
@@ -62,12 +62,6 @@ OpenAPI.property_type(::Type{ WorkflowActionModel }, name::Symbol) = Union{Nothi
 function OpenAPI.check_required(o::WorkflowActionModel)
     o.action_config === nothing && (return false)
     o.action_type === nothing && (return false)
-    o.executed === nothing && (return false)
-    o.id === nothing && (return false)
-    o.is_recovery === nothing && (return false)
-    o.persistent === nothing && (return false)
-    o.required_triggers === nothing && (return false)
-    o.trigger_count === nothing && (return false)
     o.trigger_type === nothing && (return false)
     o.workflow_id === nothing && (return false)
     true

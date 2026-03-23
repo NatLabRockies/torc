@@ -27,7 +27,7 @@ class ClaimActionResponse(BaseModel):
     ClaimActionResponse
     """ # noqa: E501
     action_id: StrictInt
-    success: Optional[StrictBool] = None
+    success: Optional[StrictBool] = False
     __properties: ClassVar[List[str]] = ["action_id", "success"]
 
     model_config = ConfigDict(
@@ -82,7 +82,7 @@ class ClaimActionResponse(BaseModel):
 
         _obj = cls.model_validate({
             "action_id": obj.get("action_id"),
-            "success": obj.get("success")
+            "success": obj.get("success") if obj.get("success") is not None else False
         })
         return _obj
 

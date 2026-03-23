@@ -27,12 +27,12 @@ class ResourceRequirementsModel(BaseModel):
     ResourceRequirementsModel
     """ # noqa: E501
     id: Optional[StrictInt] = None
-    memory: StrictStr
+    memory: Optional[StrictStr] = '1m'
     name: StrictStr
-    num_cpus: StrictInt
-    num_gpus: StrictInt
-    num_nodes: StrictInt
-    runtime: StrictStr
+    num_cpus: Optional[StrictInt] = 1
+    num_gpus: Optional[StrictInt] = 1
+    num_nodes: Optional[StrictInt] = 1
+    runtime: Optional[StrictStr] = 'PT1M'
     workflow_id: StrictInt
     __properties: ClassVar[List[str]] = ["id", "memory", "name", "num_cpus", "num_gpus", "num_nodes", "runtime", "workflow_id"]
 
@@ -93,12 +93,12 @@ class ResourceRequirementsModel(BaseModel):
 
         _obj = cls.model_validate({
             "id": obj.get("id"),
-            "memory": obj.get("memory"),
+            "memory": obj.get("memory") if obj.get("memory") is not None else '1m',
             "name": obj.get("name"),
-            "num_cpus": obj.get("num_cpus"),
-            "num_gpus": obj.get("num_gpus"),
-            "num_nodes": obj.get("num_nodes"),
-            "runtime": obj.get("runtime"),
+            "num_cpus": obj.get("num_cpus") if obj.get("num_cpus") is not None else 1,
+            "num_gpus": obj.get("num_gpus") if obj.get("num_gpus") is not None else 1,
+            "num_nodes": obj.get("num_nodes") if obj.get("num_nodes") is not None else 1,
+            "runtime": obj.get("runtime") if obj.get("runtime") is not None else 'PT1M',
             "workflow_id": obj.get("workflow_id")
         })
         return _obj

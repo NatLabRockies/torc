@@ -23,6 +23,26 @@ const fn default_false() -> bool {
     false
 }
 
+const fn default_num_cpus() -> i64 {
+    1
+}
+
+const fn default_num_gpus() -> i64 {
+    1
+}
+
+const fn default_num_nodes() -> i64 {
+    1
+}
+
+fn default_memory() -> String {
+    "1m".to_string()
+}
+
+fn default_runtime() -> String {
+    "PT1M".to_string()
+}
+
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,
@@ -661,10 +681,23 @@ pub struct ResourceRequirementsModel {
     pub id: Option<i64>,
     pub workflow_id: i64,
     pub name: String,
+    #[serde(default = "default_num_cpus")]
+    #[cfg_attr(feature = "openapi-codegen", schema(required = false, default = 1))]
     pub num_cpus: i64,
+    #[serde(default = "default_num_gpus")]
+    #[cfg_attr(feature = "openapi-codegen", schema(required = false, default = 1))]
     pub num_gpus: i64,
+    #[serde(default = "default_num_nodes")]
+    #[cfg_attr(feature = "openapi-codegen", schema(required = false, default = 1))]
     pub num_nodes: i64,
+    #[serde(default = "default_memory")]
+    #[cfg_attr(feature = "openapi-codegen", schema(required = false, default = "1m"))]
     pub memory: String,
+    #[serde(default = "default_runtime")]
+    #[cfg_attr(
+        feature = "openapi-codegen",
+        schema(required = false, default = "PT1M")
+    )]
     pub runtime: String,
 }
 
@@ -1254,11 +1287,11 @@ impl ResourceRequirementsModel {
             id: None,
             workflow_id,
             name,
-            num_cpus: 1,
-            num_gpus: 0,
-            num_nodes: 1,
-            memory: "1m".to_string(),
-            runtime: "P0DT1M".to_string(),
+            num_cpus: default_num_cpus(),
+            num_gpus: default_num_gpus(),
+            num_nodes: default_num_nodes(),
+            memory: default_memory(),
+            runtime: default_runtime(),
         }
     }
 }
@@ -1650,6 +1683,7 @@ impl SlurmStatsModel {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkflowActionModel {
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi-codegen", schema(required = false))]
     pub id: Option<i64>,
     pub workflow_id: i64,
     pub trigger_type: String,
@@ -1658,18 +1692,23 @@ pub struct WorkflowActionModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub job_ids: Option<Vec<i64>>,
     #[serde(default = "default_trigger_count")]
+    #[cfg_attr(feature = "openapi-codegen", schema(required = false, default = 0))]
     pub trigger_count: i64,
     #[serde(default = "default_required_triggers")]
+    #[cfg_attr(feature = "openapi-codegen", schema(required = false, default = 1))]
     pub required_triggers: i64,
     #[serde(default = "default_false")]
+    #[cfg_attr(feature = "openapi-codegen", schema(required = false, default = false))]
     pub executed: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub executed_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub executed_by: Option<i64>,
     #[serde(default = "default_false")]
+    #[cfg_attr(feature = "openapi-codegen", schema(required = false, default = false))]
     pub persistent: bool,
     #[serde(default = "default_false")]
+    #[cfg_attr(feature = "openapi-codegen", schema(required = false, default = false))]
     pub is_recovery: bool,
 }
 
@@ -1685,6 +1724,7 @@ pub struct ClaimActionRequest {
 pub struct ClaimActionResponse {
     pub action_id: i64,
     #[serde(default, alias = "claimed")]
+    #[cfg_attr(feature = "openapi-codegen", schema(required = false, default = false))]
     pub success: bool,
 }
 
@@ -1935,6 +1975,21 @@ mod tests {
         let _ =
             serde_json::from_value::<WorkflowStatusModel>(serde_json::to_value(wf_status).unwrap())
                 .unwrap();
+    }
+
+    #[test]
+    fn resource_requirements_defaults_apply_when_fields_are_missing() {
+        let rr = serde_json::from_value::<ResourceRequirementsModel>(json!({
+            "workflow_id": 7,
+            "name": "defaulted"
+        }))
+        .unwrap();
+
+        assert_eq!(rr.num_cpus, 1);
+        assert_eq!(rr.num_gpus, 1);
+        assert_eq!(rr.num_nodes, 1);
+        assert_eq!(rr.memory, "1m");
+        assert_eq!(rr.runtime, "PT1M");
     }
 
     #[test]

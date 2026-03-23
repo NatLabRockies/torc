@@ -592,27 +592,6 @@ pub struct TorcOpenApi;
 fn openapi_doc() -> utoipa::openapi::OpenApi {
     let mut doc = TorcOpenApi::openapi();
     doc.info.version = HTTP_API_VERSION.to_string();
-
-    let workflow_action_required = vec![
-        "id".to_string(),
-        "workflow_id".to_string(),
-        "trigger_type".to_string(),
-        "action_type".to_string(),
-        "action_config".to_string(),
-        "trigger_count".to_string(),
-        "required_triggers".to_string(),
-        "executed".to_string(),
-        "persistent".to_string(),
-        "is_recovery".to_string(),
-    ];
-
-    if let Some(components) = doc.components.as_mut()
-        && let Some(schema) = components.schemas.get_mut("WorkflowActionModel")
-        && let utoipa::openapi::RefOr::T(utoipa::openapi::schema::Schema::Object(object)) = schema
-    {
-        object.required = workflow_action_required;
-    }
-
     doc
 }
 

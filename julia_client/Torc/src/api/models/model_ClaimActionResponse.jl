@@ -6,7 +6,7 @@
 
     ClaimActionResponse(;
         action_id=nothing,
-        success=nothing,
+        success=false,
     )
 
     - action_id::Int64
@@ -14,7 +14,7 @@
 """
 Base.@kwdef mutable struct ClaimActionResponse <: OpenAPI.APIModel
     action_id::Union{Nothing, Int64} = nothing
-    success::Union{Nothing, Bool} = nothing
+    success::Union{Nothing, Bool} = false
 
     function ClaimActionResponse(action_id, success, )
         o = new(action_id, success, )
