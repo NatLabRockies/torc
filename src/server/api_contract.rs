@@ -221,6 +221,8 @@ pub trait TransportApiCore<C: Send + Sync> {
         workflow_id: i64,
         offset: Option<i64>,
         limit: Option<i64>,
+        sort_by: Option<String>,
+        reverse_sort: Option<bool>,
         context: &C,
     ) -> Result<ListRoCrateEntitiesResponse, ApiError>;
 
@@ -513,6 +515,8 @@ pub trait TransportApiCore<C: Send + Sync> {
         workflow_id: i64,
         offset: Option<i64>,
         limit: Option<i64>,
+        sort_by: Option<String>,
+        reverse_sort: Option<bool>,
         context: &C,
     ) -> Result<ListJobDependenciesResponse, ApiError>;
 
@@ -522,6 +526,8 @@ pub trait TransportApiCore<C: Send + Sync> {
         workflow_id: i64,
         offset: Option<i64>,
         limit: Option<i64>,
+        sort_by: Option<String>,
+        reverse_sort: Option<bool>,
         context: &C,
     ) -> Result<ListJobFileRelationshipsResponse, ApiError>;
 
@@ -531,6 +537,8 @@ pub trait TransportApiCore<C: Send + Sync> {
         workflow_id: i64,
         offset: Option<i64>,
         limit: Option<i64>,
+        sort_by: Option<String>,
+        reverse_sort: Option<bool>,
         context: &C,
     ) -> Result<ListJobUserDataRelationshipsResponse, ApiError>;
 

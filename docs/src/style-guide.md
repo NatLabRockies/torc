@@ -261,14 +261,14 @@ libraries.
 When implementing a user-facing feature, ensure it is exposed through the appropriate interfaces.
 The following table shows where features should be implemented:
 
-| Interface        | Location                                       | Primary Use Case                                                         |
-| ---------------- | ---------------------------------------------- | ------------------------------------------------------------------------ |
-| CLI              | `src/client/commands/`                         | Command-line automation, scripting                                       |
-| HTTP API         | `src/openapi_codegen*.rs`, `src/api_models.rs` | Rust-owned API contract source                                           |
-| OpenAPI artifact | `api/openapi.yaml`                             | Checked-in emitted contract for Python/Julia integration, external tools |
-| Dashboard        | `torc-dash/src/`                               | Web-based monitoring and management                                      |
-| TUI              | `src/tui/`                                     | Interactive terminal monitoring                                          |
-| MCP Server       | `torc-mcp-server/src/`                         | AI assistant integration                                                 |
+| Interface        | Location                                   | Primary Use Case                                                         |
+| ---------------- | ------------------------------------------ | ------------------------------------------------------------------------ |
+| CLI              | `src/client/commands/`                     | Command-line automation, scripting                                       |
+| HTTP API         | `src/openapi_codegen*.rs`, `src/models.rs` | Rust-owned API contract source                                           |
+| OpenAPI artifact | `api/openapi.yaml`                         | Checked-in emitted contract for Python/Julia integration, external tools |
+| Dashboard        | `torc-dash/src/`                           | Web-based monitoring and management                                      |
+| TUI              | `src/tui/`                                 | Interactive terminal monitoring                                          |
+| MCP Server       | `torc-mcp-server/src/`                     | AI assistant integration                                                 |
 
 ### CLI Implementation
 

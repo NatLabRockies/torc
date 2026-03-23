@@ -783,11 +783,15 @@ pub fn list_ro_crate_entities(
     id: i64,
     offset: Option<i64>,
     limit: Option<i64>,
+    sort_by: Option<&str>,
+    reverse_sort: Option<bool>,
 ) -> Result<models::ListRoCrateEntitiesResponse, Error<ListRoCrateEntitiesError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_id = id;
     let p_query_offset = offset;
     let p_query_limit = limit;
+    let p_query_sort_by = sort_by;
+    let p_query_reverse_sort = reverse_sort;
 
     let uri_str = format!(
         "{}/workflows/{id}/ro_crate_entities",
@@ -801,6 +805,12 @@ pub fn list_ro_crate_entities(
     }
     if let Some(ref param_value) = p_query_limit {
         req_builder = req_builder.query(&[("limit", &param_value.to_string())]);
+    }
+    if let Some(ref param_value) = p_query_sort_by {
+        req_builder = req_builder.query(&[("sort_by", &param_value.to_string())]);
+    }
+    if let Some(ref param_value) = p_query_reverse_sort {
+        req_builder = req_builder.query(&[("reverse_sort", &param_value.to_string())]);
     }
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());

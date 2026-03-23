@@ -8,7 +8,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use utoipa::IntoParams;
 
-use crate::api_models::{
+use crate::models::{
     ClaimJobsBasedOnResources, ClaimNextJobsResponse, ComputeNodesResources,
     GetReadyJobRequirementsResponse, IsCompleteResponse, IsUninitializedResponse,
     JobDependencyModel, JobFileRelationshipModel, JobStatus, JobUserDataRelationshipModel,
@@ -83,6 +83,10 @@ pub struct WorkflowRelationshipsQuery {
     pub offset: Option<i64>,
     #[param(nullable = true)]
     pub limit: Option<i64>,
+    #[param(nullable = true)]
+    pub sort_by: Option<String>,
+    #[param(nullable = true)]
+    pub reverse_sort: Option<bool>,
 }
 
 #[allow(dead_code)]

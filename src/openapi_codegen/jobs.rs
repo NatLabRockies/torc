@@ -8,7 +8,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use utoipa::IntoParams;
 
-use crate::api_models::{
+use crate::models::{
     DeleteCountResponse, ErrorResponse, JobModel, JobStatus, ListJobsResponse, ResultModel,
 };
 

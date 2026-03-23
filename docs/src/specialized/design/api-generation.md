@@ -6,7 +6,7 @@ This document describes how Torc's HTTP API contract and generated clients are p
 
 Torc uses a Rust-owned OpenAPI workflow:
 
-- The HTTP contract is defined in Rust under `src/openapi_codegen/` and `src/api_models.rs`.
+- The HTTP contract is defined in Rust under `src/openapi_codegen/` and `src/models.rs`.
 - The checked-in OpenAPI artifacts are `api/openapi.yaml` and `api/openapi.codegen.yaml`.
 - The live server transport is implemented in Rust under `src/server/http_transport.rs`.
 - The Rust client used by the CLI/TUI/dashboard is generated into `src/client/apis/` using
@@ -18,7 +18,7 @@ Torc uses a Rust-owned OpenAPI workflow:
 
 The main ownership layers are:
 
-- `src/api_models.rs`
+- `src/models.rs`
   - Canonical API models used by the Rust-owned contract.
 - `src/openapi_codegen.rs` and `src/openapi_codegen/*.rs`
   - Code-first OpenAPI emission.
@@ -94,10 +94,10 @@ That includes things like:
 - `src/client/workflow_spec.rs`
 
 The generated Rust client is one layer inside a larger hand-owned Rust client stack. The canonical
-Rust API models remain in `src/api_models.rs` and are re-exported as `crate::models`.
+Rust API models remain in `src/models.rs`.
 
 The generated Rust client does **not** own a second Rust model layer. Generated `models.rs` output
-is discarded. The repo keeps exactly one canonical Rust API model surface in `src/api_models.rs`.
+is discarded. The repo keeps exactly one canonical Rust API model surface in `src/models.rs`.
 
 The generated Rust client is tag-grouped. Current generated modules include domains such as:
 

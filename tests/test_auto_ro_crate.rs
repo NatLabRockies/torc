@@ -197,8 +197,15 @@ fn test_auto_ro_crate_input_files_on_initialize(start_server: &ServerProcess) {
     fs::write(work_dir.join("input.json"), input_data).expect("Failed to write input.json");
 
     // Verify no RO-Crate entities exist yet
-    let entities_before =
-        apis::final_surfaces_api::list_ro_crate_entities(config, workflow_id, None, None).unwrap();
+    let entities_before = apis::final_surfaces_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
     assert_eq!(
         entities_before.items.len(),
         0,
@@ -210,8 +217,15 @@ fn test_auto_ro_crate_input_files_on_initialize(start_server: &ServerProcess) {
         .expect("Failed to initialize jobs");
 
     // Verify RO-Crate entity was created for the input file
-    let entities_after =
-        apis::final_surfaces_api::list_ro_crate_entities(config, workflow_id, None, None).unwrap();
+    let entities_after = apis::final_surfaces_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
     let items = entities_after.items;
 
     // Should have at least one entity (for the input file)
@@ -291,9 +305,15 @@ fn test_auto_ro_crate_output_files_on_job_completion(start_server: &ServerProces
     );
 
     // Verify RO-Crate entities were created
-    let entities =
-        apis::final_surfaces_api::list_ro_crate_entities(config, workflow_id, None, None)
-            .expect("Failed to list RO-Crate entities");
+    let entities = apis::final_surfaces_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list RO-Crate entities");
     let items = entities.items;
 
     // Should have entities for both input and output files, plus a CreateAction
@@ -390,8 +410,15 @@ fn test_auto_ro_crate_disabled_by_default(start_server: &ServerProcess) {
         .unwrap();
 
     // Verify no file-based RO-Crate entities were created (only the SoftwareApplication for torc-server)
-    let entities =
-        apis::final_surfaces_api::list_ro_crate_entities(config, workflow_id, None, None).unwrap();
+    let entities = apis::final_surfaces_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
     let items = entities.items;
     let file_entities: Vec<_> = items
         .iter()
@@ -422,8 +449,15 @@ fn test_auto_ro_crate_diamond_workflow(start_server: &ServerProcess) {
         .expect("Failed to initialize jobs");
 
     // Verify input file entity was created
-    let entities_after_init =
-        apis::final_surfaces_api::list_ro_crate_entities(config, workflow_id, None, None).unwrap();
+    let entities_after_init = apis::final_surfaces_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
     let items = entities_after_init.items;
 
     let input_entity = items.iter().find(|e| e.file_id == Some(input_file_ids[0]));
@@ -478,8 +512,15 @@ fn test_auto_ro_crate_diamond_workflow(start_server: &ServerProcess) {
     assert!(work_dir.join("f4.json").exists(), "f4.json should exist");
 
     // Verify RO-Crate entities were created for output files
-    let final_entities =
-        apis::final_surfaces_api::list_ro_crate_entities(config, workflow_id, None, None).unwrap();
+    let final_entities = apis::final_surfaces_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
     let final_items = final_entities.items;
 
     // Should have entities for:
@@ -577,8 +618,15 @@ fn test_auto_ro_crate_second_run_replaces_entities(start_server: &ServerProcess)
     );
 
     // Capture first run RO-Crate entities
-    let entities_run1 =
-        apis::final_surfaces_api::list_ro_crate_entities(config, workflow_id, None, None).unwrap();
+    let entities_run1 = apis::final_surfaces_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
     let items_run1 = entities_run1.items;
 
     let file_entities_run1: Vec<_> = items_run1
@@ -643,8 +691,15 @@ fn test_auto_ro_crate_second_run_replaces_entities(start_server: &ServerProcess)
 
     // --- Verify file entities were replaced, not duplicated ---
 
-    let entities_run2 =
-        apis::final_surfaces_api::list_ro_crate_entities(config, workflow_id, None, None).unwrap();
+    let entities_run2 = apis::final_surfaces_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
     let items_run2 = entities_run2.items;
 
     let file_entities_run2: Vec<_> = items_run2

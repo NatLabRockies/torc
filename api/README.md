@@ -110,6 +110,5 @@ not own a second hand-maintained Rust model layer.
   - Makes generated request modules use `crate::models` instead of generated model files.
   - Applies repo-specific request behavior such as the shared auth hook.
 
-The canonical Rust API model surface remains in `src/api_models.rs` and is re-exported as
-`crate::models`. Generated Rust API modules are downstream plumbing over that shared model layer,
-not an independent source of truth.
+The canonical Rust API model surface remains in `src/models.rs`. Generated Rust API modules are
+downstream plumbing over that shared model layer, not an independent source of truth.

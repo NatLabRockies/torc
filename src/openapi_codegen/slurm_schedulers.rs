@@ -8,7 +8,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use utoipa::IntoParams;
 
-use crate::api_models::{DeleteCountResponse, ListSlurmSchedulersResponse, SlurmSchedulerModel};
+use crate::models::{DeleteCountResponse, ListSlurmSchedulersResponse, SlurmSchedulerModel};
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize, IntoParams)]

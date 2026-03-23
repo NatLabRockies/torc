@@ -72,6 +72,8 @@ impl Paginatable for RoCrateEntityModel {
             params.workflow_id,
             Some(params.offset),
             Some(limit),
+            params.sort_by(),
+            params.reverse_sort(),
         )?;
 
         Ok(PaginatedResponse {

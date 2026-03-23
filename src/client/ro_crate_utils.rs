@@ -223,7 +223,14 @@ pub fn find_entity_for_file(
     workflow_id: i64,
     file_id: i64,
 ) -> Option<RoCrateEntityModel> {
-    match apis::final_surfaces_api::list_ro_crate_entities(config, workflow_id, None, None) {
+    match apis::final_surfaces_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+    ) {
         Ok(response) => response
             .items
             .into_iter()
@@ -539,7 +546,14 @@ pub fn create_software_entities(config: &Configuration, workflow_id: i64, run_id
 
     // Check existing entities to avoid duplicates
     let existing_ids: std::collections::HashSet<String> =
-        match apis::final_surfaces_api::list_ro_crate_entities(config, workflow_id, None, None) {
+        match apis::final_surfaces_api::list_ro_crate_entities(
+            config,
+            workflow_id,
+            None,
+            None,
+            None,
+            None,
+        ) {
             Ok(response) => response.items.into_iter().map(|e| e.entity_id).collect(),
             Err(e) => {
                 warn!(

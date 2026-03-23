@@ -328,11 +328,13 @@ const _returntypes_list_job_dependencies_WorkflowsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ListJobDependenciesResponse,
 )
 
-function _oacinternal_list_job_dependencies(_api::WorkflowsApi, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing)
+function _oacinternal_list_job_dependencies(_api::WorkflowsApi, id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_job_dependencies_WorkflowsApi, "/workflows/{id}/job_dependencies", [])
     OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
     OpenAPI.Clients.set_param(_ctx.query, "offset", offset; style="form", is_explode=true)  # type Int64
     OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort; style="form", is_explode=true)  # type Bool
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -342,16 +344,18 @@ end
 - id::Int64 (required)
 - offset::Int64
 - limit::Int64
+- sort_by::String
+- reverse_sort::Bool
 
 Return: ListJobDependenciesResponse, OpenAPI.Clients.ApiResponse
 """
-function list_job_dependencies(_api::WorkflowsApi, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_list_job_dependencies(_api, id; offset=offset, limit=limit, _mediaType=_mediaType)
+function list_job_dependencies(_api::WorkflowsApi, id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_list_job_dependencies(_api, id; offset=offset, limit=limit, sort_by=sort_by, reverse_sort=reverse_sort, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function list_job_dependencies(_api::WorkflowsApi, response_stream::Channel, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_list_job_dependencies(_api, id; offset=offset, limit=limit, _mediaType=_mediaType)
+function list_job_dependencies(_api::WorkflowsApi, response_stream::Channel, id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_list_job_dependencies(_api, id; offset=offset, limit=limit, sort_by=sort_by, reverse_sort=reverse_sort, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
@@ -359,11 +363,13 @@ const _returntypes_list_job_file_relationships_WorkflowsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ListJobFileRelationshipsResponse,
 )
 
-function _oacinternal_list_job_file_relationships(_api::WorkflowsApi, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing)
+function _oacinternal_list_job_file_relationships(_api::WorkflowsApi, id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_job_file_relationships_WorkflowsApi, "/workflows/{id}/job_file_relationships", [])
     OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
     OpenAPI.Clients.set_param(_ctx.query, "offset", offset; style="form", is_explode=true)  # type Int64
     OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort; style="form", is_explode=true)  # type Bool
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -373,16 +379,18 @@ end
 - id::Int64 (required)
 - offset::Int64
 - limit::Int64
+- sort_by::String
+- reverse_sort::Bool
 
 Return: ListJobFileRelationshipsResponse, OpenAPI.Clients.ApiResponse
 """
-function list_job_file_relationships(_api::WorkflowsApi, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_list_job_file_relationships(_api, id; offset=offset, limit=limit, _mediaType=_mediaType)
+function list_job_file_relationships(_api::WorkflowsApi, id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_list_job_file_relationships(_api, id; offset=offset, limit=limit, sort_by=sort_by, reverse_sort=reverse_sort, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function list_job_file_relationships(_api::WorkflowsApi, response_stream::Channel, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_list_job_file_relationships(_api, id; offset=offset, limit=limit, _mediaType=_mediaType)
+function list_job_file_relationships(_api::WorkflowsApi, response_stream::Channel, id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_list_job_file_relationships(_api, id; offset=offset, limit=limit, sort_by=sort_by, reverse_sort=reverse_sort, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
@@ -417,11 +425,13 @@ const _returntypes_list_job_user_data_relationships_WorkflowsApi = Dict{Regex,Ty
     Regex("^" * replace("200", "x"=>".") * "\$") => ListJobUserDataRelationshipsResponse,
 )
 
-function _oacinternal_list_job_user_data_relationships(_api::WorkflowsApi, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing)
+function _oacinternal_list_job_user_data_relationships(_api::WorkflowsApi, id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_job_user_data_relationships_WorkflowsApi, "/workflows/{id}/job_user_data_relationships", [])
     OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
     OpenAPI.Clients.set_param(_ctx.query, "offset", offset; style="form", is_explode=true)  # type Int64
     OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort; style="form", is_explode=true)  # type Bool
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -431,16 +441,18 @@ end
 - id::Int64 (required)
 - offset::Int64
 - limit::Int64
+- sort_by::String
+- reverse_sort::Bool
 
 Return: ListJobUserDataRelationshipsResponse, OpenAPI.Clients.ApiResponse
 """
-function list_job_user_data_relationships(_api::WorkflowsApi, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_list_job_user_data_relationships(_api, id; offset=offset, limit=limit, _mediaType=_mediaType)
+function list_job_user_data_relationships(_api::WorkflowsApi, id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_list_job_user_data_relationships(_api, id; offset=offset, limit=limit, sort_by=sort_by, reverse_sort=reverse_sort, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function list_job_user_data_relationships(_api::WorkflowsApi, response_stream::Channel, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_list_job_user_data_relationships(_api, id; offset=offset, limit=limit, _mediaType=_mediaType)
+function list_job_user_data_relationships(_api::WorkflowsApi, response_stream::Channel, id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_list_job_user_data_relationships(_api, id; offset=offset, limit=limit, sort_by=sort_by, reverse_sort=reverse_sort, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 

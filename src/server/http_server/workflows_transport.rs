@@ -285,11 +285,13 @@ where
         workflow_id: i64,
         offset: Option<i64>,
         limit: Option<i64>,
+        sort_by: Option<String>,
+        reverse_sort: Option<bool>,
         context: &C,
     ) -> Result<ListJobDependenciesResponse, ApiError> {
         authorize_workflow!(self, workflow_id, context, ListJobDependenciesResponse);
         self.workflows_api
-            .list_job_dependencies(workflow_id, offset, limit, context)
+            .list_job_dependencies(workflow_id, offset, limit, sort_by, reverse_sort, context)
             .await
     }
 
@@ -298,11 +300,13 @@ where
         workflow_id: i64,
         offset: Option<i64>,
         limit: Option<i64>,
+        sort_by: Option<String>,
+        reverse_sort: Option<bool>,
         context: &C,
     ) -> Result<ListJobFileRelationshipsResponse, ApiError> {
         authorize_workflow!(self, workflow_id, context, ListJobFileRelationshipsResponse);
         self.workflows_api
-            .list_job_file_relationships(workflow_id, offset, limit, context)
+            .list_job_file_relationships(workflow_id, offset, limit, sort_by, reverse_sort, context)
             .await
     }
 
@@ -311,6 +315,8 @@ where
         workflow_id: i64,
         offset: Option<i64>,
         limit: Option<i64>,
+        sort_by: Option<String>,
+        reverse_sort: Option<bool>,
         context: &C,
     ) -> Result<ListJobUserDataRelationshipsResponse, ApiError> {
         authorize_workflow!(
@@ -320,7 +326,14 @@ where
             ListJobUserDataRelationshipsResponse
         );
         self.workflows_api
-            .list_job_user_data_relationships(workflow_id, offset, limit, context)
+            .list_job_user_data_relationships(
+                workflow_id,
+                offset,
+                limit,
+                sort_by,
+                reverse_sort,
+                context,
+            )
             .await
     }
 

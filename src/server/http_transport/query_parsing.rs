@@ -169,6 +169,8 @@ pub(super) struct WorkflowsQuery {
 pub(super) struct WorkflowRelationshipsQuery {
     pub(super) offset: Option<i64>,
     pub(super) limit: Option<i64>,
+    pub(super) sort_by: Option<String>,
+    pub(super) reverse_sort: Option<bool>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -477,6 +479,8 @@ pub(super) fn parse_workflow_relationships_query(
     Ok(WorkflowRelationshipsQuery {
         offset: parse_optional_i64(&params, "offset")?,
         limit: parse_optional_i64(&params, "limit")?,
+        sort_by: params.get("sort_by").cloned(),
+        reverse_sort: parse_optional_bool(&params, "reverse_sort")?,
     })
 }
 

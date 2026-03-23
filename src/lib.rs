@@ -19,12 +19,11 @@ pub fn get_username() -> String {
 }
 
 // Shared modules (always available)
-pub mod api_models;
 pub mod api_version;
 pub mod memory_utils;
+pub mod models;
 pub mod network_utils;
 pub mod time_utils;
-pub use api_models as models;
 
 // Configuration module (requires config feature, enabled by client)
 #[cfg(feature = "config")]
@@ -65,7 +64,7 @@ pub mod openapi_codegen;
 pub mod cli;
 
 // Re-export model types explicitly
-pub use api_models::{
+pub use models::{
     ClaimJobsBasedOnResources, ClaimNextJobsResponse, ComputeNodeModel, ComputeNodeSchedule,
     ComputeNodesResources, CreateJobsResponse, ErrorResponse, EventModel, FileModel,
     GetDotGraphResponse, GetReadyJobRequirementsResponse, IsCompleteResponse, JobDependencyModel,

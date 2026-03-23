@@ -7,7 +7,7 @@ use axum::{
 use serde::Deserialize;
 use utoipa::IntoParams;
 
-use crate::api_models::{ComputeNodeModel, DeleteCountResponse, ListComputeNodesResponse};
+use crate::models::{ComputeNodeModel, DeleteCountResponse, ListComputeNodesResponse};
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize, IntoParams)]

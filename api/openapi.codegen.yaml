@@ -3150,6 +3150,20 @@ paths:
           - integer
           - 'null'
           format: int64
+      - name: sort_by
+        in: query
+        required: false
+        schema:
+          type:
+          - string
+          - 'null'
+      - name: reverse_sort
+        in: query
+        required: false
+        schema:
+          type:
+          - boolean
+          - 'null'
       responses:
         '200':
           description: Successful response
@@ -3186,6 +3200,20 @@ paths:
           - integer
           - 'null'
           format: int64
+      - name: sort_by
+        in: query
+        required: false
+        schema:
+          type:
+          - string
+          - 'null'
+      - name: reverse_sort
+        in: query
+        required: false
+        schema:
+          type:
+          - boolean
+          - 'null'
       responses:
         '200':
           description: Successful response
@@ -3242,6 +3270,20 @@ paths:
           - integer
           - 'null'
           format: int64
+      - name: sort_by
+        in: query
+        required: false
+        schema:
+          type:
+          - string
+          - 'null'
+      - name: reverse_sort
+        in: query
+        required: false
+        schema:
+          type:
+          - boolean
+          - 'null'
       responses:
         '200':
           description: Successful response
@@ -3515,6 +3557,20 @@ paths:
           - integer
           - 'null'
           format: int64
+      - name: sort_by
+        in: query
+        required: false
+        schema:
+          type:
+          - string
+          - 'null'
+      - name: reverse_sort
+        in: query
+        required: false
+        schema:
+          type:
+          - boolean
+          - 'null'
       responses:
         '200':
           description: Successful response
@@ -4831,7 +4887,7 @@ components:
         num_gpus:
           type: integer
           format: int64
-          default: 1
+          default: 0
         num_nodes:
           type: integer
           format: int64

@@ -583,7 +583,14 @@ where
     };
 
     match server
-        .list_job_dependencies(id, query.offset, query.limit, &context)
+        .list_job_dependencies(
+            id,
+            query.offset,
+            query.limit,
+            query.sort_by,
+            query.reverse_sort,
+            &context,
+        )
         .await
     {
         Ok(response) => list_job_dependencies_response(response),
@@ -606,7 +613,14 @@ where
     };
 
     match server
-        .list_job_file_relationships(id, query.offset, query.limit, &context)
+        .list_job_file_relationships(
+            id,
+            query.offset,
+            query.limit,
+            query.sort_by,
+            query.reverse_sort,
+            &context,
+        )
         .await
     {
         Ok(response) => list_job_file_relationships_response(response),
@@ -639,7 +653,14 @@ where
     };
 
     match server
-        .list_job_user_data_relationships(id, query.offset, query.limit, &context)
+        .list_job_user_data_relationships(
+            id,
+            query.offset,
+            query.limit,
+            query.sort_by,
+            query.reverse_sort,
+            &context,
+        )
         .await
     {
         Ok(response) => list_job_user_data_relationships_response(response),

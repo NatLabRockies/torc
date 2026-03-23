@@ -22,7 +22,8 @@ use utoipa::OpenApi;
 
 pub use system::{PingResponse, VersionResponse};
 
-use crate::api_models::{
+use crate::api_version::HTTP_API_VERSION;
+use crate::models::{
     AccessCheckResponse, AccessGroupModel, ClaimActionRequest, ClaimActionResponse,
     ClaimJobsBasedOnResources, ClaimNextJobsResponse, ComputeNodeModel, ComputeNodesResources,
     CreateJobsResponse, DeleteCountResponse, DeleteRoCrateEntitiesResponse, EventModel,
@@ -42,7 +43,6 @@ use crate::api_models::{
     UserDataModel, UserGroupMembershipModel, WorkflowAccessGroupModel, WorkflowActionModel,
     WorkflowModel, WorkflowStatusModel,
 };
-use crate::api_version::HTTP_API_VERSION;
 use helpers::{check_component_properties, check_operation_id, check_schema_properties};
 
 #[derive(Debug, Clone)]

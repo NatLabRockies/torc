@@ -1471,6 +1471,7 @@ execution_config:
 
 /// Test custom OOM exit code configuration.
 #[rstest]
+#[serial]
 fn test_direct_mode_custom_oom_exit_code(start_server: &ServerProcess) {
     let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
     let work_dir = temp_dir.path();

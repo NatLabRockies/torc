@@ -16,7 +16,7 @@ from pydantic import validate_call, Field, StrictFloat, StrictStr, StrictInt
 from typing import Any, Dict, List, Optional, Tuple, Union
 from typing_extensions import Annotated
 
-from pydantic import Field, StrictInt, StrictStr
+from pydantic import Field, StrictBool, StrictInt, StrictStr
 from typing import Any, List, Optional
 from typing_extensions import Annotated
 from torc.openapi_client.models.claim_action_request import ClaimActionRequest
@@ -3054,6 +3054,8 @@ class FinalSurfacesApi:
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
+        sort_by: Optional[StrictStr] = None,
+        reverse_sort: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -3076,6 +3078,10 @@ class FinalSurfacesApi:
         :type offset: int
         :param limit:
         :type limit: int
+        :param sort_by:
+        :type sort_by: str
+        :param reverse_sort:
+        :type reverse_sort: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -3102,6 +3108,8 @@ class FinalSurfacesApi:
             id=id,
             offset=offset,
             limit=limit,
+            sort_by=sort_by,
+            reverse_sort=reverse_sort,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -3128,6 +3136,8 @@ class FinalSurfacesApi:
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
+        sort_by: Optional[StrictStr] = None,
+        reverse_sort: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -3150,6 +3160,10 @@ class FinalSurfacesApi:
         :type offset: int
         :param limit:
         :type limit: int
+        :param sort_by:
+        :type sort_by: str
+        :param reverse_sort:
+        :type reverse_sort: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -3176,6 +3190,8 @@ class FinalSurfacesApi:
             id=id,
             offset=offset,
             limit=limit,
+            sort_by=sort_by,
+            reverse_sort=reverse_sort,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -3202,6 +3218,8 @@ class FinalSurfacesApi:
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
+        sort_by: Optional[StrictStr] = None,
+        reverse_sort: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -3224,6 +3242,10 @@ class FinalSurfacesApi:
         :type offset: int
         :param limit:
         :type limit: int
+        :param sort_by:
+        :type sort_by: str
+        :param reverse_sort:
+        :type reverse_sort: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -3250,6 +3272,8 @@ class FinalSurfacesApi:
             id=id,
             offset=offset,
             limit=limit,
+            sort_by=sort_by,
+            reverse_sort=reverse_sort,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -3271,6 +3295,8 @@ class FinalSurfacesApi:
         id,
         offset,
         limit,
+        sort_by,
+        reverse_sort,
         _request_auth,
         _content_type,
         _headers,
@@ -3302,6 +3328,14 @@ class FinalSurfacesApi:
         if limit is not None:
             
             _query_params.append(('limit', limit))
+            
+        if sort_by is not None:
+            
+            _query_params.append(('sort_by', sort_by))
+            
+        if reverse_sort is not None:
+            
+            _query_params.append(('reverse_sort', reverse_sort))
             
         # process the header parameters
         # process the form parameters

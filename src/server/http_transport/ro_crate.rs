@@ -91,13 +91,20 @@ pub(crate) async fn handle_list_ro_crate_entities<C, B>(
 where
     C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
 {
-    let query = match parse_access_pagination_query(request.uri().query()) {
+    let query = match parse_workflow_relationships_query(request.uri().query()) {
         Ok(query) => query,
         Err(message) => return error_response(StatusCode::BAD_REQUEST, message),
     };
 
     match server
-        .list_ro_crate_entities(workflow_id, query.offset, query.limit, &context)
+        .list_ro_crate_entities(
+            workflow_id,
+            query.offset,
+            query.limit,
+            query.sort_by,
+            query.reverse_sort,
+            &context,
+        )
         .await
     {
         Ok(response) => list_ro_crate_entities_response(response),

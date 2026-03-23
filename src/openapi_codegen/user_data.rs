@@ -8,7 +8,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use utoipa::IntoParams;
 
-use crate::api_models::{ListUserDataResponse, UserDataModel};
+use crate::models::{ListUserDataResponse, UserDataModel};
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize, IntoParams)]

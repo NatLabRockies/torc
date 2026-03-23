@@ -793,9 +793,15 @@ fn test_export_import_ro_crate_job_id_remapping(start_server: &ServerProcess) {
     assert_ne!(new_job_id, job_id, "New job should have different ID");
 
     // Get the imported RO-Crate entities
-    let entities_response =
-        apis::final_surfaces_api::list_ro_crate_entities(config, new_workflow_id, None, None)
-            .expect("Failed to list RO-Crate entities");
+    let entities_response = apis::final_surfaces_api::list_ro_crate_entities(
+        config,
+        new_workflow_id,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list RO-Crate entities");
     let imported_entities = entities_response.items;
     assert_eq!(imported_entities.len(), 2);
 

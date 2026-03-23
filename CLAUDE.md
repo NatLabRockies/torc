@@ -347,7 +347,7 @@ cascade-delete the entire database contents.
 ### Adding a New API Endpoint
 
 1. Add the endpoint to the Rust-owned scaffold and model layer (`src/openapi_codegen*.rs`,
-   `src/api_models.rs`)
+   `src/models.rs`)
 2. Regenerate API artifacts (`cd api && bash sync_openapi.sh clients --use-rust-spec`)
 3. Promote the Rust spec when the change is ready to become the checked-in contract
    (`cd api && bash sync_openapi.sh all --promote`)

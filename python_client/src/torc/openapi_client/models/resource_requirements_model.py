@@ -30,7 +30,7 @@ class ResourceRequirementsModel(BaseModel):
     memory: Optional[StrictStr] = '1m'
     name: StrictStr
     num_cpus: Optional[StrictInt] = 1
-    num_gpus: Optional[StrictInt] = 1
+    num_gpus: Optional[StrictInt] = 0
     num_nodes: Optional[StrictInt] = 1
     runtime: Optional[StrictStr] = 'PT1M'
     workflow_id: StrictInt
@@ -96,7 +96,7 @@ class ResourceRequirementsModel(BaseModel):
             "memory": obj.get("memory") if obj.get("memory") is not None else '1m',
             "name": obj.get("name"),
             "num_cpus": obj.get("num_cpus") if obj.get("num_cpus") is not None else 1,
-            "num_gpus": obj.get("num_gpus") if obj.get("num_gpus") is not None else 1,
+            "num_gpus": obj.get("num_gpus") if obj.get("num_gpus") is not None else 0,
             "num_nodes": obj.get("num_nodes") if obj.get("num_nodes") is not None else 1,
             "runtime": obj.get("runtime") if obj.get("runtime") is not None else 'PT1M',
             "workflow_id": obj.get("workflow_id")

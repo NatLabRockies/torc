@@ -88,6 +88,8 @@ pub trait WorkflowsApi<C> {
         workflow_id: i64,
         offset: Option<i64>,
         limit: Option<i64>,
+        sort_by: Option<String>,
+        reverse_sort: Option<bool>,
         context: &C,
     ) -> Result<ListJobDependenciesResponse, ApiError>;
 
@@ -97,6 +99,8 @@ pub trait WorkflowsApi<C> {
         workflow_id: i64,
         offset: Option<i64>,
         limit: Option<i64>,
+        sort_by: Option<String>,
+        reverse_sort: Option<bool>,
         context: &C,
     ) -> Result<ListJobFileRelationshipsResponse, ApiError>;
 
@@ -106,6 +110,8 @@ pub trait WorkflowsApi<C> {
         workflow_id: i64,
         offset: Option<i64>,
         limit: Option<i64>,
+        sort_by: Option<String>,
+        reverse_sort: Option<bool>,
         context: &C,
     ) -> Result<ListJobUserDataRelationshipsResponse, ApiError>;
 
@@ -199,6 +205,35 @@ const ALL_WORKFLOW_COLUMNS: &[&str] = &[
     "is_archived",
     "is_canceled",
     "has_detected_need_to_run_completion_script",
+];
+
+const JOB_DEPENDENCY_COLUMNS: &[&str] = &[
+    "job_id",
+    "job_name",
+    "depends_on_job_id",
+    "depends_on_job_name",
+    "workflow_id",
+];
+
+const JOB_FILE_RELATIONSHIP_COLUMNS: &[&str] = &[
+    "file_id",
+    "file_name",
+    "file_path",
+    "producer_job_id",
+    "producer_job_name",
+    "consumer_job_id",
+    "consumer_job_name",
+    "workflow_id",
+];
+
+const JOB_USER_DATA_RELATIONSHIP_COLUMNS: &[&str] = &[
+    "user_data_id",
+    "user_data_name",
+    "producer_job_id",
+    "producer_job_name",
+    "consumer_job_id",
+    "consumer_job_name",
+    "workflow_id",
 ];
 
 impl WorkflowsApiImpl {
@@ -895,47 +930,81 @@ where
             id,
             context.get().0.clone()
         );
-        match sqlx::query!(
+        match sqlx::query(
             r#"
-                SELECT *
+                SELECT
+                    id,
+                    name,
+                    user,
+                    description,
+                    timestamp,
+                    compute_node_expiration_buffer_seconds,
+                    compute_node_wait_for_new_jobs_seconds,
+                    compute_node_ignore_workflow_completion,
+                    compute_node_wait_for_healthy_database_minutes,
+                    compute_node_min_time_for_new_jobs_seconds,
+                    resource_monitor_config,
+                    slurm_defaults,
+                    use_pending_failed,
+                    enable_ro_crate,
+                    project,
+                    metadata,
+                    status_id,
+                    slurm_config,
+                    execution_config
                 FROM workflow
-                WHERE id = $1
+                WHERE id = ?
             "#,
-            id
         )
+        .bind(id)
         .fetch_optional(self.context.pool.as_ref())
         .await
         {
             Ok(Some(row)) => Ok(GetWorkflowResponse::SuccessfulResponse(
                 models::WorkflowModel {
-                    id: Some(row.id),
-                    name: row.name,
-                    user: row.user,
-                    description: row.description,
-                    timestamp: Some(row.timestamp),
+                    id: Some(row.get("id")),
+                    name: row.get("name"),
+                    user: row.get("user"),
+                    description: row.get("description"),
+                    timestamp: Some(row.get("timestamp")),
                     compute_node_expiration_buffer_seconds: row
-                        .compute_node_expiration_buffer_seconds,
+                        .try_get::<Option<i64>, _>("compute_node_expiration_buffer_seconds")
+                        .unwrap_or(None),
                     compute_node_wait_for_new_jobs_seconds: Some(
-                        row.compute_node_wait_for_new_jobs_seconds,
+                        row.get("compute_node_wait_for_new_jobs_seconds"),
                     ),
                     compute_node_ignore_workflow_completion: Some(
-                        row.compute_node_ignore_workflow_completion != 0,
+                        row.get::<i64, _>("compute_node_ignore_workflow_completion") != 0,
                     ),
                     compute_node_wait_for_healthy_database_minutes: Some(
-                        row.compute_node_wait_for_healthy_database_minutes,
+                        row.get("compute_node_wait_for_healthy_database_minutes"),
                     ),
                     compute_node_min_time_for_new_jobs_seconds: Some(
-                        row.compute_node_min_time_for_new_jobs_seconds,
+                        row.get("compute_node_min_time_for_new_jobs_seconds"),
                     ),
-                    resource_monitor_config: row.resource_monitor_config,
-                    slurm_defaults: row.slurm_defaults,
-                    use_pending_failed: row.use_pending_failed.map(|v| v != 0),
-                    enable_ro_crate: row.enable_ro_crate.map(|v| v != 0),
-                    project: row.project,
-                    metadata: row.metadata,
-                    status_id: Some(row.status_id),
-                    slurm_config: row.slurm_config,
-                    execution_config: row.execution_config,
+                    resource_monitor_config: row.get("resource_monitor_config"),
+                    slurm_defaults: row.get("slurm_defaults"),
+                    use_pending_failed: row
+                        .try_get::<Option<i64>, _>("use_pending_failed")
+                        .ok()
+                        .flatten()
+                        .map(|v| v != 0),
+                    enable_ro_crate: row
+                        .try_get::<Option<i64>, _>("enable_ro_crate")
+                        .ok()
+                        .flatten()
+                        .map(|v| v != 0),
+                    project: row.get("project"),
+                    metadata: row.get("metadata"),
+                    status_id: Some(row.get("status_id")),
+                    slurm_config: row
+                        .try_get::<Option<String>, _>("slurm_config")
+                        .ok()
+                        .flatten(),
+                    execution_config: row
+                        .try_get::<Option<String>, _>("execution_config")
+                        .ok()
+                        .flatten(),
                 },
             )),
             Ok(None) => {
@@ -1822,13 +1891,17 @@ where
         workflow_id: i64,
         offset: Option<i64>,
         limit: Option<i64>,
+        sort_by: Option<String>,
+        reverse_sort: Option<bool>,
         context: &C,
     ) -> Result<ListJobDependenciesResponse, ApiError> {
         debug!(
-            "list_job_dependencies({}, {:?}, {:?}) - X-Span-ID: {:?}",
+            "list_job_dependencies({}, {:?}, {:?}, {:?}, {:?}) - X-Span-ID: {:?}",
             workflow_id,
             offset,
             limit,
+            sort_by,
+            reverse_sort,
             context.get().0.clone()
         );
 
@@ -1837,9 +1910,20 @@ where
             .unwrap_or(MAX_RECORD_TRANSFER_COUNT)
             .min(MAX_RECORD_TRANSFER_COUNT);
 
-        // Query job_depends_on table with JOIN to get job names
-        let dependencies = match sqlx::query_as!(
-            models::JobDependencyModel,
+        let validated_sort_by = match sort_by.as_deref() {
+            Some("job_id") => Some("jb.job_id".to_string()),
+            Some("job_name") => Some("j1.name".to_string()),
+            Some("depends_on_job_id") => Some("jb.depends_on_job_id".to_string()),
+            Some("depends_on_job_name") => Some("j2.name".to_string()),
+            Some("workflow_id") => Some("jb.workflow_id".to_string()),
+            Some(col) => {
+                debug!("Invalid sort column requested: {}", col);
+                None
+            }
+            None => None,
+        };
+
+        let query = SqlQueryBuilder::new(
             r#"
             SELECT
                 jb.job_id as job_id,
@@ -1850,15 +1934,24 @@ where
             FROM job_depends_on jb
             INNER JOIN job j1 ON jb.job_id = j1.id
             INNER JOIN job j2 ON jb.depends_on_job_id = j2.id
-            WHERE jb.workflow_id = ?
-            LIMIT ? OFFSET ?
-            "#,
-            workflow_id,
-            limit_val,
-            offset_val
+            "#
+            .to_string(),
         )
-        .fetch_all(self.context.pool.as_ref())
-        .await
+        .with_where("jb.workflow_id = ?".to_string())
+        .with_pagination_and_sorting(
+            offset_val,
+            limit_val,
+            validated_sort_by,
+            reverse_sort,
+            "jb.job_id",
+            JOB_DEPENDENCY_COLUMNS,
+        )
+        .build();
+
+        let dependency_rows = match sqlx::query(&query)
+            .bind(workflow_id)
+            .fetch_all(self.context.pool.as_ref())
+            .await
         {
             Ok(deps) => deps,
             Err(e) => {
@@ -1868,6 +1961,17 @@ where
                 ));
             }
         };
+
+        let dependencies: Vec<models::JobDependencyModel> = dependency_rows
+            .into_iter()
+            .map(|record| models::JobDependencyModel {
+                job_id: record.get("job_id"),
+                job_name: record.get("job_name"),
+                depends_on_job_id: record.get("depends_on_job_id"),
+                depends_on_job_name: record.get("depends_on_job_name"),
+                workflow_id: record.get("workflow_id"),
+            })
+            .collect();
 
         // Get total count
         let total_count = match sqlx::query_scalar::<_, i64>(
@@ -1915,13 +2019,17 @@ where
         workflow_id: i64,
         offset: Option<i64>,
         limit: Option<i64>,
+        sort_by: Option<String>,
+        reverse_sort: Option<bool>,
         context: &C,
     ) -> Result<ListJobFileRelationshipsResponse, ApiError> {
         debug!(
-            "list_job_file_relationships({}, {:?}, {:?}) - X-Span-ID: {:?}",
+            "list_job_file_relationships({}, {:?}, {:?}, {:?}, {:?}) - X-Span-ID: {:?}",
             workflow_id,
             offset,
             limit,
+            sort_by,
+            reverse_sort,
             context.get().0.clone()
         );
 
@@ -1930,35 +2038,58 @@ where
             .unwrap_or(MAX_RECORD_TRANSFER_COUNT)
             .min(MAX_RECORD_TRANSFER_COUNT);
 
-        // Query job_input_file and job_output_file tables with JOINs
-        // UNION the input and output relationships
-        let relationships = match sqlx::query_as!(
-            models::JobFileRelationshipModel,
+        let validated_sort_by = match sort_by.as_deref() {
+            Some("file_id") => Some("f.id".to_string()),
+            Some("file_name") => Some("f.name".to_string()),
+            Some("file_path") => Some("f.path".to_string()),
+            Some("producer_job_id") => Some("jof.job_id".to_string()),
+            Some("producer_job_name") => Some("producer.name".to_string()),
+            Some("consumer_job_id") => Some("jif.job_id".to_string()),
+            Some("consumer_job_name") => Some("consumer.name".to_string()),
+            Some("workflow_id") => Some("f.workflow_id".to_string()),
+            Some(col) => {
+                debug!("Invalid sort column requested: {}", col);
+                None
+            }
+            None => None,
+        };
+
+        let query = SqlQueryBuilder::new(
             r#"
             SELECT
                 f.id as file_id,
                 f.name as file_name,
                 f.path as file_path,
-                jof.job_id as "producer_job_id?",
-                producer.name as "producer_job_name?",
-                jif.job_id as "consumer_job_id?",
-                consumer.name as "consumer_job_name?",
+                jof.job_id as producer_job_id,
+                producer.name as producer_job_name,
+                jif.job_id as consumer_job_id,
+                consumer.name as consumer_job_name,
                 f.workflow_id as workflow_id
             FROM file f
             LEFT JOIN job_output_file jof ON f.id = jof.file_id
             LEFT JOIN job producer ON jof.job_id = producer.id
             LEFT JOIN job_input_file jif ON f.id = jif.file_id
             LEFT JOIN job consumer ON jif.job_id = consumer.id
-            WHERE f.workflow_id = ?
-                AND (jof.job_id IS NOT NULL OR jif.job_id IS NOT NULL)
-            LIMIT ? OFFSET ?
-            "#,
-            workflow_id,
-            limit_val,
-            offset_val
+            "#
+            .to_string(),
         )
-        .fetch_all(self.context.pool.as_ref())
-        .await
+        .with_where(
+            "f.workflow_id = ? AND (jof.job_id IS NOT NULL OR jif.job_id IS NOT NULL)".to_string(),
+        )
+        .with_pagination_and_sorting(
+            offset_val,
+            limit_val,
+            validated_sort_by,
+            reverse_sort,
+            "f.id",
+            JOB_FILE_RELATIONSHIP_COLUMNS,
+        )
+        .build();
+
+        let relationship_rows = match sqlx::query(&query)
+            .bind(workflow_id)
+            .fetch_all(self.context.pool.as_ref())
+            .await
         {
             Ok(rels) => rels,
             Err(e) => {
@@ -1968,6 +2099,32 @@ where
                 ));
             }
         };
+
+        let relationships: Vec<models::JobFileRelationshipModel> = relationship_rows
+            .into_iter()
+            .map(|record| models::JobFileRelationshipModel {
+                file_id: record.get("file_id"),
+                file_name: record.get("file_name"),
+                file_path: record.get("file_path"),
+                producer_job_id: record
+                    .try_get::<Option<i64>, _>("producer_job_id")
+                    .ok()
+                    .flatten(),
+                producer_job_name: record
+                    .try_get::<Option<String>, _>("producer_job_name")
+                    .ok()
+                    .flatten(),
+                consumer_job_id: record
+                    .try_get::<Option<i64>, _>("consumer_job_id")
+                    .ok()
+                    .flatten(),
+                consumer_job_name: record
+                    .try_get::<Option<String>, _>("consumer_job_name")
+                    .ok()
+                    .flatten(),
+                workflow_id: record.get("workflow_id"),
+            })
+            .collect();
 
         // Get total count
         let total_count = match sqlx::query_scalar::<_, i64>(
@@ -2025,13 +2182,17 @@ where
         workflow_id: i64,
         offset: Option<i64>,
         limit: Option<i64>,
+        sort_by: Option<String>,
+        reverse_sort: Option<bool>,
         context: &C,
     ) -> Result<ListJobUserDataRelationshipsResponse, ApiError> {
         debug!(
-            "list_job_user_data_relationships({}, {:?}, {:?}) - X-Span-ID: {:?}",
+            "list_job_user_data_relationships({}, {:?}, {:?}, {:?}, {:?}) - X-Span-ID: {:?}",
             workflow_id,
             offset,
             limit,
+            sort_by,
+            reverse_sort,
             context.get().0.clone()
         );
 
@@ -2040,33 +2201,57 @@ where
             .unwrap_or(MAX_RECORD_TRANSFER_COUNT)
             .min(MAX_RECORD_TRANSFER_COUNT);
 
-        // Query job_input_user_data and job_output_user_data tables with JOINs
-        let relationships = match sqlx::query_as!(
-            models::JobUserDataRelationshipModel,
+        let validated_sort_by = match sort_by.as_deref() {
+            Some("user_data_id") => Some("ud.id".to_string()),
+            Some("user_data_name") => Some("ud.name".to_string()),
+            Some("producer_job_id") => Some("joud.job_id".to_string()),
+            Some("producer_job_name") => Some("producer.name".to_string()),
+            Some("consumer_job_id") => Some("jiud.job_id".to_string()),
+            Some("consumer_job_name") => Some("consumer.name".to_string()),
+            Some("workflow_id") => Some("ud.workflow_id".to_string()),
+            Some(col) => {
+                debug!("Invalid sort column requested: {}", col);
+                None
+            }
+            None => None,
+        };
+
+        let query = SqlQueryBuilder::new(
             r#"
             SELECT
                 ud.id as user_data_id,
                 ud.name as user_data_name,
-                joud.job_id as "producer_job_id?",
-                producer.name as "producer_job_name?",
-                jiud.job_id as "consumer_job_id?",
-                consumer.name as "consumer_job_name?",
+                joud.job_id as producer_job_id,
+                producer.name as producer_job_name,
+                jiud.job_id as consumer_job_id,
+                consumer.name as consumer_job_name,
                 ud.workflow_id as workflow_id
             FROM user_data ud
             LEFT JOIN job_output_user_data joud ON ud.id = joud.user_data_id
             LEFT JOIN job producer ON joud.job_id = producer.id
             LEFT JOIN job_input_user_data jiud ON ud.id = jiud.user_data_id
             LEFT JOIN job consumer ON jiud.job_id = consumer.id
-            WHERE ud.workflow_id = ?
-                AND (joud.job_id IS NOT NULL OR jiud.job_id IS NOT NULL)
-            LIMIT ? OFFSET ?
-            "#,
-            workflow_id,
-            limit_val,
-            offset_val
+            "#
+            .to_string(),
         )
-        .fetch_all(self.context.pool.as_ref())
-        .await
+        .with_where(
+            "ud.workflow_id = ? AND (joud.job_id IS NOT NULL OR jiud.job_id IS NOT NULL)"
+                .to_string(),
+        )
+        .with_pagination_and_sorting(
+            offset_val,
+            limit_val,
+            validated_sort_by,
+            reverse_sort,
+            "ud.id",
+            JOB_USER_DATA_RELATIONSHIP_COLUMNS,
+        )
+        .build();
+
+        let relationship_rows = match sqlx::query(&query)
+            .bind(workflow_id)
+            .fetch_all(self.context.pool.as_ref())
+            .await
         {
             Ok(rels) => rels,
             Err(e) => {
@@ -2076,6 +2261,31 @@ where
                 ));
             }
         };
+
+        let relationships: Vec<models::JobUserDataRelationshipModel> = relationship_rows
+            .into_iter()
+            .map(|record| models::JobUserDataRelationshipModel {
+                user_data_id: record.get("user_data_id"),
+                user_data_name: record.get("user_data_name"),
+                producer_job_id: record
+                    .try_get::<Option<i64>, _>("producer_job_id")
+                    .ok()
+                    .flatten(),
+                producer_job_name: record
+                    .try_get::<Option<String>, _>("producer_job_name")
+                    .ok()
+                    .flatten(),
+                consumer_job_id: record
+                    .try_get::<Option<i64>, _>("consumer_job_id")
+                    .ok()
+                    .flatten(),
+                consumer_job_name: record
+                    .try_get::<Option<String>, _>("consumer_job_name")
+                    .ok()
+                    .flatten(),
+                workflow_id: record.get("workflow_id"),
+            })
+            .collect();
 
         // Get total count
         let total_count = match sqlx::query_scalar::<_, i64>(

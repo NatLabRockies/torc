@@ -7,7 +7,7 @@ use axum::{
 use serde::Deserialize;
 use utoipa::IntoParams;
 
-use crate::api_models::{
+use crate::models::{
     AccessCheckResponse, AccessGroupModel, ListAccessGroupsResponse,
     ListUserGroupMembershipsResponse, UserGroupMembershipModel, WorkflowAccessGroupModel,
 };

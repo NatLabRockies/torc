@@ -608,9 +608,10 @@ fn test_user_data_delete_workflow_command_json(start_server: &ServerProcess) {
 
     // Should return a success message
     assert!(json_output.get("message").is_some());
+    assert_eq!(json_output.get("deleted_count").unwrap(), &json!(2));
 
     // Verify all user data is deleted by trying to list it
-    let list_result = apis::user_data_api::list_user_data(
+    let response = apis::user_data_api::list_user_data(
         config,
         workflow_id,
         None,
@@ -621,12 +622,10 @@ fn test_user_data_delete_workflow_command_json(start_server: &ServerProcess) {
         None,
         None,
         None,
-    );
+    )
+    .expect("Failed to list user data after delete-all");
 
-    if let Ok(response) = list_result {
-        let items = response.items;
-        assert!(items.is_empty(), "All user data should be deleted");
-    }
+    assert!(response.items.is_empty(), "All user data should be deleted");
 }
 
 #[rstest]

@@ -3,8 +3,8 @@
 The Torc server implements a HTTP API under `/torc-service/v1`.
 
 The checked-in OpenAPI artifact is `api/openapi.yaml`, but the contract is now emitted from the
-Rust-owned scaffold in `src/openapi_codegen*.rs` and `src/api_models.rs`. Refresh the emitted
-artifact with:
+Rust-owned scaffold in `src/openapi_codegen*.rs` and `src/models.rs`. Refresh the emitted artifact
+with:
 
 ```bash
 cd api

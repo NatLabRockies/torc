@@ -8,7 +8,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use utoipa::IntoParams;
 
-use crate::api_models::{
+use crate::models::{
     ClaimActionRequest, ClaimActionResponse, DeleteRoCrateEntitiesResponse, MessageResponse,
     ReloadAuthResponse, RemoteWorkerModel, RoCrateEntityModel, WorkflowActionModel,
 };
@@ -25,6 +25,10 @@ pub struct RoCrateEntitiesQuery {
     pub offset: Option<i64>,
     #[param(nullable = true)]
     pub limit: Option<i64>,
+    #[param(nullable = true)]
+    pub sort_by: Option<String>,
+    #[param(nullable = true)]
+    pub reverse_sort: Option<bool>,
 }
 
 #[utoipa::path(
@@ -215,13 +219,13 @@ pub async fn delete_ro_crate_entity(Path(_id): Path<i64>) -> Json<MessageRespons
         ("id" = i64, Path, description = "Workflow ID"),
         RoCrateEntitiesQuery
     ),
-    responses((status = 200, description = "Successful response", body = crate::api_models::ListRoCrateEntitiesResponse))
+    responses((status = 200, description = "Successful response", body = crate::models::ListRoCrateEntitiesResponse))
 )]
 pub async fn list_ro_crate_entities(
     Path(id): Path<i64>,
     Query(query): Query<RoCrateEntitiesQuery>,
-) -> Json<crate::api_models::ListRoCrateEntitiesResponse> {
-    Json(crate::api_models::ListRoCrateEntitiesResponse {
+) -> Json<crate::models::ListRoCrateEntitiesResponse> {
+    Json(crate::models::ListRoCrateEntitiesResponse {
         items: vec![example_ro_crate_entity(Some(1), id)],
         offset: query.offset.unwrap_or(0),
         max_limit: crate::MAX_RECORD_TRANSFER_COUNT,

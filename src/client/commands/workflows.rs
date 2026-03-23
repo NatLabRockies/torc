@@ -3705,14 +3705,20 @@ fn handle_export(
         };
 
     // Get all RO-Crate entities
-    export.ro_crate_entities =
-        match apis::final_surfaces_api::list_ro_crate_entities(config, workflow_id, None, None) {
-            Ok(response) => response.items,
-            Err(e) => {
-                print_error("listing RO-Crate entities", &e);
-                std::process::exit(1);
-            }
-        };
+    export.ro_crate_entities = match apis::final_surfaces_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+    ) {
+        Ok(response) => response.items,
+        Err(e) => {
+            print_error("listing RO-Crate entities", &e);
+            std::process::exit(1);
+        }
+    };
 
     // Get all jobs (with relationships)
     let job_params = JobListParams {

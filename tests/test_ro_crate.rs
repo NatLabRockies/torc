@@ -52,9 +52,15 @@ fn test_ro_crate_crud(start_server: &ServerProcess) {
     assert_eq!(result.entity_id, "data/output.parquet");
 
     // List entities
-    let list_response =
-        apis::final_surfaces_api::list_ro_crate_entities(config, workflow_id, None, None)
-            .expect("Failed to list entities");
+    let list_response = apis::final_surfaces_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list entities");
     let items = list_response.items;
     assert_eq!(items.len(), 1);
     assert_eq!(items[0].entity_type, "Dataset");
@@ -64,9 +70,15 @@ fn test_ro_crate_crud(start_server: &ServerProcess) {
         .expect("Failed to delete entity");
 
     // Verify it's gone
-    let list_response =
-        apis::final_surfaces_api::list_ro_crate_entities(config, workflow_id, None, None)
-            .expect("Failed to list entities after delete");
+    let list_response = apis::final_surfaces_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list entities after delete");
     let items = list_response.items;
     assert_eq!(items.len(), 0);
 }
@@ -152,8 +164,15 @@ fn test_ro_crate_bulk_delete(start_server: &ServerProcess) {
     }
 
     // Verify all three exist
-    let list = apis::final_surfaces_api::list_ro_crate_entities(config, workflow_id, None, None)
-        .expect("Failed to list");
+    let list = apis::final_surfaces_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list");
     assert_eq!(list.items.len(), 3);
 
     // Bulk delete all entities for the workflow
@@ -162,8 +181,15 @@ fn test_ro_crate_bulk_delete(start_server: &ServerProcess) {
     assert_eq!(result.deleted_count, 3);
 
     // Verify all are gone
-    let list = apis::final_surfaces_api::list_ro_crate_entities(config, workflow_id, None, None)
-        .expect("Failed to list after delete");
+    let list = apis::final_surfaces_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list after delete");
     assert_eq!(list.items.len(), 0);
 }
 
@@ -185,8 +211,15 @@ fn test_ro_crate_cascade_delete(start_server: &ServerProcess) {
         .expect("Failed to create entity");
 
     // Verify it exists
-    let list = apis::final_surfaces_api::list_ro_crate_entities(config, workflow_id, None, None)
-        .expect("Failed to list");
+    let list = apis::final_surfaces_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list");
     assert_eq!(list.items.len(), 1);
 
     // Delete the workflow (should cascade delete RO-Crate entities)
@@ -194,7 +227,14 @@ fn test_ro_crate_cascade_delete(start_server: &ServerProcess) {
         .expect("Failed to delete workflow");
 
     // The workflow is gone, so listing should fail or return error
-    let result = apis::final_surfaces_api::list_ro_crate_entities(config, workflow_id, None, None);
+    let result = apis::final_surfaces_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+    );
     // Either the list returns empty (workflow gone, no entities) or an error
     match result {
         Ok(response) => {

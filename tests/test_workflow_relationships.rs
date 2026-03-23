@@ -23,6 +23,8 @@ fn test_list_job_file_relationships_empty(start_server: &ServerProcess) {
         workflow_id,
         Some(0),   // offset
         Some(100), // limit
+        None,
+        None,
     )
     .expect("Failed to list job-file relationships");
 
@@ -56,9 +58,15 @@ fn test_list_job_file_relationships_workflow_inputs(start_server: &ServerProcess
     let job_id = job.id.unwrap();
 
     // List the relationships
-    let result =
-        apis::workflows_api::list_job_file_relationships(config, workflow_id, Some(0), Some(100))
-            .expect("Failed to list job-file relationships");
+    let result = apis::workflows_api::list_job_file_relationships(
+        config,
+        workflow_id,
+        Some(0),
+        Some(100),
+        None,
+        None,
+    )
+    .expect("Failed to list job-file relationships");
 
     // Verify we have 2 relationships (one for each file)
     assert_eq!(result.total_count, 2, "Should have 2 relationships");
@@ -129,9 +137,15 @@ fn test_list_job_file_relationships_workflow_outputs(start_server: &ServerProces
     let job_id = job.id.unwrap();
 
     // List the relationships
-    let result =
-        apis::workflows_api::list_job_file_relationships(config, workflow_id, Some(0), Some(100))
-            .expect("Failed to list job-file relationships");
+    let result = apis::workflows_api::list_job_file_relationships(
+        config,
+        workflow_id,
+        Some(0),
+        Some(100),
+        None,
+        None,
+    )
+    .expect("Failed to list job-file relationships");
 
     // Verify we have 2 relationships
     assert_eq!(result.total_count, 2, "Should have 2 relationships");
@@ -213,9 +227,15 @@ fn test_list_job_file_relationships_intermediate_files(start_server: &ServerProc
     let consumer2_id = consumer_job2.id.unwrap();
 
     // List the relationships
-    let result =
-        apis::workflows_api::list_job_file_relationships(config, workflow_id, Some(0), Some(100))
-            .expect("Failed to list job-file relationships");
+    let result = apis::workflows_api::list_job_file_relationships(
+        config,
+        workflow_id,
+        Some(0),
+        Some(100),
+        None,
+        None,
+    )
+    .expect("Failed to list job-file relationships");
 
     // We should have 2 relationships (one for each consumer, but each may reference the same producer)
     // The exact count depends on how the query is structured
@@ -283,6 +303,8 @@ fn test_list_job_file_relationships_pagination(start_server: &ServerProcess) {
         workflow_id,
         Some(0),
         Some(3), // limit to 3
+        None,
+        None,
     )
     .expect("Failed to list first page");
 
@@ -296,6 +318,8 @@ fn test_list_job_file_relationships_pagination(start_server: &ServerProcess) {
         workflow_id,
         Some(3), // offset
         Some(3),
+        None,
+        None,
     )
     .expect("Failed to list second page");
 
@@ -317,6 +341,8 @@ fn test_list_job_user_data_relationships_empty(start_server: &ServerProcess) {
         workflow_id,
         Some(0),
         Some(100),
+        None,
+        None,
     )
     .expect("Failed to list job-user_data relationships");
 
@@ -367,6 +393,8 @@ fn test_list_job_user_data_relationships_workflow_inputs(start_server: &ServerPr
         workflow_id,
         Some(0),
         Some(100),
+        None,
+        None,
     )
     .expect("Failed to list job-user_data relationships");
 
@@ -445,6 +473,8 @@ fn test_list_job_user_data_relationships_workflow_outputs(start_server: &ServerP
         workflow_id,
         Some(0),
         Some(100),
+        None,
+        None,
     )
     .expect("Failed to list job-user_data relationships");
 
@@ -530,6 +560,8 @@ fn test_list_job_user_data_relationships_intermediate_data(start_server: &Server
         workflow_id,
         Some(0),
         Some(100),
+        None,
+        None,
     )
     .expect("Failed to list job-user_data relationships");
 
@@ -579,9 +611,15 @@ fn test_list_job_dependencies_for_comparison(start_server: &ServerProcess) {
     let job2_id = job2.id.unwrap();
 
     // List job dependencies
-    let result =
-        apis::workflows_api::list_job_dependencies(config, workflow_id, Some(0), Some(100))
-            .expect("Failed to list job dependencies");
+    let result = apis::workflows_api::list_job_dependencies(
+        config,
+        workflow_id,
+        Some(0),
+        Some(100),
+        None,
+        None,
+    )
+    .expect("Failed to list job dependencies");
 
     // Verify we have 1 dependency
     assert_eq!(result.total_count, 1, "Should have 1 dependency");

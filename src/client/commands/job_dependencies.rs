@@ -117,6 +117,8 @@ pub fn handle_job_dependency_commands(
                 selected_workflow_id,
                 Some(*offset),
                 *limit,
+                None,
+                None,
             ) {
                 Ok(response) => {
                     if print_if_json(format, &response, "job dependencies") {
@@ -163,6 +165,8 @@ pub fn handle_job_dependency_commands(
                 selected_workflow_id,
                 Some(*offset),
                 *limit,
+                None,
+                None,
             ) {
                 Ok(response) => {
                     if print_if_json(format, &response, "job-file relationships") {
@@ -223,6 +227,8 @@ pub fn handle_job_dependency_commands(
                 selected_workflow_id,
                 Some(*offset),
                 *limit,
+                None,
+                None,
             ) {
                 Ok(response) => {
                     if print_if_json(format, &response, "job-user_data relationships") {

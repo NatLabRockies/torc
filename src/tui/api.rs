@@ -167,6 +167,8 @@ impl TorcClient {
             workflow_id,
             None, // offset
             None, // limit
+            None, // sort_by
+            None, // reverse_sort
         )
         .context("Failed to list job dependencies")?;
 

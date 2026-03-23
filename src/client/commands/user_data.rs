@@ -3,7 +3,7 @@ use serde_json;
 
 use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::commands::output::{print_if_json, print_json_wrapped};
+use crate::client::commands::output::{print_if_json, print_json, print_json_wrapped};
 use crate::client::commands::{get_env_user_name, pagination};
 use crate::client::commands::{
     print_error, select_workflow_interactively, table_format::display_table_with_count,
@@ -367,12 +367,9 @@ pub fn handle_user_data_commands(config: &Configuration, command: &UserDataComma
         }
         UserDataCommands::DeleteAll { workflow_id } => {
             match apis::user_data_api::delete_all_user_data(config, *workflow_id, None) {
-                Ok(_) => {
+                Ok(response) => {
                     if format == "json" {
-                        println!(
-                            "{{\"message\": \"All user data deleted for workflow {}\"}}",
-                            workflow_id
-                        );
+                        print_json(&response, "user data delete-all response");
                     } else {
                         println!(
                             "Successfully deleted all user data for workflow ID: {}",
