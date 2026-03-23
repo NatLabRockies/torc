@@ -28,7 +28,7 @@ const fn default_num_cpus() -> i64 {
 }
 
 const fn default_num_gpus() -> i64 {
-    1
+    0
 }
 
 const fn default_num_nodes() -> i64 {
@@ -685,7 +685,7 @@ pub struct ResourceRequirementsModel {
     #[cfg_attr(feature = "openapi-codegen", schema(required = false, default = 1))]
     pub num_cpus: i64,
     #[serde(default = "default_num_gpus")]
-    #[cfg_attr(feature = "openapi-codegen", schema(required = false, default = 1))]
+    #[cfg_attr(feature = "openapi-codegen", schema(required = false, default = 0))]
     pub num_gpus: i64,
     #[serde(default = "default_num_nodes")]
     #[cfg_attr(feature = "openapi-codegen", schema(required = false, default = 1))]
@@ -1986,7 +1986,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(rr.num_cpus, 1);
-        assert_eq!(rr.num_gpus, 1);
+        assert_eq!(rr.num_gpus, 0);
         assert_eq!(rr.num_nodes, 1);
         assert_eq!(rr.memory, "1m");
         assert_eq!(rr.runtime, "PT1M");
