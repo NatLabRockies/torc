@@ -602,14 +602,14 @@ map_response_std!(
     SuccessfulResponse
 );
 
-pub(super) fn json_response<T>(body: &T) -> Response<Body>
+pub(crate) fn json_response<T>(body: &T) -> Response<Body>
 where
     T: serde::Serialize,
 {
     json_response_with_status(body, StatusCode::OK)
 }
 
-pub(super) fn json_response_with_status<T>(body: &T, status: StatusCode) -> Response<Body>
+pub(crate) fn json_response_with_status<T>(body: &T, status: StatusCode) -> Response<Body>
 where
     T: serde::Serialize,
 {
@@ -635,14 +635,7 @@ pub(super) fn error_response(status: StatusCode, message: String) -> Response<Bo
     )
 }
 
-pub(super) fn method_not_allowed_response() -> Response<Body> {
-    Response::builder()
-        .status(StatusCode::METHOD_NOT_ALLOWED)
-        .body(Body::empty())
-        .expect("valid method-not-allowed response")
-}
-
-pub(super) fn not_found_response() -> Response<Body> {
+pub(crate) fn not_found_response() -> Response<Body> {
     Response::builder()
         .status(StatusCode::NOT_FOUND)
         .body(Body::empty())

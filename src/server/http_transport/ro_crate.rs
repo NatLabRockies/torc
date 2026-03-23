@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) async fn handle_create_ro_crate_entity<C, B>(
+pub(crate) async fn handle_create_ro_crate_entity<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -22,7 +22,7 @@ where
     }
 }
 
-pub(super) async fn handle_get_ro_crate_entity<C>(
+pub(crate) async fn handle_get_ro_crate_entity<C>(
     server: Server<C>,
     id: i64,
     context: C,
@@ -36,7 +36,7 @@ where
     }
 }
 
-pub(super) async fn handle_update_ro_crate_entity<C, B>(
+pub(crate) async fn handle_update_ro_crate_entity<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,
@@ -59,7 +59,7 @@ where
     }
 }
 
-pub(super) async fn handle_delete_ro_crate_entity<C, B>(
+pub(crate) async fn handle_delete_ro_crate_entity<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,
@@ -82,7 +82,7 @@ where
     }
 }
 
-pub(super) async fn handle_list_ro_crate_entities<C, B>(
+pub(crate) async fn handle_list_ro_crate_entities<C, B>(
     server: Server<C>,
     workflow_id: i64,
     request: Request<B>,
@@ -105,7 +105,7 @@ where
     }
 }
 
-pub(super) async fn handle_delete_ro_crate_entities<C, B>(
+pub(crate) async fn handle_delete_ro_crate_entities<C, B>(
     server: Server<C>,
     workflow_id: i64,
     request: Request<B>,

@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) async fn handle_list_local_schedulers<C, B>(
+pub(crate) async fn handle_list_local_schedulers<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -31,7 +31,7 @@ where
     }
 }
 
-pub(super) async fn handle_get_local_scheduler<C>(
+pub(crate) async fn handle_get_local_scheduler<C>(
     server: Server<C>,
     id: i64,
     context: C,
@@ -45,7 +45,7 @@ where
     }
 }
 
-pub(super) async fn handle_create_local_scheduler<C, B>(
+pub(crate) async fn handle_create_local_scheduler<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -67,7 +67,7 @@ where
     }
 }
 
-pub(super) async fn handle_update_local_scheduler<C, B>(
+pub(crate) async fn handle_update_local_scheduler<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,
@@ -90,7 +90,7 @@ where
     }
 }
 
-pub(super) async fn handle_delete_local_schedulers<C, B>(
+pub(crate) async fn handle_delete_local_schedulers<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -119,7 +119,7 @@ where
     }
 }
 
-pub(super) async fn handle_delete_local_scheduler<C, B>(
+pub(crate) async fn handle_delete_local_scheduler<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,

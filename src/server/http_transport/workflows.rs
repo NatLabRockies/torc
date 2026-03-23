@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) async fn handle_list_workflows<C, B>(
+pub(crate) async fn handle_list_workflows<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -32,7 +32,7 @@ where
     }
 }
 
-pub(super) async fn handle_create_workflow<C, B>(
+pub(crate) async fn handle_create_workflow<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -54,7 +54,7 @@ where
     }
 }
 
-pub(super) async fn handle_get_workflow<C>(server: Server<C>, id: i64, context: C) -> Response<Body>
+pub(crate) async fn handle_get_workflow<C>(server: Server<C>, id: i64, context: C) -> Response<Body>
 where
     C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
 {
@@ -64,7 +64,7 @@ where
     }
 }
 
-pub(super) async fn handle_update_workflow<C, B>(
+pub(crate) async fn handle_update_workflow<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,
@@ -87,7 +87,7 @@ where
     }
 }
 
-pub(super) async fn handle_delete_workflow<C, B>(
+pub(crate) async fn handle_delete_workflow<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,
@@ -110,7 +110,7 @@ where
     }
 }
 
-pub(super) async fn handle_list_events<C, B>(
+pub(crate) async fn handle_list_events<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -141,7 +141,7 @@ where
     }
 }
 
-pub(super) async fn handle_get_event<C>(server: Server<C>, id: i64, context: C) -> Response<Body>
+pub(crate) async fn handle_get_event<C>(server: Server<C>, id: i64, context: C) -> Response<Body>
 where
     C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
 {
@@ -151,7 +151,7 @@ where
     }
 }
 
-pub(super) async fn handle_create_event<C, B>(
+pub(crate) async fn handle_create_event<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -173,7 +173,7 @@ where
     }
 }
 
-pub(super) async fn handle_update_event<C, B>(
+pub(crate) async fn handle_update_event<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,
@@ -196,7 +196,7 @@ where
     }
 }
 
-pub(super) async fn handle_delete_events<C, B>(
+pub(crate) async fn handle_delete_events<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -225,7 +225,7 @@ where
     }
 }
 
-pub(super) async fn handle_delete_event<C, B>(
+pub(crate) async fn handle_delete_event<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,
@@ -248,7 +248,7 @@ where
     }
 }
 
-pub(super) async fn handle_create_failure_handler<C, B>(
+pub(crate) async fn handle_create_failure_handler<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -270,7 +270,7 @@ where
     }
 }
 
-pub(super) async fn handle_get_failure_handler<C>(
+pub(crate) async fn handle_get_failure_handler<C>(
     server: Server<C>,
     id: i64,
     context: C,
@@ -284,7 +284,7 @@ where
     }
 }
 
-pub(super) async fn handle_delete_failure_handler<C, B>(
+pub(crate) async fn handle_delete_failure_handler<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,
@@ -307,7 +307,7 @@ where
     }
 }
 
-pub(super) async fn handle_list_failure_handlers<C, B>(
+pub(crate) async fn handle_list_failure_handlers<C, B>(
     server: Server<C>,
     workflow_id: i64,
     request: Request<B>,
@@ -330,7 +330,7 @@ where
     }
 }
 
-pub(super) async fn handle_get_workflow_actions<C>(
+pub(crate) async fn handle_get_workflow_actions<C>(
     server: Server<C>,
     workflow_id: i64,
     context: C,
@@ -344,7 +344,7 @@ where
     }
 }
 
-pub(super) async fn handle_create_workflow_action<C, B>(
+pub(crate) async fn handle_create_workflow_action<C, B>(
     server: Server<C>,
     workflow_id: i64,
     request: Request<B>,
@@ -370,7 +370,7 @@ where
     }
 }
 
-pub(super) async fn handle_get_pending_actions<C, B>(
+pub(crate) async fn handle_get_pending_actions<C, B>(
     server: Server<C>,
     workflow_id: i64,
     request: Request<B>,
@@ -393,7 +393,7 @@ where
     }
 }
 
-pub(super) async fn handle_claim_action<C, B>(
+pub(crate) async fn handle_claim_action<C, B>(
     server: Server<C>,
     workflow_id: i64,
     action_id: i64,
@@ -420,7 +420,7 @@ where
     }
 }
 
-pub(super) async fn handle_cancel_workflow<C, B>(
+pub(crate) async fn handle_cancel_workflow<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,
@@ -443,7 +443,7 @@ where
     }
 }
 
-pub(super) async fn handle_claim_jobs_based_on_resources<C, B>(
+pub(crate) async fn handle_claim_jobs_based_on_resources<C, B>(
     server: Server<C>,
     id: i64,
     limit: i64,
@@ -474,7 +474,7 @@ where
     }
 }
 
-pub(super) async fn handle_claim_next_jobs<C, B>(
+pub(crate) async fn handle_claim_next_jobs<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,
@@ -504,7 +504,7 @@ where
     }
 }
 
-pub(super) async fn handle_initialize_jobs<C, B>(
+pub(crate) async fn handle_initialize_jobs<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,
@@ -540,7 +540,7 @@ where
     }
 }
 
-pub(super) async fn handle_is_workflow_complete<C>(
+pub(crate) async fn handle_is_workflow_complete<C>(
     server: Server<C>,
     id: i64,
     context: C,
@@ -554,7 +554,7 @@ where
     }
 }
 
-pub(super) async fn handle_is_workflow_uninitialized<C>(
+pub(crate) async fn handle_is_workflow_uninitialized<C>(
     server: Server<C>,
     id: i64,
     context: C,
@@ -568,7 +568,7 @@ where
     }
 }
 
-pub(super) async fn handle_list_job_dependencies<C, B>(
+pub(crate) async fn handle_list_job_dependencies<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,
@@ -591,7 +591,7 @@ where
     }
 }
 
-pub(super) async fn handle_list_job_file_relationships<C, B>(
+pub(crate) async fn handle_list_job_file_relationships<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,
@@ -614,7 +614,7 @@ where
     }
 }
 
-pub(super) async fn handle_list_job_ids<C>(server: Server<C>, id: i64, context: C) -> Response<Body>
+pub(crate) async fn handle_list_job_ids<C>(server: Server<C>, id: i64, context: C) -> Response<Body>
 where
     C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
 {
@@ -624,7 +624,7 @@ where
     }
 }
 
-pub(super) async fn handle_list_job_user_data_relationships<C, B>(
+pub(crate) async fn handle_list_job_user_data_relationships<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,
@@ -647,7 +647,7 @@ where
     }
 }
 
-pub(super) async fn handle_list_missing_user_data<C>(
+pub(crate) async fn handle_list_missing_user_data<C>(
     server: Server<C>,
     id: i64,
     context: C,
@@ -661,7 +661,7 @@ where
     }
 }
 
-pub(super) async fn handle_process_changed_job_inputs<C, B>(
+pub(crate) async fn handle_process_changed_job_inputs<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,
@@ -691,7 +691,7 @@ where
     }
 }
 
-pub(super) async fn handle_get_ready_job_requirements<C, B>(
+pub(crate) async fn handle_get_ready_job_requirements<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,
@@ -714,7 +714,7 @@ where
     }
 }
 
-pub(super) async fn handle_list_required_existing_files<C>(
+pub(crate) async fn handle_list_required_existing_files<C>(
     server: Server<C>,
     id: i64,
     context: C,
@@ -728,7 +728,7 @@ where
     }
 }
 
-pub(super) async fn handle_reset_job_status<C, B>(
+pub(crate) async fn handle_reset_job_status<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,
@@ -758,7 +758,7 @@ where
     }
 }
 
-pub(super) async fn handle_reset_workflow_status<C, B>(
+pub(crate) async fn handle_reset_workflow_status<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,
@@ -788,7 +788,7 @@ where
     }
 }
 
-pub(super) async fn handle_get_workflow_status<C>(
+pub(crate) async fn handle_get_workflow_status<C>(
     server: Server<C>,
     id: i64,
     context: C,
@@ -802,7 +802,7 @@ where
     }
 }
 
-pub(super) async fn handle_update_workflow_status<C, B>(
+pub(crate) async fn handle_update_workflow_status<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,
@@ -825,7 +825,7 @@ where
     }
 }
 
-pub(super) async fn handle_workflow_events_stream<C, B>(
+pub(crate) async fn handle_workflow_events_stream<C, B>(
     server: Server<C>,
     workflow_id: i64,
     request: Request<B>,
@@ -885,7 +885,7 @@ where
         .expect("valid SSE response")
 }
 
-pub(super) async fn handle_get_dot_graph<C>(
+pub(crate) async fn handle_get_dot_graph<C>(
     server: Server<C>,
     id: i64,
     name: String,

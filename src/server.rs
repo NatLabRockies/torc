@@ -20,6 +20,8 @@ pub mod htpasswd;
 pub mod http_server;
 #[cfg(all(feature = "server-bin", feature = "openapi-codegen"))]
 pub mod http_transport;
+#[cfg(all(feature = "server-bin", feature = "openapi-codegen"))]
+pub mod live_router;
 #[cfg(feature = "server-bin")]
 pub mod live_state;
 #[cfg(feature = "server-bin")]

@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) async fn handle_list_scheduled_compute_nodes<C, B>(
+pub(crate) async fn handle_list_scheduled_compute_nodes<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -32,7 +32,7 @@ where
     }
 }
 
-pub(super) async fn handle_create_scheduled_compute_node<C, B>(
+pub(crate) async fn handle_create_scheduled_compute_node<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -55,7 +55,7 @@ where
     }
 }
 
-pub(super) async fn handle_get_scheduled_compute_node<C>(
+pub(crate) async fn handle_get_scheduled_compute_node<C>(
     server: Server<C>,
     id: i64,
     context: C,
@@ -69,7 +69,7 @@ where
     }
 }
 
-pub(super) async fn handle_update_scheduled_compute_node<C, B>(
+pub(crate) async fn handle_update_scheduled_compute_node<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,
@@ -96,7 +96,7 @@ where
     }
 }
 
-pub(super) async fn handle_delete_scheduled_compute_nodes<C, B>(
+pub(crate) async fn handle_delete_scheduled_compute_nodes<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -125,7 +125,7 @@ where
     }
 }
 
-pub(super) async fn handle_delete_scheduled_compute_node<C, B>(
+pub(crate) async fn handle_delete_scheduled_compute_node<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,

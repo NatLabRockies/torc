@@ -1,7 +1,6 @@
 use super::Server;
-use crate::server::auth::MakeHtpasswdAuthenticator;
 use crate::server::htpasswd::HtpasswdFile;
-use crate::server::transport_types::context_types::EmptyContext;
+use crate::server::live_router::{LiveAuthState, LiveRouterState};
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto::Builder as HyperServerBuilder;
 use log::{error, info};
@@ -141,26 +140,15 @@ pub(super) async fn create_server(
     });
 
     #[cfg(feature = "openapi-codegen")]
-    let bridge_state = server.openapi_app_state();
-    #[cfg(feature = "openapi-codegen")]
-    let bridge_server = server.clone();
-
-    #[cfg(feature = "openapi-codegen")]
-    let service = crate::server::http_transport::MakeHttpTransportService::new(
-        crate::server::http_transport::MakeHttpFallbackService::new(),
-        bridge_state,
-        bridge_server,
-    );
-
-    let service = MakeHtpasswdAuthenticator::new(
-        service,
-        shared_htpasswd,
-        require_auth,
-        shared_credential_cache,
-    );
-
-    #[allow(unused_mut)]
-    let mut service = crate::server::context::MakeAddContext::<_, EmptyContext>::new(service);
+    let app = crate::server::live_router::app_router(LiveRouterState {
+        openapi_state: server.openapi_app_state(),
+        server: server.clone(),
+        auth: LiveAuthState {
+            htpasswd: shared_htpasswd.clone(),
+            require_auth,
+            credential_cache: shared_credential_cache.clone(),
+        },
+    });
 
     if https {
         #[cfg(any(target_os = "macos", target_os = "windows", target_os = "ios"))]
@@ -212,15 +200,13 @@ pub(super) async fn create_server(
                             Ok((tcp, _)) => {
                                 consecutive_accept_errors = 0;
                                 let ssl = Ssl::new(tls_acceptor.context()).unwrap();
-                                let addr = tcp.peer_addr().expect("Unable to get remote address");
-                                let service = tower::Service::call(&mut service, addr);
-
+                                let _addr = tcp.peer_addr().expect("Unable to get remote address");
+                                let app = app.clone();
                                 connection_tasks.spawn(async move {
                                     let mut tls = tokio_openssl::SslStream::new(ssl, tcp).map_err(|_| ())?;
                                     std::pin::Pin::new(&mut tls).accept().await.map_err(|_| ())?;
-                                    let service = service.await.map_err(|_| ())?;
                                     let hyper_service =
-                                        hyper_util::service::TowerToHyperService::new(service);
+                                        hyper_util::service::TowerToHyperService::new(app.clone());
                                     let io = TokioIo::new(tls);
 
                                     HyperServerBuilder::new(TokioExecutor::new())
@@ -285,14 +271,12 @@ pub(super) async fn create_server(
             tokio::select! {
                 result = tcp_listener.accept() => {
                     match result {
-                        Ok((tcp, addr)) => {
+                        Ok((tcp, _addr)) => {
                             consecutive_accept_errors = 0;
-                            let service = tower::Service::call(&mut service, addr);
-
+                            let app = app.clone();
                             connection_tasks.spawn(async move {
-                                let service = service.await.map_err(|_| ())?;
                                 let hyper_service =
-                                    hyper_util::service::TowerToHyperService::new(service);
+                                    hyper_util::service::TowerToHyperService::new(app.clone());
                                 let io = TokioIo::new(tcp);
 
                                 HyperServerBuilder::new(TokioExecutor::new())

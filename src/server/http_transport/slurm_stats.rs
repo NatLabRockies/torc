@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) async fn handle_create_slurm_stats<C, B>(
+pub(crate) async fn handle_create_slurm_stats<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -22,7 +22,7 @@ where
     }
 }
 
-pub(super) async fn handle_list_slurm_stats<C, B>(
+pub(crate) async fn handle_list_slurm_stats<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,

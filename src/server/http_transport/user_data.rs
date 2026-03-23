@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) async fn handle_list_user_data<C, B>(
+pub(crate) async fn handle_list_user_data<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -33,7 +33,7 @@ where
     }
 }
 
-pub(super) async fn handle_get_user_data<C>(
+pub(crate) async fn handle_get_user_data<C>(
     server: Server<C>,
     id: i64,
     context: C,
@@ -47,7 +47,7 @@ where
     }
 }
 
-pub(super) async fn handle_create_user_data<C, B>(
+pub(crate) async fn handle_create_user_data<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -81,7 +81,7 @@ where
     }
 }
 
-pub(super) async fn handle_update_user_data<C, B>(
+pub(crate) async fn handle_update_user_data<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,
@@ -104,7 +104,7 @@ where
     }
 }
 
-pub(super) async fn handle_delete_all_user_data<C, B>(
+pub(crate) async fn handle_delete_all_user_data<C, B>(
     server: Server<C>,
     request: Request<B>,
     context: C,
@@ -133,7 +133,7 @@ where
     }
 }
 
-pub(super) async fn handle_delete_user_data<C, B>(
+pub(crate) async fn handle_delete_user_data<C, B>(
     server: Server<C>,
     id: i64,
     request: Request<B>,

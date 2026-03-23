@@ -67,3 +67,5 @@ docker_run run \
 
 rm -f "${REPO_ROOT}/src/client/apis/"*_api.rs
 cp "${TMP_RUST_CLIENT}/src/apis/"*_api.rs "${REPO_ROOT}/src/client/apis/"
+
+cargo fmt --manifest-path "${REPO_ROOT}/Cargo.toml" -- "${REPO_ROOT}/src/client/apis/"*_api.rs
