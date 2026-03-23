@@ -52,9 +52,8 @@ fn test_pending_failed_status(start_server: &ServerProcess) {
     let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
-        &resources,
         10,
-        None,
+        resources,
         None,
     )
     .expect("Failed to claim jobs");
@@ -117,9 +116,8 @@ fn test_list_pending_failed_jobs(start_server: &ServerProcess) {
     let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
-        &resources,
         10,
-        None,
+        resources,
         None,
     )
     .expect("Failed to claim jobs");
@@ -207,9 +205,8 @@ fn test_reset_includes_pending_failed(start_server: &ServerProcess) {
     let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
-        &resources,
         10,
-        None,
+        resources,
         None,
     )
     .expect("Failed to claim jobs");

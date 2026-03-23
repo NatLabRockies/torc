@@ -135,9 +135,8 @@ fn execute_workflow_with_job(
     let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
-        &resources,
         10,
-        None,
+        resources,
         None,
     )?;
     let returned_jobs = result.jobs.expect("Server must return jobs array");
@@ -797,9 +796,8 @@ fn test_update_jobs_on_file_change_with_dependent_jobs(start_server: &ServerProc
     let result = apis::workflows_api::claim_jobs_based_on_resources(
         &config,
         workflow_id,
-        &resources,
         10,
-        None,
+        resources,
         None,
     )
     .expect("Failed to prepare jobs for submission");
@@ -1027,9 +1025,8 @@ fn test_update_jobs_on_file_change_with_canceled_jobs(start_server: &ServerProce
     let result = apis::workflows_api::claim_jobs_based_on_resources(
         &config,
         workflow_id,
-        &resources,
         10,
-        None,
+        resources,
         None,
     )
     .expect("Failed to claim jobs");
@@ -1126,9 +1123,8 @@ fn test_process_changed_files_end_to_end(start_server: &ServerProcess) {
     let result = apis::workflows_api::claim_jobs_based_on_resources(
         &config,
         workflow_id,
-        &resources,
         10,
-        None,
+        resources,
         None,
     )
     .expect("claim_jobs_based_on_resources should succeed");

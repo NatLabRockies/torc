@@ -120,6 +120,7 @@ pub fn create_failure_handler(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_failure_handler_model);
 
     let req = req_builder.build()?;
@@ -174,6 +175,7 @@ pub fn create_jobs(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_jobs_model);
 
     let req = req_builder.build()?;
@@ -228,6 +230,7 @@ pub fn create_resource_requirements(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_resource_requirements_model);
 
     let req = req_builder.build()?;
@@ -282,6 +285,7 @@ pub fn create_slurm_stats(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_slurm_stats_model);
 
     let req = req_builder.build()?;
@@ -342,6 +346,7 @@ pub fn delete_failure_handler(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
@@ -402,6 +407,7 @@ pub fn delete_resource_requirement(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
@@ -459,6 +465,7 @@ pub fn delete_resource_requirements(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
@@ -515,6 +522,7 @@ pub fn get_failure_handler(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -570,6 +578,7 @@ pub fn get_resource_requirements(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -635,6 +644,7 @@ pub fn list_failure_handlers(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -677,47 +687,35 @@ pub fn list_resource_requirements(
     configuration: &configuration::Configuration,
     workflow_id: i64,
     job_id: Option<i64>,
-    offset: Option<i64>,
-    limit: Option<i64>,
-    sort_by: Option<&str>,
-    reverse_sort: Option<bool>,
     name: Option<&str>,
     memory: Option<&str>,
     num_cpus: Option<i64>,
     num_gpus: Option<i64>,
     num_nodes: Option<i64>,
     runtime: Option<i64>,
+    offset: Option<i64>,
+    limit: Option<i64>,
+    sort_by: Option<&str>,
+    reverse_sort: Option<bool>,
 ) -> Result<models::ListResourceRequirementsResponse, Error<ListResourceRequirementsError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_query_workflow_id = workflow_id;
     let p_query_job_id = job_id;
-    let p_query_offset = offset;
-    let p_query_limit = limit;
-    let p_query_sort_by = sort_by;
-    let p_query_reverse_sort = reverse_sort;
     let p_query_name = name;
     let p_query_memory = memory;
     let p_query_num_cpus = num_cpus;
     let p_query_num_gpus = num_gpus;
     let p_query_num_nodes = num_nodes;
     let p_query_runtime = runtime;
+    let p_query_offset = offset;
+    let p_query_limit = limit;
+    let p_query_sort_by = sort_by;
+    let p_query_reverse_sort = reverse_sort;
 
     let uri_str = format!("{}/resource_requirements", configuration.base_path);
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
 
     req_builder = req_builder.query(&[("workflow_id", &p_query_workflow_id.to_string())]);
-    if let Some(ref param_value) = p_query_offset {
-        req_builder = req_builder.query(&[("offset", &param_value.to_string())]);
-    }
-    if let Some(ref param_value) = p_query_limit {
-        req_builder = req_builder.query(&[("limit", &param_value.to_string())]);
-    }
-    if let Some(ref param_value) = p_query_sort_by {
-        req_builder = req_builder.query(&[("sort_by", &param_value.to_string())]);
-    }
-    if let Some(ref param_value) = p_query_reverse_sort {
-        req_builder = req_builder.query(&[("reverse_sort", &param_value.to_string())]);
-    }
     if let Some(ref param_value) = p_query_job_id {
         req_builder = req_builder.query(&[("job_id", &param_value.to_string())]);
     }
@@ -739,9 +737,22 @@ pub fn list_resource_requirements(
     if let Some(ref param_value) = p_query_runtime {
         req_builder = req_builder.query(&[("runtime", &param_value.to_string())]);
     }
+    if let Some(ref param_value) = p_query_offset {
+        req_builder = req_builder.query(&[("offset", &param_value.to_string())]);
+    }
+    if let Some(ref param_value) = p_query_limit {
+        req_builder = req_builder.query(&[("limit", &param_value.to_string())]);
+    }
+    if let Some(ref param_value) = p_query_sort_by {
+        req_builder = req_builder.query(&[("sort_by", &param_value.to_string())]);
+    }
+    if let Some(ref param_value) = p_query_reverse_sort {
+        req_builder = req_builder.query(&[("reverse_sort", &param_value.to_string())]);
+    }
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -819,6 +830,7 @@ pub fn list_slurm_stats(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -876,6 +888,7 @@ pub fn update_resource_requirements(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_resource_requirements_model);
 
     let req = req_builder.build()?;

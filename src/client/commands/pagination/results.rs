@@ -128,14 +128,14 @@ impl Paginatable for ResultModel {
             params.workflow_id,
             params.job_id,
             params.run_id,
+            params.return_code,
+            params.status,
+            params.compute_node_id,
             Some(params.offset),
             Some(limit),
             params.sort_by.as_deref(),
             params.reverse_sort,
-            params.return_code,
-            params.status,
             params.all_runs,
-            params.compute_node_id,
         )?;
 
         Ok(PaginatedResponse {

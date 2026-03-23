@@ -9,7 +9,7 @@ use serde_json::json;
 use torc::client::apis;
 use torc::client::workflow_manager::WorkflowManager;
 use torc::config::TorcConfig;
-use torc::models::JobModel;
+use torc::models::{ClaimActionRequest, JobModel, WorkflowActionModel};
 
 /// Helper function to create a test job
 fn create_test_job(
@@ -49,6 +49,30 @@ fn create_test_compute_node(
     Ok(created.id.expect("Compute node should have ID"))
 }
 
+fn workflow_action(
+    workflow_id: i64,
+    trigger_type: &str,
+    action_type: &str,
+    action_config: serde_json::Value,
+    job_ids: Option<Vec<i64>>,
+) -> WorkflowActionModel {
+    WorkflowActionModel {
+        id: None,
+        workflow_id,
+        trigger_type: trigger_type.to_string(),
+        action_type: action_type.to_string(),
+        action_config,
+        job_ids,
+        trigger_count: 0,
+        required_triggers: 1,
+        executed: false,
+        executed_at: None,
+        executed_by: None,
+        persistent: false,
+        is_recovery: false,
+    }
+}
+
 #[rstest]
 fn test_create_workflow_action_run_commands(start_server: &ServerProcess) {
     let config = &start_server.config;
@@ -60,12 +84,13 @@ fn test_create_workflow_action_run_commands(start_server: &ServerProcess) {
         "commands": ["echo 'Starting workflow'", "mkdir -p output"]
     });
 
-    let action_body = json!({
-        "workflow_id": workflow_id,
-        "trigger_type": "on_workflow_start",
-        "action_type": "run_commands",
-        "action_config": action_config,
-    });
+    let action_body = workflow_action(
+        workflow_id,
+        "on_workflow_start",
+        "run_commands",
+        action_config,
+        None,
+    );
 
     let result = apis::final_surfaces_api::create_workflow_action(config, workflow_id, action_body)
         .expect("Failed to create workflow action");
@@ -90,12 +115,13 @@ fn test_create_workflow_action_schedule_nodes(start_server: &ServerProcess) {
         "max_parallel_jobs": 4
     });
 
-    let action_body = json!({
-        "workflow_id": workflow_id,
-        "trigger_type": "on_jobs_ready",
-        "action_type": "schedule_nodes",
-        "action_config": action_config,
-    });
+    let action_body = workflow_action(
+        workflow_id,
+        "on_jobs_ready",
+        "schedule_nodes",
+        action_config,
+        None,
+    );
 
     let result = apis::final_surfaces_api::create_workflow_action(config, workflow_id, action_body)
         .expect("Failed to create schedule_nodes action");
@@ -116,15 +142,13 @@ fn test_get_workflow_actions(start_server: &ServerProcess) {
             "commands": [format!("echo 'Command {}'", i)]
         });
 
-        let action_body = json!({
-            "workflow_id": workflow_id,
-            "trigger_type": "on_workflow_start",
-            "action_type": "run_commands",
-            "action_config": action_config,
-            "jobs": null,
-            "job_name_regexes": null,
-            "job_ids": null,
-        });
+        let action_body = workflow_action(
+            workflow_id,
+            "on_workflow_start",
+            "run_commands",
+            action_config,
+            None,
+        );
 
         apis::final_surfaces_api::create_workflow_action(config, workflow_id, action_body)
             .expect("Failed to create action");
@@ -152,12 +176,13 @@ fn test_get_pending_actions(start_server: &ServerProcess) {
         "commands": ["echo 'Pending action'"]
     });
 
-    let action_body = json!({
-        "workflow_id": workflow_id,
-        "trigger_type": "on_workflow_start",
-        "action_type": "run_commands",
-        "action_config": action_config,
-    });
+    let action_body = workflow_action(
+        workflow_id,
+        "on_workflow_start",
+        "run_commands",
+        action_config,
+        None,
+    );
 
     apis::final_surfaces_api::create_workflow_action(config, workflow_id, action_body)
         .expect("Failed to create action");
@@ -187,12 +212,13 @@ fn test_claim_action_success(start_server: &ServerProcess) {
         "commands": ["echo 'Claimable action'"]
     });
 
-    let action_body = json!({
-        "workflow_id": workflow_id,
-        "trigger_type": "on_workflow_start",
-        "action_type": "run_commands",
-        "action_config": action_config,
-    });
+    let action_body = workflow_action(
+        workflow_id,
+        "on_workflow_start",
+        "run_commands",
+        action_config,
+        None,
+    );
 
     let created_action =
         apis::final_surfaces_api::create_workflow_action(config, workflow_id, action_body)
@@ -204,19 +230,16 @@ fn test_claim_action_success(start_server: &ServerProcess) {
         .expect("Failed to initialize workflow");
 
     // Claim the action
-    let claim_body = json!({
-        "compute_node_id": compute_node_id
-    });
+    let claim_body = ClaimActionRequest {
+        compute_node_id: Some(compute_node_id),
+    };
 
     let claim_result =
         apis::final_surfaces_api::claim_action(config, workflow_id, action_id, claim_body)
             .expect("Failed to claim action");
 
-    assert!(claim_result.get("claimed").unwrap().as_bool().unwrap());
-    assert_eq!(
-        claim_result.get("action_id").unwrap().as_i64().unwrap(),
-        action_id
-    );
+    assert!(claim_result.success);
+    assert_eq!(claim_result.action_id, action_id);
 
     // Verify the action is no longer pending
     let pending_actions = apis::final_surfaces_api::get_pending_actions(config, workflow_id, None)
@@ -239,12 +262,13 @@ fn test_claim_action_already_claimed(start_server: &ServerProcess) {
         "commands": ["echo 'Double claim test'"]
     });
 
-    let action_body = json!({
-        "workflow_id": workflow_id,
-        "trigger_type": "on_workflow_start",
-        "action_type": "run_commands",
-        "action_config": action_config,
-    });
+    let action_body = workflow_action(
+        workflow_id,
+        "on_workflow_start",
+        "run_commands",
+        action_config,
+        None,
+    );
 
     let created_action =
         apis::final_surfaces_api::create_workflow_action(config, workflow_id, action_body)
@@ -256,19 +280,19 @@ fn test_claim_action_already_claimed(start_server: &ServerProcess) {
         .expect("Failed to initialize workflow");
 
     // First claim should succeed
-    let claim_body1 = json!({
-        "compute_node_id": compute_node_id1
-    });
+    let claim_body1 = ClaimActionRequest {
+        compute_node_id: Some(compute_node_id1),
+    };
 
     let claim_result1 =
         apis::final_surfaces_api::claim_action(config, workflow_id, action_id, claim_body1)
             .expect("Failed to claim action first time");
-    assert!(claim_result1.get("claimed").unwrap().as_bool().unwrap());
+    assert!(claim_result1.success);
 
     // Second claim should return CONFLICT
-    let claim_body2 = json!({
-        "compute_node_id": compute_node_id2
-    });
+    let claim_body2 = ClaimActionRequest {
+        compute_node_id: Some(compute_node_id2),
+    };
 
     let claim_result2 =
         apis::final_surfaces_api::claim_action(config, workflow_id, action_id, claim_body2);
@@ -303,13 +327,13 @@ fn test_action_with_job_names(start_server: &ServerProcess) {
     });
 
     let job_ids_array = vec![job1.id.unwrap(), job2.id.unwrap()];
-    let action_body = json!({
-        "workflow_id": workflow_id,
-        "trigger_type": "on_jobs_ready",
-        "action_type": "schedule_nodes",
-        "action_config": action_config,
-        "job_ids": job_ids_array,
-    });
+    let action_body = workflow_action(
+        workflow_id,
+        "on_jobs_ready",
+        "schedule_nodes",
+        action_config,
+        Some(job_ids_array),
+    );
 
     let created_action =
         apis::final_surfaces_api::create_workflow_action(config, workflow_id, action_body)
@@ -344,13 +368,13 @@ fn test_action_with_job_name_regexes(start_server: &ServerProcess) {
     });
 
     let job_ids_array = vec![job1.id.unwrap(), job2.id.unwrap()];
-    let action_body = json!({
-        "workflow_id": workflow_id,
-        "trigger_type": "on_jobs_ready",
-        "action_type": "schedule_nodes",
-        "action_config": action_config,
-        "job_ids": job_ids_array,
-    });
+    let action_body = workflow_action(
+        workflow_id,
+        "on_jobs_ready",
+        "schedule_nodes",
+        action_config,
+        Some(job_ids_array),
+    );
 
     let created_action =
         apis::final_surfaces_api::create_workflow_action(config, workflow_id, action_body)
@@ -382,13 +406,13 @@ fn test_action_with_combined_patterns_and_regexes(start_server: &ServerProcess) 
         "commands": ["echo 'All training ready'"]
     });
 
-    let action_body = json!({
-        "workflow_id": workflow_id,
-        "trigger_type": "on_jobs_ready",
-        "action_type": "run_commands",
-        "action_config": action_config,
-        "job_ids": [job1.id.unwrap(), job2.id.unwrap(), job3.id.unwrap()],
-    });
+    let action_body = workflow_action(
+        workflow_id,
+        "on_jobs_ready",
+        "run_commands",
+        action_config,
+        Some(vec![job1.id.unwrap(), job2.id.unwrap(), job3.id.unwrap()]),
+    );
 
     let created_action =
         apis::final_surfaces_api::create_workflow_action(config, workflow_id, action_body)
@@ -421,15 +445,8 @@ fn test_multiple_actions_different_triggers(start_server: &ServerProcess) {
             "commands": [format!("echo 'Trigger: {}'", trigger)]
         });
 
-        let action_body = json!({
-            "workflow_id": workflow_id,
-            "trigger_type": trigger,
-            "action_type": "run_commands",
-            "action_config": action_config,
-            "jobs": null,
-            "job_name_regexes": null,
-            "job_ids": null,
-        });
+        let action_body =
+            workflow_action(workflow_id, trigger, "run_commands", action_config, None);
 
         apis::final_surfaces_api::create_workflow_action(config, workflow_id, action_body)
             .unwrap_or_else(|_| panic!("Failed to create action for trigger: {}", trigger));
@@ -462,12 +479,13 @@ fn test_action_status_lifecycle(start_server: &ServerProcess) {
         "commands": ["echo 'Status lifecycle test'"]
     });
 
-    let action_body = json!({
-        "workflow_id": workflow_id,
-        "trigger_type": "on_workflow_start",
-        "action_type": "run_commands",
-        "action_config": action_config,
-    });
+    let action_body = workflow_action(
+        workflow_id,
+        "on_workflow_start",
+        "run_commands",
+        action_config,
+        None,
+    );
 
     let created_action =
         apis::final_surfaces_api::create_workflow_action(config, workflow_id, action_body)
@@ -483,9 +501,9 @@ fn test_action_status_lifecycle(start_server: &ServerProcess) {
         .expect("Failed to initialize workflow");
 
     // Claim the action
-    let claim_body = json!({
-        "compute_node_id": compute_node_id
-    });
+    let claim_body = ClaimActionRequest {
+        compute_node_id: Some(compute_node_id),
+    };
 
     apis::final_surfaces_api::claim_action(config, workflow_id, action_id, claim_body)
         .expect("Failed to claim action");
@@ -557,13 +575,13 @@ fn test_action_executed_flag_reset_on_reinitialize(start_server: &ServerProcess)
     let action_config = json!({
         "commands": ["echo 'postprocess_job is ready'"]
     });
-    let action_body = json!({
-        "workflow_id": workflow_id,
-        "trigger_type": "on_jobs_ready",
-        "action_type": "run_commands",
-        "action_config": action_config,
-        "job_ids": [postprocess_job_id],
-    });
+    let action_body = workflow_action(
+        workflow_id,
+        "on_jobs_ready",
+        "run_commands",
+        action_config,
+        Some(vec![postprocess_job_id]),
+    );
     let created_action =
         apis::final_surfaces_api::create_workflow_action(config, workflow_id, action_body)
             .expect("Failed to create workflow action");
@@ -648,7 +666,9 @@ fn test_action_executed_flag_reset_on_reinitialize(start_server: &ServerProcess)
     );
 
     // Claim the action
-    let claim_body = json!({ "compute_node_id": compute_node_id });
+    let claim_body = ClaimActionRequest {
+        compute_node_id: Some(compute_node_id),
+    };
     apis::final_surfaces_api::claim_action(config, workflow_id, action_id, claim_body)
         .expect("Failed to claim action");
 

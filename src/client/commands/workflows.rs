@@ -3939,16 +3939,16 @@ fn handle_import(
         config,
         new_workflow_id,
         None,            // job_id
-        None,            // offset
-        None,            // limit
-        None,            // sort_by
-        None,            // reverse_sort
         Some("default"), // name
         None,            // memory
         None,            // num_cpus
         None,            // num_gpus
         None,            // num_nodes
         None,            // runtime
+        None,            // offset
+        None,            // limit
+        None,            // sort_by
+        None,            // reverse_sort
     )
     .ok()
     .map(|response| response.items)
@@ -4193,11 +4193,8 @@ fn handle_import(
             new_action.job_ids = Some(mappings.remap_job_ids(job_ids));
         }
 
-        // Serialize to JSON Value for the API
-        let action_json = serde_json::to_value(&new_action).unwrap_or_default();
-
         if let Err(e) =
-            apis::final_surfaces_api::create_workflow_action(config, new_workflow_id, action_json)
+            apis::final_surfaces_api::create_workflow_action(config, new_workflow_id, new_action)
         {
             print_error("creating workflow action", &e);
             let _ = apis::workflows_api::delete_workflow(config, new_workflow_id, None);

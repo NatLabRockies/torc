@@ -9,8 +9,9 @@ Torc uses a Rust-owned OpenAPI workflow:
 - The HTTP contract is defined in Rust under `src/openapi_codegen/` and `src/api_models.rs`.
 - The checked-in OpenAPI artifacts are `api/openapi.yaml` and `api/openapi.codegen.yaml`.
 - The live server transport is implemented in Rust under `src/server/http_transport.rs`.
-- The Rust client used by the CLI/TUI/dashboard is generated into `src/client/apis/` and then
-  patched to use Torc's canonical model layer and client conventions.
+- The Rust client used by the CLI/TUI/dashboard is generated into `src/client/apis/` using
+  checked-in OpenAPI Generator template overrides so it matches Torc's canonical model layer and
+  client conventions.
 - The Python and Julia clients are generated from the checked-in OpenAPI artifact.
 
 ## Source Of Truth
@@ -71,11 +72,13 @@ Relevant files:
 
 - `api/regenerate_rust_client.sh`
   - Generates a sync Rust client into a temporary directory.
+  - Passes `api/openapi-generator-templates/rust/` to OpenAPI Generator.
   - Copies only the generated grouped API modules, not the generated `models/` tree.
-  - Applies `api/rust_client.patch` so the generated modules integrate with Torc's canonical
-    `crate::models` layer and the repo's established blocking client conventions.
-- `api/rust_client.patch`
-  - Checked-in overlay for the generated Rust client surface.
+- `api/openapi-generator-templates/rust/`
+  - Checked-in template overrides for the generated Rust client surface.
+  - Must remain version-controlled because regeneration uses them as a required input.
+  - Encodes Torc-specific generation behavior such as importing `crate::models`, using the shared
+    blocking client helpers, and applying auth consistently.
 - `src/client/apis/configuration.rs`
   - Hand-owned blocking client configuration used by the generated Rust API modules.
   - Carries Torc-specific conventions like TLS settings, cookie handling, and auth application.
@@ -131,9 +134,6 @@ There is also a hand-written Python compatibility/helper layer in:
 That layer exists to provide a stable high-level interface over the tag-grouped generated Python
 APIs.
 
-The Rust client patch overlay keeps the generated code compatible with Torc's model/configuration
-conventions.
-
 ## Developer Workflow
 
 Emit the Rust-owned OpenAPI spec:
@@ -160,8 +160,8 @@ Regenerate Rust, Python, and Julia clients:
 bash api/sync_openapi.sh clients
 ```
 
-This runs the Rust client generator first, applies the checked-in Rust patch overlay, and then
-regenerates the Python and Julia clients from the same spec.
+This regenerates the Rust client from the selected spec using the checked-in template overrides,
+then regenerates the Python and Julia clients from the same spec.
 
 Run the full sync flow:
 
@@ -176,4 +176,6 @@ This arrangement gives Torc one authoritative contract pipeline:
 - The server contract is owned in normal Rust code.
 - The OpenAPI artifact is emitted deterministically from that Rust code.
 - External clients are generated from the emitted artifact.
+- Rust generator customization is expressed in checked-in templates, not a post-generation patch
+  overlay.
 - Generated files are downstream artifacts, not the source of truth.

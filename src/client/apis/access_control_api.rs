@@ -119,6 +119,7 @@ pub fn add_user_to_group(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_user_group_membership_model);
 
     let req = req_builder.build()?;
@@ -165,12 +166,13 @@ pub fn add_workflow_to_group(
 ) -> Result<models::WorkflowAccessGroupModel, Error<AddWorkflowToGroupError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_id = id;
-    let p_body_workflow_access_group_model = models::WorkflowAccessGroupModel::new(id, group_id);
+    let p_path_group_id = group_id;
 
     let uri_str = format!(
-        "{}/workflows/{id}/access_groups",
+        "{}/workflows/{id}/access_groups/{group_id}",
         configuration.base_path,
-        id = p_path_id
+        id = p_path_id,
+        group_id = p_path_group_id
     );
     let mut req_builder = configuration
         .client
@@ -179,7 +181,7 @@ pub fn add_workflow_to_group(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
-    req_builder = req_builder.json(&p_body_workflow_access_group_model);
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -238,6 +240,7 @@ pub fn check_workflow_access(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -291,6 +294,7 @@ pub fn create_access_group(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_access_group_model);
 
     let req = req_builder.build()?;
@@ -336,6 +340,7 @@ pub fn delete_access_group(
 ) -> Result<models::AccessGroupModel, Error<DeleteAccessGroupError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_id = id;
+
     let uri_str = format!(
         "{}/access_groups/{id}",
         configuration.base_path,
@@ -348,6 +353,8 @@ pub fn delete_access_group(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
+
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
 
@@ -402,6 +409,7 @@ pub fn get_access_group(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -461,6 +469,7 @@ pub fn list_access_groups(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -526,6 +535,7 @@ pub fn list_group_members(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -591,6 +601,7 @@ pub fn list_user_groups(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -656,6 +667,7 @@ pub fn list_workflow_groups(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -702,6 +714,7 @@ pub fn remove_user_from_group(
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_id = id;
     let p_path_user_name = user_name;
+
     let uri_str = format!(
         "{}/access_groups/{id}/members/{user_name}",
         configuration.base_path,
@@ -715,6 +728,7 @@ pub fn remove_user_from_group(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -761,6 +775,7 @@ pub fn remove_workflow_from_group(
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_id = id;
     let p_path_group_id = group_id;
+
     let uri_str = format!(
         "{}/workflows/{id}/access_groups/{group_id}",
         configuration.base_path,
@@ -774,6 +789,7 @@ pub fn remove_workflow_from_group(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;

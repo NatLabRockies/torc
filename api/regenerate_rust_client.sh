@@ -6,7 +6,7 @@ CONTAINER_EXEC="${CONTAINER_EXEC:-docker}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SPEC_PATH="${SCRIPT_DIR}/openapi.yaml"
-PATCH_PATH="${SCRIPT_DIR}/rust_client.patch"
+TEMPLATE_DIR="${SCRIPT_DIR}/openapi-generator-templates/rust"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -30,8 +30,8 @@ if [[ ! -f "${SPEC_PATH}" ]]; then
   exit 1
 fi
 
-if [[ ! -f "${PATCH_PATH}" ]]; then
-  echo "Rust client patch overlay not found: ${PATCH_PATH}" >&2
+if [[ ! -d "${TEMPLATE_DIR}" ]]; then
+  echo "Rust client template directory not found: ${TEMPLATE_DIR}" >&2
   exit 1
 fi
 
@@ -57,16 +57,13 @@ trap 'rm -rf "${TMP_RUST_CLIENT}" "${TMP_STAGE}"' EXIT
 docker_run run \
   -v "${SPEC_DIR}":/spec \
   -v "${TMP_RUST_CLIENT}":/rust_client \
+  -v "${TEMPLATE_DIR}":/templates \
   "docker.io/openapitools/openapi-generator-cli:${OPENAPI_CLI_VERSION}" \
   generate -g rust \
   --input-spec="/spec/${SPEC_FILE}" \
   -o /rust_client \
+  -t /templates \
   --additional-properties=supportAsync=false
 
-mkdir -p "${TMP_STAGE}/apis"
-cp "${TMP_RUST_CLIENT}/src/apis/"*_api.rs "${TMP_STAGE}/apis/"
-
-(cd "${TMP_STAGE}" && git apply "${PATCH_PATH}")
-
 rm -f "${REPO_ROOT}/src/client/apis/"*_api.rs
-cp "${TMP_STAGE}/apis/"*_api.rs "${REPO_ROOT}/src/client/apis/"
+cp "${TMP_RUST_CLIENT}/src/apis/"*_api.rs "${REPO_ROOT}/src/client/apis/"

@@ -182,7 +182,6 @@ struct InitializeJobsQuery {
 
 #[derive(Debug, PartialEq)]
 struct ClaimJobsBasedOnResourcesQuery {
-    sort_method: Option<models::ClaimJobsSortMethod>,
     strict_scheduler_match: Option<bool>,
 }
 
@@ -501,7 +500,6 @@ fn parse_claim_jobs_based_on_resources_query(
         .into_owned()
         .collect();
     Ok(ClaimJobsBasedOnResourcesQuery {
-        sort_method: parse_optional_claim_jobs_sort_method(&params, "sort_method")?,
         strict_scheduler_match: parse_optional_bool(&params, "strict_scheduler_match")?,
     })
 }
@@ -606,19 +604,6 @@ fn parse_optional_job_status_name(
         .map(|raw| {
             raw.parse::<models::JobStatus>()
                 .map_err(|_| format!("Invalid job status for query parameter: {key}"))
-        })
-        .transpose()
-}
-
-fn parse_optional_claim_jobs_sort_method(
-    params: &HashMap<String, String>,
-    key: &str,
-) -> Result<Option<models::ClaimJobsSortMethod>, String> {
-    params
-        .get(key)
-        .map(|raw| {
-            raw.parse::<models::ClaimJobsSortMethod>()
-                .map_err(|_| format!("Invalid claim jobs sort method for query parameter: {key}"))
         })
         .transpose()
 }

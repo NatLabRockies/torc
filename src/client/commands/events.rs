@@ -338,7 +338,7 @@ pub fn handle_event_commands(config: &Configuration, command: &EventCommands, fo
                 }
             }
         }
-        EventCommands::Delete { id } => match apis::events_api::delete_event(config, *id, None) {
+        EventCommands::Delete { id } => match apis::events_api::delete_event(config, *id) {
             Ok(removed_event) => {
                 let json_event = EventJsonOutput::from(&removed_event);
                 if print_if_json(format, &json_event, "event") {

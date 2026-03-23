@@ -135,10 +135,6 @@ impl Paginatable for ResourceRequirementsModel {
             config,
             params.workflow_id,
             params.job_id,
-            Some(params.offset),
-            Some(limit),
-            params.sort_by.as_deref(),
-            params.reverse_sort,
             params.name.as_deref(),
             params.memory.as_deref(),
             params.num_cpus,
@@ -152,6 +148,10 @@ impl Paginatable for ResourceRequirementsModel {
                 ),
                 None => None,
             },
+            Some(params.offset),
+            Some(limit),
+            params.sort_by.as_deref(),
+            params.reverse_sort,
         )?;
 
         Ok(PaginatedResponse {

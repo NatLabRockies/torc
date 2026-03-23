@@ -160,7 +160,6 @@ const WORKFLOW_COLUMNS: &[&str] = &[
     "compute_node_ignore_workflow_completion",
     "compute_node_wait_for_healthy_database_minutes",
     "compute_node_min_time_for_new_jobs_seconds",
-    "jobs_sort_method",
     "resource_monitor_config",
     "slurm_defaults",
     "use_pending_failed",
@@ -189,7 +188,6 @@ const ALL_WORKFLOW_COLUMNS: &[&str] = &[
     "compute_node_ignore_workflow_completion",
     "compute_node_wait_for_healthy_database_minutes",
     "compute_node_min_time_for_new_jobs_seconds",
-    "jobs_sort_method",
     "resource_monitor_config",
     "slurm_defaults",
     "use_pending_failed",
@@ -277,7 +275,6 @@ impl WorkflowsApiImpl {
                 ,w.compute_node_ignore_workflow_completion
                 ,w.compute_node_wait_for_healthy_database_minutes
                 ,w.compute_node_min_time_for_new_jobs_seconds
-                ,w.jobs_sort_method
                 ,w.resource_monitor_config
                 ,w.slurm_defaults
                 ,w.use_pending_failed
@@ -304,7 +301,6 @@ impl WorkflowsApiImpl {
                 ,compute_node_ignore_workflow_completion
                 ,compute_node_wait_for_healthy_database_minutes
                 ,compute_node_min_time_for_new_jobs_seconds
-                ,jobs_sort_method
                 ,resource_monitor_config
                 ,slurm_defaults
                 ,use_pending_failed
@@ -435,10 +431,6 @@ impl WorkflowsApiImpl {
 
         let mut items: Vec<models::WorkflowModel> = Vec::new();
         for record in records {
-            let jobs_sort_method_str: String = record.get("jobs_sort_method");
-            let sort_method = jobs_sort_method_str
-                .parse::<models::ClaimJobsSortMethod>()
-                .ok();
             items.push(models::WorkflowModel {
                 id: Some(record.get("id")),
                 name: record.get("name"),
@@ -460,7 +452,6 @@ impl WorkflowsApiImpl {
                 compute_node_min_time_for_new_jobs_seconds: Some(
                     record.get("compute_node_min_time_for_new_jobs_seconds"),
                 ),
-                jobs_sort_method: sort_method,
                 resource_monitor_config: record.get("resource_monitor_config"),
                 slurm_defaults: record.get("slurm_defaults"),
                 use_pending_failed: record
@@ -610,11 +601,6 @@ where
         };
 
         body.timestamp = Some(Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string());
-        let jobs_sort_method_str = body
-            .jobs_sort_method
-            .map(|m| m.to_string())
-            .unwrap_or_else(|| "gpus_runtime_memory".to_string());
-
         let compute_node_expiration_buffer_seconds = body.compute_node_expiration_buffer_seconds;
         // Default must be >= completion_check_interval_secs + job_completion_poll_interval
         // to avoid workers exiting before dependent jobs are unblocked.
@@ -647,7 +633,6 @@ where
                 compute_node_ignore_workflow_completion,
                 compute_node_wait_for_healthy_database_minutes,
                 compute_node_min_time_for_new_jobs_seconds,
-                jobs_sort_method,
                 resource_monitor_config,
                 slurm_defaults,
                 use_pending_failed,
@@ -658,7 +643,7 @@ where
                 slurm_config,
                 execution_config
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
             RETURNING rowid
             "#,
             body.name,
@@ -670,7 +655,6 @@ where
             compute_node_ignore_workflow_completion,
             compute_node_wait_for_healthy_database_minutes,
             compute_node_min_time_for_new_jobs_seconds,
-            jobs_sort_method_str,
             body.resource_monitor_config,
             body.slurm_defaults,
             use_pending_failed_int,
@@ -943,10 +927,6 @@ where
                     compute_node_min_time_for_new_jobs_seconds: Some(
                         row.compute_node_min_time_for_new_jobs_seconds,
                     ),
-                    jobs_sort_method: row
-                        .jobs_sort_method
-                        .parse::<models::ClaimJobsSortMethod>()
-                        .ok(),
                     resource_monitor_config: row.resource_monitor_config,
                     slurm_defaults: row.slurm_defaults,
                     use_pending_failed: row.use_pending_failed.map(|v| v != 0),
@@ -1236,9 +1216,6 @@ where
             }
         };
 
-        // Convert enum to string for database storage
-        let jobs_sort_method_str = body.jobs_sort_method.map(|m| m.to_string());
-
         // Convert boolean to integer for SQLite if provided
         let compute_node_ignore_workflow_completion_int = body
             .compute_node_ignore_workflow_completion
@@ -1258,14 +1235,13 @@ where
                 compute_node_wait_for_new_jobs_seconds = COALESCE($5, compute_node_wait_for_new_jobs_seconds),
                 compute_node_ignore_workflow_completion = COALESCE($6, compute_node_ignore_workflow_completion),
                 compute_node_wait_for_healthy_database_minutes = COALESCE($7, compute_node_wait_for_healthy_database_minutes),
-                jobs_sort_method = COALESCE($8, jobs_sort_method),
-                use_pending_failed = COALESCE($9, use_pending_failed),
-                enable_ro_crate = COALESCE($10, enable_ro_crate),
-                project = COALESCE($11, project),
-                metadata = COALESCE($12, metadata),
-                slurm_config = COALESCE($13, slurm_config),
-                execution_config = COALESCE($14, execution_config)
-            WHERE id = $15
+                use_pending_failed = COALESCE($8, use_pending_failed),
+                enable_ro_crate = COALESCE($9, enable_ro_crate),
+                project = COALESCE($10, project),
+                metadata = COALESCE($11, metadata),
+                slurm_config = COALESCE($12, slurm_config),
+                execution_config = COALESCE($13, execution_config)
+            WHERE id = $14
             "#,
             body.name,
             body.description,
@@ -1274,7 +1250,6 @@ where
             body.compute_node_wait_for_new_jobs_seconds,
             compute_node_ignore_workflow_completion_int,
             body.compute_node_wait_for_healthy_database_minutes,
-            jobs_sort_method_str,
             use_pending_failed_int,
             enable_ro_crate_int,
             body.project,

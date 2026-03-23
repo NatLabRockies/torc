@@ -42,6 +42,12 @@ pub struct DeleteJobsQuery {
     pub workflow_id: i64,
 }
 
+#[allow(dead_code)]
+#[derive(Debug, Clone, Deserialize, IntoParams)]
+pub struct RetryJobQuery {
+    pub max_retries: i32,
+}
+
 #[utoipa::path(
     post,
     path = "/jobs",
@@ -200,14 +206,14 @@ pub async fn start_job(
     operation_id = "retry_job",
     params(
         ("id" = i64, Path, description = "Job ID"),
-        ("run_id" = i64, Path, description = "Current workflow run ID")
+        ("run_id" = i64, Path, description = "Current workflow run ID"),
+        RetryJobQuery
     ),
-    request_body = Option<Value>,
     responses((status = 200, description = "Successful response", body = JobModel))
 )]
 pub async fn retry_job(
     Path((id, run_id)): Path<(i64, i64)>,
-    Json(_body): Json<Option<Value>>,
+    Query(_query): Query<RetryJobQuery>,
 ) -> Json<JobModel> {
     let mut job = example_job(Some(id));
     job.status = Some(JobStatus::Ready);

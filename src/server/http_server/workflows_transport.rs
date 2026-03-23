@@ -132,21 +132,9 @@ where
     pub(super) async fn transport_create_workflow_action(
         &self,
         workflow_id: i64,
-        body: serde_json::Value,
+        action_model: models::WorkflowActionModel,
         context: &C,
     ) -> Result<CreateWorkflowActionResponse, ApiError> {
-        let action_model: models::WorkflowActionModel = match serde_json::from_value(body) {
-            Ok(model) => model,
-            Err(e) => {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("Invalid workflow action data: {}", e)
-                }));
-                return Ok(CreateWorkflowActionResponse::DefaultErrorResponse(
-                    error_response,
-                ));
-            }
-        };
-
         authorize_workflow!(self, workflow_id, context, CreateWorkflowActionResponse);
         self.workflow_actions_api
             .create_workflow_action(workflow_id, action_model, context)
@@ -180,13 +168,12 @@ where
         &self,
         workflow_id: i64,
         action_id: i64,
-        body: serde_json::Value,
+        body: models::ClaimActionRequest,
         context: &C,
     ) -> Result<ClaimActionResponse, ApiError> {
-        let compute_node_id = body.get("compute_node_id").and_then(|v| v.as_i64());
         authorize_workflow!(self, workflow_id, context, ClaimActionResponse);
         self.workflow_actions_api
-            .claim_action(workflow_id, action_id, compute_node_id, context)
+            .claim_action(workflow_id, action_id, body.compute_node_id, context)
             .await
     }
 
@@ -502,15 +489,13 @@ where
         id: i64,
         body: models::ComputeNodesResources,
         limit: i64,
-        sort_method: Option<models::ClaimJobsSortMethod>,
         strict_scheduler_match: Option<bool>,
         context: &C,
     ) -> Result<ClaimJobsBasedOnResources, ApiError> {
         debug!(
-            "claim_jobs_based_on_resources({}, {:?}, {:?}, {:?}, strict_scheduler_match={:?}) - X-Span-ID: {:?}",
+            "claim_jobs_based_on_resources({}, {:?}, {:?}, strict_scheduler_match={:?}) - X-Span-ID: {:?}",
             id,
             body,
-            sort_method,
             limit,
             strict_scheduler_match,
             Has::<XSpanIdString>::get(context).0.clone()
@@ -541,14 +526,7 @@ where
             ));
         }
 
-        self.transport_prepare_ready_jobs(
-            id,
-            body,
-            sort_method,
-            limit,
-            strict_scheduler_match,
-            context,
-        )
-        .await
+        self.transport_prepare_ready_jobs(id, body, limit, strict_scheduler_match, context)
+            .await
     }
 }

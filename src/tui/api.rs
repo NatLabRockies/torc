@@ -4,7 +4,7 @@ use crate::client::config::TorcConfig;
 use crate::client::workflow_spec::WorkflowSpec;
 use crate::models::{
     FileModel, JobDependencyModel, JobModel, JobStatus, ResultModel, ScheduledComputeNodesModel,
-    SlurmStatsModel, WorkflowModel,
+    SlurmStatsModel, WorkflowActionModel, WorkflowModel,
 };
 use anyhow::{Context, Result};
 
@@ -147,14 +147,14 @@ impl TorcClient {
             workflow_id,
             None, // job_id
             None, // run_id
+            None, // return_code
+            None, // status
+            None, // compute_node_id
             None, // offset
             None, // limit
             None, // sort_by
             None, // reverse_sort
-            None, // return_code
-            None, // status
             None, // all_runs
-            None, // compute_node_id
         )
         .context("Failed to list results")?;
 
@@ -212,12 +212,21 @@ impl TorcClient {
 
     pub fn submit_workflow(&self, workflow_id: i64) -> Result<()> {
         // Create a workflow action to submit to scheduler
-        let action = serde_json::json!({
-            "workflow_id": workflow_id,
-            "trigger_type": "on_workflow_start",
-            "action_type": "schedule_nodes",
-            "action_config": {}
-        });
+        let action = WorkflowActionModel {
+            id: None,
+            workflow_id,
+            trigger_type: "on_workflow_start".to_string(),
+            action_type: "schedule_nodes".to_string(),
+            action_config: serde_json::json!({}),
+            job_ids: None,
+            trigger_count: 0,
+            required_triggers: 1,
+            executed: false,
+            executed_at: None,
+            executed_by: None,
+            persistent: false,
+            is_recovery: false,
+        };
 
         apis::final_surfaces_api::create_workflow_action(&self.config, workflow_id, action)
             .context("Failed to create submit action")?;

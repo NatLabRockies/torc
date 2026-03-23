@@ -221,14 +221,14 @@ pub fn handle_scheduled_compute_node_commands(
                         workflow_id,
                         None,                  // job_id
                         None,                  // run_id
+                        None,                  // return_code
+                        None,                  // status
+                        Some(compute_node_id), // compute_node_id filter
                         None,                  // offset
                         None,                  // limit
                         None,                  // sort_by
                         None,                  // reverse_sort
-                        None,                  // return_code
-                        None,                  // status
                         Some(true),            // all_runs - include all historical results
-                        Some(compute_node_id), // compute_node_id filter
                     ) {
                         Ok(response) => {
                             for result in response.items {

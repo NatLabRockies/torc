@@ -264,8 +264,8 @@ fn test_events(start_server: &ServerProcess) {
         events.items[1].data,
         serde_json::json!({"key3": 3, "key4": 4})
     );
-    apis::events_api::delete_event(config, event_id1, None).expect("Failed to delete event");
-    apis::events_api::delete_event(config, event_id2, None).expect("Failed to delete event");
+    apis::events_api::delete_event(config, event_id1).expect("Failed to delete event");
+    apis::events_api::delete_event(config, event_id2).expect("Failed to delete event");
     let events = apis::events_api::list_events(
         config,
         workflow_id as i64,

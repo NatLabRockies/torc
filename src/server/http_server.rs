@@ -642,7 +642,7 @@ where
     async fn create_workflow_action(
         &self,
         workflow_id: i64,
-        body: serde_json::Value,
+        body: models::WorkflowActionModel,
         context: &C,
     ) -> Result<CreateWorkflowActionResponse, ApiError> {
         self.transport_create_workflow_action(workflow_id, body, context)
@@ -673,7 +673,7 @@ where
         &self,
         workflow_id: i64,
         action_id: i64,
-        body: serde_json::Value,
+        body: models::ClaimActionRequest,
         context: &C,
     ) -> Result<ClaimActionResponse, ApiError> {
         self.transport_claim_action(workflow_id, action_id, body, context)
@@ -1435,7 +1435,6 @@ where
         id: i64,
         body: models::ComputeNodesResources,
         limit: i64,
-        sort_method: Option<models::ClaimJobsSortMethod>,
         strict_scheduler_match: Option<bool>,
         context: &C,
     ) -> Result<ClaimJobsBasedOnResources, ApiError> {
@@ -1443,7 +1442,6 @@ where
             id,
             body,
             limit,
-            sort_method,
             strict_scheduler_match,
             context,
         )
@@ -1701,7 +1699,6 @@ where
     /// # Parameters
     /// - `workflow_id`: ID of the workflow to get jobs for
     /// - `resources`: Available compute resources (CPUs, memory, GPUs, nodes, time limit)
-    /// - `sort_method`: Legacy request parameter; ignored for scheduling order
     /// - `limit`: Maximum number of jobs to return
     ///
     /// # Returns
@@ -1723,7 +1720,6 @@ where
         &self,
         workflow_id: i64,
         resources: models::ComputeNodesResources,
-        sort_method: Option<models::ClaimJobsSortMethod>,
         limit: i64,
         strict_scheduler_match: Option<bool>,
         context: &C,
@@ -1731,7 +1727,6 @@ where
         self.transport_prepare_ready_jobs(
             workflow_id,
             resources,
-            sort_method,
             limit,
             strict_scheduler_match,
             context,

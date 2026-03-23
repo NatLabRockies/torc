@@ -4530,7 +4530,9 @@ fn handle_regenerate(
                                 config,
                                 workflow_id,
                                 action_id,
-                                serde_json::json!({}),
+                                models::ClaimActionRequest {
+                                    compute_node_id: None,
+                                },
                             )
                         },
                         WAIT_FOR_HEALTHY_DATABASE_MINUTES,
@@ -4896,15 +4898,21 @@ fn handle_regenerate(
             "num_allocations": action.num_allocations,
         });
 
-        let action_body = serde_json::json!({
-            "workflow_id": workflow_id,
-            "trigger_type": "on_jobs_ready",
-            "action_type": "schedule_nodes",
-            "action_config": action_config,
-            "job_ids": job_ids,
-            "persistent": false,
-            "is_recovery": true,
-        });
+        let action_body = models::WorkflowActionModel {
+            id: None,
+            workflow_id,
+            trigger_type: "on_jobs_ready".to_string(),
+            action_type: "schedule_nodes".to_string(),
+            action_config,
+            job_ids: Some(job_ids.clone()),
+            trigger_count: 0,
+            required_triggers: 1,
+            executed: false,
+            executed_at: None,
+            executed_by: None,
+            persistent: false,
+            is_recovery: true,
+        };
 
         match utils::send_with_retries(
             config,

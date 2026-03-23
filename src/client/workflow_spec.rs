@@ -991,9 +991,6 @@ pub struct WorkflowSpec {
     /// Inform all compute nodes to wait this number of minutes if the database becomes unresponsive
     #[serde(skip_serializing_if = "Option::is_none")]
     pub compute_node_wait_for_healthy_database_minutes: Option<i64>,
-    /// Method for sorting jobs when claiming them from the server
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub jobs_sort_method: Option<models::ClaimJobsSortMethod>,
     /// Jobs that make up this workflow
     pub jobs: Vec<JobSpec>,
     /// Files associated with this workflow
@@ -1058,7 +1055,6 @@ impl WorkflowSpec {
             compute_node_wait_for_new_jobs_seconds: None,
             compute_node_ignore_workflow_completion: None,
             compute_node_wait_for_healthy_database_minutes: None,
-            jobs_sort_method: None,
             jobs,
             files: None,
             user_data: None,
@@ -1388,7 +1384,7 @@ impl WorkflowSpec {
     /// A `ValidationResult` containing validation status and summary
     pub fn validate_spec<P: AsRef<Path>>(path: P) -> ValidationResult {
         let mut errors = Vec::new();
-        let mut warnings = Vec::new();
+        let warnings = Vec::new();
 
         // Step 1: Try to parse the spec file
         let mut spec = match Self::from_spec_file(&path) {
@@ -1770,75 +1766,6 @@ impl WorkflowSpec {
             }
         }
 
-        // Step 11: Warn about heterogeneous schedulers without jobs_sort_method
-        // This helps users avoid suboptimal job-to-node matching
-        if let Some(ref schedulers) = spec.slurm_schedulers
-            && schedulers.len() > 1
-            && spec.jobs_sort_method.is_none()
-        {
-            // Check if schedulers have different resource profiles
-            let has_different_gres = schedulers
-                .iter()
-                .map(|s| &s.gres)
-                .collect::<HashSet<_>>()
-                .len()
-                > 1;
-            let has_different_mem = schedulers
-                .iter()
-                .map(|s| &s.mem)
-                .collect::<HashSet<_>>()
-                .len()
-                > 1;
-            let has_different_walltime = schedulers
-                .iter()
-                .map(|s| &s.walltime)
-                .collect::<HashSet<_>>()
-                .len()
-                > 1;
-            let has_different_partition = schedulers
-                .iter()
-                .map(|s| &s.partition)
-                .collect::<HashSet<_>>()
-                .len()
-                > 1;
-
-            let has_heterogeneous_schedulers = has_different_gres
-                || has_different_mem
-                || has_different_walltime
-                || has_different_partition;
-
-            // Check if any jobs don't have explicit scheduler assignments
-            let jobs_without_scheduler = spec.jobs.iter().filter(|j| j.scheduler.is_none()).count();
-
-            if has_heterogeneous_schedulers && jobs_without_scheduler > 0 {
-                let mut differences = Vec::new();
-                if has_different_gres {
-                    differences.push("GPUs (gres)");
-                }
-                if has_different_mem {
-                    differences.push("memory (mem)");
-                }
-                if has_different_walltime {
-                    differences.push("walltime");
-                }
-                if has_different_partition {
-                    differences.push("partition");
-                }
-
-                warnings.push(format!(
-                        "Workflow has {} schedulers with different {} but {} job(s) have no explicit \
-                        scheduler assignment and jobs_sort_method is not set. The default sort method \
-                        'gpus_runtime_memory' will be used (jobs sorted by GPUs, then runtime, then \
-                        memory). If this doesn't match your workload, consider setting jobs_sort_method \
-                        explicitly to 'gpus_memory_runtime' (prioritize memory over runtime) or 'none' \
-                        (no sorting).",
-                        schedulers.len(),
-                        differences.join(", "),
-                        jobs_without_scheduler
-                    ));
-            }
-        }
-
         // Collect scheduler names for summary
         let scheduler_names: Vec<String> = spec
             .slurm_schedulers
@@ -2058,10 +1985,6 @@ impl WorkflowSpec {
         if let Some(value) = spec.compute_node_wait_for_healthy_database_minutes {
             workflow_model.compute_node_wait_for_healthy_database_minutes = Some(value);
         }
-        if let Some(ref value) = spec.jobs_sort_method {
-            workflow_model.jobs_sort_method = Some(*value);
-        }
-
         // Serialize resource_monitor config if present
         if let Some(ref resource_monitor) = spec.resource_monitor {
             let config_json = serde_json::to_string(resource_monitor)
@@ -2549,14 +2472,21 @@ impl WorkflowSpec {
                 };
 
                 // Create the action via API
-                let action_body = serde_json::json!({
-                    "workflow_id": workflow_id,
-                    "trigger_type": action_spec.trigger_type,
-                    "action_type": action_spec.action_type,
-                    "action_config": action_config,
-                    "job_ids": job_ids,
-                    "persistent": action_spec.persistent.unwrap_or(false),
-                });
+                let action_body = models::WorkflowActionModel {
+                    id: None,
+                    workflow_id,
+                    trigger_type: action_spec.trigger_type.clone(),
+                    action_type: action_spec.action_type.clone(),
+                    action_config,
+                    job_ids,
+                    trigger_count: 0,
+                    required_triggers: 1,
+                    executed: false,
+                    executed_at: None,
+                    executed_by: None,
+                    persistent: action_spec.persistent.unwrap_or(false),
+                    is_recovery: false,
+                };
 
                 apis::final_surfaces_api::create_workflow_action(config, workflow_id, action_body)
                     .map_err(|e| format!("Failed to create workflow action: {:?}", e))?;
@@ -3999,14 +3929,6 @@ impl WorkflowSpec {
                         );
                     }
                 }
-                "jobs_sort_method" => {
-                    if let Some(v) = node.entries().first().and_then(|e| e.value().as_string()) {
-                        obj.insert(
-                            "jobs_sort_method".to_string(),
-                            serde_json::Value::String(v.to_string()),
-                        );
-                    }
-                }
                 "parameters" => {
                     if let Some(params) = Self::kdl_parameters_to_json(node)? {
                         obj.insert("parameters".to_string(), params);
@@ -4147,15 +4069,6 @@ impl WorkflowSpec {
                 val
             ));
         }
-        if let Some(ref method) = self.jobs_sort_method {
-            let method_str = match method {
-                models::ClaimJobsSortMethod::GpusRuntimeMemory => "gpus_runtime_memory",
-                models::ClaimJobsSortMethod::GpusMemoryRuntime => "gpus_memory_runtime",
-                models::ClaimJobsSortMethod::None => "none",
-            };
-            lines.push(format!("jobs_sort_method \"{}\"", method_str));
-        }
-
         // Parameters
         if let Some(ref params) = self.parameters
             && !params.is_empty()
@@ -5224,7 +5137,6 @@ job "train_lr{lr:.4f}_bs{batch_size}" {
             compute_node_wait_for_healthy_database_minutes: None,
             compute_node_ignore_workflow_completion: None,
             compute_node_wait_for_new_jobs_seconds: None,
-            jobs_sort_method: None,
             parameters: None,
             jobs: vec![JobSpec {
                 name: "job_{i}".to_string(),

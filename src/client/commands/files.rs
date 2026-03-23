@@ -289,7 +289,7 @@ pub fn handle_file_commands(config: &Configuration, command: &FileCommands, form
                 }
             }
         }
-        FileCommands::Delete { id } => match apis::files_api::delete_file(config, *id, None) {
+        FileCommands::Delete { id } => match apis::files_api::delete_file(config, *id) {
             Ok(removed_file) => {
                 if print_if_json(format, &removed_file, "file") {
                     // JSON was printed

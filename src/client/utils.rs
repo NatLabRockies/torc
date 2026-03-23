@@ -30,6 +30,7 @@ use std::time::{Duration, Instant};
 
 use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
+use crate::models;
 
 const PING_INTERVAL_SECONDS: u64 = 30;
 
@@ -168,19 +169,10 @@ pub fn claim_action(
     let claimed = send_with_retries(
         config,
         || -> Result<bool, Box<dyn std::error::Error>> {
-            let body = match compute_node_id {
-                Some(id) => serde_json::json!({ "compute_node_id": id }),
-                None => serde_json::json!({}),
-            };
+            let body = models::ClaimActionRequest { compute_node_id };
 
             match apis::final_surfaces_api::claim_action(config, workflow_id, action_id, body) {
-                Ok(result) => {
-                    let claimed = result
-                        .get("claimed")
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(false);
-                    Ok(claimed)
-                }
+                Ok(result) => Ok(result.success),
                 Err(err) => {
                     // Check if it's a Conflict (already claimed by another compute node)
                     if let crate::client::apis::Error::ResponseError(ref response_content) = err

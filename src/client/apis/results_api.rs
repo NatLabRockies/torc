@@ -71,6 +71,7 @@ pub fn create_result(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_result_model);
 
     let req = req_builder.build()?;
@@ -127,6 +128,7 @@ pub fn delete_result(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
@@ -184,6 +186,7 @@ pub fn delete_results(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
@@ -236,6 +239,7 @@ pub fn get_result(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -279,27 +283,27 @@ pub fn list_results(
     workflow_id: i64,
     job_id: Option<i64>,
     run_id: Option<i64>,
+    return_code: Option<i64>,
+    status: Option<models::JobStatus>,
+    compute_node_id: Option<i64>,
     offset: Option<i64>,
     limit: Option<i64>,
     sort_by: Option<&str>,
     reverse_sort: Option<bool>,
-    return_code: Option<i64>,
-    status: Option<models::JobStatus>,
     all_runs: Option<bool>,
-    compute_node_id: Option<i64>,
 ) -> Result<models::ListResultsResponse, Error<ListResultsError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_query_workflow_id = workflow_id;
     let p_query_job_id = job_id;
     let p_query_run_id = run_id;
+    let p_query_return_code = return_code;
+    let p_query_status = status;
+    let p_query_compute_node_id = compute_node_id;
     let p_query_offset = offset;
     let p_query_limit = limit;
     let p_query_sort_by = sort_by;
     let p_query_reverse_sort = reverse_sort;
-    let p_query_return_code = return_code;
-    let p_query_status = status;
     let p_query_all_runs = all_runs;
-    let p_query_compute_node_id = compute_node_id;
 
     let uri_str = format!("{}/results", configuration.base_path);
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
@@ -307,6 +311,18 @@ pub fn list_results(
     req_builder = req_builder.query(&[("workflow_id", &p_query_workflow_id.to_string())]);
     if let Some(ref param_value) = p_query_job_id {
         req_builder = req_builder.query(&[("job_id", &param_value.to_string())]);
+    }
+    if let Some(ref param_value) = p_query_run_id {
+        req_builder = req_builder.query(&[("run_id", &param_value.to_string())]);
+    }
+    if let Some(ref param_value) = p_query_return_code {
+        req_builder = req_builder.query(&[("return_code", &param_value.to_string())]);
+    }
+    if let Some(ref param_value) = p_query_status {
+        req_builder = req_builder.query(&[("status", &param_value.to_string())]);
+    }
+    if let Some(ref param_value) = p_query_compute_node_id {
+        req_builder = req_builder.query(&[("compute_node_id", &param_value.to_string())]);
     }
     if let Some(ref param_value) = p_query_offset {
         req_builder = req_builder.query(&[("offset", &param_value.to_string())]);
@@ -320,24 +336,13 @@ pub fn list_results(
     if let Some(ref param_value) = p_query_reverse_sort {
         req_builder = req_builder.query(&[("reverse_sort", &param_value.to_string())]);
     }
-    if let Some(ref param_value) = p_query_run_id {
-        req_builder = req_builder.query(&[("run_id", &param_value.to_string())]);
-    }
-    if let Some(ref param_value) = p_query_return_code {
-        req_builder = req_builder.query(&[("return_code", &param_value.to_string())]);
-    }
-    if let Some(ref param_value) = p_query_status {
-        req_builder = req_builder.query(&[("status", &param_value.to_string())]);
-    }
     if let Some(ref param_value) = p_query_all_runs {
         req_builder = req_builder.query(&[("all_runs", &param_value.to_string())]);
-    }
-    if let Some(ref param_value) = p_query_compute_node_id {
-        req_builder = req_builder.query(&[("compute_node_id", &param_value.to_string())]);
     }
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -391,6 +396,7 @@ pub fn update_result(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_result_model);
 
     let req = req_builder.build()?;

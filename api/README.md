@@ -7,6 +7,8 @@ Python, and Julia clients are generated from that emitted contract.
 
 - `openapi.codegen.yaml`: full API spec emitted from hand-owned Rust code.
 - `openapi.yaml`: checked-in distribution artifact that can now be refreshed from Rust.
+- `openapi-generator-templates/rust/`: checked-in Rust OpenAPI generator template overrides used
+  during regeneration.
 - `sync_openapi.sh`: preferred entrypoint for emit/check/promote/client regeneration.
 
 ## Preferred Commands
@@ -91,3 +93,23 @@ bash sync_openapi.sh clients --use-rust-spec
 3. Promote the Rust spec into `openapi.yaml` with `bash sync_openapi.sh all --promote` when ready.
 4. Generate Rust, Python, and Julia clients from the emitted spec instead of hand-editing client
    bindings.
+5. Keep `api/openapi-generator-templates/` checked in because it is a required input to Rust client
+   regeneration, not a local-only artifact.
+
+## Rust Client Generation Details
+
+The Rust client under `src/client/apis/` is generated from the checked-in OpenAPI spec, but it does
+not own a second hand-maintained Rust model layer.
+
+- `api/regenerate_rust_client.sh`
+  - Generates a Rust client into a temporary directory from the selected spec.
+  - Passes `api/openapi-generator-templates/rust/` to OpenAPI Generator with `-t`.
+  - Copies only the generated grouped `*_api.rs` modules into `src/client/apis/`.
+- `api/openapi-generator-templates/rust/`
+  - Holds Torc's checked-in Rust generator customizations.
+  - Makes generated request modules use `crate::models` instead of generated model files.
+  - Applies repo-specific request behavior such as the shared auth hook.
+
+The canonical Rust API model surface remains in `src/api_models.rs` and is re-exported as
+`crate::models`. Generated Rust API modules are downstream plumbing over that shared model layer,
+not an independent source of truth.

@@ -66,14 +66,13 @@ pub mod cli;
 
 // Re-export model types explicitly
 pub use api_models::{
-    ClaimJobsBasedOnResources, ClaimJobsSortMethod, ClaimNextJobsResponse, ComputeNodeModel,
-    ComputeNodeSchedule, ComputeNodesResources, CreateJobsResponse, ErrorResponse, EventModel,
-    FileModel, GetDotGraphResponse, GetReadyJobRequirementsResponse, IsCompleteResponse,
-    JobDependencyModel, JobFileRelationshipModel, JobModel, JobStatus,
-    JobUserDataRelationshipModel, JobsModel, ListComputeNodesResponse, ListEventsResponse,
-    ListFilesResponse, ListJobDependenciesResponse, ListJobFileRelationshipsResponse,
-    ListJobUserDataRelationshipsResponse, ListJobsResponse, ListLocalSchedulersResponse,
-    ListMissingUserDataResponse, ListRequiredExistingFilesResponse,
+    ClaimJobsBasedOnResources, ClaimNextJobsResponse, ComputeNodeModel, ComputeNodeSchedule,
+    ComputeNodesResources, CreateJobsResponse, ErrorResponse, EventModel, FileModel,
+    GetDotGraphResponse, GetReadyJobRequirementsResponse, IsCompleteResponse, JobDependencyModel,
+    JobFileRelationshipModel, JobModel, JobStatus, JobUserDataRelationshipModel, JobsModel,
+    ListComputeNodesResponse, ListEventsResponse, ListFilesResponse, ListJobDependenciesResponse,
+    ListJobFileRelationshipsResponse, ListJobUserDataRelationshipsResponse, ListJobsResponse,
+    ListLocalSchedulersResponse, ListMissingUserDataResponse, ListRequiredExistingFilesResponse,
     ListResourceRequirementsResponse, ListResultsResponse, ListScheduledComputeNodesResponse,
     ListSlurmSchedulersResponse, ListUserDataResponse, ListWorkflowsResponse, LocalSchedulerModel,
     ProcessChangedJobInputsResponse, ResourceRequirementsModel, ResultModel,

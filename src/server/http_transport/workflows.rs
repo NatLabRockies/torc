@@ -350,7 +350,7 @@ where
     B::Error: std::fmt::Display,
     C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
 {
-    let body = match read_required_json_body::<B, serde_json::Value>(request).await {
+    let body = match read_required_json_body::<B, models::WorkflowActionModel>(request).await {
         Ok(body) => body,
         Err(response) => return response,
     };
@@ -400,7 +400,7 @@ where
     B::Error: std::fmt::Display,
     C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
 {
-    let body = match read_required_json_body::<B, serde_json::Value>(request).await {
+    let body = match read_required_json_body::<B, models::ClaimActionRequest>(request).await {
         Ok(body) => body,
         Err(response) => return response,
     };
@@ -460,14 +460,7 @@ where
     };
 
     match server
-        .claim_jobs_based_on_resources(
-            id,
-            body,
-            limit,
-            query.sort_method,
-            query.strict_scheduler_match,
-            &context,
-        )
+        .claim_jobs_based_on_resources(id, body, limit, query.strict_scheduler_match, &context)
         .await
     {
         Ok(response) => claim_jobs_based_on_resources_response(response),

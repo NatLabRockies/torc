@@ -194,6 +194,7 @@ pub fn cancel_workflow(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
@@ -236,16 +237,14 @@ pub fn cancel_workflow(
 pub fn claim_jobs_based_on_resources(
     configuration: &configuration::Configuration,
     id: i64,
-    compute_nodes_resources: &models::ComputeNodesResources,
     limit: i64,
-    sort_method: Option<models::ClaimJobsSortMethod>,
+    compute_nodes_resources: models::ComputeNodesResources,
     strict_scheduler_match: Option<bool>,
 ) -> Result<models::ClaimJobsBasedOnResources, Error<ClaimJobsBasedOnResourcesError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_id = id;
     let p_path_limit = limit;
     let p_body_compute_nodes_resources = compute_nodes_resources;
-    let p_query_sort_method = sort_method;
     let p_query_strict_scheduler_match = strict_scheduler_match;
 
     let uri_str = format!(
@@ -258,15 +257,13 @@ pub fn claim_jobs_based_on_resources(
         .client
         .request(reqwest::Method::POST, &uri_str);
 
-    if let Some(ref param_value) = p_query_sort_method {
-        req_builder = req_builder.query(&[("sort_method", &param_value.to_string())]);
-    }
     if let Some(ref param_value) = p_query_strict_scheduler_match {
         req_builder = req_builder.query(&[("strict_scheduler_match", &param_value.to_string())]);
     }
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_compute_nodes_resources);
 
     let req = req_builder.build()?;
@@ -332,6 +329,7 @@ pub fn claim_next_jobs(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
@@ -386,6 +384,7 @@ pub fn create_workflow(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_workflow_model);
 
     let req = req_builder.build()?;
@@ -442,6 +441,7 @@ pub fn delete_workflow(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
@@ -503,6 +503,7 @@ pub fn get_ready_job_requirements(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -554,6 +555,7 @@ pub fn get_workflow(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -609,6 +611,7 @@ pub fn get_workflow_status(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -678,6 +681,7 @@ pub fn initialize_jobs(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
@@ -734,6 +738,7 @@ pub fn is_workflow_complete(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -789,6 +794,7 @@ pub fn is_workflow_uninitialized(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -837,6 +843,7 @@ pub fn list_job_dependencies(
     let p_path_id = id;
     let p_query_offset = offset;
     let p_query_limit = limit;
+
     let uri_str = format!(
         "{}/workflows/{id}/job_dependencies",
         configuration.base_path,
@@ -853,6 +860,7 @@ pub fn list_job_dependencies(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -901,6 +909,7 @@ pub fn list_job_file_relationships(
     let p_path_id = id;
     let p_query_offset = offset;
     let p_query_limit = limit;
+
     let uri_str = format!(
         "{}/workflows/{id}/job_file_relationships",
         configuration.base_path,
@@ -917,6 +926,7 @@ pub fn list_job_file_relationships(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -972,6 +982,7 @@ pub fn list_job_ids(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -1021,6 +1032,7 @@ pub fn list_job_user_data_relationships(
     let p_path_id = id;
     let p_query_offset = offset;
     let p_query_limit = limit;
+
     let uri_str = format!(
         "{}/workflows/{id}/job_user_data_relationships",
         configuration.base_path,
@@ -1037,6 +1049,7 @@ pub fn list_job_user_data_relationships(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -1092,6 +1105,7 @@ pub fn list_missing_user_data(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -1147,6 +1161,7 @@ pub fn list_required_existing_files(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -1236,6 +1251,7 @@ pub fn list_workflows(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -1300,6 +1316,7 @@ pub fn process_changed_job_inputs(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
@@ -1365,6 +1382,7 @@ pub fn reset_job_status(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
@@ -1430,6 +1448,7 @@ pub fn reset_workflow_status(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
@@ -1484,6 +1503,7 @@ pub fn update_workflow(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_workflow_model);
 
     let req = req_builder.build()?;
@@ -1542,6 +1562,7 @@ pub fn update_workflow_status(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_workflow_status_model);
 
     let req = req_builder.build()?;

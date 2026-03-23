@@ -65,9 +65,8 @@ fn test_correct_resources_memory_violation_dry_run(start_server: &ServerProcess)
     let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
-        &resources,
         10,
-        None,
+        resources,
         None,
     )
     .expect("Failed to claim jobs");
@@ -164,9 +163,8 @@ fn test_correct_resources_cpu_violation_dry_run(start_server: &ServerProcess) {
     let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
-        &resources,
         10,
-        None,
+        resources,
         None,
     )
     .expect("Failed to claim jobs");
@@ -262,9 +260,8 @@ fn test_correct_resources_runtime_violation_dry_run(start_server: &ServerProcess
     let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
-        &resources,
         10,
-        None,
+        resources,
         None,
     )
     .expect("Failed to claim jobs");
@@ -384,9 +381,8 @@ fn test_correct_resources_multiple_violations(start_server: &ServerProcess) {
     let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
-        &resources,
         10,
-        None,
+        resources,
         None,
     )
     .expect("Failed to claim jobs");
@@ -550,9 +546,8 @@ fn test_correct_resources_applies_corrections(start_server: &ServerProcess) {
     let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
-        &resources,
         10,
-        None,
+        resources,
         None,
     )
     .expect("Failed to claim jobs");
@@ -658,9 +653,8 @@ fn test_correct_resources_dry_run_mode(start_server: &ServerProcess) {
     let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
-        &resources,
         10,
-        None,
+        resources,
         None,
     )
     .expect("Failed to claim jobs");
@@ -773,9 +767,8 @@ fn test_correct_resources_memory_violation_successful_job(start_server: &ServerP
     let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
-        &resources,
         10,
-        None,
+        resources,
         None,
     )
     .expect("Failed to claim jobs");
@@ -943,9 +936,8 @@ fn claim_and_complete_jobs(
     let claim_result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
-        &resources,
         100,
-        None,
+        resources,
         None,
     )
     .expect("Failed to claim jobs");

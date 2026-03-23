@@ -70,7 +70,8 @@ pub struct PingResponse {
 pub struct VersionResponse {
     pub version: String,
     pub api_version: String,
-    pub git_hash: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub git_hash: Option<String>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -383,15 +384,6 @@ pub struct ListSlurmSchedulersResponse {
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "snake_case")]
-pub enum ClaimJobsSortMethod {
-    GpusRuntimeMemory,
-    GpusMemoryRuntime,
-    None,
-}
-
-#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkflowModel {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -412,8 +404,6 @@ pub struct WorkflowModel {
     pub compute_node_wait_for_healthy_database_minutes: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub compute_node_min_time_for_new_jobs_seconds: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub jobs_sort_method: Option<ClaimJobsSortMethod>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resource_monitor_config: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1235,29 +1225,6 @@ impl LocalSchedulerModel {
     }
 }
 
-impl std::fmt::Display for ClaimJobsSortMethod {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match *self {
-            ClaimJobsSortMethod::GpusRuntimeMemory => write!(f, "gpus_runtime_memory"),
-            ClaimJobsSortMethod::GpusMemoryRuntime => write!(f, "gpus_memory_runtime"),
-            ClaimJobsSortMethod::None => write!(f, "none"),
-        }
-    }
-}
-
-impl std::str::FromStr for ClaimJobsSortMethod {
-    type Err = String;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        match s {
-            "gpus_runtime_memory" => Ok(ClaimJobsSortMethod::GpusRuntimeMemory),
-            "gpus_memory_runtime" => Ok(ClaimJobsSortMethod::GpusMemoryRuntime),
-            "none" => Ok(ClaimJobsSortMethod::None),
-            _ => Err(format!("Value not valid: {}", s)),
-        }
-    }
-}
-
 impl ClaimJobsBasedOnResources {
     pub fn new() -> ClaimJobsBasedOnResources {
         ClaimJobsBasedOnResources {
@@ -1396,7 +1363,6 @@ impl WorkflowModel {
             compute_node_ignore_workflow_completion: Some(false),
             compute_node_wait_for_healthy_database_minutes: Some(20),
             compute_node_min_time_for_new_jobs_seconds: Some(300),
-            jobs_sort_method: None,
             resource_monitor_config: None,
             slurm_defaults: None,
             use_pending_failed: Some(false),
@@ -1546,7 +1512,7 @@ impl VersionResponse {
         match key {
             "version" => Some(Value::from(self.version.clone())),
             "api_version" => Some(Value::from(self.api_version.clone())),
-            "git_hash" => Some(Value::from(self.git_hash.clone())),
+            "git_hash" => self.git_hash.clone().map(Value::from),
             _ => None,
         }
     }
@@ -1710,7 +1676,8 @@ pub struct WorkflowActionModel {
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ClaimActionRequest {
-    pub compute_node_id: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compute_node_id: Option<i64>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -1812,11 +1779,10 @@ pub struct ResetJobStatusResponse {
 #[cfg(test)]
 mod tests {
     use super::{
-        ClaimJobsBasedOnResources, ClaimJobsSortMethod, ClaimNextJobsResponse, ComputeNodeModel,
-        ComputeNodesResources, CreateJobsResponse, EventModel, FileModel,
-        GetReadyJobRequirementsResponse, JobModel, JobStatus, ListComputeNodesResponse,
-        ListFilesResponse, ResourceRequirementsModel, ResultModel, UserDataModel, WorkflowModel,
-        WorkflowStatusModel,
+        ClaimJobsBasedOnResources, ClaimNextJobsResponse, ComputeNodeModel, ComputeNodesResources,
+        CreateJobsResponse, EventModel, FileModel, GetReadyJobRequirementsResponse, JobModel,
+        JobStatus, ListComputeNodesResponse, ListFilesResponse, ResourceRequirementsModel,
+        ResultModel, UserDataModel, WorkflowModel, WorkflowStatusModel,
     };
     use serde_json::json;
 
@@ -1833,7 +1799,6 @@ mod tests {
             compute_node_ignore_workflow_completion: Some(false),
             compute_node_wait_for_healthy_database_minutes: Some(20),
             compute_node_min_time_for_new_jobs_seconds: Some(300),
-            jobs_sort_method: Some(ClaimJobsSortMethod::None),
             resource_monitor_config: None,
             slurm_defaults: None,
             use_pending_failed: Some(false),

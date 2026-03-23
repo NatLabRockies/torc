@@ -266,6 +266,12 @@ using Torc
 
 ## For Developers
 
+Install `cargo-nextest` before running the Rust test suite:
+
+```bash
+cargo install cargo-nextest
+```
+
 ### Running Tests
 
 # Run all tests

@@ -116,10 +116,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: Successful response
@@ -207,10 +203,6 @@ paths:
         required: true
         schema:
           type: string
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: Successful response
@@ -1115,10 +1107,12 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
+      - name: max_retries
+        in: query
+        required: true
+        schema:
+          type: integer
+          format: int32
       responses:
         '200':
           description: Successful response
@@ -1359,36 +1353,6 @@ paths:
         schema:
           type: integer
           format: int64
-      - name: offset
-        in: query
-        required: false
-        schema:
-          type:
-          - integer
-          - 'null'
-          format: int64
-      - name: limit
-        in: query
-        required: false
-        schema:
-          type:
-          - integer
-          - 'null'
-          format: int64
-      - name: sort_by
-        in: query
-        required: false
-        schema:
-          type:
-          - string
-          - 'null'
-      - name: reverse_sort
-        in: query
-        required: false
-        schema:
-          type:
-          - boolean
-          - 'null'
       - name: job_id
         in: query
         required: false
@@ -1443,6 +1407,36 @@ paths:
           - integer
           - 'null'
           format: int64
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type:
+          - integer
+          - 'null'
+          format: int64
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type:
+          - integer
+          - 'null'
+          format: int64
+      - name: sort_by
+        in: query
+        required: false
+        schema:
+          type:
+          - string
+          - 'null'
+      - name: reverse_sort
+        in: query
+        required: false
+        schema:
+          type:
+          - boolean
+          - 'null'
       responses:
         '200':
           description: Successful response
@@ -1577,6 +1571,37 @@ paths:
           - integer
           - 'null'
           format: int64
+      - name: run_id
+        in: query
+        required: false
+        schema:
+          type:
+          - integer
+          - 'null'
+          format: int64
+      - name: return_code
+        in: query
+        required: false
+        schema:
+          type:
+          - integer
+          - 'null'
+          format: int64
+      - name: status
+        in: query
+        required: false
+        schema:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/JobStatus'
+      - name: compute_node_id
+        in: query
+        required: false
+        schema:
+          type:
+          - integer
+          - 'null'
+          format: int64
       - name: offset
         in: query
         required: false
@@ -1607,29 +1632,6 @@ paths:
           type:
           - boolean
           - 'null'
-      - name: run_id
-        in: query
-        required: false
-        schema:
-          type:
-          - integer
-          - 'null'
-          format: int64
-      - name: return_code
-        in: query
-        required: false
-        schema:
-          type:
-          - integer
-          - 'null'
-          format: int64
-      - name: status
-        in: query
-        required: false
-        schema:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/JobStatus'
       - name: all_runs
         in: query
         required: false
@@ -1637,14 +1639,6 @@ paths:
           type:
           - boolean
           - 'null'
-      - name: compute_node_id
-        in: query
-        required: false
-        schema:
-          type:
-          - integer
-          - 'null'
-          format: int64
       responses:
         '200':
           description: Successful response
@@ -1834,10 +1828,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: Successful response
@@ -2255,6 +2245,22 @@ paths:
           type: integer
           format: int64
       - name: job_id
+        in: query
+        required: false
+        schema:
+          type:
+          - integer
+          - 'null'
+          format: int64
+      - name: run_id
+        in: query
+        required: false
+        schema:
+          type:
+          - integer
+          - 'null'
+          format: int64
+      - name: attempt_id
         in: query
         required: false
         schema:
@@ -2743,6 +2749,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListAccessGroupsResponse'
+  /workflows/{id}/access_groups/{group_id}:
     post:
       tags:
       - access_control
@@ -2755,12 +2762,13 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/WorkflowAccessGroupModel'
+      - name: group_id
+        in: path
+        description: ID of the access group
         required: true
+        schema:
+          type: integer
+          format: int64
       responses:
         '200':
           description: Successful response
@@ -2768,7 +2776,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WorkflowAccessGroupModel'
-  /workflows/{id}/access_groups/{group_id}:
     delete:
       tags:
       - access_control
@@ -2788,10 +2795,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: Successful response
@@ -2946,13 +2949,6 @@ paths:
         schema:
           type: integer
           format: int64
-      - name: sort_method
-        in: query
-        required: false
-        schema:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/ClaimJobsSortMethod'
       - name: strict_scheduler_match
         in: query
         required: false
@@ -3154,20 +3150,6 @@ paths:
           - integer
           - 'null'
           format: int64
-      - name: sort_by
-        in: query
-        required: false
-        schema:
-          type:
-          - string
-          - 'null'
-      - name: reverse_sort
-        in: query
-        required: false
-        schema:
-          type:
-          - boolean
-          - 'null'
       responses:
         '200':
           description: Successful response
@@ -3204,20 +3186,6 @@ paths:
           - integer
           - 'null'
           format: int64
-      - name: sort_by
-        in: query
-        required: false
-        schema:
-          type:
-          - string
-          - 'null'
-      - name: reverse_sort
-        in: query
-        required: false
-        schema:
-          type:
-          - boolean
-          - 'null'
       responses:
         '200':
           description: Successful response
@@ -3274,20 +3242,6 @@ paths:
           - integer
           - 'null'
           format: int64
-      - name: sort_by
-        in: query
-        required: false
-        schema:
-          type:
-          - string
-          - 'null'
-      - name: reverse_sort
-        in: query
-        required: false
-        schema:
-          type:
-          - boolean
-          - 'null'
       responses:
         '200':
           description: Successful response
@@ -3561,20 +3515,6 @@ paths:
           - integer
           - 'null'
           format: int64
-      - name: sort_by
-        in: query
-        required: false
-        schema:
-          type:
-          - string
-          - 'null'
-      - name: reverse_sort
-        in: query
-        required: false
-        schema:
-          type:
-          - boolean
-          - 'null'
       responses:
         '200':
           description: Successful response
@@ -3692,11 +3632,11 @@ components:
           type: string
     ClaimActionRequest:
       type: object
-      required:
-      - compute_node_id
       properties:
         compute_node_id:
-          type: integer
+          type:
+          - integer
+          - 'null'
           format: int64
     ClaimActionResponse:
       type: object
@@ -3721,12 +3661,6 @@ components:
           type:
           - string
           - 'null'
-    ClaimJobsSortMethod:
-      type: string
-      enum:
-      - gpus_runtime_memory
-      - gpus_memory_runtime
-      - none
     ClaimNextJobsResponse:
       type: object
       properties:
@@ -5315,10 +5249,6 @@ components:
           - integer
           - 'null'
           format: int64
-        jobs_sort_method:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/ClaimJobsSortMethod'
         metadata:
           type:
           - string

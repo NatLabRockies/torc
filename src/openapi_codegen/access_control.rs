@@ -5,7 +5,6 @@ use axum::{
     extract::{Path, Query},
 };
 use serde::Deserialize;
-use serde_json::Value;
 use utoipa::IntoParams;
 
 use crate::api_models::{
@@ -74,13 +73,9 @@ pub async fn get_access_group(Path(id): Path<i64>) -> Json<AccessGroupModel> {
     path = "/access_groups/{id}",
     operation_id = "delete_access_group",
     params(("id" = i64, Path, description = "ID of the access group")),
-    request_body = Option<Value>,
     responses((status = 200, description = "Successful response", body = AccessGroupModel))
 )]
-pub async fn delete_access_group(
-    Path(id): Path<i64>,
-    Json(_body): Json<Option<Value>>,
-) -> Json<AccessGroupModel> {
+pub async fn delete_access_group(Path(id): Path<i64>) -> Json<AccessGroupModel> {
     Json(example_access_group(Some(id)))
 }
 
@@ -134,12 +129,10 @@ pub async fn list_group_members(
         ("id" = i64, Path, description = "ID of the access group"),
         ("user_name" = String, Path, description = "Username to remove")
     ),
-    request_body = Option<Value>,
     responses((status = 200, description = "Successful response", body = UserGroupMembershipModel))
 )]
 pub async fn remove_user_from_group(
     Path((id, user_name)): Path<(i64, String)>,
-    Json(_body): Json<Option<Value>>,
 ) -> Json<UserGroupMembershipModel> {
     Json(UserGroupMembershipModel {
         id: Some(1),
@@ -175,18 +168,22 @@ pub async fn list_user_groups(
 
 #[utoipa::path(
     post,
-    path = "/workflows/{id}/access_groups",
+    path = "/workflows/{id}/access_groups/{group_id}",
     operation_id = "add_workflow_to_group",
-    params(("id" = i64, Path, description = "ID of the workflow")),
-    request_body = WorkflowAccessGroupModel,
+    params(
+        ("id" = i64, Path, description = "ID of the workflow"),
+        ("group_id" = i64, Path, description = "ID of the access group")
+    ),
     responses((status = 200, description = "Successful response", body = WorkflowAccessGroupModel))
 )]
 pub async fn add_workflow_to_group(
-    Path(id): Path<i64>,
-    Json(mut body): Json<WorkflowAccessGroupModel>,
+    Path((id, group_id)): Path<(i64, i64)>,
 ) -> Json<WorkflowAccessGroupModel> {
-    body.workflow_id = id;
-    Json(body)
+    Json(WorkflowAccessGroupModel {
+        workflow_id: id,
+        group_id,
+        created_at: Some("2026-03-21T00:00:00Z".to_string()),
+    })
 }
 
 #[utoipa::path(
@@ -220,12 +217,10 @@ pub async fn list_workflow_groups(
         ("id" = i64, Path, description = "ID of the workflow"),
         ("group_id" = i64, Path, description = "ID of the access group")
     ),
-    request_body = Option<Value>,
     responses((status = 200, description = "Successful response", body = WorkflowAccessGroupModel))
 )]
 pub async fn remove_workflow_from_group(
     Path((id, group_id)): Path<(i64, i64)>,
-    Json(_body): Json<Option<Value>>,
 ) -> Json<WorkflowAccessGroupModel> {
     Json(WorkflowAccessGroupModel {
         workflow_id: id,

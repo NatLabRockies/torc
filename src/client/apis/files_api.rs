@@ -71,6 +71,7 @@ pub fn create_file(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_file_model);
 
     let req = req_builder.build()?;
@@ -113,7 +114,6 @@ pub fn create_file(
 pub fn delete_file(
     configuration: &configuration::Configuration,
     id: i64,
-    _body: Option<serde_json::Value>,
 ) -> Result<models::FileModel, Error<DeleteFileError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_id = id;
@@ -126,6 +126,7 @@ pub fn delete_file(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -180,6 +181,7 @@ pub fn delete_files(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -231,6 +233,7 @@ pub fn get_file(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -323,6 +326,7 @@ pub fn list_files(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -376,6 +380,7 @@ pub fn update_file(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_file_model);
 
     let req = req_builder.build()?;

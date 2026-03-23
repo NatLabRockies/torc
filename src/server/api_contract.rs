@@ -338,7 +338,7 @@ pub trait TransportApiCore<C: Send + Sync> {
     async fn create_workflow_action(
         &self,
         workflow_id: i64,
-        body: serde_json::Value,
+        body: models::WorkflowActionModel,
         context: &C,
     ) -> Result<CreateWorkflowActionResponse, ApiError>;
 
@@ -362,7 +362,7 @@ pub trait TransportApiCore<C: Send + Sync> {
         &self,
         workflow_id: i64,
         action_id: i64,
-        body: serde_json::Value,
+        body: models::ClaimActionRequest,
         context: &C,
     ) -> Result<ClaimActionResponse, ApiError>;
 
@@ -867,7 +867,6 @@ pub trait TransportApiCore<C: Send + Sync> {
         id: i64,
         body: models::ComputeNodesResources,
         limit: i64,
-        sort_method: Option<models::ClaimJobsSortMethod>,
         strict_scheduler_match: Option<bool>,
         context: &C,
     ) -> Result<ClaimJobsBasedOnResources, ApiError>;
@@ -1048,7 +1047,6 @@ pub trait TransportApiCore<C: Send + Sync> {
         &self,
         workflow_id: i64,
         resources: models::ComputeNodesResources,
-        sort_method: Option<models::ClaimJobsSortMethod>,
         limit: i64,
         strict_scheduler_match: Option<bool>,
         context: &C,

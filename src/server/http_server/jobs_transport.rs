@@ -1195,7 +1195,6 @@ where
         &self,
         workflow_id: i64,
         resources: models::ComputeNodesResources,
-        sort_method: Option<models::ClaimJobsSortMethod>,
         limit: i64,
         strict_scheduler_match: Option<bool>,
         context: &C,
@@ -1215,10 +1214,9 @@ where
             })?;
 
         debug!(
-            "get_ready_jobs: workflow_id={}, limit={}, requested_sort_method={:?}, resources={:?} - X-Span-ID: {:?}",
+            "get_ready_jobs: workflow_id={}, limit={}, resources={:?} - X-Span-ID: {:?}",
             workflow_id,
             limit,
-            sort_method,
             resources,
             Has::<XSpanIdString>::get(context).0.clone()
         );

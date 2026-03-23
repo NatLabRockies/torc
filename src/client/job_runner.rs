@@ -44,8 +44,8 @@ use crate::client::workflow_spec::{ExecutionConfig, ExecutionMode};
 use crate::config::TorcConfig;
 use crate::memory_utils::memory_string_to_gb;
 use crate::models::{
-    ClaimJobsSortMethod, ComputeNodesResources, JobStatus, ResourceRequirementsModel, ResultModel,
-    SlurmStatsModel, WorkflowModel,
+    ComputeNodesResources, JobStatus, ResourceRequirementsModel, ResultModel, SlurmStatsModel,
+    WorkflowModel,
 };
 
 /// Rule definition for failure handler (parsed from JSON stored in database)
@@ -428,7 +428,6 @@ impl JobRunner {
             workflow.compute_node_ignore_workflow_completion,
             workflow.compute_node_wait_for_healthy_database_minutes,
             workflow.compute_node_min_time_for_new_jobs_seconds,
-            workflow.jobs_sort_method,
         );
         let execution_config = ExecutionConfig::from_workflow_model(&workflow);
         if execution_config.effective_mode() == ExecutionMode::Slurm
@@ -1929,9 +1928,8 @@ impl JobRunner {
             apis::workflows_api::claim_jobs_based_on_resources(
                 &self.config,
                 self.workflow_id,
-                &per_node,
                 limit,
-                Some(self.rules.jobs_sort_method),
+                per_node.clone(),
                 Some(strict_scheduler_match),
             )
         }) {
@@ -2633,7 +2631,6 @@ struct ComputeNodeRules {
     /// If the remaining time is less than this value, the compute node will stop requesting
     /// new jobs and wait for running jobs to complete. Default is 300 seconds (5 minutes).
     pub compute_node_min_time_for_new_jobs_seconds: u64,
-    pub jobs_sort_method: ClaimJobsSortMethod,
 }
 
 impl ComputeNodeRules {
@@ -2642,7 +2639,6 @@ impl ComputeNodeRules {
         compute_node_ignore_workflow_completion: Option<bool>,
         compute_node_wait_for_healthy_database_minutes: Option<i64>,
         compute_node_min_time_for_new_jobs_seconds: Option<i64>,
-        jobs_sort_method: Option<ClaimJobsSortMethod>,
     ) -> Self {
         ComputeNodeRules {
             compute_node_wait_for_new_jobs_seconds: compute_node_wait_for_new_jobs_seconds
@@ -2653,7 +2649,6 @@ impl ComputeNodeRules {
                 compute_node_wait_for_healthy_database_minutes.unwrap_or(20) as u64,
             compute_node_min_time_for_new_jobs_seconds: compute_node_min_time_for_new_jobs_seconds
                 .unwrap_or(300) as u64,
-            jobs_sort_method: jobs_sort_method.unwrap_or(ClaimJobsSortMethod::GpusRuntimeMemory),
         }
     }
 }

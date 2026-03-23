@@ -18,14 +18,6 @@ use crate::api_models::{
 pub struct ResourceRequirementsListQuery {
     pub workflow_id: i64,
     #[param(nullable = true)]
-    pub offset: Option<i64>,
-    #[param(nullable = true)]
-    pub limit: Option<i64>,
-    #[param(nullable = true)]
-    pub sort_by: Option<String>,
-    #[param(nullable = true)]
-    pub reverse_sort: Option<bool>,
-    #[param(nullable = true)]
     pub job_id: Option<i64>,
     #[param(nullable = true)]
     pub name: Option<String>,
@@ -39,6 +31,14 @@ pub struct ResourceRequirementsListQuery {
     pub num_nodes: Option<i64>,
     #[param(nullable = true)]
     pub runtime: Option<i64>,
+    #[param(nullable = true)]
+    pub offset: Option<i64>,
+    #[param(nullable = true)]
+    pub limit: Option<i64>,
+    #[param(nullable = true)]
+    pub sort_by: Option<String>,
+    #[param(nullable = true)]
+    pub reverse_sort: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
@@ -59,6 +59,10 @@ pub struct SlurmStatsListQuery {
     pub workflow_id: i64,
     #[param(nullable = true)]
     pub job_id: Option<i64>,
+    #[param(nullable = true)]
+    pub run_id: Option<i64>,
+    #[param(nullable = true)]
+    pub attempt_id: Option<i64>,
     #[param(nullable = true)]
     pub offset: Option<i64>,
     #[param(nullable = true)]

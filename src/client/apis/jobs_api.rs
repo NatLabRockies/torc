@@ -112,6 +112,7 @@ pub fn complete_job(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_result_model);
 
     let req = req_builder.build()?;
@@ -166,6 +167,7 @@ pub fn create_job(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_job_model);
 
     let req = req_builder.build()?;
@@ -222,6 +224,7 @@ pub fn delete_job(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
@@ -279,6 +282,7 @@ pub fn delete_jobs(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
@@ -331,6 +335,7 @@ pub fn get_job(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -428,6 +433,7 @@ pub fn list_jobs(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -491,6 +497,7 @@ pub fn manage_status_change(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
@@ -539,7 +546,7 @@ pub fn retry_job(
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_id = id;
     let p_path_run_id = run_id;
-    let p_body_body = Some(serde_json::json!({ "max_retries": max_retries }));
+    let p_query_max_retries = max_retries;
 
     let uri_str = format!(
         "{}/jobs/{id}/retry/{run_id}",
@@ -551,10 +558,11 @@ pub fn retry_job(
         .client
         .request(reqwest::Method::POST, &uri_str);
 
+    req_builder = req_builder.query(&[("max_retries", &p_query_max_retries.to_string())]);
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
-    req_builder = req_builder.json(&p_body_body);
+    req_builder = configuration.apply_auth(req_builder);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -618,6 +626,7 @@ pub fn start_job(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
@@ -672,6 +681,7 @@ pub fn update_job(
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = configuration.apply_auth(req_builder);
     req_builder = req_builder.json(&p_body_job_model);
 
     let req = req_builder.build()?;

@@ -17,6 +17,14 @@ pub struct ResultsListQuery {
     #[param(nullable = true)]
     pub job_id: Option<i64>,
     #[param(nullable = true)]
+    pub run_id: Option<i64>,
+    #[param(nullable = true)]
+    pub return_code: Option<i64>,
+    #[param(nullable = true)]
+    pub status: Option<JobStatus>,
+    #[param(nullable = true)]
+    pub compute_node_id: Option<i64>,
+    #[param(nullable = true)]
     pub offset: Option<i64>,
     #[param(nullable = true)]
     pub limit: Option<i64>,
@@ -25,15 +33,7 @@ pub struct ResultsListQuery {
     #[param(nullable = true)]
     pub reverse_sort: Option<bool>,
     #[param(nullable = true)]
-    pub run_id: Option<i64>,
-    #[param(nullable = true)]
-    pub return_code: Option<i64>,
-    #[param(nullable = true)]
-    pub status: Option<JobStatus>,
-    #[param(nullable = true)]
     pub all_runs: Option<bool>,
-    #[param(nullable = true)]
-    pub compute_node_id: Option<i64>,
 }
 
 #[allow(dead_code)]

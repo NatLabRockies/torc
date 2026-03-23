@@ -25,10 +25,6 @@ pub struct RoCrateEntitiesQuery {
     pub offset: Option<i64>,
     #[param(nullable = true)]
     pub limit: Option<i64>,
-    #[param(nullable = true)]
-    pub sort_by: Option<String>,
-    #[param(nullable = true)]
-    pub reverse_sort: Option<bool>,
 }
 
 #[utoipa::path(
@@ -203,13 +199,9 @@ pub async fn update_ro_crate_entity(
     path = "/ro_crate_entities/{id}",
     operation_id = "delete_ro_crate_entity",
     params(("id" = i64, Path, description = "Entity ID")),
-    request_body = Option<Value>,
     responses((status = 200, description = "Successful response", body = MessageResponse))
 )]
-pub async fn delete_ro_crate_entity(
-    Path(_id): Path<i64>,
-    Json(_body): Json<Option<Value>>,
-) -> Json<MessageResponse> {
+pub async fn delete_ro_crate_entity(Path(_id): Path<i64>) -> Json<MessageResponse> {
     Json(MessageResponse {
         message: "RO-Crate entity deleted".to_string(),
     })

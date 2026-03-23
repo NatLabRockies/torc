@@ -9,7 +9,7 @@ use serde_json::Value;
 use utoipa::IntoParams;
 
 use crate::api_models::{
-    ClaimJobsBasedOnResources, ClaimJobsSortMethod, ClaimNextJobsResponse, ComputeNodesResources,
+    ClaimJobsBasedOnResources, ClaimNextJobsResponse, ComputeNodesResources,
     GetReadyJobRequirementsResponse, IsCompleteResponse, IsUninitializedResponse,
     JobDependencyModel, JobFileRelationshipModel, JobStatus, JobUserDataRelationshipModel,
     ListJobDependenciesResponse, ListJobFileRelationshipsResponse, ListJobIdsResponse,
@@ -66,8 +66,6 @@ pub struct ResetJobStatusQuery {
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct ClaimJobsBasedOnResourcesQuery {
     #[param(nullable = true)]
-    pub sort_method: Option<ClaimJobsSortMethod>,
-    #[param(nullable = true)]
     pub strict_scheduler_match: Option<bool>,
 }
 
@@ -85,10 +83,6 @@ pub struct WorkflowRelationshipsQuery {
     pub offset: Option<i64>,
     #[param(nullable = true)]
     pub limit: Option<i64>,
-    #[param(nullable = true)]
-    pub sort_by: Option<String>,
-    #[param(nullable = true)]
-    pub reverse_sort: Option<bool>,
 }
 
 #[allow(dead_code)]
@@ -356,12 +350,7 @@ pub async fn claim_jobs_based_on_resources(
         } else if body.num_cpus <= 0 {
             Some("worker_has_no_available_cpus".to_string())
         } else {
-            Some(
-                query
-                    .sort_method
-                    .map(|value| format!("claimed_with_sort_method_{value:?}"))
-                    .unwrap_or_else(|| "claimed_jobs".to_string()),
-            )
+            Some("claimed_jobs".to_string())
         };
 
     Json(ClaimJobsBasedOnResources { jobs, reason })
@@ -583,7 +572,6 @@ pub fn example_workflow(id: Option<i64>) -> WorkflowModel {
         compute_node_ignore_workflow_completion: Some(false),
         compute_node_wait_for_healthy_database_minutes: Some(5),
         compute_node_min_time_for_new_jobs_seconds: Some(300),
-        jobs_sort_method: Some(ClaimJobsSortMethod::GpusRuntimeMemory),
         resource_monitor_config: None,
         slurm_defaults: None,
         use_pending_failed: Some(false),

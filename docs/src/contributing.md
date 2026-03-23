@@ -19,13 +19,19 @@ Make sure you have Rust 1.85 or later installed:
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
-3. **Install SQLx CLI:**
+3. **Install cargo-nextest:**
+
+```bash
+cargo install cargo-nextest
+```
+
+4. **Install SQLx CLI:**
 
 ```bash
 cargo install sqlx-cli --no-default-features --features sqlite
 ```
 
-4. **Set up the database:**
+5. **Set up the database:**
 
 ```bash
 # Create .env file
@@ -35,7 +41,7 @@ echo "DATABASE_URL=sqlite:torc.db" > .env
 sqlx migrate run --source torc-server/migrations
 ```
 
-5. **Build and test:**
+6. **Build and test:**
 
 ```bash
 cargo build
