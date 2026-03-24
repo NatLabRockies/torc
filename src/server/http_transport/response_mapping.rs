@@ -2,7 +2,7 @@ use super::*;
 
 macro_rules! map_response_std {
     ($name:ident, $ty:path, $success:ident) => {
-        pub(super) fn $name(response: $ty) -> Response<Body> {
+        pub(crate) fn $name(response: $ty) -> Response<Body> {
             use $ty::*;
             match response {
                 $success(body) => json_response_with_status(&body, StatusCode::OK),
@@ -22,7 +22,7 @@ macro_rules! map_response_std {
 
 macro_rules! map_response_conflict {
     ($name:ident, $ty:path, $success:ident, $conflict:ident) => {
-        pub(super) fn $name(response: $ty) -> Response<Body> {
+        pub(crate) fn $name(response: $ty) -> Response<Body> {
             use $ty::*;
             match response {
                 $success(body) => json_response_with_status(&body, StatusCode::OK),
@@ -43,7 +43,7 @@ macro_rules! map_response_conflict {
 
 macro_rules! map_response_unprocessable {
     ($name:ident, $ty:path, $success:ident) => {
-        pub(super) fn $name(response: $ty) -> Response<Body> {
+        pub(crate) fn $name(response: $ty) -> Response<Body> {
             use $ty::*;
             match response {
                 $success(body) => json_response_with_status(&body, StatusCode::OK),
@@ -622,7 +622,7 @@ where
     response
 }
 
-pub(super) fn error_response(status: StatusCode, message: String) -> Response<Body> {
+pub(crate) fn error_response(status: StatusCode, message: String) -> Response<Body> {
     json_response_with_status(
         &models::ErrorResponse::new(serde_json::json!({
             "error": status

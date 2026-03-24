@@ -27,7 +27,7 @@ Current ownership is:
 
 When adding a new endpoint:
 
-1. Update the Rust-owned OpenAPI/codegen surface if the contract changes.
+1. Update the live Rust-owned OpenAPI surface if the contract changes.
 2. Add or update the transport handler in `http_transport.rs`.
 3. Put transport-specific implementation in the matching `http_server/*.rs` domain module.
 4. Reuse the lower-level domain API implementation in `src/server/api/` where possible.

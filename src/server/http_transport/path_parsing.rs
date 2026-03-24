@@ -1,22 +1,9 @@
-use super::*;
-
 #[cfg(test)]
 pub(super) fn decode_path_segment(segment: &str) -> Option<String> {
     percent_encoding::percent_decode_str(segment)
         .decode_utf8()
         .ok()
         .map(|value| value.into_owned())
-}
-
-pub(super) fn parse_required_i32(
-    params: &HashMap<String, String>,
-    key: &str,
-) -> Result<i32, String> {
-    let raw = params
-        .get(key)
-        .ok_or_else(|| format!("Missing required query parameter: {key}"))?;
-    raw.parse::<i32>()
-        .map_err(|_| format!("Invalid integer for query parameter: {key}"))
 }
 
 #[cfg(test)]

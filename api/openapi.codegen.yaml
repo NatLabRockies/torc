@@ -20,20 +20,20 @@ paths:
       parameters:
       - name: workflow_id
         in: path
-        description: ID of the workflow
+        description: Workflow ID
         required: true
         schema:
           type: integer
           format: int64
       - name: user_name
         in: path
-        description: Username to check
+        description: Username
         required: true
         schema:
           type: string
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -62,7 +62,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -79,7 +79,7 @@ paths:
         required: true
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -92,14 +92,14 @@ paths:
       parameters:
       - name: id
         in: path
-        description: ID of the access group
+        description: Access group ID
         required: true
         schema:
           type: integer
           format: int64
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -111,14 +111,14 @@ paths:
       parameters:
       - name: id
         in: path
-        description: ID of the access group
+        description: Access group ID
         required: true
         schema:
           type: integer
           format: int64
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -131,7 +131,7 @@ paths:
       parameters:
       - name: id
         in: path
-        description: ID of the access group
+        description: Access group ID
         required: true
         schema:
           type: integer
@@ -154,7 +154,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -166,7 +166,7 @@ paths:
       parameters:
       - name: id
         in: path
-        description: ID of the access group
+        description: Access group ID
         required: true
         schema:
           type: integer
@@ -179,7 +179,7 @@ paths:
         required: true
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -192,20 +192,20 @@ paths:
       parameters:
       - name: id
         in: path
-        description: ID of the access group
+        description: Access group ID
         required: true
         schema:
           type: integer
           format: int64
       - name: user_name
         in: path
-        description: Username to remove
+        description: Username
         required: true
         schema:
           type: string
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -217,7 +217,7 @@ paths:
       operationId: reload_auth
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -225,7 +225,7 @@ paths:
   /bulk_jobs:
     post:
       tags:
-      - admin_resources
+      - jobs
       operationId: create_jobs
       requestBody:
         content:
@@ -235,7 +235,7 @@ paths:
         required: true
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -311,6 +311,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListComputeNodesResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     post:
       tags:
       - compute_nodes
@@ -328,6 +346,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ComputeNodeModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
       - compute_nodes
@@ -339,6 +375,10 @@ paths:
         schema:
           type: integer
           format: int64
+      requestBody:
+        content:
+          application/json:
+            schema: {}
       responses:
         '200':
           description: Successful response
@@ -346,6 +386,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeleteCountResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /compute_nodes/{id}:
     get:
       tags:
@@ -366,6 +424,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ComputeNodeModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     put:
       tags:
       - compute_nodes
@@ -391,6 +467,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ComputeNodeModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
       - compute_nodes
@@ -398,11 +492,15 @@ paths:
       parameters:
       - name: id
         in: path
-        description: ID of the compute node
+        description: Compute node ID
         required: true
         schema:
           type: integer
           format: int64
+      requestBody:
+        content:
+          application/json:
+            schema: {}
       responses:
         '200':
           description: Successful response
@@ -410,6 +508,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ComputeNodeModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /events:
     get:
       tags:
@@ -474,6 +590,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListEventsResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     post:
       tags:
       - events
@@ -491,6 +625,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EventModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
       - events
@@ -502,13 +654,34 @@ paths:
         schema:
           type: integer
           format: int64
+      requestBody:
+        content:
+          application/json:
+            schema: {}
       responses:
         '200':
           description: Successful response
           content:
             application/json:
+              schema: {}
+        '403':
+          description: Forbidden
+          content:
+            application/json:
               schema:
-                $ref: '#/components/schemas/DeleteCountResponse'
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /events/{id}:
     get:
       tags:
@@ -529,6 +702,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EventModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     put:
       tags:
       - events
@@ -544,8 +735,7 @@ paths:
       requestBody:
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/EventModel'
+            schema: {}
         required: true
       responses:
         '200':
@@ -554,6 +744,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EventModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
       - events
@@ -566,6 +774,10 @@ paths:
         schema:
           type: integer
           format: int64
+      requestBody:
+        content:
+          application/json:
+            schema: {}
       responses:
         '200':
           description: Successful response
@@ -573,10 +785,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EventModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /failure_handlers:
     post:
       tags:
-      - admin_resources
+      - failure_handlers
       operationId: create_failure_handler
       requestBody:
         content:
@@ -591,10 +821,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FailureHandlerModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /failure_handlers/{id}:
     get:
       tags:
-      - admin_resources
+      - failure_handlers
       operationId: get_failure_handler
       parameters:
       - name: id
@@ -611,9 +859,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FailureHandlerModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
-      - admin_resources
+      - failure_handlers
       operationId: delete_failure_handler
       parameters:
       - name: id
@@ -634,6 +900,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FailureHandlerModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /files:
     get:
       tags:
@@ -712,6 +996,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListFilesResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     post:
       tags:
       - files
@@ -729,6 +1031,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FileModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
       - files
@@ -740,6 +1060,10 @@ paths:
         schema:
           type: integer
           format: int64
+      requestBody:
+        content:
+          application/json:
+            schema: {}
       responses:
         '200':
           description: Successful response
@@ -747,6 +1071,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeleteCountResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /files/{id}:
     get:
       tags:
@@ -755,7 +1097,7 @@ paths:
       parameters:
       - name: id
         in: path
-        description: ID of the files record
+        description: ID of the file record
         required: true
         schema:
           type: integer
@@ -767,6 +1109,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FileModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     put:
       tags:
       - files
@@ -792,6 +1152,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FileModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
       - files
@@ -799,11 +1177,15 @@ paths:
       parameters:
       - name: id
         in: path
-        description: ID of the file record.
+        description: File ID
         required: true
         schema:
           type: integer
           format: int64
+      requestBody:
+        content:
+          application/json:
+            schema: {}
       responses:
         '200':
           description: Successful response
@@ -811,6 +1193,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FileModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /jobs:
     get:
       tags:
@@ -898,6 +1298,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListJobsResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     post:
       tags:
       - jobs
@@ -915,8 +1333,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/JobModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: Unprocessable content (e.g., invalid priority)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -943,6 +1379,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeleteCountResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /jobs/{id}:
     get:
       tags:
@@ -963,6 +1417,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/JobModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     put:
       tags:
       - jobs
@@ -988,6 +1460,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/JobModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
       - jobs
@@ -1011,6 +1501,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/JobModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /jobs/{id}/complete_job/{status}/{run_id}:
     post:
       tags:
@@ -1050,6 +1558,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/JobModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /jobs/{id}/manage_status_change/{status}/{run_id}:
     put:
       tags:
@@ -1087,6 +1613,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/JobModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /jobs/{id}/retry/{run_id}:
     post:
       tags:
@@ -1120,6 +1664,30 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/JobModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /jobs/{id}/start_job/{run_id}/{compute_node_id}:
     put:
       tags:
@@ -1158,6 +1726,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/JobModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /local_schedulers:
     get:
       tags:
@@ -1217,11 +1803,29 @@ paths:
           format: int64
       responses:
         '200':
-          description: HTTP 200 OK.
+          description: Successful response
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListLocalSchedulersResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     post:
       tags:
       - local_schedulers
@@ -1239,6 +1843,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LocalSchedulerModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
       - local_schedulers
@@ -1261,6 +1883,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeleteCountResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /local_schedulers/{id}:
     get:
       tags:
@@ -1269,7 +1909,7 @@ paths:
       parameters:
       - name: id
         in: path
-        description: Scheduler ID
+        description: ID of the local scheduler record
         required: true
         schema:
           type: integer
@@ -1281,6 +1921,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LocalSchedulerModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     put:
       tags:
       - local_schedulers
@@ -1288,7 +1946,7 @@ paths:
       parameters:
       - name: id
         in: path
-        description: Scheduler ID
+        description: ID of the local scheduler.
         required: true
         schema:
           type: integer
@@ -1306,6 +1964,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LocalSchedulerModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
       - local_schedulers
@@ -1313,7 +1989,7 @@ paths:
       parameters:
       - name: id
         in: path
-        description: ID of the local compute node configuration record.
+        description: Local scheduler ID
         required: true
         schema:
           type: integer
@@ -1324,11 +2000,29 @@ paths:
             schema: {}
       responses:
         '200':
-          description: local compute node configuration stored in the table.
+          description: Successful response
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/LocalSchedulerModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /ping:
     get:
       tags:
@@ -1336,7 +2030,7 @@ paths:
       operationId: ping
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -1344,7 +2038,7 @@ paths:
   /resource_requirements:
     get:
       tags:
-      - admin_resources
+      - resource_requirements
       operationId: list_resource_requirements
       parameters:
       - name: workflow_id
@@ -1444,9 +2138,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListResourceRequirementsResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     post:
       tags:
-      - admin_resources
+      - resource_requirements
       operationId: create_resource_requirements
       requestBody:
         content:
@@ -1461,9 +2173,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResourceRequirementsModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
-      - admin_resources
+      - resource_requirements
       operationId: delete_resource_requirements
       parameters:
       - name: workflow_id
@@ -1481,12 +2217,29 @@ paths:
           description: Successful response
           content:
             application/json:
+              schema: {}
+        '403':
+          description: Forbidden
+          content:
+            application/json:
               schema:
-                $ref: '#/components/schemas/DeleteCountResponse'
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /resource_requirements/{id}:
     get:
       tags:
-      - admin_resources
+      - resource_requirements
       operationId: get_resource_requirements
       parameters:
       - name: id
@@ -1503,9 +2256,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResourceRequirementsModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     put:
       tags:
-      - admin_resources
+      - resource_requirements
       operationId: update_resource_requirements
       parameters:
       - name: id
@@ -1528,9 +2299,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResourceRequirementsModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
-      - admin_resources
+      - resource_requirements
       operationId: delete_resource_requirement
       parameters:
       - name: id
@@ -1551,6 +2346,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResourceRequirementsModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /results:
     get:
       tags:
@@ -1646,6 +2459,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListResultsResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     post:
       tags:
       - results
@@ -1663,6 +2494,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResultModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
       - results
@@ -1683,8 +2532,25 @@ paths:
           description: Successful response
           content:
             application/json:
+              schema: {}
+        '403':
+          description: Forbidden
+          content:
+            application/json:
               schema:
-                $ref: '#/components/schemas/DeleteCountResponse'
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /results/{id}:
     get:
       tags:
@@ -1705,6 +2571,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResultModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     put:
       tags:
       - results
@@ -1730,6 +2614,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResultModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
       - results
@@ -1753,10 +2655,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResultModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /ro_crate_entities:
     post:
       tags:
-      - ro_crate
+      - ro_crate_entities
       operationId: create_ro_crate_entity
       requestBody:
         content:
@@ -1771,10 +2691,34 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RoCrateEntityModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /ro_crate_entities/{id}:
     get:
       tags:
-      - ro_crate
+      - ro_crate_entities
       operationId: get_ro_crate_entity
       parameters:
       - name: id
@@ -1791,9 +2735,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RoCrateEntityModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     put:
       tags:
-      - ro_crate
+      - ro_crate_entities
       operationId: update_ro_crate_entity
       parameters:
       - name: id
@@ -1816,9 +2778,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RoCrateEntityModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
-      - ro_crate
+      - ro_crate_entities
       operationId: delete_ro_crate_entity
       parameters:
       - name: id
@@ -1828,6 +2814,10 @@ paths:
         schema:
           type: integer
           format: int64
+      requestBody:
+        content:
+          application/json:
+            schema: {}
       responses:
         '200':
           description: Successful response
@@ -1835,6 +2825,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /scheduled_compute_nodes:
     get:
       tags:
@@ -1905,6 +2913,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListScheduledComputeNodesResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     post:
       tags:
       - scheduled_compute_nodes
@@ -1922,6 +2948,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ScheduledComputeNodesModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
       - scheduled_compute_nodes
@@ -1944,6 +2988,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeleteCountResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /scheduled_compute_nodes/{id}:
     get:
       tags:
@@ -1964,6 +3026,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ScheduledComputeNodesModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     put:
       tags:
       - scheduled_compute_nodes
@@ -1989,6 +3069,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ScheduledComputeNodesModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
       - scheduled_compute_nodes
@@ -2012,6 +3110,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ScheduledComputeNodesModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /slurm_schedulers:
     get:
       tags:
@@ -2054,70 +3170,6 @@ paths:
           type:
           - boolean
           - 'null'
-      - name: name
-        in: query
-        required: false
-        schema:
-          type:
-          - string
-          - 'null'
-      - name: account
-        in: query
-        required: false
-        schema:
-          type:
-          - string
-          - 'null'
-      - name: gres
-        in: query
-        required: false
-        schema:
-          type:
-          - string
-          - 'null'
-      - name: mem
-        in: query
-        required: false
-        schema:
-          type:
-          - string
-          - 'null'
-      - name: nodes
-        in: query
-        required: false
-        schema:
-          type:
-          - integer
-          - 'null'
-          format: int64
-      - name: partition
-        in: query
-        required: false
-        schema:
-          type:
-          - string
-          - 'null'
-      - name: qos
-        in: query
-        required: false
-        schema:
-          type:
-          - string
-          - 'null'
-      - name: tmp
-        in: query
-        required: false
-        schema:
-          type:
-          - string
-          - 'null'
-      - name: walltime
-        in: query
-        required: false
-        schema:
-          type:
-          - string
-          - 'null'
       responses:
         '200':
           description: Successful response
@@ -2125,6 +3177,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListSlurmSchedulersResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     post:
       tags:
       - slurm_schedulers
@@ -2142,6 +3212,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SlurmSchedulerModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
       - slurm_schedulers
@@ -2164,6 +3252,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeleteCountResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /slurm_schedulers/{id}:
     get:
       tags:
@@ -2184,6 +3290,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SlurmSchedulerModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     put:
       tags:
       - slurm_schedulers
@@ -2209,6 +3333,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SlurmSchedulerModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
       - slurm_schedulers
@@ -2232,10 +3374,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SlurmSchedulerModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /slurm_stats:
     get:
       tags:
-      - admin_resources
+      - slurm_stats
       operationId: list_slurm_stats
       parameters:
       - name: workflow_id
@@ -2291,9 +3451,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListSlurmStatsResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     post:
       tags:
-      - admin_resources
+      - slurm_stats
       operationId: create_slurm_stats
       requestBody:
         content:
@@ -2308,6 +3486,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SlurmStatsModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /user_data:
     get:
       tags:
@@ -2387,6 +3583,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListUserDataResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     post:
       tags:
       - user_data
@@ -2421,6 +3635,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserDataModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
       - user_data
@@ -2442,6 +3674,24 @@ paths:
           content:
             application/json:
               schema: {}
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /user_data/{id}:
     get:
       tags:
@@ -2462,6 +3712,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserDataModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     put:
       tags:
       - user_data
@@ -2487,6 +3755,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserDataModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
       - user_data
@@ -2510,6 +3796,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserDataModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /users/{user_name}/groups:
     get:
       tags:
@@ -2540,7 +3844,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -2552,7 +3856,7 @@ paths:
       operationId: get_version
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -2623,7 +3927,7 @@ paths:
           - 'null'
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -2640,7 +3944,7 @@ paths:
         required: true
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -2653,14 +3957,14 @@ paths:
       parameters:
       - name: id
         in: path
-        description: ID of the workflows record
+        description: Workflow ID
         required: true
         schema:
           type: integer
           format: int64
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -2685,7 +3989,7 @@ paths:
         required: true
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -2697,7 +4001,7 @@ paths:
       parameters:
       - name: id
         in: path
-        description: Workflow ID.
+        description: Workflow ID
         required: true
         schema:
           type: integer
@@ -2708,7 +4012,7 @@ paths:
             schema: {}
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -2721,7 +4025,7 @@ paths:
       parameters:
       - name: id
         in: path
-        description: ID of the workflow
+        description: Workflow ID
         required: true
         schema:
           type: integer
@@ -2744,7 +4048,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -2757,21 +4061,21 @@ paths:
       parameters:
       - name: id
         in: path
-        description: ID of the workflow
+        description: Workflow ID
         required: true
         schema:
           type: integer
           format: int64
       - name: group_id
         in: path
-        description: ID of the access group
+        description: Access group ID
         required: true
         schema:
           type: integer
           format: int64
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -2783,21 +4087,21 @@ paths:
       parameters:
       - name: id
         in: path
-        description: ID of the workflow
+        description: Workflow ID
         required: true
         schema:
           type: integer
           format: int64
       - name: group_id
         in: path
-        description: ID of the access group
+        description: Access group ID
         required: true
         schema:
           type: integer
           format: int64
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -2817,7 +4121,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -2844,7 +4148,7 @@ paths:
         required: true
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -2873,7 +4177,7 @@ paths:
             type: string
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -2908,7 +4212,7 @@ paths:
         required: true
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -2932,7 +4236,7 @@ paths:
             schema: {}
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema: {}
@@ -2971,7 +4275,7 @@ paths:
         required: true
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -3003,7 +4307,7 @@ paths:
             schema: {}
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -3011,7 +4315,7 @@ paths:
   /workflows/{id}/failure_handlers:
     get:
       tags:
-      - admin_resources
+      - failure_handlers
       operationId: list_failure_handlers
       parameters:
       - name: id
@@ -3044,6 +4348,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListFailureHandlersResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /workflows/{id}/initialize_jobs:
     post:
       tags:
@@ -3077,7 +4399,7 @@ paths:
             schema: {}
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema: {}
@@ -3096,7 +4418,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -3116,7 +4438,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -3166,7 +4488,7 @@ paths:
           - 'null'
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -3216,7 +4538,7 @@ paths:
           - 'null'
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -3236,7 +4558,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -3286,7 +4608,7 @@ paths:
           - 'null'
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -3306,7 +4628,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -3337,7 +4659,7 @@ paths:
             schema: {}
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -3365,7 +4687,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -3392,6 +4714,24 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/RemoteWorkerModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     post:
       tags:
       - remote_workers
@@ -3421,6 +4761,30 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/RemoteWorkerModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /workflows/{id}/remote_workers/{worker}:
     delete:
       tags:
@@ -3447,6 +4811,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RemoteWorkerModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /workflows/{id}/required_existing_files:
     get:
       tags:
@@ -3462,7 +4844,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -3493,7 +4875,7 @@ paths:
             schema: {}
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -3524,14 +4906,14 @@ paths:
             schema: {}
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema: {}
   /workflows/{id}/ro_crate_entities:
     get:
       tags:
-      - ro_crate
+      - ro_crate_entities
       operationId: list_ro_crate_entities
       parameters:
       - name: id
@@ -3578,9 +4960,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListRoCrateEntitiesResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
-      - ro_crate
+      - ro_crate_entities
       operationId: delete_ro_crate_entities
       parameters:
       - name: id
@@ -3601,6 +5001,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeleteRoCrateEntitiesResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /workflows/{id}/status:
     get:
       tags:
@@ -3616,7 +5034,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:
@@ -3641,7 +5059,7 @@ paths:
         required: true
       responses:
         '200':
-          description: Successful response
+          description: ''
           content:
             application/json:
               schema:

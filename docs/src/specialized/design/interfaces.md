@@ -319,8 +319,8 @@ bash sync_openapi.sh all --promote
 
 When adding a new feature that should be exposed to users:
 
-1. **Start with the Rust-owned API contract**: Define the endpoint in `src/openapi_codegen*.rs` and
-   `src/models.rs`
+1. **Start with the live Rust-owned API contract**: Define the endpoint in
+   `src/server/live_router.rs` and `src/models.rs`
 2. **Implement server-side**: Add handler in `src/server/api/`
 3. **Promote and regenerate**: Run `api/sync_openapi.sh all --promote` when the contract is ready,
    or `api/sync_openapi.sh clients --use-rust-spec` for local client iteration against the

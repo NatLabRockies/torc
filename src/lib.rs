@@ -57,7 +57,7 @@ pub mod mcp_server;
 
 // Rust-owned OpenAPI emission
 #[cfg(feature = "openapi-codegen")]
-pub mod openapi_codegen;
+pub mod openapi_spec;
 
 // CLI types module - requires all features for the unified CLI
 #[cfg(all(feature = "client", feature = "tui", feature = "plot_resources"))]

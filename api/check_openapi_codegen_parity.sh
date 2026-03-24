@@ -25,6 +25,6 @@ fi
 cargo run \
   --quiet \
   --no-default-features \
-  --features openapi-codegen \
+  --features server-bin \
   --bin torc-openapi \
   -- compare "${SCRIPT_DIR}/openapi.yaml"

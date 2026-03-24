@@ -100,7 +100,8 @@ cargo nextest run -E 'test(test_get_ready_jobs)'
 - Async Tokio runtime
 - SQLite with write locks for safe job claiming
 - Foreign key cascades for workflow deletion
-- Rust-owned OpenAPI contract emitted from `src/openapi_codegen*.rs`
+- Rust-owned OpenAPI contract emitted from `src/openapi_spec.rs` and live handlers in
+  `src/server/live_router.rs`
 - Live HTTP transport in `src/server/http_transport.rs`
 
 ### OpenAPI Workflow

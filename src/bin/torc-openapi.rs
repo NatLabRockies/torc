@@ -9,7 +9,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("compare") => {
             let source_path = args.next().ok_or("missing source spec path")?;
             let source = fs::read_to_string(&source_path)?;
-            let issues = torc::openapi_codegen::parity_report(&source)?;
+            let issues = torc::openapi_spec::parity_report(&source)?;
             if issues.is_empty() {
                 writeln!(io::stdout(), "parity-check: ok")?;
                 return Ok(());
@@ -21,7 +21,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Err("parity-check failed".into())
         }
         None => {
-            let yaml = torc::openapi_codegen::render_openapi_yaml()?;
+            let yaml = torc::openapi_spec::render_openapi_yaml()?;
             io::stdout().write_all(yaml.as_bytes())?;
             Ok(())
         }

@@ -204,8 +204,8 @@ libraries.
 1. **Modify the OpenAPI spec:**
 
    ```bash
-   # Update the Rust-owned API scaffold and models
-   vim src/openapi_codegen.rs
+   # Update the Rust-owned API document, live handler, and models
+   vim src/openapi_spec.rs
    ```
 
 2. **Regenerate API clients:**
@@ -261,14 +261,14 @@ libraries.
 When implementing a user-facing feature, ensure it is exposed through the appropriate interfaces.
 The following table shows where features should be implemented:
 
-| Interface        | Location                                   | Primary Use Case                                                         |
-| ---------------- | ------------------------------------------ | ------------------------------------------------------------------------ |
-| CLI              | `src/client/commands/`                     | Command-line automation, scripting                                       |
-| HTTP API         | `src/openapi_codegen*.rs`, `src/models.rs` | Rust-owned API contract source                                           |
-| OpenAPI artifact | `api/openapi.yaml`                         | Checked-in emitted contract for Python/Julia integration, external tools |
-| Dashboard        | `torc-dash/src/`                           | Web-based monitoring and management                                      |
-| TUI              | `src/tui/`                                 | Interactive terminal monitoring                                          |
-| MCP Server       | `torc-mcp-server/src/`                     | AI assistant integration                                                 |
+| Interface        | Location                                                            | Primary Use Case                                                         |
+| ---------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| CLI              | `src/client/commands/`                                              | Command-line automation, scripting                                       |
+| HTTP API         | `src/openapi_spec.rs`, `src/server/live_router.rs`, `src/models.rs` | Rust-owned API contract source                                           |
+| OpenAPI artifact | `api/openapi.yaml`                                                  | Checked-in emitted contract for Python/Julia integration, external tools |
+| Dashboard        | `torc-dash/src/`                                                    | Web-based monitoring and management                                      |
+| TUI              | `src/tui/`                                                          | Interactive terminal monitoring                                          |
+| MCP Server       | `torc-mcp-server/src/`                                              | AI assistant integration                                                 |
 
 ### CLI Implementation
 

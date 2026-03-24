@@ -332,7 +332,7 @@ cascade-delete the entire database contents.
 - `api/sync_openapi.sh` is the preferred developer entrypoint for emit/check/promote/client sync.
 - The retired wrappers `make_api_clients.sh` and `regenerate_openapi_artifacts.sh` should not be
   reintroduced.
-- `api/check_openapi_codegen_parity.sh` validates migrated endpoints against `api/openapi.yaml`.
+- `api/check_openapi_codegen_parity.sh` validates the Rust-emitted spec against `api/openapi.yaml`.
 - Generated Rust surfaces should not be hand-edited. Keep deterministic post-processing under the
   Rust-owned OpenAPI workflow under `api/sync_openapi.sh`.
 - Implement business logic in non-generated modules (e.g., `server/src/bin/server/api/*.rs`)
@@ -346,13 +346,12 @@ cascade-delete the entire database contents.
 
 ### Adding a New API Endpoint
 
-1. Add the endpoint to the Rust-owned scaffold and model layer (`src/openapi_codegen*.rs`,
-   `src/models.rs`)
+1. Add the endpoint to the live Rust-owned API surface and model layer (`src/openapi_spec.rs`,
+   `src/server/live_router.rs`, `src/models.rs`)
 2. Regenerate API artifacts (`cd api && bash sync_openapi.sh clients --use-rust-spec`)
 3. Promote the Rust spec when the change is ready to become the checked-in contract
    (`cd api && bash sync_openapi.sh all --promote`)
-4. Add implementation in appropriate `src/server/api/*.rs` module if the live server still uses the
-   generated surface
+4. Add implementation in the appropriate live server module
 5. Add CLI command handler if needed in `src/client/commands/`
 
 **API Implementation Checklist:**

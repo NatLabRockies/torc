@@ -6,7 +6,8 @@ This document describes how Torc's HTTP API contract and generated clients are p
 
 Torc uses a Rust-owned OpenAPI workflow:
 
-- The HTTP contract is defined in Rust under `src/openapi_codegen/` and `src/models.rs`.
+- The HTTP contract is defined in Rust by `src/openapi_spec.rs`, live handlers in
+  `src/server/live_router.rs`, and `src/models.rs`.
 - The checked-in OpenAPI artifacts are `api/openapi.yaml` and `api/openapi.codegen.yaml`.
 - The live server transport is implemented in Rust under `src/server/http_transport.rs`.
 - The Rust client used by the CLI/TUI/dashboard is generated into `src/client/apis/` using
@@ -20,9 +21,10 @@ The main ownership layers are:
 
 - `src/models.rs`
   - Canonical API models used by the Rust-owned contract.
-- `src/openapi_codegen.rs` and `src/openapi_codegen/*.rs`
-  - Code-first OpenAPI emission.
-  - Route metadata, operation IDs, schemas, and server base path.
+- `src/openapi_spec.rs`
+  - OpenAPI document definition, emission, and parity checks.
+- `src/server/live_router.rs`
+  - Live typed handlers that also own route metadata and operation IDs.
 - `src/server/http_transport.rs` and `src/server/http_transport/*.rs`
   - Live HTTP transport implementation for the server.
 - `src/server/api_contract.rs`

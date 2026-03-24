@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use super::*;
 use axum::http::header::CONTENT_LENGTH;
 use futures::future::poll_fn;

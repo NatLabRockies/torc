@@ -161,7 +161,7 @@ required-features = ["slurm-runner"]
 [[bin]]
 name = "torc-openapi"
 path = "src/bin/torc-openapi.rs"
-required-features = ["openapi-codegen"]
+required-features = ["server-bin"]
 
 [features]
 default = ["client", "tui", "plot_resources"]

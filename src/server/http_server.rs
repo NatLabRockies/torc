@@ -332,7 +332,7 @@ impl<C> Server<C> {
     }
 
     #[cfg(feature = "openapi-codegen")]
-    pub fn openapi_app_state(&self) -> crate::openapi_codegen::OpenApiAppState {
+    pub fn openapi_app_state(&self) -> crate::openapi_spec::OpenApiAppState {
         self.shared.openapi_app_state(
             full_version(),
             API_VERSION.to_string(),

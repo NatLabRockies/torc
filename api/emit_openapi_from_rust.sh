@@ -10,6 +10,6 @@ cd "${REPO_ROOT}"
 cargo run \
   --quiet \
   --no-default-features \
-  --features openapi-codegen \
+  --features server-bin \
   --bin torc-openapi \
   > "${OUTPUT_PATH}"

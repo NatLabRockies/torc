@@ -1,23 +1,10 @@
 //! Permanent HTTP transport for the live Torc server.
 
-mod access_control;
 mod compute_nodes;
-mod files;
-mod jobs;
-mod local_schedulers;
 mod path_parsing;
 mod query_parsing;
-mod remote_workers;
 mod request_parsing;
-mod resource_requirements;
 mod response_mapping;
-mod results;
-mod ro_crate;
-mod scheduled_compute_nodes;
-mod slurm_schedulers;
-mod slurm_stats;
-mod system;
-mod user_data;
 mod workflows;
 
 use crate::models;
@@ -35,28 +22,18 @@ use http_body::Body as HttpBody;
 use std::collections::HashMap;
 use url::form_urlencoded;
 
-pub(crate) use self::access_control::*;
-pub(crate) use self::compute_nodes::*;
-pub(crate) use self::files::*;
-pub(crate) use self::jobs::*;
-pub(crate) use self::local_schedulers::*;
-use self::path_parsing::*;
 use self::query_parsing::*;
-pub(crate) use self::remote_workers::*;
-use self::request_parsing::*;
-pub(crate) use self::resource_requirements::*;
 pub(crate) use self::response_mapping::*;
-pub(crate) use self::results::*;
-pub(crate) use self::ro_crate::*;
-pub(crate) use self::scheduled_compute_nodes::*;
-pub(crate) use self::slurm_schedulers::*;
-pub(crate) use self::slurm_stats::*;
-pub(crate) use self::system::*;
-pub(crate) use self::user_data::*;
 pub(crate) use self::workflows::*;
 
 #[cfg(test)]
 mod http_transport_tests {
+    use super::path_parsing::{
+        parse_access_check_path, parse_access_group_members_collection_path,
+        parse_group_member_path, parse_user_groups_path, parse_workflow_access_group_item_path,
+        parse_workflow_access_groups_collection_path, parse_workflow_events_stream_path,
+        parse_workflow_failure_handlers_path,
+    };
     use super::*;
 
     #[test]

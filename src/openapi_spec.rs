@@ -1,28 +1,9 @@
-//! Code-first OpenAPI scaffold used to migrate away from generated server bindings.
+//! Live-server-owned OpenAPI document and parity checks.
 
-mod access_control;
-mod admin_resources;
-mod compute_nodes;
-mod events;
-mod files;
-mod helpers;
-mod jobs;
-mod local_schedulers;
-mod remote_workers;
-mod results;
-mod ro_crate;
-mod scheduled_compute_nodes;
-mod slurm_schedulers;
-mod system;
-mod user_data;
-mod workflow_actions;
-mod workflows;
-
-use axum::{Router, routing::get};
-use serde_json::Value;
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 use utoipa::OpenApi;
-
-pub use system::{PingResponse, VersionResponse};
+use utoipa::ToSchema;
 
 use crate::api_version::HTTP_API_VERSION;
 use crate::models::{
@@ -45,7 +26,211 @@ use crate::models::{
     UserDataModel, UserGroupMembershipModel, WorkflowAccessGroupModel, WorkflowActionModel,
     WorkflowModel, WorkflowStatusModel,
 };
-use helpers::{check_component_properties, check_operation_id, check_schema_properties};
+
+#[allow(unused_imports)]
+mod openapi_job_paths {
+    pub use crate::server::live_router::{
+        __path_complete_job, __path_create_job, __path_delete_job, __path_delete_jobs,
+        __path_get_job, __path_list_jobs, __path_manage_status_change, __path_retry_job,
+        __path_start_job, __path_update_job, complete_job, create_job, delete_job, delete_jobs,
+        get_job, list_jobs, manage_status_change, retry_job, start_job, update_job,
+    };
+}
+
+#[allow(unused_imports)]
+mod openapi_system_paths {
+    pub use crate::server::live_router::{__path_ping, __path_version, ping, version};
+}
+
+#[allow(unused_imports)]
+mod openapi_access_control_paths {
+    pub use crate::server::live_router::{
+        __path_add_user_to_group, __path_add_workflow_to_group, __path_check_workflow_access,
+        __path_create_access_group, __path_delete_access_group, __path_get_access_group,
+        __path_list_access_groups, __path_list_group_members, __path_list_user_groups,
+        __path_list_workflow_groups, __path_reload_auth, __path_remove_user_from_group,
+        __path_remove_workflow_from_group, add_user_to_group, add_workflow_to_group,
+        check_workflow_access, create_access_group, delete_access_group, get_access_group,
+        list_access_groups, list_group_members, list_user_groups, list_workflow_groups,
+        reload_auth, remove_user_from_group, remove_workflow_from_group,
+    };
+}
+
+#[allow(unused_imports)]
+mod openapi_bulk_job_paths {
+    pub use crate::server::live_router::{__path_create_jobs, create_jobs};
+}
+
+#[allow(unused_imports)]
+mod openapi_compute_node_paths {
+    pub use crate::server::live_router::{
+        __path_create_compute_node, __path_delete_compute_node, __path_delete_compute_nodes,
+        __path_get_compute_node, __path_list_compute_nodes, __path_update_compute_node,
+        create_compute_node, delete_compute_node, delete_compute_nodes, get_compute_node,
+        list_compute_nodes, update_compute_node,
+    };
+}
+
+#[allow(unused_imports)]
+mod openapi_file_paths {
+    pub use crate::server::live_router::{
+        __path_create_file, __path_delete_file, __path_delete_files, __path_get_file,
+        __path_list_files, __path_update_file, create_file, delete_file, delete_files, get_file,
+        list_files, update_file,
+    };
+}
+
+#[allow(unused_imports)]
+mod openapi_local_scheduler_paths {
+    pub use crate::server::live_router::{
+        __path_create_local_scheduler, __path_delete_local_scheduler,
+        __path_delete_local_schedulers, __path_get_local_scheduler, __path_list_local_schedulers,
+        __path_update_local_scheduler, create_local_scheduler, delete_local_scheduler,
+        delete_local_schedulers, get_local_scheduler, list_local_schedulers,
+        update_local_scheduler,
+    };
+}
+
+#[allow(unused_imports)]
+mod openapi_event_paths {
+    pub use crate::server::live_router::{
+        __path_create_event, __path_delete_event, __path_delete_events, __path_get_event,
+        __path_list_events, __path_update_event, create_event, delete_event, delete_events,
+        get_event, list_events, update_event,
+    };
+}
+
+#[allow(unused_imports)]
+mod openapi_result_paths {
+    pub use crate::server::live_router::{
+        __path_create_result, __path_delete_result, __path_delete_results, __path_get_result,
+        __path_list_results, __path_update_result, create_result, delete_result, delete_results,
+        get_result, list_results, update_result,
+    };
+}
+
+#[allow(unused_imports)]
+mod openapi_user_data_paths {
+    pub use crate::server::live_router::{
+        __path_create_user_data, __path_delete_all_user_data, __path_delete_user_data,
+        __path_get_user_data, __path_list_user_data, __path_update_user_data, create_user_data,
+        delete_all_user_data, delete_user_data, get_user_data, list_user_data, update_user_data,
+    };
+}
+
+#[allow(unused_imports)]
+mod openapi_workflow_action_paths {
+    pub use crate::server::live_router::{
+        __path_claim_action, __path_create_workflow_action, __path_get_pending_actions,
+        __path_get_workflow_actions, claim_action, create_workflow_action, get_pending_actions,
+        get_workflow_actions,
+    };
+}
+
+#[allow(unused_imports)]
+mod openapi_workflow_paths {
+    pub use crate::server::live_router::{
+        __path_cancel_workflow, __path_claim_jobs_based_on_resources, __path_claim_next_jobs,
+        __path_create_workflow, __path_delete_workflow, __path_get_ready_job_requirements,
+        __path_get_workflow, __path_get_workflow_status, __path_initialize_jobs,
+        __path_is_workflow_complete, __path_is_workflow_uninitialized,
+        __path_list_job_dependencies, __path_list_job_file_relationships, __path_list_job_ids,
+        __path_list_job_user_data_relationships, __path_list_missing_user_data,
+        __path_list_required_existing_files, __path_list_workflows,
+        __path_process_changed_job_inputs, __path_reset_job_status, __path_reset_workflow_status,
+        __path_update_workflow, __path_update_workflow_status, cancel_workflow,
+        claim_jobs_based_on_resources, claim_next_jobs, create_workflow, delete_workflow,
+        get_ready_job_requirements, get_workflow, get_workflow_status, initialize_jobs,
+        is_workflow_complete, is_workflow_uninitialized, list_job_dependencies,
+        list_job_file_relationships, list_job_ids, list_job_user_data_relationships,
+        list_missing_user_data, list_required_existing_files, list_workflows,
+        process_changed_job_inputs, reset_job_status, reset_workflow_status, update_workflow,
+        update_workflow_status,
+    };
+}
+
+#[allow(unused_imports)]
+mod openapi_resource_requirements_paths {
+    pub use crate::server::live_router::{
+        __path_create_resource_requirements, __path_delete_all_resource_requirements,
+        __path_delete_resource_requirements, __path_get_resource_requirements,
+        __path_list_resource_requirements, __path_update_resource_requirements,
+        create_resource_requirements, delete_all_resource_requirements,
+        delete_resource_requirements, get_resource_requirements, list_resource_requirements,
+        update_resource_requirements,
+    };
+}
+
+#[allow(unused_imports)]
+mod openapi_failure_handler_paths {
+    pub use crate::server::live_router::{
+        __path_create_failure_handler, __path_delete_failure_handler, __path_get_failure_handler,
+        __path_list_failure_handlers, create_failure_handler, delete_failure_handler,
+        get_failure_handler, list_failure_handlers,
+    };
+}
+
+#[allow(unused_imports)]
+mod openapi_slurm_stats_paths {
+    pub use crate::server::live_router::{
+        __path_create_slurm_stats, __path_list_slurm_stats, create_slurm_stats, list_slurm_stats,
+    };
+}
+
+#[allow(unused_imports)]
+mod openapi_scheduled_compute_node_paths {
+    pub use crate::server::live_router::{
+        __path_create_scheduled_compute_node, __path_delete_scheduled_compute_node,
+        __path_delete_scheduled_compute_nodes, __path_get_scheduled_compute_node,
+        __path_list_scheduled_compute_nodes, __path_update_scheduled_compute_node,
+        create_scheduled_compute_node, delete_scheduled_compute_node,
+        delete_scheduled_compute_nodes, get_scheduled_compute_node, list_scheduled_compute_nodes,
+        update_scheduled_compute_node,
+    };
+}
+
+#[allow(unused_imports)]
+mod openapi_slurm_scheduler_paths {
+    pub use crate::server::live_router::{
+        __path_create_slurm_scheduler, __path_delete_slurm_scheduler,
+        __path_delete_slurm_schedulers, __path_get_slurm_scheduler, __path_list_slurm_schedulers,
+        __path_update_slurm_scheduler, create_slurm_scheduler, delete_slurm_scheduler,
+        delete_slurm_schedulers, get_slurm_scheduler, list_slurm_schedulers,
+        update_slurm_scheduler,
+    };
+}
+
+#[allow(unused_imports)]
+mod openapi_remote_worker_paths {
+    pub use crate::server::live_router::{
+        __path_create_remote_workers, __path_delete_remote_worker, __path_list_remote_workers,
+        create_remote_workers, delete_remote_worker, list_remote_workers,
+    };
+}
+
+#[allow(unused_imports)]
+mod openapi_ro_crate_paths {
+    pub use crate::server::live_router::{
+        __path_create_ro_crate_entity, __path_delete_ro_crate_entities,
+        __path_delete_ro_crate_entity, __path_get_ro_crate_entity, __path_list_ro_crate_entities,
+        __path_update_ro_crate_entity, create_ro_crate_entity, delete_ro_crate_entities,
+        delete_ro_crate_entity, get_ro_crate_entity, list_ro_crate_entities,
+        update_ro_crate_entity,
+    };
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PingResponse {
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct VersionResponse {
+    pub version: String,
+    pub api_version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub git_hash: Option<String>,
+}
 
 #[derive(Debug, Clone)]
 pub struct OpenApiAppState {
@@ -70,450 +255,284 @@ impl Default for OpenApiAppState {
     }
 }
 
-pub fn app_router(state: OpenApiAppState) -> Router {
-    Router::new()
-        .route(
-            "/torc-service/v1/access_groups",
-            axum::routing::post(access_control::create_access_group)
-                .get(access_control::list_access_groups),
-        )
-        .route(
-            "/torc-service/v1/access_groups/{id}",
-            get(access_control::get_access_group).delete(access_control::delete_access_group),
-        )
-        .route(
-            "/torc-service/v1/access_groups/{id}/members",
-            axum::routing::post(access_control::add_user_to_group)
-                .get(access_control::list_group_members),
-        )
-        .route(
-            "/torc-service/v1/access_groups/{id}/members/{user_name}",
-            axum::routing::delete(access_control::remove_user_from_group),
-        )
-        .route(
-            "/torc-service/v1/users/{user_name}/groups",
-            get(access_control::list_user_groups),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/access_groups",
-            get(access_control::list_workflow_groups),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/access_groups/{group_id}",
-            axum::routing::post(access_control::add_workflow_to_group)
-                .delete(access_control::remove_workflow_from_group),
-        )
-        .route(
-            "/torc-service/v1/access_check/{workflow_id}/{user_name}",
-            get(access_control::check_workflow_access),
-        )
-        .route("/torc-service/v1/ping", get(system::ping))
-        .route("/torc-service/v1/version", get(system::version))
-        .route(
-            "/torc-service/v1/bulk_jobs",
-            axum::routing::post(admin_resources::create_jobs),
-        )
-        .route(
-            "/torc-service/v1/compute_nodes",
-            axum::routing::post(compute_nodes::create_compute_node)
-                .get(compute_nodes::list_compute_nodes)
-                .delete(compute_nodes::delete_compute_nodes),
-        )
-        .route(
-            "/torc-service/v1/compute_nodes/{id}",
-            get(compute_nodes::get_compute_node)
-                .put(compute_nodes::update_compute_node)
-                .delete(compute_nodes::delete_compute_node),
-        )
-        .route(
-            "/torc-service/v1/events",
-            axum::routing::post(events::create_event)
-                .get(events::list_events)
-                .delete(events::delete_events),
-        )
-        .route(
-            "/torc-service/v1/events/{id}",
-            get(events::get_event)
-                .put(events::update_event)
-                .delete(events::delete_event),
-        )
-        .route(
-            "/torc-service/v1/files",
-            axum::routing::post(files::create_file)
-                .get(files::list_files)
-                .delete(files::delete_files),
-        )
-        .route(
-            "/torc-service/v1/files/{id}",
-            get(files::get_file)
-                .put(files::update_file)
-                .delete(files::delete_file),
-        )
-        .route(
-            "/torc-service/v1/local_schedulers",
-            axum::routing::post(local_schedulers::create_local_scheduler)
-                .get(local_schedulers::list_local_schedulers)
-                .delete(local_schedulers::delete_local_schedulers),
-        )
-        .route(
-            "/torc-service/v1/local_schedulers/{id}",
-            get(local_schedulers::get_local_scheduler)
-                .put(local_schedulers::update_local_scheduler)
-                .delete(local_schedulers::delete_local_scheduler),
-        )
-        .route(
-            "/torc-service/v1/resource_requirements",
-            axum::routing::post(admin_resources::create_resource_requirements)
-                .get(admin_resources::list_resource_requirements)
-                .delete(admin_resources::delete_resource_requirements),
-        )
-        .route(
-            "/torc-service/v1/resource_requirements/{id}",
-            get(admin_resources::get_resource_requirements)
-                .put(admin_resources::update_resource_requirements)
-                .delete(admin_resources::delete_resource_requirement),
-        )
-        .route(
-            "/torc-service/v1/failure_handlers",
-            axum::routing::post(admin_resources::create_failure_handler),
-        )
-        .route(
-            "/torc-service/v1/failure_handlers/{id}",
-            get(admin_resources::get_failure_handler)
-                .delete(admin_resources::delete_failure_handler),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/failure_handlers",
-            get(admin_resources::list_failure_handlers),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/actions",
-            axum::routing::post(workflow_actions::create_workflow_action)
-                .get(workflow_actions::get_workflow_actions),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/actions/pending",
-            get(workflow_actions::get_pending_actions),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/actions/{action_id}/claim",
-            axum::routing::post(workflow_actions::claim_action),
-        )
-        .route(
-            "/torc-service/v1/jobs",
-            axum::routing::post(jobs::create_job)
-                .get(jobs::list_jobs)
-                .delete(jobs::delete_jobs),
-        )
-        .route(
-            "/torc-service/v1/jobs/{id}",
-            get(jobs::get_job)
-                .put(jobs::update_job)
-                .delete(jobs::delete_job),
-        )
-        .route(
-            "/torc-service/v1/jobs/{id}/complete_job/{status}/{run_id}",
-            axum::routing::post(jobs::complete_job),
-        )
-        .route(
-            "/torc-service/v1/jobs/{id}/manage_status_change/{status}/{run_id}",
-            axum::routing::put(jobs::manage_status_change),
-        )
-        .route(
-            "/torc-service/v1/jobs/{id}/start_job/{run_id}/{compute_node_id}",
-            axum::routing::put(jobs::start_job),
-        )
-        .route(
-            "/torc-service/v1/jobs/{id}/retry/{run_id}",
-            axum::routing::post(jobs::retry_job),
-        )
-        .route(
-            "/torc-service/v1/user_data",
-            axum::routing::post(user_data::create_user_data)
-                .get(user_data::list_user_data)
-                .delete(user_data::delete_all_user_data),
-        )
-        .route(
-            "/torc-service/v1/user_data/{id}",
-            get(user_data::get_user_data)
-                .put(user_data::update_user_data)
-                .delete(user_data::delete_user_data),
-        )
-        .route(
-            "/torc-service/v1/results",
-            axum::routing::post(results::create_result)
-                .get(results::list_results)
-                .delete(results::delete_results),
-        )
-        .route(
-            "/torc-service/v1/results/{id}",
-            get(results::get_result)
-                .put(results::update_result)
-                .delete(results::delete_result),
-        )
-        .route(
-            "/torc-service/v1/scheduled_compute_nodes",
-            axum::routing::post(scheduled_compute_nodes::create_scheduled_compute_node)
-                .get(scheduled_compute_nodes::list_scheduled_compute_nodes)
-                .delete(scheduled_compute_nodes::delete_scheduled_compute_nodes),
-        )
-        .route(
-            "/torc-service/v1/scheduled_compute_nodes/{id}",
-            get(scheduled_compute_nodes::get_scheduled_compute_node)
-                .put(scheduled_compute_nodes::update_scheduled_compute_node)
-                .delete(scheduled_compute_nodes::delete_scheduled_compute_node),
-        )
-        .route(
-            "/torc-service/v1/slurm_schedulers",
-            axum::routing::post(slurm_schedulers::create_slurm_scheduler)
-                .get(slurm_schedulers::list_slurm_schedulers)
-                .delete(slurm_schedulers::delete_slurm_schedulers),
-        )
-        .route(
-            "/torc-service/v1/slurm_schedulers/{id}",
-            get(slurm_schedulers::get_slurm_scheduler)
-                .put(slurm_schedulers::update_slurm_scheduler)
-                .delete(slurm_schedulers::delete_slurm_scheduler),
-        )
-        .route(
-            "/torc-service/v1/slurm_stats",
-            axum::routing::post(admin_resources::create_slurm_stats)
-                .get(admin_resources::list_slurm_stats),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/remote_workers",
-            axum::routing::post(remote_workers::create_remote_workers)
-                .get(remote_workers::list_remote_workers),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/remote_workers/{worker}",
-            axum::routing::delete(remote_workers::delete_remote_worker),
-        )
-        .route(
-            "/torc-service/v1/ro_crate_entities",
-            axum::routing::post(ro_crate::create_ro_crate_entity),
-        )
-        .route(
-            "/torc-service/v1/ro_crate_entities/{id}",
-            get(ro_crate::get_ro_crate_entity)
-                .put(ro_crate::update_ro_crate_entity)
-                .delete(ro_crate::delete_ro_crate_entity),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/ro_crate_entities",
-            get(ro_crate::list_ro_crate_entities).delete(ro_crate::delete_ro_crate_entities),
-        )
-        .route(
-            "/torc-service/v1/admin/reload-auth",
-            axum::routing::post(access_control::reload_auth),
-        )
-        .route(
-            "/torc-service/v1/workflows",
-            axum::routing::get(workflows::list_workflows).post(workflows::create_workflow),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}",
-            get(workflows::get_workflow)
-                .put(workflows::update_workflow)
-                .delete(workflows::delete_workflow),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/cancel",
-            axum::routing::put(workflows::cancel_workflow),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/initialize_jobs",
-            axum::routing::post(workflows::initialize_jobs),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/is_complete",
-            get(workflows::is_workflow_complete),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/is_uninitialized",
-            get(workflows::is_workflow_uninitialized),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/reset_status",
-            axum::routing::post(workflows::reset_workflow_status),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/reset_job_status",
-            axum::routing::post(workflows::reset_job_status),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/status",
-            get(workflows::get_workflow_status).put(workflows::update_workflow_status),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/claim_jobs_based_on_resources/{limit}",
-            axum::routing::post(workflows::claim_jobs_based_on_resources),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/claim_next_jobs",
-            axum::routing::post(workflows::claim_next_jobs),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/job_dependencies",
-            get(workflows::list_job_dependencies),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/job_file_relationships",
-            get(workflows::list_job_file_relationships),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/job_user_data_relationships",
-            get(workflows::list_job_user_data_relationships),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/job_ids",
-            get(workflows::list_job_ids),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/missing_user_data",
-            get(workflows::list_missing_user_data),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/process_changed_job_inputs",
-            axum::routing::post(workflows::process_changed_job_inputs),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/ready_job_requirements",
-            get(workflows::get_ready_job_requirements),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/required_existing_files",
-            get(workflows::list_required_existing_files),
-        )
-        .with_state(state)
+fn check_operation_id(
+    source: &str,
+    emitted: &Value,
+    path: &str,
+    method: &str,
+    expected: &str,
+    issues: &mut Vec<String>,
+) {
+    let source_operation_id = source_operation_id(source, path, method);
+    let emitted_operation_id = emitted
+        .get("paths")
+        .and_then(|paths| paths.get(path))
+        .and_then(|path_item| path_item.get(method))
+        .and_then(|op| op.get("operationId"))
+        .and_then(Value::as_str);
+
+    if source_operation_id != Some(expected) {
+        issues.push(format!(
+            "source operationId mismatch for {} {}: expected {}, found {:?}",
+            method, path, expected, source_operation_id
+        ));
+    }
+
+    if emitted_operation_id != Some(expected) {
+        issues.push(format!(
+            "emitted operationId mismatch for {} {}: expected {}, found {:?}",
+            method, path, expected, emitted_operation_id
+        ));
+    }
+}
+
+fn check_schema_properties(
+    emitted: &Value,
+    path: &str,
+    method: &str,
+    expected_properties: &[&str],
+    issues: &mut Vec<String>,
+) {
+    let schema = emitted
+        .get("paths")
+        .and_then(|paths| paths.get(path))
+        .and_then(|path_item| path_item.get(method))
+        .and_then(|op| op.get("responses"))
+        .and_then(|responses| responses.get("200"))
+        .and_then(|response| response.get("content"))
+        .and_then(|content| content.get("application/json"))
+        .and_then(|json_content| json_content.get("schema"));
+
+    let Some(schema) = schema else {
+        issues.push(format!(
+            "emitted schema missing for {} {} 200 response",
+            method, path
+        ));
+        return;
+    };
+
+    let properties = resolve_schema_properties(emitted, schema);
+    let Some(properties) = properties else {
+        issues.push(format!(
+            "unable to resolve emitted properties for {} {}",
+            method, path
+        ));
+        return;
+    };
+
+    for property in expected_properties {
+        if !properties.contains_key(*property) {
+            issues.push(format!(
+                "emitted schema for {} {} missing property {}",
+                method, path, property
+            ));
+        }
+    }
+}
+
+fn check_component_properties(
+    document: &Value,
+    schema_name: &str,
+    expected_properties: &[&str],
+    issues: &mut Vec<String>,
+) {
+    let properties = document
+        .get("components")
+        .and_then(|components| components.get("schemas"))
+        .and_then(|schemas| schemas.get(schema_name))
+        .and_then(|schema| schema.get("properties"))
+        .and_then(Value::as_object);
+
+    let Some(properties) = properties else {
+        issues.push(format!("emitted component schema missing: {schema_name}"));
+        return;
+    };
+
+    for property in expected_properties {
+        if !properties.contains_key(*property) {
+            issues.push(format!(
+                "emitted component {schema_name} missing property {}",
+                property
+            ));
+        }
+    }
+}
+
+fn source_operation_id<'a>(source: &'a str, path: &str, method: &str) -> Option<&'a str> {
+    let path_line = format!("  {path}:");
+    let start = source.find(&path_line)?;
+    let remaining = &source[start..];
+    let end = remaining[1..]
+        .find("\n  /")
+        .map(|index| index + 1)
+        .unwrap_or(remaining.len());
+    let section = &remaining[..end];
+
+    let mut current_method: Option<&str> = None;
+
+    for line in section.lines() {
+        if let Some(method_name) = line
+            .strip_prefix("    ")
+            .and_then(|rest| rest.strip_suffix(':'))
+            .filter(|value| matches!(*value, "get" | "post" | "put" | "delete" | "patch"))
+        {
+            current_method = Some(method_name);
+            continue;
+        }
+
+        if current_method == Some(method)
+            && let Some(value) = line.trim().strip_prefix("operationId: ")
+        {
+            return Some(value.trim());
+        }
+    }
+
+    None
+}
+
+fn resolve_schema_properties<'a>(
+    document: &'a Value,
+    schema: &'a Value,
+) -> Option<&'a Map<String, Value>> {
+    if let Some(reference) = schema.get("$ref").and_then(Value::as_str) {
+        let schema_name = reference.rsplit('/').next()?;
+        return document
+            .get("components")
+            .and_then(|components| components.get("schemas"))
+            .and_then(|schemas| schemas.get(schema_name))
+            .and_then(|schema| schema.get("properties"))
+            .and_then(Value::as_object);
+    }
+
+    schema.get("properties").and_then(Value::as_object)
 }
 
 #[derive(OpenApi)]
 #[openapi(
     servers((url = "/torc-service/v1", description = "Versioned Torc API base path")),
     paths(
-        access_control::create_access_group,
-        access_control::list_access_groups,
-        access_control::get_access_group,
-        access_control::delete_access_group,
-        access_control::add_user_to_group,
-        access_control::list_group_members,
-        access_control::remove_user_from_group,
-        access_control::list_user_groups,
-        access_control::add_workflow_to_group,
-        access_control::list_workflow_groups,
-        access_control::remove_workflow_from_group,
-        access_control::check_workflow_access,
-        system::ping,
-        system::version,
-        admin_resources::create_jobs,
-        compute_nodes::create_compute_node,
-        compute_nodes::delete_compute_nodes,
-        compute_nodes::list_compute_nodes,
-        compute_nodes::delete_compute_node,
-        compute_nodes::get_compute_node,
-        compute_nodes::update_compute_node,
-        events::create_event,
-        events::delete_events,
-        events::list_events,
-        events::delete_event,
-        events::get_event,
-        events::update_event,
-        files::create_file,
-        files::delete_files,
-        files::list_files,
-        files::delete_file,
-        files::get_file,
-        files::update_file,
-        jobs::create_job,
-        jobs::delete_jobs,
-        jobs::list_jobs,
-        jobs::delete_job,
-        jobs::get_job,
-        jobs::update_job,
-        jobs::complete_job,
-        jobs::manage_status_change,
-        jobs::start_job,
-        jobs::retry_job,
-        local_schedulers::create_local_scheduler,
-        local_schedulers::delete_local_schedulers,
-        local_schedulers::list_local_schedulers,
-        local_schedulers::delete_local_scheduler,
-        local_schedulers::get_local_scheduler,
-        local_schedulers::update_local_scheduler,
-        admin_resources::create_resource_requirements,
-        admin_resources::delete_resource_requirements,
-        admin_resources::list_resource_requirements,
-        admin_resources::delete_resource_requirement,
-        admin_resources::get_resource_requirements,
-        admin_resources::update_resource_requirements,
-        admin_resources::create_failure_handler,
-        admin_resources::get_failure_handler,
-        admin_resources::delete_failure_handler,
-        admin_resources::list_failure_handlers,
-        workflow_actions::create_workflow_action,
-        workflow_actions::get_workflow_actions,
-        workflow_actions::get_pending_actions,
-        workflow_actions::claim_action,
-        results::create_result,
-        results::delete_results,
-        results::list_results,
-        results::delete_result,
-        results::get_result,
-        results::update_result,
-        scheduled_compute_nodes::create_scheduled_compute_node,
-        scheduled_compute_nodes::delete_scheduled_compute_nodes,
-        scheduled_compute_nodes::list_scheduled_compute_nodes,
-        scheduled_compute_nodes::delete_scheduled_compute_node,
-        scheduled_compute_nodes::get_scheduled_compute_node,
-        scheduled_compute_nodes::update_scheduled_compute_node,
-        slurm_schedulers::create_slurm_scheduler,
-        slurm_schedulers::delete_slurm_schedulers,
-        slurm_schedulers::list_slurm_schedulers,
-        slurm_schedulers::delete_slurm_scheduler,
-        slurm_schedulers::get_slurm_scheduler,
-        slurm_schedulers::update_slurm_scheduler,
-        admin_resources::create_slurm_stats,
-        admin_resources::list_slurm_stats,
-        remote_workers::create_remote_workers,
-        remote_workers::list_remote_workers,
-        remote_workers::delete_remote_worker,
-        ro_crate::create_ro_crate_entity,
-        ro_crate::get_ro_crate_entity,
-        ro_crate::update_ro_crate_entity,
-        ro_crate::delete_ro_crate_entity,
-        ro_crate::list_ro_crate_entities,
-        ro_crate::delete_ro_crate_entities,
-        access_control::reload_auth,
-        workflows::list_workflows,
-        workflows::create_workflow,
-        workflows::delete_workflow,
-        workflows::get_workflow,
-        workflows::update_workflow,
-        workflows::cancel_workflow,
-        workflows::initialize_jobs,
-        workflows::is_workflow_complete,
-        workflows::is_workflow_uninitialized,
-        workflows::reset_workflow_status,
-        workflows::reset_job_status,
-        workflows::get_workflow_status,
-        workflows::update_workflow_status,
-        workflows::claim_jobs_based_on_resources,
-        workflows::claim_next_jobs,
-        workflows::list_job_dependencies,
-        workflows::list_job_file_relationships,
-        workflows::list_job_user_data_relationships,
-        workflows::list_job_ids,
-        workflows::list_missing_user_data,
-        workflows::process_changed_job_inputs,
-        workflows::get_ready_job_requirements,
-        workflows::list_required_existing_files,
-        user_data::create_user_data,
-        user_data::delete_all_user_data,
-        user_data::list_user_data,
-        user_data::delete_user_data,
-        user_data::get_user_data,
-        user_data::update_user_data
+        openapi_access_control_paths::create_access_group,
+        openapi_access_control_paths::list_access_groups,
+        openapi_access_control_paths::get_access_group,
+        openapi_access_control_paths::delete_access_group,
+        openapi_access_control_paths::add_user_to_group,
+        openapi_access_control_paths::list_group_members,
+        openapi_access_control_paths::remove_user_from_group,
+        openapi_access_control_paths::list_user_groups,
+        openapi_access_control_paths::add_workflow_to_group,
+        openapi_access_control_paths::list_workflow_groups,
+        openapi_access_control_paths::remove_workflow_from_group,
+        openapi_access_control_paths::check_workflow_access,
+        openapi_system_paths::ping,
+        openapi_system_paths::version,
+        openapi_bulk_job_paths::create_jobs,
+        openapi_compute_node_paths::create_compute_node,
+        openapi_compute_node_paths::delete_compute_nodes,
+        openapi_compute_node_paths::list_compute_nodes,
+        openapi_compute_node_paths::delete_compute_node,
+        openapi_compute_node_paths::get_compute_node,
+        openapi_compute_node_paths::update_compute_node,
+        openapi_event_paths::create_event,
+        openapi_event_paths::delete_events,
+        openapi_event_paths::list_events,
+        openapi_event_paths::delete_event,
+        openapi_event_paths::get_event,
+        openapi_event_paths::update_event,
+        openapi_file_paths::create_file,
+        openapi_file_paths::delete_files,
+        openapi_file_paths::list_files,
+        openapi_file_paths::delete_file,
+        openapi_file_paths::get_file,
+        openapi_file_paths::update_file,
+        openapi_job_paths::create_job,
+        openapi_job_paths::delete_jobs,
+        openapi_job_paths::list_jobs,
+        openapi_job_paths::delete_job,
+        openapi_job_paths::get_job,
+        openapi_job_paths::update_job,
+        openapi_job_paths::complete_job,
+        openapi_job_paths::manage_status_change,
+        openapi_job_paths::start_job,
+        openapi_job_paths::retry_job,
+        openapi_local_scheduler_paths::create_local_scheduler,
+        openapi_local_scheduler_paths::delete_local_schedulers,
+        openapi_local_scheduler_paths::list_local_schedulers,
+        openapi_local_scheduler_paths::delete_local_scheduler,
+        openapi_local_scheduler_paths::get_local_scheduler,
+        openapi_local_scheduler_paths::update_local_scheduler,
+        openapi_resource_requirements_paths::create_resource_requirements,
+        openapi_resource_requirements_paths::delete_all_resource_requirements,
+        openapi_resource_requirements_paths::list_resource_requirements,
+        openapi_resource_requirements_paths::delete_resource_requirements,
+        openapi_resource_requirements_paths::get_resource_requirements,
+        openapi_resource_requirements_paths::update_resource_requirements,
+        openapi_failure_handler_paths::create_failure_handler,
+        openapi_failure_handler_paths::get_failure_handler,
+        openapi_failure_handler_paths::delete_failure_handler,
+        openapi_failure_handler_paths::list_failure_handlers,
+        openapi_workflow_action_paths::create_workflow_action,
+        openapi_workflow_action_paths::get_workflow_actions,
+        openapi_workflow_action_paths::get_pending_actions,
+        openapi_workflow_action_paths::claim_action,
+        openapi_result_paths::create_result,
+        openapi_result_paths::delete_results,
+        openapi_result_paths::list_results,
+        openapi_result_paths::delete_result,
+        openapi_result_paths::get_result,
+        openapi_result_paths::update_result,
+        openapi_scheduled_compute_node_paths::create_scheduled_compute_node,
+        openapi_scheduled_compute_node_paths::delete_scheduled_compute_nodes,
+        openapi_scheduled_compute_node_paths::list_scheduled_compute_nodes,
+        openapi_scheduled_compute_node_paths::delete_scheduled_compute_node,
+        openapi_scheduled_compute_node_paths::get_scheduled_compute_node,
+        openapi_scheduled_compute_node_paths::update_scheduled_compute_node,
+        openapi_slurm_scheduler_paths::create_slurm_scheduler,
+        openapi_slurm_scheduler_paths::delete_slurm_schedulers,
+        openapi_slurm_scheduler_paths::list_slurm_schedulers,
+        openapi_slurm_scheduler_paths::delete_slurm_scheduler,
+        openapi_slurm_scheduler_paths::get_slurm_scheduler,
+        openapi_slurm_scheduler_paths::update_slurm_scheduler,
+        openapi_slurm_stats_paths::create_slurm_stats,
+        openapi_slurm_stats_paths::list_slurm_stats,
+        openapi_remote_worker_paths::create_remote_workers,
+        openapi_remote_worker_paths::list_remote_workers,
+        openapi_remote_worker_paths::delete_remote_worker,
+        openapi_ro_crate_paths::create_ro_crate_entity,
+        openapi_ro_crate_paths::get_ro_crate_entity,
+        openapi_ro_crate_paths::update_ro_crate_entity,
+        openapi_ro_crate_paths::delete_ro_crate_entity,
+        openapi_ro_crate_paths::list_ro_crate_entities,
+        openapi_ro_crate_paths::delete_ro_crate_entities,
+        openapi_access_control_paths::reload_auth,
+        openapi_workflow_paths::list_workflows,
+        openapi_workflow_paths::create_workflow,
+        openapi_workflow_paths::delete_workflow,
+        openapi_workflow_paths::get_workflow,
+        openapi_workflow_paths::update_workflow,
+        openapi_workflow_paths::cancel_workflow,
+        openapi_workflow_paths::initialize_jobs,
+        openapi_workflow_paths::is_workflow_complete,
+        openapi_workflow_paths::is_workflow_uninitialized,
+        openapi_workflow_paths::reset_workflow_status,
+        openapi_workflow_paths::reset_job_status,
+        openapi_workflow_paths::get_workflow_status,
+        openapi_workflow_paths::update_workflow_status,
+        openapi_workflow_paths::claim_jobs_based_on_resources,
+        openapi_workflow_paths::claim_next_jobs,
+        openapi_workflow_paths::list_job_dependencies,
+        openapi_workflow_paths::list_job_file_relationships,
+        openapi_workflow_paths::list_job_user_data_relationships,
+        openapi_workflow_paths::list_job_ids,
+        openapi_workflow_paths::list_missing_user_data,
+        openapi_workflow_paths::process_changed_job_inputs,
+        openapi_workflow_paths::get_ready_job_requirements,
+        openapi_workflow_paths::list_required_existing_files,
+        openapi_user_data_paths::create_user_data,
+        openapi_user_data_paths::delete_all_user_data,
+        openapi_user_data_paths::list_user_data,
+        openapi_user_data_paths::delete_user_data,
+        openapi_user_data_paths::get_user_data,
+        openapi_user_data_paths::update_user_data
     ),
     components(schemas(
         PingResponse,

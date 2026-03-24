@@ -88,8 +88,8 @@ impl LiveServerState {
         version: String,
         api_version: String,
         git_hash: String,
-    ) -> crate::openapi_codegen::OpenApiAppState {
-        crate::openapi_codegen::OpenApiAppState {
+    ) -> crate::openapi_spec::OpenApiAppState {
+        crate::openapi_spec::OpenApiAppState {
             version,
             api_version,
             git_hash,

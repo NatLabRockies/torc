@@ -1,4 +1,11 @@
+#![allow(dead_code)]
+
 use super::*;
+
+#[derive(Debug, PartialEq)]
+pub(super) struct DeleteComputeNodesQuery {
+    pub(super) workflow_id: i64,
+}
 
 #[derive(Debug, PartialEq)]
 pub(super) struct ComputeNodesQuery {
@@ -10,11 +17,6 @@ pub(super) struct ComputeNodesQuery {
     pub(super) hostname: Option<String>,
     pub(super) is_active: Option<bool>,
     pub(super) scheduled_compute_node_id: Option<i64>,
-}
-
-#[derive(Debug, PartialEq)]
-pub(super) struct DeleteComputeNodesQuery {
-    pub(super) workflow_id: i64,
 }
 
 #[derive(Debug, PartialEq)]
@@ -140,20 +142,6 @@ pub(super) struct SlurmStatsQuery {
 }
 
 #[derive(Debug, PartialEq)]
-pub(super) struct JobsQuery {
-    pub(super) workflow_id: i64,
-    pub(super) status: Option<models::JobStatus>,
-    pub(super) needs_file_id: Option<i64>,
-    pub(super) upstream_job_id: Option<i64>,
-    pub(super) offset: Option<i64>,
-    pub(super) limit: Option<i64>,
-    pub(super) sort_by: Option<String>,
-    pub(super) reverse_sort: Option<bool>,
-    pub(super) include_relationships: Option<bool>,
-    pub(super) active_compute_node_id: Option<i64>,
-}
-
-#[derive(Debug, PartialEq)]
 pub(super) struct WorkflowsQuery {
     pub(super) offset: Option<i64>,
     pub(super) sort_by: Option<String>,
@@ -214,29 +202,6 @@ pub(super) struct ResetWorkflowStatusQuery {
     pub(super) force: Option<bool>,
 }
 
-#[derive(Debug, PartialEq)]
-pub(super) struct RetryJobQuery {
-    pub(super) max_retries: i32,
-}
-
-pub(super) fn parse_compute_nodes_query(query: Option<&str>) -> Result<ComputeNodesQuery, String> {
-    let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
-        .into_owned()
-        .collect();
-
-    let workflow_id = parse_required_i64(&params, "workflow_id")?;
-    Ok(ComputeNodesQuery {
-        workflow_id,
-        offset: parse_optional_i64(&params, "offset")?,
-        limit: parse_optional_i64(&params, "limit")?,
-        sort_by: params.get("sort_by").cloned(),
-        reverse_sort: parse_optional_bool(&params, "reverse_sort")?,
-        hostname: params.get("hostname").cloned(),
-        is_active: parse_optional_bool(&params, "is_active")?,
-        scheduled_compute_node_id: parse_optional_i64(&params, "scheduled_compute_node_id")?,
-    })
-}
-
 pub(super) fn parse_delete_compute_nodes_query(
     query: Option<&str>,
 ) -> Result<DeleteComputeNodesQuery, String> {
@@ -245,6 +210,23 @@ pub(super) fn parse_delete_compute_nodes_query(
         .collect();
     Ok(DeleteComputeNodesQuery {
         workflow_id: parse_required_i64(&params, "workflow_id")?,
+    })
+}
+
+pub(super) fn parse_compute_nodes_query(query: Option<&str>) -> Result<ComputeNodesQuery, String> {
+    let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
+        .into_owned()
+        .collect();
+
+    Ok(ComputeNodesQuery {
+        workflow_id: parse_required_i64(&params, "workflow_id")?,
+        offset: parse_optional_i64(&params, "offset")?,
+        limit: parse_optional_i64(&params, "limit")?,
+        sort_by: params.get("sort_by").cloned(),
+        reverse_sort: parse_optional_bool(&params, "reverse_sort")?,
+        hostname: params.get("hostname").cloned(),
+        is_active: parse_optional_bool(&params, "is_active")?,
+        scheduled_compute_node_id: parse_optional_i64(&params, "scheduled_compute_node_id")?,
     })
 }
 
@@ -436,24 +418,6 @@ pub(super) fn parse_slurm_stats_query(query: Option<&str>) -> Result<SlurmStatsQ
     })
 }
 
-pub(super) fn parse_jobs_query(query: Option<&str>) -> Result<JobsQuery, String> {
-    let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
-        .into_owned()
-        .collect();
-    Ok(JobsQuery {
-        workflow_id: parse_required_i64(&params, "workflow_id")?,
-        status: parse_optional_job_status_name(&params, "status")?,
-        needs_file_id: parse_optional_i64(&params, "needs_file_id")?,
-        upstream_job_id: parse_optional_i64(&params, "upstream_job_id")?,
-        offset: parse_optional_i64(&params, "offset")?,
-        limit: parse_optional_i64(&params, "limit")?,
-        sort_by: params.get("sort_by").cloned(),
-        reverse_sort: parse_optional_bool(&params, "reverse_sort")?,
-        include_relationships: parse_optional_bool(&params, "include_relationships")?,
-        active_compute_node_id: parse_optional_i64(&params, "active_compute_node_id")?,
-    })
-}
-
 pub(super) fn parse_workflows_query(query: Option<&str>) -> Result<WorkflowsQuery, String> {
     let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
         .into_owned()
@@ -574,15 +538,6 @@ pub(super) fn parse_reset_workflow_status_query(
         .collect();
     Ok(ResetWorkflowStatusQuery {
         force: parse_optional_bool(&params, "force")?,
-    })
-}
-
-pub(super) fn parse_retry_job_query(query: Option<&str>) -> Result<RetryJobQuery, String> {
-    let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
-        .into_owned()
-        .collect();
-    Ok(RetryJobQuery {
-        max_retries: parse_required_i32(&params, "max_retries")?,
     })
 }
 
