@@ -553,6 +553,15 @@ impl JobRunner {
         )
     }
 
+    fn box_retry_error<T, E>(result: Result<T, E>) -> Result<T, Box<dyn std::error::Error>>
+    where
+        E: std::fmt::Display,
+    {
+        result.map_err(|err| {
+            Box::new(JobRunnerApiError(err.to_string())) as Box<dyn std::error::Error>
+        })
+    }
+
     /// Atomically claim a workflow action for execution.
     ///
     /// This is a convenience method that wraps [`utils::claim_action`] with
@@ -669,7 +678,10 @@ impl JobRunner {
 
         loop {
             match self.send_with_retries(|| {
-                apis::workflows_api::is_workflow_complete(&self.config, self.workflow_id)
+                Self::box_retry_error(apis::workflows_api::is_workflow_complete(
+                    &self.config,
+                    self.workflow_id,
+                ))
             }) {
                 Ok(response) => {
                     if response.is_canceled {
@@ -1236,9 +1248,9 @@ impl JobRunner {
 
         // Fetch file models and check existence
         for file_id in output_file_ids {
-            let file_model = match self
-                .send_with_retries(|| apis::files_api::get_file(&self.config, *file_id))
-            {
+            let file_model = match self.send_with_retries(|| {
+                Self::box_retry_error(apis::files_api::get_file(&self.config, *file_id))
+            }) {
                 Ok(file) => file,
                 Err(e) => {
                     return Err(format!(
@@ -1298,21 +1310,26 @@ impl JobRunner {
         let mut updated_file_models: Vec<crate::models::FileModel> = Vec::new();
 
         for (file_id, st_mtime) in files_to_update {
-            let mut file_model =
-                match self.send_with_retries(|| apis::files_api::get_file(&self.config, file_id)) {
-                    Ok(file) => file,
-                    Err(e) => {
-                        error!(
-                            "Failed to re-fetch file model for file_id {}: {}",
-                            file_id, e
-                        );
-                        continue;
-                    }
-                };
+            let mut file_model = match self.send_with_retries(|| {
+                Self::box_retry_error(apis::files_api::get_file(&self.config, file_id))
+            }) {
+                Ok(file) => file,
+                Err(e) => {
+                    error!(
+                        "Failed to re-fetch file model for file_id {}: {}",
+                        file_id, e
+                    );
+                    continue;
+                }
+            };
 
             file_model.st_mtime = Some(st_mtime);
             match self.send_with_retries(|| {
-                apis::files_api::update_file(&self.config, file_id, file_model.clone())
+                Self::box_retry_error(apis::files_api::update_file(
+                    &self.config,
+                    file_id,
+                    file_model.clone(),
+                ))
             }) {
                 Ok(_) => {
                     debug!("Updated st_mtime for file_id {} to {}", file_id, st_mtime);
@@ -1362,7 +1379,9 @@ impl JobRunner {
         );
 
         // Fetch the job model to get job name for CreateAction
-        let job = match self.send_with_retries(|| apis::jobs_api::get_job(&self.config, job_id)) {
+        let job = match self.send_with_retries(|| {
+            Self::box_retry_error(apis::jobs_api::get_job(&self.config, job_id))
+        }) {
             Ok(job) => job,
             Err(e) => {
                 warn!(
@@ -1499,13 +1518,13 @@ impl JobRunner {
 
         let status_str = format!("{:?}", final_result.status).to_lowercase();
         match self.send_with_retries(|| {
-            apis::jobs_api::complete_job(
+            Self::box_retry_error(apis::jobs_api::complete_job(
                 &self.config,
                 job_id,
                 final_result.status,
                 final_result.run_id,
                 final_result.clone(),
-            )
+            ))
         }) {
             Ok(_) => {
                 info!(
@@ -1635,7 +1654,10 @@ impl JobRunner {
         };
 
         let handler = match self.send_with_retries(|| {
-            apis::failure_handlers_api::get_failure_handler(&self.config, fh_id)
+            Self::box_retry_error(apis::failure_handlers_api::get_failure_handler(
+                &self.config,
+                fh_id,
+            ))
         }) {
             Ok(h) => h,
             Err(e) => {
@@ -1693,7 +1715,12 @@ impl JobRunner {
         // This ensures we don't run recovery scripts for retries that won't happen.
         // Pass max_retries for server-side validation.
         match self.send_with_retries(|| {
-            apis::jobs_api::retry_job(&self.config, job_id, self.run_id, rule.max_retries)
+            Self::box_retry_error(apis::jobs_api::retry_job(
+                &self.config,
+                job_id,
+                self.run_id,
+                rule.max_retries,
+            ))
         }) {
             Ok(_) => {
                 info!(
@@ -1940,13 +1967,13 @@ impl JobRunner {
         let limit = per_node.num_cpus;
         let strict_scheduler_match = self.torc_config.client.slurm.strict_scheduler_match;
         match self.send_with_retries(|| {
-            apis::workflows_api::claim_jobs_based_on_resources(
+            Self::box_retry_error(apis::workflows_api::claim_jobs_based_on_resources(
                 &self.config,
                 self.workflow_id,
                 limit,
                 per_node.clone(),
                 Some(strict_scheduler_match),
-            )
+            ))
         }) {
             Ok(response) => {
                 let jobs = response.jobs.unwrap_or_default();
@@ -1976,9 +2003,11 @@ impl JobRunner {
                     let mut async_job = AsyncCliCommand::new(job);
 
                     let job_rr = match self.send_with_retries(|| {
-                        apis::resource_requirements_api::get_resource_requirements(
-                            &self.config,
-                            rr_id,
+                        Self::box_retry_error(
+                            apis::resource_requirements_api::get_resource_requirements(
+                                &self.config,
+                                rr_id,
+                            ),
                         )
                     }) {
                         Ok(rr) => rr,
@@ -1992,12 +2021,12 @@ impl JobRunner {
                     };
 
                     match self.send_with_retries(|| {
-                        apis::jobs_api::start_job(
+                        Self::box_retry_error(apis::jobs_api::start_job(
                             &self.config,
                             job_id,
                             self.run_id,
                             self.compute_node_id,
-                        )
+                        ))
                     }) {
                         Ok(_) => {
                             debug!("Successfully marked job {} as started in database", job_id);
@@ -2088,7 +2117,11 @@ impl JobRunner {
             .expect("max_parallel_jobs must be set")
             - self.running_jobs.len() as i64;
         match self.send_with_retries(|| {
-            apis::workflows_api::claim_next_jobs(&self.config, self.workflow_id, Some(limit))
+            Self::box_retry_error(apis::workflows_api::claim_next_jobs(
+                &self.config,
+                self.workflow_id,
+                Some(limit),
+            ))
         }) {
             Ok(response) => {
                 let jobs = response.jobs.unwrap_or_default();
@@ -2116,9 +2149,11 @@ impl JobRunner {
                     let mut async_job = AsyncCliCommand::new(job);
 
                     let job_rr = match self.send_with_retries(|| {
-                        apis::resource_requirements_api::get_resource_requirements(
-                            &self.config,
-                            rr_id,
+                        Self::box_retry_error(
+                            apis::resource_requirements_api::get_resource_requirements(
+                                &self.config,
+                                rr_id,
+                            ),
                         )
                     }) {
                         Ok(rr) => rr,
@@ -2133,12 +2168,12 @@ impl JobRunner {
 
                     // Mark job as started in the database before actually starting it
                     match self.send_with_retries(|| {
-                        apis::jobs_api::start_job(
+                        Self::box_retry_error(apis::jobs_api::start_job(
                             &self.config,
                             job_id,
                             self.run_id,
                             self.compute_node_id,
-                        )
+                        ))
                     }) {
                         Ok(_) => {
                             debug!("Successfully marked job {} as started in database", job_id);
@@ -2217,12 +2252,12 @@ impl JobRunner {
     /// GPU devices that were reserved for the job.
     fn revert_job_to_ready(&mut self, job_id: i64) {
         match self.send_with_retries(|| {
-            apis::jobs_api::manage_status_change(
+            Self::box_retry_error(apis::jobs_api::manage_status_change(
                 &self.config,
                 job_id,
                 JobStatus::Ready,
                 self.run_id,
-            )
+            ))
         }) {
             Ok(_) => {
                 info!(
