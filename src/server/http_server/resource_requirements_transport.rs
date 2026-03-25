@@ -34,7 +34,6 @@ where
     pub(super) async fn transport_delete_all_resource_requirements(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteAllResourceRequirementsResponse, ApiError> {
         authorize_workflow!(
@@ -44,7 +43,7 @@ where
             DeleteAllResourceRequirementsResponse
         );
         self.resource_requirements_api
-            .delete_all_resource_requirements(workflow_id, body, context)
+            .delete_all_resource_requirements(workflow_id, context)
             .await
     }
     pub(super) async fn transport_list_resource_requirements(
@@ -168,7 +167,6 @@ where
     pub(super) async fn transport_delete_resource_requirements(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteResourceRequirementsResponse, ApiError> {
         authorize_resource!(
@@ -179,7 +177,7 @@ where
             DeleteResourceRequirementsResponse
         );
         self.resource_requirements_api
-            .delete_resource_requirements(id, body, context)
+            .delete_resource_requirements(id, context)
             .await
     }
 }

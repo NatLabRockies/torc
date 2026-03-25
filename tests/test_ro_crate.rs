@@ -191,8 +191,7 @@ fn test_ro_crate_cascade_delete(start_server: &ServerProcess) {
     assert_eq!(list.items.len(), 1);
 
     // Delete the workflow (should cascade delete RO-Crate entities)
-    apis::workflows_api::delete_workflow(config, workflow_id, None)
-        .expect("Failed to delete workflow");
+    apis::workflows_api::delete_workflow(config, workflow_id).expect("Failed to delete workflow");
 
     // The workflow is gone, so listing should fail or return error
     let result =

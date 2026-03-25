@@ -45,7 +45,6 @@ pub trait FailureHandlersApi<C> {
     async fn delete_failure_handler(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteFailureHandlerResponse, ApiError>;
 }
@@ -74,8 +73,7 @@ where
         context: &C,
     ) -> Result<CreateFailureHandlerResponse, ApiError> {
         debug!(
-            "create_failure_handler({:?}) - X-Span-ID: {:?}",
-            body,
+            "create_failure_handler - X-Span-ID: {:?}",
             context.get().0.clone()
         );
 
@@ -249,7 +247,6 @@ where
     async fn delete_failure_handler(
         &self,
         id: i64,
-        _body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteFailureHandlerResponse, ApiError> {
         debug!(

@@ -679,7 +679,7 @@ fn test_user_data_list_missing_command_json(start_server: &ServerProcess) {
         .unwrap();
 
     // Delete the original user data to simulate missing input
-    apis::user_data_api::delete_user_data(config, user_data_id_1, None)
+    apis::user_data_api::delete_user_data(config, user_data_id_1)
         .expect("Failed to delete user data to simulate missing input");
 
     // Scenario 2: Test missing job-produced data from completed jobs
@@ -747,7 +747,7 @@ fn test_user_data_list_missing_command_json(start_server: &ServerProcess) {
     let _ = apis::results_api::create_result(config, job_result);
 
     // Delete the produced data to simulate missing job output
-    apis::user_data_api::delete_user_data(config, user_data_id_2, None)
+    apis::user_data_api::delete_user_data(config, user_data_id_2)
         .expect("Failed to delete produced data to simulate missing output");
 
     // Test the CLI list-missing command
@@ -791,8 +791,8 @@ fn test_user_data_list_missing_command_json(start_server: &ServerProcess) {
     );
 
     // Clean up remaining test data
-    let _ = apis::user_data_api::delete_user_data(config, consumer_data_id, None);
-    let _ = apis::user_data_api::delete_user_data(config, producer_data_id, None);
+    let _ = apis::user_data_api::delete_user_data(config, consumer_data_id);
+    let _ = apis::user_data_api::delete_user_data(config, producer_data_id);
 }
 
 #[rstest]
@@ -960,7 +960,7 @@ fn test_api_list_missing_user_data(start_server: &ServerProcess) {
     let job1 = apis::jobs_api::create_job(config, job1).expect("Failed to create consumer job");
     let _job1_id = job1.id.unwrap();
 
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
     let response = apis::workflows_api::list_missing_user_data(config, workflow_id)
@@ -1013,7 +1013,7 @@ fn test_api_list_missing_user_data(start_server: &ServerProcess) {
     // Transition job2 through lifecycle: Running → Completed
     // Note: workflow_status is created with run_id=0 by default
     let run_id = 0;
-    apis::jobs_api::manage_status_change(config, job2_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(config, job2_id, models::JobStatus::Running, run_id)
         .expect("Failed to set job2 to running");
     let result = models::ResultModel::new(
         job2_id,
@@ -1081,7 +1081,7 @@ fn test_api_list_missing_user_data(start_server: &ServerProcess) {
     let job3_id = job3.id.unwrap();
 
     // Transition job3 through lifecycle: Running → Completed
-    apis::jobs_api::manage_status_change(config, job3_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(config, job3_id, models::JobStatus::Running, run_id)
         .expect("Failed to set job3 to running");
     let result3 = models::ResultModel::new(
         job3_id,

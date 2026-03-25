@@ -356,7 +356,7 @@ pub fn create_diamond_workflow(
         apis::jobs_api::create_job(config, postprocess_pre).expect("Failed to add postprocess");
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id as i64, None, None, None)
+        apis::workflows_api::initialize_jobs(config, workflow_id as i64, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -369,7 +369,7 @@ pub fn create_diamond_workflow(
     for job in jobs.values() {
         assert!(job.resource_requirements_id.is_some());
         let rr_id = job.resource_requirements_id.unwrap();
-        let rr = apis::admin_resources_api::get_resource_requirements(config, rr_id)
+        let rr = apis::resource_requirements_api::get_resource_requirements(config, rr_id)
             .expect("Failed to get resource requirements");
         assert_eq!(rr.name, "default".to_string());
     }
@@ -543,7 +543,7 @@ pub fn create_test_resource_requirements(
     req.memory = memory.to_string();
     req.runtime = runtime.to_string();
 
-    apis::admin_resources_api::create_resource_requirements(config, req)
+    apis::resource_requirements_api::create_resource_requirements(config, req)
         .expect("Failed to create test resource requirements")
 }
 
@@ -595,7 +595,7 @@ pub fn create_minimal_resources_workflow(
     }
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -645,7 +645,7 @@ pub fn create_high_cpu_workflow(
     }
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -695,7 +695,7 @@ pub fn create_high_memory_workflow(
     }
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -745,7 +745,7 @@ pub fn create_gpu_workflow(
     }
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -795,7 +795,7 @@ pub fn create_multi_node_workflow(
     }
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -845,7 +845,7 @@ pub fn create_maximum_resources_workflow(
     }
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -954,7 +954,7 @@ pub fn create_dependency_chain_workflow(
     let created_job3 = apis::jobs_api::create_job(config, job3).expect("Failed to create job3");
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -1026,7 +1026,7 @@ pub fn create_custom_resources_workflow(
     }
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -1073,7 +1073,7 @@ pub fn create_many_jobs_workflow(
     }
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -1148,7 +1148,7 @@ pub fn create_diverse_jobs_workflow(
     }
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -1177,7 +1177,7 @@ pub fn delete_all_workflows(config: &Configuration) -> Result<(), Box<dyn std::e
     // Delete each workflow, collecting any failures
     for workflow in workflows {
         if let Some(workflow_id) = workflow.id
-            && let Err(e) = apis::workflows_api::delete_workflow(config, workflow_id, None)
+            && let Err(e) = apis::workflows_api::delete_workflow(config, workflow_id)
         {
             failed_deletions.push((workflow_id, e.to_string()));
         }

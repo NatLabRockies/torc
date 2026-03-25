@@ -13,6 +13,9 @@ basepath(::Type{ SlurmSchedulersApi }) = "http://localhost/torc-service/v1"
 
 const _returntypes_create_slurm_scheduler_SlurmSchedulersApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => SlurmSchedulerModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_create_slurm_scheduler(_api::SlurmSchedulersApi, slurm_scheduler_model::SlurmSchedulerModel; _mediaType=nothing)
@@ -39,62 +42,69 @@ end
 
 const _returntypes_delete_slurm_scheduler_SlurmSchedulersApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => SlurmSchedulerModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
-function _oacinternal_delete_slurm_scheduler(_api::SlurmSchedulersApi, id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_delete_slurm_scheduler_SlurmSchedulersApi, "/slurm_schedulers/{id}", [], body)
+function _oacinternal_delete_slurm_scheduler(_api::SlurmSchedulersApi, id::Int64; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_delete_slurm_scheduler_SlurmSchedulersApi, "/slurm_schedulers/{id}", [])
     OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
-    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
 end
 
 @doc raw"""Params:
 - id::Int64 (required)
-- body::Any
 
 Return: SlurmSchedulerModel, OpenAPI.Clients.ApiResponse
 """
-function delete_slurm_scheduler(_api::SlurmSchedulersApi, id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_delete_slurm_scheduler(_api, id; body=body, _mediaType=_mediaType)
+function delete_slurm_scheduler(_api::SlurmSchedulersApi, id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_delete_slurm_scheduler(_api, id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function delete_slurm_scheduler(_api::SlurmSchedulersApi, response_stream::Channel, id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_delete_slurm_scheduler(_api, id; body=body, _mediaType=_mediaType)
+function delete_slurm_scheduler(_api::SlurmSchedulersApi, response_stream::Channel, id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_delete_slurm_scheduler(_api, id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
 const _returntypes_delete_slurm_schedulers_SlurmSchedulersApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => DeleteCountResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
-function _oacinternal_delete_slurm_schedulers(_api::SlurmSchedulersApi, workflow_id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_delete_slurm_schedulers_SlurmSchedulersApi, "/slurm_schedulers", [], body)
+function _oacinternal_delete_slurm_schedulers(_api::SlurmSchedulersApi, workflow_id::Int64; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_delete_slurm_schedulers_SlurmSchedulersApi, "/slurm_schedulers", [])
     OpenAPI.Clients.set_param(_ctx.query, "workflow_id", workflow_id; style="form", is_explode=true)  # type Int64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
-    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
 end
 
 @doc raw"""Params:
 - workflow_id::Int64 (required)
-- body::Any
 
 Return: DeleteCountResponse, OpenAPI.Clients.ApiResponse
 """
-function delete_slurm_schedulers(_api::SlurmSchedulersApi, workflow_id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_delete_slurm_schedulers(_api, workflow_id; body=body, _mediaType=_mediaType)
+function delete_slurm_schedulers(_api::SlurmSchedulersApi, workflow_id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_delete_slurm_schedulers(_api, workflow_id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function delete_slurm_schedulers(_api::SlurmSchedulersApi, response_stream::Channel, workflow_id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_delete_slurm_schedulers(_api, workflow_id; body=body, _mediaType=_mediaType)
+function delete_slurm_schedulers(_api::SlurmSchedulersApi, response_stream::Channel, workflow_id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_delete_slurm_schedulers(_api, workflow_id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
 const _returntypes_get_slurm_scheduler_SlurmSchedulersApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => SlurmSchedulerModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_get_slurm_scheduler(_api::SlurmSchedulersApi, id::Int64; _mediaType=nothing)
@@ -122,24 +132,18 @@ end
 
 const _returntypes_list_slurm_schedulers_SlurmSchedulersApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ListSlurmSchedulersResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
-function _oacinternal_list_slurm_schedulers(_api::SlurmSchedulersApi, workflow_id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, name=nothing, account=nothing, gres=nothing, mem=nothing, nodes=nothing, partition=nothing, qos=nothing, tmp=nothing, walltime=nothing, _mediaType=nothing)
+function _oacinternal_list_slurm_schedulers(_api::SlurmSchedulersApi, workflow_id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_slurm_schedulers_SlurmSchedulersApi, "/slurm_schedulers", [])
     OpenAPI.Clients.set_param(_ctx.query, "workflow_id", workflow_id; style="form", is_explode=true)  # type Int64
     OpenAPI.Clients.set_param(_ctx.query, "offset", offset; style="form", is_explode=true)  # type Int64
     OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Int64
     OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by; style="form", is_explode=true)  # type String
     OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort; style="form", is_explode=true)  # type Bool
-    OpenAPI.Clients.set_param(_ctx.query, "name", name; style="form", is_explode=true)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "account", account; style="form", is_explode=true)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "gres", gres; style="form", is_explode=true)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "mem", mem; style="form", is_explode=true)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "nodes", nodes; style="form", is_explode=true)  # type Int64
-    OpenAPI.Clients.set_param(_ctx.query, "partition", partition; style="form", is_explode=true)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "qos", qos; style="form", is_explode=true)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "tmp", tmp; style="form", is_explode=true)  # type String
-    OpenAPI.Clients.set_param(_ctx.query, "walltime", walltime; style="form", is_explode=true)  # type String
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -151,30 +155,24 @@ end
 - limit::Int64
 - sort_by::String
 - reverse_sort::Bool
-- name::String
-- account::String
-- gres::String
-- mem::String
-- nodes::Int64
-- partition::String
-- qos::String
-- tmp::String
-- walltime::String
 
 Return: ListSlurmSchedulersResponse, OpenAPI.Clients.ApiResponse
 """
-function list_slurm_schedulers(_api::SlurmSchedulersApi, workflow_id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, name=nothing, account=nothing, gres=nothing, mem=nothing, nodes=nothing, partition=nothing, qos=nothing, tmp=nothing, walltime=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_list_slurm_schedulers(_api, workflow_id; offset=offset, limit=limit, sort_by=sort_by, reverse_sort=reverse_sort, name=name, account=account, gres=gres, mem=mem, nodes=nodes, partition=partition, qos=qos, tmp=tmp, walltime=walltime, _mediaType=_mediaType)
+function list_slurm_schedulers(_api::SlurmSchedulersApi, workflow_id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_list_slurm_schedulers(_api, workflow_id; offset=offset, limit=limit, sort_by=sort_by, reverse_sort=reverse_sort, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function list_slurm_schedulers(_api::SlurmSchedulersApi, response_stream::Channel, workflow_id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, name=nothing, account=nothing, gres=nothing, mem=nothing, nodes=nothing, partition=nothing, qos=nothing, tmp=nothing, walltime=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_list_slurm_schedulers(_api, workflow_id; offset=offset, limit=limit, sort_by=sort_by, reverse_sort=reverse_sort, name=name, account=account, gres=gres, mem=mem, nodes=nodes, partition=partition, qos=qos, tmp=tmp, walltime=walltime, _mediaType=_mediaType)
+function list_slurm_schedulers(_api::SlurmSchedulersApi, response_stream::Channel, workflow_id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_list_slurm_schedulers(_api, workflow_id; offset=offset, limit=limit, sort_by=sort_by, reverse_sort=reverse_sort, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
 const _returntypes_update_slurm_scheduler_SlurmSchedulersApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => SlurmSchedulerModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_update_slurm_scheduler(_api::SlurmSchedulersApi, id::Int64, slurm_scheduler_model::SlurmSchedulerModel; _mediaType=nothing)

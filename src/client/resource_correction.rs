@@ -482,7 +482,8 @@ fn aggregate_violations(
         let adjustment = rr_adjustments.entry(rr_id).or_insert_with(|| {
             // Fetch current resource requirements (only once per rr_id)
             let (current_memory, current_runtime, current_cpus) =
-                match apis::admin_resources_api::get_resource_requirements(ctx.config, rr_id) {
+                match apis::resource_requirements_api::get_resource_requirements(ctx.config, rr_id)
+                {
                     Ok(rr) => (rr.memory, rr.runtime, rr.num_cpus),
                     Err(e) => {
                         warn!(
@@ -591,7 +592,7 @@ fn apply_upscale_for_adjustment(
     let mut new_cpus_value = None;
 
     // Fetch current resource requirements for update
-    let rr = match apis::admin_resources_api::get_resource_requirements(config, rr_id) {
+    let rr = match apis::resource_requirements_api::get_resource_requirements(config, rr_id) {
         Ok(r) => r,
         Err(e) => {
             warn!(
@@ -777,7 +778,7 @@ fn apply_upscale_for_adjustment(
     // Update resource requirements if changed (only once per rr_id)
     if !opts.dry_run
         && let Err(e) =
-            apis::admin_resources_api::update_resource_requirements(config, rr_id, new_rr)
+            apis::resource_requirements_api::update_resource_requirements(config, rr_id, new_rr)
     {
         warn!(
             "Warning: failed to update resource requirements {}: {}",
@@ -823,7 +824,7 @@ fn apply_downscale_for_candidate(
     const RUNTIME_THRESHOLD_SECS: i64 = 30 * 60; // 30 minutes
 
     let rr_id = candidate.rr_id;
-    let rr = match apis::admin_resources_api::get_resource_requirements(config, rr_id) {
+    let rr = match apis::resource_requirements_api::get_resource_requirements(config, rr_id) {
         Ok(r) => r,
         Err(e) => {
             warn!(
@@ -941,7 +942,7 @@ fn apply_downscale_for_candidate(
 
     if !opts.dry_run
         && let Err(e) =
-            apis::admin_resources_api::update_resource_requirements(config, rr_id, new_rr)
+            apis::resource_requirements_api::update_resource_requirements(config, rr_id, new_rr)
     {
         warn!(
             "Warning: failed to update resource requirements {}: {}",

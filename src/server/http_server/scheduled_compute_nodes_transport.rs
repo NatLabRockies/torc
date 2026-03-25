@@ -50,7 +50,6 @@ where
     pub(super) async fn transport_delete_scheduled_compute_nodes(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteScheduledComputeNodesResponse, ApiError> {
         authorize_workflow!(
@@ -60,7 +59,7 @@ where
             DeleteScheduledComputeNodesResponse
         );
         self.schedulers_api
-            .delete_scheduled_compute_nodes(workflow_id, body, context)
+            .delete_scheduled_compute_nodes(workflow_id, context)
             .await
     }
     pub(super) async fn transport_list_scheduled_compute_nodes(
@@ -132,7 +131,6 @@ where
     pub(super) async fn transport_delete_scheduled_compute_node(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteScheduledComputeNodeResponse, ApiError> {
         authorize_resource!(
@@ -143,7 +141,7 @@ where
             DeleteScheduledComputeNodeResponse
         );
         self.schedulers_api
-            .delete_scheduled_compute_node(id, body, context)
+            .delete_scheduled_compute_node(id, context)
             .await
     }
 }

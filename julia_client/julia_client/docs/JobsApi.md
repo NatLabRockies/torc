@@ -6,6 +6,7 @@ Method | HTTP request | Description
 ------------- | ------------- | -------------
 [**complete_job**](JobsApi.md#complete_job) | **POST** /jobs/{id}/complete_job/{status}/{run_id} | 
 [**create_job**](JobsApi.md#create_job) | **POST** /jobs | 
+[**create_jobs**](JobsApi.md#create_jobs) | **POST** /bulk_jobs | 
 [**delete_job**](JobsApi.md#delete_job) | **DELETE** /jobs/{id} | 
 [**delete_jobs**](JobsApi.md#delete_jobs) | **DELETE** /jobs | 
 [**get_job**](JobsApi.md#get_job) | **GET** /jobs/{id} | 
@@ -75,9 +76,9 @@ No authorization required
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
-# **delete_job**
-> delete_job(_api::JobsApi, id::Int64; body=nothing, _mediaType=nothing) -> JobModel, OpenAPI.Clients.ApiResponse <br/>
-> delete_job(_api::JobsApi, response_stream::Channel, id::Int64; body=nothing, _mediaType=nothing) -> Channel{ JobModel }, OpenAPI.Clients.ApiResponse
+# **create_jobs**
+> create_jobs(_api::JobsApi, jobs_model::JobsModel; _mediaType=nothing) -> CreateJobsResponse, OpenAPI.Clients.ApiResponse <br/>
+> create_jobs(_api::JobsApi, response_stream::Channel, jobs_model::JobsModel; _mediaType=nothing) -> Channel{ CreateJobsResponse }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -86,17 +87,11 @@ No authorization required
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **JobsApi** | API context | 
-**id** | **Int64** | Job ID |
-
-### Optional Parameters
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+**jobs_model** | [**JobsModel**](JobsModel.md) |  |
 
 ### Return type
 
-[**JobModel**](JobModel.md)
+[**CreateJobsResponse**](CreateJobsResponse.md)
 
 ### Authorization
 
@@ -109,9 +104,37 @@ No authorization required
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
+# **delete_job**
+> delete_job(_api::JobsApi, id::Int64; _mediaType=nothing) -> JobModel, OpenAPI.Clients.ApiResponse <br/>
+> delete_job(_api::JobsApi, response_stream::Channel, id::Int64; _mediaType=nothing) -> Channel{ JobModel }, OpenAPI.Clients.ApiResponse
+
+
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **JobsApi** | API context | 
+**id** | **Int64** | Job ID |
+
+### Return type
+
+[**JobModel**](JobModel.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
 # **delete_jobs**
-> delete_jobs(_api::JobsApi, workflow_id::Int64; body=nothing, _mediaType=nothing) -> DeleteCountResponse, OpenAPI.Clients.ApiResponse <br/>
-> delete_jobs(_api::JobsApi, response_stream::Channel, workflow_id::Int64; body=nothing, _mediaType=nothing) -> Channel{ DeleteCountResponse }, OpenAPI.Clients.ApiResponse
+> delete_jobs(_api::JobsApi, workflow_id::Int64; _mediaType=nothing) -> DeleteCountResponse, OpenAPI.Clients.ApiResponse <br/>
+> delete_jobs(_api::JobsApi, response_stream::Channel, workflow_id::Int64; _mediaType=nothing) -> Channel{ DeleteCountResponse }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -121,12 +144,6 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **JobsApi** | API context | 
 **workflow_id** | **Int64** |  |
-
-### Optional Parameters
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
 
 ### Return type
 
@@ -138,7 +155,7 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: application/json
+ - **Content-Type**: Not defined
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
@@ -214,8 +231,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **manage_status_change**
-> manage_status_change(_api::JobsApi, id::Int64, status::JobStatus, run_id::Int64; body=nothing, _mediaType=nothing) -> JobModel, OpenAPI.Clients.ApiResponse <br/>
-> manage_status_change(_api::JobsApi, response_stream::Channel, id::Int64, status::JobStatus, run_id::Int64; body=nothing, _mediaType=nothing) -> Channel{ JobModel }, OpenAPI.Clients.ApiResponse
+> manage_status_change(_api::JobsApi, id::Int64, status::JobStatus, run_id::Int64; _mediaType=nothing) -> JobModel, OpenAPI.Clients.ApiResponse <br/>
+> manage_status_change(_api::JobsApi, response_stream::Channel, id::Int64, status::JobStatus, run_id::Int64; _mediaType=nothing) -> Channel{ JobModel }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -228,12 +245,6 @@ Name | Type | Description  | Notes
 **status** | [**JobStatus**](.md) | New job status |
 **run_id** | **Int64** | Current job run ID |
 
-### Optional Parameters
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
-
 ### Return type
 
 [**JobModel**](JobModel.md)
@@ -244,7 +255,7 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: application/json
+ - **Content-Type**: Not defined
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
@@ -280,8 +291,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **start_job**
-> start_job(_api::JobsApi, id::Int64, run_id::Int64, compute_node_id::Int64; body=nothing, _mediaType=nothing) -> JobModel, OpenAPI.Clients.ApiResponse <br/>
-> start_job(_api::JobsApi, response_stream::Channel, id::Int64, run_id::Int64, compute_node_id::Int64; body=nothing, _mediaType=nothing) -> Channel{ JobModel }, OpenAPI.Clients.ApiResponse
+> start_job(_api::JobsApi, id::Int64, run_id::Int64, compute_node_id::Int64; _mediaType=nothing) -> JobModel, OpenAPI.Clients.ApiResponse <br/>
+> start_job(_api::JobsApi, response_stream::Channel, id::Int64, run_id::Int64, compute_node_id::Int64; _mediaType=nothing) -> Channel{ JobModel }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -294,12 +305,6 @@ Name | Type | Description  | Notes
 **run_id** | **Int64** | Current job run ID |
 **compute_node_id** | **Int64** | Compute node ID that started the job |
 
-### Optional Parameters
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
-
 ### Return type
 
 [**JobModel**](JobModel.md)
@@ -310,7 +315,7 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: application/json
+ - **Content-Type**: Not defined
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)

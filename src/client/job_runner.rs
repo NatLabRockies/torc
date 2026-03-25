@@ -1501,7 +1501,7 @@ impl JobRunner {
                 // slurm_stats was taken at the top of handle_job_completion so we could backfill
                 // resource fields into the result before reporting to the server.
                 if let Some(stats) = slurm_stats {
-                    match apis::admin_resources_api::create_slurm_stats(&self.config, stats) {
+                    match apis::slurm_stats_api::create_slurm_stats(&self.config, stats) {
                         Ok(_) => {
                             info!(
                                 "Stored slurm_stats workflow_id={} job_id={}",
@@ -1620,7 +1620,7 @@ impl JobRunner {
         };
 
         let handler = match self.send_with_retries(|| {
-            apis::admin_resources_api::get_failure_handler(&self.config, fh_id)
+            apis::failure_handlers_api::get_failure_handler(&self.config, fh_id)
         }) {
             Ok(h) => h,
             Err(e) => {
@@ -1961,7 +1961,10 @@ impl JobRunner {
                     let mut async_job = AsyncCliCommand::new(job);
 
                     let job_rr = match self.send_with_retries(|| {
-                        apis::admin_resources_api::get_resource_requirements(&self.config, rr_id)
+                        apis::resource_requirements_api::get_resource_requirements(
+                            &self.config,
+                            rr_id,
+                        )
                     }) {
                         Ok(rr) => rr,
                         Err(e) => {
@@ -1979,7 +1982,6 @@ impl JobRunner {
                             job_id,
                             self.run_id,
                             self.compute_node_id,
-                            None,
                         )
                     }) {
                         Ok(_) => {
@@ -2071,7 +2073,7 @@ impl JobRunner {
             .expect("max_parallel_jobs must be set")
             - self.running_jobs.len() as i64;
         match self.send_with_retries(|| {
-            apis::workflows_api::claim_next_jobs(&self.config, self.workflow_id, Some(limit), None)
+            apis::workflows_api::claim_next_jobs(&self.config, self.workflow_id, Some(limit))
         }) {
             Ok(response) => {
                 let jobs = response.jobs.unwrap_or_default();
@@ -2099,7 +2101,10 @@ impl JobRunner {
                     let mut async_job = AsyncCliCommand::new(job);
 
                     let job_rr = match self.send_with_retries(|| {
-                        apis::admin_resources_api::get_resource_requirements(&self.config, rr_id)
+                        apis::resource_requirements_api::get_resource_requirements(
+                            &self.config,
+                            rr_id,
+                        )
                     }) {
                         Ok(rr) => rr,
                         Err(e) => {
@@ -2118,7 +2123,6 @@ impl JobRunner {
                             job_id,
                             self.run_id,
                             self.compute_node_id,
-                            None,
                         )
                     }) {
                         Ok(_) => {
@@ -2203,7 +2207,6 @@ impl JobRunner {
                 job_id,
                 JobStatus::Ready,
                 self.run_id,
-                None,
             )
         }) {
             Ok(_) => {

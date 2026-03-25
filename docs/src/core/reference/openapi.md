@@ -22,8 +22,13 @@ bash sync_openapi.sh emit
 # Verify checked-in specs match the emitted contract
 bash sync_openapi.sh check
 
-# Regenerate Python/Julia clients from the checked-in contract
+# Regenerate Rust, Python, and Julia clients from the checked-in contract
 bash sync_openapi.sh clients
+
+# Or regenerate all three client surfaces from the emitted Rust spec before promotion
+bash sync_openapi.sh emit
+bash sync_openapi.sh check
+bash sync_openapi.sh clients --use-rust-spec
 ```
 
 ## Core Endpoints

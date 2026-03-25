@@ -630,7 +630,7 @@ class WorkflowActionsApi:
     def get_pending_actions(
         self,
         id: Annotated[StrictInt, Field(description="Workflow ID")],
-        trigger_type: Optional[List[StrictStr]] = None,
+        trigger_type: Optional[List[StrictStr]],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -649,7 +649,7 @@ class WorkflowActionsApi:
 
         :param id: Workflow ID (required)
         :type id: int
-        :param trigger_type:
+        :param trigger_type: (required)
         :type trigger_type: List[str]
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -700,7 +700,7 @@ class WorkflowActionsApi:
     def get_pending_actions_with_http_info(
         self,
         id: Annotated[StrictInt, Field(description="Workflow ID")],
-        trigger_type: Optional[List[StrictStr]] = None,
+        trigger_type: Optional[List[StrictStr]],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -719,7 +719,7 @@ class WorkflowActionsApi:
 
         :param id: Workflow ID (required)
         :type id: int
-        :param trigger_type:
+        :param trigger_type: (required)
         :type trigger_type: List[str]
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -770,7 +770,7 @@ class WorkflowActionsApi:
     def get_pending_actions_without_preload_content(
         self,
         id: Annotated[StrictInt, Field(description="Workflow ID")],
-        trigger_type: Optional[List[StrictStr]] = None,
+        trigger_type: Optional[List[StrictStr]],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -789,7 +789,7 @@ class WorkflowActionsApi:
 
         :param id: Workflow ID (required)
         :type id: int
-        :param trigger_type:
+        :param trigger_type: (required)
         :type trigger_type: List[str]
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -845,7 +845,7 @@ class WorkflowActionsApi:
         _host = None
 
         _collection_formats: Dict[str, str] = {
-            'trigger_type': 'multi',
+            'trigger_type': 'csv',
         }
 
         _path_params: Dict[str, str] = {}
@@ -860,11 +860,9 @@ class WorkflowActionsApi:
         # process the path parameters
         if id is not None:
             _path_params['id'] = id
-        # process the query parameters
         if trigger_type is not None:
-            
-            _query_params.append(('trigger_type', trigger_type))
-            
+            _path_params['trigger_type'] = trigger_type
+        # process the query parameters
         # process the header parameters
         # process the form parameters
         # process the body parameter

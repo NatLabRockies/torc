@@ -170,6 +170,7 @@ pub fn iter_jobs(
 ///
 /// # Returns
 /// `Result<Vec<JobModel>, Error>` containing all jobs or an error
+#[allow(clippy::result_large_err)]
 pub fn paginate_jobs(
     config: &apis::configuration::Configuration,
     workflow_id: i64,

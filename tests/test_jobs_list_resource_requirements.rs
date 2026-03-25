@@ -21,7 +21,7 @@ fn test_list_resource_requirements_for_workflow(start_server: &ServerProcess) {
     rr1.num_nodes = 1;
     rr1.memory = "8g".to_string();
     rr1.runtime = "PT1H".to_string();
-    let rr1 = apis::admin_resources_api::create_resource_requirements(config, rr1)
+    let rr1 = apis::resource_requirements_api::create_resource_requirements(config, rr1)
         .expect("Failed to create resource requirements 1");
     let rr1_id = rr1.id.unwrap();
 
@@ -31,7 +31,7 @@ fn test_list_resource_requirements_for_workflow(start_server: &ServerProcess) {
     rr2.num_nodes = 2;
     rr2.memory = "16g".to_string();
     rr2.runtime = "PT2H".to_string();
-    let rr2 = apis::admin_resources_api::create_resource_requirements(config, rr2)
+    let rr2 = apis::resource_requirements_api::create_resource_requirements(config, rr2)
         .expect("Failed to create resource requirements 2");
     let rr2_id = rr2.id.unwrap();
 
@@ -117,7 +117,7 @@ fn test_list_resource_requirements_for_specific_job(start_server: &ServerProcess
     rr.num_nodes = 1;
     rr.memory = "4g".to_string();
     rr.runtime = "PT30M".to_string();
-    let rr = apis::admin_resources_api::create_resource_requirements(config, rr)
+    let rr = apis::resource_requirements_api::create_resource_requirements(config, rr)
         .expect("Failed to create resource requirements");
     let rr_id = rr.id.unwrap();
 

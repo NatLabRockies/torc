@@ -13,6 +13,9 @@ basepath(::Type{ ResultsApi }) = "http://localhost/torc-service/v1"
 
 const _returntypes_create_result_ResultsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ResultModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_create_result(_api::ResultsApi, result_model::ResultModel; _mediaType=nothing)
@@ -39,62 +42,69 @@ end
 
 const _returntypes_delete_result_ResultsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ResultModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
-function _oacinternal_delete_result(_api::ResultsApi, id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_delete_result_ResultsApi, "/results/{id}", [], body)
+function _oacinternal_delete_result(_api::ResultsApi, id::Int64; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_delete_result_ResultsApi, "/results/{id}", [])
     OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
-    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
 end
 
 @doc raw"""Params:
 - id::Int64 (required)
-- body::Any
 
 Return: ResultModel, OpenAPI.Clients.ApiResponse
 """
-function delete_result(_api::ResultsApi, id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_delete_result(_api, id; body=body, _mediaType=_mediaType)
+function delete_result(_api::ResultsApi, id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_delete_result(_api, id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function delete_result(_api::ResultsApi, response_stream::Channel, id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_delete_result(_api, id; body=body, _mediaType=_mediaType)
+function delete_result(_api::ResultsApi, response_stream::Channel, id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_delete_result(_api, id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
 const _returntypes_delete_results_ResultsApi = Dict{Regex,Type}(
-    Regex("^" * replace("200", "x"=>".") * "\$") => DeleteCountResponse,
+    Regex("^" * replace("200", "x"=>".") * "\$") => Any,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
-function _oacinternal_delete_results(_api::ResultsApi, workflow_id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_delete_results_ResultsApi, "/results", [], body)
+function _oacinternal_delete_results(_api::ResultsApi, workflow_id::Int64; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_delete_results_ResultsApi, "/results", [])
     OpenAPI.Clients.set_param(_ctx.query, "workflow_id", workflow_id; style="form", is_explode=true)  # type Int64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
-    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
 end
 
 @doc raw"""Params:
 - workflow_id::Int64 (required)
-- body::Any
 
-Return: DeleteCountResponse, OpenAPI.Clients.ApiResponse
+Return: Any, OpenAPI.Clients.ApiResponse
 """
-function delete_results(_api::ResultsApi, workflow_id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_delete_results(_api, workflow_id; body=body, _mediaType=_mediaType)
+function delete_results(_api::ResultsApi, workflow_id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_delete_results(_api, workflow_id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function delete_results(_api::ResultsApi, response_stream::Channel, workflow_id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_delete_results(_api, workflow_id; body=body, _mediaType=_mediaType)
+function delete_results(_api::ResultsApi, response_stream::Channel, workflow_id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_delete_results(_api, workflow_id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
 const _returntypes_get_result_ResultsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ResultModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_get_result(_api::ResultsApi, id::Int64; _mediaType=nothing)
@@ -122,6 +132,9 @@ end
 
 const _returntypes_list_results_ResultsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ListResultsResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_list_results(_api::ResultsApi, workflow_id::Int64; job_id=nothing, run_id=nothing, return_code=nothing, status=nothing, compute_node_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, all_runs=nothing, _mediaType=nothing)
@@ -169,6 +182,9 @@ end
 
 const _returntypes_update_result_ResultsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ResultModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_update_result(_api::ResultsApi, id::Int64, result_model::ResultModel; _mediaType=nothing)

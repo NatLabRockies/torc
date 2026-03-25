@@ -41,8 +41,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **delete_result**
-> delete_result(_api::ResultsApi, id::Int64; body=nothing, _mediaType=nothing) -> ResultModel, OpenAPI.Clients.ApiResponse <br/>
-> delete_result(_api::ResultsApi, response_stream::Channel, id::Int64; body=nothing, _mediaType=nothing) -> Channel{ ResultModel }, OpenAPI.Clients.ApiResponse
+> delete_result(_api::ResultsApi, id::Int64; _mediaType=nothing) -> ResultModel, OpenAPI.Clients.ApiResponse <br/>
+> delete_result(_api::ResultsApi, response_stream::Channel, id::Int64; _mediaType=nothing) -> Channel{ ResultModel }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -52,12 +52,6 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **ResultsApi** | API context | 
 **id** | **Int64** | Results ID |
-
-### Optional Parameters
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
 
 ### Return type
 
@@ -69,14 +63,14 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: application/json
+ - **Content-Type**: Not defined
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **delete_results**
-> delete_results(_api::ResultsApi, workflow_id::Int64; body=nothing, _mediaType=nothing) -> DeleteCountResponse, OpenAPI.Clients.ApiResponse <br/>
-> delete_results(_api::ResultsApi, response_stream::Channel, workflow_id::Int64; body=nothing, _mediaType=nothing) -> Channel{ DeleteCountResponse }, OpenAPI.Clients.ApiResponse
+> delete_results(_api::ResultsApi, workflow_id::Int64; _mediaType=nothing) -> Any, OpenAPI.Clients.ApiResponse <br/>
+> delete_results(_api::ResultsApi, response_stream::Channel, workflow_id::Int64; _mediaType=nothing) -> Channel{ Any }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -87,15 +81,9 @@ Name | Type | Description  | Notes
  **_api** | **ResultsApi** | API context | 
 **workflow_id** | **Int64** |  |
 
-### Optional Parameters
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
-
 ### Return type
 
-[**DeleteCountResponse**](DeleteCountResponse.md)
+**Any**
 
 ### Authorization
 
@@ -103,7 +91,7 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: application/json
+ - **Content-Type**: Not defined
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)

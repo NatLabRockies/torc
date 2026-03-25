@@ -95,6 +95,9 @@ class FilesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FileModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -161,6 +164,9 @@ class FilesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FileModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -227,6 +233,9 @@ class FilesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FileModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -314,7 +323,7 @@ class FilesApi:
     @validate_call
     def delete_file(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the file record.")],
+        id: Annotated[StrictInt, Field(description="File ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -331,7 +340,7 @@ class FilesApi:
         """delete_file
 
 
-        :param id: ID of the file record. (required)
+        :param id: File ID (required)
         :type id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -365,6 +374,9 @@ class FilesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FileModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -380,7 +392,7 @@ class FilesApi:
     @validate_call
     def delete_file_with_http_info(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the file record.")],
+        id: Annotated[StrictInt, Field(description="File ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -397,7 +409,7 @@ class FilesApi:
         """delete_file
 
 
-        :param id: ID of the file record. (required)
+        :param id: File ID (required)
         :type id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -431,6 +443,9 @@ class FilesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FileModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -446,7 +461,7 @@ class FilesApi:
     @validate_call
     def delete_file_without_preload_content(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the file record.")],
+        id: Annotated[StrictInt, Field(description="File ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -463,7 +478,7 @@ class FilesApi:
         """delete_file
 
 
-        :param id: ID of the file record. (required)
+        :param id: File ID (required)
         :type id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -497,6 +512,9 @@ class FilesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FileModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -622,6 +640,9 @@ class FilesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "DeleteCountResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -688,6 +709,9 @@ class FilesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "DeleteCountResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -754,6 +778,9 @@ class FilesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "DeleteCountResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -830,7 +857,7 @@ class FilesApi:
     @validate_call
     def get_file(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the files record")],
+        id: Annotated[StrictInt, Field(description="ID of the file record")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -847,7 +874,7 @@ class FilesApi:
         """get_file
 
 
-        :param id: ID of the files record (required)
+        :param id: ID of the file record (required)
         :type id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -881,6 +908,9 @@ class FilesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FileModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -896,7 +926,7 @@ class FilesApi:
     @validate_call
     def get_file_with_http_info(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the files record")],
+        id: Annotated[StrictInt, Field(description="ID of the file record")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -913,7 +943,7 @@ class FilesApi:
         """get_file
 
 
-        :param id: ID of the files record (required)
+        :param id: ID of the file record (required)
         :type id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -947,6 +977,9 @@ class FilesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FileModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -962,7 +995,7 @@ class FilesApi:
     @validate_call
     def get_file_without_preload_content(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the files record")],
+        id: Annotated[StrictInt, Field(description="ID of the file record")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -979,7 +1012,7 @@ class FilesApi:
         """get_file
 
 
-        :param id: ID of the files record (required)
+        :param id: ID of the file record (required)
         :type id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -1013,6 +1046,9 @@ class FilesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FileModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1170,6 +1206,9 @@ class FilesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListFilesResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1268,6 +1307,9 @@ class FilesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListFilesResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1366,6 +1408,9 @@ class FilesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListFilesResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1537,6 +1582,9 @@ class FilesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FileModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1607,6 +1655,9 @@ class FilesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FileModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1677,6 +1728,9 @@ class FilesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "FileModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,

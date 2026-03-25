@@ -95,6 +95,9 @@ class ComputeNodesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ComputeNodeModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -161,6 +164,9 @@ class ComputeNodesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ComputeNodeModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -227,6 +233,9 @@ class ComputeNodesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ComputeNodeModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -314,7 +323,7 @@ class ComputeNodesApi:
     @validate_call
     def delete_compute_node(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the compute node")],
+        id: Annotated[StrictInt, Field(description="Compute node ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -331,7 +340,7 @@ class ComputeNodesApi:
         """delete_compute_node
 
 
-        :param id: ID of the compute node (required)
+        :param id: Compute node ID (required)
         :type id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -365,6 +374,9 @@ class ComputeNodesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ComputeNodeModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -380,7 +392,7 @@ class ComputeNodesApi:
     @validate_call
     def delete_compute_node_with_http_info(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the compute node")],
+        id: Annotated[StrictInt, Field(description="Compute node ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -397,7 +409,7 @@ class ComputeNodesApi:
         """delete_compute_node
 
 
-        :param id: ID of the compute node (required)
+        :param id: Compute node ID (required)
         :type id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -431,6 +443,9 @@ class ComputeNodesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ComputeNodeModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -446,7 +461,7 @@ class ComputeNodesApi:
     @validate_call
     def delete_compute_node_without_preload_content(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the compute node")],
+        id: Annotated[StrictInt, Field(description="Compute node ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -463,7 +478,7 @@ class ComputeNodesApi:
         """delete_compute_node
 
 
-        :param id: ID of the compute node (required)
+        :param id: Compute node ID (required)
         :type id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -497,6 +512,9 @@ class ComputeNodesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ComputeNodeModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -622,6 +640,9 @@ class ComputeNodesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "DeleteCountResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -688,6 +709,9 @@ class ComputeNodesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "DeleteCountResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -754,6 +778,9 @@ class ComputeNodesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "DeleteCountResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -881,6 +908,9 @@ class ComputeNodesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ComputeNodeModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -947,6 +977,9 @@ class ComputeNodesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ComputeNodeModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1013,6 +1046,9 @@ class ComputeNodesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ComputeNodeModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1166,6 +1202,9 @@ class ComputeNodesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListComputeNodesResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1260,6 +1299,9 @@ class ComputeNodesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListComputeNodesResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1354,6 +1396,9 @@ class ComputeNodesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListComputeNodesResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1520,6 +1565,9 @@ class ComputeNodesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ComputeNodeModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1590,6 +1638,9 @@ class ComputeNodesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ComputeNodeModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1660,6 +1711,9 @@ class ComputeNodesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ComputeNodeModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,

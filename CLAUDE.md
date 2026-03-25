@@ -348,11 +348,14 @@ cascade-delete the entire database contents.
 
 1. Add the endpoint to the live Rust-owned API surface and model layer (`src/openapi_spec.rs`,
    `src/server/live_router.rs`, `src/models.rs`)
-2. Regenerate API artifacts (`cd api && bash sync_openapi.sh clients --use-rust-spec`)
-3. Promote the Rust spec when the change is ready to become the checked-in contract
+2. Refresh and verify the emitted spec
+   (`cd api && bash sync_openapi.sh emit && bash sync_openapi.sh check`)
+3. Regenerate API clients from the emitted spec
+   (`cd api && bash sync_openapi.sh clients --use-rust-spec`)
+4. Promote the Rust spec when the change is ready to become the checked-in contract
    (`cd api && bash sync_openapi.sh all --promote`)
-4. Add implementation in the appropriate live server module
-5. Add CLI command handler if needed in `src/client/commands/`
+5. Add implementation in the appropriate live server module
+6. Add CLI command handler if needed in `src/client/commands/`
 
 **API Implementation Checklist:**
 

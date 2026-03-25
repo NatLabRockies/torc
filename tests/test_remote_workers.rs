@@ -467,8 +467,7 @@ fn test_workers_deleted_with_workflow(start_server: &ServerProcess) {
     assert_eq!(before_delete.len(), 1);
 
     // Delete the workflow
-    apis::workflows_api::delete_workflow(config, workflow_id, None)
-        .expect("Failed to delete workflow");
+    apis::workflows_api::delete_workflow(config, workflow_id).expect("Failed to delete workflow");
 
     // Workers should be gone with the workflow (foreign key cascade)
     // Trying to list workers for deleted workflow should fail

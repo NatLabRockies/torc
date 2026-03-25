@@ -121,15 +121,6 @@ impl Paginatable for SlurmSchedulerModel {
             Some(limit),
             params.sort_by.as_deref(),
             params.reverse_sort,
-            params.name.as_deref(),
-            params.account.as_deref(),
-            params.gres.as_deref(),
-            params.mem.as_deref(),
-            params.nodes,
-            params.partition.as_deref(),
-            params.qos.as_deref(),
-            params.tmp.as_deref(),
-            params.walltime.as_deref(),
         )?;
 
         Ok(PaginatedResponse {
@@ -170,6 +161,7 @@ pub fn iter_slurm_schedulers(
 ///
 /// # Returns
 /// `Result<Vec<SlurmSchedulerModel>, Error>` containing all slurm schedulers or an error
+#[allow(clippy::result_large_err)]
 pub fn paginate_slurm_schedulers(
     config: &apis::configuration::Configuration,
     workflow_id: i64,

@@ -18,6 +18,9 @@ use serde::{Deserialize, Serialize, de::Error as _};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum CreateEventError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -25,6 +28,9 @@ pub enum CreateEventError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum DeleteEventError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -32,6 +38,9 @@ pub enum DeleteEventError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum DeleteEventsError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -39,6 +48,9 @@ pub enum DeleteEventsError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum GetEventError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -46,6 +58,9 @@ pub enum GetEventError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ListEventsError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -53,6 +68,9 @@ pub enum ListEventsError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum UpdateEventError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -168,7 +186,7 @@ pub fn delete_event(
 pub fn delete_events(
     configuration: &configuration::Configuration,
     workflow_id: i64,
-) -> Result<models::DeleteCountResponse, Error<DeleteEventsError>> {
+) -> Result<serde_json::Value, Error<DeleteEventsError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_query_workflow_id = workflow_id;
 
@@ -200,12 +218,12 @@ pub fn delete_events(
             ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
             ContentType::Text => {
                 return Err(Error::from(serde_json::Error::custom(
-                    "Received `text/plain` content type response that cannot be converted to `models::DeleteCountResponse`",
+                    "Received `text/plain` content type response that cannot be converted to `serde_json::Value`",
                 )));
             }
             ContentType::Unsupported(unknown_type) => {
                 return Err(Error::from(serde_json::Error::custom(format!(
-                    "Received `{unknown_type}` content type response that cannot be converted to `models::DeleteCountResponse`"
+                    "Received `{unknown_type}` content type response that cannot be converted to `serde_json::Value`"
                 ))));
             }
         }
@@ -358,11 +376,11 @@ pub fn list_events(
 pub fn update_event(
     configuration: &configuration::Configuration,
     id: i64,
-    event_model: models::EventModel,
+    body: Option<serde_json::Value>,
 ) -> Result<models::EventModel, Error<UpdateEventError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_id = id;
-    let p_body_event_model = event_model;
+    let p_body_body = body;
 
     let uri_str = format!("{}/events/{id}", configuration.base_path, id = p_path_id);
     let mut req_builder = configuration.client.request(reqwest::Method::PUT, &uri_str);
@@ -371,7 +389,7 @@ pub fn update_event(
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
     req_builder = configuration.apply_auth(req_builder);
-    req_builder = req_builder.json(&p_body_event_model);
+    req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;

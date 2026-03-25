@@ -84,7 +84,7 @@ fn test_two_node_allocation_single_worker_multi_node_step(start_server: &ServerP
     let workflow_id = result.unwrap();
 
     // --- Verify resource requirements were persisted correctly ---
-    let rr_list = apis::admin_resources_api::list_resource_requirements(
+    let rr_list = apis::resource_requirements_api::list_resource_requirements(
         &start_server.config,
         workflow_id,
         None, // job_id
@@ -125,15 +125,6 @@ fn test_two_node_allocation_single_worker_multi_node_step(start_server: &ServerP
         None,
         None,
         None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
     )
     .expect("Failed to list slurm schedulers")
     .items;
@@ -157,7 +148,7 @@ fn test_two_node_allocation_single_worker_multi_node_step(start_server: &ServerP
         "Expected 1 schedule_nodes action"
     );
 
-    let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id, None);
+    let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id);
 }
 
 // =============================================================================
@@ -266,7 +257,7 @@ fn test_two_node_allocation_one_worker_per_node_parallel_jobs(start_server: &Ser
     );
 
     // --- Verify resource requirements use num_nodes=1 ---
-    let rr_list = apis::admin_resources_api::list_resource_requirements(
+    let rr_list = apis::resource_requirements_api::list_resource_requirements(
         &start_server.config,
         workflow_id,
         None,
@@ -301,7 +292,7 @@ fn test_two_node_allocation_one_worker_per_node_parallel_jobs(start_server: &Ser
     );
 
     // --- Initialize the workflow so jobs transition to 'ready' ---
-    apis::workflows_api::initialize_jobs(&start_server.config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(&start_server.config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
     // --- Verify all 4 jobs are now ready ---
@@ -334,5 +325,5 @@ fn test_two_node_allocation_one_worker_per_node_parallel_jobs(start_server: &Ser
         ready_count
     );
 
-    let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id, None);
+    let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id);
 }

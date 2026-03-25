@@ -1873,7 +1873,7 @@ impl WorkflowSpec {
 
         // If any step fails, delete the workflow (which cascades to all other objects)
         let rollback = |workflow_id: i64| {
-            let _ = apis::workflows_api::delete_workflow(config, workflow_id, None);
+            let _ = apis::workflows_api::delete_workflow(config, workflow_id);
         };
 
         // Step 3: Create supporting models and build name-to-id mappings
@@ -2250,16 +2250,17 @@ impl WorkflowSpec {
                     runtime: resource_req_spec.runtime.clone(),
                 };
 
-                let created_resource_req = apis::admin_resources_api::create_resource_requirements(
-                    config,
-                    resource_req_model,
-                )
-                .map_err(|e| {
-                    format!(
-                        "Failed to create resource requirements {}: {:?}",
-                        resource_req_spec.name, e
+                let created_resource_req =
+                    apis::resource_requirements_api::create_resource_requirements(
+                        config,
+                        resource_req_model,
                     )
-                })?;
+                    .map_err(|e| {
+                        format!(
+                            "Failed to create resource requirements {}: {:?}",
+                            resource_req_spec.name, e
+                        )
+                    })?;
 
                 let resource_req_id = created_resource_req
                     .id
@@ -2348,7 +2349,7 @@ impl WorkflowSpec {
                 );
 
                 let created_handler =
-                    apis::admin_resources_api::create_failure_handler(config, handler_model)
+                    apis::failure_handlers_api::create_failure_handler(config, handler_model)
                         .map_err(|e| {
                             format!(
                                 "Failed to create failure handler {}: {:?}",
@@ -2828,14 +2829,13 @@ impl WorkflowSpec {
             for (batch_index, batch) in job_models.chunks(batch_size).enumerate() {
                 let jobs_model = models::JobsModel::new(batch.to_vec());
 
-                let response =
-                    apis::admin_resources_api::create_jobs(config, jobs_model).map_err(|e| {
-                        format!(
-                            "Failed to create batch {} of jobs: {:?}",
-                            batch_index + 1,
-                            e
-                        )
-                    })?;
+                let response = apis::jobs_api::create_jobs(config, jobs_model).map_err(|e| {
+                    format!(
+                        "Failed to create batch {} of jobs: {:?}",
+                        batch_index + 1,
+                        e
+                    )
+                })?;
 
                 let created_batch = response.jobs.ok_or("Create jobs response missing items")?;
 

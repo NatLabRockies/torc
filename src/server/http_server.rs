@@ -445,11 +445,9 @@ where
     async fn delete_failure_handler(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteFailureHandlerResponse, ApiError> {
-        self.transport_delete_failure_handler(id, body, context)
-            .await
+        self.transport_delete_failure_handler(id, context).await
     }
 
     /// Store an RO-Crate entity.
@@ -506,21 +504,18 @@ where
     async fn delete_ro_crate_entity(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteRoCrateEntityResponse, ApiError> {
-        self.transport_delete_ro_crate_entity(id, body, context)
-            .await
+        self.transport_delete_ro_crate_entity(id, context).await
     }
 
     /// Delete all RO-Crate entities for a workflow.
     async fn delete_ro_crate_entities(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteRoCrateEntitiesResponse, ApiError> {
-        self.transport_delete_ro_crate_entities(workflow_id, body, context)
+        self.transport_delete_ro_crate_entities(workflow_id, context)
             .await
     }
 
@@ -732,108 +727,94 @@ where
     async fn cancel_workflow(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<CancelWorkflowResponse, ApiError> {
-        self.transport_cancel_workflow(id, body, context).await
+        self.transport_cancel_workflow(id, context).await
     }
 
     async fn delete_compute_nodes(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteComputeNodesResponse, ApiError> {
-        self.transport_delete_compute_nodes(workflow_id, body, context)
+        self.transport_delete_compute_nodes(workflow_id, context)
             .await
     }
 
     async fn delete_events(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteEventsResponse, ApiError> {
-        self.transport_delete_events(workflow_id, body, context)
-            .await
+        self.transport_delete_events(workflow_id, context).await
     }
 
     async fn delete_files(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteFilesResponse, ApiError> {
-        self.transport_delete_files(workflow_id, body, context)
-            .await
+        self.transport_delete_files(workflow_id, context).await
     }
 
     async fn delete_jobs(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteJobsResponse, ApiError> {
-        self.transport_delete_jobs(workflow_id, body, context).await
+        self.transport_delete_jobs(workflow_id, context).await
     }
 
     async fn delete_local_schedulers(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteLocalSchedulersResponse, ApiError> {
-        self.transport_delete_local_schedulers(workflow_id, body, context)
+        self.transport_delete_local_schedulers(workflow_id, context)
             .await
     }
 
     async fn delete_all_resource_requirements(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteAllResourceRequirementsResponse, ApiError> {
-        self.transport_delete_all_resource_requirements(workflow_id, body, context)
+        self.transport_delete_all_resource_requirements(workflow_id, context)
             .await
     }
 
     async fn delete_results(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteResultsResponse, ApiError> {
-        self.transport_delete_results(workflow_id, body, context)
-            .await
+        self.transport_delete_results(workflow_id, context).await
     }
 
     async fn delete_scheduled_compute_nodes(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteScheduledComputeNodesResponse, ApiError> {
-        self.transport_delete_scheduled_compute_nodes(workflow_id, body, context)
+        self.transport_delete_scheduled_compute_nodes(workflow_id, context)
             .await
     }
 
     async fn delete_slurm_schedulers(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteSlurmSchedulersResponse, ApiError> {
-        self.transport_delete_slurm_schedulers(workflow_id, body, context)
+        self.transport_delete_slurm_schedulers(workflow_id, context)
             .await
     }
 
     async fn delete_all_user_data(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteAllUserDataResponse, ApiError> {
-        self.transport_delete_all_user_data(workflow_id, body, context)
+        self.transport_delete_all_user_data(workflow_id, context)
             .await
     }
 
@@ -1285,17 +1266,10 @@ where
         id: i64,
         only_uninitialized: Option<bool>,
         clear_ephemeral_user_data: Option<bool>,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<InitializeJobsResponse, ApiError> {
-        self.transport_initialize_jobs(
-            id,
-            only_uninitialized,
-            clear_ephemeral_user_data,
-            body,
-            context,
-        )
-        .await
+        self.transport_initialize_jobs(id, only_uninitialized, clear_ephemeral_user_data, context)
+            .await
     }
 
     /// Return true if all jobs in the workflow are complete.
@@ -1465,7 +1439,7 @@ where
     }
 
     /// Return jobs that are ready for submission and meet worker resource requirements. Set status to pending.
-    #[instrument(level = "debug", skip(self, body, context), fields(workflow_id = id, limit))]
+    #[instrument(level = "debug", skip(self, context), fields(workflow_id = id, limit))]
     async fn claim_jobs_based_on_resources(
         &self,
         id: i64,
@@ -1485,28 +1459,25 @@ where
     }
 
     /// Return user-requested number of jobs that are ready for submission. Sets status to pending.
-    #[instrument(level = "debug", skip(self, body, context), fields(workflow_id = id, limit = ?limit))]
+    #[instrument(level = "debug", skip(self, context), fields(workflow_id = id, limit = ?limit))]
     async fn claim_next_jobs(
         &self,
         id: i64,
         limit: Option<i64>,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<ClaimNextJobsResponse, ApiError> {
-        self.transport_claim_next_jobs(id, limit, body, context)
-            .await
+        self.transport_claim_next_jobs(id, limit, context).await
     }
 
     /// Check for changed job inputs and update status accordingly.
-    #[instrument(level = "debug", skip(self, body, context), fields(workflow_id = id, dry_run = ?dry_run))]
+    #[instrument(level = "debug", skip(self, context), fields(workflow_id = id, dry_run = ?dry_run))]
     async fn process_changed_job_inputs(
         &self,
         id: i64,
         dry_run: Option<bool>,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<ProcessChangedJobInputsResponse, ApiError> {
-        self.transport_process_changed_job_inputs(id, dry_run, body, context)
+        self.transport_process_changed_job_inputs(id, dry_run, context)
             .await
     }
 
@@ -1514,82 +1485,57 @@ where
     async fn delete_compute_node(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteComputeNodeResponse, ApiError> {
-        self.transport_delete_compute_node(id, body, context).await
+        self.transport_delete_compute_node(id, context).await
     }
 
     /// Delete an event.
-    async fn delete_event(
-        &self,
-        id: i64,
-        body: Option<serde_json::Value>,
-        context: &C,
-    ) -> Result<DeleteEventResponse, ApiError> {
-        self.transport_delete_event(id, body, context).await
+    async fn delete_event(&self, id: i64, context: &C) -> Result<DeleteEventResponse, ApiError> {
+        self.transport_delete_event(id, context).await
     }
 
     /// Delete a file.
-    async fn delete_file(
-        &self,
-        id: i64,
-        body: Option<serde_json::Value>,
-        context: &C,
-    ) -> Result<DeleteFileResponse, ApiError> {
-        self.transport_delete_file(id, body, context).await
+    async fn delete_file(&self, id: i64, context: &C) -> Result<DeleteFileResponse, ApiError> {
+        self.transport_delete_file(id, context).await
     }
 
     /// Delete a job.
-    async fn delete_job(
-        &self,
-        id: i64,
-        body: Option<serde_json::Value>,
-        context: &C,
-    ) -> Result<DeleteJobResponse, ApiError> {
-        self.transport_delete_job(id, body, context).await
+    async fn delete_job(&self, id: i64, context: &C) -> Result<DeleteJobResponse, ApiError> {
+        self.transport_delete_job(id, context).await
     }
 
     /// Delete a local scheduler.
     async fn delete_local_scheduler(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteLocalSchedulerResponse, ApiError> {
-        self.transport_delete_local_scheduler(id, body, context)
-            .await
+        self.transport_delete_local_scheduler(id, context).await
     }
 
     /// Delete a resource requirements record.
     async fn delete_resource_requirements(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteResourceRequirementsResponse, ApiError> {
-        self.transport_delete_resource_requirements(id, body, context)
+        self.transport_delete_resource_requirements(id, context)
             .await
     }
 
     /// Delete a job result.
-    async fn delete_result(
-        &self,
-        id: i64,
-        body: Option<serde_json::Value>,
-        context: &C,
-    ) -> Result<DeleteResultResponse, ApiError> {
-        self.transport_delete_result(id, body, context).await
+    async fn delete_result(&self, id: i64, context: &C) -> Result<DeleteResultResponse, ApiError> {
+        self.transport_delete_result(id, context).await
     }
 
     /// Delete a scheduled compute node.
     async fn delete_scheduled_compute_node(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteScheduledComputeNodeResponse, ApiError> {
-        self.transport_delete_scheduled_compute_node(id, body, context)
+        self.transport_delete_scheduled_compute_node(id, context)
             .await
     }
 
@@ -1597,30 +1543,26 @@ where
     async fn delete_slurm_scheduler(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteSlurmSchedulerResponse, ApiError> {
-        self.transport_delete_slurm_scheduler(id, body, context)
-            .await
+        self.transport_delete_slurm_scheduler(id, context).await
     }
 
     /// Delete a user data record.
     async fn delete_user_data(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteUserDataResponse, ApiError> {
-        self.transport_delete_user_data(id, body, context).await
+        self.transport_delete_user_data(id, context).await
     }
 
     async fn delete_workflow(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteWorkflowResponse, ApiError> {
-        self.transport_delete_workflow(id, body, context).await
+        self.transport_delete_workflow(id, context).await
     }
 
     /// Reset status for jobs to uninitialized.
@@ -1630,10 +1572,9 @@ where
         &self,
         id: i64,
         failed_only: Option<bool>,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<ResetJobStatusResponse, ApiError> {
-        self.transport_reset_job_status(id, failed_only, context, body)
+        self.transport_reset_job_status(id, failed_only, context)
             .await
     }
 
@@ -1646,10 +1587,9 @@ where
         &self,
         id: i64,
         force: Option<bool>,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<ResetWorkflowStatusResponse, ApiError> {
-        self.transport_reset_workflow_status(id, force, body, context)
+        self.transport_reset_workflow_status(id, force, context)
             .await
     }
 
@@ -1664,30 +1604,28 @@ where
     }
 
     /// Change the status of a job and manage side effects.
-    #[instrument(level = "debug", skip(self, body, context), fields(job_id = id, status = ?status, run_id))]
+    #[instrument(level = "debug", skip(self, context), fields(job_id = id, status = ?status, run_id))]
     async fn manage_status_change(
         &self,
         id: i64,
         status: models::JobStatus,
         run_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<ManageStatusChangeResponse, ApiError> {
-        self.transport_manage_status_change(id, status, run_id, body, context)
+        self.transport_manage_status_change(id, status, run_id, context)
             .await
     }
 
     /// Start a job and manage side effects.
-    #[instrument(level = "debug", skip(self, body, context), fields(job_id = id, run_id, compute_node_id))]
+    #[instrument(level = "debug", skip(self, context), fields(job_id = id, run_id, compute_node_id))]
     async fn start_job(
         &self,
         id: i64,
         run_id: i64,
         compute_node_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<StartJobResponse, ApiError> {
-        self.transport_start_job(id, run_id, compute_node_id, body, context)
+        self.transport_start_job(id, run_id, compute_node_id, context)
             .await
     }
 

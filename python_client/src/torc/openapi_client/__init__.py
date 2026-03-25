@@ -19,17 +19,19 @@ __version__ = "0.11.0"
 # Define package exports
 __all__ = [
     "AccessControlApi",
-    "AdminResourcesApi",
     "ComputeNodesApi",
     "EventsApi",
+    "FailureHandlersApi",
     "FilesApi",
     "JobsApi",
     "LocalSchedulersApi",
     "RemoteWorkersApi",
+    "ResourceRequirementsApi",
     "ResultsApi",
-    "RoCrateApi",
+    "RoCrateEntitiesApi",
     "ScheduledComputeNodesApi",
     "SlurmSchedulersApi",
+    "SlurmStatsApi",
     "SystemApi",
     "UserDataApi",
     "WorkflowActionsApi",
@@ -114,17 +116,19 @@ __all__ = [
 
 # import apis into sdk package
 from torc.openapi_client.api.access_control_api import AccessControlApi as AccessControlApi
-from torc.openapi_client.api.admin_resources_api import AdminResourcesApi as AdminResourcesApi
 from torc.openapi_client.api.compute_nodes_api import ComputeNodesApi as ComputeNodesApi
 from torc.openapi_client.api.events_api import EventsApi as EventsApi
+from torc.openapi_client.api.failure_handlers_api import FailureHandlersApi as FailureHandlersApi
 from torc.openapi_client.api.files_api import FilesApi as FilesApi
 from torc.openapi_client.api.jobs_api import JobsApi as JobsApi
 from torc.openapi_client.api.local_schedulers_api import LocalSchedulersApi as LocalSchedulersApi
 from torc.openapi_client.api.remote_workers_api import RemoteWorkersApi as RemoteWorkersApi
+from torc.openapi_client.api.resource_requirements_api import ResourceRequirementsApi as ResourceRequirementsApi
 from torc.openapi_client.api.results_api import ResultsApi as ResultsApi
-from torc.openapi_client.api.ro_crate_api import RoCrateApi as RoCrateApi
+from torc.openapi_client.api.ro_crate_entities_api import RoCrateEntitiesApi as RoCrateEntitiesApi
 from torc.openapi_client.api.scheduled_compute_nodes_api import ScheduledComputeNodesApi as ScheduledComputeNodesApi
 from torc.openapi_client.api.slurm_schedulers_api import SlurmSchedulersApi as SlurmSchedulersApi
+from torc.openapi_client.api.slurm_stats_api import SlurmStatsApi as SlurmStatsApi
 from torc.openapi_client.api.system_api import SystemApi as SystemApi
 from torc.openapi_client.api.user_data_api import UserDataApi as UserDataApi
 from torc.openapi_client.api.workflow_actions_api import WorkflowActionsApi as WorkflowActionsApi

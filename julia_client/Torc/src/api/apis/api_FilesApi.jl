@@ -13,6 +13,9 @@ basepath(::Type{ FilesApi }) = "http://localhost/torc-service/v1"
 
 const _returntypes_create_file_FilesApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => FileModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_create_file(_api::FilesApi, file_model::FileModel; _mediaType=nothing)
@@ -39,6 +42,9 @@ end
 
 const _returntypes_delete_file_FilesApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => FileModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_delete_file(_api::FilesApi, id::Int64; _mediaType=nothing)
@@ -66,6 +72,9 @@ end
 
 const _returntypes_delete_files_FilesApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => DeleteCountResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_delete_files(_api::FilesApi, workflow_id::Int64; _mediaType=nothing)
@@ -93,6 +102,9 @@ end
 
 const _returntypes_get_file_FilesApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => FileModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_get_file(_api::FilesApi, id::Int64; _mediaType=nothing)
@@ -120,6 +132,9 @@ end
 
 const _returntypes_list_files_FilesApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ListFilesResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_list_files(_api::FilesApi, workflow_id::Int64; produced_by_job_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, name=nothing, path=nothing, is_output=nothing, _mediaType=nothing)
@@ -163,6 +178,9 @@ end
 
 const _returntypes_update_file_FilesApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => FileModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_update_file(_api::FilesApi, id::Int64, file_model::FileModel; _mediaType=nothing)

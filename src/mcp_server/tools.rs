@@ -72,7 +72,7 @@ pub fn get_job_details(config: &Configuration, job_id: i64) -> Result<CallToolRe
 
     // Get resource requirements if available
     let resource_reqs = if let Some(req_id) = job.resource_requirements_id {
-        apis::admin_resources_api::get_resource_requirements(config, req_id).ok()
+        apis::resource_requirements_api::get_resource_requirements(config, req_id).ok()
     } else {
         None
     };
@@ -323,7 +323,7 @@ pub fn update_job_resources(
         .ok_or_else(|| invalid_params("Job does not have resource requirements to update"))?;
 
     // Get current requirements
-    let mut reqs = apis::admin_resources_api::get_resource_requirements(config, req_id)
+    let mut reqs = apis::resource_requirements_api::get_resource_requirements(config, req_id)
         .map_err(|e| internal_error(format!("Failed to get resource requirements: {}", e)))?;
 
     // Update fields if provided
@@ -338,7 +338,7 @@ pub fn update_job_resources(
     }
 
     // Update the resource requirements
-    let updated = apis::admin_resources_api::update_resource_requirements(
+    let updated = apis::resource_requirements_api::update_resource_requirements(
         config,
         req_id,
         ResourceRequirementsModel {
@@ -1391,7 +1391,8 @@ pub fn classify_and_resolve_failures(
                 && action == "retry"
             {
                 if let Some(req_id) = job.resource_requirements_id {
-                    match apis::admin_resources_api::get_resource_requirements(config, req_id) {
+                    match apis::resource_requirements_api::get_resource_requirements(config, req_id)
+                    {
                         Ok(mut reqs) => {
                             if let Some(ref mem) = classification.memory {
                                 reqs.memory = mem.clone();
@@ -1399,7 +1400,7 @@ pub fn classify_and_resolve_failures(
                             if let Some(ref rt) = classification.runtime {
                                 reqs.runtime = rt.clone();
                             }
-                            match apis::admin_resources_api::update_resource_requirements(
+                            match apis::resource_requirements_api::update_resource_requirements(
                                 config,
                                 req_id,
                                 ResourceRequirementsModel {
@@ -1928,7 +1929,7 @@ pub fn regroup_job_resources(
         };
 
         let created_rr =
-            match apis::admin_resources_api::create_resource_requirements(config, new_rr) {
+            match apis::resource_requirements_api::create_resource_requirements(config, new_rr) {
                 Ok(rr) => rr,
                 Err(e) => {
                     apply_errors.push(format!(

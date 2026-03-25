@@ -69,8 +69,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **delete_events**
-> delete_events(_api::EventsApi, workflow_id::Int64; _mediaType=nothing) -> DeleteCountResponse, OpenAPI.Clients.ApiResponse <br/>
-> delete_events(_api::EventsApi, response_stream::Channel, workflow_id::Int64; _mediaType=nothing) -> Channel{ DeleteCountResponse }, OpenAPI.Clients.ApiResponse
+> delete_events(_api::EventsApi, workflow_id::Int64; _mediaType=nothing) -> Any, OpenAPI.Clients.ApiResponse <br/>
+> delete_events(_api::EventsApi, response_stream::Channel, workflow_id::Int64; _mediaType=nothing) -> Channel{ Any }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -83,7 +83,7 @@ Name | Type | Description  | Notes
 
 ### Return type
 
-[**DeleteCountResponse**](DeleteCountResponse.md)
+**Any**
 
 ### Authorization
 
@@ -164,8 +164,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **update_event**
-> update_event(_api::EventsApi, id::Int64, event_model::EventModel; _mediaType=nothing) -> EventModel, OpenAPI.Clients.ApiResponse <br/>
-> update_event(_api::EventsApi, response_stream::Channel, id::Int64, event_model::EventModel; _mediaType=nothing) -> Channel{ EventModel }, OpenAPI.Clients.ApiResponse
+> update_event(_api::EventsApi, id::Int64, body::Any; _mediaType=nothing) -> EventModel, OpenAPI.Clients.ApiResponse <br/>
+> update_event(_api::EventsApi, response_stream::Channel, id::Int64, body::Any; _mediaType=nothing) -> Channel{ EventModel }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -175,7 +175,7 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **EventsApi** | API context | 
 **id** | **Int64** | ID of the event. |
-**event_model** | [**EventModel**](EventModel.md) |  |
+**body** | **Any** |  |
 
 ### Return type
 

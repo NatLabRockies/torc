@@ -73,10 +73,10 @@ const _returntypes_get_pending_actions_WorkflowActionsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => Vector{WorkflowActionModel},
 )
 
-function _oacinternal_get_pending_actions(_api::WorkflowActionsApi, id::Int64; trigger_type=nothing, _mediaType=nothing)
+function _oacinternal_get_pending_actions(_api::WorkflowActionsApi, id::Int64, trigger_type::Vector{String}; _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_get_pending_actions_WorkflowActionsApi, "/workflows/{id}/actions/pending", [])
     OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
-    OpenAPI.Clients.set_param(_ctx.query, "trigger_type", trigger_type; style="form", is_explode=true)  # type Vector{String}
+    OpenAPI.Clients.set_param(_ctx.path, "trigger_type", trigger_type)  # type Vector{String}
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -84,17 +84,17 @@ end
 
 @doc raw"""Params:
 - id::Int64 (required)
-- trigger_type::Vector{String}
+- trigger_type::Vector{String} (required)
 
 Return: Vector{WorkflowActionModel}, OpenAPI.Clients.ApiResponse
 """
-function get_pending_actions(_api::WorkflowActionsApi, id::Int64; trigger_type=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_get_pending_actions(_api, id; trigger_type=trigger_type, _mediaType=_mediaType)
+function get_pending_actions(_api::WorkflowActionsApi, id::Int64, trigger_type::Vector{String}; _mediaType=nothing)
+    _ctx = _oacinternal_get_pending_actions(_api, id, trigger_type; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function get_pending_actions(_api::WorkflowActionsApi, response_stream::Channel, id::Int64; trigger_type=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_get_pending_actions(_api, id; trigger_type=trigger_type, _mediaType=_mediaType)
+function get_pending_actions(_api::WorkflowActionsApi, response_stream::Channel, id::Int64, trigger_type::Vector{String}; _mediaType=nothing)
+    _ctx = _oacinternal_get_pending_actions(_api, id, trigger_type; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 

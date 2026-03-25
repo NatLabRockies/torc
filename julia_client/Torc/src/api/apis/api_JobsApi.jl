@@ -13,6 +13,9 @@ basepath(::Type{ JobsApi }) = "http://localhost/torc-service/v1"
 
 const _returntypes_complete_job_JobsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => JobModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_complete_job(_api::JobsApi, id::Int64, status::JobStatus, run_id::Int64, result_model::ResultModel; _mediaType=nothing)
@@ -45,7 +48,10 @@ end
 
 const _returntypes_create_job_JobsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => JobModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
     Regex("^" * replace("422", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_create_job(_api::JobsApi, job_model::JobModel; _mediaType=nothing)
@@ -70,64 +76,97 @@ function create_job(_api::JobsApi, response_stream::Channel, job_model::JobModel
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
-const _returntypes_delete_job_JobsApi = Dict{Regex,Type}(
-    Regex("^" * replace("200", "x"=>".") * "\$") => JobModel,
+const _returntypes_create_jobs_JobsApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => CreateJobsResponse,
 )
 
-function _oacinternal_delete_job(_api::JobsApi, id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_delete_job_JobsApi, "/jobs/{id}", [], body)
-    OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
+function _oacinternal_create_jobs(_api::JobsApi, jobs_model::JobsModel; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_create_jobs_JobsApi, "/bulk_jobs", [], jobs_model)
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Params:
+- jobs_model::JobsModel (required)
+
+Return: CreateJobsResponse, OpenAPI.Clients.ApiResponse
+"""
+function create_jobs(_api::JobsApi, jobs_model::JobsModel; _mediaType=nothing)
+    _ctx = _oacinternal_create_jobs(_api, jobs_model; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function create_jobs(_api::JobsApi, response_stream::Channel, jobs_model::JobsModel; _mediaType=nothing)
+    _ctx = _oacinternal_create_jobs(_api, jobs_model; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
+const _returntypes_delete_job_JobsApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => JobModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
+)
+
+function _oacinternal_delete_job(_api::JobsApi, id::Int64; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_delete_job_JobsApi, "/jobs/{id}", [])
+    OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
 end
 
 @doc raw"""Params:
 - id::Int64 (required)
-- body::Any
 
 Return: JobModel, OpenAPI.Clients.ApiResponse
 """
-function delete_job(_api::JobsApi, id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_delete_job(_api, id; body=body, _mediaType=_mediaType)
+function delete_job(_api::JobsApi, id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_delete_job(_api, id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function delete_job(_api::JobsApi, response_stream::Channel, id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_delete_job(_api, id; body=body, _mediaType=_mediaType)
+function delete_job(_api::JobsApi, response_stream::Channel, id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_delete_job(_api, id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
 const _returntypes_delete_jobs_JobsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => DeleteCountResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
-function _oacinternal_delete_jobs(_api::JobsApi, workflow_id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_delete_jobs_JobsApi, "/jobs", [], body)
+function _oacinternal_delete_jobs(_api::JobsApi, workflow_id::Int64; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_delete_jobs_JobsApi, "/jobs", [])
     OpenAPI.Clients.set_param(_ctx.query, "workflow_id", workflow_id; style="form", is_explode=true)  # type Int64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
-    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
 end
 
 @doc raw"""Params:
 - workflow_id::Int64 (required)
-- body::Any
 
 Return: DeleteCountResponse, OpenAPI.Clients.ApiResponse
 """
-function delete_jobs(_api::JobsApi, workflow_id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_delete_jobs(_api, workflow_id; body=body, _mediaType=_mediaType)
+function delete_jobs(_api::JobsApi, workflow_id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_delete_jobs(_api, workflow_id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function delete_jobs(_api::JobsApi, response_stream::Channel, workflow_id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_delete_jobs(_api, workflow_id; body=body, _mediaType=_mediaType)
+function delete_jobs(_api::JobsApi, response_stream::Channel, workflow_id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_delete_jobs(_api, workflow_id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
 const _returntypes_get_job_JobsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => JobModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_get_job(_api::JobsApi, id::Int64; _mediaType=nothing)
@@ -155,6 +194,9 @@ end
 
 const _returntypes_list_jobs_JobsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ListJobsResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_list_jobs(_api::JobsApi, workflow_id::Int64; status=nothing, needs_file_id=nothing, upstream_job_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, include_relationships=nothing, active_compute_node_id=nothing, _mediaType=nothing)
@@ -200,15 +242,18 @@ end
 
 const _returntypes_manage_status_change_JobsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => JobModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
-function _oacinternal_manage_status_change(_api::JobsApi, id::Int64, status::JobStatus, run_id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = OpenAPI.Clients.Ctx(_api.client, "PUT", _returntypes_manage_status_change_JobsApi, "/jobs/{id}/manage_status_change/{status}/{run_id}", [], body)
+function _oacinternal_manage_status_change(_api::JobsApi, id::Int64, status::JobStatus, run_id::Int64; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "PUT", _returntypes_manage_status_change_JobsApi, "/jobs/{id}/manage_status_change/{status}/{run_id}", [])
     OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
     OpenAPI.Clients.set_param(_ctx.path, "status", status)  # type JobStatus
     OpenAPI.Clients.set_param(_ctx.path, "run_id", run_id)  # type Int64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
-    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
 end
 
@@ -216,22 +261,25 @@ end
 - id::Int64 (required)
 - status::JobStatus (required)
 - run_id::Int64 (required)
-- body::Any
 
 Return: JobModel, OpenAPI.Clients.ApiResponse
 """
-function manage_status_change(_api::JobsApi, id::Int64, status::JobStatus, run_id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_manage_status_change(_api, id, status, run_id; body=body, _mediaType=_mediaType)
+function manage_status_change(_api::JobsApi, id::Int64, status::JobStatus, run_id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_manage_status_change(_api, id, status, run_id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function manage_status_change(_api::JobsApi, response_stream::Channel, id::Int64, status::JobStatus, run_id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_manage_status_change(_api, id, status, run_id; body=body, _mediaType=_mediaType)
+function manage_status_change(_api::JobsApi, response_stream::Channel, id::Int64, status::JobStatus, run_id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_manage_status_change(_api, id, status, run_id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
 const _returntypes_retry_job_JobsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => JobModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("422", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_retry_job(_api::JobsApi, id::Int64, run_id::Int64, max_retries::Int64; _mediaType=nothing)
@@ -263,15 +311,18 @@ end
 
 const _returntypes_start_job_JobsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => JobModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
-function _oacinternal_start_job(_api::JobsApi, id::Int64, run_id::Int64, compute_node_id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = OpenAPI.Clients.Ctx(_api.client, "PUT", _returntypes_start_job_JobsApi, "/jobs/{id}/start_job/{run_id}/{compute_node_id}", [], body)
+function _oacinternal_start_job(_api::JobsApi, id::Int64, run_id::Int64, compute_node_id::Int64; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "PUT", _returntypes_start_job_JobsApi, "/jobs/{id}/start_job/{run_id}/{compute_node_id}", [])
     OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
     OpenAPI.Clients.set_param(_ctx.path, "run_id", run_id)  # type Int64
     OpenAPI.Clients.set_param(_ctx.path, "compute_node_id", compute_node_id)  # type Int64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
-    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
 end
 
@@ -279,22 +330,24 @@ end
 - id::Int64 (required)
 - run_id::Int64 (required)
 - compute_node_id::Int64 (required)
-- body::Any
 
 Return: JobModel, OpenAPI.Clients.ApiResponse
 """
-function start_job(_api::JobsApi, id::Int64, run_id::Int64, compute_node_id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_start_job(_api, id, run_id, compute_node_id; body=body, _mediaType=_mediaType)
+function start_job(_api::JobsApi, id::Int64, run_id::Int64, compute_node_id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_start_job(_api, id, run_id, compute_node_id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function start_job(_api::JobsApi, response_stream::Channel, id::Int64, run_id::Int64, compute_node_id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_start_job(_api, id, run_id, compute_node_id; body=body, _mediaType=_mediaType)
+function start_job(_api::JobsApi, response_stream::Channel, id::Int64, run_id::Int64, compute_node_id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_start_job(_api, id, run_id, compute_node_id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
 const _returntypes_update_job_JobsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => JobModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_update_job(_api::JobsApi, id::Int64, job_model::JobModel; _mediaType=nothing)
@@ -323,6 +376,7 @@ end
 
 export complete_job
 export create_job
+export create_jobs
 export delete_job
 export delete_jobs
 export get_job

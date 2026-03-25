@@ -13,6 +13,9 @@ basepath(::Type{ EventsApi }) = "http://localhost/torc-service/v1"
 
 const _returntypes_create_event_EventsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => EventModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_create_event(_api::EventsApi, event_model::EventModel; _mediaType=nothing)
@@ -39,6 +42,9 @@ end
 
 const _returntypes_delete_event_EventsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => EventModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_delete_event(_api::EventsApi, id::Int64; _mediaType=nothing)
@@ -65,7 +71,10 @@ function delete_event(_api::EventsApi, response_stream::Channel, id::Int64; _med
 end
 
 const _returntypes_delete_events_EventsApi = Dict{Regex,Type}(
-    Regex("^" * replace("200", "x"=>".") * "\$") => DeleteCountResponse,
+    Regex("^" * replace("200", "x"=>".") * "\$") => Any,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_delete_events(_api::EventsApi, workflow_id::Int64; _mediaType=nothing)
@@ -79,7 +88,7 @@ end
 @doc raw"""Params:
 - workflow_id::Int64 (required)
 
-Return: DeleteCountResponse, OpenAPI.Clients.ApiResponse
+Return: Any, OpenAPI.Clients.ApiResponse
 """
 function delete_events(_api::EventsApi, workflow_id::Int64; _mediaType=nothing)
     _ctx = _oacinternal_delete_events(_api, workflow_id; _mediaType=_mediaType)
@@ -93,6 +102,9 @@ end
 
 const _returntypes_get_event_EventsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => EventModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_get_event(_api::EventsApi, id::Int64; _mediaType=nothing)
@@ -120,6 +132,9 @@ end
 
 const _returntypes_list_events_EventsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ListEventsResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_list_events(_api::EventsApi, workflow_id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, category=nothing, after_timestamp=nothing, _mediaType=nothing)
@@ -159,10 +174,13 @@ end
 
 const _returntypes_update_event_EventsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => EventModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
-function _oacinternal_update_event(_api::EventsApi, id::Int64, event_model::EventModel; _mediaType=nothing)
-    _ctx = OpenAPI.Clients.Ctx(_api.client, "PUT", _returntypes_update_event_EventsApi, "/events/{id}", [], event_model)
+function _oacinternal_update_event(_api::EventsApi, id::Int64, body::Any; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "PUT", _returntypes_update_event_EventsApi, "/events/{id}", [], body)
     OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
@@ -171,17 +189,17 @@ end
 
 @doc raw"""Params:
 - id::Int64 (required)
-- event_model::EventModel (required)
+- body::Any (required)
 
 Return: EventModel, OpenAPI.Clients.ApiResponse
 """
-function update_event(_api::EventsApi, id::Int64, event_model::EventModel; _mediaType=nothing)
-    _ctx = _oacinternal_update_event(_api, id, event_model; _mediaType=_mediaType)
+function update_event(_api::EventsApi, id::Int64, body::Any; _mediaType=nothing)
+    _ctx = _oacinternal_update_event(_api, id, body; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function update_event(_api::EventsApi, response_stream::Channel, id::Int64, event_model::EventModel; _mediaType=nothing)
-    _ctx = _oacinternal_update_event(_api, id, event_model; _mediaType=_mediaType)
+function update_event(_api::EventsApi, response_stream::Channel, id::Int64, body::Any; _mediaType=nothing)
+    _ctx = _oacinternal_update_event(_api, id, body; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 

@@ -1255,7 +1255,7 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
             }
         }
         SlurmCommands::Delete { id } => {
-            match apis::slurm_schedulers_api::delete_slurm_scheduler(config, *id, None) {
+            match apis::slurm_schedulers_api::delete_slurm_scheduler(config, *id) {
                 Ok(deleted_scheduler) => {
                     if print_if_json(format, &deleted_scheduler, "Slurm scheduler") {
                         // JSON was printed
@@ -5107,7 +5107,7 @@ fn handle_slurm_stats(
     let limit = crate::MAX_RECORD_TRANSFER_COUNT;
     let mut offset = 0i64;
     loop {
-        match apis::admin_resources_api::list_slurm_stats(
+        match apis::slurm_stats_api::list_slurm_stats(
             config,
             workflow_id,
             job_id,

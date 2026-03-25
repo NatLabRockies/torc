@@ -51,7 +51,7 @@ No authorization required
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **ComputeNodesApi** | API context | 
-**id** | **Int64** | ID of the compute node |
+**id** | **Int64** | Compute node ID |
 
 ### Return type
 

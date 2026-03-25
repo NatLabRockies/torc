@@ -70,8 +70,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **get_pending_actions**
-> get_pending_actions(_api::WorkflowActionsApi, id::Int64; trigger_type=nothing, _mediaType=nothing) -> Vector{WorkflowActionModel}, OpenAPI.Clients.ApiResponse <br/>
-> get_pending_actions(_api::WorkflowActionsApi, response_stream::Channel, id::Int64; trigger_type=nothing, _mediaType=nothing) -> Channel{ Vector{WorkflowActionModel} }, OpenAPI.Clients.ApiResponse
+> get_pending_actions(_api::WorkflowActionsApi, id::Int64, trigger_type::Vector{String}; _mediaType=nothing) -> Vector{WorkflowActionModel}, OpenAPI.Clients.ApiResponse <br/>
+> get_pending_actions(_api::WorkflowActionsApi, response_stream::Channel, id::Int64, trigger_type::Vector{String}; _mediaType=nothing) -> Channel{ Vector{WorkflowActionModel} }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -81,12 +81,7 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **WorkflowActionsApi** | API context | 
 **id** | **Int64** | Workflow ID |
-
-### Optional Parameters
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **trigger_type** | [**Vector{String}**](String.md) |  | [default to nothing]
+**trigger_type** | [**Vector{String}**](String.md) |  |
 
 ### Return type
 

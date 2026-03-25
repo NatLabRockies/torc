@@ -51,7 +51,7 @@ No authorization required
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **FilesApi** | API context | 
-**id** | **Int64** | ID of the file record. |
+**id** | **Int64** | File ID |
 
 ### Return type
 
@@ -107,7 +107,7 @@ No authorization required
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **FilesApi** | API context | 
-**id** | **Int64** | ID of the files record |
+**id** | **Int64** | ID of the file record |
 
 ### Return type
 

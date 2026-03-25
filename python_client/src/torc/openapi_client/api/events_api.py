@@ -17,9 +17,8 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from typing_extensions import Annotated
 
 from pydantic import Field, StrictBool, StrictInt, StrictStr
-from typing import Optional
+from typing import Any, Optional
 from typing_extensions import Annotated
-from torc.openapi_client.models.delete_count_response import DeleteCountResponse
 from torc.openapi_client.models.event_model import EventModel
 from torc.openapi_client.models.list_events_response import ListEventsResponse
 
@@ -95,6 +94,9 @@ class EventsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "EventModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -161,6 +163,9 @@ class EventsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "EventModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -227,6 +232,9 @@ class EventsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "EventModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -365,6 +373,9 @@ class EventsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "EventModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -431,6 +442,9 @@ class EventsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "EventModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -497,6 +511,9 @@ class EventsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "EventModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -584,7 +601,7 @@ class EventsApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> DeleteCountResponse:
+    ) -> object:
         """delete_events
 
 
@@ -621,7 +638,10 @@ class EventsApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "DeleteCountResponse",
+            '200': "object",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -650,7 +670,7 @@ class EventsApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> ApiResponse[DeleteCountResponse]:
+    ) -> ApiResponse[object]:
         """delete_events
 
 
@@ -687,7 +707,10 @@ class EventsApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "DeleteCountResponse",
+            '200': "object",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -753,7 +776,10 @@ class EventsApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "DeleteCountResponse",
+            '200': "object",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -881,6 +907,9 @@ class EventsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "EventModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -947,6 +976,9 @@ class EventsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "EventModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1013,6 +1045,9 @@ class EventsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "EventModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1162,6 +1197,9 @@ class EventsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListEventsResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1252,6 +1290,9 @@ class EventsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListEventsResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1342,6 +1383,9 @@ class EventsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListEventsResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1449,7 +1493,7 @@ class EventsApi:
     def update_event(
         self,
         id: Annotated[StrictInt, Field(description="ID of the event.")],
-        event_model: EventModel,
+        body: Optional[Any],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1468,8 +1512,8 @@ class EventsApi:
 
         :param id: ID of the event. (required)
         :type id: int
-        :param event_model: (required)
-        :type event_model: EventModel
+        :param body: (required)
+        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1494,7 +1538,7 @@ class EventsApi:
 
         _param = self._update_event_serialize(
             id=id,
-            event_model=event_model,
+            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1503,6 +1547,9 @@ class EventsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "EventModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1519,7 +1566,7 @@ class EventsApi:
     def update_event_with_http_info(
         self,
         id: Annotated[StrictInt, Field(description="ID of the event.")],
-        event_model: EventModel,
+        body: Optional[Any],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1538,8 +1585,8 @@ class EventsApi:
 
         :param id: ID of the event. (required)
         :type id: int
-        :param event_model: (required)
-        :type event_model: EventModel
+        :param body: (required)
+        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1564,7 +1611,7 @@ class EventsApi:
 
         _param = self._update_event_serialize(
             id=id,
-            event_model=event_model,
+            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1573,6 +1620,9 @@ class EventsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "EventModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1589,7 +1639,7 @@ class EventsApi:
     def update_event_without_preload_content(
         self,
         id: Annotated[StrictInt, Field(description="ID of the event.")],
-        event_model: EventModel,
+        body: Optional[Any],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1608,8 +1658,8 @@ class EventsApi:
 
         :param id: ID of the event. (required)
         :type id: int
-        :param event_model: (required)
-        :type event_model: EventModel
+        :param body: (required)
+        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1634,7 +1684,7 @@ class EventsApi:
 
         _param = self._update_event_serialize(
             id=id,
-            event_model=event_model,
+            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1643,6 +1693,9 @@ class EventsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "EventModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1654,7 +1707,7 @@ class EventsApi:
     def _update_event_serialize(
         self,
         id,
-        event_model,
+        body,
         _request_auth,
         _content_type,
         _headers,
@@ -1682,8 +1735,8 @@ class EventsApi:
         # process the header parameters
         # process the form parameters
         # process the body parameter
-        if event_model is not None:
-            _body_params = event_model
+        if body is not None:
+            _body_params = body
 
 
         # set the HTTP header `Accept`

@@ -102,6 +102,9 @@ class UserDataApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "UserDataModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -176,6 +179,9 @@ class UserDataApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "UserDataModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -250,6 +256,9 @@ class UserDataApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "UserDataModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -348,7 +357,6 @@ class UserDataApi:
     def delete_all_user_data(
         self,
         workflow_id: StrictInt,
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -367,8 +375,6 @@ class UserDataApi:
 
         :param workflow_id: (required)
         :type workflow_id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -393,7 +399,6 @@ class UserDataApi:
 
         _param = self._delete_all_user_data_serialize(
             workflow_id=workflow_id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -402,6 +407,9 @@ class UserDataApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -418,7 +426,6 @@ class UserDataApi:
     def delete_all_user_data_with_http_info(
         self,
         workflow_id: StrictInt,
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -437,8 +444,6 @@ class UserDataApi:
 
         :param workflow_id: (required)
         :type workflow_id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -463,7 +468,6 @@ class UserDataApi:
 
         _param = self._delete_all_user_data_serialize(
             workflow_id=workflow_id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -472,6 +476,9 @@ class UserDataApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -488,7 +495,6 @@ class UserDataApi:
     def delete_all_user_data_without_preload_content(
         self,
         workflow_id: StrictInt,
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -507,8 +513,6 @@ class UserDataApi:
 
         :param workflow_id: (required)
         :type workflow_id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -533,7 +537,6 @@ class UserDataApi:
 
         _param = self._delete_all_user_data_serialize(
             workflow_id=workflow_id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -542,6 +545,9 @@ class UserDataApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "object",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -553,7 +559,6 @@ class UserDataApi:
     def _delete_all_user_data_serialize(
         self,
         workflow_id,
-        body,
         _request_auth,
         _content_type,
         _headers,
@@ -583,8 +588,6 @@ class UserDataApi:
         # process the header parameters
         # process the form parameters
         # process the body parameter
-        if body is not None:
-            _body_params = body
 
 
         # set the HTTP header `Accept`
@@ -595,19 +598,6 @@ class UserDataApi:
                 ]
             )
 
-        # set the HTTP header `Content-Type`
-        if _content_type:
-            _header_params['Content-Type'] = _content_type
-        else:
-            _default_content_type = (
-                self.api_client.select_header_content_type(
-                    [
-                        'application/json'
-                    ]
-                )
-            )
-            if _default_content_type is not None:
-                _header_params['Content-Type'] = _default_content_type
 
         # authentication setting
         _auth_settings: List[str] = [
@@ -635,7 +625,6 @@ class UserDataApi:
     def delete_user_data(
         self,
         id: Annotated[StrictInt, Field(description="User data record ID")],
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -654,8 +643,6 @@ class UserDataApi:
 
         :param id: User data record ID (required)
         :type id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -680,7 +667,6 @@ class UserDataApi:
 
         _param = self._delete_user_data_serialize(
             id=id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -689,6 +675,9 @@ class UserDataApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "UserDataModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -705,7 +694,6 @@ class UserDataApi:
     def delete_user_data_with_http_info(
         self,
         id: Annotated[StrictInt, Field(description="User data record ID")],
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -724,8 +712,6 @@ class UserDataApi:
 
         :param id: User data record ID (required)
         :type id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -750,7 +736,6 @@ class UserDataApi:
 
         _param = self._delete_user_data_serialize(
             id=id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -759,6 +744,9 @@ class UserDataApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "UserDataModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -775,7 +763,6 @@ class UserDataApi:
     def delete_user_data_without_preload_content(
         self,
         id: Annotated[StrictInt, Field(description="User data record ID")],
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -794,8 +781,6 @@ class UserDataApi:
 
         :param id: User data record ID (required)
         :type id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -820,7 +805,6 @@ class UserDataApi:
 
         _param = self._delete_user_data_serialize(
             id=id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -829,6 +813,9 @@ class UserDataApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "UserDataModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -840,7 +827,6 @@ class UserDataApi:
     def _delete_user_data_serialize(
         self,
         id,
-        body,
         _request_auth,
         _content_type,
         _headers,
@@ -868,8 +854,6 @@ class UserDataApi:
         # process the header parameters
         # process the form parameters
         # process the body parameter
-        if body is not None:
-            _body_params = body
 
 
         # set the HTTP header `Accept`
@@ -880,19 +864,6 @@ class UserDataApi:
                 ]
             )
 
-        # set the HTTP header `Content-Type`
-        if _content_type:
-            _header_params['Content-Type'] = _content_type
-        else:
-            _default_content_type = (
-                self.api_client.select_header_content_type(
-                    [
-                        'application/json'
-                    ]
-                )
-            )
-            if _default_content_type is not None:
-                _header_params['Content-Type'] = _default_content_type
 
         # authentication setting
         _auth_settings: List[str] = [
@@ -970,6 +941,9 @@ class UserDataApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "UserDataModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1036,6 +1010,9 @@ class UserDataApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "UserDataModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1102,6 +1079,9 @@ class UserDataApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "UserDataModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1259,6 +1239,9 @@ class UserDataApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListUserDataResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1357,6 +1340,9 @@ class UserDataApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListUserDataResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1455,6 +1441,9 @@ class UserDataApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListUserDataResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1626,6 +1615,9 @@ class UserDataApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "UserDataModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1696,6 +1688,9 @@ class UserDataApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "UserDataModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1766,6 +1761,9 @@ class UserDataApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "UserDataModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,

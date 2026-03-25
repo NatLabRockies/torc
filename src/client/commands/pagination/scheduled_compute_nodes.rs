@@ -152,6 +152,7 @@ pub fn iter_scheduled_compute_nodes(
 ///
 /// # Returns
 /// `Result<Vec<ScheduledComputeNodesModel>, Error>` containing all scheduled compute nodes or an error
+#[allow(clippy::result_large_err)]
 pub fn paginate_scheduled_compute_nodes(
     config: &apis::configuration::Configuration,
     workflow_id: i64,

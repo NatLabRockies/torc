@@ -1543,7 +1543,7 @@ fn handle_cancel(config: &Configuration, workflow_id: &Option<i64>, format: &str
         None => select_workflow_interactively(config, &user_name).unwrap(),
     };
 
-    match apis::workflows_api::cancel_workflow(config, selected_workflow_id, None) {
+    match apis::workflows_api::cancel_workflow(config, selected_workflow_id) {
         Ok(_) => {
             if format != "json" {
                 eprintln!("Successfully canceled workflow {}", selected_workflow_id);
@@ -1731,12 +1731,7 @@ fn handle_reset_status(
     let force_param = if force { Some(true) } else { None };
 
     // Reset workflow status
-    match apis::workflows_api::reset_workflow_status(
-        config,
-        selected_workflow_id,
-        force_param,
-        None,
-    ) {
+    match apis::workflows_api::reset_workflow_status(config, selected_workflow_id, force_param) {
         Ok(_) => {
             workflow_reset_success = true;
             if format != "json" {
@@ -1755,12 +1750,7 @@ fn handle_reset_status(
     }
 
     // Reset job status
-    match apis::workflows_api::reset_job_status(
-        config,
-        selected_workflow_id,
-        Some(failed_only),
-        None,
-    ) {
+    match apis::workflows_api::reset_job_status(config, selected_workflow_id, Some(failed_only)) {
         Ok(_) => {
             job_reset_success = true;
             if format != "json" {
@@ -2544,7 +2534,7 @@ fn handle_delete(config: &Configuration, ids: &[i64], no_prompts: bool, format: 
         }
 
         // Proceed with deletion
-        match apis::workflows_api::delete_workflow(config, selected_id, None) {
+        match apis::workflows_api::delete_workflow(config, selected_id) {
             Ok(removed_workflow) => {
                 deleted_workflows.push(removed_workflow);
             }
@@ -3696,7 +3686,7 @@ fn handle_export(
 
     // Get all failure handlers
     export.failure_handlers =
-        match apis::admin_resources_api::list_failure_handlers(config, workflow_id, None, None) {
+        match apis::failure_handlers_api::list_failure_handlers(config, workflow_id, None, None) {
             Ok(response) => response.items,
             Err(e) => {
                 print_error("listing failure handlers", &e);
@@ -3705,7 +3695,7 @@ fn handle_export(
         };
 
     // Get all RO-Crate entities
-    export.ro_crate_entities = match apis::ro_crate_api::list_ro_crate_entities(
+    export.ro_crate_entities = match apis::ro_crate_entities_api::list_ro_crate_entities(
         config,
         workflow_id,
         None,
@@ -3911,7 +3901,7 @@ fn handle_import(
             Err(e) => {
                 print_error("creating file", &e);
                 // Clean up: delete the workflow we just created
-                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id, None);
+                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id);
                 std::process::exit(1);
             }
         }
@@ -3932,7 +3922,7 @@ fn handle_import(
             }
             Err(e) => {
                 print_error("creating user_data", &e);
-                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id, None);
+                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id);
                 std::process::exit(1);
             }
         }
@@ -3941,7 +3931,7 @@ fn handle_import(
     // Create resource requirements and build mapping
     // First, get the 'default' resource requirement that was auto-created with the workflow
     // so we can map old 'default' IDs to it
-    let default_rr = apis::admin_resources_api::list_resource_requirements(
+    let default_rr = apis::resource_requirements_api::list_resource_requirements(
         config,
         new_workflow_id,
         None,            // job_id
@@ -3984,7 +3974,7 @@ fn handle_import(
         new_rr.id = None;
         new_rr.workflow_id = new_workflow_id;
 
-        match apis::admin_resources_api::create_resource_requirements(config, new_rr) {
+        match apis::resource_requirements_api::create_resource_requirements(config, new_rr) {
             Ok(created) => {
                 mappings
                     .resource_requirements
@@ -3992,7 +3982,7 @@ fn handle_import(
             }
             Err(e) => {
                 print_error("creating resource requirements", &e);
-                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id, None);
+                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id);
                 std::process::exit(1);
             }
         }
@@ -4013,7 +4003,7 @@ fn handle_import(
             }
             Err(e) => {
                 print_error("creating slurm scheduler", &e);
-                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id, None);
+                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id);
                 std::process::exit(1);
             }
         }
@@ -4034,7 +4024,7 @@ fn handle_import(
             }
             Err(e) => {
                 print_error("creating local scheduler", &e);
-                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id, None);
+                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id);
                 std::process::exit(1);
             }
         }
@@ -4047,7 +4037,7 @@ fn handle_import(
         new_handler.id = None;
         new_handler.workflow_id = new_workflow_id;
 
-        match apis::admin_resources_api::create_failure_handler(config, new_handler) {
+        match apis::failure_handlers_api::create_failure_handler(config, new_handler) {
             Ok(created) => {
                 mappings
                     .failure_handlers
@@ -4055,7 +4045,7 @@ fn handle_import(
             }
             Err(e) => {
                 print_error("creating failure handler", &e);
-                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id, None);
+                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id);
                 std::process::exit(1);
             }
         }
@@ -4112,7 +4102,7 @@ fn handle_import(
             }
             Err(e) => {
                 print_error("creating job", &e);
-                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id, None);
+                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id);
                 std::process::exit(1);
             }
         }
@@ -4141,7 +4131,7 @@ fn handle_import(
 
             if let Err(e) = apis::jobs_api::update_job(config, *new_job_id, update_job) {
                 print_error("updating job dependencies", &e);
-                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id, None);
+                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id);
                 std::process::exit(1);
             }
         }
@@ -4165,11 +4155,11 @@ fn handle_import(
         new_entity.entity_id = new_entity_id;
         new_entity.metadata = new_metadata;
 
-        match apis::ro_crate_api::create_ro_crate_entity(config, new_entity) {
+        match apis::ro_crate_entities_api::create_ro_crate_entity(config, new_entity) {
             Ok(_) => {}
             Err(e) => {
                 print_error("creating RO-Crate entity", &e);
-                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id, None);
+                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id);
                 std::process::exit(1);
             }
         }
@@ -4203,7 +4193,7 @@ fn handle_import(
             apis::workflow_actions_api::create_workflow_action(config, new_workflow_id, new_action)
         {
             print_error("creating workflow action", &e);
-            let _ = apis::workflows_api::delete_workflow(config, new_workflow_id, None);
+            let _ = apis::workflows_api::delete_workflow(config, new_workflow_id);
             std::process::exit(1);
         }
     }

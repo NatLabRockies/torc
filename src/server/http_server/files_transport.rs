@@ -17,13 +17,10 @@ where
     pub(super) async fn transport_delete_files(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteFilesResponse, ApiError> {
         authorize_workflow!(self, workflow_id, context, DeleteFilesResponse);
-        self.files_api
-            .delete_files(workflow_id, body, context)
-            .await
+        self.files_api.delete_files(workflow_id, context).await
     }
     pub(super) async fn transport_list_files(
         &self,
@@ -85,10 +82,9 @@ where
     pub(super) async fn transport_delete_file(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteFileResponse, ApiError> {
         authorize_resource!(self, id, "file", context, DeleteFileResponse);
-        self.files_api.delete_file(id, body, context).await
+        self.files_api.delete_file(id, context).await
     }
 }

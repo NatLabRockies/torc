@@ -21,12 +21,11 @@ where
     pub(super) async fn transport_delete_all_user_data(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteAllUserDataResponse, ApiError> {
         authorize_workflow!(self, workflow_id, context, DeleteAllUserDataResponse);
         self.user_data_api
-            .delete_all_user_data(workflow_id, body, context)
+            .delete_all_user_data(workflow_id, context)
             .await
     }
     pub(super) async fn transport_list_user_data(
@@ -88,10 +87,9 @@ where
     pub(super) async fn transport_delete_user_data(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteUserDataResponse, ApiError> {
         authorize_resource!(self, id, "user_data", context, DeleteUserDataResponse);
-        self.user_data_api.delete_user_data(id, body, context).await
+        self.user_data_api.delete_user_data(id, context).await
     }
 }

@@ -276,12 +276,14 @@ pub fn list_workflows(config: &Configuration) -> Result<CallToolResult, McpError
 
 ```bash
 cd api
+bash sync_openapi.sh emit
+bash sync_openapi.sh check
 bash sync_openapi.sh clients --use-rust-spec
 ```
 
-This workflow regenerates the Python and Julia clients from the Rust-emitted OpenAPI document and
-also refreshes `api/openapi.codegen.yaml` from the code-first Rust scaffold. When the emitted spec
-should replace the checked-in artifact, run:
+This workflow regenerates the Rust, Python, and Julia clients from `api/openapi.codegen.yaml`. Run
+`emit` first to refresh that file from the Rust-owned scaffold, and `check` to verify the checked-in
+artifacts still match. When the emitted spec should replace the checked-in artifact, run:
 
 ```bash
 cd api

@@ -18,6 +18,9 @@ use serde::{Deserialize, Serialize, de::Error as _};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum CreateSlurmSchedulerError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -25,6 +28,9 @@ pub enum CreateSlurmSchedulerError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum DeleteSlurmSchedulerError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -32,6 +38,9 @@ pub enum DeleteSlurmSchedulerError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum DeleteSlurmSchedulersError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -39,6 +48,9 @@ pub enum DeleteSlurmSchedulersError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum GetSlurmSchedulerError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -46,6 +58,9 @@ pub enum GetSlurmSchedulerError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ListSlurmSchedulersError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -53,6 +68,9 @@ pub enum ListSlurmSchedulersError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum UpdateSlurmSchedulerError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -114,11 +132,9 @@ pub fn create_slurm_scheduler(
 pub fn delete_slurm_scheduler(
     configuration: &configuration::Configuration,
     id: i64,
-    body: Option<serde_json::Value>,
 ) -> Result<models::SlurmSchedulerModel, Error<DeleteSlurmSchedulerError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_id = id;
-    let p_body_body = body;
 
     let uri_str = format!(
         "{}/slurm_schedulers/{id}",
@@ -133,7 +149,6 @@ pub fn delete_slurm_scheduler(
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
     req_builder = configuration.apply_auth(req_builder);
-    req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -175,11 +190,9 @@ pub fn delete_slurm_scheduler(
 pub fn delete_slurm_schedulers(
     configuration: &configuration::Configuration,
     workflow_id: i64,
-    body: Option<serde_json::Value>,
 ) -> Result<models::DeleteCountResponse, Error<DeleteSlurmSchedulersError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_query_workflow_id = workflow_id;
-    let p_body_body = body;
 
     let uri_str = format!("{}/slurm_schedulers", configuration.base_path);
     let mut req_builder = configuration
@@ -191,7 +204,6 @@ pub fn delete_slurm_schedulers(
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
     req_builder = configuration.apply_auth(req_builder);
-    req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -293,15 +305,6 @@ pub fn list_slurm_schedulers(
     limit: Option<i64>,
     sort_by: Option<&str>,
     reverse_sort: Option<bool>,
-    name: Option<&str>,
-    account: Option<&str>,
-    gres: Option<&str>,
-    mem: Option<&str>,
-    nodes: Option<i64>,
-    partition: Option<&str>,
-    qos: Option<&str>,
-    tmp: Option<&str>,
-    walltime: Option<&str>,
 ) -> Result<models::ListSlurmSchedulersResponse, Error<ListSlurmSchedulersError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_query_workflow_id = workflow_id;
@@ -309,15 +312,6 @@ pub fn list_slurm_schedulers(
     let p_query_limit = limit;
     let p_query_sort_by = sort_by;
     let p_query_reverse_sort = reverse_sort;
-    let p_query_name = name;
-    let p_query_account = account;
-    let p_query_gres = gres;
-    let p_query_mem = mem;
-    let p_query_nodes = nodes;
-    let p_query_partition = partition;
-    let p_query_qos = qos;
-    let p_query_tmp = tmp;
-    let p_query_walltime = walltime;
 
     let uri_str = format!("{}/slurm_schedulers", configuration.base_path);
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
@@ -334,33 +328,6 @@ pub fn list_slurm_schedulers(
     }
     if let Some(ref param_value) = p_query_reverse_sort {
         req_builder = req_builder.query(&[("reverse_sort", &param_value.to_string())]);
-    }
-    if let Some(ref param_value) = p_query_name {
-        req_builder = req_builder.query(&[("name", &param_value.to_string())]);
-    }
-    if let Some(ref param_value) = p_query_account {
-        req_builder = req_builder.query(&[("account", &param_value.to_string())]);
-    }
-    if let Some(ref param_value) = p_query_gres {
-        req_builder = req_builder.query(&[("gres", &param_value.to_string())]);
-    }
-    if let Some(ref param_value) = p_query_mem {
-        req_builder = req_builder.query(&[("mem", &param_value.to_string())]);
-    }
-    if let Some(ref param_value) = p_query_nodes {
-        req_builder = req_builder.query(&[("nodes", &param_value.to_string())]);
-    }
-    if let Some(ref param_value) = p_query_partition {
-        req_builder = req_builder.query(&[("partition", &param_value.to_string())]);
-    }
-    if let Some(ref param_value) = p_query_qos {
-        req_builder = req_builder.query(&[("qos", &param_value.to_string())]);
-    }
-    if let Some(ref param_value) = p_query_tmp {
-        req_builder = req_builder.query(&[("tmp", &param_value.to_string())]);
-    }
-    if let Some(ref param_value) = p_query_walltime {
-        req_builder = req_builder.query(&[("walltime", &param_value.to_string())]);
     }
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());

@@ -127,7 +127,7 @@ bash sync_openapi.sh check
 # Promote the Rust spec into api/openapi.yaml and regenerate clients
 bash sync_openapi.sh all --promote
 
-# Regenerate Python/Julia clients from the current checked-in spec
+# Regenerate Rust, Python, and Julia clients from the current checked-in spec
 bash sync_openapi.sh clients
 ```
 

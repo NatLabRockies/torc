@@ -33,7 +33,6 @@ pub trait ResourceRequirementsApi<C> {
     async fn delete_all_resource_requirements(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteAllResourceRequirementsResponse, ApiError>;
 
@@ -74,7 +73,6 @@ pub trait ResourceRequirementsApi<C> {
     async fn delete_resource_requirements(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteResourceRequirementsResponse, ApiError>;
 }
@@ -114,8 +112,7 @@ where
         context: &C,
     ) -> Result<CreateResourceRequirementsResponse, ApiError> {
         debug!(
-            "create_resource_requirements({:?}) - X-Span-ID: {:?}",
-            body,
+            "create_resource_requirements - X-Span-ID: {:?}",
             context.get().0.clone()
         );
 
@@ -210,13 +207,11 @@ where
     async fn delete_all_resource_requirements(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteAllResourceRequirementsResponse, ApiError> {
         debug!(
-            "delete_all_resource_requirements({}, {:?}) - X-Span-ID: {:?}",
+            "delete_all_resource_requirements({}) - X-Span-ID: {:?}",
             workflow_id,
-            body,
             context.get().0.clone()
         );
 
@@ -542,9 +537,8 @@ where
         context: &C,
     ) -> Result<UpdateResourceRequirementsResponse, ApiError> {
         debug!(
-            "update_resource_requirements({}, {:?}) - X-Span-ID: {:?}",
+            "update_resource_requirements({}) - X-Span-ID: {:?}",
             id,
-            body,
             context.get().0.clone()
         );
 
@@ -662,13 +656,11 @@ where
     async fn delete_resource_requirements(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteResourceRequirementsResponse, ApiError> {
         debug!(
-            "delete_resource_requirements({}, {:?}) - X-Span-ID: {:?}",
+            "delete_resource_requirements({}) - X-Span-ID: {:?}",
             id,
-            body,
             context.get().0.clone()
         );
 

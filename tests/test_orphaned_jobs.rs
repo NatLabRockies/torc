@@ -75,7 +75,7 @@ fn test_start_job_sets_active_compute_node_id(start_server: &ServerProcess) {
     let job_id = created_job.id.unwrap();
 
     // Initialize jobs so it becomes ready
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
     // Get the run_id from workflow status
@@ -101,11 +101,11 @@ fn test_start_job_sets_active_compute_node_id(start_server: &ServerProcess) {
     let compute_node_id = created_compute_node.id.unwrap();
 
     // Claim the job (transition from Ready to Pending)
-    apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1), None)
+    apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1))
         .expect("Failed to claim job");
 
     // Start the job (job_id, run_id, compute_node_id, body)
-    apis::jobs_api::start_job(config, job_id, run_id, compute_node_id, None)
+    apis::jobs_api::start_job(config, job_id, run_id, compute_node_id)
         .expect("Failed to start job");
 
     // List jobs filtered by active_compute_node_id
@@ -149,7 +149,7 @@ fn test_complete_job_clears_active_compute_node_id(start_server: &ServerProcess)
     let job_id = created_job.id.unwrap();
 
     // Initialize jobs
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
     // Get the run_id from workflow status
@@ -175,11 +175,11 @@ fn test_complete_job_clears_active_compute_node_id(start_server: &ServerProcess)
     let compute_node_id = created_compute_node.id.unwrap();
 
     // Claim the job (transition from Ready to Pending)
-    apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1), None)
+    apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1))
         .expect("Failed to claim job");
 
     // Start the job
-    apis::jobs_api::start_job(config, job_id, run_id, compute_node_id, None)
+    apis::jobs_api::start_job(config, job_id, run_id, compute_node_id)
         .expect("Failed to start job");
 
     // Verify job is listed with active_compute_node_id filter
@@ -289,7 +289,7 @@ fn test_orphaned_job_simulation(start_server: &ServerProcess) {
     let job2_id = created_job2.id.unwrap();
 
     // Initialize jobs
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
     // Get the run_id from workflow status
@@ -298,13 +298,13 @@ fn test_orphaned_job_simulation(start_server: &ServerProcess) {
     let run_id = workflow_status.run_id;
 
     // Claim jobs (transition from Ready to Pending)
-    apis::workflows_api::claim_next_jobs(config, workflow_id, Some(2), None)
+    apis::workflows_api::claim_next_jobs(config, workflow_id, Some(2))
         .expect("Failed to claim jobs");
 
     // Start both jobs on the compute node (simulating they were running when Slurm job died)
-    apis::jobs_api::start_job(config, job1_id, run_id, compute_node_id, None)
+    apis::jobs_api::start_job(config, job1_id, run_id, compute_node_id)
         .expect("Failed to start job1");
-    apis::jobs_api::start_job(config, job2_id, run_id, compute_node_id, None)
+    apis::jobs_api::start_job(config, job2_id, run_id, compute_node_id)
         .expect("Failed to start job2");
 
     // Verify both jobs are found via active_compute_node_id filter
@@ -427,7 +427,7 @@ fn test_list_jobs_no_active_compute_node(start_server: &ServerProcess) {
     apis::jobs_api::create_job(config, job).expect("Failed to create job");
 
     // Initialize jobs
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
     // Query with a compute_node_id that no jobs are running on
@@ -506,7 +506,7 @@ fn test_multiple_compute_nodes_job_tracking(start_server: &ServerProcess) {
     }
 
     // Initialize
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
     // Get the run_id from workflow status
@@ -515,19 +515,19 @@ fn test_multiple_compute_nodes_job_tracking(start_server: &ServerProcess) {
     let run_id = workflow_status.run_id;
 
     // Claim all jobs (transition from Ready to Pending)
-    apis::workflows_api::claim_next_jobs(config, workflow_id, Some(4), None)
+    apis::workflows_api::claim_next_jobs(config, workflow_id, Some(4))
         .expect("Failed to claim jobs");
 
     // Start jobs 1 and 2 on compute_node1
-    apis::jobs_api::start_job(config, jobs[0].id.unwrap(), run_id, cn1_id, None)
+    apis::jobs_api::start_job(config, jobs[0].id.unwrap(), run_id, cn1_id)
         .expect("Failed to start job 1");
-    apis::jobs_api::start_job(config, jobs[1].id.unwrap(), run_id, cn1_id, None)
+    apis::jobs_api::start_job(config, jobs[1].id.unwrap(), run_id, cn1_id)
         .expect("Failed to start job 2");
 
     // Start jobs 3 and 4 on compute_node2
-    apis::jobs_api::start_job(config, jobs[2].id.unwrap(), run_id, cn2_id, None)
+    apis::jobs_api::start_job(config, jobs[2].id.unwrap(), run_id, cn2_id)
         .expect("Failed to start job 3");
-    apis::jobs_api::start_job(config, jobs[3].id.unwrap(), run_id, cn2_id, None)
+    apis::jobs_api::start_job(config, jobs[3].id.unwrap(), run_id, cn2_id)
         .expect("Failed to start job 4");
 
     // Verify jobs on compute_node1
@@ -644,7 +644,7 @@ fn test_reset_job_clears_active_compute_node_id(start_server: &ServerProcess) {
     let job_id = created_job.id.unwrap();
 
     // Initialize
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
     // Get the run_id from workflow status
@@ -670,10 +670,10 @@ fn test_reset_job_clears_active_compute_node_id(start_server: &ServerProcess) {
     let compute_node_id = created_node.id.unwrap();
 
     // Claim the job (transition from Ready to Pending)
-    apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1), None)
+    apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1))
         .expect("Failed to claim job");
 
-    apis::jobs_api::start_job(config, job_id, run_id, compute_node_id, None)
+    apis::jobs_api::start_job(config, job_id, run_id, compute_node_id)
         .expect("Failed to start job");
 
     // Verify job has active_compute_node_id
@@ -694,7 +694,7 @@ fn test_reset_job_clears_active_compute_node_id(start_server: &ServerProcess) {
     assert_eq!(before_reset.items.len(), 1);
 
     // Reset job status
-    apis::workflows_api::reset_job_status(config, workflow_id, None, None)
+    apis::workflows_api::reset_job_status(config, workflow_id, None)
         .expect("Failed to reset job status");
 
     // Verify active_compute_node_id is cleared

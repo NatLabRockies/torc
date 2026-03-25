@@ -176,7 +176,7 @@ impl TorcClient {
     }
 
     pub fn list_slurm_stats(&self, workflow_id: i64) -> Result<Vec<SlurmStatsModel>> {
-        let response = apis::admin_resources_api::list_slurm_stats(
+        let response = apis::slurm_stats_api::list_slurm_stats(
             &self.config,
             workflow_id,
             None, // job_id
@@ -237,14 +237,14 @@ impl TorcClient {
     }
 
     pub fn delete_workflow(&self, workflow_id: i64) -> Result<()> {
-        apis::workflows_api::delete_workflow(&self.config, workflow_id, None)
+        apis::workflows_api::delete_workflow(&self.config, workflow_id)
             .context("Failed to delete workflow")?;
 
         Ok(())
     }
 
     pub fn cancel_workflow(&self, workflow_id: i64) -> Result<()> {
-        apis::workflows_api::cancel_workflow(&self.config, workflow_id, None)
+        apis::workflows_api::cancel_workflow(&self.config, workflow_id)
             .context("Failed to cancel workflow")?;
 
         Ok(())

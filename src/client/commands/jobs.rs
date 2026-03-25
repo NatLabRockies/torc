@@ -610,10 +610,12 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                         });
 
                         // Get and update the resource requirements
-                        match apis::admin_resources_api::get_resource_requirements(config, rr_id) {
+                        match apis::resource_requirements_api::get_resource_requirements(
+                            config, rr_id,
+                        ) {
                             Ok(mut rr) => {
                                 rr.runtime = new_runtime.clone();
-                                match apis::admin_resources_api::update_resource_requirements(
+                                match apis::resource_requirements_api::update_resource_requirements(
                                     config, rr_id, rr,
                                 ) {
                                     Ok(_) => {
@@ -740,7 +742,7 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
             // All jobs exist, proceed with deletion
             let mut deleted_jobs = Vec::new();
             for id in ids {
-                match apis::jobs_api::delete_job(config, *id, None) {
+                match apis::jobs_api::delete_job(config, *id) {
                     Ok(removed_job) => {
                         deleted_jobs.push(removed_job);
                     }
@@ -821,7 +823,7 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                     }
 
                     // Delete all jobs
-                    match apis::jobs_api::delete_jobs(config, selected_workflow_id, None) {
+                    match apis::jobs_api::delete_jobs(config, selected_workflow_id) {
                         Ok(result) => {
                             if print_if_json(format, &result, "result") {
                                 // JSON was printed
@@ -939,7 +941,8 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                 if let Some(rr_id) = job.resource_requirements_id
                     && let std::collections::hash_map::Entry::Vacant(e) = rr_map.entry(rr_id)
                 {
-                    match apis::admin_resources_api::get_resource_requirements(config, rr_id) {
+                    match apis::resource_requirements_api::get_resource_requirements(config, rr_id)
+                    {
                         Ok(rr) => {
                             e.insert(rr);
                         }
@@ -1056,7 +1059,7 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                 if let Some(fh_id) = job.failure_handler_id
                     && let std::collections::hash_map::Entry::Vacant(e) = fh_map.entry(fh_id)
                 {
-                    match apis::admin_resources_api::get_failure_handler(config, fh_id) {
+                    match apis::failure_handlers_api::get_failure_handler(config, fh_id) {
                         Ok(fh) => {
                             e.insert(fh);
                         }
@@ -1183,7 +1186,7 @@ pub fn create_jobs_from_file(
     resource_req.runtime = runtime_per_job.to_string();
 
     let created_resource_req =
-        apis::admin_resources_api::create_resource_requirements(config, resource_req)
+        apis::resource_requirements_api::create_resource_requirements(config, resource_req)
             .map_err(|e| format!("Failed to create resource requirements: {:?}", e))?;
 
     // Create jobs
@@ -1212,7 +1215,7 @@ pub fn create_jobs_from_file(
 
     for batch in jobs.chunks(batch_size) {
         let jobs_model = models::JobsModel::new(batch.to_vec());
-        let response = apis::admin_resources_api::create_jobs(config, jobs_model)
+        let response = apis::jobs_api::create_jobs(config, jobs_model)
             .map_err(|e| format!("Failed to create batch of jobs: {:?}", e))?;
 
         total_created += response.jobs.as_ref().map(|jobs| jobs.len()).unwrap_or(0);

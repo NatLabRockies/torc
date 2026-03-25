@@ -41,8 +41,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **delete_scheduled_compute_node**
-> delete_scheduled_compute_node(_api::ScheduledComputeNodesApi, id::Int64; body=nothing, _mediaType=nothing) -> ScheduledComputeNodesModel, OpenAPI.Clients.ApiResponse <br/>
-> delete_scheduled_compute_node(_api::ScheduledComputeNodesApi, response_stream::Channel, id::Int64; body=nothing, _mediaType=nothing) -> Channel{ ScheduledComputeNodesModel }, OpenAPI.Clients.ApiResponse
+> delete_scheduled_compute_node(_api::ScheduledComputeNodesApi, id::Int64; _mediaType=nothing) -> ScheduledComputeNodesModel, OpenAPI.Clients.ApiResponse <br/>
+> delete_scheduled_compute_node(_api::ScheduledComputeNodesApi, response_stream::Channel, id::Int64; _mediaType=nothing) -> Channel{ ScheduledComputeNodesModel }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -52,12 +52,6 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **ScheduledComputeNodesApi** | API context | 
 **id** | **Int64** | Scheduled compute node ID |
-
-### Optional Parameters
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
 
 ### Return type
 
@@ -69,14 +63,14 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: application/json
+ - **Content-Type**: Not defined
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **delete_scheduled_compute_nodes**
-> delete_scheduled_compute_nodes(_api::ScheduledComputeNodesApi, workflow_id::Int64; body=nothing, _mediaType=nothing) -> DeleteCountResponse, OpenAPI.Clients.ApiResponse <br/>
-> delete_scheduled_compute_nodes(_api::ScheduledComputeNodesApi, response_stream::Channel, workflow_id::Int64; body=nothing, _mediaType=nothing) -> Channel{ DeleteCountResponse }, OpenAPI.Clients.ApiResponse
+> delete_scheduled_compute_nodes(_api::ScheduledComputeNodesApi, workflow_id::Int64; _mediaType=nothing) -> DeleteCountResponse, OpenAPI.Clients.ApiResponse <br/>
+> delete_scheduled_compute_nodes(_api::ScheduledComputeNodesApi, response_stream::Channel, workflow_id::Int64; _mediaType=nothing) -> Channel{ DeleteCountResponse }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -86,12 +80,6 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **ScheduledComputeNodesApi** | API context | 
 **workflow_id** | **Int64** |  |
-
-### Optional Parameters
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
 
 ### Return type
 
@@ -103,7 +91,7 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: application/json
+ - **Content-Type**: Not defined
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)

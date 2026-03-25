@@ -59,7 +59,6 @@ class WorkflowsApi:
     def cancel_workflow(
         self,
         id: Annotated[StrictInt, Field(description="Workflow ID")],
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -78,8 +77,6 @@ class WorkflowsApi:
 
         :param id: Workflow ID (required)
         :type id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -104,7 +101,6 @@ class WorkflowsApi:
 
         _param = self._cancel_workflow_serialize(
             id=id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -129,7 +125,6 @@ class WorkflowsApi:
     def cancel_workflow_with_http_info(
         self,
         id: Annotated[StrictInt, Field(description="Workflow ID")],
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -148,8 +143,6 @@ class WorkflowsApi:
 
         :param id: Workflow ID (required)
         :type id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -174,7 +167,6 @@ class WorkflowsApi:
 
         _param = self._cancel_workflow_serialize(
             id=id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -199,7 +191,6 @@ class WorkflowsApi:
     def cancel_workflow_without_preload_content(
         self,
         id: Annotated[StrictInt, Field(description="Workflow ID")],
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -218,8 +209,6 @@ class WorkflowsApi:
 
         :param id: Workflow ID (required)
         :type id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -244,7 +233,6 @@ class WorkflowsApi:
 
         _param = self._cancel_workflow_serialize(
             id=id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -264,7 +252,6 @@ class WorkflowsApi:
     def _cancel_workflow_serialize(
         self,
         id,
-        body,
         _request_auth,
         _content_type,
         _headers,
@@ -292,8 +279,6 @@ class WorkflowsApi:
         # process the header parameters
         # process the form parameters
         # process the body parameter
-        if body is not None:
-            _body_params = body
 
 
         # set the HTTP header `Accept`
@@ -304,19 +289,6 @@ class WorkflowsApi:
                 ]
             )
 
-        # set the HTTP header `Content-Type`
-        if _content_type:
-            _header_params['Content-Type'] = _content_type
-        else:
-            _default_content_type = (
-                self.api_client.select_header_content_type(
-                    [
-                        'application/json'
-                    ]
-                )
-            )
-            if _default_content_type is not None:
-                _header_params['Content-Type'] = _default_content_type
 
         # authentication setting
         _auth_settings: List[str] = [
@@ -662,7 +634,6 @@ class WorkflowsApi:
         self,
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         limit: Optional[StrictInt] = None,
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -683,8 +654,6 @@ class WorkflowsApi:
         :type id: int
         :param limit:
         :type limit: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -710,7 +679,6 @@ class WorkflowsApi:
         _param = self._claim_next_jobs_serialize(
             id=id,
             limit=limit,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -736,7 +704,6 @@ class WorkflowsApi:
         self,
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         limit: Optional[StrictInt] = None,
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -757,8 +724,6 @@ class WorkflowsApi:
         :type id: int
         :param limit:
         :type limit: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -784,7 +749,6 @@ class WorkflowsApi:
         _param = self._claim_next_jobs_serialize(
             id=id,
             limit=limit,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -810,7 +774,6 @@ class WorkflowsApi:
         self,
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         limit: Optional[StrictInt] = None,
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -831,8 +794,6 @@ class WorkflowsApi:
         :type id: int
         :param limit:
         :type limit: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -858,7 +819,6 @@ class WorkflowsApi:
         _param = self._claim_next_jobs_serialize(
             id=id,
             limit=limit,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -879,7 +839,6 @@ class WorkflowsApi:
         self,
         id,
         limit,
-        body,
         _request_auth,
         _content_type,
         _headers,
@@ -911,8 +870,6 @@ class WorkflowsApi:
         # process the header parameters
         # process the form parameters
         # process the body parameter
-        if body is not None:
-            _body_params = body
 
 
         # set the HTTP header `Accept`
@@ -923,19 +880,6 @@ class WorkflowsApi:
                 ]
             )
 
-        # set the HTTP header `Content-Type`
-        if _content_type:
-            _header_params['Content-Type'] = _content_type
-        else:
-            _default_content_type = (
-                self.api_client.select_header_content_type(
-                    [
-                        'application/json'
-                    ]
-                )
-            )
-            if _default_content_type is not None:
-                _header_params['Content-Type'] = _default_content_type
 
         # authentication setting
         _auth_settings: List[str] = [
@@ -1232,8 +1176,7 @@ class WorkflowsApi:
     @validate_call
     def delete_workflow(
         self,
-        id: Annotated[StrictInt, Field(description="Workflow ID.")],
-        body: Optional[Any] = None,
+        id: Annotated[StrictInt, Field(description="Workflow ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1250,10 +1193,8 @@ class WorkflowsApi:
         """delete_workflow
 
 
-        :param id: Workflow ID. (required)
+        :param id: Workflow ID (required)
         :type id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1278,7 +1219,6 @@ class WorkflowsApi:
 
         _param = self._delete_workflow_serialize(
             id=id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1302,8 +1242,7 @@ class WorkflowsApi:
     @validate_call
     def delete_workflow_with_http_info(
         self,
-        id: Annotated[StrictInt, Field(description="Workflow ID.")],
-        body: Optional[Any] = None,
+        id: Annotated[StrictInt, Field(description="Workflow ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1320,10 +1259,8 @@ class WorkflowsApi:
         """delete_workflow
 
 
-        :param id: Workflow ID. (required)
+        :param id: Workflow ID (required)
         :type id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1348,7 +1285,6 @@ class WorkflowsApi:
 
         _param = self._delete_workflow_serialize(
             id=id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1372,8 +1308,7 @@ class WorkflowsApi:
     @validate_call
     def delete_workflow_without_preload_content(
         self,
-        id: Annotated[StrictInt, Field(description="Workflow ID.")],
-        body: Optional[Any] = None,
+        id: Annotated[StrictInt, Field(description="Workflow ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1390,10 +1325,8 @@ class WorkflowsApi:
         """delete_workflow
 
 
-        :param id: Workflow ID. (required)
+        :param id: Workflow ID (required)
         :type id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1418,7 +1351,6 @@ class WorkflowsApi:
 
         _param = self._delete_workflow_serialize(
             id=id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1438,7 +1370,6 @@ class WorkflowsApi:
     def _delete_workflow_serialize(
         self,
         id,
-        body,
         _request_auth,
         _content_type,
         _headers,
@@ -1466,8 +1397,6 @@ class WorkflowsApi:
         # process the header parameters
         # process the form parameters
         # process the body parameter
-        if body is not None:
-            _body_params = body
 
 
         # set the HTTP header `Accept`
@@ -1478,19 +1407,6 @@ class WorkflowsApi:
                 ]
             )
 
-        # set the HTTP header `Content-Type`
-        if _content_type:
-            _header_params['Content-Type'] = _content_type
-        else:
-            _default_content_type = (
-                self.api_client.select_header_content_type(
-                    [
-                        'application/json'
-                    ]
-                )
-            )
-            if _default_content_type is not None:
-                _header_params['Content-Type'] = _default_content_type
 
         # authentication setting
         _auth_settings: List[str] = [
@@ -1791,7 +1707,7 @@ class WorkflowsApi:
     @validate_call
     def get_workflow(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the workflows record")],
+        id: Annotated[StrictInt, Field(description="Workflow ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1808,7 +1724,7 @@ class WorkflowsApi:
         """get_workflow
 
 
-        :param id: ID of the workflows record (required)
+        :param id: Workflow ID (required)
         :type id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -1857,7 +1773,7 @@ class WorkflowsApi:
     @validate_call
     def get_workflow_with_http_info(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the workflows record")],
+        id: Annotated[StrictInt, Field(description="Workflow ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1874,7 +1790,7 @@ class WorkflowsApi:
         """get_workflow
 
 
-        :param id: ID of the workflows record (required)
+        :param id: Workflow ID (required)
         :type id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -1923,7 +1839,7 @@ class WorkflowsApi:
     @validate_call
     def get_workflow_without_preload_content(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the workflows record")],
+        id: Annotated[StrictInt, Field(description="Workflow ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1940,7 +1856,7 @@ class WorkflowsApi:
         """get_workflow
 
 
-        :param id: ID of the workflows record (required)
+        :param id: Workflow ID (required)
         :type id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -2308,7 +2224,6 @@ class WorkflowsApi:
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         only_uninitialized: Optional[StrictBool] = None,
         clear_ephemeral_user_data: Optional[StrictBool] = None,
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2331,8 +2246,6 @@ class WorkflowsApi:
         :type only_uninitialized: bool
         :param clear_ephemeral_user_data:
         :type clear_ephemeral_user_data: bool
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2359,7 +2272,6 @@ class WorkflowsApi:
             id=id,
             only_uninitialized=only_uninitialized,
             clear_ephemeral_user_data=clear_ephemeral_user_data,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2386,7 +2298,6 @@ class WorkflowsApi:
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         only_uninitialized: Optional[StrictBool] = None,
         clear_ephemeral_user_data: Optional[StrictBool] = None,
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2409,8 +2320,6 @@ class WorkflowsApi:
         :type only_uninitialized: bool
         :param clear_ephemeral_user_data:
         :type clear_ephemeral_user_data: bool
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2437,7 +2346,6 @@ class WorkflowsApi:
             id=id,
             only_uninitialized=only_uninitialized,
             clear_ephemeral_user_data=clear_ephemeral_user_data,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2464,7 +2372,6 @@ class WorkflowsApi:
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         only_uninitialized: Optional[StrictBool] = None,
         clear_ephemeral_user_data: Optional[StrictBool] = None,
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2487,8 +2394,6 @@ class WorkflowsApi:
         :type only_uninitialized: bool
         :param clear_ephemeral_user_data:
         :type clear_ephemeral_user_data: bool
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2515,7 +2420,6 @@ class WorkflowsApi:
             id=id,
             only_uninitialized=only_uninitialized,
             clear_ephemeral_user_data=clear_ephemeral_user_data,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2537,7 +2441,6 @@ class WorkflowsApi:
         id,
         only_uninitialized,
         clear_ephemeral_user_data,
-        body,
         _request_auth,
         _content_type,
         _headers,
@@ -2573,8 +2476,6 @@ class WorkflowsApi:
         # process the header parameters
         # process the form parameters
         # process the body parameter
-        if body is not None:
-            _body_params = body
 
 
         # set the HTTP header `Accept`
@@ -2585,19 +2486,6 @@ class WorkflowsApi:
                 ]
             )
 
-        # set the HTTP header `Content-Type`
-        if _content_type:
-            _header_params['Content-Type'] = _content_type
-        else:
-            _default_content_type = (
-                self.api_client.select_header_content_type(
-                    [
-                        'application/json'
-                    ]
-                )
-            )
-            if _default_content_type is not None:
-                _header_params['Content-Type'] = _default_content_type
 
         # authentication setting
         _auth_settings: List[str] = [
@@ -5264,7 +5152,6 @@ class WorkflowsApi:
         self,
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         dry_run: Optional[StrictBool] = None,
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -5285,8 +5172,6 @@ class WorkflowsApi:
         :type id: int
         :param dry_run:
         :type dry_run: bool
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -5312,7 +5197,6 @@ class WorkflowsApi:
         _param = self._process_changed_job_inputs_serialize(
             id=id,
             dry_run=dry_run,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -5338,7 +5222,6 @@ class WorkflowsApi:
         self,
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         dry_run: Optional[StrictBool] = None,
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -5359,8 +5242,6 @@ class WorkflowsApi:
         :type id: int
         :param dry_run:
         :type dry_run: bool
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -5386,7 +5267,6 @@ class WorkflowsApi:
         _param = self._process_changed_job_inputs_serialize(
             id=id,
             dry_run=dry_run,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -5412,7 +5292,6 @@ class WorkflowsApi:
         self,
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         dry_run: Optional[StrictBool] = None,
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -5433,8 +5312,6 @@ class WorkflowsApi:
         :type id: int
         :param dry_run:
         :type dry_run: bool
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -5460,7 +5337,6 @@ class WorkflowsApi:
         _param = self._process_changed_job_inputs_serialize(
             id=id,
             dry_run=dry_run,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -5481,7 +5357,6 @@ class WorkflowsApi:
         self,
         id,
         dry_run,
-        body,
         _request_auth,
         _content_type,
         _headers,
@@ -5513,8 +5388,6 @@ class WorkflowsApi:
         # process the header parameters
         # process the form parameters
         # process the body parameter
-        if body is not None:
-            _body_params = body
 
 
         # set the HTTP header `Accept`
@@ -5525,19 +5398,6 @@ class WorkflowsApi:
                 ]
             )
 
-        # set the HTTP header `Content-Type`
-        if _content_type:
-            _header_params['Content-Type'] = _content_type
-        else:
-            _default_content_type = (
-                self.api_client.select_header_content_type(
-                    [
-                        'application/json'
-                    ]
-                )
-            )
-            if _default_content_type is not None:
-                _header_params['Content-Type'] = _default_content_type
 
         # authentication setting
         _auth_settings: List[str] = [
@@ -5566,7 +5426,6 @@ class WorkflowsApi:
         self,
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         failed_only: Optional[StrictBool] = None,
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -5587,8 +5446,6 @@ class WorkflowsApi:
         :type id: int
         :param failed_only:
         :type failed_only: bool
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -5614,7 +5471,6 @@ class WorkflowsApi:
         _param = self._reset_job_status_serialize(
             id=id,
             failed_only=failed_only,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -5640,7 +5496,6 @@ class WorkflowsApi:
         self,
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         failed_only: Optional[StrictBool] = None,
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -5661,8 +5516,6 @@ class WorkflowsApi:
         :type id: int
         :param failed_only:
         :type failed_only: bool
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -5688,7 +5541,6 @@ class WorkflowsApi:
         _param = self._reset_job_status_serialize(
             id=id,
             failed_only=failed_only,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -5714,7 +5566,6 @@ class WorkflowsApi:
         self,
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         failed_only: Optional[StrictBool] = None,
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -5735,8 +5586,6 @@ class WorkflowsApi:
         :type id: int
         :param failed_only:
         :type failed_only: bool
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -5762,7 +5611,6 @@ class WorkflowsApi:
         _param = self._reset_job_status_serialize(
             id=id,
             failed_only=failed_only,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -5783,7 +5631,6 @@ class WorkflowsApi:
         self,
         id,
         failed_only,
-        body,
         _request_auth,
         _content_type,
         _headers,
@@ -5815,8 +5662,6 @@ class WorkflowsApi:
         # process the header parameters
         # process the form parameters
         # process the body parameter
-        if body is not None:
-            _body_params = body
 
 
         # set the HTTP header `Accept`
@@ -5827,19 +5672,6 @@ class WorkflowsApi:
                 ]
             )
 
-        # set the HTTP header `Content-Type`
-        if _content_type:
-            _header_params['Content-Type'] = _content_type
-        else:
-            _default_content_type = (
-                self.api_client.select_header_content_type(
-                    [
-                        'application/json'
-                    ]
-                )
-            )
-            if _default_content_type is not None:
-                _header_params['Content-Type'] = _default_content_type
 
         # authentication setting
         _auth_settings: List[str] = [
@@ -5868,7 +5700,6 @@ class WorkflowsApi:
         self,
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         force: Optional[StrictBool] = None,
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -5889,8 +5720,6 @@ class WorkflowsApi:
         :type id: int
         :param force:
         :type force: bool
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -5916,7 +5745,6 @@ class WorkflowsApi:
         _param = self._reset_workflow_status_serialize(
             id=id,
             force=force,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -5942,7 +5770,6 @@ class WorkflowsApi:
         self,
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         force: Optional[StrictBool] = None,
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -5963,8 +5790,6 @@ class WorkflowsApi:
         :type id: int
         :param force:
         :type force: bool
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -5990,7 +5815,6 @@ class WorkflowsApi:
         _param = self._reset_workflow_status_serialize(
             id=id,
             force=force,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -6016,7 +5840,6 @@ class WorkflowsApi:
         self,
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         force: Optional[StrictBool] = None,
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -6037,8 +5860,6 @@ class WorkflowsApi:
         :type id: int
         :param force:
         :type force: bool
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -6064,7 +5885,6 @@ class WorkflowsApi:
         _param = self._reset_workflow_status_serialize(
             id=id,
             force=force,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -6085,7 +5905,6 @@ class WorkflowsApi:
         self,
         id,
         force,
-        body,
         _request_auth,
         _content_type,
         _headers,
@@ -6117,8 +5936,6 @@ class WorkflowsApi:
         # process the header parameters
         # process the form parameters
         # process the body parameter
-        if body is not None:
-            _body_params = body
 
 
         # set the HTTP header `Accept`
@@ -6129,19 +5946,6 @@ class WorkflowsApi:
                 ]
             )
 
-        # set the HTTP header `Content-Type`
-        if _content_type:
-            _header_params['Content-Type'] = _content_type
-        else:
-            _default_content_type = (
-                self.api_client.select_header_content_type(
-                    [
-                        'application/json'
-                    ]
-                )
-            )
-            if _default_content_type is not None:
-                _header_params['Content-Type'] = _default_content_type
 
         # authentication setting
         _auth_settings: List[str] = [

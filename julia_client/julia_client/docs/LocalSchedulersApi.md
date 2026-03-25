@@ -41,8 +41,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **delete_local_scheduler**
-> delete_local_scheduler(_api::LocalSchedulersApi, id::Int64; body=nothing, _mediaType=nothing) -> LocalSchedulerModel, OpenAPI.Clients.ApiResponse <br/>
-> delete_local_scheduler(_api::LocalSchedulersApi, response_stream::Channel, id::Int64; body=nothing, _mediaType=nothing) -> Channel{ LocalSchedulerModel }, OpenAPI.Clients.ApiResponse
+> delete_local_scheduler(_api::LocalSchedulersApi, id::Int64; _mediaType=nothing) -> LocalSchedulerModel, OpenAPI.Clients.ApiResponse <br/>
+> delete_local_scheduler(_api::LocalSchedulersApi, response_stream::Channel, id::Int64; _mediaType=nothing) -> Channel{ LocalSchedulerModel }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -51,13 +51,7 @@ No authorization required
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **LocalSchedulersApi** | API context | 
-**id** | **Int64** | ID of the local compute node configuration record. |
-
-### Optional Parameters
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+**id** | **Int64** | Local scheduler ID |
 
 ### Return type
 
@@ -69,14 +63,14 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: application/json
+ - **Content-Type**: Not defined
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **delete_local_schedulers**
-> delete_local_schedulers(_api::LocalSchedulersApi, workflow_id::Int64; body=nothing, _mediaType=nothing) -> DeleteCountResponse, OpenAPI.Clients.ApiResponse <br/>
-> delete_local_schedulers(_api::LocalSchedulersApi, response_stream::Channel, workflow_id::Int64; body=nothing, _mediaType=nothing) -> Channel{ DeleteCountResponse }, OpenAPI.Clients.ApiResponse
+> delete_local_schedulers(_api::LocalSchedulersApi, workflow_id::Int64; _mediaType=nothing) -> DeleteCountResponse, OpenAPI.Clients.ApiResponse <br/>
+> delete_local_schedulers(_api::LocalSchedulersApi, response_stream::Channel, workflow_id::Int64; _mediaType=nothing) -> Channel{ DeleteCountResponse }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -86,12 +80,6 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **LocalSchedulersApi** | API context | 
 **workflow_id** | **Int64** |  |
-
-### Optional Parameters
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
 
 ### Return type
 
@@ -103,7 +91,7 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: application/json
+ - **Content-Type**: Not defined
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
@@ -119,7 +107,7 @@ No authorization required
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **LocalSchedulersApi** | API context | 
-**id** | **Int64** | Scheduler ID |
+**id** | **Int64** | ID of the local scheduler record |
 
 ### Return type
 
@@ -186,7 +174,7 @@ No authorization required
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **LocalSchedulersApi** | API context | 
-**id** | **Int64** | Scheduler ID |
+**id** | **Int64** | ID of the local scheduler. |
 **local_scheduler_model** | [**LocalSchedulerModel**](LocalSchedulerModel.md) |  |
 
 ### Return type

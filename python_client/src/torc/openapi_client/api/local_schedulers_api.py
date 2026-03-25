@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from typing_extensions import Annotated
 
 from pydantic import Field, StrictBool, StrictInt, StrictStr
-from typing import Any, Optional
+from typing import Optional
 from typing_extensions import Annotated
 from torc.openapi_client.models.delete_count_response import DeleteCountResponse
 from torc.openapi_client.models.list_local_schedulers_response import ListLocalSchedulersResponse
@@ -95,6 +95,9 @@ class LocalSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "LocalSchedulerModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -161,6 +164,9 @@ class LocalSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "LocalSchedulerModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -227,6 +233,9 @@ class LocalSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "LocalSchedulerModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -314,8 +323,7 @@ class LocalSchedulersApi:
     @validate_call
     def delete_local_scheduler(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the local compute node configuration record.")],
-        body: Optional[Any] = None,
+        id: Annotated[StrictInt, Field(description="Local scheduler ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -332,10 +340,8 @@ class LocalSchedulersApi:
         """delete_local_scheduler
 
 
-        :param id: ID of the local compute node configuration record. (required)
+        :param id: Local scheduler ID (required)
         :type id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -360,7 +366,6 @@ class LocalSchedulersApi:
 
         _param = self._delete_local_scheduler_serialize(
             id=id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -369,6 +374,9 @@ class LocalSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "LocalSchedulerModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -384,8 +392,7 @@ class LocalSchedulersApi:
     @validate_call
     def delete_local_scheduler_with_http_info(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the local compute node configuration record.")],
-        body: Optional[Any] = None,
+        id: Annotated[StrictInt, Field(description="Local scheduler ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -402,10 +409,8 @@ class LocalSchedulersApi:
         """delete_local_scheduler
 
 
-        :param id: ID of the local compute node configuration record. (required)
+        :param id: Local scheduler ID (required)
         :type id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -430,7 +435,6 @@ class LocalSchedulersApi:
 
         _param = self._delete_local_scheduler_serialize(
             id=id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -439,6 +443,9 @@ class LocalSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "LocalSchedulerModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -454,8 +461,7 @@ class LocalSchedulersApi:
     @validate_call
     def delete_local_scheduler_without_preload_content(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the local compute node configuration record.")],
-        body: Optional[Any] = None,
+        id: Annotated[StrictInt, Field(description="Local scheduler ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -472,10 +478,8 @@ class LocalSchedulersApi:
         """delete_local_scheduler
 
 
-        :param id: ID of the local compute node configuration record. (required)
+        :param id: Local scheduler ID (required)
         :type id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -500,7 +504,6 @@ class LocalSchedulersApi:
 
         _param = self._delete_local_scheduler_serialize(
             id=id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -509,6 +512,9 @@ class LocalSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "LocalSchedulerModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -520,7 +526,6 @@ class LocalSchedulersApi:
     def _delete_local_scheduler_serialize(
         self,
         id,
-        body,
         _request_auth,
         _content_type,
         _headers,
@@ -548,8 +553,6 @@ class LocalSchedulersApi:
         # process the header parameters
         # process the form parameters
         # process the body parameter
-        if body is not None:
-            _body_params = body
 
 
         # set the HTTP header `Accept`
@@ -560,19 +563,6 @@ class LocalSchedulersApi:
                 ]
             )
 
-        # set the HTTP header `Content-Type`
-        if _content_type:
-            _header_params['Content-Type'] = _content_type
-        else:
-            _default_content_type = (
-                self.api_client.select_header_content_type(
-                    [
-                        'application/json'
-                    ]
-                )
-            )
-            if _default_content_type is not None:
-                _header_params['Content-Type'] = _default_content_type
 
         # authentication setting
         _auth_settings: List[str] = [
@@ -600,7 +590,6 @@ class LocalSchedulersApi:
     def delete_local_schedulers(
         self,
         workflow_id: StrictInt,
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -619,8 +608,6 @@ class LocalSchedulersApi:
 
         :param workflow_id: (required)
         :type workflow_id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -645,7 +632,6 @@ class LocalSchedulersApi:
 
         _param = self._delete_local_schedulers_serialize(
             workflow_id=workflow_id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -654,6 +640,9 @@ class LocalSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "DeleteCountResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -670,7 +659,6 @@ class LocalSchedulersApi:
     def delete_local_schedulers_with_http_info(
         self,
         workflow_id: StrictInt,
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -689,8 +677,6 @@ class LocalSchedulersApi:
 
         :param workflow_id: (required)
         :type workflow_id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -715,7 +701,6 @@ class LocalSchedulersApi:
 
         _param = self._delete_local_schedulers_serialize(
             workflow_id=workflow_id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -724,6 +709,9 @@ class LocalSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "DeleteCountResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -740,7 +728,6 @@ class LocalSchedulersApi:
     def delete_local_schedulers_without_preload_content(
         self,
         workflow_id: StrictInt,
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -759,8 +746,6 @@ class LocalSchedulersApi:
 
         :param workflow_id: (required)
         :type workflow_id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -785,7 +770,6 @@ class LocalSchedulersApi:
 
         _param = self._delete_local_schedulers_serialize(
             workflow_id=workflow_id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -794,6 +778,9 @@ class LocalSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "DeleteCountResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -805,7 +792,6 @@ class LocalSchedulersApi:
     def _delete_local_schedulers_serialize(
         self,
         workflow_id,
-        body,
         _request_auth,
         _content_type,
         _headers,
@@ -835,8 +821,6 @@ class LocalSchedulersApi:
         # process the header parameters
         # process the form parameters
         # process the body parameter
-        if body is not None:
-            _body_params = body
 
 
         # set the HTTP header `Accept`
@@ -847,19 +831,6 @@ class LocalSchedulersApi:
                 ]
             )
 
-        # set the HTTP header `Content-Type`
-        if _content_type:
-            _header_params['Content-Type'] = _content_type
-        else:
-            _default_content_type = (
-                self.api_client.select_header_content_type(
-                    [
-                        'application/json'
-                    ]
-                )
-            )
-            if _default_content_type is not None:
-                _header_params['Content-Type'] = _default_content_type
 
         # authentication setting
         _auth_settings: List[str] = [
@@ -886,7 +857,7 @@ class LocalSchedulersApi:
     @validate_call
     def get_local_scheduler(
         self,
-        id: Annotated[StrictInt, Field(description="Scheduler ID")],
+        id: Annotated[StrictInt, Field(description="ID of the local scheduler record")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -903,7 +874,7 @@ class LocalSchedulersApi:
         """get_local_scheduler
 
 
-        :param id: Scheduler ID (required)
+        :param id: ID of the local scheduler record (required)
         :type id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -937,6 +908,9 @@ class LocalSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "LocalSchedulerModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -952,7 +926,7 @@ class LocalSchedulersApi:
     @validate_call
     def get_local_scheduler_with_http_info(
         self,
-        id: Annotated[StrictInt, Field(description="Scheduler ID")],
+        id: Annotated[StrictInt, Field(description="ID of the local scheduler record")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -969,7 +943,7 @@ class LocalSchedulersApi:
         """get_local_scheduler
 
 
-        :param id: Scheduler ID (required)
+        :param id: ID of the local scheduler record (required)
         :type id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -1003,6 +977,9 @@ class LocalSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "LocalSchedulerModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1018,7 +995,7 @@ class LocalSchedulersApi:
     @validate_call
     def get_local_scheduler_without_preload_content(
         self,
-        id: Annotated[StrictInt, Field(description="Scheduler ID")],
+        id: Annotated[StrictInt, Field(description="ID of the local scheduler record")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1035,7 +1012,7 @@ class LocalSchedulersApi:
         """get_local_scheduler
 
 
-        :param id: Scheduler ID (required)
+        :param id: ID of the local scheduler record (required)
         :type id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -1069,6 +1046,9 @@ class LocalSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "LocalSchedulerModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1218,6 +1198,9 @@ class LocalSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListLocalSchedulersResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1308,6 +1291,9 @@ class LocalSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListLocalSchedulersResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1398,6 +1384,9 @@ class LocalSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListLocalSchedulersResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1504,7 +1493,7 @@ class LocalSchedulersApi:
     @validate_call
     def update_local_scheduler(
         self,
-        id: Annotated[StrictInt, Field(description="Scheduler ID")],
+        id: Annotated[StrictInt, Field(description="ID of the local scheduler.")],
         local_scheduler_model: LocalSchedulerModel,
         _request_timeout: Union[
             None,
@@ -1522,7 +1511,7 @@ class LocalSchedulersApi:
         """update_local_scheduler
 
 
-        :param id: Scheduler ID (required)
+        :param id: ID of the local scheduler. (required)
         :type id: int
         :param local_scheduler_model: (required)
         :type local_scheduler_model: LocalSchedulerModel
@@ -1559,6 +1548,9 @@ class LocalSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "LocalSchedulerModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1574,7 +1566,7 @@ class LocalSchedulersApi:
     @validate_call
     def update_local_scheduler_with_http_info(
         self,
-        id: Annotated[StrictInt, Field(description="Scheduler ID")],
+        id: Annotated[StrictInt, Field(description="ID of the local scheduler.")],
         local_scheduler_model: LocalSchedulerModel,
         _request_timeout: Union[
             None,
@@ -1592,7 +1584,7 @@ class LocalSchedulersApi:
         """update_local_scheduler
 
 
-        :param id: Scheduler ID (required)
+        :param id: ID of the local scheduler. (required)
         :type id: int
         :param local_scheduler_model: (required)
         :type local_scheduler_model: LocalSchedulerModel
@@ -1629,6 +1621,9 @@ class LocalSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "LocalSchedulerModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1644,7 +1639,7 @@ class LocalSchedulersApi:
     @validate_call
     def update_local_scheduler_without_preload_content(
         self,
-        id: Annotated[StrictInt, Field(description="Scheduler ID")],
+        id: Annotated[StrictInt, Field(description="ID of the local scheduler.")],
         local_scheduler_model: LocalSchedulerModel,
         _request_timeout: Union[
             None,
@@ -1662,7 +1657,7 @@ class LocalSchedulersApi:
         """update_local_scheduler
 
 
-        :param id: Scheduler ID (required)
+        :param id: ID of the local scheduler. (required)
         :type id: int
         :param local_scheduler_model: (required)
         :type local_scheduler_model: LocalSchedulerModel
@@ -1699,6 +1694,9 @@ class LocalSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "LocalSchedulerModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,

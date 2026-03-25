@@ -137,6 +137,7 @@ pub fn iter_events(
 ///
 /// # Returns
 /// `Result<Vec<EventModel>, Error>` containing all events or an error
+#[allow(clippy::result_large_err)]
 pub fn paginate_events(
     config: &apis::configuration::Configuration,
     workflow_id: i64,

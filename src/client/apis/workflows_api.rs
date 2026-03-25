@@ -178,11 +178,9 @@ pub enum UpdateWorkflowStatusError {
 pub fn cancel_workflow(
     configuration: &configuration::Configuration,
     id: i64,
-    body: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, Error<CancelWorkflowError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_id = id;
-    let p_body_body = body;
 
     let uri_str = format!(
         "{}/workflows/{id}/cancel",
@@ -195,7 +193,6 @@ pub fn cancel_workflow(
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
     req_builder = configuration.apply_auth(req_builder);
-    req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -307,12 +304,10 @@ pub fn claim_next_jobs(
     configuration: &configuration::Configuration,
     id: i64,
     limit: Option<i64>,
-    body: Option<serde_json::Value>,
 ) -> Result<models::ClaimNextJobsResponse, Error<ClaimNextJobsError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_id = id;
     let p_query_limit = limit;
-    let p_body_body = body;
 
     let uri_str = format!(
         "{}/workflows/{id}/claim_next_jobs",
@@ -330,7 +325,6 @@ pub fn claim_next_jobs(
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
     req_builder = configuration.apply_auth(req_builder);
-    req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -427,11 +421,9 @@ pub fn create_workflow(
 pub fn delete_workflow(
     configuration: &configuration::Configuration,
     id: i64,
-    body: Option<serde_json::Value>,
 ) -> Result<models::WorkflowModel, Error<DeleteWorkflowError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_id = id;
-    let p_body_body = body;
 
     let uri_str = format!("{}/workflows/{id}", configuration.base_path, id = p_path_id);
     let mut req_builder = configuration
@@ -442,7 +434,6 @@ pub fn delete_workflow(
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
     req_builder = configuration.apply_auth(req_builder);
-    req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -655,13 +646,11 @@ pub fn initialize_jobs(
     id: i64,
     only_uninitialized: Option<bool>,
     clear_ephemeral_user_data: Option<bool>,
-    body: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, Error<InitializeJobsError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_id = id;
     let p_query_only_uninitialized = only_uninitialized;
     let p_query_clear_ephemeral_user_data = clear_ephemeral_user_data;
-    let p_body_body = body;
 
     let uri_str = format!(
         "{}/workflows/{id}/initialize_jobs",
@@ -682,7 +671,6 @@ pub fn initialize_jobs(
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
     req_builder = configuration.apply_auth(req_builder);
-    req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -1324,12 +1312,10 @@ pub fn process_changed_job_inputs(
     configuration: &configuration::Configuration,
     id: i64,
     dry_run: Option<bool>,
-    body: Option<serde_json::Value>,
 ) -> Result<models::ProcessChangedJobInputsResponse, Error<ProcessChangedJobInputsError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_id = id;
     let p_query_dry_run = dry_run;
-    let p_body_body = body;
 
     let uri_str = format!(
         "{}/workflows/{id}/process_changed_job_inputs",
@@ -1347,7 +1333,6 @@ pub fn process_changed_job_inputs(
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
     req_builder = configuration.apply_auth(req_builder);
-    req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -1390,12 +1375,10 @@ pub fn reset_job_status(
     configuration: &configuration::Configuration,
     id: i64,
     failed_only: Option<bool>,
-    body: Option<serde_json::Value>,
 ) -> Result<models::ResetJobStatusResponse, Error<ResetJobStatusError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_id = id;
     let p_query_failed_only = failed_only;
-    let p_body_body = body;
 
     let uri_str = format!(
         "{}/workflows/{id}/reset_job_status",
@@ -1413,7 +1396,6 @@ pub fn reset_job_status(
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
     req_builder = configuration.apply_auth(req_builder);
-    req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -1456,12 +1438,10 @@ pub fn reset_workflow_status(
     configuration: &configuration::Configuration,
     id: i64,
     force: Option<bool>,
-    body: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, Error<ResetWorkflowStatusError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_id = id;
     let p_query_force = force;
-    let p_body_body = body;
 
     let uri_str = format!(
         "{}/workflows/{id}/reset_status",
@@ -1479,7 +1459,6 @@ pub fn reset_workflow_status(
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
     req_builder = configuration.apply_auth(req_builder);
-    req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;

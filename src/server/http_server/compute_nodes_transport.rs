@@ -41,12 +41,11 @@ where
     pub(super) async fn transport_delete_compute_nodes(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteComputeNodesResponse, ApiError> {
         authorize_workflow!(self, workflow_id, context, DeleteComputeNodesResponse);
         self.compute_nodes_api
-            .delete_compute_nodes(workflow_id, body, context)
+            .delete_compute_nodes(workflow_id, context)
             .await
     }
     pub(super) async fn transport_list_compute_nodes(
@@ -118,12 +117,11 @@ where
     pub(super) async fn transport_delete_compute_node(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteComputeNodeResponse, ApiError> {
         authorize_resource!(self, id, "compute_node", context, DeleteComputeNodeResponse);
         self.compute_nodes_api
-            .delete_compute_node(id, body, context)
+            .delete_compute_node(id, context)
             .await
     }
 }

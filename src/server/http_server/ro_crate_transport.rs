@@ -67,7 +67,6 @@ where
     pub(super) async fn transport_delete_ro_crate_entity(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteRoCrateEntityResponse, ApiError> {
         authorize_resource!(
@@ -78,19 +77,16 @@ where
             DeleteRoCrateEntityResponse
         );
 
-        self.ro_crate_api
-            .delete_ro_crate_entity(id, body, context)
-            .await
+        self.ro_crate_api.delete_ro_crate_entity(id, context).await
     }
     pub(super) async fn transport_delete_ro_crate_entities(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteRoCrateEntitiesResponse, ApiError> {
         authorize_workflow!(self, workflow_id, context, DeleteRoCrateEntitiesResponse);
         self.ro_crate_api
-            .delete_ro_crate_entities(workflow_id, body, context)
+            .delete_ro_crate_entities(workflow_id, context)
             .await
     }
 }

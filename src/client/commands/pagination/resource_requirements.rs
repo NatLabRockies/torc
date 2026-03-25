@@ -123,7 +123,7 @@ impl PaginationParams for ResourceRequirementsListParams {
 }
 
 impl Paginatable for ResourceRequirementsModel {
-    type ListError = apis::admin_resources_api::ListResourceRequirementsError;
+    type ListError = apis::resource_requirements_api::ListResourceRequirementsError;
     type Params = ResourceRequirementsListParams;
 
     fn fetch_page(
@@ -131,7 +131,7 @@ impl Paginatable for ResourceRequirementsModel {
         params: &Self::Params,
         limit: i64,
     ) -> Result<PaginatedResponse<Self>, apis::Error<Self::ListError>> {
-        let response = apis::admin_resources_api::list_resource_requirements(
+        let response = apis::resource_requirements_api::list_resource_requirements(
             config,
             params.workflow_id,
             params.job_id,
@@ -192,13 +192,14 @@ pub fn iter_resource_requirements(
 ///
 /// # Returns
 /// `Result<Vec<ResourceRequirementsModel>, Error>` containing all resource requirements or an error
+#[allow(clippy::result_large_err)]
 pub fn paginate_resource_requirements(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: ResourceRequirementsListParams,
 ) -> Result<
     Vec<ResourceRequirementsModel>,
-    apis::Error<apis::admin_resources_api::ListResourceRequirementsError>,
+    apis::Error<apis::resource_requirements_api::ListResourceRequirementsError>,
 > {
     iter_resource_requirements(config, workflow_id, params).collect()
 }

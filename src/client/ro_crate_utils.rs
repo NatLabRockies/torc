@@ -223,7 +223,14 @@ pub fn find_entity_for_file(
     workflow_id: i64,
     file_id: i64,
 ) -> Option<RoCrateEntityModel> {
-    match apis::ro_crate_api::list_ro_crate_entities(config, workflow_id, None, None, None, None) {
+    match apis::ro_crate_entities_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+    ) {
         Ok(response) => response
             .items
             .into_iter()
@@ -285,7 +292,8 @@ pub fn create_ro_crate_entity_for_file(
             ..entity
         };
 
-        match apis::ro_crate_api::update_ro_crate_entity(config, entity_id, updated_entity) {
+        match apis::ro_crate_entities_api::update_ro_crate_entity(config, entity_id, updated_entity)
+        {
             Ok(_) => {
                 debug!(
                     "Updated RO-Crate entity for file '{}' (entity_id={})",
@@ -302,7 +310,7 @@ pub fn create_ro_crate_entity_for_file(
         return;
     }
 
-    match apis::ro_crate_api::create_ro_crate_entity(config, entity) {
+    match apis::ro_crate_entities_api::create_ro_crate_entity(config, entity) {
         Ok(created) => {
             debug!(
                 "Created RO-Crate entity for file '{}' (entity_id={})",
@@ -373,7 +381,8 @@ pub fn create_ro_crate_entity_for_output_file(
             ..entity
         };
 
-        match apis::ro_crate_api::update_ro_crate_entity(config, entity_id, updated_entity) {
+        match apis::ro_crate_entities_api::update_ro_crate_entity(config, entity_id, updated_entity)
+        {
             Ok(_) => {
                 debug!(
                     "Updated RO-Crate entity for output file '{}' with provenance (entity_id={})",
@@ -392,7 +401,7 @@ pub fn create_ro_crate_entity_for_output_file(
 
     // No existing entity - create a new one
 
-    match apis::ro_crate_api::create_ro_crate_entity(config, entity) {
+    match apis::ro_crate_entities_api::create_ro_crate_entity(config, entity) {
         Ok(created) => {
             debug!(
                 "Created RO-Crate entity for output file '{}' (entity_id={})",
@@ -424,7 +433,7 @@ pub fn create_create_action_entity(
     let entity =
         build_create_action_entity(workflow_id, run_id, job, attempt_id, output_file_paths);
 
-    match apis::ro_crate_api::create_ro_crate_entity(config, entity) {
+    match apis::ro_crate_entities_api::create_ro_crate_entity(config, entity) {
         Ok(created) => {
             debug!(
                 "Created RO-Crate CreateAction entity for job '{}' (entity_id={})",
@@ -539,7 +548,7 @@ pub fn create_software_entities(config: &Configuration, workflow_id: i64, run_id
 
     // Check existing entities to avoid duplicates
     let existing_ids: std::collections::HashSet<String> =
-        match apis::ro_crate_api::list_ro_crate_entities(
+        match apis::ro_crate_entities_api::list_ro_crate_entities(
             config,
             workflow_id,
             None,
@@ -577,7 +586,7 @@ pub fn create_software_entities(config: &Configuration, workflow_id: i64, run_id
         };
 
         let entity = build_software_entity(workflow_id, run_id, name, &binary_path);
-        match apis::ro_crate_api::create_ro_crate_entity(config, entity) {
+        match apis::ro_crate_entities_api::create_ro_crate_entity(config, entity) {
             Ok(created) => {
                 debug!(
                     "Created SoftwareApplication entity for '{}' version='{}' (entity_id={})",

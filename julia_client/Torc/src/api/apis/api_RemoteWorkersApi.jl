@@ -13,6 +13,10 @@ basepath(::Type{ RemoteWorkersApi }) = "http://localhost/torc-service/v1"
 
 const _returntypes_create_remote_workers_RemoteWorkersApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => Vector{RemoteWorkerModel},
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("422", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_create_remote_workers(_api::RemoteWorkersApi, id::Int64, request_body::Vector{String}; _mediaType=nothing)
@@ -41,6 +45,9 @@ end
 
 const _returntypes_delete_remote_worker_RemoteWorkersApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => RemoteWorkerModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_delete_remote_worker(_api::RemoteWorkersApi, id::Int64, worker::String; _mediaType=nothing)
@@ -70,6 +77,9 @@ end
 
 const _returntypes_list_remote_workers_RemoteWorkersApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => Vector{RemoteWorkerModel},
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_list_remote_workers(_api::RemoteWorkersApi, id::Int64; _mediaType=nothing)

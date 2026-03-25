@@ -1024,7 +1024,7 @@ fn test_jobs_delete_all(start_server: &ServerProcess) {
 
     // Call delete_jobs API directly (simulating what delete-all does)
     let result =
-        apis::jobs_api::delete_jobs(config, workflow_id, None).expect("Failed to delete all jobs");
+        apis::jobs_api::delete_jobs(config, workflow_id).expect("Failed to delete all jobs");
 
     // Verify the count
     assert_eq!(
@@ -1063,7 +1063,7 @@ fn test_jobs_delete_all_empty_workflow(start_server: &ServerProcess) {
     let workflow_id = workflow.id.unwrap();
 
     // Call delete_jobs on empty workflow
-    let result = apis::jobs_api::delete_jobs(config, workflow_id, None)
+    let result = apis::jobs_api::delete_jobs(config, workflow_id)
         .expect("Failed to delete jobs from empty workflow");
 
     // Verify count is 0
@@ -1088,7 +1088,7 @@ fn test_retry_job_from_running_status(start_server: &ServerProcess) {
     let job_id = job.id.unwrap();
 
     // Initialize workflow to get run_id and make job Ready
-    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false), None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false))
         .expect("Failed to initialize jobs");
 
     // Get run_id
@@ -1097,7 +1097,7 @@ fn test_retry_job_from_running_status(start_server: &ServerProcess) {
     let run_id = workflow_status.run_id;
 
     // Set job to Running (simulating job runner claiming it)
-    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
         .expect("Failed to set job to Running");
 
     // Verify job is Running
@@ -1128,7 +1128,7 @@ fn test_retry_job_from_failed_status(start_server: &ServerProcess) {
     let job_id = job.id.unwrap();
 
     // Initialize workflow
-    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false), None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false))
         .expect("Failed to initialize jobs");
 
     // Get run_id
@@ -1141,7 +1141,7 @@ fn test_retry_job_from_failed_status(start_server: &ServerProcess) {
     let compute_node_id = compute_node.id.unwrap();
 
     // Set job to Running then complete as Failed
-    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
         .expect("Failed to set job to Running");
 
     let result = models::ResultModel::new(
@@ -1183,7 +1183,7 @@ fn test_retry_job_invalid_status(start_server: &ServerProcess) {
     let job_id = job.id.unwrap();
 
     // Initialize workflow
-    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false), None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false))
         .expect("Failed to initialize jobs");
 
     // Get run_id
@@ -1289,7 +1289,7 @@ fn test_jobs_update_runtime(start_server: &ServerProcess) {
     let job_id = created_job.id.unwrap();
 
     // Verify initial runtime
-    let rr_before = apis::admin_resources_api::get_resource_requirements(config, rr_id)
+    let rr_before = apis::resource_requirements_api::get_resource_requirements(config, rr_id)
         .expect("Failed to get RR");
     assert_eq!(rr_before.runtime, "PT1H");
 
@@ -1303,7 +1303,7 @@ fn test_jobs_update_runtime(start_server: &ServerProcess) {
     assert_eq!(json_output.get("id").unwrap(), &json!(job_id));
 
     // Verify the resource requirements runtime was updated
-    let rr_after = apis::admin_resources_api::get_resource_requirements(config, rr_id)
+    let rr_after = apis::resource_requirements_api::get_resource_requirements(config, rr_id)
         .expect("Failed to get RR after");
     assert_eq!(rr_after.runtime, "PT4H");
 }
@@ -1359,7 +1359,7 @@ fn test_jobs_update_runtime_and_resource_requirements_id_together(start_server: 
     );
 
     // Verify the resource requirements runtime was updated
-    let rr_after = apis::admin_resources_api::get_resource_requirements(config, rr_id)
+    let rr_after = apis::resource_requirements_api::get_resource_requirements(config, rr_id)
         .expect("Failed to get RR after");
     assert_eq!(rr_after.runtime, "PT8H");
 }

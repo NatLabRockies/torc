@@ -153,7 +153,7 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
             );
             entity.file_id = *file_id;
 
-            match apis::ro_crate_api::create_ro_crate_entity(config, entity) {
+            match apis::ro_crate_entities_api::create_ro_crate_entity(config, entity) {
                 Ok(created) => {
                     if print_if_json(format, &created, "RO-Crate entity") {
                         // JSON printed
@@ -231,7 +231,7 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
             }
         }
         RoCrateCommands::Get { id } => {
-            match apis::ro_crate_api::get_ro_crate_entity(config, *id) {
+            match apis::ro_crate_entities_api::get_ro_crate_entity(config, *id) {
                 Ok(entity) => {
                     if print_if_json(format, &entity, "RO-Crate entity") {
                         // JSON printed
@@ -274,7 +274,7 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
             file_id,
         } => {
             // First fetch the existing entity
-            let existing = match apis::ro_crate_api::get_ro_crate_entity(config, *id) {
+            let existing = match apis::ro_crate_entities_api::get_ro_crate_entity(config, *id) {
                 Ok(entity) => entity,
                 Err(e) => {
                     print_error("getting RO-Crate entity for update", &e);
@@ -298,7 +298,7 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
                 metadata: updated_metadata,
             };
 
-            match apis::ro_crate_api::update_ro_crate_entity(config, *id, updated) {
+            match apis::ro_crate_entities_api::update_ro_crate_entity(config, *id, updated) {
                 Ok(result) => {
                     if print_if_json(format, &result, "RO-Crate entity") {
                         // JSON printed
@@ -313,7 +313,7 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
             }
         }
         RoCrateCommands::Delete { id } => {
-            match apis::ro_crate_api::delete_ro_crate_entity(config, *id) {
+            match apis::ro_crate_entities_api::delete_ro_crate_entity(config, *id) {
                 Ok(_) => {
                     println!("Deleted RO-Crate entity ID: {}", id);
                 }
@@ -742,7 +742,7 @@ fn handle_add_dataset(
         metadata.to_string(),
     );
 
-    match apis::ro_crate_api::create_ro_crate_entity(config, entity) {
+    match apis::ro_crate_entities_api::create_ro_crate_entity(config, entity) {
         Ok(created) => {
             if print_if_json(format, &created, "RO-Crate Dataset entity") {
                 // JSON printed

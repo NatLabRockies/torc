@@ -18,6 +18,9 @@ use serde::{Deserialize, Serialize, de::Error as _};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum CompleteJobError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -25,7 +28,17 @@ pub enum CompleteJobError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum CreateJobError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
     Status422(models::ErrorResponse),
+    Status500(models::ErrorResponse),
+    UnknownValue(serde_json::Value),
+}
+
+/// struct for typed errors of method [`create_jobs`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum CreateJobsError {
     UnknownValue(serde_json::Value),
 }
 
@@ -33,6 +46,9 @@ pub enum CreateJobError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum DeleteJobError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -40,6 +56,9 @@ pub enum DeleteJobError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum DeleteJobsError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -47,6 +66,9 @@ pub enum DeleteJobsError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum GetJobError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -54,6 +76,9 @@ pub enum GetJobError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ListJobsError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -61,6 +86,9 @@ pub enum ListJobsError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ManageStatusChangeError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -68,6 +96,10 @@ pub enum ManageStatusChangeError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum RetryJobError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status422(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -75,6 +107,9 @@ pub enum RetryJobError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum StartJobError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -82,6 +117,9 @@ pub enum StartJobError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum UpdateJobError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -207,14 +245,67 @@ pub fn create_job(
     }
 }
 
+pub fn create_jobs(
+    configuration: &configuration::Configuration,
+    jobs_model: models::JobsModel,
+) -> Result<models::CreateJobsResponse, Error<CreateJobsError>> {
+    // add a prefix to parameters to efficiently prevent name collisions
+    let p_body_jobs_model = jobs_model;
+
+    let uri_str = format!("{}/bulk_jobs", configuration.base_path);
+    let mut req_builder = configuration
+        .client
+        .request(reqwest::Method::POST, &uri_str);
+
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+    req_builder = configuration.apply_auth(req_builder);
+    req_builder = req_builder.json(&p_body_jobs_model);
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req)?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text()?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => {
+                return Err(Error::from(serde_json::Error::custom(
+                    "Received `text/plain` content type response that cannot be converted to `models::CreateJobsResponse`",
+                )));
+            }
+            ContentType::Unsupported(unknown_type) => {
+                return Err(Error::from(serde_json::Error::custom(format!(
+                    "Received `{unknown_type}` content type response that cannot be converted to `models::CreateJobsResponse`"
+                ))));
+            }
+        }
+    } else {
+        let content = resp.text()?;
+        let entity: Option<CreateJobsError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent {
+            status,
+            content,
+            entity,
+        }))
+    }
+}
+
 pub fn delete_job(
     configuration: &configuration::Configuration,
     id: i64,
-    body: Option<serde_json::Value>,
 ) -> Result<models::JobModel, Error<DeleteJobError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_id = id;
-    let p_body_body = body;
 
     let uri_str = format!("{}/jobs/{id}", configuration.base_path, id = p_path_id);
     let mut req_builder = configuration
@@ -225,7 +316,6 @@ pub fn delete_job(
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
     req_builder = configuration.apply_auth(req_builder);
-    req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -267,11 +357,9 @@ pub fn delete_job(
 pub fn delete_jobs(
     configuration: &configuration::Configuration,
     workflow_id: i64,
-    body: Option<serde_json::Value>,
 ) -> Result<models::DeleteCountResponse, Error<DeleteJobsError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_query_workflow_id = workflow_id;
-    let p_body_body = body;
 
     let uri_str = format!("{}/jobs", configuration.base_path);
     let mut req_builder = configuration
@@ -283,7 +371,6 @@ pub fn delete_jobs(
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
     req_builder = configuration.apply_auth(req_builder);
-    req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -477,13 +564,11 @@ pub fn manage_status_change(
     id: i64,
     status: models::JobStatus,
     run_id: i64,
-    body: Option<serde_json::Value>,
 ) -> Result<models::JobModel, Error<ManageStatusChangeError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_id = id;
     let p_path_status = status;
     let p_path_run_id = run_id;
-    let p_body_body = body;
 
     let uri_str = format!(
         "{}/jobs/{id}/manage_status_change/{status}/{run_id}",
@@ -498,7 +583,6 @@ pub fn manage_status_change(
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
     req_builder = configuration.apply_auth(req_builder);
-    req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -606,13 +690,11 @@ pub fn start_job(
     id: i64,
     run_id: i64,
     compute_node_id: i64,
-    body: Option<serde_json::Value>,
 ) -> Result<models::JobModel, Error<StartJobError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_id = id;
     let p_path_run_id = run_id;
     let p_path_compute_node_id = compute_node_id;
-    let p_body_body = body;
 
     let uri_str = format!(
         "{}/jobs/{id}/start_job/{run_id}/{compute_node_id}",
@@ -627,7 +709,6 @@ pub fn start_job(
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
     req_builder = configuration.apply_auth(req_builder);
-    req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;

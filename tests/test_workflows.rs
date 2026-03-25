@@ -511,7 +511,7 @@ fn test_workflows_reset_status_command_json(start_server: &ServerProcess) {
     );
 
     // Initialize jobs
-    let _result = apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+    let _result = apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
     // Verify job statuses are now Ready
@@ -572,7 +572,7 @@ fn test_workflows_reset_status_depends_on_submitted_jobs(start_server: &ServerPr
     let job2_id = created_job2.id.unwrap();
 
     // Initialize jobs so they become Ready
-    let _result = apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+    let _result = apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
     // Get workflow status to get run_id
@@ -586,7 +586,6 @@ fn test_workflows_reset_status_depends_on_submitted_jobs(start_server: &ServerPr
         job1_id,
         torc::models::JobStatus::Running,
         run_id,
-        None,
     )
     .expect("Failed to set job1 to running");
 
@@ -596,7 +595,6 @@ fn test_workflows_reset_status_depends_on_submitted_jobs(start_server: &ServerPr
         job2_id,
         torc::models::JobStatus::Pending,
         run_id,
-        None,
     )
     .expect("Failed to set job2 to SubmittedPending");
 
@@ -607,7 +605,7 @@ fn test_workflows_reset_status_depends_on_submitted_jobs(start_server: &ServerPr
     assert_eq!(check_job2.status.unwrap(), torc::models::JobStatus::Pending);
 
     // Try to reset workflow status - should fail with 422 error
-    let reset_result = apis::workflows_api::reset_workflow_status(config, workflow_id, None, None);
+    let reset_result = apis::workflows_api::reset_workflow_status(config, workflow_id, None);
 
     assert!(
         reset_result.is_err(),
@@ -645,7 +643,7 @@ fn test_workflows_reset_status_depends_on_submitted_jobs(start_server: &ServerPr
 
     // Now test that force flag allows reset even with active jobs
     let force_reset_result =
-        apis::workflows_api::reset_workflow_status(config, workflow_id, Some(true), None);
+        apis::workflows_api::reset_workflow_status(config, workflow_id, Some(true));
 
     assert!(
         force_reset_result.is_ok(),
@@ -1007,7 +1005,7 @@ fn test_workflows_is_uninitialized(start_server: &ServerProcess) {
     );
 
     // Initialize jobs
-    let _result = apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+    let _result = apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
     // Check that workflow is no longer uninitialized (jobs are now Ready)
@@ -1074,7 +1072,7 @@ fn test_workflows_is_uninitialized_with_disabled_jobs(start_server: &ServerProce
     );
 
     // Initialize jobs (only the uninitialized one will change to Ready)
-    let _result = apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+    let _result = apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
     // Check that workflow is no longer uninitialized (job1 is now Ready, job2 is still Disabled)
@@ -1299,7 +1297,7 @@ fn test_cannot_reset_archived_workflow_status(start_server: &ServerProcess) {
         .expect("Failed to archive workflow");
 
     // Attempt to reset workflow status - should fail
-    let reset_result = apis::workflows_api::reset_workflow_status(config, workflow_id, None, None);
+    let reset_result = apis::workflows_api::reset_workflow_status(config, workflow_id, None);
 
     assert!(
         reset_result.is_err(),
@@ -1361,7 +1359,7 @@ fn test_archived_workflow_other_operations_still_work(start_server: &ServerProce
     );
 
     // Verify delete_workflow still works
-    let delete_result = apis::workflows_api::delete_workflow(config, workflow_id, None);
+    let delete_result = apis::workflows_api::delete_workflow(config, workflow_id);
     assert!(
         delete_result.is_ok(),
         "Should be able to delete archived workflow"

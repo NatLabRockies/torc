@@ -105,7 +105,7 @@ mod unix_main {
             let response = match utils::send_with_retries(
                 config,
                 || {
-                    apis::admin_resources_api::list_resource_requirements(
+                    apis::resource_requirements_api::list_resource_requirements(
                         config,
                         workflow_id,
                         None,

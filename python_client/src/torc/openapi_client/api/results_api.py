@@ -19,7 +19,6 @@ from typing_extensions import Annotated
 from pydantic import Field, StrictBool, StrictInt, StrictStr
 from typing import Any, Optional
 from typing_extensions import Annotated
-from torc.openapi_client.models.delete_count_response import DeleteCountResponse
 from torc.openapi_client.models.job_status import JobStatus
 from torc.openapi_client.models.list_results_response import ListResultsResponse
 from torc.openapi_client.models.result_model import ResultModel
@@ -96,6 +95,9 @@ class ResultsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResultModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -162,6 +164,9 @@ class ResultsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResultModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -228,6 +233,9 @@ class ResultsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResultModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -316,7 +324,6 @@ class ResultsApi:
     def delete_result(
         self,
         id: Annotated[StrictInt, Field(description="Results ID")],
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -335,8 +342,6 @@ class ResultsApi:
 
         :param id: Results ID (required)
         :type id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -361,7 +366,6 @@ class ResultsApi:
 
         _param = self._delete_result_serialize(
             id=id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -370,6 +374,9 @@ class ResultsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResultModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -386,7 +393,6 @@ class ResultsApi:
     def delete_result_with_http_info(
         self,
         id: Annotated[StrictInt, Field(description="Results ID")],
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -405,8 +411,6 @@ class ResultsApi:
 
         :param id: Results ID (required)
         :type id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -431,7 +435,6 @@ class ResultsApi:
 
         _param = self._delete_result_serialize(
             id=id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -440,6 +443,9 @@ class ResultsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResultModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -456,7 +462,6 @@ class ResultsApi:
     def delete_result_without_preload_content(
         self,
         id: Annotated[StrictInt, Field(description="Results ID")],
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -475,8 +480,6 @@ class ResultsApi:
 
         :param id: Results ID (required)
         :type id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -501,7 +504,6 @@ class ResultsApi:
 
         _param = self._delete_result_serialize(
             id=id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -510,6 +512,9 @@ class ResultsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResultModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -521,7 +526,6 @@ class ResultsApi:
     def _delete_result_serialize(
         self,
         id,
-        body,
         _request_auth,
         _content_type,
         _headers,
@@ -549,8 +553,6 @@ class ResultsApi:
         # process the header parameters
         # process the form parameters
         # process the body parameter
-        if body is not None:
-            _body_params = body
 
 
         # set the HTTP header `Accept`
@@ -561,19 +563,6 @@ class ResultsApi:
                 ]
             )
 
-        # set the HTTP header `Content-Type`
-        if _content_type:
-            _header_params['Content-Type'] = _content_type
-        else:
-            _default_content_type = (
-                self.api_client.select_header_content_type(
-                    [
-                        'application/json'
-                    ]
-                )
-            )
-            if _default_content_type is not None:
-                _header_params['Content-Type'] = _default_content_type
 
         # authentication setting
         _auth_settings: List[str] = [
@@ -601,7 +590,6 @@ class ResultsApi:
     def delete_results(
         self,
         workflow_id: StrictInt,
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -614,14 +602,12 @@ class ResultsApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> DeleteCountResponse:
+    ) -> object:
         """delete_results
 
 
         :param workflow_id: (required)
         :type workflow_id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -646,7 +632,6 @@ class ResultsApi:
 
         _param = self._delete_results_serialize(
             workflow_id=workflow_id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -654,7 +639,10 @@ class ResultsApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "DeleteCountResponse",
+            '200': "object",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -671,7 +659,6 @@ class ResultsApi:
     def delete_results_with_http_info(
         self,
         workflow_id: StrictInt,
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -684,14 +671,12 @@ class ResultsApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> ApiResponse[DeleteCountResponse]:
+    ) -> ApiResponse[object]:
         """delete_results
 
 
         :param workflow_id: (required)
         :type workflow_id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -716,7 +701,6 @@ class ResultsApi:
 
         _param = self._delete_results_serialize(
             workflow_id=workflow_id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -724,7 +708,10 @@ class ResultsApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "DeleteCountResponse",
+            '200': "object",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -741,7 +728,6 @@ class ResultsApi:
     def delete_results_without_preload_content(
         self,
         workflow_id: StrictInt,
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -760,8 +746,6 @@ class ResultsApi:
 
         :param workflow_id: (required)
         :type workflow_id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -786,7 +770,6 @@ class ResultsApi:
 
         _param = self._delete_results_serialize(
             workflow_id=workflow_id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -794,7 +777,10 @@ class ResultsApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "DeleteCountResponse",
+            '200': "object",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -806,7 +792,6 @@ class ResultsApi:
     def _delete_results_serialize(
         self,
         workflow_id,
-        body,
         _request_auth,
         _content_type,
         _headers,
@@ -836,8 +821,6 @@ class ResultsApi:
         # process the header parameters
         # process the form parameters
         # process the body parameter
-        if body is not None:
-            _body_params = body
 
 
         # set the HTTP header `Accept`
@@ -848,19 +831,6 @@ class ResultsApi:
                 ]
             )
 
-        # set the HTTP header `Content-Type`
-        if _content_type:
-            _header_params['Content-Type'] = _content_type
-        else:
-            _default_content_type = (
-                self.api_client.select_header_content_type(
-                    [
-                        'application/json'
-                    ]
-                )
-            )
-            if _default_content_type is not None:
-                _header_params['Content-Type'] = _default_content_type
 
         # authentication setting
         _auth_settings: List[str] = [
@@ -938,6 +908,9 @@ class ResultsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResultModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1004,6 +977,9 @@ class ResultsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResultModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1070,6 +1046,9 @@ class ResultsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResultModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1235,6 +1214,9 @@ class ResultsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListResultsResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1341,6 +1323,9 @@ class ResultsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListResultsResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1447,6 +1432,9 @@ class ResultsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListResultsResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1628,6 +1616,9 @@ class ResultsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResultModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1698,6 +1689,9 @@ class ResultsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResultModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1768,6 +1762,9 @@ class ResultsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ResultModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,

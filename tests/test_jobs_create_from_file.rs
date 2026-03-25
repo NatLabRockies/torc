@@ -136,7 +136,7 @@ echo 'job 3'
 
     let resource_req_id = first_job.resource_requirements_id.unwrap();
     let resource_req =
-        apis::admin_resources_api::get_resource_requirements(config, resource_req_id)
+        apis::resource_requirements_api::get_resource_requirements(config, resource_req_id)
             .expect("Failed to get resource requirements");
 
     assert_eq!(resource_req.num_cpus, 2);

@@ -136,8 +136,7 @@ impl WorkflowManager {
     pub fn initialize(&self, force: bool) -> Result<(), TorcError> {
         self.check_workflow(force)?;
         self.cleanup_output_files(false)?;
-        match apis::workflows_api::reset_workflow_status(&self.config, self.workflow_id, None, None)
-        {
+        match apis::workflows_api::reset_workflow_status(&self.config, self.workflow_id, None) {
             Ok(_) => {}
             Err(err) => {
                 error!(
@@ -147,12 +146,7 @@ impl WorkflowManager {
                 return Err(TorcError::ApiError(err.to_string()));
             }
         }
-        match apis::workflows_api::reset_job_status(
-            &self.config,
-            self.workflow_id,
-            Some(false),
-            None,
-        ) {
+        match apis::workflows_api::reset_job_status(&self.config, self.workflow_id, Some(false)) {
             Ok(_) => {}
             Err(err) => {
                 error!(
@@ -324,12 +318,7 @@ impl WorkflowManager {
         self.check_workflow(force)?;
         if !dry_run {
             self.bump_run_id()?;
-            match apis::workflows_api::reset_workflow_status(
-                &self.config,
-                self.workflow_id,
-                None,
-                None,
-            ) {
+            match apis::workflows_api::reset_workflow_status(&self.config, self.workflow_id, None) {
                 Ok(_) => {
                     info!("Reset status of workflow_id={}", self.workflow_id);
                 }
@@ -591,7 +580,6 @@ impl WorkflowManager {
             self.workflow_id,
             Some(only_uninitialized),
             Some(false),
-            None,
         ) {
             Ok(_) => {
                 info!(
@@ -833,7 +821,6 @@ impl WorkflowManager {
             &self.config,
             self.workflow_id,
             Some(dry_run),
-            None,
         ) {
             Ok(response) => {
                 if !response.reinitialized_jobs.is_empty() {
@@ -959,7 +946,6 @@ impl WorkflowManager {
                             job_id,
                             JobStatus::Uninitialized,
                             run_id,
-                            None, // body
                         ) {
                             Ok(_) => {
                                 info!(
@@ -1070,7 +1056,6 @@ impl WorkflowManager {
                         job_id,
                         JobStatus::Uninitialized,
                         run_id,
-                        None, // body
                     ) {
                         Ok(_) => {
                             info!(

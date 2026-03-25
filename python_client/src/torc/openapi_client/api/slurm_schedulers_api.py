@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from typing_extensions import Annotated
 
 from pydantic import Field, StrictBool, StrictInt, StrictStr
-from typing import Any, Optional
+from typing import Optional
 from typing_extensions import Annotated
 from torc.openapi_client.models.delete_count_response import DeleteCountResponse
 from torc.openapi_client.models.list_slurm_schedulers_response import ListSlurmSchedulersResponse
@@ -95,6 +95,9 @@ class SlurmSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "SlurmSchedulerModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -161,6 +164,9 @@ class SlurmSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "SlurmSchedulerModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -227,6 +233,9 @@ class SlurmSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "SlurmSchedulerModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -315,7 +324,6 @@ class SlurmSchedulersApi:
     def delete_slurm_scheduler(
         self,
         id: Annotated[StrictInt, Field(description="Slurm compute node configuration ID")],
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -334,8 +342,6 @@ class SlurmSchedulersApi:
 
         :param id: Slurm compute node configuration ID (required)
         :type id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -360,7 +366,6 @@ class SlurmSchedulersApi:
 
         _param = self._delete_slurm_scheduler_serialize(
             id=id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -369,6 +374,9 @@ class SlurmSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "SlurmSchedulerModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -385,7 +393,6 @@ class SlurmSchedulersApi:
     def delete_slurm_scheduler_with_http_info(
         self,
         id: Annotated[StrictInt, Field(description="Slurm compute node configuration ID")],
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -404,8 +411,6 @@ class SlurmSchedulersApi:
 
         :param id: Slurm compute node configuration ID (required)
         :type id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -430,7 +435,6 @@ class SlurmSchedulersApi:
 
         _param = self._delete_slurm_scheduler_serialize(
             id=id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -439,6 +443,9 @@ class SlurmSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "SlurmSchedulerModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -455,7 +462,6 @@ class SlurmSchedulersApi:
     def delete_slurm_scheduler_without_preload_content(
         self,
         id: Annotated[StrictInt, Field(description="Slurm compute node configuration ID")],
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -474,8 +480,6 @@ class SlurmSchedulersApi:
 
         :param id: Slurm compute node configuration ID (required)
         :type id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -500,7 +504,6 @@ class SlurmSchedulersApi:
 
         _param = self._delete_slurm_scheduler_serialize(
             id=id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -509,6 +512,9 @@ class SlurmSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "SlurmSchedulerModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -520,7 +526,6 @@ class SlurmSchedulersApi:
     def _delete_slurm_scheduler_serialize(
         self,
         id,
-        body,
         _request_auth,
         _content_type,
         _headers,
@@ -548,8 +553,6 @@ class SlurmSchedulersApi:
         # process the header parameters
         # process the form parameters
         # process the body parameter
-        if body is not None:
-            _body_params = body
 
 
         # set the HTTP header `Accept`
@@ -560,19 +563,6 @@ class SlurmSchedulersApi:
                 ]
             )
 
-        # set the HTTP header `Content-Type`
-        if _content_type:
-            _header_params['Content-Type'] = _content_type
-        else:
-            _default_content_type = (
-                self.api_client.select_header_content_type(
-                    [
-                        'application/json'
-                    ]
-                )
-            )
-            if _default_content_type is not None:
-                _header_params['Content-Type'] = _default_content_type
 
         # authentication setting
         _auth_settings: List[str] = [
@@ -600,7 +590,6 @@ class SlurmSchedulersApi:
     def delete_slurm_schedulers(
         self,
         workflow_id: StrictInt,
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -619,8 +608,6 @@ class SlurmSchedulersApi:
 
         :param workflow_id: (required)
         :type workflow_id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -645,7 +632,6 @@ class SlurmSchedulersApi:
 
         _param = self._delete_slurm_schedulers_serialize(
             workflow_id=workflow_id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -654,6 +640,9 @@ class SlurmSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "DeleteCountResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -670,7 +659,6 @@ class SlurmSchedulersApi:
     def delete_slurm_schedulers_with_http_info(
         self,
         workflow_id: StrictInt,
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -689,8 +677,6 @@ class SlurmSchedulersApi:
 
         :param workflow_id: (required)
         :type workflow_id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -715,7 +701,6 @@ class SlurmSchedulersApi:
 
         _param = self._delete_slurm_schedulers_serialize(
             workflow_id=workflow_id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -724,6 +709,9 @@ class SlurmSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "DeleteCountResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -740,7 +728,6 @@ class SlurmSchedulersApi:
     def delete_slurm_schedulers_without_preload_content(
         self,
         workflow_id: StrictInt,
-        body: Optional[Any] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -759,8 +746,6 @@ class SlurmSchedulersApi:
 
         :param workflow_id: (required)
         :type workflow_id: int
-        :param body:
-        :type body: object
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -785,7 +770,6 @@ class SlurmSchedulersApi:
 
         _param = self._delete_slurm_schedulers_serialize(
             workflow_id=workflow_id,
-            body=body,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -794,6 +778,9 @@ class SlurmSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "DeleteCountResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -805,7 +792,6 @@ class SlurmSchedulersApi:
     def _delete_slurm_schedulers_serialize(
         self,
         workflow_id,
-        body,
         _request_auth,
         _content_type,
         _headers,
@@ -835,8 +821,6 @@ class SlurmSchedulersApi:
         # process the header parameters
         # process the form parameters
         # process the body parameter
-        if body is not None:
-            _body_params = body
 
 
         # set the HTTP header `Accept`
@@ -847,19 +831,6 @@ class SlurmSchedulersApi:
                 ]
             )
 
-        # set the HTTP header `Content-Type`
-        if _content_type:
-            _header_params['Content-Type'] = _content_type
-        else:
-            _default_content_type = (
-                self.api_client.select_header_content_type(
-                    [
-                        'application/json'
-                    ]
-                )
-            )
-            if _default_content_type is not None:
-                _header_params['Content-Type'] = _default_content_type
 
         # authentication setting
         _auth_settings: List[str] = [
@@ -937,6 +908,9 @@ class SlurmSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "SlurmSchedulerModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1003,6 +977,9 @@ class SlurmSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "SlurmSchedulerModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1069,6 +1046,9 @@ class SlurmSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "SlurmSchedulerModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1148,15 +1128,6 @@ class SlurmSchedulersApi:
         limit: Optional[StrictInt] = None,
         sort_by: Optional[StrictStr] = None,
         reverse_sort: Optional[StrictBool] = None,
-        name: Optional[StrictStr] = None,
-        account: Optional[StrictStr] = None,
-        gres: Optional[StrictStr] = None,
-        mem: Optional[StrictStr] = None,
-        nodes: Optional[StrictInt] = None,
-        partition: Optional[StrictStr] = None,
-        qos: Optional[StrictStr] = None,
-        tmp: Optional[StrictStr] = None,
-        walltime: Optional[StrictStr] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1183,24 +1154,6 @@ class SlurmSchedulersApi:
         :type sort_by: str
         :param reverse_sort:
         :type reverse_sort: bool
-        :param name:
-        :type name: str
-        :param account:
-        :type account: str
-        :param gres:
-        :type gres: str
-        :param mem:
-        :type mem: str
-        :param nodes:
-        :type nodes: int
-        :param partition:
-        :type partition: str
-        :param qos:
-        :type qos: str
-        :param tmp:
-        :type tmp: str
-        :param walltime:
-        :type walltime: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1229,15 +1182,6 @@ class SlurmSchedulersApi:
             limit=limit,
             sort_by=sort_by,
             reverse_sort=reverse_sort,
-            name=name,
-            account=account,
-            gres=gres,
-            mem=mem,
-            nodes=nodes,
-            partition=partition,
-            qos=qos,
-            tmp=tmp,
-            walltime=walltime,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1246,6 +1190,9 @@ class SlurmSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListSlurmSchedulersResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1266,15 +1213,6 @@ class SlurmSchedulersApi:
         limit: Optional[StrictInt] = None,
         sort_by: Optional[StrictStr] = None,
         reverse_sort: Optional[StrictBool] = None,
-        name: Optional[StrictStr] = None,
-        account: Optional[StrictStr] = None,
-        gres: Optional[StrictStr] = None,
-        mem: Optional[StrictStr] = None,
-        nodes: Optional[StrictInt] = None,
-        partition: Optional[StrictStr] = None,
-        qos: Optional[StrictStr] = None,
-        tmp: Optional[StrictStr] = None,
-        walltime: Optional[StrictStr] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1301,24 +1239,6 @@ class SlurmSchedulersApi:
         :type sort_by: str
         :param reverse_sort:
         :type reverse_sort: bool
-        :param name:
-        :type name: str
-        :param account:
-        :type account: str
-        :param gres:
-        :type gres: str
-        :param mem:
-        :type mem: str
-        :param nodes:
-        :type nodes: int
-        :param partition:
-        :type partition: str
-        :param qos:
-        :type qos: str
-        :param tmp:
-        :type tmp: str
-        :param walltime:
-        :type walltime: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1347,15 +1267,6 @@ class SlurmSchedulersApi:
             limit=limit,
             sort_by=sort_by,
             reverse_sort=reverse_sort,
-            name=name,
-            account=account,
-            gres=gres,
-            mem=mem,
-            nodes=nodes,
-            partition=partition,
-            qos=qos,
-            tmp=tmp,
-            walltime=walltime,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1364,6 +1275,9 @@ class SlurmSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListSlurmSchedulersResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1384,15 +1298,6 @@ class SlurmSchedulersApi:
         limit: Optional[StrictInt] = None,
         sort_by: Optional[StrictStr] = None,
         reverse_sort: Optional[StrictBool] = None,
-        name: Optional[StrictStr] = None,
-        account: Optional[StrictStr] = None,
-        gres: Optional[StrictStr] = None,
-        mem: Optional[StrictStr] = None,
-        nodes: Optional[StrictInt] = None,
-        partition: Optional[StrictStr] = None,
-        qos: Optional[StrictStr] = None,
-        tmp: Optional[StrictStr] = None,
-        walltime: Optional[StrictStr] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1419,24 +1324,6 @@ class SlurmSchedulersApi:
         :type sort_by: str
         :param reverse_sort:
         :type reverse_sort: bool
-        :param name:
-        :type name: str
-        :param account:
-        :type account: str
-        :param gres:
-        :type gres: str
-        :param mem:
-        :type mem: str
-        :param nodes:
-        :type nodes: int
-        :param partition:
-        :type partition: str
-        :param qos:
-        :type qos: str
-        :param tmp:
-        :type tmp: str
-        :param walltime:
-        :type walltime: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1465,15 +1352,6 @@ class SlurmSchedulersApi:
             limit=limit,
             sort_by=sort_by,
             reverse_sort=reverse_sort,
-            name=name,
-            account=account,
-            gres=gres,
-            mem=mem,
-            nodes=nodes,
-            partition=partition,
-            qos=qos,
-            tmp=tmp,
-            walltime=walltime,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1482,6 +1360,9 @@ class SlurmSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ListSlurmSchedulersResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1497,15 +1378,6 @@ class SlurmSchedulersApi:
         limit,
         sort_by,
         reverse_sort,
-        name,
-        account,
-        gres,
-        mem,
-        nodes,
-        partition,
-        qos,
-        tmp,
-        walltime,
         _request_auth,
         _content_type,
         _headers,
@@ -1547,42 +1419,6 @@ class SlurmSchedulersApi:
         if reverse_sort is not None:
             
             _query_params.append(('reverse_sort', reverse_sort))
-            
-        if name is not None:
-            
-            _query_params.append(('name', name))
-            
-        if account is not None:
-            
-            _query_params.append(('account', account))
-            
-        if gres is not None:
-            
-            _query_params.append(('gres', gres))
-            
-        if mem is not None:
-            
-            _query_params.append(('mem', mem))
-            
-        if nodes is not None:
-            
-            _query_params.append(('nodes', nodes))
-            
-        if partition is not None:
-            
-            _query_params.append(('partition', partition))
-            
-        if qos is not None:
-            
-            _query_params.append(('qos', qos))
-            
-        if tmp is not None:
-            
-            _query_params.append(('tmp', tmp))
-            
-        if walltime is not None:
-            
-            _query_params.append(('walltime', walltime))
             
         # process the header parameters
         # process the form parameters
@@ -1678,6 +1514,9 @@ class SlurmSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "SlurmSchedulerModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1748,6 +1587,9 @@ class SlurmSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "SlurmSchedulerModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1818,6 +1660,9 @@ class SlurmSchedulersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "SlurmSchedulerModel",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,

@@ -212,14 +212,19 @@ libraries.
 
    ```bash
    cd api
+   bash sync_openapi.sh emit
+   bash sync_openapi.sh check
    bash sync_openapi.sh clients --use-rust-spec
    ```
 
    This regenerates:
+   - Rust client: `src/client/apis/`
    - Python client: `python_client/src/torc/openapi_client/`
    - Julia client: `julia_client/Torc/src/api/`
-   - Rust-emitted spec: `api/openapi.codegen.yaml`
-   - Parity check against the checked-in artifact: `api/openapi.yaml`
+
+   `clients --use-rust-spec` uses the current `api/openapi.codegen.yaml`. Run `emit` first so the
+   generated clients reflect the latest Rust-owned contract, and `check` to verify the checked-in
+   artifacts are still in sync.
 
    When the Rust-emitted spec should become the checked-in contract artifact, run:
 

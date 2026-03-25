@@ -13,6 +13,9 @@ basepath(::Type{ UserDataApi }) = "http://localhost/torc-service/v1"
 
 const _returntypes_create_user_data_UserDataApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => UserDataModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_create_user_data(_api::UserDataApi, user_data_model::UserDataModel; consumer_job_id=nothing, producer_job_id=nothing, _mediaType=nothing)
@@ -43,62 +46,69 @@ end
 
 const _returntypes_delete_all_user_data_UserDataApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => Any,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
-function _oacinternal_delete_all_user_data(_api::UserDataApi, workflow_id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_delete_all_user_data_UserDataApi, "/user_data", [], body)
+function _oacinternal_delete_all_user_data(_api::UserDataApi, workflow_id::Int64; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_delete_all_user_data_UserDataApi, "/user_data", [])
     OpenAPI.Clients.set_param(_ctx.query, "workflow_id", workflow_id; style="form", is_explode=true)  # type Int64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
-    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
 end
 
 @doc raw"""Params:
 - workflow_id::Int64 (required)
-- body::Any
 
 Return: Any, OpenAPI.Clients.ApiResponse
 """
-function delete_all_user_data(_api::UserDataApi, workflow_id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_delete_all_user_data(_api, workflow_id; body=body, _mediaType=_mediaType)
+function delete_all_user_data(_api::UserDataApi, workflow_id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_delete_all_user_data(_api, workflow_id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function delete_all_user_data(_api::UserDataApi, response_stream::Channel, workflow_id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_delete_all_user_data(_api, workflow_id; body=body, _mediaType=_mediaType)
+function delete_all_user_data(_api::UserDataApi, response_stream::Channel, workflow_id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_delete_all_user_data(_api, workflow_id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
 const _returntypes_delete_user_data_UserDataApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => UserDataModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
-function _oacinternal_delete_user_data(_api::UserDataApi, id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_delete_user_data_UserDataApi, "/user_data/{id}", [], body)
+function _oacinternal_delete_user_data(_api::UserDataApi, id::Int64; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_delete_user_data_UserDataApi, "/user_data/{id}", [])
     OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
-    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
 end
 
 @doc raw"""Params:
 - id::Int64 (required)
-- body::Any
 
 Return: UserDataModel, OpenAPI.Clients.ApiResponse
 """
-function delete_user_data(_api::UserDataApi, id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_delete_user_data(_api, id; body=body, _mediaType=_mediaType)
+function delete_user_data(_api::UserDataApi, id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_delete_user_data(_api, id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function delete_user_data(_api::UserDataApi, response_stream::Channel, id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_delete_user_data(_api, id; body=body, _mediaType=_mediaType)
+function delete_user_data(_api::UserDataApi, response_stream::Channel, id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_delete_user_data(_api, id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
 const _returntypes_get_user_data_UserDataApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => UserDataModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_get_user_data(_api::UserDataApi, id::Int64; _mediaType=nothing)
@@ -126,6 +136,9 @@ end
 
 const _returntypes_list_user_data_UserDataApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ListUserDataResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_list_user_data(_api::UserDataApi, workflow_id::Int64; consumer_job_id=nothing, producer_job_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, name=nothing, is_ephemeral=nothing, _mediaType=nothing)
@@ -169,6 +182,9 @@ end
 
 const _returntypes_update_user_data_UserDataApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => UserDataModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_update_user_data(_api::UserDataApi, id::Int64, user_data_model::UserDataModel; _mediaType=nothing)

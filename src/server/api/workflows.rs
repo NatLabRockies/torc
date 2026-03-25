@@ -40,7 +40,6 @@ pub trait WorkflowsApi<C> {
     async fn cancel_workflow(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<CancelWorkflowResponse, ApiError>;
 
@@ -135,7 +134,6 @@ pub trait WorkflowsApi<C> {
     async fn delete_workflow(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteWorkflowResponse, ApiError>;
 
@@ -144,7 +142,6 @@ pub trait WorkflowsApi<C> {
         &self,
         id: i64,
         force: Option<bool>,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<ResetWorkflowStatusResponse, ApiError>;
 }
@@ -599,11 +596,7 @@ where
         mut body: models::WorkflowModel,
         context: &C,
     ) -> Result<CreateWorkflowResponse, ApiError> {
-        info!(
-            "create_workflow({:?}) - X-Span-ID: {:?}",
-            body,
-            context.get().0.clone()
-        );
+        info!("create_workflow - X-Span-ID: {:?}", context.get().0.clone());
 
         // Begin a transaction to ensure workflow and workflow_status are created atomically
         let mut tx = match self.context.pool.begin().await {
@@ -748,13 +741,11 @@ where
     async fn cancel_workflow(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<CancelWorkflowResponse, ApiError> {
         info!(
-            "cancel_workflow({}, {:?}) - X-Span-ID: {:?}",
+            "cancel_workflow({}) - X-Span-ID: {:?}",
             id,
-            body,
             context.get().0.clone()
         );
 
@@ -1264,9 +1255,8 @@ where
         context: &C,
     ) -> Result<UpdateWorkflowResponse, ApiError> {
         debug!(
-            "update_workflow({}, {:?}) - X-Span-ID: {:?}",
+            "update_workflow({}) - X-Span-ID: {:?}",
             id,
-            body,
             context.get().0.clone()
         );
 
@@ -1369,9 +1359,8 @@ where
         context: &C,
     ) -> Result<UpdateWorkflowStatusResponse, ApiError> {
         debug!(
-            "update_workflow_status({}, {:?}) - X-Span-ID: {:?}",
+            "update_workflow_status({}) - X-Span-ID: {:?}",
             id,
-            body,
             context.get().0.clone()
         );
 
@@ -1472,13 +1461,11 @@ where
     async fn delete_workflow(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteWorkflowResponse, ApiError> {
         debug!(
-            "delete_workflow({}, {:?}) - X-Span-ID: {:?}",
+            "delete_workflow({}) - X-Span-ID: {:?}",
             id,
-            body,
             context.get().0.clone()
         );
 
@@ -1712,14 +1699,12 @@ where
         &self,
         id: i64,
         force: Option<bool>,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<ResetWorkflowStatusResponse, ApiError> {
         debug!(
-            "reset_workflow_status({}, force={:?}, {:?}) - X-Span-ID: {:?}",
+            "reset_workflow_status({}, force={:?}) - X-Span-ID: {:?}",
             id,
             force,
-            body,
             context.get().0.clone()
         );
 

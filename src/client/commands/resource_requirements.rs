@@ -138,7 +138,7 @@ pub fn handle_resource_requirements_commands(
             req.memory = memory.clone();
             req.runtime = runtime.clone();
 
-            match apis::admin_resources_api::create_resource_requirements(config, req) {
+            match apis::resource_requirements_api::create_resource_requirements(config, req) {
                 Ok(created_req) => {
                     if print_if_json(format, &created_req, "resource requirements") {
                         // JSON was printed
@@ -228,7 +228,7 @@ pub fn handle_resource_requirements_commands(
             }
         }
         ResourceRequirementsCommands::Get { id } => {
-            match apis::admin_resources_api::get_resource_requirements(config, *id) {
+            match apis::resource_requirements_api::get_resource_requirements(config, *id) {
                 Ok(req) => {
                     if print_if_json(format, &req, "resource requirements") {
                         // JSON was printed
@@ -259,7 +259,7 @@ pub fn handle_resource_requirements_commands(
             runtime,
         } => {
             // First get the existing resource requirements
-            match apis::admin_resources_api::get_resource_requirements(config, *id) {
+            match apis::resource_requirements_api::get_resource_requirements(config, *id) {
                 Ok(mut req) => {
                     // Update fields that were provided
                     if name.is_some() {
@@ -281,8 +281,9 @@ pub fn handle_resource_requirements_commands(
                         req.runtime = runtime.clone().unwrap();
                     }
 
-                    match apis::admin_resources_api::update_resource_requirements(config, *id, req)
-                    {
+                    match apis::resource_requirements_api::update_resource_requirements(
+                        config, *id, req,
+                    ) {
                         Ok(updated_req) => {
                             if print_if_json(format, &updated_req, "resource requirements") {
                                 // JSON was printed
@@ -311,7 +312,7 @@ pub fn handle_resource_requirements_commands(
             }
         }
         ResourceRequirementsCommands::Delete { id } => {
-            match apis::admin_resources_api::delete_resource_requirement(config, *id, None) {
+            match apis::resource_requirements_api::delete_resource_requirement(config, *id) {
                 Ok(removed_req) => {
                     if print_if_json(format, &removed_req, "resource requirements") {
                         // JSON was printed

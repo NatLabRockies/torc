@@ -58,8 +58,7 @@ fn test_diamond_workflow(start_server: &ServerProcess, #[case] max_parallel_jobs
     let jobs2 = create_diamond_workflow(config, true, work_dir2);
     check_diamond_workflow_init_job_statuses(config, &jobs2);
 
-    apis::workflows_api::delete_workflow(config, workflow_id, None)
-        .expect("Failed to delete workflow");
+    apis::workflows_api::delete_workflow(config, workflow_id).expect("Failed to delete workflow");
     for (name, job) in &jobs {
         let result = apis::jobs_api::get_job(config, job.id.unwrap());
         assert!(
@@ -192,7 +191,7 @@ fn test_uninitialize_blocked_jobs(start_server: &ServerProcess) {
     //     .expect("Failed to update bystander");
     // assert_eq!(bystander_b.status, Some(models::JobStatus::Completed));
 
-    // apis::workflows_api::initialize_jobs(config, workflow_id as i64, Some(false), None, None)
+    // apis::workflows_api::initialize_jobs(config, workflow_id as i64, Some(false), None)
     //     .expect("Failed to initialize jobs");
     // let job1_post = apis::jobs_api::get_job(config, job1.id.unwrap()).expect("Failed to get job1");
     // let job2_post = apis::jobs_api::get_job(config, job2_id).expect("Failed to get job2");
@@ -211,8 +210,8 @@ fn test_remove_job(start_server: &ServerProcess) {
     let work_dir = temp_dir.path();
     let jobs = create_diamond_workflow(config, true, work_dir);
     for (name, job) in &jobs {
-        let removed = apis::jobs_api::delete_job(config, job.id.unwrap(), None)
-            .expect("Failed to delete job");
+        let removed =
+            apis::jobs_api::delete_job(config, job.id.unwrap()).expect("Failed to delete job");
         let result = apis::jobs_api::get_job(config, removed.id.unwrap());
         assert!(result.is_err(), "Expected job {} to be deleted", name);
     }
@@ -393,8 +392,7 @@ resource_requirements:
     verify_many_jobs_completion(config, workflow_id, 30);
 
     // Cleanup
-    apis::workflows_api::delete_workflow(config, workflow_id, None)
-        .expect("Failed to delete workflow");
+    apis::workflows_api::delete_workflow(config, workflow_id).expect("Failed to delete workflow");
 }
 
 fn verify_many_jobs_completion(
@@ -842,7 +840,7 @@ resource_requirements:
     );
 
     // Cleanup
-    apis::workflows_api::delete_workflow(config, workflow_id, None)
+    apis::workflows_api::delete_workflow(config, workflow_id)
         .expect("Failed to delete restart_test workflow");
 }
 
@@ -1173,6 +1171,6 @@ resource_requirements:
     );
 
     // Cleanup
-    apis::workflows_api::delete_workflow(config, workflow_id, None)
+    apis::workflows_api::delete_workflow(config, workflow_id)
         .expect("Failed to delete reinitialize_test workflow");
 }

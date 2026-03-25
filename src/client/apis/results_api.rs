@@ -18,6 +18,9 @@ use serde::{Deserialize, Serialize, de::Error as _};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum CreateResultError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -25,6 +28,9 @@ pub enum CreateResultError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum DeleteResultError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -32,6 +38,9 @@ pub enum DeleteResultError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum DeleteResultsError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -39,6 +48,9 @@ pub enum DeleteResultsError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum GetResultError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -46,6 +58,9 @@ pub enum GetResultError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ListResultsError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -53,6 +68,9 @@ pub enum ListResultsError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum UpdateResultError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -114,11 +132,9 @@ pub fn create_result(
 pub fn delete_result(
     configuration: &configuration::Configuration,
     id: i64,
-    body: Option<serde_json::Value>,
 ) -> Result<models::ResultModel, Error<DeleteResultError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_id = id;
-    let p_body_body = body;
 
     let uri_str = format!("{}/results/{id}", configuration.base_path, id = p_path_id);
     let mut req_builder = configuration
@@ -129,7 +145,6 @@ pub fn delete_result(
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
     req_builder = configuration.apply_auth(req_builder);
-    req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -171,11 +186,9 @@ pub fn delete_result(
 pub fn delete_results(
     configuration: &configuration::Configuration,
     workflow_id: i64,
-    body: Option<serde_json::Value>,
-) -> Result<models::DeleteCountResponse, Error<DeleteResultsError>> {
+) -> Result<serde_json::Value, Error<DeleteResultsError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_query_workflow_id = workflow_id;
-    let p_body_body = body;
 
     let uri_str = format!("{}/results", configuration.base_path);
     let mut req_builder = configuration
@@ -187,7 +200,6 @@ pub fn delete_results(
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
     req_builder = configuration.apply_auth(req_builder);
-    req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -206,12 +218,12 @@ pub fn delete_results(
             ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
             ContentType::Text => {
                 return Err(Error::from(serde_json::Error::custom(
-                    "Received `text/plain` content type response that cannot be converted to `models::DeleteCountResponse`",
+                    "Received `text/plain` content type response that cannot be converted to `serde_json::Value`",
                 )));
             }
             ContentType::Unsupported(unknown_type) => {
                 return Err(Error::from(serde_json::Error::custom(format!(
-                    "Received `{unknown_type}` content type response that cannot be converted to `models::DeleteCountResponse`"
+                    "Received `{unknown_type}` content type response that cannot be converted to `serde_json::Value`"
                 ))));
             }
         }

@@ -44,7 +44,7 @@ fn test_pending_failed_status(start_server: &ServerProcess) {
     let compute_node_id = compute_node.id.unwrap();
 
     // Reinitialize to pick up the new job
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to reinitialize");
 
     // Claim the job using resources
@@ -61,7 +61,7 @@ fn test_pending_failed_status(start_server: &ServerProcess) {
     assert_eq!(jobs.len(), 1);
 
     // Set job to running
-    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
         .expect("Failed to set job running");
 
     // Complete the job with PendingFailed status (simulating no failure handler match)
@@ -108,7 +108,7 @@ fn test_list_pending_failed_jobs(start_server: &ServerProcess) {
     let compute_node_id = compute_node.id.unwrap();
 
     // Reinitialize to pick up the new jobs
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to reinitialize");
 
     // Claim both jobs
@@ -126,7 +126,7 @@ fn test_list_pending_failed_jobs(start_server: &ServerProcess) {
 
     // Set both jobs to running
     for job_id in [job1_id, job2_id] {
-        apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id, None)
+        apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
             .expect("Failed to set job running");
     }
 
@@ -197,7 +197,7 @@ fn test_reset_includes_pending_failed(start_server: &ServerProcess) {
     let compute_node_id = compute_node.id.unwrap();
 
     // Reinitialize to pick up the new job
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to reinitialize");
 
     // Claim the job
@@ -213,7 +213,7 @@ fn test_reset_includes_pending_failed(start_server: &ServerProcess) {
     assert_eq!(result.jobs.expect("Should return jobs").len(), 1);
 
     // Set job to running
-    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
         .expect("Failed to set job running");
 
     // Complete as pending_failed
@@ -236,7 +236,7 @@ fn test_reset_includes_pending_failed(start_server: &ServerProcess) {
     assert_eq!(job_before.status, Some(JobStatus::PendingFailed));
 
     // Reset failed jobs only (should include pending_failed)
-    apis::workflows_api::reset_job_status(config, workflow_id, Some(true), None)
+    apis::workflows_api::reset_job_status(config, workflow_id, Some(true))
         .expect("Failed to reset job status");
 
     // Verify job is now uninitialized

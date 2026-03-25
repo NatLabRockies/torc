@@ -18,6 +18,9 @@ use serde::{Deserialize, Serialize, de::Error as _};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum CreateScheduledComputeNodeError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -25,6 +28,9 @@ pub enum CreateScheduledComputeNodeError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum DeleteScheduledComputeNodeError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -32,6 +38,9 @@ pub enum DeleteScheduledComputeNodeError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum DeleteScheduledComputeNodesError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -39,6 +48,9 @@ pub enum DeleteScheduledComputeNodesError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum GetScheduledComputeNodeError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -46,6 +58,9 @@ pub enum GetScheduledComputeNodeError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ListScheduledComputeNodesError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -53,6 +68,9 @@ pub enum ListScheduledComputeNodesError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum UpdateScheduledComputeNodeError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -114,11 +132,9 @@ pub fn create_scheduled_compute_node(
 pub fn delete_scheduled_compute_node(
     configuration: &configuration::Configuration,
     id: i64,
-    body: Option<serde_json::Value>,
 ) -> Result<models::ScheduledComputeNodesModel, Error<DeleteScheduledComputeNodeError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_id = id;
-    let p_body_body = body;
 
     let uri_str = format!(
         "{}/scheduled_compute_nodes/{id}",
@@ -133,7 +149,6 @@ pub fn delete_scheduled_compute_node(
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
     req_builder = configuration.apply_auth(req_builder);
-    req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;
@@ -175,11 +190,9 @@ pub fn delete_scheduled_compute_node(
 pub fn delete_scheduled_compute_nodes(
     configuration: &configuration::Configuration,
     workflow_id: i64,
-    body: Option<serde_json::Value>,
 ) -> Result<models::DeleteCountResponse, Error<DeleteScheduledComputeNodesError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_query_workflow_id = workflow_id;
-    let p_body_body = body;
 
     let uri_str = format!("{}/scheduled_compute_nodes", configuration.base_path);
     let mut req_builder = configuration
@@ -191,7 +204,6 @@ pub fn delete_scheduled_compute_nodes(
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
     req_builder = configuration.apply_auth(req_builder);
-    req_builder = req_builder.json(&p_body_body);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req)?;

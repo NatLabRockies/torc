@@ -79,7 +79,6 @@ pub trait RoCrateApi<C> {
     async fn delete_ro_crate_entity(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteRoCrateEntityResponse, ApiError>;
 
@@ -87,7 +86,6 @@ pub trait RoCrateApi<C> {
     async fn delete_ro_crate_entities(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteRoCrateEntitiesResponse, ApiError>;
 }
@@ -348,8 +346,7 @@ where
         context: &C,
     ) -> Result<CreateRoCrateEntityResponse, ApiError> {
         debug!(
-            "create_ro_crate_entity({:?}) - X-Span-ID: {:?}",
-            body,
+            "create_ro_crate_entity - X-Span-ID: {:?}",
             context.get().0.clone()
         );
 
@@ -549,9 +546,8 @@ where
         context: &C,
     ) -> Result<UpdateRoCrateEntityResponse, ApiError> {
         debug!(
-            "update_ro_crate_entity({}, {:?}) - X-Span-ID: {:?}",
+            "update_ro_crate_entity({}) - X-Span-ID: {:?}",
             id,
-            body,
             context.get().0.clone()
         );
 
@@ -597,7 +593,6 @@ where
     async fn delete_ro_crate_entity(
         &self,
         id: i64,
-        _body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteRoCrateEntityResponse, ApiError> {
         debug!(
@@ -638,7 +633,6 @@ where
     async fn delete_ro_crate_entities(
         &self,
         workflow_id: i64,
-        _body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteRoCrateEntitiesResponse, ApiError> {
         debug!(

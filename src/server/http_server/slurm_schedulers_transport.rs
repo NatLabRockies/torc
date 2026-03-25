@@ -24,12 +24,11 @@ where
     pub(super) async fn transport_delete_slurm_schedulers(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteSlurmSchedulersResponse, ApiError> {
         authorize_workflow!(self, workflow_id, context, DeleteSlurmSchedulersResponse);
         self.schedulers_api
-            .delete_slurm_schedulers(workflow_id, body, context)
+            .delete_slurm_schedulers(workflow_id, context)
             .await
     }
     pub(super) async fn transport_list_slurm_schedulers(
@@ -81,7 +80,6 @@ where
     pub(super) async fn transport_delete_slurm_scheduler(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteSlurmSchedulerResponse, ApiError> {
         authorize_resource!(
@@ -92,7 +90,7 @@ where
             DeleteSlurmSchedulerResponse
         );
         self.schedulers_api
-            .delete_slurm_scheduler(id, body, context)
+            .delete_slurm_scheduler(id, context)
             .await
     }
 }

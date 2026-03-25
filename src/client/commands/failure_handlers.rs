@@ -56,7 +56,7 @@ pub fn handle_failure_handler_commands(
                 None => select_workflow_interactively(config, &user_name).unwrap(),
             };
 
-            match apis::admin_resources_api::list_failure_handlers(
+            match apis::failure_handlers_api::list_failure_handlers(
                 config,
                 selected_workflow_id,
                 Some(*offset),
@@ -100,7 +100,7 @@ pub fn handle_failure_handler_commands(
             }
         }
         FailureHandlerCommands::Get { id } => {
-            match apis::admin_resources_api::get_failure_handler(config, *id) {
+            match apis::failure_handlers_api::get_failure_handler(config, *id) {
                 Ok(handler) => {
                     if print_if_json(format, &handler, "failure handler") {
                         // JSON was printed

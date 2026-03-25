@@ -117,8 +117,10 @@ fn execute_workflow_with_job(
 ) -> Result<(i64, i64), Box<dyn std::error::Error>> {
     // Create resource requirements
     let resource_requirements = models::ResourceRequirementsModel::new(1, "small".to_string());
-    let rr =
-        apis::admin_resources_api::create_resource_requirements(config, resource_requirements)?;
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        config,
+        resource_requirements,
+    )?;
 
     // Create a job
     let mut job = models::JobModel::new(workflow_id, job_name.to_string(), command.to_string());
@@ -154,7 +156,7 @@ fn execute_workflow_with_job(
     let compute_node = create_test_compute_node(config, workflow_id);
     let compute_node_id = compute_node.id.unwrap();
 
-    apis::jobs_api::manage_status_change(config, job_id, models::JobStatus::Running, run_id, None)?;
+    apis::jobs_api::manage_status_change(config, job_id, models::JobStatus::Running, run_id)?;
     let job_result = models::ResultModel::new(
         job_id,
         workflow_id,
@@ -531,9 +533,11 @@ fn test_initialize_jobs(start_server: &ServerProcess) {
 
     // Create and execute a second job
     let resource_requirements = models::ResourceRequirementsModel::new(1, "small".to_string());
-    let rr =
-        apis::admin_resources_api::create_resource_requirements(&config, resource_requirements)
-            .expect("Failed to create resource requirements");
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        &config,
+        resource_requirements,
+    )
+    .expect("Failed to create resource requirements");
 
     let mut job2 =
         models::JobModel::new(workflow_id, "job2".to_string(), "echo 'job2'".to_string());
@@ -759,9 +763,11 @@ fn test_update_jobs_on_file_change_with_dependent_jobs(start_server: &ServerProc
 
     // Create resource requirements for both jobs
     let resource_requirements = models::ResourceRequirementsModel::new(1, "small".to_string());
-    let rr =
-        apis::admin_resources_api::create_resource_requirements(&config, resource_requirements)
-            .expect("Failed to create resource requirements");
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        &config,
+        resource_requirements,
+    )
+    .expect("Failed to create resource requirements");
 
     // Create job1 with file dependency
     let mut job1 = models::JobModel::new(
@@ -811,14 +817,8 @@ fn test_update_jobs_on_file_change_with_dependent_jobs(start_server: &ServerProc
     let compute_node_id = compute_node.id.unwrap();
 
     // Complete job1
-    apis::jobs_api::manage_status_change(
-        &config,
-        job1_id,
-        models::JobStatus::Running,
-        run_id,
-        None,
-    )
-    .expect("Failed to change job1 status to running");
+    apis::jobs_api::manage_status_change(&config, job1_id, models::JobStatus::Running, run_id)
+        .expect("Failed to change job1 status to running");
     let job1_result = models::ResultModel::new(
         job1_id,
         workflow_id,
@@ -834,14 +834,8 @@ fn test_update_jobs_on_file_change_with_dependent_jobs(start_server: &ServerProc
         .expect("Failed to complete job1");
 
     // Complete job2
-    apis::jobs_api::manage_status_change(
-        &config,
-        job2_id,
-        models::JobStatus::Running,
-        run_id,
-        None,
-    )
-    .expect("Failed to change job2 status to running");
+    apis::jobs_api::manage_status_change(&config, job2_id, models::JobStatus::Running, run_id)
+        .expect("Failed to change job2 status to running");
     let job2_result = models::ResultModel::new(
         job2_id,
         workflow_id,
@@ -899,9 +893,11 @@ fn test_update_jobs_on_file_change_only_completed_jobs_reset(start_server: &Serv
 
     // Create additional jobs with different statuses using resource requirements
     let resource_requirements = models::ResourceRequirementsModel::new(1, "small".to_string());
-    let rr =
-        apis::admin_resources_api::create_resource_requirements(&config, resource_requirements)
-            .expect("Failed to create resource requirements");
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        &config,
+        resource_requirements,
+    )
+    .expect("Failed to create resource requirements");
 
     let mut job_running = models::JobModel::new(
         workflow_id,
@@ -928,17 +924,11 @@ fn test_update_jobs_on_file_change_only_completed_jobs_reset(start_server: &Serv
     let ready_id = created_ready.id.unwrap();
 
     // Initialize and set different statuses
-    apis::workflows_api::initialize_jobs(&config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(&config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
-    apis::jobs_api::manage_status_change(
-        &config,
-        running_id,
-        models::JobStatus::Running,
-        run_id,
-        None,
-    )
-    .expect("Failed to set job to running");
+    apis::jobs_api::manage_status_change(&config, running_id, models::JobStatus::Running, run_id)
+        .expect("Failed to set job to running");
 
     // Update jobs on file change
     let result = manager.update_jobs_on_file_change(files[0].clone(), false);
@@ -1002,9 +992,11 @@ fn test_update_jobs_on_file_change_with_canceled_jobs(start_server: &ServerProce
 
     // Create resource requirements
     let resource_requirements = models::ResourceRequirementsModel::new(1, "small".to_string());
-    let rr =
-        apis::admin_resources_api::create_resource_requirements(&config, resource_requirements)
-            .expect("Failed to create resource requirements");
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        &config,
+        resource_requirements,
+    )
+    .expect("Failed to create resource requirements");
 
     // Create a job with file dependency
     let mut job = models::JobModel::new(
@@ -1034,7 +1026,7 @@ fn test_update_jobs_on_file_change_with_canceled_jobs(start_server: &ServerProce
     assert_eq!(returned_jobs.len(), 1, "Should return exactly 1 job");
 
     // Set to Running using manage_status_change (non-completion status, allowed)
-    apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id)
         .expect("Failed to set job to Running");
 
     // Create compute node for the result
@@ -1100,9 +1092,11 @@ fn test_process_changed_files_end_to_end(start_server: &ServerProcess) {
     let file_id = files[0].id.unwrap();
 
     let resource_requirements = models::ResourceRequirementsModel::new(1, "small".to_string());
-    let rr =
-        apis::admin_resources_api::create_resource_requirements(&config, resource_requirements)
-            .expect("Failed to create resource requirements");
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        &config,
+        resource_requirements,
+    )
+    .expect("Failed to create resource requirements");
 
     // Create a job that depends on the first file
     let mut job = models::JobModel::new(
@@ -1141,7 +1135,7 @@ fn test_process_changed_files_end_to_end(start_server: &ServerProcess) {
         job.status.expect("Job status should be present"),
         models::JobStatus::Pending
     );
-    apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id)
         .expect("Failed to set job to Completed");
 
     // Create a compute node for the results
@@ -1298,8 +1292,11 @@ fn create_job_with_output_files(
 ) -> (i64, Vec<models::FileModel>) {
     // Create resource requirements
     let resource_requirements = models::ResourceRequirementsModel::new(1, "small".to_string());
-    let rr = apis::admin_resources_api::create_resource_requirements(config, resource_requirements)
-        .expect("Failed to create resource requirements");
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        config,
+        resource_requirements,
+    )
+    .expect("Failed to create resource requirements");
 
     // Create output file paths (don't create actual files on disk yet)
     let mut output_files = Vec::new();
@@ -1389,7 +1386,7 @@ fn test_update_jobs_if_output_files_are_missing_no_missing_files(start_server: &
     let run_id = manager.get_run_id().expect("Failed to get run_id");
 
     // Set job to running
-    apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id)
         .expect("Failed to set job to running");
 
     // Create a compute node for the results
@@ -1434,7 +1431,7 @@ fn test_update_jobs_if_output_files_are_missing_with_missing_files(start_server:
     let run_id = manager.get_run_id().expect("Failed to get run_id");
 
     // Set job to running
-    apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id)
         .expect("Failed to set job to running");
 
     // Create a compute node for the results
@@ -1487,7 +1484,7 @@ fn test_update_jobs_if_output_files_are_missing_dry_run_true(start_server: &Serv
     let run_id = manager.get_run_id().expect("Failed to get run_id");
 
     // Set job to running
-    apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id)
         .expect("Failed to set job to running");
 
     // Create a compute node for the results
@@ -1537,7 +1534,7 @@ fn test_update_jobs_if_output_files_are_missing_dry_run_false(start_server: &Ser
     let run_id = manager.get_run_id().expect("Failed to get run_id");
 
     // Set job to running
-    apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id)
         .expect("Failed to set job to running");
 
     // Create a compute node for the results
@@ -1605,14 +1602,8 @@ fn test_update_jobs_if_output_files_are_missing_multiple_jobs(start_server: &Ser
         (job2_id, &output_files2),
         (job3_id, &output_files3),
     ] {
-        apis::jobs_api::manage_status_change(
-            &config,
-            job_id,
-            models::JobStatus::Running,
-            run_id,
-            None,
-        )
-        .expect("Failed to set job to running");
+        apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id)
+            .expect("Failed to set job to running");
 
         complete_job_and_create_files(
             &config,
@@ -1700,9 +1691,11 @@ fn test_update_jobs_if_output_files_are_missing_with_upstream_jobs_dry_run(
 
     // Create resource requirements for upstream job
     let resource_requirements = models::ResourceRequirementsModel::new(1, "small".to_string());
-    let rr =
-        apis::admin_resources_api::create_resource_requirements(&config, resource_requirements)
-            .expect("Failed to create resource requirements");
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        &config,
+        resource_requirements,
+    )
+    .expect("Failed to create resource requirements");
 
     // Create an upstream job that depends on job1
     let mut upstream_job = models::JobModel::new(
@@ -1726,14 +1719,8 @@ fn test_update_jobs_if_output_files_are_missing_with_upstream_jobs_dry_run(
     let compute_node_id = compute_node.id.unwrap();
 
     // Complete job1 (with output files)
-    apis::jobs_api::manage_status_change(
-        &config,
-        job1_id,
-        models::JobStatus::Running,
-        run_id,
-        None,
-    )
-    .expect("Failed to set job1 to running");
+    apis::jobs_api::manage_status_change(&config, job1_id, models::JobStatus::Running, run_id)
+        .expect("Failed to set job1 to running");
     complete_job_and_create_files(
         &config,
         job1_id,
@@ -1755,7 +1742,6 @@ fn test_update_jobs_if_output_files_are_missing_with_upstream_jobs_dry_run(
         upstream_job_id,
         models::JobStatus::Running,
         run_id,
-        None,
     )
     .expect("Failed to set upstream_job to running");
     let upstream_result = models::ResultModel::new(
@@ -1810,9 +1796,11 @@ fn test_initialize_workflow_with_missing_files_ignore_missing_data_true(
     let workflow_id = workflow.id.unwrap();
 
     let resource_requirements = models::ResourceRequirementsModel::new(1, "small".to_string());
-    let rr =
-        apis::admin_resources_api::create_resource_requirements(&config, resource_requirements)
-            .expect("Failed to create resource requirements");
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        &config,
+        resource_requirements,
+    )
+    .expect("Failed to create resource requirements");
 
     // Create file records in database but don't create actual files on disk
     let missing_file1 = create_test_file(
@@ -1879,9 +1867,11 @@ fn test_initialize_workflow_with_missing_files_ignore_missing_data_false(
     let workflow_id = workflow.id.unwrap();
 
     let resource_requirements = models::ResourceRequirementsModel::new(1, "small".to_string());
-    let rr =
-        apis::admin_resources_api::create_resource_requirements(&config, resource_requirements)
-            .expect("Failed to create resource requirements");
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        &config,
+        resource_requirements,
+    )
+    .expect("Failed to create resource requirements");
 
     // Create file records in database but don't create actual files on disk
     let missing_file = create_test_file(
@@ -1925,9 +1915,11 @@ fn test_reinitialize_workflow_with_missing_files_ignore_missing_data_true(
     let workflow_id = workflow.id.unwrap();
 
     let resource_requirements = models::ResourceRequirementsModel::new(1, "small".to_string());
-    let rr =
-        apis::admin_resources_api::create_resource_requirements(&config, resource_requirements)
-            .expect("Failed to create resource requirements");
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        &config,
+        resource_requirements,
+    )
+    .expect("Failed to create resource requirements");
 
     // Create file records in database but don't create actual files on disk
     let missing_file1 = create_test_file(
@@ -1960,7 +1952,7 @@ fn test_reinitialize_workflow_with_missing_files_ignore_missing_data_true(
 
     // Complete the job to have something to reinitialize from
     let run_id = manager.get_run_id().expect("Failed to get run_id");
-    apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id)
         .expect("Failed to set job to running");
 
     // Create a compute node for the results
@@ -2019,9 +2011,11 @@ fn test_reinitialize_workflow_with_missing_files_dry_run_true(start_server: &Ser
 
     // Create resource requirements
     let resource_requirements = models::ResourceRequirementsModel::new(1, "small".to_string());
-    let rr =
-        apis::admin_resources_api::create_resource_requirements(&config, resource_requirements)
-            .expect("Failed to create resource requirements");
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        &config,
+        resource_requirements,
+    )
+    .expect("Failed to create resource requirements");
 
     // Create file records in database but don't create actual files on disk
     let missing_file = create_test_file(
@@ -2048,7 +2042,7 @@ fn test_reinitialize_workflow_with_missing_files_dry_run_true(start_server: &Ser
 
     // Complete the job to have something to reinitialize from
     let run_id = manager.get_run_id().expect("Failed to get run_id");
-    apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id)
         .expect("Failed to set job to running");
 
     // Create a compute node for the results
@@ -2116,9 +2110,11 @@ fn test_reinitialize_workflow_with_missing_files_ignore_missing_data_false(
     let workflow_id = workflow.id.unwrap();
 
     let resource_requirements = models::ResourceRequirementsModel::new(1, "small".to_string());
-    let rr =
-        apis::admin_resources_api::create_resource_requirements(&config, resource_requirements)
-            .expect("Failed to create resource requirements");
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        &config,
+        resource_requirements,
+    )
+    .expect("Failed to create resource requirements");
 
     // Create file records in database but don't create actual files on disk
     let missing_file = create_test_file(
@@ -2145,7 +2141,7 @@ fn test_reinitialize_workflow_with_missing_files_ignore_missing_data_false(
 
     // Complete the job to have something to reinitialize from
     let run_id = manager.get_run_id().expect("Failed to get run_id");
-    apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id)
         .expect("Failed to set job to running");
 
     // Create a compute node for the results
@@ -2236,8 +2232,11 @@ fn create_workflow_with_user_data_chain(
 
     // Create resource requirements
     let resource_requirements = models::ResourceRequirementsModel::new(1, "small".to_string());
-    let rr = apis::admin_resources_api::create_resource_requirements(config, resource_requirements)
-        .expect("Failed to create resource requirements");
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        config,
+        resource_requirements,
+    )
+    .expect("Failed to create resource requirements");
 
     // Create job1: consumes ud1, produces ud2
     let mut job1 =
@@ -2320,14 +2319,8 @@ fn test_user_data_dependency_chain(start_server: &ServerProcess) {
     let compute_node_id = compute_node.id.unwrap();
 
     // Simulate job1 execution: change status to running, populate ud2, complete job1
-    apis::jobs_api::manage_status_change(
-        &config,
-        job1_id,
-        models::JobStatus::Running,
-        run_id,
-        None,
-    )
-    .expect("Failed to set job1 to running");
+    apis::jobs_api::manage_status_change(&config, job1_id, models::JobStatus::Running, run_id)
+        .expect("Failed to set job1 to running");
 
     // Populate ud2 with data
     let mut ud2 = apis::user_data_api::get_user_data(&config, ud2_id).expect("Failed to get ud2");
@@ -2374,14 +2367,8 @@ fn test_user_data_dependency_chain(start_server: &ServerProcess) {
     );
 
     // Simulate job2 execution
-    apis::jobs_api::manage_status_change(
-        &config,
-        job2_id,
-        models::JobStatus::Running,
-        run_id,
-        None,
-    )
-    .expect("Failed to set job2 to running");
+    apis::jobs_api::manage_status_change(&config, job2_id, models::JobStatus::Running, run_id)
+        .expect("Failed to set job2 to running");
 
     // Populate ud3 with data
     let mut ud3 = apis::user_data_api::get_user_data(&config, ud3_id).expect("Failed to get ud3");
@@ -2419,14 +2406,8 @@ fn test_user_data_dependency_chain(start_server: &ServerProcess) {
     );
 
     // Simulate job3 execution
-    apis::jobs_api::manage_status_change(
-        &config,
-        job3_id,
-        models::JobStatus::Running,
-        run_id,
-        None,
-    )
-    .expect("Failed to set job3 to running");
+    apis::jobs_api::manage_status_change(&config, job3_id, models::JobStatus::Running, run_id)
+        .expect("Failed to set job3 to running");
 
     // Populate ud4 with data
     let mut ud4 = apis::user_data_api::get_user_data(&config, ud4_id).expect("Failed to get ud4");
@@ -2568,7 +2549,6 @@ fn test_reinitialize_with_file_change_depends_on_complete_job(start_server: &Ser
         preprocess_id,
         models::JobStatus::Running,
         run_id,
-        None,
     )
     .expect("Failed to set preprocess to Running");
     fs::write(&f2_path, r#"{"preprocess": "output1"}"#).expect("Failed to write f2");
@@ -2599,14 +2579,8 @@ fn test_reinitialize_with_file_change_depends_on_complete_job(start_server: &Ser
         wait_for_job_status(&config, work1_id, models::JobStatus::Ready, 5),
         "work1 did not become ready after preprocess completed"
     );
-    apis::jobs_api::manage_status_change(
-        &config,
-        work1_id,
-        models::JobStatus::Running,
-        run_id,
-        None,
-    )
-    .expect("Failed to set work1 to Running");
+    apis::jobs_api::manage_status_change(&config, work1_id, models::JobStatus::Running, run_id)
+        .expect("Failed to set work1 to Running");
     fs::write(&f4_path, r#"{"work1": "output"}"#).expect("Failed to write f4");
 
     let work1_result = models::ResultModel::new(
@@ -2634,14 +2608,8 @@ fn test_reinitialize_with_file_change_depends_on_complete_job(start_server: &Ser
         wait_for_job_status(&config, work2_id, models::JobStatus::Ready, 5),
         "work2 did not become ready after preprocess completed"
     );
-    apis::jobs_api::manage_status_change(
-        &config,
-        work2_id,
-        models::JobStatus::Running,
-        run_id,
-        None,
-    )
-    .expect("Failed to set work2 to Running");
+    apis::jobs_api::manage_status_change(&config, work2_id, models::JobStatus::Running, run_id)
+        .expect("Failed to set work2 to Running");
     fs::write(&f5_path, r#"{"work2": "output"}"#).expect("Failed to write f5");
 
     // Update f5 mtime in database
@@ -2701,7 +2669,6 @@ fn test_reinitialize_with_file_change_depends_on_complete_job(start_server: &Ser
         postprocess_id,
         models::JobStatus::Running,
         run_id,
-        None,
     )
     .expect("Failed to set postprocess to Running");
     fs::write(&f6_path, r#"{"postprocess": "output"}"#).expect("Failed to write f6");

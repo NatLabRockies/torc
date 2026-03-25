@@ -114,14 +114,14 @@ cd api
 bash sync_openapi.sh check
 ```
 
-- Promote the Rust-emitted spec and regenerate external clients with:
+- Promote the Rust-emitted spec and regenerate Rust, Python, and Julia clients with:
 
 ```bash
 cd api
 bash sync_openapi.sh all --promote
 ```
 
-- Regenerate external clients from the current checked-in spec with:
+- Regenerate Rust, Python, and Julia clients from the current checked-in spec with:
 
 ```bash
 cd api

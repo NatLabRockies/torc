@@ -348,7 +348,7 @@ pub fn handle_user_data_commands(config: &Configuration, command: &UserDataComma
             }
         }
         UserDataCommands::Delete { id } => {
-            match apis::user_data_api::delete_user_data(config, *id, None) {
+            match apis::user_data_api::delete_user_data(config, *id) {
                 Ok(removed_user_data) => {
                     if print_if_json(format, &removed_user_data, "user data") {
                         // JSON was printed
@@ -366,7 +366,7 @@ pub fn handle_user_data_commands(config: &Configuration, command: &UserDataComma
             }
         }
         UserDataCommands::DeleteAll { workflow_id } => {
-            match apis::user_data_api::delete_all_user_data(config, *workflow_id, None) {
+            match apis::user_data_api::delete_all_user_data(config, *workflow_id) {
                 Ok(response) => {
                     if format == "json" {
                         print_json(&response, "user data delete-all response");

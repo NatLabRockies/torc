@@ -30,7 +30,7 @@ Method | HTTP request | Description
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **AccessControlApi** | API context | 
-**id** | **Int64** | ID of the access group |
+**id** | **Int64** | Access group ID |
 **user_group_membership_model** | [**UserGroupMembershipModel**](UserGroupMembershipModel.md) |  |
 
 ### Return type
@@ -59,8 +59,8 @@ No authorization required
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **AccessControlApi** | API context | 
-**id** | **Int64** | ID of the workflow |
-**group_id** | **Int64** | ID of the access group |
+**id** | **Int64** | Workflow ID |
+**group_id** | **Int64** | Access group ID |
 
 ### Return type
 
@@ -88,8 +88,8 @@ No authorization required
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **AccessControlApi** | API context | 
-**workflow_id** | **Int64** | ID of the workflow |
-**user_name** | **String** | Username to check |
+**workflow_id** | **Int64** | Workflow ID |
+**user_name** | **String** | Username |
 
 ### Return type
 
@@ -145,7 +145,7 @@ No authorization required
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **AccessControlApi** | API context | 
-**id** | **Int64** | ID of the access group |
+**id** | **Int64** | Access group ID |
 
 ### Return type
 
@@ -173,7 +173,7 @@ No authorization required
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **AccessControlApi** | API context | 
-**id** | **Int64** | ID of the access group |
+**id** | **Int64** | Access group ID |
 
 ### Return type
 
@@ -235,7 +235,7 @@ No authorization required
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **AccessControlApi** | API context | 
-**id** | **Int64** | ID of the access group |
+**id** | **Int64** | Access group ID |
 
 ### Optional Parameters
 
@@ -305,7 +305,7 @@ No authorization required
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **AccessControlApi** | API context | 
-**id** | **Int64** | ID of the workflow |
+**id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
 
@@ -364,8 +364,8 @@ No authorization required
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **AccessControlApi** | API context | 
-**id** | **Int64** | ID of the access group |
-**user_name** | **String** | Username to remove |
+**id** | **Int64** | Access group ID |
+**user_name** | **String** | Username |
 
 ### Return type
 
@@ -393,8 +393,8 @@ No authorization required
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **AccessControlApi** | API context | 
-**id** | **Int64** | ID of the workflow |
-**group_id** | **Int64** | ID of the access group |
+**id** | **Int64** | Workflow ID |
+**group_id** | **Int64** | Access group ID |
 
 ### Return type
 

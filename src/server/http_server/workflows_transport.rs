@@ -67,7 +67,6 @@ where
     pub(super) async fn transport_delete_failure_handler(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteFailureHandlerResponse, ApiError> {
         authorize_resource!(
@@ -78,7 +77,7 @@ where
             DeleteFailureHandlerResponse
         );
         self.failure_handlers_api
-            .delete_failure_handler(id, body, context)
+            .delete_failure_handler(id, context)
             .await
     }
 
@@ -229,7 +228,6 @@ where
     pub(super) async fn transport_cancel_workflow(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<CancelWorkflowResponse, ApiError> {
         info!(
@@ -238,19 +236,16 @@ where
             Has::<XSpanIdString>::get(context).0.clone()
         );
         authorize_workflow!(self, id, context, CancelWorkflowResponse);
-        self.workflows_api.cancel_workflow(id, body, context).await
+        self.workflows_api.cancel_workflow(id, context).await
     }
 
     pub(super) async fn transport_delete_events(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteEventsResponse, ApiError> {
         authorize_workflow!(self, workflow_id, context, DeleteEventsResponse);
-        self.events_api
-            .delete_events(workflow_id, body, context)
-            .await
+        self.events_api.delete_events(workflow_id, context).await
     }
 
     pub(super) async fn transport_list_events(
@@ -424,17 +419,15 @@ where
     pub(super) async fn transport_delete_event(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteEventResponse, ApiError> {
         authorize_resource!(self, id, "event", context, DeleteEventResponse);
-        self.events_api.delete_event(id, body, context).await
+        self.events_api.delete_event(id, context).await
     }
 
     pub(super) async fn transport_delete_workflow(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteWorkflowResponse, ApiError> {
         info!(
@@ -446,14 +439,13 @@ where
         if let Ok(mut set) = self.workflows_with_failures.write() {
             set.remove(&id);
         }
-        self.workflows_api.delete_workflow(id, body, context).await
+        self.workflows_api.delete_workflow(id, context).await
     }
 
     pub(super) async fn transport_reset_workflow_status(
         &self,
         id: i64,
         force: Option<bool>,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<ResetWorkflowStatusResponse, ApiError> {
         info!(
@@ -471,7 +463,7 @@ where
         let force_value = force.unwrap_or(false);
         let result = self
             .workflows_api
-            .reset_workflow_status(id, force, body, context)
+            .reset_workflow_status(id, force, context)
             .await?;
 
         if let ResetWorkflowStatusResponse::SuccessfulResponse(_) = result {

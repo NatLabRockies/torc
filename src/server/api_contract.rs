@@ -197,7 +197,6 @@ pub trait TransportApiCore<C: Send + Sync> {
     async fn delete_failure_handler(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteFailureHandlerResponse, ApiError>;
 
@@ -238,7 +237,6 @@ pub trait TransportApiCore<C: Send + Sync> {
     async fn delete_ro_crate_entity(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteRoCrateEntityResponse, ApiError>;
 
@@ -246,7 +244,6 @@ pub trait TransportApiCore<C: Send + Sync> {
     async fn delete_ro_crate_entities(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteRoCrateEntitiesResponse, ApiError>;
 
@@ -372,7 +369,6 @@ pub trait TransportApiCore<C: Send + Sync> {
     async fn delete_compute_nodes(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteComputeNodesResponse, ApiError>;
 
@@ -380,7 +376,6 @@ pub trait TransportApiCore<C: Send + Sync> {
     async fn delete_events(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteEventsResponse, ApiError>;
 
@@ -388,7 +383,6 @@ pub trait TransportApiCore<C: Send + Sync> {
     async fn delete_files(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteFilesResponse, ApiError>;
 
@@ -396,7 +390,6 @@ pub trait TransportApiCore<C: Send + Sync> {
     async fn delete_jobs(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteJobsResponse, ApiError>;
 
@@ -404,7 +397,6 @@ pub trait TransportApiCore<C: Send + Sync> {
     async fn delete_local_schedulers(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteLocalSchedulersResponse, ApiError>;
 
@@ -412,7 +404,6 @@ pub trait TransportApiCore<C: Send + Sync> {
     async fn delete_all_resource_requirements(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteAllResourceRequirementsResponse, ApiError>;
 
@@ -420,7 +411,6 @@ pub trait TransportApiCore<C: Send + Sync> {
     async fn delete_results(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteResultsResponse, ApiError>;
 
@@ -428,7 +418,6 @@ pub trait TransportApiCore<C: Send + Sync> {
     async fn delete_scheduled_compute_nodes(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteScheduledComputeNodesResponse, ApiError>;
 
@@ -436,7 +425,6 @@ pub trait TransportApiCore<C: Send + Sync> {
     async fn delete_slurm_schedulers(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteSlurmSchedulersResponse, ApiError>;
 
@@ -444,7 +432,6 @@ pub trait TransportApiCore<C: Send + Sync> {
     async fn delete_all_user_data(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteAllUserDataResponse, ApiError>;
 
@@ -660,7 +647,6 @@ pub trait TransportApiCore<C: Send + Sync> {
     async fn cancel_workflow(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<CancelWorkflowResponse, ApiError>;
 
@@ -738,7 +724,6 @@ pub trait TransportApiCore<C: Send + Sync> {
         id: i64,
         only_uninitialized: Option<bool>,
         clear_ephemeral_user_data: Option<bool>,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<InitializeJobsResponse, ApiError>;
 
@@ -884,7 +869,6 @@ pub trait TransportApiCore<C: Send + Sync> {
         &self,
         id: i64,
         limit: Option<i64>,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<ClaimNextJobsResponse, ApiError>;
 
@@ -893,7 +877,6 @@ pub trait TransportApiCore<C: Send + Sync> {
         &self,
         id: i64,
         dry_run: Option<bool>,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<ProcessChangedJobInputsResponse, ApiError>;
 
@@ -901,39 +884,22 @@ pub trait TransportApiCore<C: Send + Sync> {
     async fn delete_compute_node(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteComputeNodeResponse, ApiError>;
 
     /// Delete an event.
-    async fn delete_event(
-        &self,
-        id: i64,
-        body: Option<serde_json::Value>,
-        context: &C,
-    ) -> Result<DeleteEventResponse, ApiError>;
+    async fn delete_event(&self, id: i64, context: &C) -> Result<DeleteEventResponse, ApiError>;
 
     /// Delete a file.
-    async fn delete_file(
-        &self,
-        id: i64,
-        body: Option<serde_json::Value>,
-        context: &C,
-    ) -> Result<DeleteFileResponse, ApiError>;
+    async fn delete_file(&self, id: i64, context: &C) -> Result<DeleteFileResponse, ApiError>;
 
     /// Delete a job.
-    async fn delete_job(
-        &self,
-        id: i64,
-        body: Option<serde_json::Value>,
-        context: &C,
-    ) -> Result<DeleteJobResponse, ApiError>;
+    async fn delete_job(&self, id: i64, context: &C) -> Result<DeleteJobResponse, ApiError>;
 
     /// Delete a local scheduler.
     async fn delete_local_scheduler(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteLocalSchedulerResponse, ApiError>;
 
@@ -941,23 +907,16 @@ pub trait TransportApiCore<C: Send + Sync> {
     async fn delete_resource_requirements(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteResourceRequirementsResponse, ApiError>;
 
     /// Delete a job result.
-    async fn delete_result(
-        &self,
-        id: i64,
-        body: Option<serde_json::Value>,
-        context: &C,
-    ) -> Result<DeleteResultResponse, ApiError>;
+    async fn delete_result(&self, id: i64, context: &C) -> Result<DeleteResultResponse, ApiError>;
 
     /// Delete a scheduled compute node.
     async fn delete_scheduled_compute_node(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteScheduledComputeNodeResponse, ApiError>;
 
@@ -965,7 +924,6 @@ pub trait TransportApiCore<C: Send + Sync> {
     async fn delete_slurm_scheduler(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteSlurmSchedulerResponse, ApiError>;
 
@@ -973,7 +931,6 @@ pub trait TransportApiCore<C: Send + Sync> {
     async fn delete_user_data(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteUserDataResponse, ApiError>;
 
@@ -981,7 +938,6 @@ pub trait TransportApiCore<C: Send + Sync> {
     async fn delete_workflow(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteWorkflowResponse, ApiError>;
 
@@ -990,7 +946,6 @@ pub trait TransportApiCore<C: Send + Sync> {
         &self,
         id: i64,
         failed_only: Option<bool>,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<ResetJobStatusResponse, ApiError>;
 
@@ -999,7 +954,6 @@ pub trait TransportApiCore<C: Send + Sync> {
         &self,
         id: i64,
         force: Option<bool>,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<ResetWorkflowStatusResponse, ApiError>;
 
@@ -1017,7 +971,6 @@ pub trait TransportApiCore<C: Send + Sync> {
         id: i64,
         status: models::JobStatus,
         run_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<ManageStatusChangeResponse, ApiError>;
 
@@ -1027,7 +980,6 @@ pub trait TransportApiCore<C: Send + Sync> {
         id: i64,
         run_id: i64,
         compute_node_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<StartJobResponse, ApiError>;
 

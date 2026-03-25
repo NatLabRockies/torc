@@ -204,8 +204,7 @@ impl AccessGroupsApiImpl {
         C: Has<XSpanIdString> + Send + Sync,
     {
         debug!(
-            "create_access_group({:?}) - X-Span-ID: {:?}",
-            body,
+            "create_access_group - X-Span-ID: {:?}",
             context.get().0.clone()
         );
 
@@ -425,9 +424,8 @@ impl AccessGroupsApiImpl {
         C: Has<XSpanIdString> + Send + Sync,
     {
         debug!(
-            "add_user_to_group({}, {:?}) - X-Span-ID: {:?}",
+            "add_user_to_group({}) - X-Span-ID: {:?}",
             group_id,
-            body,
             context.get().0.clone()
         );
 

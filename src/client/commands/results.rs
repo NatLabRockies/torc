@@ -318,7 +318,7 @@ pub fn handle_result_commands(config: &Configuration, command: &ResultCommands, 
             }
         },
         ResultCommands::Delete { id } => {
-            match apis::results_api::delete_result(config, *id, None) {
+            match apis::results_api::delete_result(config, *id) {
                 Ok(removed_result) => {
                     if print_if_json(format, &removed_result, "result") {
                         // JSON was printed

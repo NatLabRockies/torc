@@ -44,7 +44,6 @@ pub trait JobsApi<C> {
     async fn delete_jobs(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteJobsResponse, ApiError>;
 
@@ -114,25 +113,18 @@ pub trait JobsApi<C> {
     async fn process_changed_job_inputs(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         dry_run: bool,
         context: &C,
     ) -> Result<ProcessChangedJobInputsResponse, ApiError>;
 
     /// Delete a job.
-    async fn delete_job(
-        &self,
-        id: i64,
-        body: Option<serde_json::Value>,
-        context: &C,
-    ) -> Result<DeleteJobResponse, ApiError>;
+    async fn delete_job(&self, id: i64, context: &C) -> Result<DeleteJobResponse, ApiError>;
 
     /// Reset status for jobs to uninitialized.
     async fn reset_job_status(
         &self,
         id: i64,
         failed_only: bool,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<ResetJobStatusResponse, ApiError>;
 
@@ -1547,13 +1539,11 @@ where
     async fn delete_jobs(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteJobsResponse, ApiError> {
         debug!(
-            "delete_jobs({}, {:?}) - X-Span-ID: {:?}",
+            "delete_jobs({}) - X-Span-ID: {:?}",
             workflow_id,
-            body,
             context.get().0.clone()
         );
 
@@ -1894,9 +1884,8 @@ where
         context: &C,
     ) -> Result<UpdateJobResponse, ApiError> {
         debug!(
-            "update_job({}, {:?}) - X-Span-ID: {:?}",
+            "update_job({}) - X-Span-ID: {:?}",
             id,
-            body,
             context.get().0.clone()
         );
 
@@ -2293,7 +2282,6 @@ where
     async fn process_changed_job_inputs(
         &self,
         id: i64,
-        _body: Option<serde_json::Value>,
         dry_run: bool,
         context: &C,
     ) -> Result<ProcessChangedJobInputsResponse, ApiError> {
@@ -2442,16 +2430,10 @@ where
     }
 
     /// Delete a job.
-    async fn delete_job(
-        &self,
-        id: i64,
-        body: Option<serde_json::Value>,
-        context: &C,
-    ) -> Result<DeleteJobResponse, ApiError> {
+    async fn delete_job(&self, id: i64, context: &C) -> Result<DeleteJobResponse, ApiError> {
         debug!(
-            "delete_job({}, {:?}) - X-Span-ID: {:?}",
+            "delete_job({}) - X-Span-ID: {:?}",
             id,
-            body,
             context.get().0.clone()
         );
 
@@ -2504,14 +2486,12 @@ where
         &self,
         id: i64,
         failed_only: bool,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<ResetJobStatusResponse, ApiError> {
         debug!(
-            "reset_job_status({}, {}, {:?}) - X-Span-ID: {:?}",
+            "reset_job_status({}, {}) - X-Span-ID: {:?}",
             id,
             failed_only,
-            body,
             context.get().0.clone()
         );
 

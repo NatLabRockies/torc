@@ -34,7 +34,7 @@ fn create_workflow_with_ready_jobs(
     rr.num_nodes = 1;
     rr.memory = "8g".to_string();
     rr.runtime = "PT1H".to_string();
-    let rr = apis::admin_resources_api::create_resource_requirements(config, rr)
+    let rr = apis::resource_requirements_api::create_resource_requirements(config, rr)
         .expect("Failed to create resource requirements");
     let rr_id = rr.id.unwrap();
 
@@ -49,7 +49,7 @@ fn create_workflow_with_ready_jobs(
     }
 
     // Initialize jobs (sets them to Ready state)
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
     (workflow_id, job_ids)
@@ -246,15 +246,6 @@ fn test_create_slurm_scheduler(start_server: &ServerProcess) {
         workflow_id,
         Some(0),
         Some(100),
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
         None,
         None,
     )

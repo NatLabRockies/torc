@@ -13,6 +13,9 @@ basepath(::Type{ LocalSchedulersApi }) = "http://localhost/torc-service/v1"
 
 const _returntypes_create_local_scheduler_LocalSchedulersApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => LocalSchedulerModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_create_local_scheduler(_api::LocalSchedulersApi, local_scheduler_model::LocalSchedulerModel; _mediaType=nothing)
@@ -39,62 +42,69 @@ end
 
 const _returntypes_delete_local_scheduler_LocalSchedulersApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => LocalSchedulerModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
-function _oacinternal_delete_local_scheduler(_api::LocalSchedulersApi, id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_delete_local_scheduler_LocalSchedulersApi, "/local_schedulers/{id}", [], body)
+function _oacinternal_delete_local_scheduler(_api::LocalSchedulersApi, id::Int64; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_delete_local_scheduler_LocalSchedulersApi, "/local_schedulers/{id}", [])
     OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
-    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
 end
 
 @doc raw"""Params:
 - id::Int64 (required)
-- body::Any
 
 Return: LocalSchedulerModel, OpenAPI.Clients.ApiResponse
 """
-function delete_local_scheduler(_api::LocalSchedulersApi, id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_delete_local_scheduler(_api, id; body=body, _mediaType=_mediaType)
+function delete_local_scheduler(_api::LocalSchedulersApi, id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_delete_local_scheduler(_api, id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function delete_local_scheduler(_api::LocalSchedulersApi, response_stream::Channel, id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_delete_local_scheduler(_api, id; body=body, _mediaType=_mediaType)
+function delete_local_scheduler(_api::LocalSchedulersApi, response_stream::Channel, id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_delete_local_scheduler(_api, id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
 const _returntypes_delete_local_schedulers_LocalSchedulersApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => DeleteCountResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
-function _oacinternal_delete_local_schedulers(_api::LocalSchedulersApi, workflow_id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_delete_local_schedulers_LocalSchedulersApi, "/local_schedulers", [], body)
+function _oacinternal_delete_local_schedulers(_api::LocalSchedulersApi, workflow_id::Int64; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_delete_local_schedulers_LocalSchedulersApi, "/local_schedulers", [])
     OpenAPI.Clients.set_param(_ctx.query, "workflow_id", workflow_id; style="form", is_explode=true)  # type Int64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
-    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
 end
 
 @doc raw"""Params:
 - workflow_id::Int64 (required)
-- body::Any
 
 Return: DeleteCountResponse, OpenAPI.Clients.ApiResponse
 """
-function delete_local_schedulers(_api::LocalSchedulersApi, workflow_id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_delete_local_schedulers(_api, workflow_id; body=body, _mediaType=_mediaType)
+function delete_local_schedulers(_api::LocalSchedulersApi, workflow_id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_delete_local_schedulers(_api, workflow_id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function delete_local_schedulers(_api::LocalSchedulersApi, response_stream::Channel, workflow_id::Int64; body=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_delete_local_schedulers(_api, workflow_id; body=body, _mediaType=_mediaType)
+function delete_local_schedulers(_api::LocalSchedulersApi, response_stream::Channel, workflow_id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_delete_local_schedulers(_api, workflow_id; _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
 const _returntypes_get_local_scheduler_LocalSchedulersApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => LocalSchedulerModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_get_local_scheduler(_api::LocalSchedulersApi, id::Int64; _mediaType=nothing)
@@ -122,6 +132,9 @@ end
 
 const _returntypes_list_local_schedulers_LocalSchedulersApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ListLocalSchedulersResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_list_local_schedulers(_api::LocalSchedulersApi, workflow_id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, memory=nothing, num_cpus=nothing, _mediaType=nothing)
@@ -161,6 +174,9 @@ end
 
 const _returntypes_update_local_scheduler_LocalSchedulersApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => LocalSchedulerModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_update_local_scheduler(_api::LocalSchedulersApi, id::Int64, local_scheduler_model::LocalSchedulerModel; _mediaType=nothing)

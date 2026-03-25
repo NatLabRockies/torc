@@ -375,10 +375,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: Successful response
@@ -497,10 +493,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: Successful response
@@ -654,10 +646,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: Successful response
@@ -774,10 +762,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: Successful response
@@ -889,10 +873,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: Successful response
@@ -1060,10 +1040,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: Successful response
@@ -1182,10 +1158,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: Successful response
@@ -1368,10 +1340,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: Successful response
@@ -1490,10 +1458,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: Successful response
@@ -1602,10 +1566,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: Successful response
@@ -1715,10 +1675,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: Successful response
@@ -1872,10 +1828,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: Successful response
@@ -1994,10 +1946,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: Successful response
@@ -2208,10 +2156,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: Successful response
@@ -2335,10 +2279,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: Successful response
@@ -2523,10 +2463,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: Successful response
@@ -2644,10 +2580,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: Successful response
@@ -2814,10 +2746,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: Successful response
@@ -2977,10 +2905,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: Successful response
@@ -3099,10 +3023,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: Successful response
@@ -3241,10 +3161,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: Successful response
@@ -3363,10 +3279,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: Successful response
@@ -3664,10 +3576,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: Successful response
@@ -3785,10 +3693,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: Successful response
@@ -4006,10 +3910,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: ''
@@ -4167,8 +4067,8 @@ paths:
           type: integer
           format: int64
       - name: trigger_type
-        in: query
-        required: false
+        in: path
+        required: true
         schema:
           type:
           - array
@@ -4230,10 +4130,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: ''
@@ -4301,10 +4197,6 @@ paths:
           - integer
           - 'null'
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: ''
@@ -4393,10 +4285,6 @@ paths:
           type:
           - boolean
           - 'null'
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: ''
@@ -4653,10 +4541,6 @@ paths:
           type:
           - boolean
           - 'null'
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: ''
@@ -4869,10 +4753,6 @@ paths:
           type:
           - boolean
           - 'null'
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: ''
@@ -4900,10 +4780,6 @@ paths:
           type:
           - boolean
           - 'null'
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: ''
@@ -4990,10 +4866,6 @@ paths:
         schema:
           type: integer
           format: int64
-      requestBody:
-        content:
-          application/json:
-            schema: {}
       responses:
         '200':
           description: Successful response

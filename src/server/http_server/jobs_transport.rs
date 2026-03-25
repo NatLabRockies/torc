@@ -67,15 +67,13 @@ where
         id: i64,
         only_uninitialized: Option<bool>,
         clear_ephemeral_user_data: Option<bool>,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<InitializeJobsResponse, ApiError> {
         info!(
-            "initialize_jobs({}, {:?}, {:?}, {:?}) - X-Span-ID: {:?}",
+            "initialize_jobs({}, {:?}, {:?}) - X-Span-ID: {:?}",
             id,
             only_uninitialized,
             clear_ephemeral_user_data,
-            body,
             Has::<XSpanIdString>::get(context).0.clone()
         );
         authorize_workflow!(self, id, context, InitializeJobsResponse);
@@ -290,11 +288,10 @@ where
     pub(super) async fn transport_delete_jobs(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteJobsResponse, ApiError> {
         authorize_workflow!(self, workflow_id, context, DeleteJobsResponse);
-        self.jobs_api.delete_jobs(workflow_id, body, context).await
+        self.jobs_api.delete_jobs(workflow_id, context).await
     }
 
     pub(super) async fn transport_list_jobs(
@@ -362,14 +359,12 @@ where
         &self,
         id: i64,
         limit: Option<i64>,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<ClaimNextJobsResponse, ApiError> {
         debug!(
-            "claim_next_jobs({}, {:?}, {:?}) - X-Span-ID: {:?}",
+            "claim_next_jobs({}, {:?}) - X-Span-ID: {:?}",
             id,
             limit,
-            body,
             Has::<XSpanIdString>::get(context).0.clone()
         );
 
@@ -593,13 +588,12 @@ where
         &self,
         id: i64,
         dry_run: Option<bool>,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<ProcessChangedJobInputsResponse, ApiError> {
         authorize_workflow!(self, id, context, ProcessChangedJobInputsResponse);
         let dry_run_value = dry_run.unwrap_or(false);
         self.jobs_api
-            .process_changed_job_inputs(id, body, dry_run_value, context)
+            .process_changed_job_inputs(id, dry_run_value, context)
             .await
     }
 
@@ -619,11 +613,10 @@ where
     pub(super) async fn transport_delete_job(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteJobResponse, ApiError> {
         authorize_job!(self, id, context, DeleteJobResponse);
-        self.jobs_api.delete_job(id, body, context).await
+        self.jobs_api.delete_job(id, context).await
     }
 
     pub(super) async fn transport_reset_job_status(
@@ -631,7 +624,6 @@ where
         id: i64,
         failed_only: Option<bool>,
         context: &C,
-        body: Option<serde_json::Value>,
     ) -> Result<ResetJobStatusResponse, ApiError> {
         info!(
             "reset_job_status(workflow_id={}, failed_only={:?}) - X-Span-ID: {:?}",
@@ -645,7 +637,7 @@ where
         let failed_only_value = failed_only.unwrap_or(false);
         let result = self
             .jobs_api
-            .reset_job_status(id, failed_only_value, body, context)
+            .reset_job_status(id, failed_only_value, context)
             .await?;
 
         if let ResetJobStatusResponse::SuccessfulResponse(ref response) = result {
@@ -678,15 +670,13 @@ where
         id: i64,
         status: models::JobStatus,
         run_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<ManageStatusChangeResponse, ApiError> {
         debug!(
-            "manage_status_change({}, {:?}, {}, {:?}) - X-Span-ID: {:?}",
+            "manage_status_change({}, {:?}, {}) - X-Span-ID: {:?}",
             id,
             status,
             run_id,
-            body,
             Has::<XSpanIdString>::get(context).0.clone()
         );
 
@@ -827,15 +817,13 @@ where
         id: i64,
         run_id: i64,
         compute_node_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<StartJobResponse, ApiError> {
         debug!(
-            "start_job({}, {}, {}, {:?}) - X-Span-ID: {:?}",
+            "start_job({}, {}, {}) - X-Span-ID: {:?}",
             id,
             run_id,
             compute_node_id,
-            body,
             Has::<XSpanIdString>::get(context).0.clone()
         );
 

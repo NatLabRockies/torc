@@ -190,7 +190,7 @@ fn test_get_pending_actions(start_server: &ServerProcess) {
         .expect("Failed to create action");
 
     // Initialize the workflow to trigger on_workflow_start actions
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize workflow");
 
     // Get pending actions (should include the newly created action)
@@ -229,7 +229,7 @@ fn test_claim_action_success(start_server: &ServerProcess) {
     let action_id = created_action.id.unwrap();
 
     // Initialize the workflow to trigger on_workflow_start actions
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize workflow");
 
     // Claim the action
@@ -280,7 +280,7 @@ fn test_claim_action_already_claimed(start_server: &ServerProcess) {
     let action_id = created_action.id.unwrap();
 
     // Initialize the workflow to trigger on_workflow_start actions
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize workflow");
 
     // First claim should succeed
@@ -501,7 +501,7 @@ fn test_action_status_lifecycle(start_server: &ServerProcess) {
     assert!(created_action.executed_by.is_none());
 
     // Initialize the workflow to trigger on_workflow_start actions
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize workflow");
 
     // Claim the action
@@ -604,14 +604,8 @@ fn test_action_executed_flag_reset_on_reinitialize(start_server: &ServerProcess)
 
     // === First run: Complete job1 with FAILURE ===
     // Note: status must match return_code - non-zero return_code requires Failed status
-    apis::jobs_api::manage_status_change(
-        config,
-        job1_id,
-        torc::models::JobStatus::Running,
-        run_id,
-        None,
-    )
-    .expect("Failed to set job1 to running");
+    apis::jobs_api::manage_status_change(config, job1_id, torc::models::JobStatus::Running, run_id)
+        .expect("Failed to set job1 to running");
     let result1 = torc::models::ResultModel::new(
         job1_id,
         workflow_id,
@@ -627,14 +621,8 @@ fn test_action_executed_flag_reset_on_reinitialize(start_server: &ServerProcess)
         .expect("Failed to complete job1 with failure");
 
     // === First run: Complete job2 with SUCCESS ===
-    apis::jobs_api::manage_status_change(
-        config,
-        job2_id,
-        torc::models::JobStatus::Running,
-        run_id,
-        None,
-    )
-    .expect("Failed to set job2 to running");
+    apis::jobs_api::manage_status_change(config, job2_id, torc::models::JobStatus::Running, run_id)
+        .expect("Failed to set job2 to running");
     let result2 = torc::models::ResultModel::new(
         job2_id,
         workflow_id,
@@ -686,7 +674,7 @@ fn test_action_executed_flag_reset_on_reinitialize(start_server: &ServerProcess)
     assert_eq!(action.trigger_count, 1);
 
     // === Reset failed job and reinitialize using WorkflowManager ===
-    apis::workflows_api::reset_job_status(config, workflow_id, Some(true), None)
+    apis::workflows_api::reset_job_status(config, workflow_id, Some(true))
         .expect("Failed to reset failed jobs");
 
     // Reinitialize workflow using WorkflowManager (this gets a new run_id)
@@ -754,7 +742,6 @@ fn test_action_executed_flag_reset_on_reinitialize(start_server: &ServerProcess)
         job1_id,
         torc::models::JobStatus::Running,
         run_id2,
-        None,
     )
     .expect("Failed to set job1 to running");
     let result1_second = torc::models::ResultModel::new(

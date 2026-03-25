@@ -108,7 +108,7 @@ The generated Rust client is tag-grouped. Current generated modules include doma
 - `src/client/apis/access_control_api.rs`
 - `src/client/apis/workflow_actions_api.rs`
 - `src/client/apis/remote_workers_api.rs`
-- `src/client/apis/ro_crate_api.rs`
+- `src/client/apis/ro_crate_entities_api.rs`
 - `src/client/apis/system_api.rs`
 
 The rest of the Rust codebase now calls those grouped generated modules directly.
@@ -120,7 +120,7 @@ The Python and Julia clients are generated from `api/openapi.yaml`.
 Relevant files:
 
 - `api/regenerate_clients.sh`
-  - Regenerates Python and Julia clients from the selected spec.
+  - Regenerates the Rust, Python, and Julia clients from the selected spec.
 - `api/sync_openapi.sh`
   - Main developer entrypoint for emitting, checking, promoting, and regenerating clients.
 
@@ -167,6 +167,14 @@ bash api/sync_openapi.sh clients
 
 This regenerates the Rust client from the selected spec using the checked-in template overrides,
 then regenerates the Python and Julia clients from the same spec.
+
+To iterate on clients against the Rust-emitted contract before promotion:
+
+```bash
+bash api/sync_openapi.sh emit
+bash api/sync_openapi.sh check
+bash api/sync_openapi.sh clients --use-rust-spec
+```
 
 Run the full sync flow:
 

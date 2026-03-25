@@ -1910,7 +1910,7 @@ fn test_create_workflows_from_all_example_files(start_server: &ServerProcess) {
             created_workflow.name, workflow_id
         );
 
-        apis::workflows_api::delete_workflow(&start_server.config, workflow_id, None)
+        apis::workflows_api::delete_workflow(&start_server.config, workflow_id)
             .expect("Warning: Failed to delete workflow");
     }
 }
@@ -2060,7 +2060,7 @@ fn test_scheduler_node_validation_passes_single_node_jobs_in_multi_node_allocati
     );
 
     if let Ok(workflow_id) = result {
-        let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id, None);
+        let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id);
     }
 }
 
@@ -2137,7 +2137,7 @@ fn test_scheduler_node_validation_passes_with_start_one_worker_per_node(
 
     // Clean up
     if let Ok(workflow_id) = result {
-        let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id, None);
+        let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id);
     }
 }
 
@@ -2346,7 +2346,7 @@ fn test_scheduler_node_validation_passes_with_matching_nodes(start_server: &Serv
 
     // Clean up
     if let Ok(workflow_id) = result {
-        let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id, None);
+        let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id);
     }
 }
 
@@ -2417,7 +2417,7 @@ fn test_scheduler_node_validation_skipped_with_skip_checks(start_server: &Server
 
     // Clean up
     if let Ok(workflow_id) = result {
-        let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id, None);
+        let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id);
     }
 }
 
@@ -2479,7 +2479,7 @@ fn test_scheduler_node_validation_passes_with_single_node_scheduler(start_server
 
     // Clean up
     if let Ok(workflow_id) = result {
-        let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id, None);
+        let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id);
     }
 }
 
@@ -3655,16 +3655,7 @@ fn test_create_subgraph_workflows_from_examples(start_server: &ServerProcess) {
                 Some(0),  // offset
                 Some(50), // limit
                 None,     // sort_by
-                None,     // reverse_sort
-                None,     // name filter
-                None,     // account filter
-                None,     // gres filter
-                None,     // mem filter
-                None,     // nodes filter
-                None,     // partition filter
-                None,     // qos filter
-                None,     // tmp filter
-                None,     // walltime filter
+                None,
             )
             .expect("Failed to list schedulers");
             let sched_count = response.items.len();
@@ -3686,7 +3677,7 @@ fn test_create_subgraph_workflows_from_examples(start_server: &ServerProcess) {
         }
 
         // Clean up
-        let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id, None);
+        let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id);
     }
 }
 
@@ -3828,20 +3819,11 @@ fn test_subgraph_workflow_execution_plan_from_database() {
         None,
         None,
         None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
     )
     .map(|r| r.items)
     .unwrap_or_default();
 
-    let resource_requirements = apis::admin_resources_api::list_resource_requirements(
+    let resource_requirements = apis::resource_requirements_api::list_resource_requirements(
         &start_server.config,
         workflow_id,
         None, // job_id
@@ -3938,7 +3920,7 @@ fn test_subgraph_workflow_execution_plan_from_database() {
     );
 
     // Clean up
-    let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id, None);
+    let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id);
 
     eprintln!("✓ Execution plan from database has correct 6 events (DAG structure)");
 }
@@ -4005,20 +3987,11 @@ fn test_subgraph_workflow_execution_plan_spec_vs_database() {
         None,
         None,
         None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
     )
     .map(|r| r.items)
     .unwrap_or_default();
 
-    let resource_requirements = apis::admin_resources_api::list_resource_requirements(
+    let resource_requirements = apis::resource_requirements_api::list_resource_requirements(
         &start_server.config,
         workflow_id,
         None, // job_id
@@ -4083,7 +4056,7 @@ fn test_subgraph_workflow_execution_plan_spec_vs_database() {
     );
 
     // Clean up
-    let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id, None);
+    let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id);
 
     eprintln!("✓ Execution plan from spec matches execution plan from database");
 }

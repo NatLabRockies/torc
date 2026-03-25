@@ -891,7 +891,6 @@ pub async fn create_compute_node(
     path = "/compute_nodes",
     operation_id = "delete_compute_nodes",
     params(DeleteComputeNodesQuery),
-    request_body = Option<Value>,
     responses(
         (status = 200, description = "Successful response", body = models::DeleteCountResponse),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
@@ -903,11 +902,10 @@ pub async fn delete_compute_nodes(
     State(state): State<LiveRouterState>,
     Query(query): Query<DeleteComputeNodesQuery>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
     match state
         .server
-        .delete_compute_nodes(query.workflow_id, body.map(|Json(value)| value), &context)
+        .delete_compute_nodes(query.workflow_id, &context)
         .await
     {
         Ok(response) => delete_compute_nodes_response(response),
@@ -971,7 +969,6 @@ pub async fn update_compute_node(
     path = "/compute_nodes/{id}",
     operation_id = "delete_compute_node",
     params(("id" = i64, Path, description = "Compute node ID")),
-    request_body = Option<Value>,
     responses(
         (status = 200, description = "Successful response", body = models::ComputeNodeModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
@@ -983,13 +980,8 @@ pub async fn delete_compute_node(
     State(state): State<LiveRouterState>,
     Path(id): Path<i64>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
-    match state
-        .server
-        .delete_compute_node(id, body.map(|Json(value)| value), &context)
-        .await
-    {
+    match state.server.delete_compute_node(id, &context).await {
         Ok(response) => delete_compute_node_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
@@ -1079,7 +1071,6 @@ pub async fn create_event(
     path = "/events",
     operation_id = "delete_events",
     params(DeleteComputeNodesQuery),
-    request_body = Option<Value>,
     responses(
         (status = 200, description = "Successful response", body = Value),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
@@ -1091,11 +1082,10 @@ pub async fn delete_events(
     State(state): State<LiveRouterState>,
     Query(query): Query<DeleteComputeNodesQuery>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
     match state
         .server
-        .delete_events(query.workflow_id, body.map(|Json(value)| value), &context)
+        .delete_events(query.workflow_id, &context)
         .await
     {
         Ok(response) => delete_events_response(response),
@@ -1159,7 +1149,6 @@ pub async fn update_event(
     path = "/events/{id}",
     operation_id = "delete_event",
     params(("id" = i64, Path, description = "ID of the event record.")),
-    request_body = Option<Value>,
     responses(
         (status = 200, description = "Successful response", body = models::EventModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
@@ -1171,13 +1160,8 @@ pub async fn delete_event(
     State(state): State<LiveRouterState>,
     Path(id): Path<i64>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
-    match state
-        .server
-        .delete_event(id, body.map(|Json(value)| value), &context)
-        .await
-    {
+    match state.server.delete_event(id, &context).await {
         Ok(response) => delete_event_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
@@ -1273,7 +1257,6 @@ pub async fn create_file(
     path = "/files",
     operation_id = "delete_files",
     params(DeleteComputeNodesQuery),
-    request_body = Option<Value>,
     responses(
         (status = 200, description = "Successful response", body = models::DeleteCountResponse),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
@@ -1285,13 +1268,8 @@ pub async fn delete_files(
     State(state): State<LiveRouterState>,
     Query(query): Query<DeleteComputeNodesQuery>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
-    match state
-        .server
-        .delete_files(query.workflow_id, body.map(|Json(value)| value), &context)
-        .await
-    {
+    match state.server.delete_files(query.workflow_id, &context).await {
         Ok(response) => delete_files_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
@@ -1353,7 +1331,6 @@ pub async fn update_file(
     path = "/files/{id}",
     operation_id = "delete_file",
     params(("id" = i64, Path, description = "File ID")),
-    request_body = Option<Value>,
     responses(
         (status = 200, description = "Successful response", body = models::FileModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
@@ -1365,13 +1342,8 @@ pub async fn delete_file(
     State(state): State<LiveRouterState>,
     Path(id): Path<i64>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
-    match state
-        .server
-        .delete_file(id, body.map(|Json(value)| value), &context)
-        .await
-    {
+    match state.server.delete_file(id, &context).await {
         Ok(response) => delete_file_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
@@ -1461,7 +1433,6 @@ pub async fn create_local_scheduler(
     path = "/local_schedulers",
     operation_id = "delete_local_schedulers",
     params(DeleteComputeNodesQuery),
-    request_body = Option<Value>,
     responses(
         (status = 200, description = "Successful response", body = models::DeleteCountResponse),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
@@ -1473,11 +1444,10 @@ pub async fn delete_local_schedulers(
     State(state): State<LiveRouterState>,
     Query(query): Query<DeleteComputeNodesQuery>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
     match state
         .server
-        .delete_local_schedulers(query.workflow_id, body.map(|Json(value)| value), &context)
+        .delete_local_schedulers(query.workflow_id, &context)
         .await
     {
         Ok(response) => delete_local_schedulers_response(response),
@@ -1545,7 +1515,6 @@ pub async fn update_local_scheduler(
     path = "/local_schedulers/{id}",
     operation_id = "delete_local_scheduler",
     params(("id" = i64, Path, description = "Local scheduler ID")),
-    request_body = Option<Value>,
     responses(
         (status = 200, description = "Successful response", body = models::LocalSchedulerModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
@@ -1557,13 +1526,8 @@ pub async fn delete_local_scheduler(
     State(state): State<LiveRouterState>,
     Path(id): Path<i64>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
-    match state
-        .server
-        .delete_local_scheduler(id, body.map(|Json(value)| value), &context)
-        .await
-    {
+    match state.server.delete_local_scheduler(id, &context).await {
         Ok(response) => delete_local_scheduler_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
@@ -1696,7 +1660,6 @@ pub async fn list_resource_requirements(
     path = "/resource_requirements",
     operation_id = "delete_resource_requirements",
     params(DeleteComputeNodesQuery),
-    request_body = Option<Value>,
     responses(
         (status = 200, description = "Successful response", body = Value),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
@@ -1708,15 +1671,10 @@ pub async fn delete_all_resource_requirements(
     State(state): State<LiveRouterState>,
     Query(query): Query<DeleteComputeNodesQuery>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
     match state
         .server
-        .delete_all_resource_requirements(
-            query.workflow_id,
-            body.map(|Json(value)| value),
-            &context,
-        )
+        .delete_all_resource_requirements(query.workflow_id, &context)
         .await
     {
         Ok(response) => delete_all_resource_requirements_response(response),
@@ -1785,7 +1743,6 @@ pub async fn update_resource_requirements(
     path = "/resource_requirements/{id}",
     operation_id = "delete_resource_requirement",
     params(("id" = i64, Path, description = "Resource requirements ID")),
-    request_body = Option<Value>,
     responses(
         (status = 200, description = "Successful response", body = models::ResourceRequirementsModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
@@ -1797,11 +1754,10 @@ pub async fn delete_resource_requirements(
     State(state): State<LiveRouterState>,
     Path(id): Path<i64>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
     match state
         .server
-        .delete_resource_requirements(id, body.map(|Json(value)| value), &context)
+        .delete_resource_requirements(id, &context)
         .await
     {
         Ok(response) => delete_resource_requirements_response(response),
@@ -1863,7 +1819,6 @@ pub async fn get_failure_handler(
     path = "/failure_handlers/{id}",
     operation_id = "delete_failure_handler",
     params(("id" = i64, Path, description = "Failure handler ID")),
-    request_body = Option<Value>,
     responses(
         (status = 200, description = "Successful response", body = models::FailureHandlerModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
@@ -1875,13 +1830,8 @@ pub async fn delete_failure_handler(
     State(state): State<LiveRouterState>,
     Path(id): Path<i64>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
-    match state
-        .server
-        .delete_failure_handler(id, body.map(|Json(value)| value), &context)
-        .await
-    {
+    match state.server.delete_failure_handler(id, &context).await {
         Ok(response) => delete_failure_handler_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
@@ -2080,7 +2030,6 @@ pub async fn create_job(
     path = "/jobs",
     operation_id = "delete_jobs",
     params(DeleteJobsQuery),
-    request_body = Option<Value>,
     responses(
         (status = 200, description = "Successful response", body = models::DeleteCountResponse),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
@@ -2092,13 +2041,8 @@ pub async fn delete_jobs(
     State(state): State<LiveRouterState>,
     Query(query): Query<DeleteJobsQuery>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
-    match state
-        .server
-        .delete_jobs(query.workflow_id, body.map(|Json(value)| value), &context)
-        .await
-    {
+    match state.server.delete_jobs(query.workflow_id, &context).await {
         Ok(response) => delete_jobs_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
@@ -2160,7 +2104,6 @@ pub async fn update_job(
     path = "/jobs/{id}",
     operation_id = "delete_job",
     params(("id" = i64, Path, description = "Job ID")),
-    request_body = Option<Value>,
     responses(
         (status = 200, description = "Successful response", body = models::JobModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
@@ -2172,13 +2115,8 @@ pub async fn delete_job(
     State(state): State<LiveRouterState>,
     Path(id): Path<i64>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
-    match state
-        .server
-        .delete_job(id, body.map(|Json(value)| value), &context)
-        .await
-    {
+    match state.server.delete_job(id, &context).await {
         Ok(response) => delete_job_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
@@ -2228,7 +2166,6 @@ pub async fn complete_job(
         ("status" = models::JobStatus, Path, description = "New job status"),
         ("run_id" = i64, Path, description = "Current job run ID")
     ),
-    request_body = Option<Value>,
     responses(
         (status = 200, description = "Successful response", body = models::JobModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
@@ -2240,11 +2177,10 @@ pub async fn manage_status_change(
     State(state): State<LiveRouterState>,
     Path((id, status, run_id)): Path<(i64, models::JobStatus, i64)>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
     match state
         .server
-        .manage_status_change(id, status, run_id, body.map(|Json(value)| value), &context)
+        .manage_status_change(id, status, run_id, &context)
         .await
     {
         Ok(response) => manage_status_change_response(response),
@@ -2262,7 +2198,6 @@ pub async fn manage_status_change(
         ("run_id" = i64, Path, description = "Current job run ID"),
         ("compute_node_id" = i64, Path, description = "Compute node ID that started the job")
     ),
-    request_body = Option<Value>,
     responses(
         (status = 200, description = "Successful response", body = models::JobModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
@@ -2274,17 +2209,10 @@ pub async fn start_job(
     State(state): State<LiveRouterState>,
     Path((id, run_id, compute_node_id)): Path<(i64, i64, i64)>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
     match state
         .server
-        .start_job(
-            id,
-            run_id,
-            compute_node_id,
-            body.map(|Json(value)| value),
-            &context,
-        )
+        .start_job(id, run_id, compute_node_id, &context)
         .await
     {
         Ok(response) => start_job_response(response),
@@ -2430,7 +2358,6 @@ pub async fn create_user_data(
     path = "/user_data",
     operation_id = "delete_all_user_data",
     params(DeleteComputeNodesQuery),
-    request_body = Option<Value>,
     responses(
         (status = 200, description = "Successful response", body = Value),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
@@ -2442,11 +2369,10 @@ pub async fn delete_all_user_data(
     State(state): State<LiveRouterState>,
     Query(query): Query<DeleteComputeNodesQuery>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
     match state
         .server
-        .delete_all_user_data(query.workflow_id, body.map(|Json(value)| value), &context)
+        .delete_all_user_data(query.workflow_id, &context)
         .await
     {
         Ok(response) => delete_all_user_data_response(response),
@@ -2510,7 +2436,6 @@ pub async fn update_user_data(
     path = "/user_data/{id}",
     operation_id = "delete_user_data",
     params(("id" = i64, Path, description = "User data record ID")),
-    request_body = Option<Value>,
     responses(
         (status = 200, description = "Successful response", body = models::UserDataModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
@@ -2522,13 +2447,8 @@ pub async fn delete_user_data(
     State(state): State<LiveRouterState>,
     Path(id): Path<i64>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
-    match state
-        .server
-        .delete_user_data(id, body.map(|Json(value)| value), &context)
-        .await
-    {
+    match state.server.delete_user_data(id, &context).await {
         Ok(response) => delete_user_data_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
@@ -2630,7 +2550,6 @@ pub async fn create_result(
     path = "/results",
     operation_id = "delete_results",
     params(DeleteComputeNodesQuery),
-    request_body = Option<Value>,
     responses(
         (status = 200, description = "Successful response", body = Value),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
@@ -2642,11 +2561,10 @@ pub async fn delete_results(
     State(state): State<LiveRouterState>,
     Query(query): Query<DeleteComputeNodesQuery>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
     match state
         .server
-        .delete_results(query.workflow_id, body.map(|Json(value)| value), &context)
+        .delete_results(query.workflow_id, &context)
         .await
     {
         Ok(response) => delete_results_response(response),
@@ -2710,7 +2628,6 @@ pub async fn update_result(
     path = "/results/{id}",
     operation_id = "delete_result",
     params(("id" = i64, Path, description = "Results ID")),
-    request_body = Option<Value>,
     responses(
         (status = 200, description = "Successful response", body = models::ResultModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
@@ -2722,13 +2639,8 @@ pub async fn delete_result(
     State(state): State<LiveRouterState>,
     Path(id): Path<i64>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
-    match state
-        .server
-        .delete_result(id, body.map(|Json(value)| value), &context)
-        .await
-    {
+    match state.server.delete_result(id, &context).await {
         Ok(response) => delete_result_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
@@ -2838,7 +2750,6 @@ pub async fn create_scheduled_compute_node(
     path = "/scheduled_compute_nodes",
     operation_id = "delete_scheduled_compute_nodes",
     params(DeleteComputeNodesQuery),
-    request_body = Option<Value>,
     responses(
         (status = 200, description = "Successful response", body = models::DeleteCountResponse),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
@@ -2850,11 +2761,10 @@ pub async fn delete_scheduled_compute_nodes(
     State(state): State<LiveRouterState>,
     Query(query): Query<DeleteComputeNodesQuery>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
     match state
         .server
-        .delete_scheduled_compute_nodes(query.workflow_id, body.map(|Json(value)| value), &context)
+        .delete_scheduled_compute_nodes(query.workflow_id, &context)
         .await
     {
         Ok(response) => delete_scheduled_compute_nodes_response(response),
@@ -2922,7 +2832,6 @@ pub async fn update_scheduled_compute_node(
     path = "/scheduled_compute_nodes/{id}",
     operation_id = "delete_scheduled_compute_node",
     params(("id" = i64, Path, description = "Scheduled compute node ID")),
-    request_body = Option<Value>,
     responses(
         (status = 200, description = "Successful response", body = models::ScheduledComputeNodesModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
@@ -2934,11 +2843,10 @@ pub async fn delete_scheduled_compute_node(
     State(state): State<LiveRouterState>,
     Path(id): Path<i64>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
     match state
         .server
-        .delete_scheduled_compute_node(id, body.map(|Json(value)| value), &context)
+        .delete_scheduled_compute_node(id, &context)
         .await
     {
         Ok(response) => delete_scheduled_compute_node_response(response),
@@ -3020,7 +2928,6 @@ pub async fn create_slurm_scheduler(
     path = "/slurm_schedulers",
     operation_id = "delete_slurm_schedulers",
     params(DeleteComputeNodesQuery),
-    request_body = Option<Value>,
     responses(
         (status = 200, description = "Successful response", body = models::DeleteCountResponse),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
@@ -3032,11 +2939,10 @@ pub async fn delete_slurm_schedulers(
     State(state): State<LiveRouterState>,
     Query(query): Query<DeleteComputeNodesQuery>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
     match state
         .server
-        .delete_slurm_schedulers(query.workflow_id, body.map(|Json(value)| value), &context)
+        .delete_slurm_schedulers(query.workflow_id, &context)
         .await
     {
         Ok(response) => delete_slurm_schedulers_response(response),
@@ -3104,7 +3010,6 @@ pub async fn update_slurm_scheduler(
     path = "/slurm_schedulers/{id}",
     operation_id = "delete_slurm_scheduler",
     params(("id" = i64, Path, description = "Slurm compute node configuration ID")),
-    request_body = Option<Value>,
     responses(
         (status = 200, description = "Successful response", body = models::SlurmSchedulerModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
@@ -3116,13 +3021,8 @@ pub async fn delete_slurm_scheduler(
     State(state): State<LiveRouterState>,
     Path(id): Path<i64>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
-    match state
-        .server
-        .delete_slurm_scheduler(id, body.map(|Json(value)| value), &context)
-        .await
-    {
+    match state.server.delete_slurm_scheduler(id, &context).await {
         Ok(response) => delete_slurm_scheduler_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
@@ -3325,20 +3225,14 @@ pub async fn update_workflow(
     path = "/workflows/{id}",
     operation_id = "delete_workflow",
     params(("id" = i64, Path, description = "Workflow ID")),
-    request_body = Option<Value>,
     responses((status = 200, body = models::WorkflowModel))
 )]
 pub async fn delete_workflow(
     State(state): State<LiveRouterState>,
     Path(id): Path<i64>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
-    match state
-        .server
-        .delete_workflow(id, body.map(|Json(value)| value), &context)
-        .await
-    {
+    match state.server.delete_workflow(id, &context).await {
         Ok(response) => delete_workflow_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
@@ -3350,20 +3244,14 @@ pub async fn delete_workflow(
     path = "/workflows/{id}/cancel",
     operation_id = "cancel_workflow",
     params(("id" = i64, Path, description = "Workflow ID")),
-    request_body = Option<Value>,
     responses((status = 200, body = Value))
 )]
 pub async fn cancel_workflow(
     State(state): State<LiveRouterState>,
     Path(id): Path<i64>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
-    match state
-        .server
-        .cancel_workflow(id, body.map(|Json(value)| value), &context)
-        .await
-    {
+    match state.server.cancel_workflow(id, &context).await {
         Ok(response) => cancel_workflow_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
@@ -3375,7 +3263,6 @@ pub async fn cancel_workflow(
     path = "/workflows/{id}/initialize_jobs",
     operation_id = "initialize_jobs",
     params(("id" = i64, Path, description = "Workflow ID"), InitializeJobsQuery),
-    request_body = Option<Value>,
     responses((status = 200, body = Value))
 )]
 pub async fn initialize_jobs(
@@ -3383,7 +3270,6 @@ pub async fn initialize_jobs(
     Path(id): Path<i64>,
     Query(query): Query<InitializeJobsQuery>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
     match state
         .server
@@ -3391,7 +3277,6 @@ pub async fn initialize_jobs(
             id,
             query.only_uninitialized,
             query.clear_ephemeral_user_data,
-            body.map(|Json(value)| value),
             &context,
         )
         .await
@@ -3445,7 +3330,6 @@ pub async fn is_workflow_uninitialized(
     path = "/workflows/{id}/reset_status",
     operation_id = "reset_workflow_status",
     params(("id" = i64, Path, description = "Workflow ID"), ResetWorkflowStatusQuery),
-    request_body = Option<Value>,
     responses((status = 200, body = Value))
 )]
 pub async fn reset_workflow_status(
@@ -3453,11 +3337,10 @@ pub async fn reset_workflow_status(
     Path(id): Path<i64>,
     Query(query): Query<ResetWorkflowStatusQuery>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
     match state
         .server
-        .reset_workflow_status(id, query.force, body.map(|Json(value)| value), &context)
+        .reset_workflow_status(id, query.force, &context)
         .await
     {
         Ok(response) => reset_workflow_status_response(response),
@@ -3471,7 +3354,6 @@ pub async fn reset_workflow_status(
     path = "/workflows/{id}/reset_job_status",
     operation_id = "reset_job_status",
     params(("id" = i64, Path, description = "Workflow ID"), ResetJobStatusQuery),
-    request_body = Option<Value>,
     responses((status = 200, body = models::ResetJobStatusResponse))
 )]
 pub async fn reset_job_status(
@@ -3479,16 +3361,10 @@ pub async fn reset_job_status(
     Path(id): Path<i64>,
     Query(query): Query<ResetJobStatusQuery>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
     match state
         .server
-        .reset_job_status(
-            id,
-            query.failed_only,
-            body.map(|Json(value)| value),
-            &context,
-        )
+        .reset_job_status(id, query.failed_only, &context)
         .await
     {
         Ok(response) => reset_job_status_response(response),
@@ -3576,7 +3452,6 @@ pub async fn claim_jobs_based_on_resources(
     path = "/workflows/{id}/claim_next_jobs",
     operation_id = "claim_next_jobs",
     params(("id" = i64, Path, description = "Workflow ID"), ClaimNextJobsQuery),
-    request_body = Option<Value>,
     responses((status = 200, body = models::ClaimNextJobsResponse))
 )]
 pub async fn claim_next_jobs(
@@ -3584,11 +3459,10 @@ pub async fn claim_next_jobs(
     Path(id): Path<i64>,
     Query(query): Query<ClaimNextJobsQuery>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
     match state
         .server
-        .claim_next_jobs(id, query.limit, body.map(|Json(value)| value), &context)
+        .claim_next_jobs(id, query.limit, &context)
         .await
     {
         Ok(response) => claim_next_jobs_response(response),
@@ -3733,7 +3607,6 @@ pub async fn list_missing_user_data(
     path = "/workflows/{id}/process_changed_job_inputs",
     operation_id = "process_changed_job_inputs",
     params(("id" = i64, Path, description = "Workflow ID"), ProcessChangedJobInputsQuery),
-    request_body = Option<Value>,
     responses((status = 200, body = models::ProcessChangedJobInputsResponse))
 )]
 pub async fn process_changed_job_inputs(
@@ -3741,11 +3614,10 @@ pub async fn process_changed_job_inputs(
     Path(id): Path<i64>,
     Query(query): Query<ProcessChangedJobInputsQuery>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
     match state
         .server
-        .process_changed_job_inputs(id, query.dry_run, body.map(|Json(value)| value), &context)
+        .process_changed_job_inputs(id, query.dry_run, &context)
         .await
     {
         Ok(response) => process_changed_job_inputs_response(response),
@@ -3988,7 +3860,6 @@ pub async fn update_ro_crate_entity(
     path = "/ro_crate_entities/{id}",
     operation_id = "delete_ro_crate_entity",
     params(("id" = i64, Path, description = "Entity ID")),
-    request_body = Option<Value>,
     responses(
         (status = 200, description = "Successful response", body = models::MessageResponse),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
@@ -4000,13 +3871,8 @@ pub async fn delete_ro_crate_entity(
     State(state): State<LiveRouterState>,
     Path(id): Path<i64>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
-    match state
-        .server
-        .delete_ro_crate_entity(id, body.map(|Json(value)| value), &context)
-        .await
-    {
+    match state.server.delete_ro_crate_entity(id, &context).await {
         Ok(response) => delete_ro_crate_entity_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
@@ -4057,7 +3923,6 @@ pub async fn list_ro_crate_entities(
     path = "/workflows/{id}/ro_crate_entities",
     operation_id = "delete_ro_crate_entities",
     params(("id" = i64, Path, description = "Workflow ID")),
-    request_body = Option<Value>,
     responses(
         (status = 200, description = "Successful response", body = models::DeleteRoCrateEntitiesResponse),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
@@ -4069,11 +3934,10 @@ pub async fn delete_ro_crate_entities(
     State(state): State<LiveRouterState>,
     Path(workflow_id): Path<i64>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Value>>,
 ) -> Response<Body> {
     match state
         .server
-        .delete_ro_crate_entities(workflow_id, body.map(|Json(value)| value), &context)
+        .delete_ro_crate_entities(workflow_id, &context)
         .await
     {
         Ok(response) => delete_ro_crate_entities_response(response),

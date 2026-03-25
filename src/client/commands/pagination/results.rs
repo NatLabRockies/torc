@@ -176,6 +176,7 @@ pub fn iter_results(
 ///
 /// # Returns
 /// `Result<Vec<ResultModel>, Error>` containing all results or an error
+#[allow(clippy::result_large_err)]
 pub fn paginate_results(
     config: &apis::configuration::Configuration,
     workflow_id: i64,

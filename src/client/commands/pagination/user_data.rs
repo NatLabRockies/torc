@@ -160,6 +160,7 @@ pub fn iter_user_data(
 ///
 /// # Returns
 /// `Result<Vec<UserDataModel>, Error>` containing all user data or an error
+#[allow(clippy::result_large_err)]
 pub fn paginate_user_data(
     config: &apis::configuration::Configuration,
     workflow_id: i64,

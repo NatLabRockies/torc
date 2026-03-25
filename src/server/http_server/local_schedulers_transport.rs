@@ -24,12 +24,11 @@ where
     pub(super) async fn transport_delete_local_schedulers(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteLocalSchedulersResponse, ApiError> {
         authorize_workflow!(self, workflow_id, context, DeleteLocalSchedulersResponse);
         self.schedulers_api
-            .delete_local_schedulers(workflow_id, body, context)
+            .delete_local_schedulers(workflow_id, context)
             .await
     }
     pub(super) async fn transport_list_local_schedulers(
@@ -92,7 +91,6 @@ where
     pub(super) async fn transport_delete_local_scheduler(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteLocalSchedulerResponse, ApiError> {
         authorize_resource!(
@@ -103,7 +101,7 @@ where
             DeleteLocalSchedulerResponse
         );
         self.schedulers_api
-            .delete_local_scheduler(id, body, context)
+            .delete_local_scheduler(id, context)
             .await
     }
 }

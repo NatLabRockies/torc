@@ -48,7 +48,7 @@ class AccessControlApi:
     @validate_call
     def add_user_to_group(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the access group")],
+        id: Annotated[StrictInt, Field(description="Access group ID")],
         user_group_membership_model: UserGroupMembershipModel,
         _request_timeout: Union[
             None,
@@ -66,7 +66,7 @@ class AccessControlApi:
         """add_user_to_group
 
 
-        :param id: ID of the access group (required)
+        :param id: Access group ID (required)
         :type id: int
         :param user_group_membership_model: (required)
         :type user_group_membership_model: UserGroupMembershipModel
@@ -118,7 +118,7 @@ class AccessControlApi:
     @validate_call
     def add_user_to_group_with_http_info(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the access group")],
+        id: Annotated[StrictInt, Field(description="Access group ID")],
         user_group_membership_model: UserGroupMembershipModel,
         _request_timeout: Union[
             None,
@@ -136,7 +136,7 @@ class AccessControlApi:
         """add_user_to_group
 
 
-        :param id: ID of the access group (required)
+        :param id: Access group ID (required)
         :type id: int
         :param user_group_membership_model: (required)
         :type user_group_membership_model: UserGroupMembershipModel
@@ -188,7 +188,7 @@ class AccessControlApi:
     @validate_call
     def add_user_to_group_without_preload_content(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the access group")],
+        id: Annotated[StrictInt, Field(description="Access group ID")],
         user_group_membership_model: UserGroupMembershipModel,
         _request_timeout: Union[
             None,
@@ -206,7 +206,7 @@ class AccessControlApi:
         """add_user_to_group
 
 
-        :param id: ID of the access group (required)
+        :param id: Access group ID (required)
         :type id: int
         :param user_group_membership_model: (required)
         :type user_group_membership_model: UserGroupMembershipModel
@@ -333,8 +333,8 @@ class AccessControlApi:
     @validate_call
     def add_workflow_to_group(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the workflow")],
-        group_id: Annotated[StrictInt, Field(description="ID of the access group")],
+        id: Annotated[StrictInt, Field(description="Workflow ID")],
+        group_id: Annotated[StrictInt, Field(description="Access group ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -351,9 +351,9 @@ class AccessControlApi:
         """add_workflow_to_group
 
 
-        :param id: ID of the workflow (required)
+        :param id: Workflow ID (required)
         :type id: int
-        :param group_id: ID of the access group (required)
+        :param group_id: Access group ID (required)
         :type group_id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -403,8 +403,8 @@ class AccessControlApi:
     @validate_call
     def add_workflow_to_group_with_http_info(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the workflow")],
-        group_id: Annotated[StrictInt, Field(description="ID of the access group")],
+        id: Annotated[StrictInt, Field(description="Workflow ID")],
+        group_id: Annotated[StrictInt, Field(description="Access group ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -421,9 +421,9 @@ class AccessControlApi:
         """add_workflow_to_group
 
 
-        :param id: ID of the workflow (required)
+        :param id: Workflow ID (required)
         :type id: int
-        :param group_id: ID of the access group (required)
+        :param group_id: Access group ID (required)
         :type group_id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -473,8 +473,8 @@ class AccessControlApi:
     @validate_call
     def add_workflow_to_group_without_preload_content(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the workflow")],
-        group_id: Annotated[StrictInt, Field(description="ID of the access group")],
+        id: Annotated[StrictInt, Field(description="Workflow ID")],
+        group_id: Annotated[StrictInt, Field(description="Access group ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -491,9 +491,9 @@ class AccessControlApi:
         """add_workflow_to_group
 
 
-        :param id: ID of the workflow (required)
+        :param id: Workflow ID (required)
         :type id: int
-        :param group_id: ID of the access group (required)
+        :param group_id: Access group ID (required)
         :type group_id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -605,8 +605,8 @@ class AccessControlApi:
     @validate_call
     def check_workflow_access(
         self,
-        workflow_id: Annotated[StrictInt, Field(description="ID of the workflow")],
-        user_name: Annotated[StrictStr, Field(description="Username to check")],
+        workflow_id: Annotated[StrictInt, Field(description="Workflow ID")],
+        user_name: Annotated[StrictStr, Field(description="Username")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -623,9 +623,9 @@ class AccessControlApi:
         """check_workflow_access
 
 
-        :param workflow_id: ID of the workflow (required)
+        :param workflow_id: Workflow ID (required)
         :type workflow_id: int
-        :param user_name: Username to check (required)
+        :param user_name: Username (required)
         :type user_name: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -675,8 +675,8 @@ class AccessControlApi:
     @validate_call
     def check_workflow_access_with_http_info(
         self,
-        workflow_id: Annotated[StrictInt, Field(description="ID of the workflow")],
-        user_name: Annotated[StrictStr, Field(description="Username to check")],
+        workflow_id: Annotated[StrictInt, Field(description="Workflow ID")],
+        user_name: Annotated[StrictStr, Field(description="Username")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -693,9 +693,9 @@ class AccessControlApi:
         """check_workflow_access
 
 
-        :param workflow_id: ID of the workflow (required)
+        :param workflow_id: Workflow ID (required)
         :type workflow_id: int
-        :param user_name: Username to check (required)
+        :param user_name: Username (required)
         :type user_name: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -745,8 +745,8 @@ class AccessControlApi:
     @validate_call
     def check_workflow_access_without_preload_content(
         self,
-        workflow_id: Annotated[StrictInt, Field(description="ID of the workflow")],
-        user_name: Annotated[StrictStr, Field(description="Username to check")],
+        workflow_id: Annotated[StrictInt, Field(description="Workflow ID")],
+        user_name: Annotated[StrictStr, Field(description="Username")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -763,9 +763,9 @@ class AccessControlApi:
         """check_workflow_access
 
 
-        :param workflow_id: ID of the workflow (required)
+        :param workflow_id: Workflow ID (required)
         :type workflow_id: int
-        :param user_name: Username to check (required)
+        :param user_name: Username (required)
         :type user_name: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -1147,7 +1147,7 @@ class AccessControlApi:
     @validate_call
     def delete_access_group(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the access group")],
+        id: Annotated[StrictInt, Field(description="Access group ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1164,7 +1164,7 @@ class AccessControlApi:
         """delete_access_group
 
 
-        :param id: ID of the access group (required)
+        :param id: Access group ID (required)
         :type id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -1213,7 +1213,7 @@ class AccessControlApi:
     @validate_call
     def delete_access_group_with_http_info(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the access group")],
+        id: Annotated[StrictInt, Field(description="Access group ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1230,7 +1230,7 @@ class AccessControlApi:
         """delete_access_group
 
 
-        :param id: ID of the access group (required)
+        :param id: Access group ID (required)
         :type id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -1279,7 +1279,7 @@ class AccessControlApi:
     @validate_call
     def delete_access_group_without_preload_content(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the access group")],
+        id: Annotated[StrictInt, Field(description="Access group ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1296,7 +1296,7 @@ class AccessControlApi:
         """delete_access_group
 
 
-        :param id: ID of the access group (required)
+        :param id: Access group ID (required)
         :type id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -1404,7 +1404,7 @@ class AccessControlApi:
     @validate_call
     def get_access_group(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the access group")],
+        id: Annotated[StrictInt, Field(description="Access group ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1421,7 +1421,7 @@ class AccessControlApi:
         """get_access_group
 
 
-        :param id: ID of the access group (required)
+        :param id: Access group ID (required)
         :type id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -1470,7 +1470,7 @@ class AccessControlApi:
     @validate_call
     def get_access_group_with_http_info(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the access group")],
+        id: Annotated[StrictInt, Field(description="Access group ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1487,7 +1487,7 @@ class AccessControlApi:
         """get_access_group
 
 
-        :param id: ID of the access group (required)
+        :param id: Access group ID (required)
         :type id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -1536,7 +1536,7 @@ class AccessControlApi:
     @validate_call
     def get_access_group_without_preload_content(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the access group")],
+        id: Annotated[StrictInt, Field(description="Access group ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1553,7 +1553,7 @@ class AccessControlApi:
         """get_access_group
 
 
-        :param id: ID of the access group (required)
+        :param id: Access group ID (required)
         :type id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -1937,7 +1937,7 @@ class AccessControlApi:
     @validate_call
     def list_group_members(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the access group")],
+        id: Annotated[StrictInt, Field(description="Access group ID")],
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
         _request_timeout: Union[
@@ -1956,7 +1956,7 @@ class AccessControlApi:
         """list_group_members
 
 
-        :param id: ID of the access group (required)
+        :param id: Access group ID (required)
         :type id: int
         :param offset:
         :type offset: int
@@ -2011,7 +2011,7 @@ class AccessControlApi:
     @validate_call
     def list_group_members_with_http_info(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the access group")],
+        id: Annotated[StrictInt, Field(description="Access group ID")],
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
         _request_timeout: Union[
@@ -2030,7 +2030,7 @@ class AccessControlApi:
         """list_group_members
 
 
-        :param id: ID of the access group (required)
+        :param id: Access group ID (required)
         :type id: int
         :param offset:
         :type offset: int
@@ -2085,7 +2085,7 @@ class AccessControlApi:
     @validate_call
     def list_group_members_without_preload_content(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the access group")],
+        id: Annotated[StrictInt, Field(description="Access group ID")],
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
         _request_timeout: Union[
@@ -2104,7 +2104,7 @@ class AccessControlApi:
         """list_group_members
 
 
-        :param id: ID of the access group (required)
+        :param id: Access group ID (required)
         :type id: int
         :param offset:
         :type offset: int
@@ -2519,7 +2519,7 @@ class AccessControlApi:
     @validate_call
     def list_workflow_groups(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the workflow")],
+        id: Annotated[StrictInt, Field(description="Workflow ID")],
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
         _request_timeout: Union[
@@ -2538,7 +2538,7 @@ class AccessControlApi:
         """list_workflow_groups
 
 
-        :param id: ID of the workflow (required)
+        :param id: Workflow ID (required)
         :type id: int
         :param offset:
         :type offset: int
@@ -2593,7 +2593,7 @@ class AccessControlApi:
     @validate_call
     def list_workflow_groups_with_http_info(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the workflow")],
+        id: Annotated[StrictInt, Field(description="Workflow ID")],
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
         _request_timeout: Union[
@@ -2612,7 +2612,7 @@ class AccessControlApi:
         """list_workflow_groups
 
 
-        :param id: ID of the workflow (required)
+        :param id: Workflow ID (required)
         :type id: int
         :param offset:
         :type offset: int
@@ -2667,7 +2667,7 @@ class AccessControlApi:
     @validate_call
     def list_workflow_groups_without_preload_content(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the workflow")],
+        id: Annotated[StrictInt, Field(description="Workflow ID")],
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
         _request_timeout: Union[
@@ -2686,7 +2686,7 @@ class AccessControlApi:
         """list_workflow_groups
 
 
-        :param id: ID of the workflow (required)
+        :param id: Workflow ID (required)
         :type id: int
         :param offset:
         :type offset: int
@@ -3052,8 +3052,8 @@ class AccessControlApi:
     @validate_call
     def remove_user_from_group(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the access group")],
-        user_name: Annotated[StrictStr, Field(description="Username to remove")],
+        id: Annotated[StrictInt, Field(description="Access group ID")],
+        user_name: Annotated[StrictStr, Field(description="Username")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -3070,9 +3070,9 @@ class AccessControlApi:
         """remove_user_from_group
 
 
-        :param id: ID of the access group (required)
+        :param id: Access group ID (required)
         :type id: int
-        :param user_name: Username to remove (required)
+        :param user_name: Username (required)
         :type user_name: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -3122,8 +3122,8 @@ class AccessControlApi:
     @validate_call
     def remove_user_from_group_with_http_info(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the access group")],
-        user_name: Annotated[StrictStr, Field(description="Username to remove")],
+        id: Annotated[StrictInt, Field(description="Access group ID")],
+        user_name: Annotated[StrictStr, Field(description="Username")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -3140,9 +3140,9 @@ class AccessControlApi:
         """remove_user_from_group
 
 
-        :param id: ID of the access group (required)
+        :param id: Access group ID (required)
         :type id: int
-        :param user_name: Username to remove (required)
+        :param user_name: Username (required)
         :type user_name: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -3192,8 +3192,8 @@ class AccessControlApi:
     @validate_call
     def remove_user_from_group_without_preload_content(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the access group")],
-        user_name: Annotated[StrictStr, Field(description="Username to remove")],
+        id: Annotated[StrictInt, Field(description="Access group ID")],
+        user_name: Annotated[StrictStr, Field(description="Username")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -3210,9 +3210,9 @@ class AccessControlApi:
         """remove_user_from_group
 
 
-        :param id: ID of the access group (required)
+        :param id: Access group ID (required)
         :type id: int
-        :param user_name: Username to remove (required)
+        :param user_name: Username (required)
         :type user_name: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -3324,8 +3324,8 @@ class AccessControlApi:
     @validate_call
     def remove_workflow_from_group(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the workflow")],
-        group_id: Annotated[StrictInt, Field(description="ID of the access group")],
+        id: Annotated[StrictInt, Field(description="Workflow ID")],
+        group_id: Annotated[StrictInt, Field(description="Access group ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -3342,9 +3342,9 @@ class AccessControlApi:
         """remove_workflow_from_group
 
 
-        :param id: ID of the workflow (required)
+        :param id: Workflow ID (required)
         :type id: int
-        :param group_id: ID of the access group (required)
+        :param group_id: Access group ID (required)
         :type group_id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -3394,8 +3394,8 @@ class AccessControlApi:
     @validate_call
     def remove_workflow_from_group_with_http_info(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the workflow")],
-        group_id: Annotated[StrictInt, Field(description="ID of the access group")],
+        id: Annotated[StrictInt, Field(description="Workflow ID")],
+        group_id: Annotated[StrictInt, Field(description="Access group ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -3412,9 +3412,9 @@ class AccessControlApi:
         """remove_workflow_from_group
 
 
-        :param id: ID of the workflow (required)
+        :param id: Workflow ID (required)
         :type id: int
-        :param group_id: ID of the access group (required)
+        :param group_id: Access group ID (required)
         :type group_id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -3464,8 +3464,8 @@ class AccessControlApi:
     @validate_call
     def remove_workflow_from_group_without_preload_content(
         self,
-        id: Annotated[StrictInt, Field(description="ID of the workflow")],
-        group_id: Annotated[StrictInt, Field(description="ID of the access group")],
+        id: Annotated[StrictInt, Field(description="Workflow ID")],
+        group_id: Annotated[StrictInt, Field(description="Access group ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -3482,9 +3482,9 @@ class AccessControlApi:
         """remove_workflow_from_group
 
 
-        :param id: ID of the workflow (required)
+        :param id: Workflow ID (required)
         :type id: int
-        :param group_id: ID of the access group (required)
+        :param group_id: Access group ID (required)
         :type group_id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request

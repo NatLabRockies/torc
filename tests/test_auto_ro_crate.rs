@@ -207,7 +207,7 @@ fn test_auto_ro_crate_input_files_on_initialize(start_server: &ServerProcess) {
     );
 
     // Initialize the workflow - this should create RO-Crate entities for input files
-    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false), None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false))
         .expect("Failed to initialize jobs");
 
     // Verify RO-Crate entity was created for the input file
@@ -260,7 +260,7 @@ fn test_auto_ro_crate_output_files_on_job_completion(start_server: &ServerProces
     fs::write(work_dir.join("input.json"), input_data).expect("Failed to write input.json");
 
     // Initialize the workflow
-    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false), None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false))
         .expect("Failed to initialize jobs");
 
     // Run the workflow
@@ -388,8 +388,7 @@ fn test_auto_ro_crate_disabled_by_default(start_server: &ServerProcess) {
     fs::write(work_dir.join("input.txt"), "test data").unwrap();
 
     // Initialize the workflow
-    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false), None)
-        .unwrap();
+    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false)).unwrap();
 
     // Verify no file-based RO-Crate entities were created (only the SoftwareApplication for torc-server)
     let entities =
@@ -421,7 +420,7 @@ fn test_auto_ro_crate_diamond_workflow(start_server: &ServerProcess) {
     fs::write(work_dir.join("f1.json"), input_data).expect("Failed to write f1.json");
 
     // Initialize the workflow
-    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false), None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false))
         .expect("Failed to initialize jobs");
 
     // Verify input file entity was created
@@ -557,7 +556,7 @@ fn test_auto_ro_crate_second_run_replaces_entities(start_server: &ServerProcess)
     fs::write(work_dir.join("input.json"), input_data_v1).expect("Failed to write input.json");
 
     // Initialize and run
-    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false), None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false))
         .expect("Failed to initialize jobs");
 
     let workflow_id_str = workflow_id.to_string();

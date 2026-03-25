@@ -352,9 +352,8 @@ fn test_delete_scheduled_compute_node(start_server: &ServerProcess) {
     let node_id = created.id.unwrap();
 
     // Delete the scheduled compute node
-    let deleted =
-        apis::scheduled_compute_nodes_api::delete_scheduled_compute_node(config, node_id, None)
-            .expect("Failed to delete scheduled compute node");
+    let deleted = apis::scheduled_compute_nodes_api::delete_scheduled_compute_node(config, node_id)
+        .expect("Failed to delete scheduled compute node");
 
     assert_eq!(deleted.id, Some(node_id));
 

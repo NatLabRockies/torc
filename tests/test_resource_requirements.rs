@@ -521,7 +521,7 @@ fn test_resource_requirements_remove_command_json(start_server: &ServerProcess) 
     assert_eq!(json_output.get("name").unwrap(), &json!("test_remove_req"));
 
     // Verify the requirement is actually removed by trying to get it
-    let get_result = apis::admin_resources_api::get_resource_requirements(config, req_id);
+    let get_result = apis::resource_requirements_api::get_resource_requirements(config, req_id);
     assert!(
         get_result.is_err(),
         "Resource requirement should be deleted"

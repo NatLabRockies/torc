@@ -152,6 +152,7 @@ pub fn iter_files(
 ///
 /// # Returns
 /// `Result<Vec<FileModel>, Error>` containing all files or an error
+#[allow(clippy::result_large_err)]
 pub fn paginate_files(
     config: &apis::configuration::Configuration,
     workflow_id: i64,

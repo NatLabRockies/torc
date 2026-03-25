@@ -30,8 +30,8 @@ Method | HTTP request | Description
 
 
 # **cancel_workflow**
-> cancel_workflow(_api::WorkflowsApi, id::Int64; body=nothing, _mediaType=nothing) -> Any, OpenAPI.Clients.ApiResponse <br/>
-> cancel_workflow(_api::WorkflowsApi, response_stream::Channel, id::Int64; body=nothing, _mediaType=nothing) -> Channel{ Any }, OpenAPI.Clients.ApiResponse
+> cancel_workflow(_api::WorkflowsApi, id::Int64; _mediaType=nothing) -> Any, OpenAPI.Clients.ApiResponse <br/>
+> cancel_workflow(_api::WorkflowsApi, response_stream::Channel, id::Int64; _mediaType=nothing) -> Channel{ Any }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -41,12 +41,6 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **WorkflowsApi** | API context | 
 **id** | **Int64** | Workflow ID |
-
-### Optional Parameters
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
 
 ### Return type
 
@@ -58,7 +52,7 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: application/json
+ - **Content-Type**: Not defined
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
@@ -100,8 +94,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **claim_next_jobs**
-> claim_next_jobs(_api::WorkflowsApi, id::Int64; limit=nothing, body=nothing, _mediaType=nothing) -> ClaimNextJobsResponse, OpenAPI.Clients.ApiResponse <br/>
-> claim_next_jobs(_api::WorkflowsApi, response_stream::Channel, id::Int64; limit=nothing, body=nothing, _mediaType=nothing) -> Channel{ ClaimNextJobsResponse }, OpenAPI.Clients.ApiResponse
+> claim_next_jobs(_api::WorkflowsApi, id::Int64; limit=nothing, _mediaType=nothing) -> ClaimNextJobsResponse, OpenAPI.Clients.ApiResponse <br/>
+> claim_next_jobs(_api::WorkflowsApi, response_stream::Channel, id::Int64; limit=nothing, _mediaType=nothing) -> Channel{ ClaimNextJobsResponse }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -117,7 +111,6 @@ Name | Type | Description  | Notes
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **limit** | **Int64** |  | [default to nothing]
- **body** | **Any** |  | 
 
 ### Return type
 
@@ -129,7 +122,7 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: application/json
+ - **Content-Type**: Not defined
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
@@ -163,8 +156,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **delete_workflow**
-> delete_workflow(_api::WorkflowsApi, id::Int64; body=nothing, _mediaType=nothing) -> WorkflowModel, OpenAPI.Clients.ApiResponse <br/>
-> delete_workflow(_api::WorkflowsApi, response_stream::Channel, id::Int64; body=nothing, _mediaType=nothing) -> Channel{ WorkflowModel }, OpenAPI.Clients.ApiResponse
+> delete_workflow(_api::WorkflowsApi, id::Int64; _mediaType=nothing) -> WorkflowModel, OpenAPI.Clients.ApiResponse <br/>
+> delete_workflow(_api::WorkflowsApi, response_stream::Channel, id::Int64; _mediaType=nothing) -> Channel{ WorkflowModel }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -173,13 +166,7 @@ No authorization required
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **WorkflowsApi** | API context | 
-**id** | **Int64** | Workflow ID. |
-
-### Optional Parameters
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **body** | **Any** |  | 
+**id** | **Int64** | Workflow ID |
 
 ### Return type
 
@@ -191,7 +178,7 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: application/json
+ - **Content-Type**: Not defined
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
@@ -241,7 +228,7 @@ No authorization required
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **WorkflowsApi** | API context | 
-**id** | **Int64** | ID of the workflows record |
+**id** | **Int64** | Workflow ID |
 
 ### Return type
 
@@ -287,8 +274,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **initialize_jobs**
-> initialize_jobs(_api::WorkflowsApi, id::Int64; only_uninitialized=nothing, clear_ephemeral_user_data=nothing, body=nothing, _mediaType=nothing) -> Any, OpenAPI.Clients.ApiResponse <br/>
-> initialize_jobs(_api::WorkflowsApi, response_stream::Channel, id::Int64; only_uninitialized=nothing, clear_ephemeral_user_data=nothing, body=nothing, _mediaType=nothing) -> Channel{ Any }, OpenAPI.Clients.ApiResponse
+> initialize_jobs(_api::WorkflowsApi, id::Int64; only_uninitialized=nothing, clear_ephemeral_user_data=nothing, _mediaType=nothing) -> Any, OpenAPI.Clients.ApiResponse <br/>
+> initialize_jobs(_api::WorkflowsApi, response_stream::Channel, id::Int64; only_uninitialized=nothing, clear_ephemeral_user_data=nothing, _mediaType=nothing) -> Channel{ Any }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -305,7 +292,6 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **only_uninitialized** | **Bool** |  | [default to nothing]
  **clear_ephemeral_user_data** | **Bool** |  | [default to nothing]
- **body** | **Any** |  | 
 
 ### Return type
 
@@ -317,7 +303,7 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: application/json
+ - **Content-Type**: Not defined
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
@@ -614,8 +600,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **process_changed_job_inputs**
-> process_changed_job_inputs(_api::WorkflowsApi, id::Int64; dry_run=nothing, body=nothing, _mediaType=nothing) -> ProcessChangedJobInputsResponse, OpenAPI.Clients.ApiResponse <br/>
-> process_changed_job_inputs(_api::WorkflowsApi, response_stream::Channel, id::Int64; dry_run=nothing, body=nothing, _mediaType=nothing) -> Channel{ ProcessChangedJobInputsResponse }, OpenAPI.Clients.ApiResponse
+> process_changed_job_inputs(_api::WorkflowsApi, id::Int64; dry_run=nothing, _mediaType=nothing) -> ProcessChangedJobInputsResponse, OpenAPI.Clients.ApiResponse <br/>
+> process_changed_job_inputs(_api::WorkflowsApi, response_stream::Channel, id::Int64; dry_run=nothing, _mediaType=nothing) -> Channel{ ProcessChangedJobInputsResponse }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -631,7 +617,6 @@ Name | Type | Description  | Notes
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **dry_run** | **Bool** |  | [default to nothing]
- **body** | **Any** |  | 
 
 ### Return type
 
@@ -643,14 +628,14 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: application/json
+ - **Content-Type**: Not defined
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **reset_job_status**
-> reset_job_status(_api::WorkflowsApi, id::Int64; failed_only=nothing, body=nothing, _mediaType=nothing) -> ResetJobStatusResponse, OpenAPI.Clients.ApiResponse <br/>
-> reset_job_status(_api::WorkflowsApi, response_stream::Channel, id::Int64; failed_only=nothing, body=nothing, _mediaType=nothing) -> Channel{ ResetJobStatusResponse }, OpenAPI.Clients.ApiResponse
+> reset_job_status(_api::WorkflowsApi, id::Int64; failed_only=nothing, _mediaType=nothing) -> ResetJobStatusResponse, OpenAPI.Clients.ApiResponse <br/>
+> reset_job_status(_api::WorkflowsApi, response_stream::Channel, id::Int64; failed_only=nothing, _mediaType=nothing) -> Channel{ ResetJobStatusResponse }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -666,7 +651,6 @@ Name | Type | Description  | Notes
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **failed_only** | **Bool** |  | [default to nothing]
- **body** | **Any** |  | 
 
 ### Return type
 
@@ -678,14 +662,14 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: application/json
+ - **Content-Type**: Not defined
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **reset_workflow_status**
-> reset_workflow_status(_api::WorkflowsApi, id::Int64; force=nothing, body=nothing, _mediaType=nothing) -> Any, OpenAPI.Clients.ApiResponse <br/>
-> reset_workflow_status(_api::WorkflowsApi, response_stream::Channel, id::Int64; force=nothing, body=nothing, _mediaType=nothing) -> Channel{ Any }, OpenAPI.Clients.ApiResponse
+> reset_workflow_status(_api::WorkflowsApi, id::Int64; force=nothing, _mediaType=nothing) -> Any, OpenAPI.Clients.ApiResponse <br/>
+> reset_workflow_status(_api::WorkflowsApi, response_stream::Channel, id::Int64; force=nothing, _mediaType=nothing) -> Channel{ Any }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -701,7 +685,6 @@ Name | Type | Description  | Notes
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **force** | **Bool** |  | [default to nothing]
- **body** | **Any** |  | 
 
 ### Return type
 
@@ -713,7 +696,7 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: application/json
+ - **Content-Type**: Not defined
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)

@@ -33,7 +33,7 @@ fn create_workflow_with_job_states(
     rr.num_nodes = 1;
     rr.memory = "8g".to_string();
     rr.runtime = "PT1H".to_string();
-    let rr = apis::admin_resources_api::create_resource_requirements(config, rr)
+    let rr = apis::resource_requirements_api::create_resource_requirements(config, rr)
         .expect("Failed to create resource requirements");
     let rr_id = rr.id.unwrap();
 
@@ -52,7 +52,7 @@ fn create_workflow_with_job_states(
 
     // Initialize jobs - after this, jobs without dependencies will be "ready",
     // jobs with dependencies will be "blocked"
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
     (workflow_id, job_ids)
@@ -78,7 +78,7 @@ fn create_multi_stage_workflow(
     rr.num_nodes = 1;
     rr.memory = "8g".to_string();
     rr.runtime = "PT1H".to_string();
-    let rr = apis::admin_resources_api::create_resource_requirements(config, rr)
+    let rr = apis::resource_requirements_api::create_resource_requirements(config, rr)
         .expect("Failed to create resource requirements");
     let rr_id = rr.id.unwrap();
 
@@ -145,7 +145,7 @@ fn create_multi_stage_workflow(
         apis::jobs_api::create_job(config, postprocess).expect("Failed to create postprocess job");
 
     // Initialize workflow
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
     // Build job_ids map
@@ -177,7 +177,7 @@ fn create_workflow_with_varied_resources(
     rr_small.num_nodes = 1;
     rr_small.memory = "8g".to_string();
     rr_small.runtime = "PT1H".to_string();
-    let rr_small = apis::admin_resources_api::create_resource_requirements(config, rr_small)
+    let rr_small = apis::resource_requirements_api::create_resource_requirements(config, rr_small)
         .expect("Failed to create small resource requirements");
 
     // Create large resource requirements (one job per node)
@@ -187,7 +187,7 @@ fn create_workflow_with_varied_resources(
     rr_large.num_nodes = 1;
     rr_large.memory = "120g".to_string();
     rr_large.runtime = "PT4H".to_string();
-    let rr_large = apis::admin_resources_api::create_resource_requirements(config, rr_large)
+    let rr_large = apis::resource_requirements_api::create_resource_requirements(config, rr_large)
         .expect("Failed to create large resource requirements");
 
     // Create GPU resource requirements
@@ -197,7 +197,7 @@ fn create_workflow_with_varied_resources(
     rr_gpu.num_nodes = 1;
     rr_gpu.memory = "64g".to_string();
     rr_gpu.runtime = "PT2H".to_string();
-    let rr_gpu = apis::admin_resources_api::create_resource_requirements(config, rr_gpu)
+    let rr_gpu = apis::resource_requirements_api::create_resource_requirements(config, rr_gpu)
         .expect("Failed to create GPU resource requirements");
 
     // Create jobs with different resource requirements
@@ -240,7 +240,7 @@ fn create_workflow_with_varied_resources(
     }
 
     // Initialize workflow
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
     (workflow_id, job_ids)
@@ -253,15 +253,6 @@ fn get_scheduler_count(config: &Configuration, workflow_id: i64) -> usize {
         workflow_id,
         Some(0),
         Some(100),
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
         None,
         None,
     )
@@ -590,15 +581,6 @@ fn test_regenerate_uses_existing_account(start_server: &ServerProcess) {
         Some(100),
         None,
         None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
     )
     .expect("Failed to list schedulers");
 
@@ -652,7 +634,7 @@ fn test_regenerate_with_default_resource_requirements(start_server: &ServerProce
     );
 
     // Initialize
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize");
 
     // Run regenerate command
