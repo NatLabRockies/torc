@@ -100,12 +100,19 @@ mod unix_main {
         workflow_id: i64,
         wait_for_healthy_database_minutes: u64,
     ) -> bool {
+        fn box_retry_error<T, E>(result: Result<T, E>) -> Result<T, Box<dyn std::error::Error>>
+        where
+            E: std::fmt::Display,
+        {
+            result.map_err(|err| err.to_string().into())
+        }
+
         let mut offset = 0i64;
         loop {
             let response = match utils::send_with_retries(
                 config,
                 || {
-                    apis::resource_requirements_api::list_resource_requirements(
+                    box_retry_error(apis::resource_requirements_api::list_resource_requirements(
                         config,
                         workflow_id,
                         None,
@@ -119,7 +126,7 @@ mod unix_main {
                         Some(100),
                         None,
                         None,
-                    )
+                    ))
                 },
                 wait_for_healthy_database_minutes,
             ) {
