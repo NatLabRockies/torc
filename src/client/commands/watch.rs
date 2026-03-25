@@ -27,12 +27,32 @@ pub use super::orphan_detection::ORPHANED_JOB_RETURN_CODE;
 /// Default wait time for database connectivity issues (in minutes)
 const WAIT_FOR_HEALTHY_DATABASE_MINUTES: u64 = 20;
 
+#[derive(Debug)]
+struct RetryApiError(String);
+
+impl std::fmt::Display for RetryApiError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for RetryApiError {}
+
+fn box_retry_error<T, E>(result: Result<T, E>) -> Result<T, Box<dyn std::error::Error>>
+where
+    E: std::fmt::Display,
+{
+    result.map_err(|err| Box::new(RetryApiError(err.to_string())) as Box<dyn std::error::Error>)
+}
+
 /// Execute an API call with automatic retries for network errors.
 /// This wraps utils::send_with_retries with a default timeout.
-fn send_with_retries<T, E, F>(config: &Configuration, api_call: F) -> Result<T, E>
+fn send_with_retries<T, F>(
+    config: &Configuration,
+    api_call: F,
+) -> Result<T, Box<dyn std::error::Error>>
 where
-    F: FnMut() -> Result<T, E>,
-    E: std::fmt::Display,
+    F: FnMut() -> Result<T, Box<dyn std::error::Error>>,
 {
     utils::send_with_retries(config, api_call, WAIT_FOR_HEALTHY_DATABASE_MINUTES)
 }
@@ -142,7 +162,7 @@ fn count_ready_retry_jobs(config: &Configuration, workflow_id: i64) -> Result<(i
 fn has_active_workers(config: &Configuration, workflow_id: i64) -> bool {
     // Check for active compute nodes (is_active=true)
     if let Ok(response) = send_with_retries(config, || {
-        apis::compute_nodes_api::list_compute_nodes(
+        box_retry_error(apis::compute_nodes_api::list_compute_nodes(
             config,
             workflow_id,
             None,       // offset
@@ -152,7 +172,7 @@ fn has_active_workers(config: &Configuration, workflow_id: i64) -> bool {
             None,       // hostname
             Some(true), // is_active = true
             None,       // scheduled_compute_node_id
-        )
+        ))
     }) && !response.items.is_empty()
     {
         return true;
@@ -168,16 +188,18 @@ fn has_active_workers(config: &Configuration, workflow_id: i64) -> bool {
 fn has_any_scheduled_compute_nodes(config: &Configuration, workflow_id: i64) -> bool {
     // Check for pending allocations
     if let Ok(response) = send_with_retries(config, || {
-        apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
-            config,
-            workflow_id,
-            None,            // offset
-            Some(1),         // limit - just need one
-            None,            // sort_by
-            None,            // reverse_sort
-            None,            // scheduler_id
-            None,            // scheduler_config_id
-            Some("pending"), // status
+        box_retry_error(
+            apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
+                config,
+                workflow_id,
+                None,            // offset
+                Some(1),         // limit - just need one
+                None,            // sort_by
+                None,            // reverse_sort
+                None,            // scheduler_id
+                None,            // scheduler_config_id
+                Some("pending"), // status
+            ),
         )
     }) && !response.items.is_empty()
     {
@@ -186,16 +208,18 @@ fn has_any_scheduled_compute_nodes(config: &Configuration, workflow_id: i64) -> 
 
     // Check for active allocations
     if let Ok(response) = send_with_retries(config, || {
-        apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
-            config,
-            workflow_id,
-            None,           // offset
-            Some(1),        // limit - just need one
-            None,           // sort_by
-            None,           // reverse_sort
-            None,           // scheduler_id
-            None,           // scheduler_config_id
-            Some("active"), // status
+        box_retry_error(
+            apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
+                config,
+                workflow_id,
+                None,           // offset
+                Some(1),        // limit - just need one
+                None,           // sort_by
+                None,           // reverse_sort
+                None,           // scheduler_id
+                None,           // scheduler_config_id
+                Some("active"), // status
+            ),
         )
     }) && !response.items.is_empty()
     {
@@ -217,16 +241,18 @@ fn has_valid_slurm_allocation(config: &Configuration, workflow_id: i64) -> bool 
 
     // First check for active allocations
     let active_nodes = send_with_retries(config, || {
-        apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
-            config,
-            workflow_id,
-            None,           // offset
-            Some(1),        // limit - just need one
-            None,           // sort_by
-            None,           // reverse_sort
-            None,           // scheduler_id
-            None,           // scheduler_config_id
-            Some("active"), // status
+        box_retry_error(
+            apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
+                config,
+                workflow_id,
+                None,           // offset
+                Some(1),        // limit - just need one
+                None,           // sort_by
+                None,           // reverse_sort
+                None,           // scheduler_id
+                None,           // scheduler_config_id
+                Some("active"), // status
+            ),
         )
     });
 
@@ -253,16 +279,18 @@ fn has_valid_slurm_allocation(config: &Configuration, workflow_id: i64) -> bool 
 
     // Check for pending allocations
     let pending_nodes = send_with_retries(config, || {
-        apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
-            config,
-            workflow_id,
-            None,            // offset
-            Some(1),         // limit - just need one
-            None,            // sort_by
-            None,            // reverse_sort
-            None,            // scheduler_id
-            None,            // scheduler_config_id
-            Some("pending"), // status
+        box_retry_error(
+            apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
+                config,
+                workflow_id,
+                None,            // offset
+                Some(1),         // limit - just need one
+                None,            // sort_by
+                None,            // reverse_sort
+                None,            // scheduler_id
+                None,            // scheduler_config_id
+                Some("pending"), // status
+            ),
         )
     });
 
@@ -327,7 +355,10 @@ fn poll_until_complete(
         // Check if workflow is complete
         if !workflow_complete {
             match send_with_retries(config, || {
-                apis::workflows_api::is_workflow_complete(config, workflow_id)
+                box_retry_error(apis::workflows_api::is_workflow_complete(
+                    config,
+                    workflow_id,
+                ))
             }) {
                 Ok(response) => {
                     if response.is_complete {

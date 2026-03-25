@@ -1555,6 +1555,24 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
 /// Default wait time (in minutes) for the database to recover from network errors
 const WAIT_FOR_HEALTHY_DATABASE_MINUTES: u64 = 20;
 
+#[derive(Debug)]
+struct RetryApiError(String);
+
+impl std::fmt::Display for RetryApiError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for RetryApiError {}
+
+fn box_retry_error<T, E>(result: Result<T, E>) -> Result<T, Box<dyn std::error::Error>>
+where
+    E: std::fmt::Display,
+{
+    result.map_err(|err| Box::new(RetryApiError(err.to_string())) as Box<dyn std::error::Error>)
+}
+
 /// Result indicating success or failure
 #[allow(clippy::too_many_arguments)]
 pub fn schedule_slurm_nodes(
@@ -1571,7 +1589,12 @@ pub fn schedule_slurm_nodes(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let scheduler = match utils::send_with_retries(
         config,
-        || apis::slurm_schedulers_api::get_slurm_scheduler(config, scheduler_config_id),
+        || {
+            box_retry_error(apis::slurm_schedulers_api::get_slurm_scheduler(
+                config,
+                scheduler_config_id,
+            ))
+        },
         WAIT_FOR_HEALTHY_DATABASE_MINUTES,
     ) {
         Ok(s) => s,
@@ -1730,9 +1753,11 @@ pub fn schedule_slurm_nodes(
                 let created_scn = match utils::send_with_retries(
                     config,
                     || {
-                        apis::scheduled_compute_nodes_api::create_scheduled_compute_node(
-                            config,
-                            scheduled_compute_node.clone(),
+                        box_retry_error(
+                            apis::scheduled_compute_nodes_api::create_scheduled_compute_node(
+                                config,
+                                scheduled_compute_node.clone(),
+                            ),
                         )
                     },
                     WAIT_FOR_HEALTHY_DATABASE_MINUTES,
@@ -1856,7 +1881,12 @@ pub fn create_compute_node(
 
     match utils::send_with_retries(
         config,
-        || apis::compute_nodes_api::create_compute_node(config, compute_node.clone()),
+        || {
+            box_retry_error(apis::compute_nodes_api::create_compute_node(
+                config,
+                compute_node.clone(),
+            ))
+        },
         WAIT_FOR_HEALTHY_DATABASE_MINUTES,
     ) {
         Ok(node) => node,
