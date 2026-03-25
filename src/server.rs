@@ -15,14 +15,14 @@ pub mod dashboard;
 pub mod event_broadcast;
 pub mod header;
 pub mod htpasswd;
-// These modules are only needed for the server binary, not the server library
-#[cfg(feature = "server-bin")]
+// These modules are needed by the server binary and by the Rust-owned OpenAPI emitter.
+#[cfg(any(feature = "server-bin", feature = "openapi-codegen"))]
 pub mod http_server;
-#[cfg(all(feature = "server-bin", feature = "openapi-codegen"))]
+#[cfg(feature = "openapi-codegen")]
 pub mod http_transport;
-#[cfg(all(feature = "server-bin", feature = "openapi-codegen"))]
+#[cfg(feature = "openapi-codegen")]
 pub mod live_router;
-#[cfg(feature = "server-bin")]
+#[cfg(any(feature = "server-bin", feature = "openapi-codegen"))]
 pub mod live_state;
 #[cfg(feature = "server-bin")]
 pub mod logging;

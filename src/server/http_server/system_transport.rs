@@ -77,7 +77,7 @@ where
 
                 {
                     let cache_guard = self.credential_cache.read();
-                    if let Some(ref cache) = *cache_guard {
+                    if let Some(cache) = cache_guard.as_ref() {
                         cache.clear();
                     }
                 }
