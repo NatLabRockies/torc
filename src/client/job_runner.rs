@@ -203,6 +203,17 @@ pub enum RecoveryOutcome {
     Error(String),
 }
 
+#[derive(Debug)]
+struct JobRunnerApiError(String);
+
+impl std::fmt::Display for JobRunnerApiError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for JobRunnerApiError {}
+
 /// Manages parallel job execution on a compute node.
 ///
 /// The JobRunner claims jobs from the server, executes them locally, and reports results.
@@ -526,14 +537,18 @@ impl JobRunner {
     ///
     /// This is a convenience method that wraps [`utils::send_with_retries`] with
     /// the JobRunner's configuration and retry settings.
-    fn send_with_retries<T, E, F>(&self, api_call: F) -> Result<T, E>
+    fn send_with_retries<T, E, F>(&self, mut api_call: F) -> Result<T, Box<dyn std::error::Error>>
     where
         F: FnMut() -> Result<T, E>,
         E: std::fmt::Display,
     {
         utils::send_with_retries(
             &self.config,
-            api_call,
+            || {
+                api_call().map_err(|err| {
+                    Box::new(JobRunnerApiError(err.to_string())) as Box<dyn std::error::Error>
+                })
+            },
             self.rules.compute_node_wait_for_healthy_database_minutes,
         )
     }
