@@ -1,4 +1,4 @@
 //! Shared HTTP API contract version.
 
 /// Version of the Torc HTTP API contract.
-pub const HTTP_API_VERSION: &str = "0.11.0";
+pub const HTTP_API_VERSION: &str = "0.12.0";

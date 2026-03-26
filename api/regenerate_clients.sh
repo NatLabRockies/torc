@@ -1,7 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
+# Pin both version (for readability) and digest (for reproducibility).
+# To update: docker pull openapitools/openapi-generator-cli:NEW_VERSION
+#            docker inspect --format='{{index .RepoDigests 0}}' openapitools/openapi-generator-cli:NEW_VERSION
 OPENAPI_CLI_VERSION="${OPENAPI_CLI_VERSION:-v7.16.0}"
+OPENAPI_CLI_DIGEST="sha256:e56372add5e038753fb91aa1bbb470724ef58382fdfc35082bf1b3e079ce353c"
 CONTAINER_EXEC="${CONTAINER_EXEC:-docker}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -64,7 +68,7 @@ docker_run run \
   -v "${SCRIPT_DIR}":/data \
   -v "${SPEC_DIR}":/spec \
   -v "${TMP_PYTHON_CLIENT}":/python_client \
-  "docker.io/openapitools/openapi-generator-cli:${OPENAPI_CLI_VERSION}" \
+  "docker.io/openapitools/openapi-generator-cli:${OPENAPI_CLI_VERSION}@${OPENAPI_CLI_DIGEST}" \
   generate -g python --input-spec="/spec/${SPEC_FILE}" -o /python_client -c /data/config.json \
   --additional-properties=packageVersion="${API_VERSION}"
 
@@ -72,7 +76,7 @@ docker_run run \
   -v "${SCRIPT_DIR}":/data \
   -v "${SPEC_DIR}":/spec \
   -v "${TMP_JULIA_CLIENT}":/julia_client \
-  "docker.io/openapitools/openapi-generator-cli:${OPENAPI_CLI_VERSION}" \
+  "docker.io/openapitools/openapi-generator-cli:${OPENAPI_CLI_VERSION}@${OPENAPI_CLI_DIGEST}" \
   generate -g julia-client --input-spec="/spec/${SPEC_FILE}" -o /julia_client \
   --additional-properties=packageVersion="${API_VERSION}"
 
