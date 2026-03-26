@@ -102,14 +102,6 @@ pub trait SystemApi<C: Send + Sync> {
     /// Check if the service is running.
     async fn ping(&self, context: &C) -> Result<PingResponse, ApiError>;
 
-    /// Build a string for a DOT graph.
-    async fn get_dot_graph(
-        &self,
-        id: i64,
-        name: String,
-        context: &C,
-    ) -> Result<GetDotGraphResponse, ApiError>;
-
     /// Reload the htpasswd file from disk (admin only).
     async fn reload_auth(&self, context: &C) -> Result<ReloadAuthResponse, ApiError>;
 }
@@ -956,14 +948,6 @@ pub trait TransportApiCore<C: Send + Sync> {
         force: Option<bool>,
         context: &C,
     ) -> Result<ResetWorkflowStatusResponse, ApiError>;
-
-    /// Build a string for a DOT graph.
-    async fn get_dot_graph(
-        &self,
-        id: i64,
-        name: String,
-        context: &C,
-    ) -> Result<GetDotGraphResponse, ApiError>;
 
     /// Change the status of a job and manage side effects.
     async fn manage_status_change(

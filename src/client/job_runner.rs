@@ -15,7 +15,8 @@
 //!
 //! 2. **Graceful Shutdown**: When the flag is set, the main loop detects it and calls
 //!    [`JobRunner::terminate_jobs()`], which sends SIGTERM to all running jobs, waits for
-//!    them to exit, and sets job status to `JobStatus::Terminated`.
+//!    them to exit, and sets job status to `JobStatus::Completed` (if exit code is 0) or
+//!    `JobStatus::Terminated` (if exit code is non-zero).
 //!
 //! # Per-Step Timeout via srun
 //!
@@ -229,7 +230,8 @@ impl std::error::Error for JobRunnerApiError {}
 /// When termination is requested:
 /// - Jobs with `supports_termination = true` receive SIGTERM (graceful shutdown)
 /// - Jobs with `supports_termination = false` receive SIGKILL (immediate kill)
-/// - All jobs are set to `JobStatus::Terminated`
+/// - Jobs that exit cleanly (exit code 0) are set to `JobStatus::Completed`
+/// - Jobs that crash or are force-killed are set to `JobStatus::Terminated`
 #[allow(dead_code)]
 pub struct JobRunner {
     config: Configuration,
@@ -935,7 +937,8 @@ impl JobRunner {
     ///    - Exit codes are captured, including negative values for signal-terminated processes
     ///
     /// 3. **Completion Phase**: Report results to the server
-    ///    - All terminated jobs are set to `JobStatus::Terminated`
+    ///    - Jobs that exited cleanly (exit code 0) are set to `JobStatus::Completed`
+    ///    - Jobs that crashed or were force-killed are set to `JobStatus::Terminated`
     ///    - Results include execution time and resource metrics (if monitoring is enabled)
     ///
     /// Terminates all running jobs with a graceful shutdown timeline.
@@ -1069,10 +1072,16 @@ impl JobRunner {
                 self.compute_node_id,
                 self.resource_monitor.as_ref(),
             );
-            result.status = JobStatus::Terminated;
             if force_killed.contains(job_id) {
                 result.return_code = timeout_exit_code as i64;
             }
+            // Jobs that exited cleanly (rc=0) handled termination gracefully - mark as Completed.
+            // Jobs that crashed or were force-killed get Terminated status.
+            result.status = if result.return_code == 0 {
+                JobStatus::Completed
+            } else {
+                JobStatus::Terminated
+            };
             results.push((*job_id, result));
         }
 

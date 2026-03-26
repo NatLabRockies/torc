@@ -67,7 +67,7 @@ pub mod cli;
 pub use models::{
     ClaimJobsBasedOnResources, ClaimNextJobsResponse, ComputeNodeModel, ComputeNodeSchedule,
     ComputeNodesResources, CreateJobsResponse, ErrorResponse, EventModel, FileModel,
-    GetDotGraphResponse, GetReadyJobRequirementsResponse, IsCompleteResponse, JobDependencyModel,
+    GetReadyJobRequirementsResponse, IsCompleteResponse, JobDependencyModel,
     JobFileRelationshipModel, JobModel, JobStatus, JobUserDataRelationshipModel, JobsModel,
     ListComputeNodesResponse, ListEventsResponse, ListFilesResponse, ListJobDependenciesResponse,
     ListJobFileRelationshipsResponse, ListJobUserDataRelationshipsResponse, ListJobsResponse,

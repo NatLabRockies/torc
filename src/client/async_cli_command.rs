@@ -848,7 +848,8 @@ impl AsyncCliCommand {
     /// capture its exit code.
     ///
     /// After this method returns, the job is marked as complete with status
-    /// `JobStatus::Terminated`.
+    /// `JobStatus::Completed` (if exit code is 0) or `JobStatus::Terminated`
+    /// (if exit code is non-zero).
     ///
     /// # Returns
     ///
@@ -880,8 +881,14 @@ impl AsyncCliCommand {
             -1
         };
 
-        // Mark as terminated with the actual exit code
-        self.handle_completion(exit_code, JobStatus::Terminated)?;
+        // Jobs that exited cleanly (rc=0) handled termination gracefully - mark as Completed.
+        // Jobs that crashed or were force-killed get Terminated status.
+        let status = if exit_code == 0 {
+            JobStatus::Completed
+        } else {
+            JobStatus::Terminated
+        };
+        self.handle_completion(exit_code, status)?;
         Ok(exit_code)
     }
 }

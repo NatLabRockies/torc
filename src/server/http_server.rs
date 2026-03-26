@@ -1593,16 +1593,6 @@ where
             .await
     }
 
-    /// Build a string for a DOT graph.
-    async fn get_dot_graph(
-        &self,
-        id: i64,
-        name: String,
-        context: &C,
-    ) -> Result<GetDotGraphResponse, ApiError> {
-        self.transport_get_dot_graph(id, name, context).await
-    }
-
     /// Change the status of a job and manage side effects.
     #[instrument(level = "debug", skip(self, context), fields(job_id = id, status = ?status, run_id))]
     async fn manage_status_change(

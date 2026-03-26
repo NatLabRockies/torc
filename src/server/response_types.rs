@@ -67,9 +67,7 @@ pub mod scheduling {
 }
 
 pub mod system {
-    pub use crate::server::api_responses::{
-        GetDotGraphResponse, GetVersionResponse, PingResponse, ReloadAuthResponse,
-    };
+    pub use crate::server::api_responses::{GetVersionResponse, PingResponse, ReloadAuthResponse};
 }
 
 pub mod workflows {

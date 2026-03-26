@@ -1403,19 +1403,6 @@ pub enum ResetWorkflowStatusResponse {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[must_use]
-pub enum GetDotGraphResponse {
-    /// Successful response
-    SuccessfulResponse(models::GetDotGraphResponse),
-    /// Forbidden - user does not have access
-    ForbiddenErrorResponse(models::ErrorResponse),
-    /// Not found error response
-    NotFoundErrorResponse(models::ErrorResponse),
-    /// Default error response
-    DefaultErrorResponse(models::ErrorResponse),
-}
-
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[must_use]
 pub enum ManageStatusChangeResponse {
     /// Successful response
     SuccessfulResponse(models::JobModel),

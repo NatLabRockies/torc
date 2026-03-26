@@ -137,7 +137,6 @@ impl From<&str> for ContentType {
 }
 
 pub mod access_control_api;
-pub mod admin_resources_api;
 pub mod compute_nodes_api;
 pub mod configuration;
 pub mod events_api;

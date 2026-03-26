@@ -96,12 +96,6 @@ pub struct VersionResponse {
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct GetDotGraphResponse {
-    pub graph: String,
-}
-
-#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ComputeNodeModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<i64>,
@@ -1022,12 +1016,6 @@ impl ListRoCrateEntitiesResponse {
             total_count,
             has_more,
         }
-    }
-}
-
-impl GetDotGraphResponse {
-    pub fn new(graph: String) -> GetDotGraphResponse {
-        GetDotGraphResponse { graph }
     }
 }
 

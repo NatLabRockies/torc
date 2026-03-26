@@ -337,10 +337,6 @@ pub fn app_router(state: LiveRouterState) -> Router {
             "/torc-service/v1/workflows/{id}/events/stream",
             get(workflow_events_stream_route),
         )
-        .route(
-            "/torc-service/v1/workflows/{id}/dot_graph/{name}",
-            get(get_dot_graph_route),
-        )
         .fallback(dashboard_fallback)
         .layer(middleware::from_fn_with_state(
             state.auth.clone(),
@@ -3952,14 +3948,6 @@ path_handler!(
         handle_workflow_events_stream(server, id, request, context).await
     }
 );
-path_handler!(
-    get_dot_graph_route,
-    (i64, String),
-    |(id, name), server, request, context| {
-        handle_get_dot_graph(server, id, name, context).await
-    }
-);
-
 fn request_context(request: &Request) -> EmptyContext {
     request
         .extensions()

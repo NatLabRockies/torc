@@ -5,6 +5,32 @@ use torc::client::version_check::{
     ServerInfo, VersionCheckResult, VersionMismatchSeverity, compare_versions, parse_version,
 };
 
+/// Helper to derive test versions relative to HTTP_API_VERSION.
+/// This ensures tests don't break when the API version is bumped.
+fn api_version_parts() -> (u32, u32, u32) {
+    parse_version(HTTP_API_VERSION).expect("HTTP_API_VERSION should be valid semver")
+}
+
+/// Returns a version string with the same major.minor but patch + 1.
+fn api_version_with_patch_bump() -> String {
+    let (major, minor, patch) = api_version_parts();
+    format!("{}.{}.{}", major, minor, patch + 1)
+}
+
+/// Returns a version string with minor + 1 (server newer than client).
+fn api_version_with_minor_bump() -> String {
+    let (major, minor, _patch) = api_version_parts();
+    format!("{}.{}.0", major, minor + 1)
+}
+
+/// Returns a version string with minor - 1 (client newer than server).
+fn api_version_with_minor_decrement() -> String {
+    let (major, minor, _patch) = api_version_parts();
+    // Ensure we don't go negative
+    let older_minor = if minor > 0 { minor - 1 } else { 0 };
+    format!("{}.{}.0", major, older_minor)
+}
+
 #[test]
 fn test_parse_version() {
     assert_eq!(parse_version("0.8.0"), Some((0, 8, 0)));
@@ -82,9 +108,10 @@ fn test_version_check_with_api_version_match() {
 
 #[test]
 fn test_version_check_with_api_version_patch_diff() {
+    // Server has same major.minor but different patch than client
     let info = ServerInfo {
         version: "0.14.0 (abc1234)".to_string(),
-        api_version: Some("0.11.1".to_string()),
+        api_version: Some(api_version_with_patch_bump()),
     };
     let result = VersionCheckResult::from_server_info(&info);
     assert_eq!(result.severity, VersionMismatchSeverity::Patch);
@@ -93,9 +120,10 @@ fn test_version_check_with_api_version_patch_diff() {
 
 #[test]
 fn test_version_check_with_api_version_client_newer() {
+    // Server has an older minor API version than client
     let info = ServerInfo {
         version: "0.12.0 (abc1234)".to_string(),
-        api_version: Some("0.7.0".to_string()),
+        api_version: Some(api_version_with_minor_decrement()),
     };
     let result = VersionCheckResult::from_server_info(&info);
     assert_eq!(result.severity, VersionMismatchSeverity::Minor);
@@ -135,10 +163,10 @@ fn test_version_check_legacy_server_no_api_version() {
 
 #[test]
 fn test_version_check_server_newer_api_is_minor() {
-    // Server has a newer minor API version — reported as Minor severity.
+    // Server has a newer minor API version than client — reported as Minor severity.
     let info = ServerInfo {
         version: "0.15.0 (abc1234)".to_string(),
-        api_version: Some("0.12.0".to_string()),
+        api_version: Some(api_version_with_minor_bump()),
     };
     let result = VersionCheckResult::from_server_info(&info);
     assert_eq!(result.severity, VersionMismatchSeverity::Minor);

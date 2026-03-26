@@ -474,7 +474,8 @@ fn test_async_cli_command_get_result() {
     assert_eq!(result.workflow_id, 1);
     assert_eq!(result.run_id, run_id);
     assert!(!result.completion_time.is_empty());
-    assert_eq!(result.status, JobStatus::Terminated);
+    // Job exited with code 0, so status should be Completed (not Terminated)
+    assert_eq!(result.status, JobStatus::Completed);
 }
 
 #[rstest]

@@ -59,18 +59,3 @@ where
         .body(Body::from_stream(stream))
         .expect("valid SSE response")
 }
-
-pub(crate) async fn handle_get_dot_graph<C>(
-    server: Server<C>,
-    id: i64,
-    name: String,
-    context: C,
-) -> Response<Body>
-where
-    C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
-{
-    match server.get_dot_graph(id, name, &context).await {
-        Ok(response) => get_dot_graph_response(response),
-        Err(err) => error_response(StatusCode::NOT_IMPLEMENTED, err.0),
-    }
-}

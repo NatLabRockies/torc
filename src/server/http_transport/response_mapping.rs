@@ -596,12 +596,6 @@ map_response_std!(
     UpdateWorkflowStatusResponse,
     SuccessfulResponse
 );
-map_response_std!(
-    get_dot_graph_response,
-    crate::server::api_responses::GetDotGraphResponse,
-    SuccessfulResponse
-);
-
 pub(crate) fn json_response<T>(body: &T) -> Response<Body>
 where
     T: serde::Serialize,

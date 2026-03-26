@@ -103,20 +103,4 @@ where
             }
         }
     }
-
-    pub(super) async fn transport_get_dot_graph(
-        &self,
-        id: i64,
-        name: String,
-        context: &C,
-    ) -> Result<GetDotGraphResponse, ApiError> {
-        debug!(
-            "get_dot_graph({}, \"{}\") - X-Span-ID: {:?}",
-            id,
-            name,
-            Has::<XSpanIdString>::get(context).0.clone()
-        );
-        error!("get_dot_graph operation is not implemented");
-        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
-    }
 }
