@@ -19,6 +19,8 @@ use crate::client::resource_correction::{
     ResourceAdjustmentReport, ResourceCorrectionContext, ResourceCorrectionOptions,
     apply_resource_corrections,
 };
+use crate::client::workflow_manager::WorkflowManager;
+use crate::config::TorcConfig;
 use crate::models::JobStatus;
 
 fn torc_command() -> Result<Command, String> {
@@ -389,7 +391,7 @@ pub fn recover_workflow(
     // reset_workflow_status rejects requests when there are pending scheduled compute nodes,
     // so we must reinitialize before creating new allocations.
     info!("Workflow reinitializing workflow_id={}", args.workflow_id);
-    reinitialize_workflow(args.workflow_id)?;
+    reinitialize_workflow(config, args.workflow_id)?;
 
     // Step 7: Regenerate Slurm schedulers and submit
     info!("Schedulers regenerating workflow_id={}", args.workflow_id);
@@ -811,7 +813,7 @@ pub fn apply_recovery_heuristics(
 
 /// Reset specific failed jobs for retry (without reinitializing)
 pub fn reset_failed_jobs(
-    _config: &Configuration,
+    config: &Configuration,
     workflow_id: i64,
     job_ids: &[i64],
 ) -> Result<usize, String> {
@@ -821,49 +823,26 @@ pub fn reset_failed_jobs(
 
     let job_count = job_ids.len();
 
-    // Reset failed jobs WITHOUT --reinitialize (we'll reinitialize separately)
-    let mut cmd = torc_command()?;
-    let output = cmd
-        .args([
-            "workflows",
-            "reset-status",
-            &workflow_id.to_string(),
-            "--failed-only",
-            "--no-prompts",
-        ])
-        .output()
-        .map_err(|e| format!("Failed to run workflow reset-status: {}", e))?;
+    apis::workflows_api::reset_workflow_status(config, workflow_id, None)
+        .map_err(|e| format!("Failed to reset workflow status: {}", e))?;
+    info!("  Reset workflow status for workflow {}", workflow_id);
 
-    // Print stdout so user sees what was reset
-    if !output.stdout.is_empty() {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        for line in stdout.lines() {
-            info!("  {}", line);
-        }
-    }
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("workflow reset-status failed: {}", stderr));
-    }
+    apis::workflows_api::reset_job_status(config, workflow_id, Some(true))
+        .map_err(|e| format!("Failed to reset failed job status: {}", e))?;
+    info!("  Reset failed job status for workflow {}", workflow_id);
 
     Ok(job_count)
 }
 
 /// Reinitialize the workflow (set up dependencies and fire on_workflow_start actions)
-pub fn reinitialize_workflow(workflow_id: i64) -> Result<(), String> {
-    let mut cmd = torc_command()?;
-    let output = cmd
-        .args(["workflows", "reinitialize", &workflow_id.to_string()])
-        .output()
-        .map_err(|e| format!("Failed to run workflow reinitialize: {}", e))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("workflow reinitialize failed: {}", stderr));
-    }
-
-    Ok(())
+pub fn reinitialize_workflow(config: &Configuration, workflow_id: i64) -> Result<(), String> {
+    let workflow = apis::workflows_api::get_workflow(config, workflow_id)
+        .map_err(|e| format!("Failed to fetch workflow for reinitialize: {}", e))?;
+    let torc_config = TorcConfig::load().unwrap_or_default();
+    let workflow_manager = WorkflowManager::new(config.clone(), torc_config, workflow);
+    workflow_manager
+        .reinitialize(false, false)
+        .map_err(|e| format!("workflow reinitialize failed: {}", e))
 }
 
 /// Run the user's custom recovery hook command

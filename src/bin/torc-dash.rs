@@ -1385,7 +1385,7 @@ async fn cli_run_stream_handler(
 
         // Spawn the command with piped stdout/stderr
         let mut child = match Command::new(&torc_bin)
-            .args(["workflows", "run", &workflow_id])
+            .args(["run", &workflow_id])
             .env("TORC_API_URL", &api_url)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())

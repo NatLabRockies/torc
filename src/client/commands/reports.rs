@@ -2,7 +2,7 @@ use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
 use crate::client::commands::output::print_json;
 use crate::client::commands::{
-    get_env_user_name, pagination, print_error, select_workflow_interactively,
+    get_env_user_name, pagination, select_workflow_interactively,
     table_format::display_table_with_count,
 };
 use crate::client::log_paths::{
@@ -798,100 +798,178 @@ pub fn build_results_report(
 
 /// Generate a summary of workflow results
 pub fn generate_summary(config: &Configuration, workflow_id: Option<i64>, format: &str) {
-    // Get or select workflow ID
-    let user = get_env_user_name();
-    let workflow_id = match workflow_id {
-        Some(id) => id,
-        None => match select_workflow_interactively(config, &user) {
-            Ok(id) => id,
-            Err(e) => {
-                eprintln!("Error selecting workflow: {}", e);
-                std::process::exit(1);
-            }
-        },
-    };
-
-    // Fetch workflow info
-    let workflow = match apis::workflows_api::get_workflow(config, workflow_id) {
-        Ok(wf) => wf,
+    let report = match build_workflow_summary_report(config, workflow_id) {
+        Ok(report) => report,
         Err(e) => {
-            print_error("fetching workflow", &e);
+            eprintln!("{}", e);
             std::process::exit(1);
         }
     };
 
-    // Check if workflow is complete
-    let completion_status = match apis::workflows_api::is_workflow_complete(config, workflow_id) {
-        Ok(status) => Some(status),
-        Err(e) => {
-            eprintln!("Warning: could not check workflow completion status: {}", e);
-            None
+    if format == "json" {
+        print_json(&report, "workflow summary");
+    } else {
+        let workflow_id = report["workflow_id"].as_i64().unwrap_or(-1);
+        let workflow_name = report["workflow_name"].as_str().unwrap_or("");
+        let workflow_user = report["workflow_user"].as_str().unwrap_or("");
+        let total_jobs = report["total_jobs"].as_u64().unwrap_or(0);
+        let jobs_by_status = report["jobs_by_status"].as_object();
+        let total_exec_time_formatted = report["total_exec_time_formatted"].as_str().unwrap_or("");
+        let walltime_formatted = report["walltime_formatted"].as_str();
+        let active_compute_nodes = report["active_compute_nodes"].as_i64().unwrap_or(0);
+        let pending_scheduled_nodes = report["pending_scheduled_nodes"].as_i64().unwrap_or(0);
+        let active_scheduled_nodes = report["active_scheduled_nodes"].as_i64().unwrap_or(0);
+        let is_complete = report["is_complete"].as_bool();
+        let is_canceled = report["is_canceled"].as_bool();
+        let completed_count = jobs_by_status
+            .and_then(|counts| counts.get("completed"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let failed_count = jobs_by_status
+            .and_then(|counts| counts.get("failed"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let terminated_count = jobs_by_status
+            .and_then(|counts| counts.get("terminated"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let canceled_count = jobs_by_status
+            .and_then(|counts| counts.get("canceled"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+
+        println!("Workflow Summary");
+        println!("================");
+        println!();
+        println!("Workflow ID: {}", workflow_id);
+        println!("Name: {}", workflow_name);
+        println!("User: {}", workflow_user);
+        println!();
+        println!("Job Status (total: {}):", total_jobs);
+        if let Some(counts) = jobs_by_status {
+            let print_if_nonzero = |label: &str, key: &str, suffix: &str| {
+                let count = counts.get(key).and_then(|v| v.as_u64()).unwrap_or(0);
+                if count > 0 {
+                    println!("  {label:<13} {count}{suffix}");
+                }
+            };
+            print_if_nonzero("Uninitialized:", "uninitialized", "");
+            print_if_nonzero("Blocked:", "blocked", "");
+            print_if_nonzero("Ready:", "ready", "");
+            print_if_nonzero("Pending:", "pending", "");
+            print_if_nonzero("Running:", "running", "");
+            print_if_nonzero("Completed:", "completed", " ✓");
+            print_if_nonzero("Failed:", "failed", " ✗");
+            print_if_nonzero("Canceled:", "canceled", "");
+            print_if_nonzero("Terminated:", "terminated", " ✗");
+            print_if_nonzero("Disabled:", "disabled", "");
+            print_if_nonzero("PendingFailed:", "pending_failed", " ⏳");
         }
+        println!();
+        println!("Total Execution Time: {}", total_exec_time_formatted);
+        if let Some(walltime) = walltime_formatted {
+            println!("Walltime:             {}", walltime);
+        }
+
+        // Show compute resources if any are active
+        if active_compute_nodes > 0 || pending_scheduled_nodes > 0 || active_scheduled_nodes > 0 {
+            println!();
+            println!("Compute Resources:");
+            if active_compute_nodes > 0 {
+                println!("  Active workers:           {}", active_compute_nodes);
+            }
+            if active_scheduled_nodes > 0 {
+                println!("  Active Slurm allocations: {}", active_scheduled_nodes);
+            }
+            if pending_scheduled_nodes > 0 {
+                println!("  Pending Slurm allocations: {}", pending_scheduled_nodes);
+            }
+        }
+
+        // Show workflow status
+        println!();
+        if let Some(is_complete) = is_complete {
+            if is_complete {
+                if failed_count > 0 || terminated_count > 0 || canceled_count > 0 {
+                    println!(
+                        "✗ Workflow complete with failures ({} failed, {} terminated, {} canceled)",
+                        failed_count, terminated_count, canceled_count
+                    );
+                } else {
+                    println!("✓ Workflow complete - all jobs finished successfully!");
+                }
+            } else if is_canceled.unwrap_or(false) {
+                println!("⊘ Workflow was canceled");
+            } else {
+                println!("◷ Workflow in progress...");
+            }
+        } else if completed_count == total_jobs {
+            println!("✓ All jobs completed successfully!");
+        }
+    }
+}
+
+pub fn build_workflow_summary_report(
+    config: &Configuration,
+    workflow_id: Option<i64>,
+) -> Result<serde_json::Value, String> {
+    let user = get_env_user_name();
+    let workflow_id = match workflow_id {
+        Some(id) => id,
+        None => select_workflow_interactively(config, &user)
+            .map_err(|e| format!("Error selecting workflow: {}", e))?,
     };
 
-    // Get active compute nodes count
-    let active_compute_nodes = match apis::compute_nodes_api::list_compute_nodes(
+    let workflow = apis::workflows_api::get_workflow(config, workflow_id)
+        .map_err(|e| format!("Error fetching workflow: {}", e))?;
+
+    let completion_status = apis::workflows_api::is_workflow_complete(config, workflow_id).ok();
+
+    let active_compute_nodes = apis::compute_nodes_api::list_compute_nodes(
         config,
         workflow_id,
-        None,       // offset
-        Some(1),    // limit - we only need the count
-        None,       // sort_by
-        None,       // reverse_sort
-        None,       // hostname
-        Some(true), // is_active = true
-        None,       // scheduled_compute_node_id
-    ) {
-        Ok(response) => response.total_count,
-        Err(_) => 0,
-    };
+        None,
+        Some(1),
+        None,
+        None,
+        None,
+        Some(true),
+        None,
+    )
+    .map(|response| response.total_count)
+    .unwrap_or(0);
 
-    // Get pending scheduled compute nodes count
-    let pending_scheduled_nodes =
-        match apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
-            config,
-            workflow_id,
-            None,            // offset
-            Some(1),         // limit - we only need the count
-            None,            // sort_by
-            None,            // reverse_sort
-            None,            // scheduler_id
-            None,            // scheduler_config_id
-            Some("pending"), // status
-        ) {
-            Ok(response) => response.total_count,
-            Err(_) => 0,
-        };
+    let pending_scheduled_nodes = apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
+        config,
+        workflow_id,
+        None,
+        Some(1),
+        None,
+        None,
+        None,
+        None,
+        Some("pending"),
+    )
+    .map(|response| response.total_count)
+    .unwrap_or(0);
 
-    // Get active scheduled compute nodes count
-    let active_scheduled_nodes =
-        match apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
-            config,
-            workflow_id,
-            None,           // offset
-            Some(1),        // limit - we only need the count
-            None,           // sort_by
-            None,           // reverse_sort
-            None,           // scheduler_id
-            None,           // scheduler_config_id
-            Some("active"), // status
-        ) {
-            Ok(response) => response.total_count,
-            Err(_) => 0,
-        };
+    let active_scheduled_nodes = apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
+        config,
+        workflow_id,
+        None,
+        Some(1),
+        None,
+        None,
+        None,
+        None,
+        Some("active"),
+    )
+    .map(|response| response.total_count)
+    .unwrap_or(0);
 
-    // Fetch all jobs to get total count
-    let jobs =
-        match pagination::paginate_jobs(config, workflow_id, pagination::JobListParams::new()) {
-            Ok(jobs) => jobs,
-            Err(e) => {
-                print_error("fetching jobs", &e);
-                std::process::exit(1);
-            }
-        };
+    let jobs = pagination::paginate_jobs(config, workflow_id, pagination::JobListParams::new())
+        .map_err(|e| format!("Error fetching jobs: {}", e))?;
 
-    let total_jobs = jobs.len();
-
-    // Count jobs by status
     let mut uninitialized_count = 0;
     let mut blocked_count = 0;
     let mut ready_count = 0;
@@ -921,30 +999,18 @@ pub fn generate_summary(config: &Configuration, workflow_id: Option<i64>, format
         }
     }
 
-    // Fetch results to get execution time stats
-    let results = match pagination::paginate_results(
-        config,
-        workflow_id,
-        pagination::ResultListParams::new(),
-    ) {
-        Ok(results) => results,
-        Err(e) => {
-            print_error("fetching results", &e);
-            std::process::exit(1);
-        }
-    };
+    let results =
+        pagination::paginate_results(config, workflow_id, pagination::ResultListParams::new())
+            .map_err(|e| format!("Error fetching results: {}", e))?;
 
-    // Calculate total execution time
     let total_exec_time_minutes: f64 = results.iter().map(|r| r.exec_time_minutes).sum();
 
-    // Calculate walltime (elapsed time from first job start to last job completion)
     let walltime_seconds: Option<f64> = {
         let mut min_start: Option<DateTime<FixedOffset>> = None;
         let mut max_end: Option<DateTime<FixedOffset>> = None;
 
         for result in &results {
             if let Ok(completion_time) = DateTime::parse_from_rfc3339(&result.completion_time) {
-                // Calculate start time by subtracting execution time from completion time
                 let exec_duration = chrono::Duration::milliseconds(
                     (result.exec_time_minutes * 60.0 * 1000.0) as i64,
                 );
@@ -970,129 +1036,40 @@ pub fn generate_summary(config: &Configuration, workflow_id: Option<i64>, format
         }
     };
 
-    // Output results
-    if format == "json" {
-        let mut report = serde_json::json!({
-            "workflow_id": workflow_id,
-            "workflow_name": workflow.name,
-            "workflow_user": workflow.user,
-            "total_jobs": total_jobs,
-            "jobs_by_status": {
-                "uninitialized": uninitialized_count,
-                "blocked": blocked_count,
-                "ready": ready_count,
-                "pending": pending_count,
-                "running": running_count,
-                "completed": completed_count,
-                "failed": failed_count,
-                "canceled": canceled_count,
-                "terminated": terminated_count,
-                "disabled": disabled_count,
-                "pending_failed": pending_failed_count,
-            },
-            "total_exec_time_minutes": total_exec_time_minutes,
-            "total_exec_time_formatted": format_duration(total_exec_time_minutes * 60.0),
-            "active_compute_nodes": active_compute_nodes,
-            "pending_scheduled_nodes": pending_scheduled_nodes,
-            "active_scheduled_nodes": active_scheduled_nodes,
-        });
+    let mut report = serde_json::json!({
+        "workflow_id": workflow_id,
+        "workflow_name": workflow.name,
+        "workflow_user": workflow.user,
+        "total_jobs": jobs.len(),
+        "jobs_by_status": {
+            "uninitialized": uninitialized_count,
+            "blocked": blocked_count,
+            "ready": ready_count,
+            "pending": pending_count,
+            "running": running_count,
+            "completed": completed_count,
+            "failed": failed_count,
+            "canceled": canceled_count,
+            "terminated": terminated_count,
+            "disabled": disabled_count,
+            "pending_failed": pending_failed_count,
+        },
+        "total_exec_time_minutes": total_exec_time_minutes,
+        "total_exec_time_formatted": format_duration(total_exec_time_minutes * 60.0),
+        "active_compute_nodes": active_compute_nodes,
+        "pending_scheduled_nodes": pending_scheduled_nodes,
+        "active_scheduled_nodes": active_scheduled_nodes,
+    });
 
-        if let Some(status) = &completion_status {
-            report["is_complete"] = serde_json::json!(status.is_complete);
-            report["is_canceled"] = serde_json::json!(status.is_canceled);
-        }
-
-        if let Some(walltime) = walltime_seconds {
-            report["walltime_seconds"] = serde_json::json!(walltime);
-            report["walltime_formatted"] = serde_json::json!(format_duration(walltime));
-        }
-
-        print_json(&report, "workflow summary");
-    } else {
-        println!("Workflow Summary");
-        println!("================");
-        println!();
-        println!("Workflow ID: {}", workflow_id);
-        println!("Name: {}", workflow.name);
-        println!("User: {}", workflow.user);
-        println!();
-        println!("Job Status (total: {}):", total_jobs);
-        if uninitialized_count > 0 {
-            println!("  Uninitialized: {}", uninitialized_count);
-        }
-        if blocked_count > 0 {
-            println!("  Blocked:       {}", blocked_count);
-        }
-        if ready_count > 0 {
-            println!("  Ready:         {}", ready_count);
-        }
-        if pending_count > 0 {
-            println!("  Pending:       {}", pending_count);
-        }
-        if running_count > 0 {
-            println!("  Running:       {}", running_count);
-        }
-        if completed_count > 0 {
-            println!("  Completed:     {} ✓", completed_count);
-        }
-        if failed_count > 0 {
-            println!("  Failed:        {} ✗", failed_count);
-        }
-        if canceled_count > 0 {
-            println!("  Canceled:      {}", canceled_count);
-        }
-        if terminated_count > 0 {
-            println!("  Terminated:    {} ✗", terminated_count);
-        }
-        if disabled_count > 0 {
-            println!("  Disabled:      {}", disabled_count);
-        }
-        if pending_failed_count > 0 {
-            println!("  PendingFailed: {} ⏳", pending_failed_count);
-        }
-        println!();
-        println!(
-            "Total Execution Time: {}",
-            format_duration(total_exec_time_minutes * 60.0)
-        );
-        if let Some(walltime) = walltime_seconds {
-            println!("Walltime:             {}", format_duration(walltime));
-        }
-
-        // Show compute resources if any are active
-        if active_compute_nodes > 0 || pending_scheduled_nodes > 0 || active_scheduled_nodes > 0 {
-            println!();
-            println!("Compute Resources:");
-            if active_compute_nodes > 0 {
-                println!("  Active workers:           {}", active_compute_nodes);
-            }
-            if active_scheduled_nodes > 0 {
-                println!("  Active Slurm allocations: {}", active_scheduled_nodes);
-            }
-            if pending_scheduled_nodes > 0 {
-                println!("  Pending Slurm allocations: {}", pending_scheduled_nodes);
-            }
-        }
-
-        // Show workflow status
-        println!();
-        if let Some(status) = &completion_status {
-            if status.is_complete {
-                if failed_count > 0 || terminated_count > 0 || canceled_count > 0 {
-                    println!(
-                        "✗ Workflow complete with failures ({} failed, {} terminated, {} canceled)",
-                        failed_count, terminated_count, canceled_count
-                    );
-                } else {
-                    println!("✓ Workflow complete - all jobs finished successfully!");
-                }
-            } else if status.is_canceled {
-                println!("⊘ Workflow was canceled");
-            } else {
-                println!("◷ Workflow in progress...");
-            }
-        } else if completed_count == total_jobs {
-            println!("✓ All jobs completed successfully!");
-        }
+    if let Some(status) = completion_status {
+        report["is_complete"] = serde_json::json!(status.is_complete);
+        report["is_canceled"] = serde_json::json!(status.is_canceled);
     }
+
+    if let Some(walltime) = walltime_seconds {
+        report["walltime_seconds"] = serde_json::json!(walltime);
+        report["walltime_formatted"] = serde_json::json!(format_duration(walltime));
+    }
+
+    Ok(report)
 }

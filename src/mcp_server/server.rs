@@ -634,7 +634,8 @@ USE CASES:
         Parameters(params): Parameters<GetWorkflowSummaryParams>,
     ) -> Result<CallToolResult, McpError> {
         let workflow_id = params.workflow_id;
-        tokio::task::spawn_blocking(move || tools::get_workflow_summary(workflow_id))
+        let config = self.config.clone();
+        tokio::task::spawn_blocking(move || tools::get_workflow_summary(&config, workflow_id))
             .await
             .map_err(|e| McpError::internal_error(format!("Task join error: {}", e), None))?
     }
@@ -757,8 +758,9 @@ USE CASES:
     ) -> Result<CallToolResult, McpError> {
         let workflow_id = params.workflow_id;
         let include_failed = params.include_failed.unwrap_or(true);
+        let config = self.config.clone();
         tokio::task::spawn_blocking(move || {
-            tools::check_resource_utilization(workflow_id, include_failed)
+            tools::check_resource_utilization(&config, workflow_id, include_failed)
         })
         .await
         .map_err(|e| McpError::internal_error(format!("Task join error: {}", e), None))?

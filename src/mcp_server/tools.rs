@@ -15,6 +15,9 @@ use crate::client::commands::pagination::resource_requirements::{
     ResourceRequirementsListParams, paginate_resource_requirements,
 };
 use crate::client::commands::pagination::results::{ResultListParams, paginate_results};
+use crate::client::commands::reports::{
+    build_resource_utilization_report, build_workflow_summary_report,
+};
 use crate::client::log_paths;
 use crate::client::resource_correction::format_memory_bytes_short;
 use crate::models::{JobStatus, ResourceRequirementsModel};
@@ -229,35 +232,24 @@ pub fn list_jobs_by_status(
     )]))
 }
 
-/// Check resource utilization for a workflow by running the CLI command.
+/// Check resource utilization for a workflow.
 pub fn check_resource_utilization(
+    config: &Configuration,
     workflow_id: i64,
     include_failed: bool,
 ) -> Result<CallToolResult, McpError> {
-    let mut cmd = Command::new("torc");
-    cmd.args(["-f", "json", "reports", "check-resource-utilization"]);
-    cmd.arg(workflow_id.to_string());
-
-    if include_failed {
-        cmd.arg("--include-failed");
-    }
-
-    let output = cmd
-        .output()
-        .map_err(|e| internal_error(format!("Failed to execute torc command: {}", e)))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(internal_error(format!(
-            "torc command failed: {}",
-            stderr.trim()
-        )));
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let report =
+        build_resource_utilization_report(config, Some(workflow_id), None, include_failed, 1.0)
+            .map_err(internal_error)?;
+    let stdout = serde_json::to_string_pretty(&report).map_err(|e| {
+        internal_error(format!(
+            "Failed to serialize resource utilization report: {}",
+            e
+        ))
+    })?;
 
     // Parse the JSON to check for over-utilization violations and add guidance
-    let mut response = stdout.to_string();
+    let mut response = stdout.clone();
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
         let over_count = json
             .get("over_utilization_count")
@@ -968,24 +960,17 @@ pub fn analyze_workflow_logs(
     )]))
 }
 
-/// Get workflow summary by running the CLI command.
-pub fn get_workflow_summary(workflow_id: i64) -> Result<CallToolResult, McpError> {
-    let output = Command::new("torc")
-        .args(["-f", "json", "reports", "summary", &workflow_id.to_string()])
-        .output()
-        .map_err(|e| internal_error(format!("Failed to execute torc command: {}", e)))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(internal_error(format!(
-            "torc command failed: {}",
-            stderr.trim()
-        )));
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
+/// Get workflow summary.
+pub fn get_workflow_summary(
+    config: &Configuration,
+    workflow_id: i64,
+) -> Result<CallToolResult, McpError> {
+    let report =
+        build_workflow_summary_report(config, Some(workflow_id)).map_err(internal_error)?;
+    let stdout = serde_json::to_string_pretty(&report)
+        .map_err(|e| internal_error(format!("Failed to serialize workflow summary: {}", e)))?;
     Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-        stdout.to_string(),
+        stdout,
     )]))
 }
 

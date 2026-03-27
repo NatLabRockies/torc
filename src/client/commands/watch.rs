@@ -941,7 +941,7 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
         // Must happen before regenerate_and_submit because reset_workflow_status
         // rejects requests when there are pending scheduled compute nodes.
         info!("Reinitializing workflow...");
-        if let Err(e) = reinitialize_workflow(args.workflow_id) {
+        if let Err(e) = reinitialize_workflow(config, args.workflow_id) {
             warn!("Error reinitializing workflow: {}", e);
             std::process::exit(1);
         }
