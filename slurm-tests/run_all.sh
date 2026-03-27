@@ -152,6 +152,7 @@ ALL_WORKFLOW_NAMES=(
   multi_node_mpi_step
   job_parallelism
   oom_detection
+  watch_recover_oom
   resource_monitoring
   failure_recovery
   timeout_detection

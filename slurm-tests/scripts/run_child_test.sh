@@ -100,7 +100,9 @@ watch_child_workflow() {
   local watch_args=(--url "$TORC_API_URL" watch "$wf_id" --poll-interval 10)
 
   if [ "$TEST_NAME" = "failure_recovery" ]; then
-    watch_args+=(--auto-schedule)
+    watch_args+=(--auto-schedule --partition "$PARTITION")
+  elif [ "$TEST_NAME" = "watch_recover_oom" ]; then
+    watch_args+=(--recover --memory-multiplier 2.0 --partition "$PARTITION")
   fi
 
   "${TORC_BIN:-torc}" "${watch_args[@]}" || true

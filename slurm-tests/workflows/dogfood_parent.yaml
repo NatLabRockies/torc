@@ -55,6 +55,12 @@ jobs:
       bash slurm-tests/scripts/run_child_test.sh
       oom_detection PLACEHOLDER_ACCOUNT PLACEHOLDER_PARTITION
 
+  - name: watch_recover_oom
+    resource_requirements: parent_resources
+    command: >-
+      bash slurm-tests/scripts/run_child_test.sh
+      watch_recover_oom PLACEHOLDER_ACCOUNT PLACEHOLDER_PARTITION
+
   - name: resource_monitoring
     resource_requirements: parent_resources
     command: >-

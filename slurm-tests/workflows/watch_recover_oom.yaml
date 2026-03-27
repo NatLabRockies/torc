@@ -1,0 +1,52 @@
+# Test: torc watch --recover OOM recovery
+#
+# One job completes normally. One job exceeds its Slurm memory limit, fails with OOM,
+# then succeeds after `torc watch --recover` increases memory and retries it.
+
+name: watch_recover_oom
+description: Test workflow for torc watch --recover with Slurm OOM recovery
+project: slurm-tests
+
+resource_monitor:
+  enabled: true
+  granularity: time_series
+  sample_interval_seconds: 1
+
+resource_requirements:
+  - name: normal_resources
+    num_cpus: 1
+    num_nodes: 1
+    memory: 1g
+    runtime: PT2M
+
+  - name: oom_resources
+    num_cpus: 1
+    num_nodes: 1
+    memory: 4g
+    runtime: PT3M
+
+jobs:
+  - name: normal_job
+    command: |
+      echo "Normal job on $(hostname)"
+      sleep 5
+      echo "Normal job complete."
+    resource_requirements: normal_resources
+
+  - name: recoverable_oom_job
+    command: bash slurm-tests/scripts/allocate_memory.sh 6
+    resource_requirements: oom_resources
+
+slurm_schedulers:
+  - name: recover_oom_scheduler
+    account: PLACEHOLDER_ACCOUNT
+    partition: PLACEHOLDER_PARTITION
+    nodes: 1
+    walltime: "00:10:00"
+
+actions:
+  - trigger_type: "on_workflow_start"
+    action_type: "schedule_nodes"
+    scheduler: "recover_oom_scheduler"
+    scheduler_type: "slurm"
+    num_allocations: 1
