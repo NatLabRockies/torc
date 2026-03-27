@@ -210,7 +210,6 @@ written in YAML, JSON, JSON5, or KDL formats.</p>
 <tr><td><code>compute_node_wait_for_new_jobs_seconds</code></td><td>integer</td><td>none</td><td>Compute nodes wait for new jobs this long before exiting</td></tr>
 <tr><td><code>compute_node_ignore_workflow_completion</code></td><td>boolean</td><td>false</td><td>Compute nodes hold allocations even after workflow completes</td></tr>
 <tr><td><code>compute_node_wait_for_healthy_database_minutes</code></td><td>integer</td><td>none</td><td>Compute nodes wait this many minutes for database recovery</td></tr>
-<tr><td><code>jobs_sort_method</code></td><td><a href="#claimjobssortmethod">ClaimJobsSortMethod</a></td><td><code>none</code></td><td>Method for sorting jobs when claiming them</td></tr>
 <tr><td><code>enable_ro_crate</code></td><td>boolean</td><td>false</td><td>Enable automatic <a href="../concepts/ro-crate.html">RO-Crate</a> provenance tracking</td></tr>
 </tbody></table>
 </div>
@@ -249,6 +248,7 @@ jobs:
 <div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>name</code></td><td>string</td><td><em>required</em></td><td>Name of the job</td></tr>
 <tr><td><code>command</code></td><td>string</td><td><em>required</em></td><td>Command to execute for this job</td></tr>
+<tr><td><code>priority</code></td><td>integer</td><td><code>0</code></td><td>Scheduling priority; higher values are claimed before lower values</td></tr>
 <tr><td><code>invocation_script</code></td><td>string</td><td>none</td><td>Optional script for job invocation</td></tr>
 <tr><td><code>resource_requirements</code></td><td>string</td><td>none</td><td>Name of a <a href="#resourcerequirementsspec">ResourceRequirementsSpec</a> to use</td></tr>
 <tr><td><code>failure_handler</code></td><td>string</td><td>none</td><td>Name of a <a href="#failurehandlerspec">FailureHandlerSpec</a> to use</td></tr>
@@ -480,14 +480,24 @@ managed by torc: <code>partition</code>, <code>nodes</code>, <code>walltime</cod
 <tr><td><code>TimeSeries</code></td><td>Collect detailed time series data</td></tr>
 </tbody></table>
 </div>
-<h2 id="claimjobssortmethod"><a class="header" href="#claimjobssortmethod">ClaimJobsSortMethod</a></h2>
-<p>Enum specifying how jobs are sorted when being claimed by workers.</p>
-<div class="table-wrapper"><table><thead><tr><th>Value</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>none</code></td><td>No sorting (default)</td></tr>
-<tr><td><code>gpus_runtime_memory</code></td><td>Sort by GPUs, then runtime, then memory</td></tr>
-<tr><td><code>gpus_memory_runtime</code></td><td>Sort by GPUs, then memory, then runtime</td></tr>
-</tbody></table>
-</div>
+<h2 id="job-priority"><a class="header" href="#job-priority">Job Priority</a></h2>
+<p>Use <code>priority</code> when some ready jobs should be claimed before others.</p>
+<ul>
+<li>Higher values are preferred over lower values</li>
+<li>The default is <code>0</code></li>
+<li>Jobs with the same priority are returned in a stable order</li>
+<li>Priority affects both <code>claim_next_jobs</code> and <code>claim_jobs_based_on_resources</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-yaml">jobs:
+  - name: urgent_step
+    command: ./run_urgent.sh
+    priority: 100
+
+  - name: background_step
+    command: ./run_background.sh
+    priority: 10
+</code></pre>
 <h2 id="parameter-formats"><a class="header" href="#parameter-formats">Parameter Formats</a></h2>
 <p>Parameters support several formats for generating multiple jobs or files:</p>
 <div class="table-wrapper"><table><thead><tr><th>Format</th><th>Example</th><th>Description</th></tr></thead><tbody>

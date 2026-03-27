@@ -571,15 +571,18 @@ Pkg.add(url="https://github.com/NatLabRockies/torc.git", subdir="julia_client/To
 <pre><code class="language-julia">using Torc
 </code></pre>
 <h2 id="for-developers"><a class="header" href="#for-developers">For Developers</a></h2>
+<p>Install <code>cargo-nextest</code> before running the Rust test suite:</p>
+<pre><code class="language-bash">cargo install cargo-nextest
+</code></pre>
 <h3 id="running-tests"><a class="header" href="#running-tests">Running Tests</a></h3>
 <h1 id="run-all-tests"><a class="header" href="#run-all-tests">Run all tests</a></h1>
-<pre><code class="language-bash">cargo test -- --test-threads=1
+<pre><code class="language-bash">cargo nextest run --all-features
 
 # Run specific test
-cargo test --test test_workflow_manager test_initialize_files_with_updated_files
+cargo nextest run -E 'test(test_initialize_files_with_updated_files)'
 
 # Run with debug logging
-RUST_LOG=debug cargo test -- --nocapture
+RUST_LOG=debug cargo nextest run -E 'test(test_initialize_files_with_updated_files)'
 </code></pre>
 <h3 id="setting-up-the-server"><a class="header" href="#setting-up-the-server">Setting Up the Server</a></h3>
 <p><strong>Start the server:</strong></p>
@@ -2006,24 +2009,38 @@ jobs:
 <li>Returns a set of jobs that can run concurrently without over-subscription</li>
 <li>Updates job status from <code>ready</code> to <code>pending</code> atomically</li>
 </ol>
+<h3 id="priority-based-job-selection"><a class="header" href="#priority-based-job-selection">Priority-Based Job Selection</a></h3>
+<p>When more than one ready job fits the runner's available resources, Torc orders the candidates by
+job <code>priority</code> before claiming work.</p>
+<ul>
+<li>Higher priority values are claimed first</li>
+<li>The default priority is <code>0</code></li>
+<li>Resource fit still applies first: a high-priority job that does not fit is skipped</li>
+<li>Priority works with both resource-aware allocation and queue-depth parallelism</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-yaml">jobs:
+  - name: preprocess
+    command: ./preprocess.sh
+    resource_requirements: small
+    priority: 10
+
+  - name: train_model
+    command: python train.py
+    resource_requirements: large
+    priority: 100
+</code></pre>
+<p>In that workflow, <code>train_model</code> is preferred whenever it is ready and fits the requesting runner's
+resources. If it does not fit, Torc continues scanning lower-priority ready jobs that do fit.</p>
 <h3 id="job-allocation-ambiguity-two-approaches"><a class="header" href="#job-allocation-ambiguity-two-approaches">Job Allocation Ambiguity: Two Approaches</a></h3>
 <p>When you have multiple compute nodes or schedulers with different capabilities, there are two ways
 to handle job allocation:</p>
-<h4 id="approach-1-sort-method-flexible-but-potentially-ambiguous"><a class="header" href="#approach-1-sort-method-flexible-but-potentially-ambiguous">Approach 1: Sort Method (Flexible but Potentially Ambiguous)</a></h4>
+<h4 id="approach-1-priority-only-flexible-but-potentially-ambiguous"><a class="header" href="#approach-1-priority-only-flexible-but-potentially-ambiguous">Approach 1: Priority Only (Flexible but Potentially Ambiguous)</a></h4>
 <p><strong>How it works:</strong></p>
 <ul>
 <li>Jobs do NOT specify a particular scheduler/compute node</li>
-<li>The server uses a <code>job_sort_method</code> parameter to prioritize jobs when allocating</li>
+<li>The server uses job <code>priority</code> to decide which ready jobs to consider first</li>
 <li>Any runner with sufficient resources can claim any ready job</li>
-</ul>
-<p><strong>Available sort methods:</strong> Define the field job_sort_method in the workflow specification file
-(YAML/JSON/KDL)</p>
-<ul>
-<li><code>gpus_runtime_memory</code> - Prioritize jobs by GPU count (desc), then runtime (desc), then memory
-(desc)</li>
-<li><code>gpus_memory_runtime</code> - Prioritize jobs by GPU count (desc), then memory (desc), then runtime
-(desc)</li>
-<li><code>none</code> - No sorting, jobs selected in queue order</li>
 </ul>
 <p><strong>Tradeoffs:</strong></p>
 <p>✅ <strong>Advantages:</strong></p>
@@ -2037,7 +2054,6 @@ to handle job allocation:</p>
 <ul>
 <li>Ambiguity - no guarantee GPU jobs go to GPU runners</li>
 <li>Potential inefficiency - high-memory jobs might land on low-memory nodes if timing is unlucky</li>
-<li>Requires careful sort method selection</li>
 <li>Less predictable job placement</li>
 </ul>
 <p><strong>When to use:</strong></p>
@@ -2115,12 +2131,12 @@ torc-slurm-job-runner $WORKFLOW_ID \
 </ul>
 <h3 id="choosing-between-sort-method-and-scheduler-id"><a class="header" href="#choosing-between-sort-method-and-scheduler-id">Choosing Between Sort Method and Scheduler ID</a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Scenario</th><th>Recommended Approach</th><th>Rationale</th></tr></thead><tbody>
-<tr><td>All jobs can run anywhere</td><td>Sort method</td><td>Maximum flexibility, simplest spec</td></tr>
+<tr><td>All jobs can run anywhere</td><td>Priority only</td><td>Maximum flexibility, simplest spec</td></tr>
 <tr><td>Some jobs need GPUs, some don't</td><td>Scheduler ID</td><td>Prevent GPU waste on CPU jobs</td></tr>
 <tr><td>Multi-cluster Slurm environment</td><td>Scheduler ID</td><td>Jobs must target correct clusters</td></tr>
-<tr><td>Development/testing</td><td>Sort method</td><td>Easier to experiment</td></tr>
+<tr><td>Development/testing</td><td>Priority only</td><td>Easier to experiment</td></tr>
 <tr><td>Production with SLAs</td><td>Scheduler ID</td><td>Predictable resource usage</td></tr>
-<tr><td>Homogeneous compute nodes</td><td>Sort method</td><td>No benefit to restricting</td></tr>
+<tr><td>Homogeneous compute nodes</td><td>Priority only</td><td>No benefit to restricting</td></tr>
 <tr><td>Specialized hardware (GPUs, high-memory, FPGAs)</td><td>Scheduler ID</td><td>Match jobs to capabilities</td></tr>
 </tbody></table>
 </div>
@@ -2326,10 +2342,10 @@ capacity, while the queue-depth runner gets small jobs for fast parallel executi
 </ul>
 </li>
 <li>
-<p><strong>Use sort_method for flexible single-cluster workflows</strong></p>
+<p><strong>Use priority for flexible single-cluster workflows</strong></p>
 <ul>
 <li>Simpler specifications</li>
-<li>Better resource utilization</li>
+<li>Lets you prefer urgent or expensive work</li>
 <li>Good for homogeneous resources</li>
 </ul>
 </li>
@@ -2360,7 +2376,7 @@ capacity, while the queue-depth runner gets small jobs for fast parallel executi
 </ol>
 <h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Strategy</th><th>Use When</th><th>Allocation Method</th><th>Resource Tracking</th></tr></thead><tbody>
-<tr><td>Resource-aware + sort_method</td><td>Heterogeneous jobs, flexible allocation</td><td>Server filters by resources</td><td>Yes</td></tr>
+<tr><td>Resource-aware + priority</td><td>Heterogeneous jobs, flexible allocation</td><td>Server filters by resources</td><td>Yes</td></tr>
 <tr><td>Resource-aware + scheduler_id</td><td>Heterogeneous jobs, strict allocation</td><td>Server filters by resources AND scheduler</td><td>Yes</td></tr>
 <tr><td>Queue-depth</td><td>Homogeneous jobs, simple parallelism</td><td>Server returns next N jobs</td><td>No</td></tr>
 </tbody></table>
@@ -2874,7 +2890,7 @@ Validation: PASSED
 <p><strong>Scheduler Configuration:</strong></p>
 <ul>
 <li>Slurm scheduler node requirements are valid</li>
-<li>Warns about heterogeneous schedulers without <code>jobs_sort_method</code> (see below)</li>
+<li>Warns about heterogeneous schedulers when jobs lack explicit scheduler assignments (see below)</li>
 </ul>
 <h4 id="heterogeneous-scheduler-warning"><a class="header" href="#heterogeneous-scheduler-warning">Heterogeneous Scheduler Warning</a></h4>
 <p>When you have multiple Slurm schedulers with different resource profiles (memory, GPUs, walltime,
@@ -2882,11 +2898,9 @@ partition) and jobs without explicit scheduler assignments, the validation warns
 suboptimal job-to-node matching:</p>
 <pre><code>Warnings (1):
   - Workflow has 3 schedulers with different memory (mem), walltime but 10 job(s)
-    have no explicit scheduler assignment and jobs_sort_method is not set. The
-    default sort method 'gpus_runtime_memory' will be used (jobs sorted by GPUs,
-    then runtime, then memory). If this doesn't match your workload, consider
-    setting jobs_sort_method explicitly to 'gpus_memory_runtime' (prioritize
-    memory over runtime) or 'none' (no sorting).
+    have no explicit scheduler assignment. These jobs can be claimed by any
+    compatible runner, which may lead to suboptimal placement on heterogeneous
+    schedulers.
 </code></pre>
 <p>This warning helps you avoid situations where:</p>
 <ul>
@@ -2896,9 +2910,9 @@ suboptimal job-to-node matching:</p>
 </ul>
 <p><strong>Solutions:</strong></p>
 <ol>
-<li>Set <code>jobs_sort_method</code> explicitly in your workflow spec</li>
 <li>Assign jobs to specific schedulers using the <code>scheduler</code> field on each job</li>
-<li>Accept the default <code>gpus_runtime_memory</code> sorting if it matches your workload</li>
+<li>Use job <code>priority</code> to prefer more important work when multiple jobs are ready</li>
+<li>Accept flexible placement if any compatible runner is an acceptable target</li>
 </ol>
 <h4 id="bypassing-validation"><a class="header" href="#bypassing-validation">Bypassing Validation</a></h4>
 <p>To create a workflow despite validation warnings:</p>
@@ -3866,6 +3880,7 @@ management in active projects where historical data is valuable but visual clutt
 <li><a href="core/how-to/./set-up-authentication.html">Set Up Authentication</a> - Saving credentials for CLI access</li>
 <li><a href="core/how-to/./check-resource-utilization.html">Check Resource Utilization</a> - Monitoring resource usage</li>
 <li><a href="core/how-to/./view-resource-plots.html">View Resource Plots</a> - Visualizing resource metrics</li>
+<li><a href="core/how-to/./prioritize-jobs.html">Prioritize Jobs</a> - Ordering ready work with job priority</li>
 <li><a href="core/how-to/./parameterize-with-files.html">Parameterize Jobs with Files</a> - Using file-based parameters</li>
 <li><a href="core/how-to/./use-invocation-script.html">Use Invocation Scripts</a> - Setting up job environments</li>
 <li><a href="core/how-to/./ro-crate-metadata.html">Add RO-Crate Metadata</a> - Storing provenance with RO-Crate</li>
@@ -4305,6 +4320,105 @@ ORDER BY timestamp;
 <ul>
 <li><a href="core/how-to/../monitoring/resource-monitoring.html">Resource Monitoring</a> — Configuration options</li>
 <li><a href="core/how-to/../reference/resource-monitoring.html">Resource Monitoring Database</a> — Database schema reference</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="prioritize-jobs"><a class="header" href="#prioritize-jobs">Prioritize Jobs</a></h1>
+<p>Use job <code>priority</code> when some ready jobs should run before others.</p>
+<p>This is useful when:</p>
+<ul>
+<li>A small number of urgent jobs should be claimed first</li>
+<li>Expensive compute should be reserved for the most important ready work</li>
+<li>Background or cleanup jobs should run only after higher-value jobs have been claimed</li>
+</ul>
+<h2 id="how-priority-works"><a class="header" href="#how-priority-works">How Priority Works</a></h2>
+<ul>
+<li>Every job has a <code>priority</code></li>
+<li>Higher values are claimed first</li>
+<li>The default is <code>0</code></li>
+<li>Priority affects both queue-depth claims and resource-based claims</li>
+<li>A high-priority job still must fit the requesting runner's resources to be claimed</li>
+</ul>
+<p>If two ready jobs have the same priority, Torc uses a stable tie-breaker.</p>
+<h2 id="yaml-example-1"><a class="header" href="#yaml-example-1">YAML Example</a></h2>
+<pre><code class="language-yaml">name: priority_example
+
+resource_requirements:
+  - name: cpu_small
+    num_cpus: 2
+    memory: 4g
+    num_gpus: 0
+    runtime: PT30M
+
+jobs:
+  - name: urgent_report
+    command: python make_report.py
+    resource_requirements: cpu_small
+    priority: 100
+
+  - name: normal_batch
+    command: python run_batch.py
+    resource_requirements: cpu_small
+    priority: 10
+
+  - name: cleanup
+    command: ./cleanup.sh
+    resource_requirements: cpu_small
+    priority: 0
+</code></pre>
+<h2 id="json-example"><a class="header" href="#json-example">JSON Example</a></h2>
+<pre><code class="language-json">{
+  "name": "priority_example",
+  "jobs": [
+    {
+      "name": "urgent_report",
+      "command": "python make_report.py",
+      "priority": 100
+    },
+    {
+      "name": "normal_batch",
+      "command": "python run_batch.py",
+      "priority": 10
+    }
+  ]
+}
+</code></pre>
+<h2 id="kdl-example-1"><a class="header" href="#kdl-example-1">KDL Example</a></h2>
+<pre><code class="language-kdl">name "priority_example"
+
+jobs {
+  job {
+    name "urgent_report"
+    command "python make_report.py"
+    priority 100
+  }
+
+  job {
+    name "normal_batch"
+    command "python run_batch.py"
+    priority 10
+  }
+}
+</code></pre>
+<h2 id="priority-and-resources"><a class="header" href="#priority-and-resources">Priority and Resources</a></h2>
+<p>Priority does not override resource limits.</p>
+<p>Example:</p>
+<ul>
+<li><code>train_large_model</code> has priority <code>100</code> but needs 8 GPUs</li>
+<li><code>small_analysis</code> has priority <code>20</code> and needs 1 CPU</li>
+<li>A runner with 1 CPU and 0 GPUs requests work</li>
+</ul>
+<p>In that case, Torc skips <code>train_large_model</code> because it does not fit and can still return
+<code>small_analysis</code>.</p>
+<h2 id="priority-and-scheduler-assignment"><a class="header" href="#priority-and-scheduler-assignment">Priority and Scheduler Assignment</a></h2>
+<p>Priority decides which eligible jobs are considered first. It does not force a job onto a specific
+scheduler or cluster.</p>
+<p>If a job must run on a specific scheduler, set its <code>scheduler</code> field. Use <code>priority</code> to order jobs
+within that eligible set.</p>
+<h2 id="recommendations-1"><a class="header" href="#recommendations-1">Recommendations</a></h2>
+<ul>
+<li>Use larger gaps like <code>100</code>, <code>50</code>, <code>10</code>, <code>0</code> so future adjustments are easy</li>
+<li>Reserve very high priorities for urgent or user-facing work</li>
+<li>Keep most jobs at <code>0</code> unless you need explicit ordering</li>
+<li>Use <code>scheduler</code> for placement constraints and <code>priority</code> for ordering</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="how-to-parameterize-jobs-with-files"><a class="header" href="#how-to-parameterize-jobs-with-files">How to Parameterize Jobs with Files</a></h1>
 <p>Process multiple input files by combining parameterization with file path templating.</p>
@@ -9670,7 +9784,6 @@ written in YAML, JSON, JSON5, or KDL formats.</p>
 <tr><td><code>compute_node_wait_for_new_jobs_seconds</code></td><td>integer</td><td>none</td><td>Compute nodes wait for new jobs this long before exiting</td></tr>
 <tr><td><code>compute_node_ignore_workflow_completion</code></td><td>boolean</td><td>false</td><td>Compute nodes hold allocations even after workflow completes</td></tr>
 <tr><td><code>compute_node_wait_for_healthy_database_minutes</code></td><td>integer</td><td>none</td><td>Compute nodes wait this many minutes for database recovery</td></tr>
-<tr><td><code>jobs_sort_method</code></td><td><a href="core/reference/workflow-spec.html#claimjobssortmethod">ClaimJobsSortMethod</a></td><td><code>none</code></td><td>Method for sorting jobs when claiming them</td></tr>
 <tr><td><code>enable_ro_crate</code></td><td>boolean</td><td>false</td><td>Enable automatic <a href="core/reference/../concepts/ro-crate.html">RO-Crate</a> provenance tracking</td></tr>
 </tbody></table>
 </div>
@@ -9709,6 +9822,7 @@ jobs:
 <div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>name</code></td><td>string</td><td><em>required</em></td><td>Name of the job</td></tr>
 <tr><td><code>command</code></td><td>string</td><td><em>required</em></td><td>Command to execute for this job</td></tr>
+<tr><td><code>priority</code></td><td>integer</td><td><code>0</code></td><td>Scheduling priority; higher values are claimed before lower values</td></tr>
 <tr><td><code>invocation_script</code></td><td>string</td><td>none</td><td>Optional script for job invocation</td></tr>
 <tr><td><code>resource_requirements</code></td><td>string</td><td>none</td><td>Name of a <a href="core/reference/workflow-spec.html#resourcerequirementsspec">ResourceRequirementsSpec</a> to use</td></tr>
 <tr><td><code>failure_handler</code></td><td>string</td><td>none</td><td>Name of a <a href="core/reference/workflow-spec.html#failurehandlerspec">FailureHandlerSpec</a> to use</td></tr>
@@ -9940,14 +10054,24 @@ managed by torc: <code>partition</code>, <code>nodes</code>, <code>walltime</cod
 <tr><td><code>TimeSeries</code></td><td>Collect detailed time series data</td></tr>
 </tbody></table>
 </div>
-<h2 id="claimjobssortmethod"><a class="header" href="#claimjobssortmethod">ClaimJobsSortMethod</a></h2>
-<p>Enum specifying how jobs are sorted when being claimed by workers.</p>
-<div class="table-wrapper"><table><thead><tr><th>Value</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>none</code></td><td>No sorting (default)</td></tr>
-<tr><td><code>gpus_runtime_memory</code></td><td>Sort by GPUs, then runtime, then memory</td></tr>
-<tr><td><code>gpus_memory_runtime</code></td><td>Sort by GPUs, then memory, then runtime</td></tr>
-</tbody></table>
-</div>
+<h2 id="job-priority"><a class="header" href="#job-priority">Job Priority</a></h2>
+<p>Use <code>priority</code> when some ready jobs should be claimed before others.</p>
+<ul>
+<li>Higher values are preferred over lower values</li>
+<li>The default is <code>0</code></li>
+<li>Jobs with the same priority are returned in a stable order</li>
+<li>Priority affects both <code>claim_next_jobs</code> and <code>claim_jobs_based_on_resources</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-yaml">jobs:
+  - name: urgent_step
+    command: ./run_urgent.sh
+    priority: 100
+
+  - name: background_step
+    command: ./run_background.sh
+    priority: 10
+</code></pre>
 <h2 id="parameter-formats-1"><a class="header" href="#parameter-formats-1">Parameter Formats</a></h2>
 <p>Parameters support several formats for generating multiple jobs or files:</p>
 <div class="table-wrapper"><table><thead><tr><th>Format</th><th>Example</th><th>Description</th></tr></thead><tbody>
@@ -11127,8 +11251,30 @@ completion_check_interval_secs = 5
 <li><a href="core/reference/../../specialized/admin/server-deployment.html">Server Deployment</a></li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="openapi-specification"><a class="header" href="#openapi-specification">OpenAPI Specification</a></h1>
-<p>The Torc server implements a HTTP API defined in <code>api/openapi.yaml</code>. All endpoints are prefixed with
-<code>/torc-service/v1</code>.</p>
+<p>The Torc server implements a HTTP API under <code>/torc-service/v1</code>.</p>
+<p>The checked-in OpenAPI artifact is <code>api/openapi.yaml</code>, but the contract is now emitted from
+<code>src/openapi_spec.rs</code>, live handlers in <code>src/server/live_router.rs</code>, and <code>src/models.rs</code>. Refresh
+the emitted artifact with:</p>
+<pre><code class="language-bash">cd api
+bash sync_openapi.sh all --promote
+</code></pre>
+<p>For day-to-day development:</p>
+<pre><code class="language-bash">cd api
+
+# Emit Rust-owned spec only
+bash sync_openapi.sh emit
+
+# Verify checked-in specs match the emitted contract
+bash sync_openapi.sh check
+
+# Regenerate Rust, Python, and Julia clients from the checked-in contract
+bash sync_openapi.sh clients
+
+# Or regenerate all three client surfaces from the emitted Rust spec before promotion
+bash sync_openapi.sh emit
+bash sync_openapi.sh check
+bash sync_openapi.sh clients --use-rust-spec
+</code></pre>
 <h2 id="core-endpoints"><a class="header" href="#core-endpoints">Core Endpoints</a></h2>
 <h3 id="workflows"><a class="header" href="#workflows">Workflows</a></h3>
 <p><strong>Create Workflow</strong></p>
@@ -22545,7 +22691,15 @@ generated client's configuration.</p>
 </ol>
 <p><strong>Regeneration Workflow</strong>:</p>
 <pre><code class="language-bash">cd api
-bash make_api_clients.sh  # Regenerates both Python and Julia clients
+bash sync_openapi.sh emit
+bash sync_openapi.sh check
+bash sync_openapi.sh clients --use-rust-spec
+</code></pre>
+<p>This workflow regenerates the Rust, Python, and Julia clients from <code>api/openapi.codegen.yaml</code>. Run
+<code>emit</code> first to refresh that file from the Rust-owned scaffold, and <code>check</code> to verify the checked-in
+artifacts still match. When the emitted spec should replace the checked-in artifact, run:</p>
+<pre><code class="language-bash">cd api
+bash sync_openapi.sh all --promote
 </code></pre>
 <h2 id="alternatives-considered"><a class="header" href="#alternatives-considered">Alternatives Considered</a></h2>
 <h3 id="graphql-instead-of-rest"><a class="header" href="#graphql-instead-of-rest">GraphQL Instead of REST</a></h3>
@@ -22573,9 +22727,12 @@ bash make_api_clients.sh  # Regenerates both Python and Julia clients
 <h2 id="implementation-guidelines"><a class="header" href="#implementation-guidelines">Implementation Guidelines</a></h2>
 <p>When adding a new feature that should be exposed to users:</p>
 <ol>
-<li><strong>Start with the API</strong>: Define the endpoint in <code>api/openapi.yaml</code> with proper schemas</li>
+<li><strong>Start with the live Rust-owned API contract</strong>: Define the endpoint in
+<code>src/server/live_router.rs</code> and <code>src/models.rs</code></li>
 <li><strong>Implement server-side</strong>: Add handler in <code>src/server/api/</code></li>
-<li><strong>Regenerate clients</strong>: Run <code>api/make_api_clients.sh</code></li>
+<li><strong>Promote and regenerate</strong>: Run <code>api/sync_openapi.sh all --promote</code> when the contract is ready,
+or <code>api/sync_openapi.sh clients --use-rust-spec</code> for local client iteration against the
+Rust-emitted spec</li>
 <li><strong>Add CLI command</strong>: Create handler in <code>src/client/commands/</code></li>
 <li><strong>Update TUI if applicable</strong>: Add to relevant view in <code>src/tui/</code></li>
 <li><strong>Update Dashboard if applicable</strong>: Add route in <code>torc-dash/src/</code></li>
@@ -22590,11 +22747,224 @@ bash make_api_clients.sh  # Regenerates both Python and Julia clients
 <li><strong>Interface-specific adapters</strong> that translate between user expectations and API semantics</li>
 <li><strong>Consistent data models</strong> shared across all implementations</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="api-generation-architecture"><a class="header" href="#api-generation-architecture">API Generation Architecture</a></h1>
+<p>This document describes how Torc's HTTP API contract and generated clients are produced.</p>
+<h2 id="overview-19"><a class="header" href="#overview-19">Overview</a></h2>
+<p>Torc uses a Rust-owned OpenAPI workflow:</p>
+<ul>
+<li>The HTTP contract is defined in Rust by <code>src/openapi_spec.rs</code>, live handlers in
+<code>src/server/live_router.rs</code>, and <code>src/models.rs</code>.</li>
+<li>The checked-in OpenAPI artifacts are <code>api/openapi.yaml</code> and <code>api/openapi.codegen.yaml</code>.</li>
+<li>The live server transport is implemented in Rust under <code>src/server/http_transport.rs</code>.</li>
+<li>The Rust client used by the CLI/TUI/dashboard is generated into <code>src/client/apis/</code> using
+checked-in OpenAPI Generator template overrides so it matches Torc's canonical model layer and
+client conventions.</li>
+<li>The Python and Julia clients are generated from the checked-in OpenAPI artifact.</li>
+</ul>
+<h2 id="source-of-truth"><a class="header" href="#source-of-truth">Source Of Truth</a></h2>
+<p>The main ownership layers are:</p>
+<ul>
+<li><code>src/models.rs</code>
+<ul>
+<li>Canonical API models used by the Rust-owned contract.</li>
+</ul>
+</li>
+<li><code>src/openapi_spec.rs</code>
+<ul>
+<li>OpenAPI document definition, emission, and parity checks.</li>
+</ul>
+</li>
+<li><code>src/server/live_router.rs</code>
+<ul>
+<li>Live typed handlers that also own route metadata and operation IDs.</li>
+</ul>
+</li>
+<li><code>src/server/http_transport.rs</code> and <code>src/server/http_transport/*.rs</code>
+<ul>
+<li>Live HTTP transport implementation for the server.</li>
+</ul>
+</li>
+<li><code>src/server/api_contract.rs</code>
+<ul>
+<li>Rust server contract traits.</li>
+</ul>
+</li>
+</ul>
+<p>The HTTP API version is single-sourced in:</p>
+<ul>
+<li><code>src/api_version.rs</code></li>
+</ul>
+<p>That constant feeds:</p>
+<ul>
+<li>server version reporting</li>
+<li>client/server version checks</li>
+<li>emitted OpenAPI document version</li>
+<li>external client generation package metadata</li>
+</ul>
+<h2 id="openapi-artifacts"><a class="header" href="#openapi-artifacts">OpenAPI Artifacts</a></h2>
+<p>The checked-in files in <code>api/</code> are:</p>
+<ul>
+<li><code>api/openapi.yaml</code>
+<ul>
+<li>Promoted OpenAPI artifact used for external client generation.</li>
+</ul>
+</li>
+<li><code>api/openapi.codegen.yaml</code>
+<ul>
+<li>Rust-emitted artifact kept alongside the promoted spec.</li>
+</ul>
+</li>
+</ul>
+<p>These should match the Rust emitter output. The parity check enforces that.</p>
+<h2 id="server-creation"><a class="header" href="#server-creation">Server Creation</a></h2>
+<p>The live server is built from:</p>
+<ul>
+<li><code>src/server/http_server.rs</code>
+<ul>
+<li>top-level server wiring and shared state</li>
+</ul>
+</li>
+<li><code>src/server/http_transport.rs</code>
+<ul>
+<li>HTTP route dispatch and request/response mapping</li>
+</ul>
+</li>
+<li><code>src/server/http_transport/*.rs</code>
+<ul>
+<li>domain-specific transport handlers</li>
+</ul>
+</li>
+<li><code>src/server/api/*.rs</code>
+<ul>
+<li>lower-level server business logic modules</li>
+</ul>
+</li>
+</ul>
+<h2 id="rust-client-creation"><a class="header" href="#rust-client-creation">Rust Client Creation</a></h2>
+<p>The Rust client under <code>src/client/apis/</code> is generated from <code>api/openapi.yaml</code>, but it does not own
+its own model layer.</p>
+<p>Relevant files:</p>
+<ul>
+<li><code>api/regenerate_rust_client.sh</code>
+<ul>
+<li>Generates a sync Rust client into a temporary directory.</li>
+<li>Passes <code>api/openapi-generator-templates/rust/</code> to OpenAPI Generator.</li>
+<li>Copies only the generated grouped API modules, not the generated <code>models/</code> tree.</li>
+</ul>
+</li>
+<li><code>api/openapi-generator-templates/rust/</code>
+<ul>
+<li>Checked-in template overrides for the generated Rust client surface.</li>
+<li>Must remain version-controlled because regeneration uses them as a required input.</li>
+<li>Encodes Torc-specific generation behavior such as importing <code>crate::models</code>, using the shared
+blocking client helpers, and applying auth consistently.</li>
+</ul>
+</li>
+<li><code>src/client/apis/configuration.rs</code>
+<ul>
+<li>Hand-owned blocking client configuration used by the generated Rust API modules.</li>
+<li>Carries Torc-specific conventions like TLS settings, cookie handling, and auth application.</li>
+</ul>
+</li>
+</ul>
+<p>The surrounding Rust client logic is hand-written in:</p>
+<ul>
+<li><code>src/client/</code></li>
+</ul>
+<p>That includes things like:</p>
+<ul>
+<li><code>src/client/version_check.rs</code></li>
+<li><code>src/client/commands/</code></li>
+<li><code>src/client/workflow_spec.rs</code></li>
+</ul>
+<p>The generated Rust client is one layer inside a larger hand-owned Rust client stack. The canonical
+Rust API models remain in <code>src/models.rs</code>.</p>
+<p>The generated Rust client does <strong>not</strong> own a second Rust model layer. Generated <code>models.rs</code> output
+is discarded. The repo keeps exactly one canonical Rust API model surface in <code>src/models.rs</code>.</p>
+<p>The generated Rust client is tag-grouped. Current generated modules include domains such as:</p>
+<ul>
+<li><code>src/client/apis/workflows_api.rs</code></li>
+<li><code>src/client/apis/jobs_api.rs</code></li>
+<li><code>src/client/apis/access_control_api.rs</code></li>
+<li><code>src/client/apis/workflow_actions_api.rs</code></li>
+<li><code>src/client/apis/remote_workers_api.rs</code></li>
+<li><code>src/client/apis/ro_crate_entities_api.rs</code></li>
+<li><code>src/client/apis/system_api.rs</code></li>
+</ul>
+<p>The rest of the Rust codebase now calls those grouped generated modules directly.</p>
+<h2 id="python-and-julia-client-creation"><a class="header" href="#python-and-julia-client-creation">Python And Julia Client Creation</a></h2>
+<p>The Python and Julia clients are generated from <code>api/openapi.yaml</code>.</p>
+<p>Relevant files:</p>
+<ul>
+<li><code>api/regenerate_clients.sh</code>
+<ul>
+<li>Regenerates the Rust, Python, and Julia clients from the selected spec.</li>
+</ul>
+</li>
+<li><code>api/sync_openapi.sh</code>
+<ul>
+<li>Main developer entrypoint for emitting, checking, promoting, and regenerating clients.</li>
+</ul>
+</li>
+</ul>
+<p>Generated output locations:</p>
+<ul>
+<li>Python:
+<ul>
+<li><code>python_client/src/torc/openapi_client/</code></li>
+</ul>
+</li>
+<li>Julia:
+<ul>
+<li><code>julia_client/Torc/src/api/</code></li>
+<li><code>julia_client/julia_client/docs/</code></li>
+</ul>
+</li>
+</ul>
+<p>There is also a hand-written Python compatibility/helper layer in:</p>
+<ul>
+<li><code>python_client/src/torc/api.py</code></li>
+</ul>
+<p>That layer exists to provide a stable high-level interface over the tag-grouped generated Python
+APIs.</p>
+<h2 id="developer-workflow"><a class="header" href="#developer-workflow">Developer Workflow</a></h2>
+<p>Emit the Rust-owned OpenAPI spec:</p>
+<pre><code class="language-bash">bash api/sync_openapi.sh emit
+</code></pre>
+<p>Verify the checked-in artifacts match the Rust emitter:</p>
+<pre><code class="language-bash">bash api/sync_openapi.sh check
+</code></pre>
+<p>Promote the Rust-emitted spec into <code>api/openapi.yaml</code>:</p>
+<pre><code class="language-bash">bash api/sync_openapi.sh promote
+</code></pre>
+<p>Regenerate Rust, Python, and Julia clients:</p>
+<pre><code class="language-bash">bash api/sync_openapi.sh clients
+</code></pre>
+<p>This regenerates the Rust client from the selected spec using the checked-in template overrides,
+then regenerates the Python and Julia clients from the same spec.</p>
+<p>To iterate on clients against the Rust-emitted contract before promotion:</p>
+<pre><code class="language-bash">bash api/sync_openapi.sh emit
+bash api/sync_openapi.sh check
+bash api/sync_openapi.sh clients --use-rust-spec
+</code></pre>
+<p>Run the full sync flow:</p>
+<pre><code class="language-bash">bash api/sync_openapi.sh all --promote
+</code></pre>
+<h2 id="why-this-layout-exists"><a class="header" href="#why-this-layout-exists">Why This Layout Exists</a></h2>
+<p>This arrangement gives Torc one authoritative contract pipeline:</p>
+<ul>
+<li>The server contract is owned in normal Rust code.</li>
+<li>The OpenAPI artifact is emitted deterministically from that Rust code.</li>
+<li>External clients are generated from the emitted artifact.</li>
+<li>Rust generator customization is expressed in checked-in templates, not a post-generation patch
+overlay.</li>
+<li>Generated files are downstream artifacts, not the source of truth.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="slurm-job-step-monitoring"><a class="header" href="#slurm-job-step-monitoring">Slurm Job Step Monitoring</a></h1>
 <p>Torc automatically wraps workflow jobs with <code>srun</code> when running inside a Slurm allocation, creating
 per-job steps with cgroup enforcement. It then monitors live resource usage via <code>sstat</code> and collects
 final accounting data via <code>sacct</code>. This page describes the architecture and data flow.</p>
-<h2 id="overview-19"><a class="header" href="#overview-19">Overview</a></h2>
+<h2 id="overview-20"><a class="header" href="#overview-20">Overview</a></h2>
 <p>When a Torc job runner detects <code>SLURM_JOB_ID</code> in the environment, it activates three subsystems:</p>
 <ol>
 <li><strong>srun wrapping</strong> -- creates a Slurm job step per workflow job</li>
@@ -22965,11 +23335,16 @@ cd torc
 <pre><code class="language-bash">curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 </code></pre>
 <ol start="3">
+<li><strong>Install cargo-nextest:</strong></li>
+</ol>
+<pre><code class="language-bash">cargo install cargo-nextest
+</code></pre>
+<ol start="4">
 <li><strong>Install SQLx CLI:</strong></li>
 </ol>
 <pre><code class="language-bash">cargo install sqlx-cli --no-default-features --features sqlite
 </code></pre>
-<ol start="4">
+<ol start="5">
 <li><strong>Set up the database:</strong></li>
 </ol>
 <pre><code class="language-bash"># Create .env file
@@ -22978,11 +23353,11 @@ echo "DATABASE_URL=sqlite:torc.db" &gt; .env
 # Run migrations
 sqlx migrate run --source torc-server/migrations
 </code></pre>
-<ol start="5">
+<ol start="6">
 <li><strong>Build and test:</strong></li>
 </ol>
 <pre><code class="language-bash">cargo build
-cargo test
+cargo nextest run --all-features
 </code></pre>
 <h2 id="making-changes"><a class="header" href="#making-changes">Making Changes</a></h2>
 <h3 id="code-style"><a class="header" href="#code-style">Code Style</a></h3>
@@ -22999,10 +23374,10 @@ cargo fmt --check &amp;&amp; cargo clippy --all --all-targets --all-features -- 
 <h3 id="adding-tests"><a class="header" href="#adding-tests">Adding Tests</a></h3>
 <p>All new functionality should include tests:</p>
 <pre><code class="language-bash"># Run specific test
-cargo test test_name -- --nocapture
+cargo nextest run -E 'test(test_name)'
 
 # Run with logging
-RUST_LOG=debug cargo test -- --nocapture
+RUST_LOG=debug cargo nextest run -E 'test(test_name)'
 </code></pre>
 <h3 id="database-migrations"><a class="header" href="#database-migrations">Database Migrations</a></h3>
 <p>If you need to modify the database schema:</p>
@@ -23032,7 +23407,7 @@ git commit -m "Add feature: description"
 <ol start="3">
 <li><strong>Ensure all tests pass:</strong></li>
 </ol>
-<pre><code class="language-bash">cargo test
+<pre><code class="language-bash">cargo nextest run --all-features
 cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 </code></pre>
@@ -23253,30 +23628,42 @@ libraries.</p>
 <ol>
 <li>
 <p><strong>Modify the OpenAPI spec:</strong></p>
-<pre><code class="language-bash"># Edit the specification
-vim api/openapi.yaml
+<pre><code class="language-bash"># Update the Rust-owned API document, live handler, and models
+vim src/openapi_spec.rs
 </code></pre>
 </li>
 <li>
 <p><strong>Regenerate API clients:</strong></p>
 <pre><code class="language-bash">cd api
-bash make_api_clients.sh
+bash sync_openapi.sh emit
+bash sync_openapi.sh check
+bash sync_openapi.sh clients --use-rust-spec
 </code></pre>
 <p>This regenerates:</p>
 <ul>
+<li>Rust client: <code>src/client/apis/</code></li>
 <li>Python client: <code>python_client/src/torc/openapi_client/</code></li>
 <li>Julia client: <code>julia_client/Torc/src/api/</code></li>
 </ul>
+<p><code>clients --use-rust-spec</code> uses the current <code>api/openapi.codegen.yaml</code>. Run <code>emit</code> first so the
+generated clients reflect the latest Rust-owned contract, and <code>check</code> to verify the checked-in
+artifacts are still in sync.</p>
+<p>When the Rust-emitted spec should become the checked-in contract artifact, run:</p>
+<pre><code class="language-bash">cd api
+bash sync_openapi.sh all --promote
+</code></pre>
+<p>That updates both spec artifacts from Rust and regenerates external clients from the promoted
+contract.</p>
 </li>
 <li>
-<p><strong>Update Rust client code:</strong></p>
-<p>The Rust client in <code>src/client/apis/</code> is generated separately. After modifying the OpenAPI spec,
-regenerate with the OpenAPI generator for Rust.</p>
+<p><strong>Update Rust generation assets as needed:</strong></p>
+<p>The Rust client and server still have legacy generated files in <code>src/</code>. Do not hand-edit those
+generated surfaces. Keep OpenAPI/client generation deterministic through <code>api/sync_openapi.sh</code>.</p>
 </li>
 <li>
 <p><strong>Test all clients:</strong></p>
 <pre><code class="language-bash"># Rust
-cargo test
+cargo nextest run --all-features
 
 # Python
 cd python_client &amp;&amp; pytest
@@ -23298,7 +23685,8 @@ julia --project=julia_client/Torc -e "import Pkg; Pkg.test()"
 The following table shows where features should be implemented:</p>
 <div class="table-wrapper"><table><thead><tr><th>Interface</th><th>Location</th><th>Primary Use Case</th></tr></thead><tbody>
 <tr><td>CLI</td><td><code>src/client/commands/</code></td><td>Command-line automation, scripting</td></tr>
-<tr><td>HTTP API</td><td><code>api/openapi.yaml</code></td><td>Python/Julia integration, external tools</td></tr>
+<tr><td>HTTP API</td><td><code>src/openapi_spec.rs</code>, <code>src/server/live_router.rs</code>, <code>src/models.rs</code></td><td>Rust-owned API contract source</td></tr>
+<tr><td>OpenAPI artifact</td><td><code>api/openapi.yaml</code></td><td>Checked-in emitted contract for Python/Julia integration, external tools</td></tr>
 <tr><td>Dashboard</td><td><code>torc-dash/src/</code></td><td>Web-based monitoring and management</td></tr>
 <tr><td>TUI</td><td><code>src/tui/</code></td><td>Interactive terminal monitoring</td></tr>
 <tr><td>MCP Server</td><td><code>torc-mcp-server/src/</code></td><td>AI assistant integration</td></tr>
@@ -23344,12 +23732,13 @@ pub fn handle_feature_commands(
 <li>Provide helpful error messages with context</li>
 </ul>
 <h3 id="http-api-pythonjulia"><a class="header" href="#http-api-pythonjulia">HTTP API (Python/Julia)</a></h3>
-<p>After updating <code>api/openapi.yaml</code>, the Python and Julia clients are auto-generated. Ensure:</p>
+<p>After updating the Rust-owned API contract and promoting the emitted spec, the Python and Julia
+clients are auto-generated. Ensure:</p>
 <ol>
 <li>All new endpoints have proper request/response schemas</li>
 <li>Query parameters are documented</li>
 <li>Error responses are specified</li>
-<li>Run <code>make_api_clients.sh</code> to regenerate clients</li>
+<li>Run <code>sync_openapi.sh clients</code> to regenerate clients</li>
 </ol>
 <h3 id="dashboard-torc-dash"><a class="header" href="#dashboard-torc-dash">Dashboard (torc-dash)</a></h3>
 <p>The dashboard is an Axum-based web server with embedded static assets:</p>
@@ -23590,7 +23979,7 @@ RUST_LOG=torc=debug,sqlx=warn cargo run  # Fine-grained control
 <li><input disabled="" type="checkbox"/>
 <code>dprint check</code> passes (for Markdown changes)</li>
 <li><input disabled="" type="checkbox"/>
-All tests pass with <code>cargo test</code></li>
+All tests pass with <code>cargo nextest run --all-features</code></li>
 <li><input disabled="" type="checkbox"/>
 New features have tests using <code>rstest</code></li>
 <li><input disabled="" type="checkbox"/>
@@ -23598,9 +23987,9 @@ Documentation added in appropriate Diataxis category</li>
 <li><input disabled="" type="checkbox"/>
 Design decisions documented in <code>docs/src/explanation/design/</code> if applicable</li>
 <li><input disabled="" type="checkbox"/>
-API changes reflected in <code>api/openapi.yaml</code></li>
+API changes reflected in the Rust-owned OpenAPI scaffold and promoted <code>api/openapi.yaml</code></li>
 <li><input disabled="" type="checkbox"/>
-Client libraries regenerated with <code>api/make_api_clients.sh</code></li>
+Client libraries regenerated with <code>api/sync_openapi.sh clients</code></li>
 <li><input disabled="" type="checkbox"/>
 Feature exposed through appropriate interfaces (CLI, API, TUI, etc.)</li>
 </ul>

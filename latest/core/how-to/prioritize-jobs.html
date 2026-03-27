@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>OpenAPI Specification - Torc Documentation</title>
+        <title>Prioritize Jobs - Torc Documentation</title>
 
 
         <!-- Custom HTML head -->
@@ -150,7 +150,7 @@
                         <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/NatLabRockies/torc/edit/main/docs/src/core/reference/openapi.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://github.com/NatLabRockies/torc/edit/main/docs/src/core/how-to/prioritize-jobs.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
@@ -184,221 +184,115 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="openapi-specification"><a class="header" href="#openapi-specification">OpenAPI Specification</a></h1>
-<p>The Torc server implements a HTTP API under <code>/torc-service/v1</code>.</p>
-<p>The checked-in OpenAPI artifact is <code>api/openapi.yaml</code>, but the contract is now emitted from
-<code>src/openapi_spec.rs</code>, live handlers in <code>src/server/live_router.rs</code>, and <code>src/models.rs</code>. Refresh
-the emitted artifact with:</p>
-<pre><code class="language-bash">cd api
-bash sync_openapi.sh all --promote
+                        <h1 id="prioritize-jobs"><a class="header" href="#prioritize-jobs">Prioritize Jobs</a></h1>
+<p>Use job <code>priority</code> when some ready jobs should run before others.</p>
+<p>This is useful when:</p>
+<ul>
+<li>A small number of urgent jobs should be claimed first</li>
+<li>Expensive compute should be reserved for the most important ready work</li>
+<li>Background or cleanup jobs should run only after higher-value jobs have been claimed</li>
+</ul>
+<h2 id="how-priority-works"><a class="header" href="#how-priority-works">How Priority Works</a></h2>
+<ul>
+<li>Every job has a <code>priority</code></li>
+<li>Higher values are claimed first</li>
+<li>The default is <code>0</code></li>
+<li>Priority affects both queue-depth claims and resource-based claims</li>
+<li>A high-priority job still must fit the requesting runner's resources to be claimed</li>
+</ul>
+<p>If two ready jobs have the same priority, Torc uses a stable tie-breaker.</p>
+<h2 id="yaml-example"><a class="header" href="#yaml-example">YAML Example</a></h2>
+<pre><code class="language-yaml">name: priority_example
+
+resource_requirements:
+  - name: cpu_small
+    num_cpus: 2
+    memory: 4g
+    num_gpus: 0
+    runtime: PT30M
+
+jobs:
+  - name: urgent_report
+    command: python make_report.py
+    resource_requirements: cpu_small
+    priority: 100
+
+  - name: normal_batch
+    command: python run_batch.py
+    resource_requirements: cpu_small
+    priority: 10
+
+  - name: cleanup
+    command: ./cleanup.sh
+    resource_requirements: cpu_small
+    priority: 0
 </code></pre>
-<p>For day-to-day development:</p>
-<pre><code class="language-bash">cd api
-
-# Emit Rust-owned spec only
-bash sync_openapi.sh emit
-
-# Verify checked-in specs match the emitted contract
-bash sync_openapi.sh check
-
-# Regenerate Rust, Python, and Julia clients from the checked-in contract
-bash sync_openapi.sh clients
-
-# Or regenerate all three client surfaces from the emitted Rust spec before promotion
-bash sync_openapi.sh emit
-bash sync_openapi.sh check
-bash sync_openapi.sh clients --use-rust-spec
-</code></pre>
-<h2 id="core-endpoints"><a class="header" href="#core-endpoints">Core Endpoints</a></h2>
-<h3 id="workflows"><a class="header" href="#workflows">Workflows</a></h3>
-<p><strong>Create Workflow</strong></p>
-<pre><code class="language-bash"># curl
-curl -X POST http://localhost:8080/torc-service/v1/workflows \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "test_workflow",
-    "user": "alice",
-    "description": "Test workflow"
-  }' | jq '.'
-
-# nushell
-http post http://localhost:8080/torc-service/v1/workflows {
-  name: "test_workflow"
-  user: "alice"
-  description: "Test workflow"
-}
-</code></pre>
-<p>Response:</p>
+<h2 id="json-example"><a class="header" href="#json-example">JSON Example</a></h2>
 <pre><code class="language-json">{
-  "id": 1,
-  "name": "test_workflow",
-  "user": "alice",
-  "description": "Test workflow",
-  "timestamp": 1699000000.0
+  "name": "priority_example",
+  "jobs": [
+    {
+      "name": "urgent_report",
+      "command": "python make_report.py",
+      "priority": 100
+    },
+    {
+      "name": "normal_batch",
+      "command": "python run_batch.py",
+      "priority": 10
+    }
+  ]
 }
 </code></pre>
-<p><strong>List Workflows</strong></p>
-<pre><code class="language-bash"># curl with jq
-curl http://localhost:8080/torc-service/v1/workflows?offset=0&amp;limit=10 | jq '.workflows'
+<h2 id="kdl-example"><a class="header" href="#kdl-example">KDL Example</a></h2>
+<pre><code class="language-kdl">name "priority_example"
 
-# nushell (native JSON parsing)
-http get http://localhost:8080/torc-service/v1/workflows?offset=0&amp;limit=10 | get workflows
-</code></pre>
-<p><strong>Get Workflow</strong></p>
-<pre><code class="language-bash"># curl
-curl http://localhost:8080/torc-service/v1/workflows/1 | jq '.'
+jobs {
+  job {
+    name "urgent_report"
+    command "python make_report.py"
+    priority 100
+  }
 
-# nushell
-http get http://localhost:8080/torc-service/v1/workflows/1
-</code></pre>
-<p><strong>Initialize Jobs</strong></p>
-<pre><code class="language-bash"># curl
-curl -X POST http://localhost:8080/torc-service/v1/workflows/1/initialize_jobs \
-  -H "Content-Type: application/json" \
-  -d '{"reinitialize": false, "ignore_missing_data": false}' | jq '.'
-
-# nushell
-http post http://localhost:8080/torc-service/v1/workflows/1/initialize_jobs {
-  reinitialize: false
-  ignore_missing_data: false
+  job {
+    name "normal_batch"
+    command "python run_batch.py"
+    priority 10
+  }
 }
 </code></pre>
-<h3 id="jobs"><a class="header" href="#jobs">Jobs</a></h3>
-<p><strong>Create Job</strong></p>
-<pre><code class="language-bash"># curl
-curl -X POST http://localhost:8080/torc-service/v1/jobs \
-  -H "Content-Type: application/json" \
-  -d '{
-    "workflow_id": 1,
-    "name": "job1",
-    "command": "echo hello",
-    "resource_requirements_id": 1,
-    "input_file_ids": [],
-    "output_file_ids": [],
-    "depends_on_job_ids": []
-  }' | jq '.'
-</code></pre>
-<p><strong>List Jobs</strong></p>
-<pre><code class="language-bash"># curl - filter by status
-curl "http://localhost:8080/torc-service/v1/jobs?workflow_id=1&amp;status=ready" \
-  | jq '.jobs[] | {name, status, id}'
-
-# nushell - filter and format
-http get "http://localhost:8080/torc-service/v1/jobs?workflow_id=1"
-  | get jobs
-  | where status == "ready"
-  | select name status id
-</code></pre>
-<p><strong>Update Job Status</strong></p>
-<pre><code class="language-bash"># curl
-curl -X POST http://localhost:8080/torc-service/v1/jobs/1/manage_status_change \
-  -H "Content-Type: application/json" \
-  -d '{"target_status": "running"}' | jq '.'
-</code></pre>
-<h3 id="files"><a class="header" href="#files">Files</a></h3>
-<p><strong>Create File</strong></p>
-<pre><code class="language-bash"># curl
-curl -X POST http://localhost:8080/torc-service/v1/files \
-  -H "Content-Type: application/json" \
-  -d '{
-    "workflow_id": 1,
-    "name": "input_data",
-    "path": "/data/input.csv"
-  }' | jq '.'
-</code></pre>
-<p><strong>List Files</strong></p>
-<pre><code class="language-bash">curl "http://localhost:8080/torc-service/v1/files?workflow_id=1" | jq '.files'
-</code></pre>
-<h3 id="user-data"><a class="header" href="#user-data">User Data</a></h3>
-<p><strong>Create User Data</strong></p>
-<pre><code class="language-bash">curl -X POST http://localhost:8080/torc-service/v1/user_data \
-  -H "Content-Type: application/json" \
-  -d '{
-    "workflow_id": 1,
-    "name": "config",
-    "data": {"learning_rate": 0.001, "batch_size": 32}
-  }' | jq '.'
-</code></pre>
-<p><strong>Update User Data</strong></p>
-<pre><code class="language-bash">curl -X PUT http://localhost:8080/torc-service/v1/user_data/1 \
-  -H "Content-Type: application/json" \
-  -d '{
-    "workflow_id": 1,
-    "name": "config",
-    "data": {"learning_rate": 0.01, "batch_size": 64}
-  }' | jq '.'
-</code></pre>
-<h3 id="resource-requirements"><a class="header" href="#resource-requirements">Resource Requirements</a></h3>
-<p><strong>Create Resource Requirements</strong></p>
-<pre><code class="language-bash">curl -X POST http://localhost:8080/torc-service/v1/resource_requirements \
-  -H "Content-Type: application/json" \
-  -d '{
-    "workflow_id": 1,
-    "name": "gpu_large",
-    "num_cpus": 16,
-    "num_gpus": 4,
-    "num_nodes": 1,
-    "memory": "128g",
-    "runtime": "PT8H"
-  }' | jq '.'
-</code></pre>
-<p><strong>Memory Format</strong>: String with suffix: <code>1m</code> (MB), <code>2g</code> (GB), <code>512k</code> (KB)</p>
-<p><strong>Runtime Format</strong>: ISO 8601 duration: <code>PT30M</code> (30 minutes), <code>PT2H</code> (2 hours), <code>P1DT12H</code> (1.5 days)</p>
-<h3 id="compute-nodes"><a class="header" href="#compute-nodes">Compute Nodes</a></h3>
-<p><strong>Create Compute Node</strong></p>
-<pre><code class="language-bash">curl -X POST http://localhost:8080/torc-service/v1/compute_nodes \
-  -H "Content-Type: application/json" \
-  -d '{
-    "workflow_id": 1,
-    "hostname": "compute-01",
-    "num_cpus": 32,
-    "memory": "256g",
-    "num_gpus": 8,
-    "is_active": true
-  }' | jq '.'
-</code></pre>
-<p><strong>List Active Compute Nodes</strong></p>
-<pre><code class="language-bash">curl "http://localhost:8080/torc-service/v1/compute_nodes?workflow_id=1&amp;is_active=true" \
-  | jq '.compute_nodes[] | {hostname, num_cpus, num_gpus}'
-</code></pre>
-<h3 id="results"><a class="header" href="#results">Results</a></h3>
-<p><strong>Create Result</strong></p>
-<pre><code class="language-bash">curl -X POST http://localhost:8080/torc-service/v1/results \
-  -H "Content-Type: application/json" \
-  -d '{
-    "workflow_id": 1,
-    "job_id": 1,
-    "exit_code": 0,
-    "stdout": "Job completed successfully",
-    "stderr": ""
-  }' | jq '.'
-</code></pre>
-<h3 id="events"><a class="header" href="#events">Events</a></h3>
-<p><strong>List Events</strong></p>
-<pre><code class="language-bash">curl "http://localhost:8080/torc-service/v1/events?workflow_id=1&amp;limit=20" \
-  | jq '.events[] | {timestamp, data}'
-</code></pre>
-<h2 id="advanced-endpoints"><a class="header" href="#advanced-endpoints">Advanced Endpoints</a></h2>
-<p><strong>Prepare Next Jobs for Submission</strong> (Job Runner)</p>
-<pre><code class="language-bash">curl -X POST "http://localhost:8080/torc-service/v1/workflows/1/claim_next_jobs?num_jobs=5" \
-  -H "Content-Type: application/json" \
-  -d '{}' | jq '.jobs'
-</code></pre>
-<p><strong>Process Changed Job Inputs</strong> (Reinitialization)</p>
-<pre><code class="language-bash">curl -X POST "http://localhost:8080/torc-service/v1/workflows/1/process_changed_job_inputs?dry_run=true" \
-  -H "Content-Type: application/json" \
-  -d '{}' | jq '.reinitialized_jobs'
-</code></pre>
+<h2 id="priority-and-resources"><a class="header" href="#priority-and-resources">Priority and Resources</a></h2>
+<p>Priority does not override resource limits.</p>
+<p>Example:</p>
+<ul>
+<li><code>train_large_model</code> has priority <code>100</code> but needs 8 GPUs</li>
+<li><code>small_analysis</code> has priority <code>20</code> and needs 1 CPU</li>
+<li>A runner with 1 CPU and 0 GPUs requests work</li>
+</ul>
+<p>In that case, Torc skips <code>train_large_model</code> because it does not fit and can still return
+<code>small_analysis</code>.</p>
+<h2 id="priority-and-scheduler-assignment"><a class="header" href="#priority-and-scheduler-assignment">Priority and Scheduler Assignment</a></h2>
+<p>Priority decides which eligible jobs are considered first. It does not force a job onto a specific
+scheduler or cluster.</p>
+<p>If a job must run on a specific scheduler, set its <code>scheduler</code> field. Use <code>priority</code> to order jobs
+within that eligible set.</p>
+<h2 id="recommendations"><a class="header" href="#recommendations">Recommendations</a></h2>
+<ul>
+<li>Use larger gaps like <code>100</code>, <code>50</code>, <code>10</code>, <code>0</code> so future adjustments are easy</li>
+<li>Reserve very high priorities for urgent or user-facing work</li>
+<li>Keep most jobs at <code>0</code> unless you need explicit ordering</li>
+<li>Use <code>scheduler</code> for placement constraints and <code>priority</code> for ordering</li>
+</ul>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../../core/reference/configuration.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../../core/how-to/view-resource-plots.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../../specialized/hpc/index.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../../core/how-to/parameterize-with-files.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -408,11 +302,11 @@ curl -X POST http://localhost:8080/torc-service/v1/files \
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../../core/reference/configuration.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../../core/how-to/view-resource-plots.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../../specialized/hpc/index.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../../core/how-to/parameterize-with-files.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

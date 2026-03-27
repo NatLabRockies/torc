@@ -455,7 +455,15 @@ generated client's configuration.</p>
 </ol>
 <p><strong>Regeneration Workflow</strong>:</p>
 <pre><code class="language-bash">cd api
-bash make_api_clients.sh  # Regenerates both Python and Julia clients
+bash sync_openapi.sh emit
+bash sync_openapi.sh check
+bash sync_openapi.sh clients --use-rust-spec
+</code></pre>
+<p>This workflow regenerates the Rust, Python, and Julia clients from <code>api/openapi.codegen.yaml</code>. Run
+<code>emit</code> first to refresh that file from the Rust-owned scaffold, and <code>check</code> to verify the checked-in
+artifacts still match. When the emitted spec should replace the checked-in artifact, run:</p>
+<pre><code class="language-bash">cd api
+bash sync_openapi.sh all --promote
 </code></pre>
 <h2 id="alternatives-considered"><a class="header" href="#alternatives-considered">Alternatives Considered</a></h2>
 <h3 id="graphql-instead-of-rest"><a class="header" href="#graphql-instead-of-rest">GraphQL Instead of REST</a></h3>
@@ -483,9 +491,12 @@ bash make_api_clients.sh  # Regenerates both Python and Julia clients
 <h2 id="implementation-guidelines"><a class="header" href="#implementation-guidelines">Implementation Guidelines</a></h2>
 <p>When adding a new feature that should be exposed to users:</p>
 <ol>
-<li><strong>Start with the API</strong>: Define the endpoint in <code>api/openapi.yaml</code> with proper schemas</li>
+<li><strong>Start with the live Rust-owned API contract</strong>: Define the endpoint in
+<code>src/server/live_router.rs</code> and <code>src/models.rs</code></li>
 <li><strong>Implement server-side</strong>: Add handler in <code>src/server/api/</code></li>
-<li><strong>Regenerate clients</strong>: Run <code>api/make_api_clients.sh</code></li>
+<li><strong>Promote and regenerate</strong>: Run <code>api/sync_openapi.sh all --promote</code> when the contract is ready,
+or <code>api/sync_openapi.sh clients --use-rust-spec</code> for local client iteration against the
+Rust-emitted spec</li>
 <li><strong>Add CLI command</strong>: Create handler in <code>src/client/commands/</code></li>
 <li><strong>Update TUI if applicable</strong>: Add to relevant view in <code>src/tui/</code></li>
 <li><strong>Update Dashboard if applicable</strong>: Add route in <code>torc-dash/src/</code></li>
@@ -509,7 +520,7 @@ bash make_api_clients.sh  # Regenerates both Python and Julia clients
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../../specialized/design/srun-monitoring.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../../specialized/design/api-generation.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -523,7 +534,7 @@ bash make_api_clients.sh  # Regenerates both Python and Julia clients
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../../specialized/design/srun-monitoring.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../../specialized/design/api-generation.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

@@ -421,7 +421,7 @@ Validation: PASSED
 <p><strong>Scheduler Configuration:</strong></p>
 <ul>
 <li>Slurm scheduler node requirements are valid</li>
-<li>Warns about heterogeneous schedulers without <code>jobs_sort_method</code> (see below)</li>
+<li>Warns about heterogeneous schedulers when jobs lack explicit scheduler assignments (see below)</li>
 </ul>
 <h4 id="heterogeneous-scheduler-warning"><a class="header" href="#heterogeneous-scheduler-warning">Heterogeneous Scheduler Warning</a></h4>
 <p>When you have multiple Slurm schedulers with different resource profiles (memory, GPUs, walltime,
@@ -429,11 +429,9 @@ partition) and jobs without explicit scheduler assignments, the validation warns
 suboptimal job-to-node matching:</p>
 <pre><code>Warnings (1):
   - Workflow has 3 schedulers with different memory (mem), walltime but 10 job(s)
-    have no explicit scheduler assignment and jobs_sort_method is not set. The
-    default sort method 'gpus_runtime_memory' will be used (jobs sorted by GPUs,
-    then runtime, then memory). If this doesn't match your workload, consider
-    setting jobs_sort_method explicitly to 'gpus_memory_runtime' (prioritize
-    memory over runtime) or 'none' (no sorting).
+    have no explicit scheduler assignment. These jobs can be claimed by any
+    compatible runner, which may lead to suboptimal placement on heterogeneous
+    schedulers.
 </code></pre>
 <p>This warning helps you avoid situations where:</p>
 <ul>
@@ -443,9 +441,9 @@ suboptimal job-to-node matching:</p>
 </ul>
 <p><strong>Solutions:</strong></p>
 <ol>
-<li>Set <code>jobs_sort_method</code> explicitly in your workflow spec</li>
 <li>Assign jobs to specific schedulers using the <code>scheduler</code> field on each job</li>
-<li>Accept the default <code>gpus_runtime_memory</code> sorting if it matches your workload</li>
+<li>Use job <code>priority</code> to prefer more important work when multiple jobs are ready</li>
+<li>Accept flexible placement if any compatible runner is an acceptable target</li>
 </ol>
 <h4 id="bypassing-validation"><a class="header" href="#bypassing-validation">Bypassing Validation</a></h4>
 <p>To create a workflow despite validation warnings:</p>

@@ -379,15 +379,18 @@ Pkg.add(url="https://github.com/NatLabRockies/torc.git", subdir="julia_client/To
 <pre><code class="language-julia">using Torc
 </code></pre>
 <h2 id="for-developers"><a class="header" href="#for-developers">For Developers</a></h2>
+<p>Install <code>cargo-nextest</code> before running the Rust test suite:</p>
+<pre><code class="language-bash">cargo install cargo-nextest
+</code></pre>
 <h3 id="running-tests"><a class="header" href="#running-tests">Running Tests</a></h3>
 <h1 id="run-all-tests"><a class="header" href="#run-all-tests">Run all tests</a></h1>
-<pre><code class="language-bash">cargo test -- --test-threads=1
+<pre><code class="language-bash">cargo nextest run --all-features
 
 # Run specific test
-cargo test --test test_workflow_manager test_initialize_files_with_updated_files
+cargo nextest run -E 'test(test_initialize_files_with_updated_files)'
 
 # Run with debug logging
-RUST_LOG=debug cargo test -- --nocapture
+RUST_LOG=debug cargo nextest run -E 'test(test_initialize_files_with_updated_files)'
 </code></pre>
 <h3 id="setting-up-the-server"><a class="header" href="#setting-up-the-server">Setting Up the Server</a></h3>
 <p><strong>Start the server:</strong></p>

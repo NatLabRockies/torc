@@ -348,30 +348,42 @@ libraries.</p>
 <ol>
 <li>
 <p><strong>Modify the OpenAPI spec:</strong></p>
-<pre><code class="language-bash"># Edit the specification
-vim api/openapi.yaml
+<pre><code class="language-bash"># Update the Rust-owned API document, live handler, and models
+vim src/openapi_spec.rs
 </code></pre>
 </li>
 <li>
 <p><strong>Regenerate API clients:</strong></p>
 <pre><code class="language-bash">cd api
-bash make_api_clients.sh
+bash sync_openapi.sh emit
+bash sync_openapi.sh check
+bash sync_openapi.sh clients --use-rust-spec
 </code></pre>
 <p>This regenerates:</p>
 <ul>
+<li>Rust client: <code>src/client/apis/</code></li>
 <li>Python client: <code>python_client/src/torc/openapi_client/</code></li>
 <li>Julia client: <code>julia_client/Torc/src/api/</code></li>
 </ul>
+<p><code>clients --use-rust-spec</code> uses the current <code>api/openapi.codegen.yaml</code>. Run <code>emit</code> first so the
+generated clients reflect the latest Rust-owned contract, and <code>check</code> to verify the checked-in
+artifacts are still in sync.</p>
+<p>When the Rust-emitted spec should become the checked-in contract artifact, run:</p>
+<pre><code class="language-bash">cd api
+bash sync_openapi.sh all --promote
+</code></pre>
+<p>That updates both spec artifacts from Rust and regenerates external clients from the promoted
+contract.</p>
 </li>
 <li>
-<p><strong>Update Rust client code:</strong></p>
-<p>The Rust client in <code>src/client/apis/</code> is generated separately. After modifying the OpenAPI spec,
-regenerate with the OpenAPI generator for Rust.</p>
+<p><strong>Update Rust generation assets as needed:</strong></p>
+<p>The Rust client and server still have legacy generated files in <code>src/</code>. Do not hand-edit those
+generated surfaces. Keep OpenAPI/client generation deterministic through <code>api/sync_openapi.sh</code>.</p>
 </li>
 <li>
 <p><strong>Test all clients:</strong></p>
 <pre><code class="language-bash"># Rust
-cargo test
+cargo nextest run --all-features
 
 # Python
 cd python_client &amp;&amp; pytest
@@ -393,7 +405,8 @@ julia --project=julia_client/Torc -e "import Pkg; Pkg.test()"
 The following table shows where features should be implemented:</p>
 <div class="table-wrapper"><table><thead><tr><th>Interface</th><th>Location</th><th>Primary Use Case</th></tr></thead><tbody>
 <tr><td>CLI</td><td><code>src/client/commands/</code></td><td>Command-line automation, scripting</td></tr>
-<tr><td>HTTP API</td><td><code>api/openapi.yaml</code></td><td>Python/Julia integration, external tools</td></tr>
+<tr><td>HTTP API</td><td><code>src/openapi_spec.rs</code>, <code>src/server/live_router.rs</code>, <code>src/models.rs</code></td><td>Rust-owned API contract source</td></tr>
+<tr><td>OpenAPI artifact</td><td><code>api/openapi.yaml</code></td><td>Checked-in emitted contract for Python/Julia integration, external tools</td></tr>
 <tr><td>Dashboard</td><td><code>torc-dash/src/</code></td><td>Web-based monitoring and management</td></tr>
 <tr><td>TUI</td><td><code>src/tui/</code></td><td>Interactive terminal monitoring</td></tr>
 <tr><td>MCP Server</td><td><code>torc-mcp-server/src/</code></td><td>AI assistant integration</td></tr>
@@ -439,12 +452,13 @@ pub fn handle_feature_commands(
 <li>Provide helpful error messages with context</li>
 </ul>
 <h3 id="http-api-pythonjulia"><a class="header" href="#http-api-pythonjulia">HTTP API (Python/Julia)</a></h3>
-<p>After updating <code>api/openapi.yaml</code>, the Python and Julia clients are auto-generated. Ensure:</p>
+<p>After updating the Rust-owned API contract and promoting the emitted spec, the Python and Julia
+clients are auto-generated. Ensure:</p>
 <ol>
 <li>All new endpoints have proper request/response schemas</li>
 <li>Query parameters are documented</li>
 <li>Error responses are specified</li>
-<li>Run <code>make_api_clients.sh</code> to regenerate clients</li>
+<li>Run <code>sync_openapi.sh clients</code> to regenerate clients</li>
 </ol>
 <h3 id="dashboard-torc-dash"><a class="header" href="#dashboard-torc-dash">Dashboard (torc-dash)</a></h3>
 <p>The dashboard is an Axum-based web server with embedded static assets:</p>
@@ -685,7 +699,7 @@ RUST_LOG=torc=debug,sqlx=warn cargo run  # Fine-grained control
 <li><input disabled="" type="checkbox"/>
 <code>dprint check</code> passes (for Markdown changes)</li>
 <li><input disabled="" type="checkbox"/>
-All tests pass with <code>cargo test</code></li>
+All tests pass with <code>cargo nextest run --all-features</code></li>
 <li><input disabled="" type="checkbox"/>
 New features have tests using <code>rstest</code></li>
 <li><input disabled="" type="checkbox"/>
@@ -693,9 +707,9 @@ Documentation added in appropriate Diataxis category</li>
 <li><input disabled="" type="checkbox"/>
 Design decisions documented in <code>docs/src/explanation/design/</code> if applicable</li>
 <li><input disabled="" type="checkbox"/>
-API changes reflected in <code>api/openapi.yaml</code></li>
+API changes reflected in the Rust-owned OpenAPI scaffold and promoted <code>api/openapi.yaml</code></li>
 <li><input disabled="" type="checkbox"/>
-Client libraries regenerated with <code>api/make_api_clients.sh</code></li>
+Client libraries regenerated with <code>api/sync_openapi.sh clients</code></li>
 <li><input disabled="" type="checkbox"/>
 Feature exposed through appropriate interfaces (CLI, API, TUI, etc.)</li>
 </ul>

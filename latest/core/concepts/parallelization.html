@@ -235,24 +235,38 @@ jobs:
 <li>Returns a set of jobs that can run concurrently without over-subscription</li>
 <li>Updates job status from <code>ready</code> to <code>pending</code> atomically</li>
 </ol>
+<h3 id="priority-based-job-selection"><a class="header" href="#priority-based-job-selection">Priority-Based Job Selection</a></h3>
+<p>When more than one ready job fits the runner's available resources, Torc orders the candidates by
+job <code>priority</code> before claiming work.</p>
+<ul>
+<li>Higher priority values are claimed first</li>
+<li>The default priority is <code>0</code></li>
+<li>Resource fit still applies first: a high-priority job that does not fit is skipped</li>
+<li>Priority works with both resource-aware allocation and queue-depth parallelism</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-yaml">jobs:
+  - name: preprocess
+    command: ./preprocess.sh
+    resource_requirements: small
+    priority: 10
+
+  - name: train_model
+    command: python train.py
+    resource_requirements: large
+    priority: 100
+</code></pre>
+<p>In that workflow, <code>train_model</code> is preferred whenever it is ready and fits the requesting runner's
+resources. If it does not fit, Torc continues scanning lower-priority ready jobs that do fit.</p>
 <h3 id="job-allocation-ambiguity-two-approaches"><a class="header" href="#job-allocation-ambiguity-two-approaches">Job Allocation Ambiguity: Two Approaches</a></h3>
 <p>When you have multiple compute nodes or schedulers with different capabilities, there are two ways
 to handle job allocation:</p>
-<h4 id="approach-1-sort-method-flexible-but-potentially-ambiguous"><a class="header" href="#approach-1-sort-method-flexible-but-potentially-ambiguous">Approach 1: Sort Method (Flexible but Potentially Ambiguous)</a></h4>
+<h4 id="approach-1-priority-only-flexible-but-potentially-ambiguous"><a class="header" href="#approach-1-priority-only-flexible-but-potentially-ambiguous">Approach 1: Priority Only (Flexible but Potentially Ambiguous)</a></h4>
 <p><strong>How it works:</strong></p>
 <ul>
 <li>Jobs do NOT specify a particular scheduler/compute node</li>
-<li>The server uses a <code>job_sort_method</code> parameter to prioritize jobs when allocating</li>
+<li>The server uses job <code>priority</code> to decide which ready jobs to consider first</li>
 <li>Any runner with sufficient resources can claim any ready job</li>
-</ul>
-<p><strong>Available sort methods:</strong> Define the field job_sort_method in the workflow specification file
-(YAML/JSON/KDL)</p>
-<ul>
-<li><code>gpus_runtime_memory</code> - Prioritize jobs by GPU count (desc), then runtime (desc), then memory
-(desc)</li>
-<li><code>gpus_memory_runtime</code> - Prioritize jobs by GPU count (desc), then memory (desc), then runtime
-(desc)</li>
-<li><code>none</code> - No sorting, jobs selected in queue order</li>
 </ul>
 <p><strong>Tradeoffs:</strong></p>
 <p>✅ <strong>Advantages:</strong></p>
@@ -266,7 +280,6 @@ to handle job allocation:</p>
 <ul>
 <li>Ambiguity - no guarantee GPU jobs go to GPU runners</li>
 <li>Potential inefficiency - high-memory jobs might land on low-memory nodes if timing is unlucky</li>
-<li>Requires careful sort method selection</li>
 <li>Less predictable job placement</li>
 </ul>
 <p><strong>When to use:</strong></p>
@@ -344,12 +357,12 @@ torc-slurm-job-runner $WORKFLOW_ID \
 </ul>
 <h3 id="choosing-between-sort-method-and-scheduler-id"><a class="header" href="#choosing-between-sort-method-and-scheduler-id">Choosing Between Sort Method and Scheduler ID</a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Scenario</th><th>Recommended Approach</th><th>Rationale</th></tr></thead><tbody>
-<tr><td>All jobs can run anywhere</td><td>Sort method</td><td>Maximum flexibility, simplest spec</td></tr>
+<tr><td>All jobs can run anywhere</td><td>Priority only</td><td>Maximum flexibility, simplest spec</td></tr>
 <tr><td>Some jobs need GPUs, some don't</td><td>Scheduler ID</td><td>Prevent GPU waste on CPU jobs</td></tr>
 <tr><td>Multi-cluster Slurm environment</td><td>Scheduler ID</td><td>Jobs must target correct clusters</td></tr>
-<tr><td>Development/testing</td><td>Sort method</td><td>Easier to experiment</td></tr>
+<tr><td>Development/testing</td><td>Priority only</td><td>Easier to experiment</td></tr>
 <tr><td>Production with SLAs</td><td>Scheduler ID</td><td>Predictable resource usage</td></tr>
-<tr><td>Homogeneous compute nodes</td><td>Sort method</td><td>No benefit to restricting</td></tr>
+<tr><td>Homogeneous compute nodes</td><td>Priority only</td><td>No benefit to restricting</td></tr>
 <tr><td>Specialized hardware (GPUs, high-memory, FPGAs)</td><td>Scheduler ID</td><td>Match jobs to capabilities</td></tr>
 </tbody></table>
 </div>
@@ -555,10 +568,10 @@ capacity, while the queue-depth runner gets small jobs for fast parallel executi
 </ul>
 </li>
 <li>
-<p><strong>Use sort_method for flexible single-cluster workflows</strong></p>
+<p><strong>Use priority for flexible single-cluster workflows</strong></p>
 <ul>
 <li>Simpler specifications</li>
-<li>Better resource utilization</li>
+<li>Lets you prefer urgent or expensive work</li>
 <li>Good for homogeneous resources</li>
 </ul>
 </li>
@@ -589,7 +602,7 @@ capacity, while the queue-depth runner gets small jobs for fast parallel executi
 </ol>
 <h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Strategy</th><th>Use When</th><th>Allocation Method</th><th>Resource Tracking</th></tr></thead><tbody>
-<tr><td>Resource-aware + sort_method</td><td>Heterogeneous jobs, flexible allocation</td><td>Server filters by resources</td><td>Yes</td></tr>
+<tr><td>Resource-aware + priority</td><td>Heterogeneous jobs, flexible allocation</td><td>Server filters by resources</td><td>Yes</td></tr>
 <tr><td>Resource-aware + scheduler_id</td><td>Heterogeneous jobs, strict allocation</td><td>Server filters by resources AND scheduler</td><td>Yes</td></tr>
 <tr><td>Queue-depth</td><td>Homogeneous jobs, simple parallelism</td><td>Server returns next N jobs</td><td>No</td></tr>
 </tbody></table>
