@@ -183,7 +183,7 @@ cleanup() {
   if [ -f "$RUN_DIR/workflow_ids/all.txt" ]; then
     while read -r wf_id _; do
       [ -n "$wf_id" ] || continue
-      torc --url "$TORC_API_URL" workflows cancel "$wf_id" > /dev/null 2>&1 || true
+      torc --url "$TORC_API_URL" cancel "$wf_id" > /dev/null 2>&1 || true
     done < "$RUN_DIR/workflow_ids/all.txt"
   fi
   stop_server

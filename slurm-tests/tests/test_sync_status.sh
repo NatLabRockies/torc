@@ -49,7 +49,7 @@ run_test_sync_status() {
 
     # At least one job should have return code -128 (ORPHANED_JOB_RETURN_CODE)
     local orphan_rc_count
-    orphan_rc_count=$(torc --url "$TORC_API_URL" -f json reports results "$wf_id" 2>/dev/null \
+    orphan_rc_count=$(torc --url "$TORC_API_URL" -f json results list "$wf_id" --all-runs 2>/dev/null \
         | jq '[.results[] | select(.return_code == -128)] | length')
     assert_gt "$orphan_rc_count" "0" \
         "at least 1 job has return code -128 (got $orphan_rc_count)"

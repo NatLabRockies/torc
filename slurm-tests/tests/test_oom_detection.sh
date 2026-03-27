@@ -8,7 +8,7 @@
 #   - torc slurm parse-logs detects OOM
 #   - torc logs analyze detects OOM
 #   - torc slurm sacct shows OUT_OF_MEMORY or FAILED
-#   - torc reports check-resource-utilization --include-failed flags violation
+#   - torc workflows check-resources --include-failed flags violation
 
 run_test_oom_detection() {
     local wf_id="$1"
@@ -35,7 +35,7 @@ run_test_oom_detection() {
     local oom_rc
     local oom_id
     oom_id=$(get_job_id "$wf_id" "oom_job")
-    oom_rc=$(torc --url "$TORC_API_URL" -f json reports results "$wf_id" 2>/dev/null \
+    oom_rc=$(torc --url "$TORC_API_URL" -f json results list "$wf_id" --all-runs 2>/dev/null \
         | jq -r "[.results[] | select(.job_id == $oom_id)] | sort_by(.attempt_id) | last | .return_code")
     assert_ne "${oom_rc:-0}" "0" "oom_job has non-zero return code (got $oom_rc)"
     # srun may report exit code 1 for OOM kills instead of 137 (SIGKILL)
@@ -54,6 +54,6 @@ run_test_oom_detection() {
     # sacct should show OOM state
     assert_sacct_job_state "$wf_id" "OUT_OF_MEMORY"
 
-    # check-resource-utilization should flag violations
+    # check-resources should flag violations
     assert_resource_utilization_flags_violation "$wf_id"
 }

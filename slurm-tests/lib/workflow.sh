@@ -71,7 +71,7 @@ is_workflow_terminal() {
 #   Prints a compact summary of job counts by status (e.g., "completed=3 running=2 ready=1").
 workflow_job_summary() {
     local wf_id="$1"
-    torc --url "$TORC_API_URL" -f json reports summary "$wf_id" 2>/dev/null \
+    torc --url "$TORC_API_URL" -f json status "$wf_id" 2>/dev/null \
         | jq -r '.jobs_by_status | to_entries | map(select(.value > 0)) | map("\(.key)=\(.value)") | join(" ")' \
         2>/dev/null || echo "unknown"
 }
@@ -165,7 +165,7 @@ get_job_id() {
 get_job_stdout() {
     local wf_id="$1" job_id="$2"
     local result run_id attempt_id stdout_path
-    result=$(torc --url "$TORC_API_URL" -f json results list "$wf_id" 2>/dev/null) || return 0
+    result=$(torc --url "$TORC_API_URL" -f json results list "$wf_id" --all-runs 2>/dev/null) || return 0
     run_id=$(echo "$result" | jq -r "[.results[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .run_id")
     attempt_id=$(echo "$result" | jq -r "[.results[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .attempt_id // 1")
     if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
@@ -181,7 +181,7 @@ get_job_stdout() {
 get_job_stderr() {
     local wf_id="$1" job_id="$2"
     local result run_id attempt_id stderr_path
-    result=$(torc --url "$TORC_API_URL" -f json results list "$wf_id" 2>/dev/null) || return 0
+    result=$(torc --url "$TORC_API_URL" -f json results list "$wf_id" --all-runs 2>/dev/null) || return 0
     run_id=$(echo "$result" | jq -r "[.results[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .run_id")
     attempt_id=$(echo "$result" | jq -r "[.results[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .attempt_id // 1")
     if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
@@ -204,7 +204,7 @@ wait_for_job_status() {
     echo "Waiting for workflow $wf_id to have '$target_status' jobs (timeout: ${timeout}s)..."
     while [ "$elapsed" -lt "$timeout" ]; do
         local summary count
-        summary=$(torc --url "$TORC_API_URL" -f json reports summary "$wf_id" 2>/dev/null)
+        summary=$(torc --url "$TORC_API_URL" -f json status "$wf_id" 2>/dev/null)
         count=$(echo "$summary" | jq -r ".jobs_by_status.${target_status} // 0")
         if [ "$count" -gt 0 ] 2>/dev/null; then
             echo "  Workflow $wf_id has $count '$target_status' job(s) after ${elapsed}s."

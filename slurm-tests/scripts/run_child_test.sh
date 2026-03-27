@@ -63,7 +63,7 @@ run_pre_poll_actions() {
     echo "Pre-poll: waiting for running jobs before canceling workflow $wf_id"
     wait_for_job_status "$wf_id" "running" "$pre_poll_timeout" || \
       echo "Jobs not yet running, canceling workflow anyway"
-    torc --url "$TORC_API_URL" -f json workflows cancel "$wf_id" \
+    torc --url "$TORC_API_URL" -f json cancel "$wf_id" \
       > "$RUN_DIR/cancel_workflow_output.json" \
       2> "$RUN_DIR/cancel_workflow_stderr.log"
     ;;
@@ -84,12 +84,12 @@ run_pre_poll_actions() {
       torc --url "$TORC_API_URL" -f json workflows sync-status "$wf_id" \
         > "$RUN_DIR/sync_status_output.json" \
         2> "$RUN_DIR/sync_status_stderr.log"
-      torc --url "$TORC_API_URL" workflows cancel "$wf_id" > /dev/null 2>&1 || true
+      torc --url "$TORC_API_URL" cancel "$wf_id" > /dev/null 2>&1 || true
     else
       printf '%s\n' \
         '{"skipped": true, "reason": "jobs never reached running status"}' \
         > "$RUN_DIR/sync_status_output.json"
-      torc --url "$TORC_API_URL" workflows cancel "$wf_id" > /dev/null 2>&1 || true
+      torc --url "$TORC_API_URL" cancel "$wf_id" > /dev/null 2>&1 || true
     fi
     ;;
   esac

@@ -2,7 +2,7 @@
 #
 # 1-node allocation with resource monitoring enabled.
 # 2 jobs: cpu_work (sustained load 30s) + memory_work (allocate 500MB for 30s).
-# Verifies avg_cpu_percent > 0 and peak_memory_bytes > 0 in reports results.
+# Verifies avg_cpu_percent > 0 and peak_memory_bytes > 0 in results list output.
 
 name: resource_monitoring
 description: Resource monitoring validation — CPU and memory usage captured

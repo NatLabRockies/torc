@@ -1,7 +1,7 @@
 # Test 5: OOM Detection
 #
 # 1-node allocation, 1 normal job + 1 OOM job (allocates 30GB with 4GB limit).
-# Verifies OOM detection through parse-logs, logs analyze, sacct, and check-resource-utilization.
+# Verifies OOM detection through parse-logs, logs analyze, sacct, and workflows check-resources.
 # Adapted from tests/workflows/slurm_oom_test.yaml
 
 name: oom_detection

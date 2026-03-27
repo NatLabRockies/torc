@@ -2,7 +2,7 @@
 #
 # 1-node allocation, 1 fast job + 1 slow job that exceeds its walltime.
 # Verifies timeout detection through sacct, parse-logs, logs analyze,
-# and check-resource-utilization.
+# and workflows check-resources.
 
 name: timeout_detection
 description: Timeout detection test — one fast job, one that exceeds walltime

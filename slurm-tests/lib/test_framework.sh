@@ -43,13 +43,14 @@ _dump_debug_info() {
         echo "=== Debug info for $CURRENT_TEST (workflow $CURRENT_WF_ID) ==="
         echo ""
         echo "--- Workflow Summary ---"
-        torc --url "$TORC_API_URL" reports summary "$CURRENT_WF_ID" 2>&1 || true
+        torc --url "$TORC_API_URL" status "$CURRENT_WF_ID" 2>&1 || true
         echo ""
         echo "--- Jobs ---"
         torc --url "$TORC_API_URL" jobs list "$CURRENT_WF_ID" 2>&1 || true
         echo ""
         echo "--- Results ---"
-        torc --url "$TORC_API_URL" -f json reports results "$CURRENT_WF_ID" 2>&1 || true
+        torc --url "$TORC_API_URL" -f json results list "$CURRENT_WF_ID" --all-runs \
+            --include-logs 2>&1 || true
     } > "$debug_file" 2>&1
     echo "    (debug info saved to $debug_file)"
 }
@@ -218,7 +219,7 @@ assert_return_code() {
     local job_id rc
     job_id=$(torc --url "$TORC_API_URL" -f json jobs list "$wf_id" 2>/dev/null \
         | jq -r ".jobs[] | select(.name == \"$job_name\") | .id")
-    rc=$(torc --url "$TORC_API_URL" -f json reports results "$wf_id" 2>/dev/null \
+    rc=$(torc --url "$TORC_API_URL" -f json results list "$wf_id" --all-runs 2>/dev/null \
         | jq -r "[.results[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .return_code")
     assert_eq "$rc" "$expected_code" "job '$job_name' return code is $expected_code"
 }
@@ -354,15 +355,15 @@ assert_peak_memory_ge() {
 }
 
 # assert_resource_utilization_flags_violation WF_ID
-#   Checks that check-resource-utilization --include-failed reports violations.
+#   Checks that workflows check-resources --include-failed reports violations.
 assert_resource_utilization_flags_violation() {
     local wf_id="$1"
     local output
-    output=$(torc --url "$TORC_API_URL" -f json reports check-resource-utilization "$wf_id" \
+    output=$(torc --url "$TORC_API_URL" -f json workflows check-resources "$wf_id" \
         --include-failed 2>/dev/null) || true
     local violation_count
     violation_count=$(echo "$output" | jq '.resource_violations_count // .failed_jobs_count // 0' 2>/dev/null || echo 0)
-    assert_gt "$violation_count" "0" "check-resource-utilization flags violations for workflow $wf_id"
+    assert_gt "$violation_count" "0" "check-resources flags violations for workflow $wf_id"
 }
 
 # assert_slurm_stats_available WF_ID
