@@ -481,7 +481,7 @@ fn main() {
 
             // For JSON output, get diagnosis data to include in the report
             let diagnosis = if format == "json" {
-                diagnose_failures(*workflow_id, output_dir).ok()
+                diagnose_failures(&config, *workflow_id).ok()
             } else {
                 None
             };

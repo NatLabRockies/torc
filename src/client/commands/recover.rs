@@ -12,6 +12,7 @@ use std::process::Command;
 
 use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
+use crate::client::commands::reports::{build_resource_utilization_report, build_results_report};
 use crate::client::commands::slurm::RegenerateDryRunResult;
 use crate::client::report_models::{ResourceUtilizationReport, ResultsReport};
 use crate::client::resource_correction::{
@@ -211,7 +212,7 @@ pub fn recover_workflow(
 
     // Step 2: Diagnose failures
     info!("Diagnosing failures...");
-    let diagnosis = diagnose_failures(args.workflow_id, &args.output_dir)?;
+    let diagnosis = diagnose_failures(config, args.workflow_id)?;
 
     // Step 3: Apply recovery heuristics (in dry_run mode, this shows changes without applying them)
     if args.dry_run {
@@ -663,56 +664,19 @@ fn count_pending_failed_jobs(config: &Configuration, workflow_id: i64) -> Result
 
 /// Diagnose failures and return resource utilization report
 pub fn diagnose_failures(
+    config: &Configuration,
     workflow_id: i64,
-    _output_dir: &Path,
 ) -> Result<ResourceUtilizationReport, String> {
-    let mut cmd = torc_command()?;
-    let output = cmd
-        .args([
-            "-f",
-            "json",
-            "reports",
-            "check-resource-utilization",
-            &workflow_id.to_string(),
-            "--include-failed",
-        ])
-        .output()
-        .map_err(|e| format!("Failed to run check-resource-utilization: {}", e))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("check-resource-utilization failed: {}", stderr));
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    serde_json::from_str(&stdout)
-        .map_err(|e| format!("Failed to parse resource utilization output: {}", e))
+    build_resource_utilization_report(config, Some(workflow_id), None, true, 1.0)
 }
 
 /// Get Slurm log information for failed jobs
-fn get_slurm_log_info(workflow_id: i64, output_dir: &Path) -> Result<ResultsReport, String> {
-    let mut cmd = torc_command()?;
-    let output = cmd
-        .args([
-            "-f",
-            "json",
-            "reports",
-            "results",
-            &workflow_id.to_string(),
-            "-o",
-            output_dir.to_str().unwrap_or("torc_output"),
-        ])
-        .output()
-        .map_err(|e| format!("Failed to run reports results: {}", e))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("reports results failed: {}", stderr));
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    serde_json::from_str(&stdout)
-        .map_err(|e| format!("Failed to parse reports results output: {}", e))
+fn get_slurm_log_info(
+    config: &Configuration,
+    workflow_id: i64,
+    output_dir: &Path,
+) -> Result<ResultsReport, String> {
+    build_results_report(config, Some(workflow_id), output_dir, false, &[])
 }
 
 /// Correlate failed jobs with their Slurm allocation logs
@@ -765,7 +729,7 @@ pub fn apply_recovery_heuristics(
     dry_run: bool,
 ) -> Result<RecoveryResult, String> {
     // Try to get Slurm log info for correlation and logging
-    let slurm_log_map = match get_slurm_log_info(workflow_id, output_dir) {
+    let slurm_log_map = match get_slurm_log_info(config, workflow_id, output_dir) {
         Ok(slurm_info) => {
             let log_map = correlate_slurm_logs(diagnosis, &slurm_info);
             if !log_map.is_empty() {

@@ -822,7 +822,7 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
 
         // Step 1: Diagnose failures
         info!("\nDiagnosing failures...");
-        let diagnosis = match diagnose_failures(args.workflow_id, &args.output_dir) {
+        let diagnosis = match diagnose_failures(config, args.workflow_id) {
             Ok(d) => d,
             Err(e) => {
                 warn!("Warning: Could not diagnose failures: {}", e);
