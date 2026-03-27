@@ -20,6 +20,18 @@ use crate::client::resource_correction::{
 };
 use crate::models::JobStatus;
 
+fn torc_command() -> Result<Command, String> {
+    if let Ok(path) = std::env::var("TORC_BIN")
+        && !path.trim().is_empty()
+    {
+        return Ok(Command::new(path));
+    }
+
+    let current_exe = std::env::current_exe()
+        .map_err(|e| format!("Failed to determine current torc executable: {}", e))?;
+    Ok(Command::new(current_exe))
+}
+
 /// Arguments for workflow recovery
 pub struct RecoverArgs {
     pub workflow_id: i64,
@@ -654,7 +666,8 @@ pub fn diagnose_failures(
     workflow_id: i64,
     _output_dir: &Path,
 ) -> Result<ResourceUtilizationReport, String> {
-    let output = Command::new("torc")
+    let mut cmd = torc_command()?;
+    let output = cmd
         .args([
             "-f",
             "json",
@@ -678,7 +691,8 @@ pub fn diagnose_failures(
 
 /// Get Slurm log information for failed jobs
 fn get_slurm_log_info(workflow_id: i64, output_dir: &Path) -> Result<ResultsReport, String> {
-    let output = Command::new("torc")
+    let mut cmd = torc_command()?;
+    let output = cmd
         .args([
             "-f",
             "json",
@@ -844,7 +858,8 @@ pub fn reset_failed_jobs(
     let job_count = job_ids.len();
 
     // Reset failed jobs WITHOUT --reinitialize (we'll reinitialize separately)
-    let output = Command::new("torc")
+    let mut cmd = torc_command()?;
+    let output = cmd
         .args([
             "workflows",
             "reset-status",
@@ -873,7 +888,8 @@ pub fn reset_failed_jobs(
 
 /// Reinitialize the workflow (set up dependencies and fire on_workflow_start actions)
 pub fn reinitialize_workflow(workflow_id: i64) -> Result<(), String> {
-    let output = Command::new("torc")
+    let mut cmd = torc_command()?;
+    let output = cmd
         .args(["workflows", "reinitialize", &workflow_id.to_string()])
         .output()
         .map_err(|e| format!("Failed to run workflow reinitialize: {}", e))?;
@@ -973,7 +989,8 @@ pub fn regenerate_and_submit(
         args.push("--walltime".to_string());
         args.push(w.to_string());
     }
-    let output = Command::new("torc")
+    let mut cmd = torc_command()?;
+    let output = cmd
         .args(&args)
         .output()
         .map_err(|e| format!("Failed to run slurm regenerate: {}", e))?;
@@ -1007,7 +1024,8 @@ fn get_scheduler_dry_run(
         .collect::<Vec<_>>()
         .join(",");
 
-    let output = Command::new("torc")
+    let mut cmd = torc_command()?;
+    let output = cmd
         .args([
             "-f",
             "json",
