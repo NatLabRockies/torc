@@ -6,7 +6,7 @@ limits.
 ## Quick Start
 
 ```bash
-torc reports check-resource-utilization <workflow_id>
+torc workflows check-resources <workflow_id>
 ```
 
 Example output:
@@ -25,7 +25,7 @@ Job ID | Job Name    | Resource | Specified | Peak Used | Over-Utilization
 Include jobs that stayed within limits:
 
 ```bash
-torc reports check-resource-utilization <workflow_id> --all
+torc workflows check-resources <workflow_id> --all
 ```
 
 ## Check a Specific Run
@@ -33,7 +33,7 @@ torc reports check-resource-utilization <workflow_id> --all
 For workflows that have been reinitialized multiple times:
 
 ```bash
-torc reports check-resource-utilization <workflow_id> --run-id 2
+torc workflows check-resources <workflow_id> --run-id 2
 ```
 
 ## Automatically Correct Requirements

@@ -127,7 +127,7 @@ torc access-groups add-user 1 bob
 
 ```bash
 # 1. Create a workflow (using any method)
-torc workflows create examples/sample_workflow.yaml
+torc create examples/sample_workflow.yaml
 # Output: Created workflow 42
 
 # 2. Add the workflow to the team's group

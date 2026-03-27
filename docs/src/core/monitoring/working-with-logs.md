@@ -175,7 +175,7 @@ torc logs analyze wf<id>/
 
 ## Related Commands
 
-- **`torc reports results`**: Generate JSON report with all log file paths
+- **`torc results list --include-logs`**: Generate JSON report with all log file paths
 - **`torc results list`**: View summary table of job return codes
 - **`torc slurm parse-logs`**: Parse Slurm logs for error patterns (Slurm-specific)
 - **`torc slurm sacct`**: Collect Slurm accounting data

@@ -157,8 +157,8 @@ See [Configuration Reference](../../core/reference/configuration.md) for full co
 HPC profiles are used by Slurm-related commands to automatically generate scheduler configurations.
 See [Advanced Slurm Configuration](./slurm.md) for details on:
 
-- `torc submit-slurm` - Submit workflows with auto-generated schedulers
-- `torc workflows create-slurm` - Create workflows with auto-generated schedulers
+- `torc slurm generate` + `torc submit` - Submit workflows with auto-generated schedulers
+- `torc create-slurm` - Create workflows with auto-generated schedulers
 
 ## See Also
 

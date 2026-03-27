@@ -5,8 +5,8 @@ Find and read the stdout/stderr output from job execution.
 ## Find Log File Paths
 
 ```bash
-torc reports results <workflow_id>
-torc reports results <workflow_id> --job-id 15
+torc results list --include-logs <workflow_id>
+torc results list --include-logs <workflow_id> --job-id 15
 ```
 
 Output includes:
@@ -71,7 +71,7 @@ Quickly find logs for failed jobs:
 torc jobs list <workflow_id> --status failed
 
 # Then view each job's logs
-torc reports results <workflow_id> --job-id <failed_job_id>
+torc results list --include-logs <workflow_id> --job-id <failed_job_id>
 ```
 
 ## View Logs in TUI or Dashboard

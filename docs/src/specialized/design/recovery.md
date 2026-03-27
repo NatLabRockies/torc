@@ -160,8 +160,7 @@ sequenceDiagram
 ### Step 2: Group Jobs Using WorkflowGraph
 
 The system builds a `WorkflowGraph` from pending jobs and uses `scheduler_groups()` to group them by
-`(resource_requirements, has_dependencies)`. This aligns with the behavior of
-`torc workflows create-slurm`:
+`(resource_requirements, has_dependencies)`. This aligns with the behavior of `torc create-slurm`:
 
 - **Jobs without dependencies**: Can be scheduled immediately with `on_workflow_start`
 - **Jobs with dependencies** (deferred): Need `on_jobs_ready` recovery actions to schedule when they

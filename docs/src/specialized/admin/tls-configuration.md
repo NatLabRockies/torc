@@ -43,16 +43,16 @@ and dashboard — use these settings automatically.
 
 ## Slurm / HPC
 
-When you submit a workflow with `torc submit-slurm`, TLS settings from your config file (or CLI
-flags) are automatically propagated as CLI flags on the `torc-slurm-job-runner` command that runs on
-compute nodes. No extra environment variable setup is needed.
+When you submit a workflow with `torc slurm generate` + `torc submit`, TLS settings from your config
+file (or CLI flags) are automatically propagated as CLI flags on the `torc-slurm-job-runner` command
+that runs on compute nodes. No extra environment variable setup is needed.
 
 The only requirement is that the CA certificate file must be on a **shared filesystem** accessible
 from all compute nodes.
 
 ```bash
 # Your config file handles TLS — just submit as normal
-torc submit-slurm --account myproject workflow.yaml
+torc slurm generate --account myproject workflow.yaml && torc submit workflow.yaml
 ```
 
 ## Advanced Configuration

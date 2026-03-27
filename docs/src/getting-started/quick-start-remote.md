@@ -44,7 +44,7 @@ jobs:
 ## Create the Workflow on the Server
 
 ```console
-torc workflows create workflow.yaml
+torc create workflow.yaml
 ```
 
 Note the workflow ID in the output.

@@ -72,7 +72,7 @@ inspecting the torc log from inside the allocation (`slurm-<jobid>.out`).
 ### 6. Verify execution results
 
 ```bash
-torc reports results 42
+torc results list 42 --include-logs
 ```
 
 Check that:
@@ -82,12 +82,12 @@ Check that:
 
 ## Key Validations
 
-| Check                             | Command                        | Expected                        |
-| --------------------------------- | ------------------------------ | ------------------------------- |
-| Job log shows 2-node step         | `torc jobs logs <id>`          | `SLURM_STEP_NUM_NODES=2`        |
-| sacct node_list has 2 nodes       | `torc slurm stats <wf_id>`     | Two node names in `node_list`   |
-| Return code is 0                  | `torc reports results <wf_id>` | `return_code=0`                 |
-| Slurm step name visible in squeue | `squeue --me --steps`          | `wf<id>_j<id>_r1_a1` during run |
+| Check                             | Command                                    | Expected                        |
+| --------------------------------- | ------------------------------------------ | ------------------------------- |
+| Job log shows 2-node step         | `torc jobs logs <id>`                      | `SLURM_STEP_NUM_NODES=2`        |
+| sacct node_list has 2 nodes       | `torc slurm stats <wf_id>`                 | Two node names in `node_list`   |
+| Return code is 0                  | `torc results list <wf_id> --include-logs` | `return_code=0`                 |
+| Slurm step name visible in squeue | `squeue --me --steps`                      | `wf<id>_j<id>_r1_a1` during run |
 
 ## Troubleshooting
 

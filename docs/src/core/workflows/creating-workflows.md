@@ -11,14 +11,14 @@ formats.
 ### Create from a YAML File
 
 ```bash
-torc workflows create workflow.yaml
+torc create workflow.yaml
 ```
 
 ### Create from JSON5 or KDL
 
 ```bash
-torc workflows create workflow.json5
-torc workflows create workflow.kdl
+torc create workflow.json5
+torc create workflow.kdl
 ```
 
 Torc detects the format from the file extension.
@@ -108,7 +108,7 @@ torc jobs create \
 
 ```bash
 # Initialize the workflow (resolves dependencies)
-torc workflows initialize-jobs 1
+torc init-jobs 1
 
 # Run the workflow
 torc run 1
@@ -228,7 +228,7 @@ similar to the Python client.
 Use `--dry-run` to validate a workflow specification without creating it on the server:
 
 ```bash
-torc workflows create --dry-run workflow.yaml
+torc create --dry-run workflow.yaml
 ```
 
 Example output:
@@ -332,7 +332,7 @@ This warning helps you avoid situations where:
 To create a workflow despite validation warnings:
 
 ```bash
-torc workflows create --skip-checks workflow.yaml
+torc create --skip-checks workflow.yaml
 ```
 
 Note: This bypasses scheduler node validation checks (which are treated as errors), but does not
@@ -348,7 +348,7 @@ torc workflows list
 ### Delete a Workflow
 
 ```bash
-torc workflows delete <workflow_id>
+torc delete <workflow_id>
 ```
 
 ### View Workflow Details

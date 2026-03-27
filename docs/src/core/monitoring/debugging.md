@@ -5,8 +5,8 @@ help you identify and resolve issues. The primary debugging tools are:
 
 - **`torc results list`**: Prints a table of return codes for each job execution (non-zero means
   failure)
-- **`torc reports results`**: Generates a detailed JSON report containing job results and all
-  associated log file paths
+- **`torc results list --include-logs`**: Generates a detailed JSON report containing job results
+  and all associated log file paths
 - **`torc logs analyze <output-dir>`**: Analyzes log files for known error patterns (see
   [Working with Logs](working-with-logs.md))
 - **torc-dash Debug tab**: Interactive web interface for visual debugging with log file viewer
@@ -20,8 +20,8 @@ Torc automatically captures return codes and multiple log files for each job exe
 - **Slurm logs**: Additional logs when using Slurm scheduler (see
   [Debugging Slurm Workflows](debugging-slurm.md))
 
-The `reports results` command consolidates all this information into a single JSON report, making it
-easy to locate and examine relevant log files for debugging.
+The `results list --include-logs` command consolidates all this information into a single JSON
+report, making it easy to locate and examine relevant log files for debugging.
 
 ## Quick Start
 
@@ -63,23 +63,23 @@ Generate a debugging report for a workflow:
 
 ```bash
 # Generate report for a specific workflow
-torc reports results <workflow_id>
+torc results list --include-logs <workflow_id>
 
 # Specify custom output directory (default: "torc_output")
-torc reports results <workflow_id> --output-dir /path/to/output
+torc results list --include-logs <workflow_id> --output-dir /path/to/output
 
 # Include all workflow runs (default: only latest run)
-torc reports results <workflow_id> --all-runs
+torc results list --include-logs <workflow_id> --all-runs
 
 # Interactive workflow selection (if workflow_id omitted)
-torc reports results
+torc results list --include-logs
 ```
 
 The command outputs a comprehensive JSON report to stdout. Redirect it to a file for easier
 analysis:
 
 ```bash
-torc reports results <workflow_id> > debug_report.json
+torc results list --include-logs <workflow_id> > debug_report.json
 ```
 
 ## Report Structure
@@ -277,7 +277,7 @@ Each tab includes:
 - You're investigating jobs and want to easily switch between stdout/stderr
 - You prefer not to construct `jq` queries manually
 
-**Use CLI tools (`torc reports results`) when:**
+**Use CLI tools (`torc results list --include-logs`) when:**
 
 - You need to automate failure detection in CI/CD
 - You want to save reports for archival or version control
@@ -292,7 +292,7 @@ When a job fails, follow these steps:
 
 1. **Generate the debug report**:
    ```bash
-   torc reports results <workflow_id> > debug_report.json
+   torc results list --include-logs <workflow_id> > debug_report.json
    ```
 
 2. **Find the failed job** using `jq` or similar tool:
@@ -399,7 +399,7 @@ grep -r "workflow_id=123" torc_output/ > workflow_123_logs.txt
 
 ```bash
 # 1. Generate report
-torc reports results 123 > report.json
+torc results list --include-logs 123 > report.json
 
 # 2. Check overall success/failure counts
 echo "Total jobs: $(jq '.total_results' report.json)"
@@ -429,7 +429,7 @@ When a workflow has been reinitialized multiple times, compare runs to identify 
 
 ```bash
 # Generate report with all historical runs
-torc reports results <workflow_id> --all-runs > full_history.json
+torc results list --include-logs <workflow_id> --all-runs > full_history.json
 
 # Compare return codes across runs for a specific job
 jq -r '.results[] | select(.job_name == "flaky_job") | "Run \(.run_id): exit code \(.return_code)"' full_history.json
@@ -446,8 +446,8 @@ jq -r '.results[] | select(.job_name == "flaky_job" and .return_code != 0) | "Ru
 
 ### Log File Missing Warnings
 
-The `reports results` command automatically checks for log file existence and prints warnings to
-stderr if files are missing:
+The `results list --include-logs` command automatically checks for log file existence and prints
+warnings to stderr if files are missing:
 
 ```
 Warning: job stdout log file does not exist for job 456: torc_output/job_stdio/job_456.o
@@ -476,7 +476,7 @@ The `--output-dir` parameter must match the directory used during workflow execu
 torc run <workflow_id> /path/to/my_output
 
 # Generate report using the same directory
-torc reports results <workflow_id> --output-dir /path/to/my_output
+torc results list --include-logs <workflow_id> --output-dir /path/to/my_output
 ```
 
 ### Slurm Scheduler
@@ -486,7 +486,7 @@ torc reports results <workflow_id> --output-dir /path/to/my_output
 torc slurm schedule-nodes <workflow_id> --output-dir /path/to/my_output
 
 # Generate report using the same directory
-torc reports results <workflow_id> --output-dir /path/to/my_output
+torc results list --include-logs <workflow_id> --output-dir /path/to/my_output
 ```
 
 **Default behavior**: If `--output-dir` is not specified, both the runner and reports command
@@ -499,7 +499,7 @@ default to `./output`.
 
 2. **Archive reports with logs**: Store the JSON report alongside log files for future reference
    ```bash
-   torc reports results "$WF_ID" > "torc_output/report_${WF_ID}_$(date +%Y%m%d_%H%M%S).json"
+   torc results list --include-logs "$WF_ID" > "torc_output/report_${WF_ID}_$(date +%Y%m%d_%H%M%S).json"
    ```
 
 3. **Use version control**: Commit debug reports for important workflow runs to track changes over
@@ -511,12 +511,12 @@ default to `./output`.
 5. **Check warnings**: Pay attention to warnings about missing log files - they often indicate
    configuration issues
 
-6. **Combine with resource monitoring**: Use `reports results` for log files and
+6. **Combine with resource monitoring**: Use `results list --include-logs` for log files and
    `reports check-resource-utilization` for performance issues
    ```bash
    # Check if job failed due to resource constraints
-   torc reports check-resource-utilization "$WF_ID"
-   torc reports results "$WF_ID" > report.json
+   torc workflows check-resources "$WF_ID"
+   torc results list --include-logs "$WF_ID" > report.json
    ```
 
 7. **Filter large reports**: For workflows with many jobs, filter the report to focus on relevant
@@ -536,7 +536,7 @@ default to `./output`.
 
 ```bash
 ls -ld output/  # Check if directory exists
-torc reports results <workflow_id> --output-dir "$(pwd)/torc_output"
+torc results list --include-logs <workflow_id> --output-dir "$(pwd)/torc_output"
 ```
 
 ### Empty Results Array
@@ -546,7 +546,7 @@ torc reports results <workflow_id> --output-dir "$(pwd)/torc_output"
 **Solution**: Check workflow status and ensure jobs have been completed:
 
 ```bash
-torc workflows status <workflow_id>
+torc status <workflow_id>
 torc results list <workflow_id>  # Verify results exist
 ```
 
@@ -561,15 +561,15 @@ torc results list <workflow_id>  # Verify results exist
 find . -name "job_*.o" -o -name "job_runner_*.log"
 
 # Use correct output directory in report
-torc reports results <workflow_id> --output-dir <correct_path>
+torc results list --include-logs <workflow_id> --output-dir <correct_path>
 ```
 
 ## Related Commands
 
 - **`torc results list`**: View summary of job results in table format
-- **`torc workflows status`**: Check overall workflow status
-- **`torc reports results`**: Generate debug report with all log file paths
-- **`torc reports check-resource-utilization`**: Analyze resource usage and find over-utilized jobs
+- **`torc status`**: Check overall workflow status
+- **`torc results list --include-logs`**: Generate debug report with all log file paths
+- **`torc workflows check-resources`**: Analyze resource usage and find over-utilized jobs
 - **`torc jobs list`**: View all jobs and their current status
 - **`torc-dash`**: Launch web interface with interactive Debugging tab
 - **`torc tui`**: Launch terminal UI for workflow monitoring

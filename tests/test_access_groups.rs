@@ -786,7 +786,8 @@ fn test_enforcement_revoke_access_removes_permission(
 
     // Create and share a workflow (authenticate as some_owner)
     let owner_config = config_with_auth(config, "some_owner");
-    let workflow = create_workflow_with_user(&owner_config, "revoke-test-workflow", "some_owner");
+    let workflow_name = format!("revoke-test-workflow-{}", unique_suffix());
+    let workflow = create_workflow_with_user(&owner_config, &workflow_name, "some_owner");
     let workflow_id = workflow.id.unwrap();
 
     apis::access_control_api::add_workflow_to_group(config, workflow_id, ml_team_id)
@@ -1437,33 +1438,33 @@ fn test_comprehensive_access_control_workflow_execution(
         "Files list should contain file names"
     );
 
-    // Test workflow status command
+    // Test workflow status command (now at top level, shows summary)
     let status_output = run_cli_command_with_auth(
-        &["workflows", "status", &workflow_id.to_string()],
+        &["status", &workflow_id.to_string()],
         start_server_with_access_control,
         "alice",
         password,
     )
     .expect("alice should be able to get workflow status");
-    // Workflow status shows metadata like run_id, is_canceled - verify we got output
+    // Status command shows workflow summary - verify we got output
     assert!(
-        status_output.contains("Run ID") || status_output.contains("run_id"),
-        "Workflow status should show workflow metadata. Got: {}",
+        status_output.contains("Workflow Summary") || status_output.contains("workflow_id"),
+        "Workflow status should show workflow summary. Got: {}",
         status_output
     );
 
     // =========================================================================
-    // Step 5: Valid user (alice) can run reports CLI commands
+    // Step 5: Valid user (alice) can run status CLI command
     // =========================================================================
 
-    // Test reports commands - these should work for authorized users
+    // Test status command - this should work for authorized users
     let report_output = run_cli_command_with_auth(
-        &["reports", "summary", &workflow_id.to_string()],
+        &["status", &workflow_id.to_string()],
         start_server_with_access_control,
         "alice",
         password,
     )
-    .expect("alice should be able to run reports summary");
+    .expect("alice should be able to run status");
     assert!(!report_output.is_empty(), "Report should produce output");
 
     // =========================================================================

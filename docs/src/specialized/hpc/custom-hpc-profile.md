@@ -287,10 +287,10 @@ Now you can submit workflows using your custom profile:
 
 ```bash
 # Auto-detect the profile (if on the cluster)
-torc submit-slurm --account my_project workflow.yaml
+torc slurm generate --account my_project workflow.yaml && torc submit workflow.yaml
 
 # Or explicitly specify the profile
-torc submit-slurm --account my_project --hpc-profile research workflow.yaml
+torc slurm generate --account my_project --hpc-profile && torc submit --hpc-profile research workflow.yaml
 ```
 
 ## Advanced Configuration

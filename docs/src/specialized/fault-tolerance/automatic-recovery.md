@@ -248,7 +248,7 @@ those retries get scheduled without manual intervention.
 
 ```bash
 # Submit a workflow with failure handlers
-torc submit-slurm --account my_project workflow.yaml
+torc slurm generate --account my_project workflow.yaml && torc submit workflow.yaml
 
 # Watch with auto-scheduling enabled (uses defaults)
 torc watch $WORKFLOW_ID --auto-schedule
@@ -276,7 +276,7 @@ With default settings:
 ### 1. Submit a Workflow
 
 ```bash
-torc submit-slurm --account myproject workflow.yaml
+torc slurm generate --account myproject workflow.yaml && torc submit workflow.yaml
 ```
 
 Output:
@@ -480,7 +480,7 @@ torc watch 42 --recover --poll-interval 300 --show-job-counts
 After completion, review actual usage:
 
 ```bash
-torc reports check-resource-utilization 42
+torc workflows check-resources 42
 ```
 
 This helps tune future job specifications.
@@ -549,7 +549,7 @@ If jobs are requesting more resources than partitions allow:
 2. Print status updates
 3. On completion, check for failures
 4. If failures and recover enabled:
-   - Run `torc reports check-resource-utilization --include-failed`
+   - Run `torc workflows check-resources --include-failed`
    - Parse results for `likely_oom` and `likely_timeout` flags
    - Update resource requirements via API
    - Run `torc workflows reset-status --failed-only --reinitialize`

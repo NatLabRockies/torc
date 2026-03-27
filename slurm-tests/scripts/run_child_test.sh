@@ -139,7 +139,7 @@ main() {
     echo "Prepared workflow: $prepared"
     # shellcheck disable=SC2086
     local wf_id
-    wf_id=$(submit_workflow "$prepared" ${submit_extra[@]:-})
+    wf_id=$(submit_workflow "$prepared" "${submit_extra[@]}")
     echo "Child workflow id: $wf_id"
     append_workflow_id "$wf_id"
 

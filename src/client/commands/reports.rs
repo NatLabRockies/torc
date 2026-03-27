@@ -165,7 +165,7 @@ pub fn handle_report_commands(config: &Configuration, command: &ReportCommands, 
     }
 }
 
-fn check_resource_utilization(
+pub fn check_resource_utilization(
     config: &Configuration,
     workflow_id: Option<i64>,
     run_id: Option<i64>,
@@ -636,7 +636,7 @@ fn check_log_file_exists(path: &str, log_type: &str, job_id: i64) {
 }
 
 /// Generate comprehensive JSON report of job results including log file paths
-fn generate_results_report(
+pub fn generate_results_report(
     config: &Configuration,
     workflow_id: Option<i64>,
     output_dir: &Path,
@@ -856,7 +856,7 @@ fn generate_results_report(
 }
 
 /// Generate a summary of workflow results
-fn generate_summary(config: &Configuration, workflow_id: Option<i64>, format: &str) {
+pub fn generate_summary(config: &Configuration, workflow_id: Option<i64>, format: &str) {
     // Get or select workflow ID
     let user = get_env_user_name();
     let workflow_id = match workflow_id {

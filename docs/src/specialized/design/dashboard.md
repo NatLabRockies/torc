@@ -97,12 +97,12 @@ access or complex orchestration:
 
 | Endpoint                     | CLI Command                   | Purpose                        |
 | ---------------------------- | ----------------------------- | ------------------------------ |
-| `POST /api/cli/create`       | `torc workflows create`       | Create workflow from spec file |
+| `POST /api/cli/create`       | `torc create`                 | Create workflow from spec file |
 | `POST /api/cli/run`          | `torc workflows run`          | Run workflow locally           |
 | `POST /api/cli/submit`       | `torc workflows submit`       | Submit to scheduler            |
-| `POST /api/cli/initialize`   | `torc workflows initialize`   | Initialize job dependencies    |
-| `POST /api/cli/delete`       | `torc workflows delete`       | Delete workflow                |
-| `POST /api/cli/reinitialize` | `torc workflows reinitialize` | Reinitialize workflow          |
+| `POST /api/cli/initialize`   | `torc init`                   | Initialize job dependencies    |
+| `POST /api/cli/delete`       | `torc delete`                 | Delete workflow                |
+| `POST /api/cli/reinitialize` | `torc reinit`                 | Reinitialize workflow          |
 | `POST /api/cli/reset-status` | `torc workflows reset-status` | Reset job statuses             |
 | `GET /api/cli/run-stream`    | `torc workflows run`          | SSE streaming execution        |
 

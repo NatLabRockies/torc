@@ -33,7 +33,7 @@ $ torc slurm sacct $WORKFLOW_ID
 ```
 
 **Fix:** Increase `memory` in resource requirements, or use
-`torc reports check-resource-utilization --correct` to auto-adjust based on peak usage.
+`torc workflows check-resources --correct` to auto-adjust based on peak usage.
 
 ### Timeout with Graceful Shutdown (exit code 0)
 
@@ -54,7 +54,7 @@ correctly but did not finish all its work. Reinitialize and re-submit to continu
 checkpoint:
 
 ```bash
-torc workflows reinitialize $WORKFLOW_ID
+torc reinit $WORKFLOW_ID
 torc workflows submit $WORKFLOW_ID
 ```
 

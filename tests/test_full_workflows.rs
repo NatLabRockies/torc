@@ -1024,12 +1024,8 @@ resource_requirements:
     fs::write(&input_file_path, good_input).expect("Failed to write fixed config.json");
 
     // Run reinitialize command
-    run_cli_command(
-        &["workflows", "reinitialize", &workflow_id.to_string()],
-        start_server,
-        None,
-    )
-    .expect("Failed to reinitialize workflow");
+    run_cli_command(&["reinit", &workflow_id.to_string()], start_server, None)
+        .expect("Failed to reinitialize workflow");
 
     // Verify job statuses after reinitialize
     let jobs = apis::jobs_api::list_jobs(

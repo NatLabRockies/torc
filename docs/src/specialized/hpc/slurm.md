@@ -4,8 +4,8 @@ This guide covers advanced Slurm configuration for users who need fine-grained c
 HPC workflows.
 
 > **For most users**: See [Slurm Overview](./slurm-workflows.md) for the recommended approach using
-> `torc submit-slurm`. You don't need to manually configure schedulers or actions—Torc handles this
-> automatically.
+> `torc slurm generate` + `torc submit`. You don't need to manually configure schedulers or
+> actions—Torc handles this automatically.
 
 ## When to Use Manual Configuration
 
@@ -232,8 +232,8 @@ actions:
     num_allocations: 1
 ```
 
-> **Note**: The `torc submit-slurm` command handles this automatically by analyzing job
-> dependencies.
+> **Note**: The `torc slurm generate` + `torc submit` command handles this automatically by
+> analyzing job dependencies.
 
 ## Custom Slurm Directives
 

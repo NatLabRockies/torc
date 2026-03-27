@@ -34,7 +34,7 @@ export TORC_API_URL="http://localhost:8080/torc-service/v1"
 
 # Create and run the workflow
 torc workflows create tests/workflows/database_contention_test/workflow.yaml
-torc workflows run <workflow_id>
+torc run <workflow_id>
 
 # Monitor with TUI
 torc tui
@@ -49,10 +49,10 @@ To maximize contention, run multiple workers:
 RUST_LOG=debug DATABASE_URL=sqlite:db/sqlite/dev.db cargo run --bin torc-server -- run
 
 # Terminal 2-5: Multiple workers (to increase parallel job completions)
-torc workflows run <workflow_id> &
-torc workflows run <workflow_id> &
-torc workflows run <workflow_id> &
-torc workflows run <workflow_id> &
+torc run <workflow_id> &
+torc run <workflow_id> &
+torc run <workflow_id> &
+torc run <workflow_id> &
 ```
 
 ## Expected Behavior

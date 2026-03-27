@@ -286,7 +286,7 @@ torc alice workflows list
 Password: ****
 
 # Acceptable: CI/CD with secrets
-TORC_PASSWORD=${{ secrets.TORC_PASSWORD }} torc workflows create
+TORC_PASSWORD=${{ secrets.TORC_PASSWORD }} torc create
 
 # Bad: Command-line argument (visible in `ps`)
 torc --password mypassword workflows list

@@ -405,6 +405,7 @@ schedule them independently across nodes for maximum throughput.
 
 ## See Also
 
-- [Slurm Overview](./slurm-workflows.md) — Auto-generated Slurm configuration with `submit-slurm`
+- [Slurm Overview](./slurm-workflows.md) — Auto-generated Slurm configuration with
+  `slurm generate` + `submit`
 - [Advanced Slurm Configuration](./slurm.md) — Manual scheduler and srun wrapping details
 - [Resource Requirements Reference](../../core/reference/resources.md) — Complete field reference

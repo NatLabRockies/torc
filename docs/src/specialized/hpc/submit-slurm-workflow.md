@@ -4,8 +4,11 @@ Submit a workflow specification to a Slurm-based HPC system with automatic sched
 
 ## Quick Start
 
+Generate Slurm schedulers and submit in two steps:
+
 ```bash
-torc submit-slurm --account <your-account> workflow.yaml
+torc slurm generate --account <your-account> workflow.yaml
+torc submit workflow.yaml
 ```
 
 Torc will:
@@ -17,13 +20,13 @@ Torc will:
 
 ## Preview Before Submitting
 
-Always preview the generated configuration first:
+Preview the generated configuration without creating anything:
 
 ```bash
-torc slurm generate --account <your-account> workflow.yaml
+torc slurm generate --account <your-account> --dry-run workflow.yaml
 ```
 
-This shows the Slurm schedulers and workflow actions that would be created without submitting.
+This shows the Slurm schedulers and workflow actions that would be created.
 
 ## Requirements
 
@@ -48,7 +51,8 @@ jobs:
 
 ```bash
 # See all options
-torc submit-slurm --help
+torc slurm generate --help
+torc submit --help
 ```
 
 ## See Also

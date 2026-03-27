@@ -65,7 +65,7 @@ results. Start 16 runners to simulate a compute node with 16 cores dedicated to 
 
 ```bash
 for i in $(seq 1 16); do
-  torc workflows run <workflow_id> &
+  torc run <workflow_id> &
 done
 ```
 
@@ -76,7 +76,7 @@ WORKFLOW_ID=<workflow_id>
 mkdir -p output/runner_logs
 
 for i in $(seq 1 16); do
-  torc workflows run "$WORKFLOW_ID" > "output/runner_logs/runner_${i}.log" 2>&1 &
+  torc run "$WORKFLOW_ID" > "output/runner_logs/runner_${i}.log" 2>&1 &
   echo "Started runner $i (PID: $!)"
 done
 
@@ -104,7 +104,7 @@ export TORC_API_URL="http://<server-host>:8080/torc-service/v1"
 WORKFLOW_ID=<workflow_id>
 
 for i in $(seq 1 16); do
-  torc workflows run "$WORKFLOW_ID" &
+  torc run "$WORKFLOW_ID" &
 done
 ```
 

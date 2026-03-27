@@ -43,7 +43,7 @@ The AI should:
 ### 4. Verify regrouping
 
 ```bash
-torc reports check-resource-utilization <workflow_id>
+torc workflows check-resources <workflow_id>
 ```
 
 ## Files

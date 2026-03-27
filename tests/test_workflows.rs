@@ -404,15 +404,10 @@ fn test_workflows_delete_command_json(start_server: &ServerProcess) {
     let workflow_id = workflow.id.unwrap();
 
     // Test the CLI delete command (run as the workflow owner)
-    let args = [
-        "workflows",
-        "delete",
-        "--no-prompts",
-        &workflow_id.to_string(),
-    ];
+    let args = ["delete", "--force", &workflow_id.to_string()];
 
     run_cli_with_json(&args, start_server, Some("delete_user"))
-        .expect("Failed to run workflows delete command");
+        .expect("Failed to run delete command");
 
     // Verify the workflow is actually deleted by trying to get it
     let get_result = apis::workflows_api::get_workflow(config, workflow_id);
@@ -443,8 +438,8 @@ fn test_workflows_initialize_jobs_command(start_server: &ServerProcess) {
     let _created_job = apis::jobs_api::create_job(config, job)
         .expect("Failed to create job for initialization test");
 
-    // Test the CLI initialize-jobs command
-    let args = ["workflows", "initialize-jobs", &workflow_id.to_string()];
+    // Test the CLI init command (now at top level)
+    let args = ["init", &workflow_id.to_string()];
 
     // This command doesn't return JSON in the current implementation,
     // so we'll test that it doesn't fail
@@ -461,16 +456,17 @@ fn test_workflows_status_command_json(start_server: &ServerProcess) {
     let workflow = create_test_workflow(config, "status_test_workflow");
     let workflow_id = workflow.id.unwrap();
 
-    // Test the CLI status command
-    let args = ["workflows", "status", &workflow_id.to_string()];
+    // Test the CLI status command (now at top level, returns summary info)
+    let args = ["status", &workflow_id.to_string()];
 
     let json_output = run_cli_with_json(&args, start_server, Some("test_user"))
-        .expect("Failed to run workflows status command");
+        .expect("Failed to run status command");
 
-    // Verify JSON structure for workflow status
-    assert!(json_output.get("run_id").is_some());
-    assert!(json_output.get("is_canceled").is_some());
-    // Other status fields may or may not be present depending on workflow state
+    // Verify JSON structure for workflow status/summary
+    assert!(json_output.get("workflow_id").is_some());
+    assert!(json_output.get("workflow_name").is_some());
+    assert!(json_output.get("total_jobs").is_some());
+    assert!(json_output.get("jobs_by_status").is_some());
 }
 
 #[rstest]

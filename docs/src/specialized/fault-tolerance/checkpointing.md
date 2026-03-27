@@ -217,7 +217,7 @@ Three pieces work together here:
 ## Step 3: Submit and Run
 
 ```bash
-torc submit-slurm --account my_project graceful_termination.yaml
+torc slurm generate --account my_project graceful_termination.yaml && torc submit graceful_termination.yaml
 ```
 
 Or, if you already have schedulers configured in the spec:

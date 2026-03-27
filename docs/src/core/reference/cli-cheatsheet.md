@@ -4,27 +4,36 @@
 
 ## Quick Start
 
-| Command                                        | Description                                    |
-| ---------------------------------------------- | ---------------------------------------------- |
-| `torc workflows create <spec>`                 | Create from spec file                          |
-| `torc run <spec.yaml>`                         | Create workflow from spec and run locally      |
-| `torc submit <spec.yaml>`                      | Create and submit to scheduler (needs actions) |
-| `torc submit-slurm --account ACCT <spec.yaml>` | Auto-generate Slurm schedulers and submit      |
-| `torc reports summary <id>`                    | Workflow completion summary                    |
-| `torc watch <id>`                              | Monitor workflow until completion              |
-| `torc watch <id> --recover`                    | Monitor and auto-recover from failures         |
-| `torc-dash`                                    | Launch web dashboard                           |
-| `torc tui`                                     | Launch interactive terminal UI                 |
+| Command                     | Description                                    |
+| --------------------------- | ---------------------------------------------- |
+| `torc create <spec>`        | Create workflow from spec file                 |
+| `torc run <spec.yaml>`      | Create workflow from spec and run locally      |
+| `torc submit <spec.yaml>`   | Create and submit to scheduler (needs actions) |
+| `torc status <id>`          | Workflow status and job summary                |
+| `torc watch <id>`           | Monitor workflow until completion              |
+| `torc watch <id> --recover` | Monitor and auto-recover from failures         |
+| `torc-dash`                 | Launch web dashboard                           |
+| `torc tui`                  | Launch interactive terminal UI                 |
 
-## Managing Workflows
+## Workflow Lifecycle
 
-| Command                      | Description                    |
-| ---------------------------- | ------------------------------ |
-| `torc workflows list`        | List your workflows            |
-| `torc workflows status <id>` | Get job counts by status       |
-| `torc workflows get <id>`    | Get workflow details           |
-| `torc workflows cancel <id>` | Cancel workflow and Slurm jobs |
-| `torc workflows delete <id>` | Delete workflow                |
+| Command              | Description                          |
+| -------------------- | ------------------------------------ |
+| `torc create <spec>` | Create workflow from spec file       |
+| `torc init <id>`     | Initialize workflow dependencies     |
+| `torc run <id>`      | Run workflow locally                 |
+| `torc submit <id>`   | Submit workflow to scheduler         |
+| `torc status <id>`   | Show workflow status and job summary |
+| `torc reinit <id>`   | Reinitialize workflow after changes  |
+| `torc cancel <id>`   | Cancel workflow and Slurm jobs       |
+| `torc delete <id>`   | Delete workflow                      |
+
+## Workflow Query
+
+| Command                   | Description          |
+| ------------------------- | -------------------- |
+| `torc workflows list`     | List your workflows  |
+| `torc workflows get <id>` | Get workflow details |
 
 ## Job Management
 
@@ -38,18 +47,18 @@
 
 ## Recovery & Diagnostics
 
-| Command                                        | Description                                    |
-| ---------------------------------------------- | ---------------------------------------------- |
-| `torc reports summary <id>`                    | Workflow completion summary                    |
-| `torc reports check-resource-utilization <id>` | Check memory/CPU/time usage                    |
-| `torc reports results <id>`                    | JSON report of job results with log paths      |
-| `torc recover <id>`                            | One-shot recovery (diagnose + fix + resubmit)  |
-| `torc watch <id> --recover --auto-schedule`    | Full production recovery mode                  |
-| `torc workflows sync-status <id>`              | Fix orphaned jobs (stuck in "running")         |
-| `torc workflows correct-resources <id>`        | Upscale violated + downsize over-allocated RRs |
-| `torc slurm sacct <id>`                        | Get Slurm accounting data                      |
-| `torc slurm stats <id>`                        | Per-job sacct stats stored in the database     |
-| `torc slurm usage <id>`                        | Total compute node and CPU time consumed       |
+| Command                                     | Description                                    |
+| ------------------------------------------- | ---------------------------------------------- |
+| `torc status <id>`                          | Workflow status and job summary                |
+| `torc workflows check-resources <id>`       | Check memory/CPU/time usage                    |
+| `torc results list <id> --include-logs`     | Job results with log paths                     |
+| `torc recover <id>`                         | One-shot recovery (diagnose + fix + resubmit)  |
+| `torc watch <id> --recover --auto-schedule` | Full production recovery mode                  |
+| `torc workflows sync-status <id>`           | Fix orphaned jobs (stuck in "running")         |
+| `torc workflows correct-resources <id>`     | Upscale violated + downsize over-allocated RRs |
+| `torc slurm sacct <id>`                     | Get Slurm accounting data                      |
+| `torc slurm stats <id>`                     | Per-job sacct stats stored in the database     |
+| `torc slurm usage <id>`                     | Total compute node and CPU time consumed       |
 
 ## Remote Workers
 

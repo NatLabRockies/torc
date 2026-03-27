@@ -112,6 +112,7 @@
   - [Shell Completions](./specialized/tools/shell-completions.md)
 - [Design & Architecture](./specialized/design/index.md)
   - [Client Architecture](./specialized/design/client.md)
+  - [HTTP API Design](./specialized/design/http-api.md)
   - [Workflow Actions](./specialized/design/workflow-actions.md)
   - [Web Dashboard Design](./specialized/design/dashboard.md)
   - [Server API Handler](./specialized/design/server.md)

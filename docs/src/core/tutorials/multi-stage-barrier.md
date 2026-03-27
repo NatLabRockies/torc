@@ -240,7 +240,7 @@ mkdir -p output
 ### Step 3: Create the Workflow
 
 ```bash
-torc workflows create barrier_demo.yaml
+torc create barrier_demo.yaml
 ```
 
 You should see output like:

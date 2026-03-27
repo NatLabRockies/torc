@@ -209,3 +209,98 @@ Override the username for Torc API operations (workflow ownership, authenticatio
 - **Use case**: Service accounts or when system username differs from Torc identity
 
 **Note**: Does not affect Slurm job submission, which always uses the real system user.
+
+### TORC_API_URL
+
+The URL of the Torc API server for CLI operations.
+
+- **Type**: String (URL)
+- **Default**: `http://localhost:8080/torc-service/v1`
+- **Use case**: Connect to a remote Torc server or custom port
+
+```bash
+export TORC_API_URL=http://myserver:8080/torc-service/v1
+torc workflows list
+```
+
+**Note**: Can also be set via the `--url` CLI flag.
+
+### TORC_PASSWORD
+
+Password for HTTP Basic authentication with the Torc server.
+
+- **Type**: String
+- **Default**: None (no authentication)
+- **Use case**: Authenticate with a password-protected Torc server
+
+```bash
+export TORC_PASSWORD=mysecretpassword
+torc workflows list
+```
+
+**Note**: Username comes from `TORC_USERNAME` or system username. See
+[Authentication](../../specialized/admin/authentication.md) for server setup.
+
+### TORC_TLS_CA_CERT
+
+Path to a custom CA certificate for TLS verification.
+
+- **Type**: String (file path)
+- **Default**: System CA certificates
+- **Use case**: Connect to servers using self-signed or internal CA certificates
+
+```bash
+export TORC_TLS_CA_CERT=/path/to/ca-cert.pem
+torc workflows list
+```
+
+### TORC_TLS_INSECURE
+
+Skip TLS certificate verification (use with caution).
+
+- **Type**: Boolean (`true` or `1` to enable)
+- **Default**: `false` (TLS verification enabled)
+- **Use case**: Development/testing with self-signed certificates
+
+```bash
+export TORC_TLS_INSECURE=true
+torc workflows list
+```
+
+**Warning**: Disabling TLS verification exposes connections to man-in-the-middle attacks. Only use
+in trusted development environments.
+
+### TORC_COOKIE_HEADER
+
+Cookie header value for cookie-based authentication.
+
+- **Type**: String
+- **Default**: None
+- **Use case**: Authenticate via session cookies (e.g., when behind an authentication proxy)
+
+```bash
+export TORC_COOKIE_HEADER="session=abc123; token=xyz789"
+torc workflows list
+```
+
+### RUST_LOG
+
+Control log verbosity for the Torc CLI.
+
+- **Type**: String (log level)
+- **Default**: `warn`
+- **Values**: `error`, `warn`, `info`, `debug`, `trace`
+- **Use case**: Debug CLI issues or see detailed API interactions
+
+```bash
+# Show info-level logs
+export RUST_LOG=info
+torc workflows list
+
+# Show debug logs for torc modules only
+export RUST_LOG=torc=debug
+torc run workflow.yaml
+
+# Show SQL queries (server debugging)
+RUST_LOG=sqlx=debug torc-server run
+```

@@ -107,7 +107,7 @@ While the workflow runs, you can monitor progress:
 
 ```bash
 # Check workflow status
-torc workflows status <workflow_id>
+torc status <workflow_id>
 
 # List jobs and their states
 torc jobs list <workflow_id>

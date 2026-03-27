@@ -120,7 +120,7 @@ You can always access a workflow directly by its ID, regardless of archive statu
 torc workflows get <workflow_id>
 
 # Check workflow status
-torc workflows status <workflow_id>
+torc status <workflow_id>
 ```
 
 ## Impact on Workflow Operations

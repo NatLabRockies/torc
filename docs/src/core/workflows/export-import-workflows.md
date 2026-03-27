@@ -164,7 +164,7 @@ file. After import, you need to initialize and run the workflow:
 
 ```bash
 # Initialize the imported workflow
-torc workflows initialize 456
+torc init 456
 
 # Run locally
 torc workflows run 456
@@ -263,7 +263,7 @@ python -m json.tool my_workflow.json > /dev/null && echo "Valid JSON"
 Imported jobs start in `uninitialized` status. You must initialize the workflow:
 
 ```bash
-torc workflows initialize 456
+torc init 456
 ```
 
 Then check job status:

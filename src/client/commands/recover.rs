@@ -29,6 +29,8 @@ pub struct RecoverArgs {
     pub retry_unknown: bool,
     pub recovery_hook: Option<String>,
     pub dry_run: bool,
+    /// Enable interactive recovery wizard
+    pub interactive: bool,
     /// [EXPERIMENTAL] Enable AI-assisted recovery for pending_failed jobs
     pub ai_recovery: bool,
     /// AI agent CLI to use for --ai-recovery (e.g., "claude")
@@ -86,6 +88,15 @@ pub fn recover_workflow(
     config: &Configuration,
     args: &RecoverArgs,
 ) -> Result<RecoveryResult, String> {
+    // Interactive mode is not yet implemented
+    if args.interactive {
+        return Err(
+            "Interactive recovery mode (--interactive) is not yet implemented. \
+             For now, use --dry-run to preview changes, then run without --dry-run to apply them."
+                .to_string(),
+        );
+    }
+
     if args.dry_run {
         info!("Recovery dry_run workflow_id={}", args.workflow_id);
     }

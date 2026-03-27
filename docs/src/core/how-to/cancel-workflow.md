@@ -5,7 +5,7 @@ Stop a running workflow and terminate its jobs.
 ## Cancel a Workflow
 
 ```bash
-torc workflows cancel <workflow_id>
+torc cancel <workflow_id>
 ```
 
 This:
@@ -20,7 +20,7 @@ This:
 Verify the workflow was canceled:
 
 ```bash
-torc workflows status <workflow_id>
+torc status <workflow_id>
 ```
 
 Or check completion status:
@@ -43,7 +43,7 @@ To resume a canceled workflow:
 
 ```bash
 # Reinitialize to reset canceled jobs
-torc workflows reinitialize <workflow_id>
+torc reinit <workflow_id>
 
 # Run again
 torc workflows run <workflow_id>

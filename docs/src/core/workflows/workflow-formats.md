@@ -426,9 +426,9 @@ complete collection.
 All formats use the same command:
 
 ```bash
-torc workflows create examples/yaml/sample_workflow.yaml
-torc workflows create examples/json/sample_workflow.json5
-torc workflows create examples/kdl/sample_workflow.kdl
+torc create examples/yaml/sample_workflow.yaml
+torc create examples/json/sample_workflow.json5
+torc create examples/kdl/sample_workflow.kdl
 ```
 
 Or use the quick execution commands:
