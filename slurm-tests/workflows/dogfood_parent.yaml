@@ -1,0 +1,66 @@
+name: slurm_tests_dogfood
+description: Parent Torc workflow that orchestrates the Slurm integration suite
+project: slurm-tests
+execution_config:
+  mode: direct
+
+jobs:
+  - name: single_node_basic
+    command: >-
+      bash slurm-tests/scripts/run_child_test.sh
+      single_node_basic PLACEHOLDER_ACCOUNT PLACEHOLDER_PARTITION
+
+  - name: no_srun_basic
+    command: >-
+      bash slurm-tests/scripts/run_child_test.sh
+      no_srun_basic PLACEHOLDER_ACCOUNT PLACEHOLDER_PARTITION
+
+  - name: cancel_workflow
+    command: >-
+      bash slurm-tests/scripts/run_child_test.sh
+      cancel_workflow PLACEHOLDER_ACCOUNT PLACEHOLDER_PARTITION
+
+  - name: multi_node_parallel
+    command: >-
+      bash slurm-tests/scripts/run_child_test.sh
+      multi_node_parallel PLACEHOLDER_ACCOUNT PLACEHOLDER_PARTITION
+
+  - name: multi_node_mpi_step
+    command: >-
+      bash slurm-tests/scripts/run_child_test.sh
+      multi_node_mpi_step PLACEHOLDER_ACCOUNT PLACEHOLDER_PARTITION
+
+  - name: job_parallelism
+    command: >-
+      bash slurm-tests/scripts/run_child_test.sh
+      job_parallelism PLACEHOLDER_ACCOUNT PLACEHOLDER_PARTITION
+
+  - name: oom_detection
+    command: >-
+      bash slurm-tests/scripts/run_child_test.sh
+      oom_detection PLACEHOLDER_ACCOUNT PLACEHOLDER_PARTITION
+
+  - name: resource_monitoring
+    command: >-
+      bash slurm-tests/scripts/run_child_test.sh
+      resource_monitoring PLACEHOLDER_ACCOUNT PLACEHOLDER_PARTITION
+
+  - name: failure_recovery
+    command: >-
+      bash slurm-tests/scripts/run_child_test.sh
+      failure_recovery PLACEHOLDER_ACCOUNT PLACEHOLDER_PARTITION
+
+  - name: timeout_detection
+    command: >-
+      bash slurm-tests/scripts/run_child_test.sh
+      timeout_detection PLACEHOLDER_ACCOUNT PLACEHOLDER_PARTITION
+
+  - name: srun_termination_signal
+    command: >-
+      bash slurm-tests/scripts/run_child_test.sh
+      srun_termination_signal PLACEHOLDER_ACCOUNT PLACEHOLDER_PARTITION
+
+  - name: sync_status
+    command: >-
+      bash slurm-tests/scripts/run_child_test.sh
+      sync_status PLACEHOLDER_ACCOUNT PLACEHOLDER_PARTITION
