@@ -2244,6 +2244,9 @@ fn test_scheduler_node_validation_fails_with_start_one_worker_per_node_in_auto_m
                 "walltime": "01:00:00"
             }
         ],
+        "execution_config": {
+            "mode": "auto"
+        },
         "actions": [
             {
                 "trigger_type": "on_workflow_start",

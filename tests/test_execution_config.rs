@@ -1186,13 +1186,16 @@ fn test_direct_mode_simple_job_execution(start_server: &ServerProcess) {
     )
     .expect("Failed to create workflow");
 
-    // Verify workflow was created with direct mode execution_config
+    // Verify workflow was created. Since mode=direct is the default,
+    // the server omits execution_config (no need to store defaults).
     let workflow = apis::workflows_api::get_workflow(&start_server.config, workflow_id)
         .expect("Failed to get workflow");
 
-    assert!(workflow.execution_config.is_some());
-    let exec_config: ExecutionConfig =
-        serde_json::from_str(workflow.execution_config.as_ref().unwrap()).unwrap();
+    let exec_config = workflow
+        .execution_config
+        .as_deref()
+        .map(|json| serde_json::from_str::<ExecutionConfig>(json).unwrap())
+        .unwrap_or_default();
     assert_eq!(exec_config.mode, ExecutionMode::Direct);
 }
 
