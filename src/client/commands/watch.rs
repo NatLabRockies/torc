@@ -833,6 +833,7 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
                     total_results: 0,
                     over_utilization_count: 0,
                     violations: Vec::new(),
+                    within_limits: Vec::new(),
                     resource_violations_count: 0,
                     resource_violations: Vec::new(),
                 }

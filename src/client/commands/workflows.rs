@@ -1149,6 +1149,7 @@ fn handle_correct_resources(
         total_results: all_results.len(),
         over_utilization_count: resource_violations.len(),
         violations: Vec::new(),
+        within_limits: Vec::new(),
         resource_violations_count: resource_violations.len(),
         resource_violations: resource_violations.clone(),
     };

@@ -56,7 +56,7 @@ struct ResourceUtilizationRow {
     specified: String,
     #[tabled(rename = "Peak Used")]
     peak_used: String,
-    #[tabled(rename = "Over-Utilization")]
+    #[tabled(rename = "Utilization")]
     over_utilization: String,
 }
 
@@ -99,7 +99,7 @@ pub fn check_resource_utilization(
         std::process::exit(0);
     }
 
-    let rows: Vec<ResourceUtilizationRow> = report
+    let violation_rows: Vec<ResourceUtilizationRow> = report
         .violations
         .iter()
         .map(|r| ResourceUtilizationRow {
@@ -112,37 +112,57 @@ pub fn check_resource_utilization(
         })
         .collect();
 
+    // When --all is set, also include jobs that stayed within their resource limits
+    let within_limits_rows: Vec<ResourceUtilizationRow> = if show_all {
+        report
+            .within_limits
+            .iter()
+            .map(|r| ResourceUtilizationRow {
+                job_id: r.job_id,
+                job_name: r.job_name.clone(),
+                resource_type: r.resource_type.clone(),
+                specified: r.specified.clone(),
+                peak_used: r.peak_used.clone(),
+                over_utilization: r.over_utilization.clone(),
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+
     // Output results
     match format {
         "json" => {
             print_json(&report, "resource utilization");
         }
         _ => {
-            if rows.is_empty() {
-                if show_all {
-                    println!(
-                        "All {} jobs stayed within their specified resource requirements",
-                        report.total_results
-                    );
-                } else {
-                    println!(
-                        "✓ All {} jobs stayed within their specified resource requirements",
-                        report.total_results
-                    );
-                }
+            if violation_rows.is_empty() && within_limits_rows.is_empty() {
+                println!(
+                    "✓ All {} jobs stayed within their specified resource requirements",
+                    report.total_results
+                );
+            } else if violation_rows.is_empty() && !within_limits_rows.is_empty() {
+                println!(
+                    "✓ All {} jobs stayed within their specified resource requirements:\n",
+                    report.total_results
+                );
+                display_table_with_count(&within_limits_rows, "jobs");
             } else {
-                if !show_all {
-                    println!(
-                        "\n⚠ Found {} resource over-utilization violations:\n",
-                        report.over_utilization_count
-                    );
-                }
-                display_table_with_count(&rows, "violations");
+                println!(
+                    "\n⚠ Found {} resource over-utilization violations:\n",
+                    report.over_utilization_count
+                );
+                display_table_with_count(&violation_rows, "violations");
 
                 eprintln!(
                     "\nTo automatically correct these violations, run:\n  torc workflows correct-resources {}",
                     report.workflow_id
                 );
+
+                if show_all && !within_limits_rows.is_empty() {
+                    println!("\nJobs within resource limits:\n");
+                    display_table_with_count(&within_limits_rows, "jobs");
+                }
 
                 if !show_all {
                     println!(
@@ -223,6 +243,7 @@ pub fn build_resource_utilization_report(
             .collect();
 
     let mut violations = Vec::new();
+    let mut within_limits = Vec::new();
     let mut over_util_count = 0;
     let mut resource_violations_info: Vec<ResourceViolationInfo> = Vec::new();
 
@@ -392,6 +413,16 @@ pub fn build_resource_utilization_report(
                         over_utilization: format!("+{:.1}%", over_pct),
                     });
                 }
+            } else {
+                let usage_pct = (peak_memory_bytes as f64 / specified_memory_bytes as f64) * 100.0;
+                within_limits.push(ResourceViolation {
+                    job_id,
+                    job_name: job_name.clone(),
+                    resource_type: "Memory".to_string(),
+                    specified: format_memory_bytes(specified_memory_bytes),
+                    peak_used: format_memory_bytes(peak_memory_bytes),
+                    over_utilization: format!("{:.1}%", usage_pct),
+                });
             }
         }
 
@@ -414,6 +445,16 @@ pub fn build_resource_utilization_report(
                         over_utilization: format!("+{:.1}%", over_pct),
                     });
                 }
+            } else {
+                let usage_pct = (peak_cpu_percent / specified_cpu_percent) * 100.0;
+                within_limits.push(ResourceViolation {
+                    job_id,
+                    job_name: job_name.clone(),
+                    resource_type: "CPU".to_string(),
+                    specified: format!("{:.0}% ({} cores)", specified_cpu_percent, num_cpus),
+                    peak_used: format!("{:.1}%", peak_cpu_percent),
+                    over_utilization: format!("{:.1}%", usage_pct),
+                });
             }
         }
 
@@ -440,6 +481,16 @@ pub fn build_resource_utilization_report(
                     over_utilization: format!("+{:.1}%", over_pct),
                 });
             }
+        } else {
+            let usage_pct = (exec_time_seconds / specified_runtime_seconds) * 100.0;
+            within_limits.push(ResourceViolation {
+                job_id,
+                job_name: job_name.clone(),
+                resource_type: "Runtime".to_string(),
+                specified: format_duration(specified_runtime_seconds),
+                peak_used: format_duration(exec_time_seconds),
+                over_utilization: format!("{:.1}%", usage_pct),
+            });
         }
     }
 
@@ -449,6 +500,7 @@ pub fn build_resource_utilization_report(
         total_results: results.len(),
         over_utilization_count: over_util_count,
         violations,
+        within_limits,
         resource_violations_count: resource_violations_info.len(),
         resource_violations: resource_violations_info,
     })

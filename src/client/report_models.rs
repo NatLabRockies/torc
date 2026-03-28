@@ -15,6 +15,9 @@ pub struct ResourceUtilizationReport {
     pub total_results: usize,
     pub over_utilization_count: usize,
     pub violations: Vec<ResourceViolation>,
+    /// Jobs that stayed within their resource limits (populated when `--all` is used)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub within_limits: Vec<ResourceViolation>,
     /// Number of jobs with resource violations (only present when `--include-failed` is used)
     #[serde(default, skip_serializing_if = "is_zero")]
     pub resource_violations_count: usize,
@@ -176,6 +179,7 @@ mod tests {
                 peak_used: "1.5 GB".to_string(),
                 over_utilization: "+50.0%".to_string(),
             }],
+            within_limits: vec![],
             resource_violations_count: 1,
             resource_violations: vec![ResourceViolationInfo {
                 job_id: 2,

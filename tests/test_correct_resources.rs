@@ -836,6 +836,7 @@ fn empty_diagnosis(workflow_id: i64, total_results: usize) -> ResourceUtilizatio
         total_results,
         over_utilization_count: 0,
         violations: Vec::new(),
+        within_limits: Vec::new(),
         resource_violations_count: 0,
         resource_violations: Vec::new(),
     }
