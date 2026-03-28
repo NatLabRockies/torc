@@ -290,7 +290,7 @@ Now you can submit workflows using your custom profile:
 torc slurm generate --account my_project workflow.yaml && torc submit workflow.yaml
 
 # Or explicitly specify the profile
-torc slurm generate --account my_project --hpc-profile && torc submit --hpc-profile research workflow.yaml
+torc slurm generate --account my_project --profile research workflow.yaml && torc submit workflow.yaml
 ```
 
 ## Advanced Configuration

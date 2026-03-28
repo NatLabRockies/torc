@@ -69,7 +69,12 @@ pub fn check_resource_utilization(
     min_over_utilization: f64,
     format: &str,
 ) {
-    let report = match build_resource_utilization_report(
+    let builder = if show_all {
+        build_resource_utilization_report_with_all
+    } else {
+        build_resource_utilization_report
+    };
+    let report = match builder(
         config,
         workflow_id,
         run_id,
@@ -180,6 +185,41 @@ pub fn build_resource_utilization_report(
     run_id: Option<i64>,
     include_failed: bool,
     min_over_utilization: f64,
+) -> Result<ResourceUtilizationReport, String> {
+    build_resource_utilization_report_inner(
+        config,
+        workflow_id,
+        run_id,
+        include_failed,
+        min_over_utilization,
+        false,
+    )
+}
+
+pub fn build_resource_utilization_report_with_all(
+    config: &Configuration,
+    workflow_id: Option<i64>,
+    run_id: Option<i64>,
+    include_failed: bool,
+    min_over_utilization: f64,
+) -> Result<ResourceUtilizationReport, String> {
+    build_resource_utilization_report_inner(
+        config,
+        workflow_id,
+        run_id,
+        include_failed,
+        min_over_utilization,
+        true,
+    )
+}
+
+fn build_resource_utilization_report_inner(
+    config: &Configuration,
+    workflow_id: Option<i64>,
+    run_id: Option<i64>,
+    include_failed: bool,
+    min_over_utilization: f64,
+    collect_within_limits: bool,
 ) -> Result<ResourceUtilizationReport, String> {
     let user = get_env_user_name();
     let wf_id = match workflow_id {
@@ -413,7 +453,7 @@ pub fn build_resource_utilization_report(
                         over_utilization: format!("+{:.1}%", over_pct),
                     });
                 }
-            } else {
+            } else if collect_within_limits {
                 let usage_pct = (peak_memory_bytes as f64 / specified_memory_bytes as f64) * 100.0;
                 within_limits.push(ResourceViolation {
                     job_id,
@@ -445,7 +485,7 @@ pub fn build_resource_utilization_report(
                         over_utilization: format!("+{:.1}%", over_pct),
                     });
                 }
-            } else {
+            } else if collect_within_limits {
                 let usage_pct = (peak_cpu_percent / specified_cpu_percent) * 100.0;
                 within_limits.push(ResourceViolation {
                     job_id,
@@ -481,7 +521,7 @@ pub fn build_resource_utilization_report(
                     over_utilization: format!("+{:.1}%", over_pct),
                 });
             }
-        } else {
+        } else if collect_within_limits {
             let usage_pct = (exec_time_seconds / specified_runtime_seconds) * 100.0;
             within_limits.push(ResourceViolation {
                 job_id,

@@ -681,14 +681,15 @@ pub struct StdioConfig {
 #[serde(rename_all = "lowercase")]
 pub enum ExecutionMode {
     /// Direct shell execution - torc manages termination via SIGTERM/SIGKILL.
-    /// Use when srun/sacct are unreliable or running outside Slurm.
+    /// This is the default mode. Works everywhere: local machines, cloud VMs,
+    /// containers, and inside Slurm allocations.
+    #[default]
     Direct,
     /// Slurm srun execution - Slurm manages resource limits and termination.
     /// Jobs are wrapped with `srun` inside Slurm allocations.
     Slurm,
     /// Auto-detect based on environment - uses `slurm` if SLURM_JOB_ID is set,
-    /// otherwise `direct`. This is the default behavior.
-    #[default]
+    /// otherwise `direct`.
     Auto,
 }
 
@@ -700,7 +701,7 @@ pub enum ExecutionMode {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct ExecutionConfig {
-    /// Execution mode: direct, slurm, or auto (default).
+    /// Execution mode: direct (default), slurm, or auto.
     #[serde(default)]
     pub mode: ExecutionMode,
 
@@ -2103,7 +2104,7 @@ impl WorkflowSpec {
                 .execution_config
                 .as_ref()
                 .map(|config| &config.mode)
-                .unwrap_or(&ExecutionMode::Auto);
+                .unwrap_or(&ExecutionMode::Direct);
             if *mode != ExecutionMode::Direct {
                 return Err(
                     "start_one_worker_per_node requires execution_config.mode to be 'direct'"
@@ -5826,7 +5827,7 @@ jobs:
     #[test]
     fn test_execution_config_defaults() {
         let config = ExecutionConfig::default();
-        assert_eq!(config.mode, ExecutionMode::Auto);
+        assert_eq!(config.mode, ExecutionMode::Direct);
         assert!(config.limit_resources.is_none());
         assert!(config.termination_signal.is_none());
         assert!(config.sigterm_lead_seconds.is_none());

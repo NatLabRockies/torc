@@ -9,6 +9,8 @@ name: failure_recovery
 description: Test workflow for Slurm job retry with failure handlers
 project: slurm-tests
 metadata: '{"test_type": "failure_recovery", "stages": 3}'
+execution_config:
+  mode: slurm
 
 failure_handlers:
   - name: retry_on_exit_42

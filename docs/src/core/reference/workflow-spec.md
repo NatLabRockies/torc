@@ -179,18 +179,18 @@ creation time.
 
 ### Shared fields (both modes)
 
-| Name                       | Type                        | Default   | Description                                            |
-| -------------------------- | --------------------------- | --------- | ------------------------------------------------------ |
-| `mode`                     | string                      | `"auto"`  | Execution mode: `"direct"`, `"slurm"`, or `"auto"`     |
-| `sigkill_headroom_seconds` | integer                     | `60`      | Seconds before end_time for SIGKILL or srun --time     |
-| `timeout_exit_code`        | integer                     | `152`     | Exit code for timed-out jobs (matches Slurm TIMEOUT)   |
-| `staggered_start`          | boolean                     | `true`    | Stagger job runner startup to mitigate thundering herd |
-| `stdio`                    | [StdioConfig](#stdioconfig) | see below | Workflow-level default for stdout/stderr capture       |
+| Name                       | Type                        | Default    | Description                                            |
+| -------------------------- | --------------------------- | ---------- | ------------------------------------------------------ |
+| `mode`                     | string                      | `"direct"` | Execution mode: `"direct"` or `"slurm"`                |
+| `sigkill_headroom_seconds` | integer                     | `60`       | Seconds before end_time for SIGKILL or srun --time     |
+| `timeout_exit_code`        | integer                     | `152`      | Exit code for timed-out jobs (matches Slurm TIMEOUT)   |
+| `staggered_start`          | boolean                     | `true`     | Stagger job runner startup to mitigate thundering herd |
+| `stdio`                    | [StdioConfig](#stdioconfig) | see below  | Workflow-level default for stdout/stderr capture       |
 
 ### Direct mode fields
 
-These fields only apply when the effective mode is `direct`. Setting them with `mode: slurm` (or
-`mode: auto` with `slurm_schedulers`) produces a validation error.
+These fields only apply when the effective mode is `direct`. Setting them with `mode: slurm`
+produces a validation error.
 
 | Name                   | Type    | Default     | Description                                           |
 | ---------------------- | ------- | ----------- | ----------------------------------------------------- |
@@ -201,8 +201,8 @@ These fields only apply when the effective mode is `direct`. Setting them with `
 
 ### Slurm mode fields
 
-These fields only apply when the effective mode is `slurm`. Setting them with `mode: direct` (or
-`mode: auto` without `slurm_schedulers`) produces a validation error.
+These fields only apply when the effective mode is `slurm`. Setting them with `mode: direct`
+produces a validation error.
 
 | Name                      | Type    | Default | Description                             |
 | ------------------------- | ------- | ------- | --------------------------------------- |
@@ -260,11 +260,10 @@ jobs:
 
 ### Execution Modes
 
-| Mode     | Description                                                                    |
-| -------- | ------------------------------------------------------------------------------ |
-| `direct` | Torc manages job execution directly. Use outside Slurm or when srun unreliable |
-| `slurm`  | Jobs wrapped with `srun`. Slurm manages resource limits and termination        |
-| `auto`   | Uses `slurm` if `SLURM_JOB_ID` is set, otherwise `direct` (default)            |
+| Mode     | Description                                                             |
+| -------- | ----------------------------------------------------------------------- |
+| `direct` | Torc manages job execution directly (default). Works everywhere         |
+| `slurm`  | Jobs wrapped with `srun`. Slurm manages resource limits and termination |
 
 ### Direct Mode Example
 

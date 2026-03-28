@@ -14,6 +14,8 @@
 name: job_parallelism
 description: Job-based parallelism — no resource requirements, controlled by --max-parallel-jobs
 project: slurm-tests
+execution_config:
+  mode: slurm
 
 resource_monitor:
   enabled: true

@@ -52,12 +52,12 @@ fn test_execution_mode_auto_parsing() {
 }
 
 #[test]
-fn test_execution_mode_default_is_auto() {
+fn test_execution_mode_default_is_direct() {
     let yaml = r#"
         limit_resources: true
     "#;
     let config: ExecutionConfig = serde_yaml::from_str(yaml).unwrap();
-    assert_eq!(config.mode, ExecutionMode::Auto);
+    assert_eq!(config.mode, ExecutionMode::Direct);
 }
 
 // =============================================================================
@@ -130,7 +130,7 @@ fn test_execution_config_json_parsing() {
 fn test_execution_config_default_values() {
     let config = ExecutionConfig::default();
 
-    assert_eq!(config.mode, ExecutionMode::Auto);
+    assert_eq!(config.mode, ExecutionMode::Direct);
     assert_eq!(config.limit_resources, None);
     assert_eq!(config.termination_signal, None);
     assert_eq!(config.sigterm_lead_seconds, None);
@@ -1314,7 +1314,7 @@ fn test_limit_resources_false_rejected_with_slurm_mode(start_server: &ServerProc
 fn test_limit_resources_false_rejected_with_auto_mode_and_slurm_schedulers(
     start_server: &ServerProcess,
 ) {
-    // mode=auto (the default) with slurm_schedulers should also be rejected
+    // mode=auto with slurm_schedulers should also be rejected
     let yaml = r#"
         name: auto_slurm_no_limits_rejected
         user: test_user
@@ -1323,6 +1323,7 @@ fn test_limit_resources_false_rejected_with_auto_mode_and_slurm_schedulers(
             command: "echo test"
             scheduler: my_scheduler
         execution_config:
+            mode: auto
             limit_resources: false
         slurm_schedulers:
           - name: my_scheduler
@@ -1523,6 +1524,7 @@ fn test_direct_fields_rejected_with_auto_mode_and_slurm_schedulers(start_server:
                 command: "echo test"
                 scheduler: my_scheduler
             execution_config:
+                mode: auto
                 termination_signal: SIGTERM
             slurm_schedulers:
               - name: my_scheduler
@@ -1552,6 +1554,7 @@ fn test_slurm_fields_rejected_with_auto_mode_no_schedulers(start_server: &Server
               - name: job1
                 command: "echo test"
             execution_config:
+                mode: auto
                 srun_termination_signal: "TERM@120"
         "#,
         "srun_termination_signal",

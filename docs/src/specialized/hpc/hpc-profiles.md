@@ -158,7 +158,6 @@ HPC profiles are used by Slurm-related commands to automatically generate schedu
 See [Advanced Slurm Configuration](./slurm.md) for details on:
 
 - `torc slurm generate` + `torc submit` - Submit workflows with auto-generated schedulers
-- `torc create-slurm` - Create workflows with auto-generated schedulers
 
 ## See Also
 

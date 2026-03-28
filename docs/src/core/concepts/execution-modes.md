@@ -1,51 +1,57 @@
 # Execution Modes
 
-Torc supports three execution modes that determine how jobs are launched and managed. The execution
+Torc supports two execution modes that determine how jobs are launched and managed. The execution
 mode affects resource enforcement, job termination, and integration with cluster schedulers like
 Slurm.
 
 ## Overview
 
-| Mode     | Description                                                                     |
-| -------- | ------------------------------------------------------------------------------- |
-| `direct` | Torc manages job execution directly without Slurm step wrapping                 |
-| `slurm`  | Jobs are wrapped with `srun`, letting Slurm manage resources and termination    |
-| `auto`   | Automatically selects `slurm` if `SLURM_JOB_ID` is set, otherwise uses `direct` |
+| Mode     | Description                                                                  |
+| -------- | ---------------------------------------------------------------------------- |
+| `direct` | Torc manages job execution directly without Slurm step wrapping (default)    |
+| `slurm`  | Jobs are wrapped with `srun`, letting Slurm manage resources and termination |
 
 Configure the execution mode in your workflow specification:
 
 ```yaml
 execution_config:
-  mode: direct  # or "slurm" or "auto"
+  mode: direct  # or "slurm"
 ```
 
 ## When to Use Each Mode
 
-### Direct Mode
+### Direct Mode (Default)
 
-Use direct mode when:
+Direct mode is the default and works everywhere: local machines, cloud VMs, containers, and inside
+Slurm allocations. Use direct mode when:
 
 - Running jobs **outside of Slurm** (local machine, cloud VMs, containers)
-- Running inside Slurm but **srun is unreliable** or has compatibility issues
-- You want Torc to **enforce memory limits** via OOM detection
-- You need **custom termination signals** (e.g., SIGINT for graceful shutdown)
+- Running inside Slurm but **srun has compatibility issues** with your environment
+- You want the **simplest, most portable** configuration
+- You want to run jobs **without resource limits** (`limit_resources: false`) to explore resource
+  requirements for new workloads
+
+Direct mode is recommended as the starting point for most workflows. It avoids the overhead of
+creating Slurm job steps and works consistently across different HPC sites with varying Slurm
+configurations.
 
 ### Slurm Mode
 
-Use slurm mode when:
+Use slurm mode when you need features that only Slurm can provide:
 
-- Running inside a **Slurm allocation** and want full Slurm integration
-- You want Slurm's **cgroup-based resource enforcement**
-- You need **sacct accounting** for job steps
-- HPC admins need **visibility into job steps** via Slurm tools
+- **Hardware-level resource control**: Slurm's cgroup enforcement can be more precise than Torc's
+  process-level monitoring, especially for GPU isolation and CPU binding on newer hardware
+- **Per-job accounting**: Each job appears as a separate step in `sacct`, giving detailed resource
+  usage breakdowns per job rather than a single entry for the whole Torc worker allocation
+- **Admin visibility**: HPC admins can see and manage individual job steps via Slurm tools
+  (`squeue`, `sacct`, `scontrol`), which is useful for debugging and auditing
+- **Cgroup-based memory enforcement**: Slurm's cgroup limits provide hard memory boundaries with no
+  sampling delay, compared to Torc's periodic polling in direct mode
+- **CPU binding**: `srun` can bind tasks to specific CPU cores (`enable_cpu_bind: true`), which may
+  improve cache locality for CPU-intensive workloads
 
-### Auto Mode (Default)
-
-Auto mode is the default and works well for most use cases:
-
-- Detects Slurm by checking for `SLURM_JOB_ID` environment variable
-- Uses `slurm` mode inside allocations, `direct` mode outside
-- No configuration needed for portable workflows
+> **Note**: Some HPC sites may prefer one mode over the other. Check with your site admins if you
+> are uncertain which mode to use.
 
 ## Direct Mode
 
@@ -190,15 +196,21 @@ execution_config:
 
 The `sigkill_headroom_seconds` setting creates a buffer between step timeouts and allocation end:
 
-```
-Allocation start                                        Allocation end
-    |                                                        |
-    |   [-------- Job step runs --------]                    |
-    |                                    ↑                   |
-    |                          Step timeout                  |
-    |                    (--time=remaining - headroom)       |
-    |                                                        |
-    |<---------------- sigkill_headroom_seconds ------------>|
+```mermaid
+gantt
+    title Step Timeout vs Allocation End
+    dateFormat X
+    axisFormat %s
+
+    section Allocation
+    Full allocation           :active, 0, 100
+
+    section Job Step
+    Job step runs             :done, 0, 70
+
+    section Timing
+    sigkill_headroom_seconds  :crit, 70, 100
+    Step timeout (--time=remaining - headroom) :milestone, 70, 70
 ```
 
 This ensures:
@@ -254,11 +266,11 @@ execution_config:
   limit_resources: false  # Don't enforce limits during development
 ```
 
-### Production HPC
+### Production HPC (with Slurm integration)
 
 ```yaml
 execution_config:
-  mode: auto  # Use slurm inside allocations
+  mode: slurm
   srun_termination_signal: TERM@120
   sigkill_headroom_seconds: 300
 ```

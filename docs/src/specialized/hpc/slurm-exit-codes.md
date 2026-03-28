@@ -32,8 +32,8 @@ $ torc slurm sacct $WORKFLOW_ID
 ╰──────────────────────┴───────────────┴──────────╯
 ```
 
-**Fix:** Increase `memory` in resource requirements, or use
-`torc workflows check-resources --correct` to auto-adjust based on peak usage.
+**Fix:** Increase `memory` in resource requirements, or use `torc workflows correct-resources` to
+auto-adjust based on peak usage.
 
 ### Timeout with Graceful Shutdown (exit code 0)
 

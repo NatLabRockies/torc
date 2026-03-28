@@ -676,7 +676,7 @@ EXAMPLES:
         #[arg(required = true)]
         workflow_ids: Vec<i64>,
         /// Skip confirmation prompt
-        #[arg(long, short)]
+        #[arg(long)]
         force: bool,
     },
     /// Interactive terminal UI for managing workflows

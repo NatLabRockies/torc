@@ -403,7 +403,7 @@ EXAMPLES:
         /// 4. Schedules nodes accordingly
         ///
         /// This is the one-shot equivalent of what `torc watch --auto-schedule` does continuously.
-        #[arg(long)]
+        #[arg(long, hide = true)]
         auto: bool,
         /// Start one worker per allocated node.
         /// Use this for direct-mode single-node jobs sharing a multi-node allocation.

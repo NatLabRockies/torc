@@ -9,6 +9,7 @@ name: srun_termination_signal
 description: Verify srun_termination_signal delivers SIGTERM to user job before timeout
 project: slurm-tests
 execution_config:
+  mode: slurm
   srun_termination_signal: "TERM@120"
 
 resource_requirements:

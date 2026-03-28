@@ -6,6 +6,8 @@
 name: watch_recover_oom
 description: Test workflow for torc watch --recover with Slurm OOM recovery
 project: slurm-tests
+execution_config:
+  mode: slurm
 
 resource_monitor:
   enabled: true

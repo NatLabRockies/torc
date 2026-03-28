@@ -8,6 +8,7 @@ name: multi_node_parallel
 description: 2-node allocation — 40 jobs x 5 CPUs via stress-ng
 project: slurm-tests
 execution_config:
+  mode: slurm
   enable_cpu_bind: true
 
 resource_monitor:

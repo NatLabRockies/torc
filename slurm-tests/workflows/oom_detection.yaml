@@ -7,6 +7,8 @@
 name: oom_detection
 description: OOM detection test — one good job, one that exceeds memory
 project: slurm-tests
+execution_config:
+  mode: slurm
 
 resource_monitor:
   enabled: true
