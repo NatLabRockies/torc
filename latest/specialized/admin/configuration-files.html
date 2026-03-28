@@ -307,7 +307,7 @@ export TORC_CLIENT__API_URL="${CI_TORC_SERVER}"
 export TORC_CLIENT__FORMAT="json"
 
 torc run workflow.yaml
-result=$(torc status $WORKFLOW_ID | jq -r '.status')
+result=$(torc status $WORKFLOW_ID | jq -r '.is_complete')
 </code></pre>
 <h3 id="hpc-cluster"><a class="header" href="#hpc-cluster">HPC Cluster</a></h3>
 <pre><code class="language-toml"># Project-local torc.toml

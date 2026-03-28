@@ -337,7 +337,7 @@ to. Setting a field that doesn't match the effective mode produces a validation 
 creation time.</p>
 <h3 id="shared-fields-both-modes"><a class="header" href="#shared-fields-both-modes">Shared fields (both modes)</a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>mode</code></td><td>string</td><td><code>"auto"</code></td><td>Execution mode: <code>"direct"</code>, <code>"slurm"</code>, or <code>"auto"</code></td></tr>
+<tr><td><code>mode</code></td><td>string</td><td><code>"direct"</code></td><td>Execution mode: <code>"direct"</code>, <code>"slurm"</code>, or <code>"auto"</code></td></tr>
 <tr><td><code>sigkill_headroom_seconds</code></td><td>integer</td><td><code>60</code></td><td>Seconds before end_time for SIGKILL or srun --time</td></tr>
 <tr><td><code>timeout_exit_code</code></td><td>integer</td><td><code>152</code></td><td>Exit code for timed-out jobs (matches Slurm TIMEOUT)</td></tr>
 <tr><td><code>staggered_start</code></td><td>boolean</td><td><code>true</code></td><td>Stagger job runner startup to mitigate thundering herd</td></tr>
@@ -345,8 +345,9 @@ creation time.</p>
 </tbody></table>
 </div>
 <h3 id="direct-mode-fields"><a class="header" href="#direct-mode-fields">Direct mode fields</a></h3>
-<p>These fields only apply when the effective mode is <code>direct</code>. Setting them with <code>mode: slurm</code> (or
-<code>mode: auto</code> with <code>slurm_schedulers</code>) produces a validation error.</p>
+<p>These fields only apply when the effective mode is <code>direct</code>. Setting them with <code>mode: slurm</code>
+produces a validation error. When <code>mode: auto</code>, validation checks the effective mode based on
+whether Slurm schedulers are present in the spec.</p>
 <div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>limit_resources</code></td><td>boolean</td><td><code>true</code></td><td>Monitor memory/CPU and kill jobs that exceed limits</td></tr>
 <tr><td><code>termination_signal</code></td><td>string</td><td><code>"SIGTERM"</code></td><td>Signal to send before SIGKILL for graceful shutdown</td></tr>
@@ -355,8 +356,9 @@ creation time.</p>
 </tbody></table>
 </div>
 <h3 id="slurm-mode-fields"><a class="header" href="#slurm-mode-fields">Slurm mode fields</a></h3>
-<p>These fields only apply when the effective mode is <code>slurm</code>. Setting them with <code>mode: direct</code> (or
-<code>mode: auto</code> without <code>slurm_schedulers</code>) produces a validation error.</p>
+<p>These fields only apply when the effective mode is <code>slurm</code>. Setting them with <code>mode: direct</code>
+produces a validation error. When <code>mode: auto</code>, validation checks the effective mode based on
+whether Slurm schedulers are present in the spec.</p>
 <div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>srun_termination_signal</code></td><td>string</td><td>none</td><td>Signal spec for <code>srun --signal=&lt;value&gt;</code></td></tr>
 <tr><td><code>enable_cpu_bind</code></td><td>boolean</td><td><code>false</code></td><td>Allow Slurm CPU binding (<code>--cpu-bind</code>)</td></tr>
@@ -402,11 +404,15 @@ jobs:
 </code></pre>
 <h3 id="execution-modes"><a class="header" href="#execution-modes">Execution Modes</a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Mode</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>direct</code></td><td>Torc manages job execution directly. Use outside Slurm or when srun unreliable</td></tr>
+<tr><td><code>direct</code></td><td>Torc manages job execution directly (default). Works everywhere</td></tr>
 <tr><td><code>slurm</code></td><td>Jobs wrapped with <code>srun</code>. Slurm manages resource limits and termination</td></tr>
-<tr><td><code>auto</code></td><td>Uses <code>slurm</code> if <code>SLURM_JOB_ID</code> is set, otherwise <code>direct</code> (default)</td></tr>
+<tr><td><code>auto</code></td><td>Selects <code>slurm</code> if <code>SLURM_JOB_ID</code> is set, otherwise <code>direct</code></td></tr>
 </tbody></table>
 </div>
+<blockquote>
+<p><strong>Warning</strong>: <code>auto</code> will silently select slurm mode when running inside a Slurm allocation. Prefer
+setting the mode explicitly to avoid unexpected behavior.</p>
+</blockquote>
 <h3 id="direct-mode-example"><a class="header" href="#direct-mode-example">Direct Mode Example</a></h3>
 <pre><code class="language-yaml">execution_config:
   mode: direct

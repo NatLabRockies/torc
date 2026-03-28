@@ -211,8 +211,8 @@ $ torc slurm sacct $WORKFLOW_ID
 │ wf1_j1_r1_a1         │ OUT_OF_MEMORY │ 4096000K │
 ╰──────────────────────┴───────────────┴──────────╯
 </code></pre>
-<p><strong>Fix:</strong> Increase <code>memory</code> in resource requirements, or use
-<code>torc workflows check-resources --correct</code> to auto-adjust based on peak usage.</p>
+<p><strong>Fix:</strong> Increase <code>memory</code> in resource requirements, or use <code>torc workflows correct-resources</code> to
+auto-adjust based on peak usage.</p>
 <h3 id="timeout-with-graceful-shutdown-exit-code-0"><a class="header" href="#timeout-with-graceful-shutdown-exit-code-0">Timeout with Graceful Shutdown (exit code 0)</a></h3>
 <p>The job received SIGTERM via <code>srun --signal</code>, saved a checkpoint, and called <code>sys.exit(0)</code>. From
 Slurm's perspective, the job completed normally.</p>
