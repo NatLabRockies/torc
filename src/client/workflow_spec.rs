@@ -1357,6 +1357,119 @@ impl WorkflowSpec {
         }
     }
 
+    /// Validate that job resource_requirements runtime does not exceed the walltime
+    /// of the slurm scheduler assigned to that job. For jobs without an explicit
+    /// scheduler, the runtime is checked against all slurm schedulers since any
+    /// scheduler can pick up unassigned jobs.
+    pub fn validate_runtime_vs_walltime(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let resource_req_map: HashMap<&str, &ResourceRequirementsSpec> = self
+            .resource_requirements
+            .as_ref()
+            .map(|reqs| reqs.iter().map(|r| (r.name.as_str(), r)).collect())
+            .unwrap_or_default();
+
+        let scheduler_map: HashMap<&str, &SlurmSchedulerSpec> = self
+            .slurm_schedulers
+            .as_ref()
+            .map(|schedulers| {
+                schedulers
+                    .iter()
+                    .filter_map(|s| s.name.as_ref().map(|n| (n.as_str(), s)))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        if resource_req_map.is_empty() || scheduler_map.is_empty() {
+            return Ok(());
+        }
+
+        // Pre-parse all scheduler walltimes
+        let scheduler_walltimes: Vec<(&str, &SlurmSchedulerSpec, u64)> = scheduler_map
+            .iter()
+            .filter_map(|(&name, &sched)| {
+                crate::client::commands::slurm::parse_walltime_secs(&sched.walltime)
+                    .ok()
+                    .map(|secs| (name, sched, secs))
+            })
+            .collect();
+
+        let mut errors: Vec<String> = Vec::new();
+
+        for job in &self.jobs {
+            // Job must have resource requirements to check
+            let rr_name = match &job.resource_requirements {
+                Some(name) => name,
+                None => continue,
+            };
+            let resource_req = match resource_req_map.get(rr_name.as_str()) {
+                Some(r) => r,
+                None => continue, // Missing resource req validated elsewhere
+            };
+
+            let runtime_secs =
+                match crate::time_utils::duration_string_to_seconds(&resource_req.runtime) {
+                    Ok(s) => s as u64,
+                    Err(_) => continue, // Invalid format validated elsewhere
+                };
+
+            if let Some(ref scheduler_name) = job.scheduler {
+                // Job has an explicit scheduler - runtime must fit within its walltime
+                if let Some((_, sched, walltime_secs)) = scheduler_walltimes
+                    .iter()
+                    .find(|(name, _, _)| *name == scheduler_name.as_str())
+                    && runtime_secs > *walltime_secs
+                {
+                    errors.push(format!(
+                        "Job '{}' has resource_requirements runtime '{}' ({} s) that \
+                         exceeds assigned scheduler '{}' walltime '{}' ({} s). The \
+                         runtime must be less than or equal to the walltime.",
+                        job.name,
+                        resource_req.runtime,
+                        runtime_secs,
+                        scheduler_name,
+                        sched.walltime,
+                        walltime_secs,
+                    ));
+                }
+            } else {
+                // Job has no explicit scheduler - at least one scheduler must be able
+                // to accommodate it, since any scheduler can pick up unassigned jobs
+                let has_suitable = scheduler_walltimes
+                    .iter()
+                    .any(|(_, _, walltime_secs)| runtime_secs <= *walltime_secs);
+
+                if !has_suitable {
+                    let scheduler_list: Vec<String> = scheduler_walltimes
+                        .iter()
+                        .map(|(name, sched, secs)| {
+                            format!("'{}' ({}, {} s)", name, sched.walltime, secs)
+                        })
+                        .collect();
+                    errors.push(format!(
+                        "Job '{}' has resource_requirements runtime '{}' ({} s) that \
+                         exceeds the walltime of every slurm scheduler [{}]. The job has \
+                         no explicit scheduler so it can be picked up by any scheduler, \
+                         but none have a sufficient walltime.",
+                        job.name,
+                        resource_req.runtime,
+                        runtime_secs,
+                        scheduler_list.join(", "),
+                    ));
+                }
+            }
+        }
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(format!(
+                "Runtime vs walltime validation failed:\n  - {}",
+                errors.join("\n  - ")
+            )
+            .into())
+        }
+    }
+
     /// Check if the workflow spec has an on_workflow_start action with schedule_nodes
     /// Returns true if such an action exists, false otherwise
     pub fn has_schedule_nodes_action(&self) -> bool {
@@ -1431,6 +1544,11 @@ impl WorkflowSpec {
         // Step 4: Validate scheduler node requirements
         // This is an error by default (same as create_workflow_from_spec with skip_checks=false)
         if let Err(e) = spec.validate_scheduler_node_requirements() {
+            errors.push(format!("{}", e));
+        }
+
+        // Step 4.5: Validate runtime vs walltime
+        if let Err(e) = spec.validate_runtime_vs_walltime() {
             errors.push(format!("{}", e));
         }
 
@@ -1845,6 +1963,7 @@ impl WorkflowSpec {
         // Step 1.45: Validate scheduler node requirements
         if !skip_checks {
             spec.validate_scheduler_node_requirements()?;
+            spec.validate_runtime_vs_walltime()?;
         }
 
         // Step 1.5: Perform variable substitution in commands
@@ -5975,5 +6094,170 @@ execution_config:
         assert_eq!(config.mode, ExecutionMode::Slurm);
         assert_eq!(config.srun_termination_signal, Some("TERM@120".to_string()));
         assert_eq!(config.enable_cpu_bind, Some(true));
+    }
+
+    #[test]
+    fn test_validate_runtime_vs_walltime_passes_when_runtime_within_walltime() {
+        let yaml = r#"
+name: test_workflow
+jobs:
+  - name: test_job
+    command: echo hello
+    resource_requirements: small
+    scheduler: my_scheduler
+resource_requirements:
+  - name: small
+    num_cpus: 1
+    memory: "1g"
+    runtime: "PT30M"
+slurm_schedulers:
+  - name: my_scheduler
+    account: test
+    walltime: "01:00:00"
+"#;
+        let spec: WorkflowSpec = serde_yaml::from_str(yaml).expect("Failed to parse YAML");
+        assert!(spec.validate_runtime_vs_walltime().is_ok());
+    }
+
+    #[test]
+    fn test_validate_runtime_vs_walltime_passes_when_equal() {
+        let yaml = r#"
+name: test_workflow
+jobs:
+  - name: test_job
+    command: echo hello
+    resource_requirements: small
+    scheduler: my_scheduler
+resource_requirements:
+  - name: small
+    num_cpus: 1
+    memory: "1g"
+    runtime: "PT1H"
+slurm_schedulers:
+  - name: my_scheduler
+    account: test
+    walltime: "01:00:00"
+"#;
+        let spec: WorkflowSpec = serde_yaml::from_str(yaml).expect("Failed to parse YAML");
+        assert!(spec.validate_runtime_vs_walltime().is_ok());
+    }
+
+    #[test]
+    fn test_validate_runtime_vs_walltime_fails_when_runtime_exceeds_walltime() {
+        let yaml = r#"
+name: test_workflow
+jobs:
+  - name: test_job
+    command: echo hello
+    resource_requirements: big
+    scheduler: my_scheduler
+resource_requirements:
+  - name: big
+    num_cpus: 1
+    memory: "1g"
+    runtime: "PT2H"
+slurm_schedulers:
+  - name: my_scheduler
+    account: test
+    walltime: "01:00:00"
+"#;
+        let spec: WorkflowSpec = serde_yaml::from_str(yaml).expect("Failed to parse YAML");
+        let result = spec.validate_runtime_vs_walltime();
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("test_job"));
+        assert!(err.contains("exceeds"));
+    }
+
+    #[test]
+    fn test_validate_runtime_vs_walltime_skips_jobs_without_resource_requirements() {
+        let yaml = r#"
+name: test_workflow
+jobs:
+  - name: test_job
+    command: echo hello
+slurm_schedulers:
+  - name: my_scheduler
+    account: test
+    walltime: "00:30:00"
+"#;
+        let spec: WorkflowSpec = serde_yaml::from_str(yaml).expect("Failed to parse YAML");
+        assert!(spec.validate_runtime_vs_walltime().is_ok());
+    }
+
+    #[test]
+    fn test_validate_runtime_vs_walltime_unassigned_job_passes_if_any_scheduler_fits() {
+        // Job has no explicit scheduler but one of two schedulers can accommodate it
+        let yaml = r#"
+name: test_workflow
+jobs:
+  - name: test_job
+    command: echo hello
+    resource_requirements: big
+resource_requirements:
+  - name: big
+    num_cpus: 1
+    memory: "1g"
+    runtime: "PT2H"
+slurm_schedulers:
+  - name: short_scheduler
+    account: test
+    walltime: "01:00:00"
+  - name: long_scheduler
+    account: test
+    walltime: "04:00:00"
+"#;
+        let spec: WorkflowSpec = serde_yaml::from_str(yaml).expect("Failed to parse YAML");
+        assert!(spec.validate_runtime_vs_walltime().is_ok());
+    }
+
+    #[test]
+    fn test_validate_runtime_vs_walltime_unassigned_job_fails_if_no_scheduler_fits() {
+        // Job has no explicit scheduler and no scheduler can accommodate it
+        let yaml = r#"
+name: test_workflow
+jobs:
+  - name: test_job
+    command: echo hello
+    resource_requirements: big
+resource_requirements:
+  - name: big
+    num_cpus: 1
+    memory: "1g"
+    runtime: "PT5H"
+slurm_schedulers:
+  - name: short_scheduler
+    account: test
+    walltime: "01:00:00"
+  - name: long_scheduler
+    account: test
+    walltime: "04:00:00"
+"#;
+        let spec: WorkflowSpec = serde_yaml::from_str(yaml).expect("Failed to parse YAML");
+        let result = spec.validate_runtime_vs_walltime();
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("test_job"));
+        assert!(err.contains("no explicit scheduler"));
+        assert!(err.contains("short_scheduler"));
+        assert!(err.contains("long_scheduler"));
+    }
+
+    #[test]
+    fn test_validate_runtime_vs_walltime_passes_no_schedulers() {
+        let yaml = r#"
+name: test_workflow
+jobs:
+  - name: test_job
+    command: echo hello
+    resource_requirements: big
+resource_requirements:
+  - name: big
+    num_cpus: 1
+    memory: "1g"
+    runtime: "PT2H"
+"#;
+        let spec: WorkflowSpec = serde_yaml::from_str(yaml).expect("Failed to parse YAML");
+        assert!(spec.validate_runtime_vs_walltime().is_ok());
     }
 }
