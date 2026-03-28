@@ -25,9 +25,7 @@ use torc::client::commands::scheduled_compute_nodes::handle_scheduled_compute_no
 use torc::client::commands::slurm::handle_slurm_commands;
 use torc::client::commands::user_data::handle_user_data_commands;
 use torc::client::commands::watch::{WatchArgs, run_watch};
-use torc::client::commands::workflows::{
-    handle_cancel, handle_initialize, handle_reinitialize, handle_workflow_commands,
-};
+use torc::client::commands::workflows::{handle_cancel, handle_workflow_commands};
 use torc::client::config::TorcConfig;
 use torc::client::version_check;
 use torc::client::workflow_manager::WorkflowManager;
@@ -578,21 +576,6 @@ fn main() {
         }
         Commands::Cancel { workflow_id } => {
             handle_cancel(&config, workflow_id, &format);
-        }
-        Commands::Init {
-            workflow_id,
-            force,
-            no_prompts,
-            dry_run,
-        } => {
-            handle_initialize(&config, workflow_id, *force, *no_prompts, *dry_run, &format);
-        }
-        Commands::Reinit {
-            workflow_id,
-            force,
-            dry_run,
-        } => {
-            handle_reinitialize(&config, workflow_id, *force, *dry_run, &format);
         }
         Commands::Status { workflow_id } => {
             torc::client::commands::reports::generate_summary(&config, *workflow_id, &format);

@@ -165,7 +165,7 @@ echo "Created workflow: $WORKFLOW_ID"
 touch /tmp/input.txt
 
 # Initialize the workflow (builds dependency graph)
-torc init $WORKFLOW_ID
+torc workflows init $WORKFLOW_ID
 ```
 
 The `initialize-jobs` command is where Torc:

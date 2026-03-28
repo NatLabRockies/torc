@@ -1265,7 +1265,7 @@ impl App {
                 "-f",
                 "json",
                 "workflows",
-                "initialize",
+                "init",
                 &workflow_id_str,
                 "--dry-run",
             ])
@@ -1380,7 +1380,7 @@ impl App {
             "--url",
             &url,
             "workflows",
-            "initialize",
+            "init",
             "--no-prompts",
             &workflow_id_str,
         ];
@@ -1442,7 +1442,7 @@ impl App {
         let url = self.client.get_base_url();
         let workflow_id_str = workflow_id.to_string();
 
-        let mut args = vec!["--url", &url, "workflows", "reinitialize", &workflow_id_str];
+        let mut args = vec!["--url", &url, "workflows", "reinit", &workflow_id_str];
         if force {
             args.push("--force");
         }

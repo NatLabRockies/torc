@@ -13,6 +13,8 @@ const WORKFLOWS_HELP_TEMPLATE: &str = "\
   \x1b[1;36mnew\x1b[0m              Create a new empty workflow
 
 \x1b[1;32mWorkflow State:\x1b[0m
+  \x1b[1;36minit\x1b[0m             Initialize workflow dependencies
+  \x1b[1;36mreinit\x1b[0m           Reinitialize jobs with changed inputs
   \x1b[1;36mreset-status\x1b[0m     Reset workflow and job statuses
   \x1b[1;36mis-complete\x1b[0m      Check if workflow is complete
   \x1b[1;36msync-status\x1b[0m      Detect orphaned jobs from ended Slurm allocations
@@ -33,7 +35,7 @@ const WORKFLOWS_HELP_TEMPLATE: &str = "\
   \x1b[1;36mexport\x1b[0m           Export a workflow to JSON
   \x1b[1;36mimport\x1b[0m           Import a workflow from JSON
 
-\x1b[1;33mNote:\x1b[0m Lifecycle commands (create, init, status, cancel, delete) are at the top level.
+\x1b[1;33mNote:\x1b[0m Lifecycle commands (create, status, cancel, delete) are at the top level.
       Run 'torc --help' to see all commands.
 {after-help}";
 
@@ -320,6 +322,66 @@ EXAMPLES:
         /// Skip confirmation prompt
         #[arg(long)]
         no_prompts: bool,
+    },
+    /// Initialize a workflow, including all job statuses.
+    ///
+    /// Sets up job status based on dependencies and input data availability.
+    /// Jobs with all dependencies satisfied are marked as ready.
+    #[command(
+        name = "init",
+        hide = true,
+        after_long_help = "\
+EXAMPLES:
+    # Initialize workflow (set up dependencies)
+    torc workflows init 123
+
+    # Dry-run to check for missing files
+    torc workflows init 123 --dry-run
+
+    # Force initialization with missing data
+    torc workflows init 123 --force
+"
+    )]
+    Initialize {
+        /// ID of the workflow to initialize (optional - will prompt if not provided)
+        #[arg()]
+        workflow_id: Option<i64>,
+        /// If false, fail the operation if missing data is present (defaults to false)
+        #[arg(long, default_value = "false")]
+        force: bool,
+        /// Skip confirmation prompt
+        #[arg(long)]
+        no_prompts: bool,
+        /// Perform a dry run without making changes
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Reinitialize a workflow after changes
+    ///
+    /// Reinitializes jobs that are canceled, submitting, pending, or terminated.
+    /// Jobs that completed will also be reinitialized if their input data changed.
+    #[command(
+        name = "reinit",
+        hide = true,
+        after_long_help = "\
+EXAMPLES:
+    # Reinitialize workflow after input changes
+    torc workflows reinit 123
+
+    # Dry-run to preview changes
+    torc workflows reinit 123 --dry-run
+"
+    )]
+    Reinitialize {
+        /// ID of the workflow to reinitialize (optional - will prompt if not provided)
+        #[arg()]
+        workflow_id: Option<i64>,
+        /// If false, fail the operation if missing data is present (defaults to false)
+        #[arg(long, default_value = "false")]
+        force: bool,
+        /// Perform a dry run without making changes
+        #[arg(long)]
+        dry_run: bool,
     },
     /// Correct resource requirements based on actual job usage (proactive optimization)
     ///
@@ -2801,6 +2863,21 @@ pub fn handle_workflow_commands(config: &Configuration, command: &WorkflowComman
                 *no_prompts,
                 format,
             );
+        }
+        WorkflowCommands::Initialize {
+            workflow_id,
+            force,
+            no_prompts,
+            dry_run,
+        } => {
+            handle_initialize(config, workflow_id, *force, *no_prompts, *dry_run, format);
+        }
+        WorkflowCommands::Reinitialize {
+            workflow_id,
+            force,
+            dry_run,
+        } => {
+            handle_reinitialize(config, workflow_id, *force, *dry_run, format);
         }
         WorkflowCommands::CorrectResources {
             workflow_id,

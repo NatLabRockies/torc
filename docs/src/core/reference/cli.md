@@ -513,11 +513,11 @@ Archive or unarchive one or more workflows
 - `<IS_ARCHIVED>` — Set to true to archive, false to unarchive
 - `<WORKFLOW_IDS>` — IDs of workflows to archive/unarchive (if empty, will prompt for selection)
 
-## `torc init`
+## `torc workflows init`
 
 Initialize a workflow, including all job statuses
 
-**Usage:** `torc init [OPTIONS] [WORKFLOW_ID]`
+**Usage:** `torc workflows init [OPTIONS] [WORKFLOW_ID]`
 
 ###### **Arguments:**
 
@@ -529,13 +529,13 @@ Initialize a workflow, including all job statuses
 - `--no-prompts` — Skip confirmation prompt
 - `--dry-run` — Perform a dry run without making changes
 
-## `torc reinit`
+## `torc workflows reinit`
 
 Reinitialize a workflow. This will reinitialize all jobs with a status of canceled, submitting,
 pending, or terminated. Jobs with a status of done will also be reinitialized if an input_file or
 user_data record has changed.
 
-**Usage:** `torc reinit [OPTIONS] [WORKFLOW_ID]`
+**Usage:** `torc workflows reinit [OPTIONS] [WORKFLOW_ID]`
 
 ###### **Arguments:**
 

@@ -100,9 +100,9 @@ access or complex orchestration:
 | `POST /api/cli/create`       | `torc create`                 | Create workflow from spec file |
 | `POST /api/cli/run`          | `torc run`                    | Run workflow locally           |
 | `POST /api/cli/submit`       | `torc submit`                 | Submit to scheduler            |
-| `POST /api/cli/initialize`   | `torc init`                   | Initialize job dependencies    |
+| `POST /api/cli/initialize`   | `torc workflows init`         | Initialize job dependencies    |
 | `POST /api/cli/delete`       | `torc delete`                 | Delete workflow                |
-| `POST /api/cli/reinitialize` | `torc reinit`                 | Reinitialize workflow          |
+| `POST /api/cli/reinitialize` | `torc workflows reinit`       | Reinitialize workflow          |
 | `POST /api/cli/reset-status` | `torc workflows reset-status` | Reset job statuses             |
 | `GET /api/cli/run-stream`    | `torc run`                    | SSE streaming execution        |
 

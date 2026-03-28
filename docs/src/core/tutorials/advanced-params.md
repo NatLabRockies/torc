@@ -165,7 +165,7 @@ ALL 18 metrics files."
 WORKFLOW_ID=$(torc create grid_search.yaml -f json | jq -r '.id')
 echo "Created workflow: $WORKFLOW_ID"
 
-torc init $WORKFLOW_ID
+torc workflows init $WORKFLOW_ID
 ```
 
 ## Step 3: Verify the Expansion

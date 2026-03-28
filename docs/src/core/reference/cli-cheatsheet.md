@@ -20,13 +20,19 @@
 | Command              | Description                          |
 | -------------------- | ------------------------------------ |
 | `torc create <spec>` | Create workflow from spec file       |
-| `torc init <id>`     | Initialize workflow dependencies     |
 | `torc run <id>`      | Run workflow locally                 |
 | `torc submit <id>`   | Submit workflow to scheduler         |
 | `torc status <id>`   | Show workflow status and job summary |
-| `torc reinit <id>`   | Reinitialize workflow after changes  |
 | `torc cancel <id>`   | Cancel workflow and Slurm jobs       |
 | `torc delete <id>`   | Delete workflow                      |
+
+## Workflow State
+
+| Command                            | Description                         |
+| ---------------------------------- | ----------------------------------- |
+| `torc workflows init <id>`         | Initialize workflow dependencies    |
+| `torc workflows reinit <id>`       | Reinitialize workflow after changes |
+| `torc workflows reset-status <id>` | Reset workflow and job statuses     |
 
 ## Workflow Query
 

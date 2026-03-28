@@ -43,7 +43,7 @@ To resume a canceled workflow:
 
 ```bash
 # Reinitialize to reset canceled jobs
-torc reinit <workflow_id>
+torc workflows reinit <workflow_id>
 
 # Run again locally
 torc run <workflow_id>

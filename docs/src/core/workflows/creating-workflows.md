@@ -108,7 +108,7 @@ torc jobs create \
 
 ```bash
 # Initialize the workflow (resolves dependencies)
-torc init 1
+torc workflows init 1
 
 # Run the workflow
 torc run 1

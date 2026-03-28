@@ -624,8 +624,12 @@ fn test_auto_ro_crate_second_run_replaces_entities(start_server: &ServerProcess)
     fs::write(work_dir.join("input.json"), input_data_v2).expect("Failed to write input.json v2");
 
     // Reinitialize the workflow via CLI (bumps run_id, detects changed file, resets job)
-    run_cli_command(&["reinit", &workflow_id_str], start_server, None)
-        .expect("Failed to reinitialize workflow");
+    run_cli_command(
+        &["workflows", "reinit", &workflow_id_str],
+        start_server,
+        None,
+    )
+    .expect("Failed to reinitialize workflow");
 
     // Verify the job was reset to ready (reinitialize detected changed input file)
     let job_after_reinit = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");

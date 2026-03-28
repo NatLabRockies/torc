@@ -54,7 +54,7 @@ correctly but did not finish all its work. Reinitialize and re-submit to continu
 checkpoint:
 
 ```bash
-torc reinit $WORKFLOW_ID
+torc workflows reinit $WORKFLOW_ID
 torc submit $WORKFLOW_ID
 ```
 

@@ -1202,7 +1202,7 @@ async fn cli_initialize_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<InitializeRequest>,
 ) -> impl IntoResponse {
-    let mut args = vec!["workflows", "initialize", &req.workflow_id];
+    let mut args = vec!["workflows", "init", &req.workflow_id];
     if req.force {
         args.push("--force");
     }
@@ -1222,7 +1222,7 @@ async fn cli_check_initialize_handler(
             "-f",
             "json",
             "workflows",
-            "initialize",
+            "init",
             &req.workflow_id,
             "--dry-run",
         ],
@@ -1264,7 +1264,7 @@ async fn cli_reinitialize_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<InitializeRequest>,
 ) -> impl IntoResponse {
-    let mut args = vec!["workflows", "reinitialize", &req.workflow_id];
+    let mut args = vec!["workflows", "reinit", &req.workflow_id];
     if req.force {
         args.push("--force");
     }

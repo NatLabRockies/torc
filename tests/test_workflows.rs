@@ -438,8 +438,8 @@ fn test_workflows_initialize_jobs_command(start_server: &ServerProcess) {
     let _created_job = apis::jobs_api::create_job(config, job)
         .expect("Failed to create job for initialization test");
 
-    // Test the CLI init command (now at top level)
-    let args = ["init", &workflow_id.to_string()];
+    // Test the CLI init command (under workflows subcommand)
+    let args = ["workflows", "init", &workflow_id.to_string()];
 
     // This command doesn't return JSON in the current implementation,
     // so we'll test that it doesn't fail

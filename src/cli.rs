@@ -43,13 +43,11 @@ const HELP_TEMPLATE: &str = "\
 
 \x1b[1;32mWorkflow Lifecycle:\x1b[0m
   \x1b[1;36mcreate\x1b[0m                   Create a workflow from spec file
-  \x1b[1;36minit\x1b[0m                     Initialize workflow dependencies
   \x1b[1;36mrun\x1b[0m                      Run a workflow locally
   \x1b[1;36msubmit\x1b[0m                   Submit a workflow to scheduler
   \x1b[1;36mstatus\x1b[0m                   Show workflow status and job summary
   \x1b[1;36mwatch\x1b[0m                    Watch workflow and recover from failures
   \x1b[1;36mrecover\x1b[0m                  Recover a Slurm workflow from failures
-  \x1b[1;36mreinit\x1b[0m                   Reinitialize workflow after changes
   \x1b[1;36mcancel\x1b[0m                   Cancel a workflow and Slurm jobs
   \x1b[1;36mdelete\x1b[0m                   Delete a workflow
 
@@ -636,64 +634,6 @@ EXAMPLES:
         /// ID of the workflow to cancel (optional - will prompt if not provided)
         #[arg()]
         workflow_id: Option<i64>,
-    },
-    /// Initialize a workflow (set up job dependencies)
-    ///
-    /// Sets up job status based on dependencies and input data availability.
-    /// Jobs with all dependencies satisfied are marked as ready.
-    #[command(
-        hide = true,
-        after_long_help = "\
-EXAMPLES:
-    # Initialize workflow
-    torc init 123
-
-    # Dry-run to check for missing files
-    torc init 123 --dry-run
-
-    # Force initialization with missing data
-    torc init 123 --force
-"
-    )]
-    Init {
-        /// ID of the workflow to initialize (optional - will prompt if not provided)
-        #[arg()]
-        workflow_id: Option<i64>,
-        /// If false, fail the operation if missing data is present (defaults to false)
-        #[arg(long, default_value = "false")]
-        force: bool,
-        /// Skip confirmation prompt
-        #[arg(long)]
-        no_prompts: bool,
-        /// Perform a dry run without making changes
-        #[arg(long)]
-        dry_run: bool,
-    },
-    /// Reinitialize a workflow after changes
-    ///
-    /// Reinitializes jobs that are canceled, submitting, pending, or terminated.
-    /// Jobs that completed will also be reinitialized if their input data changed.
-    #[command(
-        hide = true,
-        after_long_help = "\
-EXAMPLES:
-    # Reinitialize workflow after input changes
-    torc reinit 123
-
-    # Dry-run to preview changes
-    torc reinit 123 --dry-run
-"
-    )]
-    Reinit {
-        /// ID of the workflow to reinitialize (optional - will prompt if not provided)
-        #[arg()]
-        workflow_id: Option<i64>,
-        /// If false, fail the operation if missing data is present (defaults to false)
-        #[arg(long, default_value = "false")]
-        force: bool,
-        /// Perform a dry run without making changes
-        #[arg(long)]
-        dry_run: bool,
     },
     /// Show workflow status and job summary
     ///

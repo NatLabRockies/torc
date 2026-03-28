@@ -498,7 +498,7 @@ sqlite3 server/db/sqlite/dev.db
 - `torc workflows submit <id>` - Submit workflow to scheduler (requires
   on_workflow_start/schedule_nodes action)
 - `torc workflows run <id>` - Run workflow locally
-- `torc workflows initialize <id>` - Initialize workflow (set up dependencies without execution)
+- `torc workflows init <id>` - Initialize workflow (set up dependencies without execution)
 - `torc workflows status <id>` - Check workflow status
 
 **Job Management**:

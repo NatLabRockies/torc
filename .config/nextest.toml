@@ -3,8 +3,12 @@
 # nextest runs tests in separate processes.
 
 [profile.default]
-# Retry flaky tests up to 2 times
-retries = 2
+# Allow extra time for the first test in each file, which may trigger a cargo
+# build of server/runner binaries via build_test_binaries() in the #[once]
+# fixture. Multiple test files start in parallel, and while cargo serializes
+# concurrent builds via its lock, the waiting processes can exceed the default
+# 60-second timeout.
+slow-timeout = { period = "120s", terminate-after = 3 }
 
 [test-groups]
 # Slurm mock tests - modify PATH and mock executables
