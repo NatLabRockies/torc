@@ -167,10 +167,10 @@ file. After import, you need to initialize and run the workflow:
 torc init 456
 
 # Run locally
-torc workflows run 456
+torc run 456
 
 # Or submit to scheduler
-torc workflows submit 456
+torc submit 456
 ```
 
 ### Default Resource Requirements

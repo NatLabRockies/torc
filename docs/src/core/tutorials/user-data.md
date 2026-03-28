@@ -116,7 +116,7 @@ WORKFLOW_ID=$(torc create user_data_workflow.yaml -f json | jq -r '.id')
 echo "Created workflow: $WORKFLOW_ID"
 
 # Initialize jobs
-torc init-jobs $WORKFLOW_ID
+torc init $WORKFLOW_ID
 ```
 
 ## Step 3: Check Initial State

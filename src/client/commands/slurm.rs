@@ -814,7 +814,9 @@ pub fn generate_schedulers_for_workflow(
             msg.push_str(" defined.\n\nOptions:\n");
             msg.push_str("  1. Use --overwrite to generate new schedulers (replaces existing)\n");
             msg.push_str("  2. Use 'torc submit' to use the existing schedulers as-is\n");
-            msg.push_str("  3. Remove schedulers/actions from the spec and run submit-slurm again");
+            msg.push_str(
+                "  3. Remove schedulers/actions from the spec and run 'torc slurm generate' again",
+            );
             return Err(msg);
         }
         // overwrite=true: Clear existing and regenerate

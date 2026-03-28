@@ -135,24 +135,14 @@ torc slurm generate --account <account> -o workflow_with_schedulers.yaml workflo
 torc submit workflow_with_schedulers.yaml
 ```
 
-**Usage:** `torc submit-slurm [OPTIONS] --account <ACCOUNT> <WORKFLOW_SPEC>`
+**Usage:**
 
-###### **Arguments:**
+```bash
+torc slurm generate [OPTIONS] --account <ACCOUNT> <WORKFLOW_FILE>
+torc submit <OUTPUT_FILE>
+```
 
-- `<WORKFLOW_SPEC>` — Path to workflow spec file (JSON/JSON5/YAML/KDL)
-
-###### **Options:**
-
-- `--account <ACCOUNT>` — Slurm account to use for allocations
-- `--hpc-profile <HPC_PROFILE>` — HPC profile to use (auto-detected if not specified)
-- `--single-allocation` — Bundle all nodes into a single Slurm allocation per scheduler. By default,
-  creates one Slurm allocation per node (N×1 mode), which allows jobs to start as nodes become
-  available and provides better fault tolerance. With this flag, creates one large allocation with
-  all nodes (1×N mode), which requires all nodes to be available simultaneously but uses a single
-  sbatch.
-- `-i`, `--ignore-missing-data` — Ignore missing data. Default: `false`
-- `--skip-checks` — Skip validation checks (e.g., scheduler node requirements). Use with caution.
-  Default: `false`
+See [`torc slurm generate`](#torc-slurm-generate) for full options.
 
 ## `torc watch`
 
@@ -522,39 +512,6 @@ Archive or unarchive one or more workflows
 
 - `<IS_ARCHIVED>` — Set to true to archive, false to unarchive
 - `<WORKFLOW_IDS>` — IDs of workflows to archive/unarchive (if empty, will prompt for selection)
-
-## `torc workflows submit`
-
-Submit a workflow: initialize if needed and schedule nodes for on_workflow_start actions. This
-command requires the workflow to have an on_workflow_start action with schedule_nodes.
-
-**Usage:** `torc workflows submit [OPTIONS] [WORKFLOW_ID]`
-
-###### **Arguments:**
-
-- `<WORKFLOW_ID>` — ID of the workflow to submit (optional - will prompt if not provided)
-
-###### **Options:**
-
-- `--force` — If false, fail the operation if missing data is present. Default: `false`
-
-## `torc workflows run`
-
-Run a workflow locally on the current node
-
-**Usage:** `torc workflows run [OPTIONS] [WORKFLOW_ID]`
-
-###### **Arguments:**
-
-- `<WORKFLOW_ID>` — ID of the workflow to run (optional - will prompt if not provided)
-
-###### **Options:**
-
-- `-p`, `--poll-interval <POLL_INTERVAL>` — Poll interval in seconds for checking job completion.
-  Default: `5.0`
-- `--max-parallel-jobs <MAX_PARALLEL_JOBS>` — Maximum number of parallel jobs to run (defaults to
-  available CPUs)
-- `--output-dir <OUTPUT_DIR>` — Output directory for job logs and results. Default: `output`
 
 ## `torc init`
 

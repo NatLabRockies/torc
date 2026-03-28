@@ -216,13 +216,16 @@ Three pieces work together here:
 
 ## Step 3: Submit and Run
 
+Since the spec already includes `slurm_schedulers` and `actions`, submit directly:
+
 ```bash
-torc slurm generate --account my_project graceful_termination.yaml && torc submit graceful_termination.yaml
+torc submit graceful_termination.yaml
 ```
 
-Or, if you already have schedulers configured in the spec:
+Or, if you prefer to auto-generate schedulers from job resource requirements:
 
 ```bash
+torc slurm generate --account my_project -o graceful_termination.yaml graceful_termination.yaml
 torc submit graceful_termination.yaml
 ```
 

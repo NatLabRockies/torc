@@ -259,7 +259,7 @@ Compare this to **10,000 dependencies** without barriers!
 ### Step 4: Run the Workflow
 
 ```bash
-torc workflows run 1
+torc run 1
 ```
 
 ### Step 5: Monitor Progress

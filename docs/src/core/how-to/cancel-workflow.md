@@ -45,9 +45,10 @@ To resume a canceled workflow:
 # Reinitialize to reset canceled jobs
 torc reinit <workflow_id>
 
-# Run again
-torc workflows run <workflow_id>
-torc workflows submit <workflow_id>
+# Run again locally
+torc run <workflow_id>
+# Or submit to scheduler
+torc submit <workflow_id>
 ```
 
 Jobs that completed before cancellation remain completed.

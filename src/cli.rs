@@ -222,7 +222,8 @@ EXAMPLES:
     /// Submit a workflow to scheduler (create from spec file or submit existing workflow by ID)
     ///
     /// Requires workflow to have an on_workflow_start action with schedule_nodes.
-    /// For Slurm workflows without pre-configured schedulers, use `submit-slurm` instead.
+    /// For Slurm workflows without pre-configured schedulers, use
+    /// `torc slurm generate` to auto-generate schedulers first.
     #[command(
         hide = true,
         after_long_help = "\

@@ -92,9 +92,10 @@ After fixing the issue:
 # Reinitialize to reset failed jobs
 torc workflows reset-status --failed --reinitialize <workflow_id>
 
-# Run again
-torc workflows run <workflow_id>
-torc slurm generate <workflow_id> && torc submit <workflow_id>
+# Run again locally
+torc run <workflow_id>
+# Or re-submit to Slurm
+torc submit <workflow_id>
 ```
 
 ## See Also

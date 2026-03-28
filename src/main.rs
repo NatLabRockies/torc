@@ -298,11 +298,12 @@ fn main() {
                     );
                     eprintln!("To submit to Slurm, either:");
                     eprintln!();
-                    eprintln!("  1. Use 'torc submit-slurm' to auto-generate schedulers:");
+                    eprintln!("  1. Use 'torc slurm generate' to auto-generate schedulers:");
                     eprintln!(
-                        "     torc submit-slurm --account <account> {}",
-                        workflow_spec_or_id
+                        "     torc slurm generate --account <account> -o {} {}",
+                        workflow_spec_or_id, workflow_spec_or_id
                     );
+                    eprintln!("     torc submit {}", workflow_spec_or_id);
                     eprintln!();
                     eprintln!("  2. Add a workflow action manually:");
                     eprintln!("     actions:");

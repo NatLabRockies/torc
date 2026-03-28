@@ -55,7 +55,7 @@ checkpoint:
 
 ```bash
 torc reinit $WORKFLOW_ID
-torc workflows submit $WORKFLOW_ID
+torc submit $WORKFLOW_ID
 ```
 
 See the [Graceful Job Termination](../fault-tolerance/checkpointing.md) tutorial for a complete

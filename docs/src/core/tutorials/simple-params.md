@@ -152,7 +152,7 @@ all 5 process jobs.
 WORKFLOW_ID=$(torc create learning_rate_sweep.yaml -f json | jq -r '.id')
 echo "Created workflow: $WORKFLOW_ID"
 
-torc init-jobs $WORKFLOW_ID
+torc init $WORKFLOW_ID
 ```
 
 ## Step 3: Verify the Expansion

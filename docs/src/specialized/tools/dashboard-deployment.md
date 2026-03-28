@@ -371,7 +371,7 @@ export TORC_API_URL="http://shared-server:8080/torc-service/v1"
 
 # Create and run workflows
 torc create my_workflow.yaml
-torc workflows run <workflow_id>
+torc run <workflow_id>
 ```
 
 ### Authentication

@@ -299,7 +299,7 @@ torc jobs list $WORKFLOW_ID --status pending_failed
 
 # After AI classification, reinitialize and continue
 torc reinit $WORKFLOW_ID
-torc workflows run $WORKFLOW_ID
+torc run $WORKFLOW_ID
 ```
 
 ## Custom MCP Servers
