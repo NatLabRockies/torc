@@ -187,7 +187,7 @@
                         <h1 id="how-to-track-workflow-status"><a class="header" href="#how-to-track-workflow-status">How to Track Workflow Status</a></h1>
 <p>Monitor a running workflow's progress using the CLI, TUI, or dashboard.</p>
 <h2 id="quick-status-check"><a class="header" href="#quick-status-check">Quick Status Check</a></h2>
-<pre><code class="language-bash">torc reports summary &lt;workflow_id&gt;
+<pre><code class="language-bash">torc status &lt;workflow_id&gt;
 </code></pre>
 <p>Example output:</p>
 <pre><code>Workflow 42: data_pipeline
@@ -200,7 +200,7 @@ Jobs by Status:
 </code></pre>
 <h2 id="continuous-monitoring"><a class="header" href="#continuous-monitoring">Continuous Monitoring</a></h2>
 <p>Watch status update every 10 seconds:</p>
-<pre><code class="language-bash">watch -n 10 torc reports summary &lt;workflow_id&gt;
+<pre><code class="language-bash">watch -n 10 torc status &lt;workflow_id&gt;
 </code></pre>
 <h2 id="interactive-tui"><a class="header" href="#interactive-tui">Interactive TUI</a></h2>
 <p>Launch the terminal UI for a visual dashboard:</p>

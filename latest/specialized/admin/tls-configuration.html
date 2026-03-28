@@ -210,13 +210,13 @@ ca_cert = "/shared/certs/corporate-ca.pem"
 <p>If the connection succeeds, you're done. All Torc components — CLI, TUI, job runners, MCP server,
 and dashboard — use these settings automatically.</p>
 <h2 id="slurm--hpc"><a class="header" href="#slurm--hpc">Slurm / HPC</a></h2>
-<p>When you submit a workflow with <code>torc submit-slurm</code>, TLS settings from your config file (or CLI
-flags) are automatically propagated as CLI flags on the <code>torc-slurm-job-runner</code> command that runs on
-compute nodes. No extra environment variable setup is needed.</p>
+<p>When you submit a workflow with <code>torc slurm generate</code> + <code>torc submit</code>, TLS settings from your config
+file (or CLI flags) are automatically propagated as CLI flags on the <code>torc-slurm-job-runner</code> command
+that runs on compute nodes. No extra environment variable setup is needed.</p>
 <p>The only requirement is that the CA certificate file must be on a <strong>shared filesystem</strong> accessible
 from all compute nodes.</p>
 <pre><code class="language-bash"># Your config file handles TLS — just submit as normal
-torc submit-slurm --account myproject workflow.yaml
+torc slurm generate --account myproject workflow.yaml &amp;&amp; torc submit workflow.yaml
 </code></pre>
 <h2 id="advanced-configuration"><a class="header" href="#advanced-configuration">Advanced Configuration</a></h2>
 <h3 id="cli-flags"><a class="header" href="#cli-flags">CLI Flags</a></h3>

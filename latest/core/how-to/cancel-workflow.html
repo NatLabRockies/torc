@@ -187,7 +187,7 @@
                         <h1 id="how-to-cancel-a-workflow"><a class="header" href="#how-to-cancel-a-workflow">How to Cancel a Workflow</a></h1>
 <p>Stop a running workflow and terminate its jobs.</p>
 <h2 id="cancel-a-workflow"><a class="header" href="#cancel-a-workflow">Cancel a Workflow</a></h2>
-<pre><code class="language-bash">torc workflows cancel &lt;workflow_id&gt;
+<pre><code class="language-bash">torc cancel &lt;workflow_id&gt;
 </code></pre>
 <p>This:</p>
 <ul>
@@ -198,7 +198,7 @@
 </ul>
 <h2 id="check-cancellation-status"><a class="header" href="#check-cancellation-status">Check Cancellation Status</a></h2>
 <p>Verify the workflow was canceled:</p>
-<pre><code class="language-bash">torc workflows status &lt;workflow_id&gt;
+<pre><code class="language-bash">torc status &lt;workflow_id&gt;
 </code></pre>
 <p>Or check completion status:</p>
 <pre><code class="language-bash">torc workflows is-complete &lt;workflow_id&gt;
@@ -211,11 +211,12 @@
 <h2 id="restart-after-cancellation"><a class="header" href="#restart-after-cancellation">Restart After Cancellation</a></h2>
 <p>To resume a canceled workflow:</p>
 <pre><code class="language-bash"># Reinitialize to reset canceled jobs
-torc workflows reinitialize &lt;workflow_id&gt;
+torc workflows reinit &lt;workflow_id&gt;
 
-# Run again
-torc workflows run &lt;workflow_id&gt;
-torc workflows submit &lt;workflow_id&gt;
+# Run again locally
+torc run &lt;workflow_id&gt;
+# Or submit to scheduler
+torc submit &lt;workflow_id&gt;
 </code></pre>
 <p>Jobs that completed before cancellation remain completed.</p>
 <h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>

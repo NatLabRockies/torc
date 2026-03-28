@@ -187,8 +187,8 @@
                         <h1 id="how-to-view-job-logs"><a class="header" href="#how-to-view-job-logs">How to View Job Logs</a></h1>
 <p>Find and read the stdout/stderr output from job execution.</p>
 <h2 id="find-log-file-paths"><a class="header" href="#find-log-file-paths">Find Log File Paths</a></h2>
-<pre><code class="language-bash">torc reports results &lt;workflow_id&gt;
-torc reports results &lt;workflow_id&gt; --job-id 15
+<pre><code class="language-bash">torc results list --include-logs &lt;workflow_id&gt;
+torc results list --include-logs &lt;workflow_id&gt; --job-id 15
 </code></pre>
 <p>Output includes:</p>
 <pre><code>{
@@ -238,7 +238,7 @@ job completion.</p>
 torc jobs list &lt;workflow_id&gt; --status failed
 
 # Then view each job's logs
-torc reports results &lt;workflow_id&gt; --job-id &lt;failed_job_id&gt;
+torc results list --include-logs &lt;workflow_id&gt; --job-id &lt;failed_job_id&gt;
 </code></pre>
 <h2 id="view-logs-in-tui-or-dashboard"><a class="header" href="#view-logs-in-tui-or-dashboard">View Logs in TUI or Dashboard</a></h2>
 <p>You can also view job logs interactively:</p>

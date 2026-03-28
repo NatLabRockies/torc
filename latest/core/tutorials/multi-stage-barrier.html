@@ -399,7 +399,7 @@ jobs:
 <pre><code class="language-bash">mkdir -p output
 </code></pre>
 <h3 id="step-3-create-the-workflow"><a class="header" href="#step-3-create-the-workflow">Step 3: Create the Workflow</a></h3>
-<pre><code class="language-bash">torc workflows create barrier_demo.yaml
+<pre><code class="language-bash">torc create barrier_demo.yaml
 </code></pre>
 <p>You should see output like:</p>
 <pre><code>Created workflow with ID: 1
@@ -411,7 +411,7 @@ Total: 202 jobs, 201 dependencies
 </code></pre>
 <p>Compare this to <strong>10,000 dependencies</strong> without barriers!</p>
 <h3 id="step-4-run-the-workflow"><a class="header" href="#step-4-run-the-workflow">Step 4: Run the Workflow</a></h3>
-<pre><code class="language-bash">torc workflows run 1
+<pre><code class="language-bash">torc run 1
 </code></pre>
 <h3 id="step-5-monitor-progress"><a class="header" href="#step-5-monitor-progress">Step 5: Monitor Progress</a></h3>
 <pre><code class="language-bash">torc tui

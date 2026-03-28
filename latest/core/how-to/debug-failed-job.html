@@ -206,7 +206,7 @@
 </div>
 <h2 id="step-3-read-the-logs"><a class="header" href="#step-3-read-the-logs">Step 3: Read the Logs</a></h2>
 <pre><code class="language-bash"># Get log paths
-torc reports results &lt;workflow_id&gt; --job-id &lt;job_id&gt;
+torc results list --include-logs &lt;workflow_id&gt; --job-id &lt;job_id&gt;
 
 # View stderr (usually contains error messages)
 cat output/job_stdio/job_wf43_j15_r1_a1.e
@@ -223,7 +223,7 @@ exist. See <a href="../reference/workflow-spec.html#stdioconfig"><code>StdioConf
 </blockquote>
 <h2 id="step-4-check-resource-usage"><a class="header" href="#step-4-check-resource-usage">Step 4: Check Resource Usage</a></h2>
 <p>Did the job exceed its resource limits?</p>
-<pre><code class="language-bash">torc reports check-resource-utilization &lt;workflow_id&gt;
+<pre><code class="language-bash">torc workflows check-resources &lt;workflow_id&gt;
 </code></pre>
 <p>Look for:</p>
 <ul>
@@ -251,9 +251,10 @@ python process.py --input data.csv
 <pre><code class="language-bash"># Reinitialize to reset failed jobs
 torc workflows reset-status --failed --reinitialize &lt;workflow_id&gt;
 
-# Run again
-torc workflows run &lt;workflow_id&gt;
-torc submit-slurm &lt;workflow_id&gt;
+# Run again locally
+torc run &lt;workflow_id&gt;
+# Or re-submit to Slurm
+torc submit &lt;workflow_id&gt;
 </code></pre>
 <h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>
 <ul>

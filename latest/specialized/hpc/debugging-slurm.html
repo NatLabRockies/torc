@@ -438,7 +438,7 @@ cat torc_output/sacct_&lt;slurm_job_id&gt;.json | jq '.jobs[].steps[].tres.reque
 </li>
 <li>
 <p><strong>Check the job's own stderr for application errors:</strong></p>
-<pre><code class="language-bash">torc reports results &lt;workflow_id&gt; &gt; report.json
+<pre><code class="language-bash">torc results list --include-logs &lt;workflow_id&gt; &gt; report.json
 jq -r '.results[] | select(.return_code != 0) | .job_stderr' report.json | xargs cat
 </code></pre>
 </li>
@@ -557,7 +557,7 @@ when:</p>
 <li><strong><code>torc slurm parse-logs</code></strong>: Parse Slurm logs for known error patterns</li>
 <li><strong><code>torc slurm sacct</code></strong>: Collect Slurm accounting data for workflow jobs</li>
 <li><strong><code>torc workflows sync-status</code></strong>: Detect and fix orphaned jobs from terminated Slurm allocations</li>
-<li><strong><code>torc reports results</code></strong>: Generate debug report with all log file paths</li>
+<li><strong><code>torc results list --include-logs</code></strong>: Generate debug report with all log file paths</li>
 <li><strong><code>torc results list</code></strong>: View summary of job results in table format</li>
 <li><strong><code>torc-dash</code></strong>: Launch web interface with Slurm log viewing</li>
 <li><strong><code>torc tui</code></strong>: Launch terminal UI with Slurm log viewing</li>

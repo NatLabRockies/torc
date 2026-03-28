@@ -212,7 +212,7 @@ $ torc slurm sacct $WORKFLOW_ID
 ╰──────────────────────┴───────────────┴──────────╯
 </code></pre>
 <p><strong>Fix:</strong> Increase <code>memory</code> in resource requirements, or use
-<code>torc reports check-resource-utilization --correct</code> to auto-adjust based on peak usage.</p>
+<code>torc workflows check-resources --correct</code> to auto-adjust based on peak usage.</p>
 <h3 id="timeout-with-graceful-shutdown-exit-code-0"><a class="header" href="#timeout-with-graceful-shutdown-exit-code-0">Timeout with Graceful Shutdown (exit code 0)</a></h3>
 <p>The job received SIGTERM via <code>srun --signal</code>, saved a checkpoint, and called <code>sys.exit(0)</code>. From
 Slurm's perspective, the job completed normally.</p>
@@ -226,8 +226,8 @@ Slurm's perspective, the job completed normally.</p>
 <p>This is the expected outcome when using <code>srun_termination_signal</code>. The job handled the signal
 correctly but did not finish all its work. Reinitialize and re-submit to continue from the
 checkpoint:</p>
-<pre><code class="language-bash">torc workflows reinitialize $WORKFLOW_ID
-torc workflows submit $WORKFLOW_ID
+<pre><code class="language-bash">torc workflows reinit $WORKFLOW_ID
+torc submit $WORKFLOW_ID
 </code></pre>
 <p>See the <a href="../fault-tolerance/checkpointing.html">Graceful Job Termination</a> tutorial for a complete
 example with a Python signal handler.</p>

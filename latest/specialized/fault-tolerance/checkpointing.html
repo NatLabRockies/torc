@@ -393,10 +393,12 @@ with code 0 once it finishes, so unused retries cost nothing.</p>
 </li>
 </ul>
 <h2 id="step-3-submit-and-run"><a class="header" href="#step-3-submit-and-run">Step 3: Submit and Run</a></h2>
-<pre><code class="language-bash">torc submit-slurm --account my_project graceful_termination.yaml
-</code></pre>
-<p>Or, if you already have schedulers configured in the spec:</p>
+<p>Since the spec already includes <code>slurm_schedulers</code> and <code>actions</code>, submit directly:</p>
 <pre><code class="language-bash">torc submit graceful_termination.yaml
+</code></pre>
+<p>Or, if you prefer to auto-generate schedulers from job resource requirements:</p>
+<pre><code class="language-bash">torc slurm generate --account my_project -o graceful_termination.yaml graceful_termination.yaml
+torc submit graceful_termination.yaml
 </code></pre>
 <h2 id="step-4-observe-the-behavior"><a class="header" href="#step-4-observe-the-behavior">Step 4: Observe the Behavior</a></h2>
 <p>Monitor the workflow:</p>

@@ -204,10 +204,10 @@
 </code></pre>
 <h2 id="generate-a-workflow-summary"><a class="header" href="#generate-a-workflow-summary">Generate a Workflow Summary</a></h2>
 <p>Once a workflow is complete, generate a summary report:</p>
-<pre><code class="language-bash">torc reports summary &lt;workflow_id&gt;
+<pre><code class="language-bash">torc status &lt;workflow_id&gt;
 </code></pre>
 <p>If you omit the workflow ID, you'll be prompted to select from your workflows:</p>
-<pre><code class="language-bash">torc reports summary
+<pre><code class="language-bash">torc status
 </code></pre>
 <p>Example output:</p>
 <pre><code>Workflow Summary
@@ -243,7 +243,7 @@ Total Execution Time: 45m 30s
 <h3 id="continuous-monitoring"><a class="header" href="#continuous-monitoring">Continuous Monitoring</a></h3>
 <p>This command can be very convenient, but be mindful of your workflow size (number of jobs) and
 network load if you are using a shared server.</p>
-<pre><code class="language-bash">watch -n 10 torc reports summary &lt;workflow_id&gt;
+<pre><code class="language-bash">watch -n 10 torc status &lt;workflow_id&gt;
 </code></pre>
 <h3 id="json-output"><a class="header" href="#json-output">JSON Output</a></h3>
 <p>This is useful for scripts:</p>
@@ -288,7 +288,7 @@ fi
 </code></pre>
 <h2 id="check-resource-utilization"><a class="header" href="#check-resource-utilization">Check Resource Utilization</a></h2>
 <p>After a workflow completes, check if any jobs exceeded their resource limits:</p>
-<pre><code class="language-bash">torc reports check-resource-utilization &lt;workflow_id&gt;
+<pre><code class="language-bash">torc workflows check-resources &lt;workflow_id&gt;
 </code></pre>
 <p>Example output when jobs stayed within limits:</p>
 <pre><code>Resource Utilization Report for Workflow 42
@@ -313,10 +313,10 @@ Recommendation: Increase memory allocation for affected jobs.
 risk of failure in future runs.</p>
 <h2 id="related-commands"><a class="header" href="#related-commands">Related Commands</a></h2>
 <ul>
-<li><code>torc workflows status &lt;id&gt;</code> - View current job status counts</li>
+<li><code>torc status &lt;id&gt;</code> - View current job status counts</li>
 <li><code>torc results list &lt;id&gt;</code> - List individual job results</li>
-<li><code>torc reports check-resource-utilization &lt;id&gt;</code> - Check for resource violations</li>
-<li><code>torc reports results &lt;id&gt;</code> - Generate detailed results with log file paths</li>
+<li><code>torc workflows check-resources &lt;id&gt;</code> - Check for resource violations</li>
+<li><code>torc results list --include-logs &lt;id&gt;</code> - Generate detailed results with log file paths</li>
 </ul>
 <h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
 <ul>

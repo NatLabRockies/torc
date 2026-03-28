@@ -407,10 +407,10 @@ jobs:
 <h2 id="step-7-use-your-profile"><a class="header" href="#step-7-use-your-profile">Step 7: Use Your Profile</a></h2>
 <p>Now you can submit workflows using your custom profile:</p>
 <pre><code class="language-bash"># Auto-detect the profile (if on the cluster)
-torc submit-slurm --account my_project workflow.yaml
+torc slurm generate --account my_project workflow.yaml &amp;&amp; torc submit workflow.yaml
 
 # Or explicitly specify the profile
-torc submit-slurm --account my_project --hpc-profile research workflow.yaml
+torc slurm generate --account my_project --hpc-profile &amp;&amp; torc submit --hpc-profile research workflow.yaml
 </code></pre>
 <h2 id="advanced-configuration"><a class="header" href="#advanced-configuration">Advanced Configuration</a></h2>
 <h3 id="hostname-based-detection"><a class="header" href="#hostname-based-detection">Hostname-Based Detection</a></h3>

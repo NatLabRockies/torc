@@ -439,7 +439,7 @@ retries.</p>
 <p>Use <code>torc watch --auto-schedule</code> to automatically submit new Slurm allocations when retry jobs are
 waiting:</p>
 <pre><code class="language-bash"># Submit a workflow with failure handlers
-torc submit-slurm --account my_project workflow.yaml
+torc slurm generate --account my_project workflow.yaml &amp;&amp; torc submit workflow.yaml
 
 # Watch with auto-scheduling enabled (uses defaults)
 torc watch $WORKFLOW_ID --auto-schedule

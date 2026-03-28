@@ -233,7 +233,7 @@ jobs:
 </code></pre>
 <p>This expands to 10 jobs: <code>task_1</code>, <code>task_2</code>, ..., <code>task_10</code>.</p>
 <h2 id="step-2-create-and-run-the-workflow"><a class="header" href="#step-2-create-and-run-the-workflow">Step 2: Create and Run the Workflow</a></h2>
-<pre><code class="language-bash">WORKFLOW_ID=$(torc workflows create parallel_tasks.yaml -f json | jq -r '.id')
+<pre><code class="language-bash">WORKFLOW_ID=$(torc create parallel_tasks.yaml -f json | jq -r '.id')
 echo "Created workflow: $WORKFLOW_ID"
 
 torc run $WORKFLOW_ID
@@ -305,10 +305,10 @@ all 5 process jobs.</p>
 <li>All <code>evaluate_*</code> jobs → unblock <code>compare_results</code></li>
 </ol>
 <h2 id="step-2-create-and-initialize-the-workflow"><a class="header" href="#step-2-create-and-initialize-the-workflow">Step 2: Create and Initialize the Workflow</a></h2>
-<pre><code class="language-bash">WORKFLOW_ID=$(torc workflows create learning_rate_sweep.yaml -f json | jq -r '.id')
+<pre><code class="language-bash">WORKFLOW_ID=$(torc create learning_rate_sweep.yaml -f json | jq -r '.id')
 echo "Created workflow: $WORKFLOW_ID"
 
-torc workflows initialize-jobs $WORKFLOW_ID
+torc workflows init $WORKFLOW_ID
 </code></pre>
 <h2 id="step-3-verify-the-expansion-1"><a class="header" href="#step-3-verify-the-expansion-1">Step 3: Verify the Expansion</a></h2>
 <pre><code class="language-bash"># Count jobs (should be 11: 5 train + 5 evaluate + 1 compare)

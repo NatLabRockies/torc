@@ -258,8 +258,9 @@ jobs:
 <li>Torc matches requirements to appropriate Slurm partitions</li>
 </ul>
 <h2 id="submit-the-workflow"><a class="header" href="#submit-the-workflow">Submit the Workflow</a></h2>
-<p>Submit with your Slurm account:</p>
-<pre><code class="language-console">torc submit-slurm --account &lt;your-account&gt; workflow.yaml
+<p>First, generate Slurm schedulers for your account, then submit:</p>
+<pre><code class="language-console">torc slurm generate --account &lt;your-account&gt; workflow.yaml
+torc submit workflow.yaml
 </code></pre>
 <p>Torc will:</p>
 <ol>

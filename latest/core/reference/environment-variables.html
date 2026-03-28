@@ -362,6 +362,80 @@ jobs:
 <li><strong>Use case</strong>: Service accounts or when system username differs from Torc identity</li>
 </ul>
 <p><strong>Note</strong>: Does not affect Slurm job submission, which always uses the real system user.</p>
+<h3 id="torc_api_url-1"><a class="header" href="#torc_api_url-1">TORC_API_URL</a></h3>
+<p>The URL of the Torc API server for CLI operations.</p>
+<ul>
+<li><strong>Type</strong>: String (URL)</li>
+<li><strong>Default</strong>: <code>http://localhost:8080/torc-service/v1</code></li>
+<li><strong>Use case</strong>: Connect to a remote Torc server or custom port</li>
+</ul>
+<pre><code class="language-bash">export TORC_API_URL=http://myserver:8080/torc-service/v1
+torc workflows list
+</code></pre>
+<p><strong>Note</strong>: Can also be set via the <code>--url</code> CLI flag.</p>
+<h3 id="torc_password"><a class="header" href="#torc_password">TORC_PASSWORD</a></h3>
+<p>Password for HTTP Basic authentication with the Torc server.</p>
+<ul>
+<li><strong>Type</strong>: String</li>
+<li><strong>Default</strong>: None (no authentication)</li>
+<li><strong>Use case</strong>: Authenticate with a password-protected Torc server</li>
+</ul>
+<pre><code class="language-bash">export TORC_PASSWORD=mysecretpassword
+torc workflows list
+</code></pre>
+<p><strong>Note</strong>: Username comes from <code>TORC_USERNAME</code> or system username. See
+<a href="../../specialized/admin/authentication.html">Authentication</a> for server setup.</p>
+<h3 id="torc_tls_ca_cert"><a class="header" href="#torc_tls_ca_cert">TORC_TLS_CA_CERT</a></h3>
+<p>Path to a custom CA certificate for TLS verification.</p>
+<ul>
+<li><strong>Type</strong>: String (file path)</li>
+<li><strong>Default</strong>: System CA certificates</li>
+<li><strong>Use case</strong>: Connect to servers using self-signed or internal CA certificates</li>
+</ul>
+<pre><code class="language-bash">export TORC_TLS_CA_CERT=/path/to/ca-cert.pem
+torc workflows list
+</code></pre>
+<h3 id="torc_tls_insecure"><a class="header" href="#torc_tls_insecure">TORC_TLS_INSECURE</a></h3>
+<p>Skip TLS certificate verification (use with caution).</p>
+<ul>
+<li><strong>Type</strong>: Boolean (<code>true</code> or <code>1</code> to enable)</li>
+<li><strong>Default</strong>: <code>false</code> (TLS verification enabled)</li>
+<li><strong>Use case</strong>: Development/testing with self-signed certificates</li>
+</ul>
+<pre><code class="language-bash">export TORC_TLS_INSECURE=true
+torc workflows list
+</code></pre>
+<p><strong>Warning</strong>: Disabling TLS verification exposes connections to man-in-the-middle attacks. Only use
+in trusted development environments.</p>
+<h3 id="torc_cookie_header"><a class="header" href="#torc_cookie_header">TORC_COOKIE_HEADER</a></h3>
+<p>Cookie header value for cookie-based authentication.</p>
+<ul>
+<li><strong>Type</strong>: String</li>
+<li><strong>Default</strong>: None</li>
+<li><strong>Use case</strong>: Authenticate via session cookies (e.g., when behind an authentication proxy)</li>
+</ul>
+<pre><code class="language-bash">export TORC_COOKIE_HEADER="session=abc123; token=xyz789"
+torc workflows list
+</code></pre>
+<h3 id="rust_log"><a class="header" href="#rust_log">RUST_LOG</a></h3>
+<p>Control log verbosity for the Torc CLI.</p>
+<ul>
+<li><strong>Type</strong>: String (log level)</li>
+<li><strong>Default</strong>: <code>warn</code></li>
+<li><strong>Values</strong>: <code>error</code>, <code>warn</code>, <code>info</code>, <code>debug</code>, <code>trace</code></li>
+<li><strong>Use case</strong>: Debug CLI issues or see detailed API interactions</li>
+</ul>
+<pre><code class="language-bash"># Show info-level logs
+export RUST_LOG=info
+torc workflows list
+
+# Show debug logs for torc modules only
+export RUST_LOG=torc=debug
+torc run workflow.yaml
+
+# Show SQL queries (server debugging)
+RUST_LOG=sqlx=debug torc-server run
+</code></pre>
 
                     </main>
 

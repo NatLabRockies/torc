@@ -353,7 +353,7 @@ resource_requirements:
     runtime: PT10M
 EOF
 
-WORKFLOW_ID=$(torc workflows create /tmp/ml_training.yaml -f json | jq -r '.id')
+WORKFLOW_ID=$(torc create /tmp/ml_training.yaml -f json | jq -r '.id')
 echo "Alice created workflow: $WORKFLOW_ID"
 </code></pre>
 <h3 id="as-carol-data-team"><a class="header" href="#as-carol-data-team">As Carol (Data Team)</a></h3>
@@ -376,7 +376,7 @@ resource_requirements:
     runtime: PT10M
 EOF
 
-torc workflows create /tmp/data_pipeline.yaml
+torc create /tmp/data_pipeline.yaml
 </code></pre>
 <h2 id="step-7-observe-access-control-in-action"><a class="header" href="#step-7-observe-access-control-in-action">Step 7: Observe Access Control in Action</a></h2>
 <h3 id="carol-cannot-access-alices-workflow"><a class="header" href="#carol-cannot-access-alices-workflow">Carol Cannot Access Alice's Workflow</a></h3>

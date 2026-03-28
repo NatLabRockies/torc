@@ -260,14 +260,14 @@ torc-dash: returns response to browser
 <p>These endpoints execute the <code>torc</code> CLI as subprocesses, enabling operations that require local file
 access or complex orchestration:</p>
 <div class="table-wrapper"><table><thead><tr><th>Endpoint</th><th>CLI Command</th><th>Purpose</th></tr></thead><tbody>
-<tr><td><code>POST /api/cli/create</code></td><td><code>torc workflows create</code></td><td>Create workflow from spec file</td></tr>
-<tr><td><code>POST /api/cli/run</code></td><td><code>torc workflows run</code></td><td>Run workflow locally</td></tr>
-<tr><td><code>POST /api/cli/submit</code></td><td><code>torc workflows submit</code></td><td>Submit to scheduler</td></tr>
-<tr><td><code>POST /api/cli/initialize</code></td><td><code>torc workflows initialize</code></td><td>Initialize job dependencies</td></tr>
-<tr><td><code>POST /api/cli/delete</code></td><td><code>torc workflows delete</code></td><td>Delete workflow</td></tr>
-<tr><td><code>POST /api/cli/reinitialize</code></td><td><code>torc workflows reinitialize</code></td><td>Reinitialize workflow</td></tr>
+<tr><td><code>POST /api/cli/create</code></td><td><code>torc create</code></td><td>Create workflow from spec file</td></tr>
+<tr><td><code>POST /api/cli/run</code></td><td><code>torc run</code></td><td>Run workflow locally</td></tr>
+<tr><td><code>POST /api/cli/submit</code></td><td><code>torc submit</code></td><td>Submit to scheduler</td></tr>
+<tr><td><code>POST /api/cli/initialize</code></td><td><code>torc workflows init</code></td><td>Initialize job dependencies</td></tr>
+<tr><td><code>POST /api/cli/delete</code></td><td><code>torc delete</code></td><td>Delete workflow</td></tr>
+<tr><td><code>POST /api/cli/reinitialize</code></td><td><code>torc workflows reinit</code></td><td>Reinitialize workflow</td></tr>
 <tr><td><code>POST /api/cli/reset-status</code></td><td><code>torc workflows reset-status</code></td><td>Reset job statuses</td></tr>
-<tr><td><code>GET /api/cli/run-stream</code></td><td><code>torc workflows run</code></td><td>SSE streaming execution</td></tr>
+<tr><td><code>GET /api/cli/run-stream</code></td><td><code>torc run</code></td><td>SSE streaming execution</td></tr>
 </tbody></table>
 </div>
 <h3 id="server-management-endpoints"><a class="header" href="#server-management-endpoints">Server Management Endpoints</a></h3>

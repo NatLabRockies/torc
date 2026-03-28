@@ -331,8 +331,7 @@ prevents them from firing again and creating duplicate allocations:</p>
 </pre>
 <h3 id="step-2-group-jobs-using-workflowgraph"><a class="header" href="#step-2-group-jobs-using-workflowgraph">Step 2: Group Jobs Using WorkflowGraph</a></h3>
 <p>The system builds a <code>WorkflowGraph</code> from pending jobs and uses <code>scheduler_groups()</code> to group them by
-<code>(resource_requirements, has_dependencies)</code>. This aligns with the behavior of
-<code>torc workflows create-slurm</code>:</p>
+<code>(resource_requirements, has_dependencies)</code>. This aligns with the behavior of <code>torc create-slurm</code>:</p>
 <ul>
 <li><strong>Jobs without dependencies</strong>: Can be scheduled immediately with <code>on_workflow_start</code></li>
 <li><strong>Jobs with dependencies</strong> (deferred): Need <code>on_jobs_ready</code> recovery actions to schedule when they

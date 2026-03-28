@@ -189,7 +189,7 @@
 only the affected jobs. Reinitialization handles this by detecting what changed and marking the
 appropriate jobs for re-execution.</p>
 <h2 id="when-to-use-reinitialization"><a class="header" href="#when-to-use-reinitialization">When to Use Reinitialization</a></h2>
-<p>Use <code>torc workflows reinitialize</code> when:</p>
+<p>Use <code>torc workflows reinit</code> when:</p>
 <ul>
 <li><strong>Input files changed</strong> — You modified an input file and want dependent jobs to rerun</li>
 <li><strong>Configuration updated</strong> — You changed user_data parameters</li>
@@ -199,13 +199,13 @@ appropriate jobs for re-execution.</p>
 </ul>
 <h2 id="basic-usage"><a class="header" href="#basic-usage">Basic Usage</a></h2>
 <pre><code class="language-bash"># Preview what would change (recommended first step)
-torc workflows reinitialize &lt;workflow_id&gt; --dry-run
+torc workflows reinit &lt;workflow_id&gt; --dry-run
 
 # Reinitialize the workflow
-torc workflows reinitialize &lt;workflow_id&gt;
+torc workflows reinit &lt;workflow_id&gt;
 
 # Force reinitialization even with warnings
-torc workflows reinitialize &lt;workflow_id&gt; --force
+torc workflows reinit &lt;workflow_id&gt; --force
 </code></pre>
 <h2 id="how-change-detection-works"><a class="header" href="#how-change-detection-works">How Change Detection Works</a></h2>
 <p>Reinitialization detects changes through three mechanisms:</p>
@@ -217,7 +217,7 @@ for re-execution.</p>
 echo "new data" &gt; input.json
 
 # Reinitialize detects the change
-torc workflows reinitialize &lt;workflow_id&gt;
+torc workflows reinit &lt;workflow_id&gt;
 # Output: Reset 3 jobs due to changed inputs
 </code></pre>
 <h3 id="2-job-attribute-and-user-data-hashing"><a class="header" href="#2-job-attribute-and-user-data-hashing">2. Job Attribute and User Data Hashing</a></h3>
@@ -249,7 +249,7 @@ postprocess (depends on process output) → also marked
 </code></pre>
 <h2 id="dry-run-mode"><a class="header" href="#dry-run-mode">Dry Run Mode</a></h2>
 <p>Always use <code>--dry-run</code> first to preview changes without modifying anything:</p>
-<pre><code class="language-bash">torc workflows reinitialize &lt;workflow_id&gt; --dry-run
+<pre><code class="language-bash">torc workflows reinit &lt;workflow_id&gt; --dry-run
 </code></pre>
 <p>Example output:</p>
 <pre><code>Dry run: 5 jobs would be reset due to changed inputs

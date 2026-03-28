@@ -191,11 +191,11 @@ files) to more advanced approaches (CLI, API).</p>
 <p>The easiest way to create workflows is with specification files. Torc supports YAML, JSON5, and KDL
 formats.</p>
 <h3 id="create-from-a-yaml-file"><a class="header" href="#create-from-a-yaml-file">Create from a YAML File</a></h3>
-<pre><code class="language-bash">torc workflows create workflow.yaml
+<pre><code class="language-bash">torc create workflow.yaml
 </code></pre>
 <h3 id="create-from-json5-or-kdl"><a class="header" href="#create-from-json5-or-kdl">Create from JSON5 or KDL</a></h3>
-<pre><code class="language-bash">torc workflows create workflow.json5
-torc workflows create workflow.kdl
+<pre><code class="language-bash">torc create workflow.json5
+torc create workflow.kdl
 </code></pre>
 <p>Torc detects the format from the file extension.</p>
 <h3 id="create-and-run-in-one-step"><a class="header" href="#create-and-run-in-one-step">Create and Run in One Step</a></h3>
@@ -255,7 +255,7 @@ by piece using the CLI.</p>
 </code></pre>
 <h3 id="step-5-initialize-and-run"><a class="header" href="#step-5-initialize-and-run">Step 5: Initialize and Run</a></h3>
 <pre><code class="language-bash"># Initialize the workflow (resolves dependencies)
-torc workflows initialize-jobs 1
+torc workflows init 1
 
 # Run the workflow
 torc run 1
@@ -359,7 +359,7 @@ similar to the Python client.</p>
 <h2 id="common-tasks"><a class="header" href="#common-tasks">Common Tasks</a></h2>
 <h3 id="validate-a-workflow-file-without-creating"><a class="header" href="#validate-a-workflow-file-without-creating">Validate a Workflow File Without Creating</a></h3>
 <p>Use <code>--dry-run</code> to validate a workflow specification without creating it on the server:</p>
-<pre><code class="language-bash">torc workflows create --dry-run workflow.yaml
+<pre><code class="language-bash">torc create --dry-run workflow.yaml
 </code></pre>
 <p>Example output:</p>
 <pre><code>Workflow Validation Results
@@ -447,7 +447,7 @@ suboptimal job-to-node matching:</p>
 </ol>
 <h4 id="bypassing-validation"><a class="header" href="#bypassing-validation">Bypassing Validation</a></h4>
 <p>To create a workflow despite validation warnings:</p>
-<pre><code class="language-bash">torc workflows create --skip-checks workflow.yaml
+<pre><code class="language-bash">torc create --skip-checks workflow.yaml
 </code></pre>
 <p>Note: This bypasses scheduler node validation checks (which are treated as errors), but does not
 bypass all errors. Errors such as missing references or circular dependencies will always prevent
@@ -456,7 +456,7 @@ creation.</p>
 <pre><code class="language-bash">torc workflows list
 </code></pre>
 <h3 id="delete-a-workflow"><a class="header" href="#delete-a-workflow">Delete a Workflow</a></h3>
-<pre><code class="language-bash">torc workflows delete &lt;workflow_id&gt;
+<pre><code class="language-bash">torc delete &lt;workflow_id&gt;
 </code></pre>
 <h3 id="view-workflow-details"><a class="header" href="#view-workflow-details">View Workflow Details</a></h3>
 <pre><code class="language-bash">torc workflows get &lt;workflow_id&gt;

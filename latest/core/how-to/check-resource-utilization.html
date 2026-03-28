@@ -188,7 +188,7 @@
 <p>Compare actual resource usage against specified requirements to identify jobs that exceeded their
 limits.</p>
 <h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
-<pre><code class="language-bash">torc reports check-resource-utilization &lt;workflow_id&gt;
+<pre><code class="language-bash">torc workflows check-resources &lt;workflow_id&gt;
 </code></pre>
 <p>Example output:</p>
 <pre><code>⚠ Found 2 resource over-utilization violations:
@@ -200,11 +200,11 @@ Job ID | Job Name    | Resource | Specified | Peak Used | Over-Utilization
 </code></pre>
 <h2 id="show-all-jobs"><a class="header" href="#show-all-jobs">Show All Jobs</a></h2>
 <p>Include jobs that stayed within limits:</p>
-<pre><code class="language-bash">torc reports check-resource-utilization &lt;workflow_id&gt; --all
+<pre><code class="language-bash">torc workflows check-resources &lt;workflow_id&gt; --all
 </code></pre>
 <h2 id="check-a-specific-run"><a class="header" href="#check-a-specific-run">Check a Specific Run</a></h2>
 <p>For workflows that have been reinitialized multiple times:</p>
-<pre><code class="language-bash">torc reports check-resource-utilization &lt;workflow_id&gt; --run-id 2
+<pre><code class="language-bash">torc workflows check-resources &lt;workflow_id&gt; --run-id 2
 </code></pre>
 <h2 id="automatically-correct-requirements"><a class="header" href="#automatically-correct-requirements">Automatically Correct Requirements</a></h2>
 <p>Use the separate <code>correct-resources</code> command to automatically adjust resource allocations based on

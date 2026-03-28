@@ -398,7 +398,7 @@ after the cooldown period.</p>
 those retries get scheduled without manual intervention.</p>
 <h3 id="example-failure-handler-with-auto-scheduling"><a class="header" href="#example-failure-handler-with-auto-scheduling">Example: Failure Handler with Auto-Scheduling</a></h3>
 <pre><code class="language-bash"># Submit a workflow with failure handlers
-torc submit-slurm --account my_project workflow.yaml
+torc slurm generate --account my_project workflow.yaml &amp;&amp; torc submit workflow.yaml
 
 # Watch with auto-scheduling enabled (uses defaults)
 torc watch $WORKFLOW_ID --auto-schedule
@@ -421,7 +421,7 @@ torc watch $WORKFLOW_ID --auto-schedule
 </div>
 <h2 id="complete-workflow-example"><a class="header" href="#complete-workflow-example">Complete Workflow Example</a></h2>
 <h3 id="1-submit-a-workflow"><a class="header" href="#1-submit-a-workflow">1. Submit a Workflow</a></h3>
-<pre><code class="language-bash">torc submit-slurm --account myproject workflow.yaml
+<pre><code class="language-bash">torc slurm generate --account myproject workflow.yaml &amp;&amp; torc submit workflow.yaml
 </code></pre>
 <p>Output:</p>
 <pre><code>Created workflow 42 with 100 jobs
@@ -585,7 +585,7 @@ torc watch 42 --recover --poll-interval 300 --show-job-counts
 </code></pre>
 <h3 id="5-check-resource-utilization-afterward"><a class="header" href="#5-check-resource-utilization-afterward">5. Check Resource Utilization Afterward</a></h3>
 <p>After completion, review actual usage:</p>
-<pre><code class="language-bash">torc reports check-resource-utilization 42
+<pre><code class="language-bash">torc workflows check-resources 42
 </code></pre>
 <p>This helps tune future job specifications.</p>
 <h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
@@ -645,7 +645,7 @@ for more details.</p>
 <li>On completion, check for failures</li>
 <li>If failures and recover enabled:
 <ul>
-<li>Run <code>torc reports check-resource-utilization --include-failed</code></li>
+<li>Run <code>torc workflows check-resources --include-failed</code></li>
 <li>Parse results for <code>likely_oom</code> and <code>likely_timeout</code> flags</li>
 <li>Update resource requirements via API</li>
 <li>Run <code>torc workflows reset-status --failed-only --reinitialize</code></li>

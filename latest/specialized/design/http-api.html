@@ -1,0 +1,513 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>HTTP API Design - Torc Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Distributed workflow orchestration for complex computational pipelines">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+        <link rel="stylesheet" href="../../pagetoc.css">
+        <link rel="stylesheet" href="../../version-selector.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Torc Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc/edit/main/docs/src/specialized/design/http-api.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="http-api-design"><a class="header" href="#http-api-design">HTTP API Design</a></h1>
+<p>This document describes the design principles and conventions of Torc's HTTP API.</p>
+<h2 id="design-philosophy"><a class="header" href="#design-philosophy">Design Philosophy</a></h2>
+<p>The API follows REST conventions where appropriate, with pragmatic deviations for workflow
+orchestration operations that don't map cleanly to CRUD semantics.</p>
+<p><strong>Core principles:</strong></p>
+<ul>
+<li><strong>Resource-oriented</strong>: Primary entities (workflows, jobs, files) have standard CRUD endpoints</li>
+<li><strong>Predictable URLs</strong>: Consistent naming and structure across all resources</li>
+<li><strong>JSON everywhere</strong>: All request and response bodies use <code>application/json</code></li>
+<li><strong>Explicit over implicit</strong>: Required fields are marked required; optional fields have sensible
+defaults</li>
+</ul>
+<h2 id="base-url-and-versioning"><a class="header" href="#base-url-and-versioning">Base URL and Versioning</a></h2>
+<p>The API is served under a versioned base path:</p>
+<pre><code>/torc-service/v1
+</code></pre>
+<p><strong>Versioning strategy:</strong></p>
+<ul>
+<li>The version in the URL path (<code>v1</code>) represents the major API version</li>
+<li>The detailed version (e.g., <code>0.12.0</code>) is in the OpenAPI spec and server responses</li>
+<li>Breaking changes increment the major version; non-breaking changes increment minor/patch</li>
+<li>The version is single-sourced in <code>src/api_version.rs</code> and propagates to all artifacts</li>
+</ul>
+<h2 id="url-structure"><a class="header" href="#url-structure">URL Structure</a></h2>
+<h3 id="resource-collections"><a class="header" href="#resource-collections">Resource Collections</a></h3>
+<pre><code>GET    /resources              # List all (with pagination)
+POST   /resources              # Create new
+</code></pre>
+<h3 id="individual-resources"><a class="header" href="#individual-resources">Individual Resources</a></h3>
+<pre><code>GET    /resources/{id}         # Get by ID
+PUT    /resources/{id}         # Update (full replacement)
+PATCH  /resources/{id}         # Partial update (where supported)
+DELETE /resources/{id}         # Delete
+</code></pre>
+<h3 id="nested-resources"><a class="header" href="#nested-resources">Nested Resources</a></h3>
+<p>Resources that belong to a parent use nested URLs:</p>
+<pre><code>GET    /workflows/{id}/jobs              # Jobs in workflow
+GET    /workflows/{id}/files             # Files in workflow
+GET    /access_groups/{id}/members       # Members in group
+</code></pre>
+<h3 id="action-endpoints-rpc-style"><a class="header" href="#action-endpoints-rpc-style">Action Endpoints (RPC-Style)</a></h3>
+<p>Operations that don't map to CRUD use verb-based paths under the resource:</p>
+<pre><code>POST   /workflows/{id}/initialize_jobs           # Build dependency graph
+POST   /workflows/{id}/claim_next_jobs           # Atomically claim ready jobs
+POST   /workflows/{id}/cancel                    # Cancel workflow execution
+POST   /workflows/{id}/reset_status              # Reset workflow state
+POST   /workflows/{id}/process_changed_job_inputs # Detect and handle input changes
+POST   /jobs/{id}/complete                       # Mark job completed
+POST   /jobs/{id}/manage_status_change           # Transition job status
+</code></pre>
+<p><strong>When to use action endpoints:</strong></p>
+<ul>
+<li>Operations with side effects beyond simple CRUD</li>
+<li>Operations requiring atomicity (like <code>claim_next_jobs</code>)</li>
+<li>State machine transitions</li>
+<li>Batch operations</li>
+</ul>
+<h2 id="http-methods"><a class="header" href="#http-methods">HTTP Methods</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Method</th><th>Semantics</th><th>Idempotent</th><th>Request Body</th></tr></thead><tbody>
+<tr><td>GET</td><td>Read resource(s)</td><td>Yes</td><td>No</td></tr>
+<tr><td>POST</td><td>Create resource or trigger action</td><td>No</td><td>Yes</td></tr>
+<tr><td>PUT</td><td>Replace resource entirely</td><td>Yes</td><td>Yes</td></tr>
+<tr><td>PATCH</td><td>Partial update</td><td>No</td><td>Yes</td></tr>
+<tr><td>DELETE</td><td>Remove resource</td><td>Yes</td><td>No</td></tr>
+</tbody></table>
+</div>
+<p><strong>Notes:</strong></p>
+<ul>
+<li><code>PUT</code> expects the complete resource representation</li>
+<li><code>PATCH</code> accepts partial updates (only fields to change)</li>
+<li><code>DELETE</code> on non-existent resources returns 404 (not 204)</li>
+</ul>
+<h2 id="request-format"><a class="header" href="#request-format">Request Format</a></h2>
+<p>All request bodies use JSON with <code>Content-Type: application/json</code>.</p>
+<h3 id="creating-resources"><a class="header" href="#creating-resources">Creating Resources</a></h3>
+<pre><code class="language-json">POST /workflows
+{
+  "name": "my-workflow",
+  "user": "dthom",
+  "description": "Example workflow"
+}
+</code></pre>
+<h3 id="bulk-operations"><a class="header" href="#bulk-operations">Bulk Operations</a></h3>
+<p>Some endpoints accept arrays for batch creation:</p>
+<pre><code class="language-json">POST /bulk_jobs
+{
+  "jobs": [
+    {"name": "job1", "workflow_id": 1, "command": "echo hello"},
+    {"name": "job2", "workflow_id": 1, "command": "echo world"}
+  ]
+}
+</code></pre>
+<h2 id="response-format"><a class="header" href="#response-format">Response Format</a></h2>
+<h3 id="success-responses"><a class="header" href="#success-responses">Success Responses</a></h3>
+<p>Single resource:</p>
+<pre><code class="language-json">{
+  "id": 1,
+  "name": "my-workflow",
+  "user": "dthom",
+  "status": "ready"
+}
+</code></pre>
+<p>List response (with pagination metadata):</p>
+<pre><code class="language-json">{
+  "items": [...],
+  "offset": 0,
+  "count": 10,
+  "total_count": 42,
+  "max_limit": 10000,
+  "has_more": true
+}
+</code></pre>
+<h3 id="error-responses"><a class="header" href="#error-responses">Error Responses</a></h3>
+<p>All errors use the <code>ErrorResponse</code> schema:</p>
+<pre><code class="language-json">{
+  "error": {
+    "error": "NotFound",
+    "message": "Workflow 999 not found"
+  }
+}
+</code></pre>
+<p>Or with additional context:</p>
+<pre><code class="language-json">{
+  "error": {
+    "error": "ValidationError",
+    "message": "Invalid job status transition"
+  },
+  "errorMessage": "Cannot transition from 'completed' to 'ready'",
+  "code": 422
+}
+</code></pre>
+<h2 id="http-status-codes"><a class="header" href="#http-status-codes">HTTP Status Codes</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Code</th><th>Meaning</th><th>When Used</th></tr></thead><tbody>
+<tr><td>200</td><td>OK</td><td>Successful GET, PUT, PATCH, DELETE, or POST action</td></tr>
+<tr><td>201</td><td>Created</td><td>Resource created (some POST endpoints)</td></tr>
+<tr><td>400</td><td>Bad Request</td><td>Malformed JSON, missing required fields</td></tr>
+<tr><td>403</td><td>Forbidden</td><td>User lacks permission for this resource</td></tr>
+<tr><td>404</td><td>Not Found</td><td>Resource doesn't exist</td></tr>
+<tr><td>422</td><td>Unprocessable Entity</td><td>Valid JSON but invalid semantics (e.g., bad status transition)</td></tr>
+<tr><td>500</td><td>Internal Server Error</td><td>Unexpected server failure</td></tr>
+</tbody></table>
+</div>
+<h2 id="pagination"><a class="header" href="#pagination">Pagination</a></h2>
+<p>All list endpoints support offset-based pagination:</p>
+<div class="table-wrapper"><table><thead><tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>offset</code></td><td>integer</td><td>0</td><td>Number of records to skip</td></tr>
+<tr><td><code>limit</code></td><td>integer</td><td>10000</td><td>Maximum records to return</td></tr>
+</tbody></table>
+</div>
+<p><strong>Constraints:</strong></p>
+<ul>
+<li>Maximum <code>limit</code>: 10,000 records (enforced server-side)</li>
+<li>Response includes <code>has_more</code> boolean for client-side iteration</li>
+<li>Response includes <code>total_count</code> for progress indication</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code>GET /workflows?offset=0&amp;limit=50
+GET /workflows?offset=50&amp;limit=50  # Next page
+</code></pre>
+<h2 id="filtering-and-sorting"><a class="header" href="#filtering-and-sorting">Filtering and Sorting</a></h2>
+<h3 id="filtering"><a class="header" href="#filtering">Filtering</a></h3>
+<p>List endpoints support query parameters for filtering:</p>
+<pre><code>GET /workflows?user=dthom&amp;is_archived=false
+GET /jobs?workflow_id=1&amp;status=ready
+GET /compute_nodes?workflow_id=1&amp;is_active=true
+</code></pre>
+<p>Common filter parameters:</p>
+<ul>
+<li><code>workflow_id</code>: Filter by parent workflow (required for nested resources)</li>
+<li><code>name</code>: Filter by name (often substring match)</li>
+<li><code>user</code>: Filter by owner</li>
+<li><code>status</code>: Filter by status value</li>
+</ul>
+<h3 id="sorting"><a class="header" href="#sorting">Sorting</a></h3>
+<pre><code>GET /workflows?sort_by=created_at&amp;reverse_sort=true
+GET /jobs?sort_by=name&amp;reverse_sort=false
+</code></pre>
+<div class="table-wrapper"><table><thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>sort_by</code></td><td>string</td><td>Field name to sort by</td></tr>
+<tr><td><code>reverse_sort</code></td><td>boolean</td><td>If true, sort descending</td></tr>
+</tbody></table>
+</div>
+<h2 id="authentication"><a class="header" href="#authentication">Authentication</a></h2>
+<p>The server supports multiple authentication modes:</p>
+<h3 id="http-basic-auth"><a class="header" href="#http-basic-auth">HTTP Basic Auth</a></h3>
+<pre><code>Authorization: Basic base64(username:password)
+</code></pre>
+<p>Credentials are validated against an htpasswd file when <code>--htpasswd-file</code> is specified.</p>
+<h3 id="anonymous-access"><a class="header" href="#anonymous-access">Anonymous Access</a></h3>
+<p>When authentication is not enforced (<code>--no-auth</code> or no htpasswd file), requests are accepted with
+the username derived from the <code>X-Remote-User</code> header or defaulting to "anonymous".</p>
+<h3 id="authorization-model"><a class="header" href="#authorization-model">Authorization Model</a></h3>
+<p>Access control is resource-based:</p>
+<ol>
+<li><strong>Workflow ownership</strong>: Users can access workflows they own</li>
+<li><strong>Group membership</strong>: Users can access workflows shared with their groups</li>
+<li><strong>System administrators</strong>: Full access to all resources</li>
+</ol>
+<p>The <code>enforce_access_control</code> server flag controls whether authorization is checked.</p>
+<h2 id="resource-organization"><a class="header" href="#resource-organization">Resource Organization</a></h2>
+<p>The API is organized into logical resource groups (OpenAPI tags):</p>
+<div class="table-wrapper"><table><thead><tr><th>Tag</th><th>Resources</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>workflows</code></td><td>Workflows, workflow operations</td><td>Core workflow management</td></tr>
+<tr><td><code>jobs</code></td><td>Jobs, job status, job operations</td><td>Job execution and tracking</td></tr>
+<tr><td><code>files</code></td><td>File records</td><td>Input/output file tracking</td></tr>
+<tr><td><code>user_data</code></td><td>User data records</td><td>Key-value data dependencies</td></tr>
+<tr><td><code>events</code></td><td>Workflow events</td><td>Audit log and event stream</td></tr>
+<tr><td><code>compute_nodes</code></td><td>Compute node records</td><td>Worker node tracking</td></tr>
+<tr><td><code>slurm_schedulers</code></td><td>Slurm scheduler configs</td><td>Slurm integration</td></tr>
+<tr><td><code>remote_workers</code></td><td>Remote worker registrations</td><td>Distributed execution</td></tr>
+<tr><td><code>access_control</code></td><td>Groups, memberships, permissions</td><td>Authorization management</td></tr>
+<tr><td><code>workflow_actions</code></td><td>Scheduled actions</td><td>Automated workflow operations</td></tr>
+<tr><td><code>failure_handlers</code></td><td>Failure handler configs</td><td>Error handling rules</td></tr>
+<tr><td><code>ro_crate_entities</code></td><td>RO-Crate metadata</td><td>Research object packaging</td></tr>
+<tr><td><code>system</code></td><td>Health, version</td><td>Server status</td></tr>
+</tbody></table>
+</div>
+<h2 id="thread-safety-and-concurrency"><a class="header" href="#thread-safety-and-concurrency">Thread Safety and Concurrency</a></h2>
+<p>Certain endpoints are designed for concurrent access from multiple workers:</p>
+<h3 id="claim_next_jobs"><a class="header" href="#claim_next_jobs"><code>claim_next_jobs</code></a></h3>
+<pre><code>POST /workflows/{id}/claim_next_jobs?limit=5
+</code></pre>
+<p>This endpoint uses database-level write locks (<code>BEGIN IMMEDIATE TRANSACTION</code>) to ensure that
+multiple workers calling simultaneously will not receive the same jobs. Each job is allocated to
+exactly one worker.</p>
+<h3 id="claim_jobs_based_on_resources"><a class="header" href="#claim_jobs_based_on_resources"><code>claim_jobs_based_on_resources</code></a></h3>
+<p>Similar to <code>claim_next_jobs</code> but factors in resource requirements (CPU, memory, GPU) and available
+capacity on the requesting worker.</p>
+<h2 id="content-types"><a class="header" href="#content-types">Content Types</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Content-Type</th><th>Usage</th></tr></thead><tbody>
+<tr><td><code>application/json</code></td><td>All request and response bodies</td></tr>
+<tr><td><code>text/event-stream</code></td><td>Server-Sent Events (dashboard real-time updates)</td></tr>
+</tbody></table>
+</div>
+<h2 id="data-type-conventions"><a class="header" href="#data-type-conventions">Data Type Conventions</a></h2>
+<h3 id="ids"><a class="header" href="#ids">IDs</a></h3>
+<p>All resource IDs are 64-bit integers (<code>int64</code> in OpenAPI).</p>
+<h3 id="timestamps"><a class="header" href="#timestamps">Timestamps</a></h3>
+<p>Timestamps use Unix epoch format as <code>float64</code> (seconds with fractional milliseconds).</p>
+<h3 id="durations"><a class="header" href="#durations">Durations</a></h3>
+<p>Runtime durations use ISO 8601 format: <code>PT30M</code> (30 minutes), <code>PT2H</code> (2 hours).</p>
+<h3 id="memory-sizes"><a class="header" href="#memory-sizes">Memory Sizes</a></h3>
+<p>Memory specifications use string format with units: <code>"512m"</code>, <code>"2g"</code>, <code>"100k"</code>.</p>
+<h3 id="job-status"><a class="header" href="#job-status">Job Status</a></h3>
+<p>Job status is stored and transmitted as integers (0-10):</p>
+<div class="table-wrapper"><table><thead><tr><th>Value</th><th>Status</th></tr></thead><tbody>
+<tr><td>0</td><td>uninitialized</td></tr>
+<tr><td>1</td><td>blocked</td></tr>
+<tr><td>2</td><td>ready</td></tr>
+<tr><td>3</td><td>pending</td></tr>
+<tr><td>4</td><td>running</td></tr>
+<tr><td>5</td><td>completed</td></tr>
+<tr><td>6</td><td>failed</td></tr>
+<tr><td>7</td><td>canceled</td></tr>
+<tr><td>8</td><td>terminated</td></tr>
+<tr><td>9</td><td>disabled</td></tr>
+<tr><td>10</td><td>pending_failed</td></tr>
+</tbody></table>
+</div>
+<h2 id="api-evolution"><a class="header" href="#api-evolution">API Evolution</a></h2>
+<p>When evolving the API:</p>
+<ol>
+<li><strong>Additive changes</strong> (new fields, new endpoints) don't require version bumps</li>
+<li><strong>Breaking changes</strong> (removed fields, changed semantics) require major version increment</li>
+<li><strong>Deprecation</strong> should be communicated via documentation before removal</li>
+<li>The OpenAPI spec is the authoritative contract; regenerate clients after spec changes</li>
+</ol>
+<p>See <a href="./api-generation.html">API Generation Architecture</a> for the code-first workflow that maintains
+the API contract.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../specialized/design/client.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../specialized/design/workflow-actions.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../specialized/design/client.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../specialized/design/workflow-actions.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../mermaid.min.js"></script>
+        <script src="../../mermaid-init.js"></script>
+        <script src="../../pagetoc.js"></script>
+        <script src="../../version-selector.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

@@ -328,10 +328,10 @@ resource_requirements:
 needs <code>parameters:</code> to match the parameterized <code>input_files</code>. This tells Torc: "this job depends on
 ALL 18 metrics files."</p>
 <h2 id="step-2-create-and-initialize-the-workflow"><a class="header" href="#step-2-create-and-initialize-the-workflow">Step 2: Create and Initialize the Workflow</a></h2>
-<pre><code class="language-bash">WORKFLOW_ID=$(torc workflows create grid_search.yaml -f json | jq -r '.id')
+<pre><code class="language-bash">WORKFLOW_ID=$(torc create grid_search.yaml -f json | jq -r '.id')
 echo "Created workflow: $WORKFLOW_ID"
 
-torc workflows initialize-jobs $WORKFLOW_ID
+torc workflows init $WORKFLOW_ID
 </code></pre>
 <h2 id="step-3-verify-the-expansion"><a class="header" href="#step-3-verify-the-expansion">Step 3: Verify the Expansion</a></h2>
 <p>Count the jobs:</p>
@@ -384,7 +384,7 @@ train_lr0.0100_bs64_optsgd
 </ol>
 <h2 id="step-6-monitor-progress"><a class="header" href="#step-6-monitor-progress">Step 6: Monitor Progress</a></h2>
 <pre><code class="language-bash"># Check status summary
-torc workflows status $WORKFLOW_ID
+torc status $WORKFLOW_ID
 
 # Watch job completion in real-time
 watch -n 10 'torc jobs list-by-status $WORKFLOW_ID'

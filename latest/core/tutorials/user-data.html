@@ -285,11 +285,11 @@ resource_requirements:
 </ol>
 <h2 id="step-2-create-and-initialize-the-workflow"><a class="header" href="#step-2-create-and-initialize-the-workflow">Step 2: Create and Initialize the Workflow</a></h2>
 <pre><code class="language-bash"># Create the workflow
-WORKFLOW_ID=$(torc workflows create user_data_workflow.yaml -f json | jq -r '.id')
+WORKFLOW_ID=$(torc create user_data_workflow.yaml -f json | jq -r '.id')
 echo "Created workflow: $WORKFLOW_ID"
 
 # Initialize jobs
-torc workflows initialize-jobs $WORKFLOW_ID
+torc workflows init $WORKFLOW_ID
 </code></pre>
 <h2 id="step-3-check-initial-state"><a class="header" href="#step-3-check-initial-state">Step 3: Check Initial State</a></h2>
 <p>Before running, examine the user_data:</p>

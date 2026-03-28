@@ -425,8 +425,8 @@ torc jobs list $WORKFLOW_ID --status pending_failed
 # (via MCP tools list_pending_failed_jobs and classify_and_resolve_failures)
 
 # After AI classification, reinitialize and continue
-torc workflows reinitialize $WORKFLOW_ID
-torc workflows run $WORKFLOW_ID
+torc workflows reinit $WORKFLOW_ID
+torc run $WORKFLOW_ID
 </code></pre>
 <h2 id="custom-mcp-servers"><a class="header" href="#custom-mcp-servers">Custom MCP Servers</a></h2>
 <p>You can create domain-specific MCP servers that the AI agent uses alongside torc:</p>

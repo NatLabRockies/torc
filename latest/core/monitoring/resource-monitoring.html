@@ -201,7 +201,7 @@ jobs:
   # ... your jobs
 </code></pre>
 <p>To disable monitoring when creating a workflow:</p>
-<pre><code class="language-bash">torc workflows create my_workflow.yaml --no-resource-monitoring
+<pre><code class="language-bash">torc create my_workflow.yaml --no-resource-monitoring
 </code></pre>
 <h2 id="view-summary-metrics"><a class="header" href="#view-summary-metrics">View Summary Metrics</a></h2>
 <p>For workflows using summary mode (default), view resource metrics with:</p>
@@ -211,13 +211,13 @@ jobs:
 <h2 id="check-for-resource-violations"><a class="header" href="#check-for-resource-violations">Check for Resource Violations</a></h2>
 <p>Use <code>check-resource-utilization</code> to identify jobs that exceeded their specified requirements:</p>
 <pre><code class="language-bash"># Check latest run
-torc reports check-resource-utilization &lt;workflow_id&gt;
+torc workflows check-resources &lt;workflow_id&gt;
 
 # Check a specific run
-torc reports check-resource-utilization &lt;workflow_id&gt; --run-id &lt;run_id&gt;
+torc workflows check-resources &lt;workflow_id&gt; --run-id &lt;run_id&gt;
 
 # Show all jobs, not just violations
-torc reports check-resource-utilization &lt;workflow_id&gt; --all
+torc workflows check-resources &lt;workflow_id&gt; --all
 </code></pre>
 <p>Example output:</p>
 <pre><code>⚠ Found 3 resource over-utilization violations:

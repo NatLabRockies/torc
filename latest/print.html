@@ -761,8 +761,9 @@ jobs:
 <li>Torc matches requirements to appropriate Slurm partitions</li>
 </ul>
 <h2 id="submit-the-workflow"><a class="header" href="#submit-the-workflow">Submit the Workflow</a></h2>
-<p>Submit with your Slurm account:</p>
-<pre><code class="language-console">torc submit-slurm --account &lt;your-account&gt; workflow.yaml
+<p>First, generate Slurm schedulers for your account, then submit:</p>
+<pre><code class="language-console">torc slurm generate --account &lt;your-account&gt; workflow.yaml
+torc submit workflow.yaml
 </code></pre>
 <p>Torc will:</p>
 <ol>
@@ -879,7 +880,7 @@ jobs:
     command: echo "And once more from $(hostname)!"
 </code></pre>
 <h2 id="create-the-workflow-on-the-server"><a class="header" href="#create-the-workflow-on-the-server">Create the Workflow on the Server</a></h2>
-<pre><code class="language-console">torc workflows create workflow.yaml
+<pre><code class="language-console">torc create workflow.yaml
 </code></pre>
 <p>Note the workflow ID in the output.</p>
 <h2 id="add-remote-workers"><a class="header" href="#add-remote-workers">Add Remote Workers</a></h2>
@@ -1550,7 +1551,8 @@ data in job commands:</p>
 <p>Torc supports three execution modes:</p>
 <ol>
 <li><strong>Local Runner</strong> (<code>torc run</code>) - Runs jobs on the local machine with resource tracking</li>
-<li><strong>HPC/Slurm Runner</strong> (<code>torc submit-slurm</code>) - Runs jobs on Slurm-allocated compute nodes</li>
+<li><strong>HPC/Slurm Runner</strong> (<code>torc slurm generate</code> + <code>torc submit</code>) - Runs jobs on Slurm-allocated
+compute nodes</li>
 <li><strong>Remote Workers</strong> (<code>torc remote run</code>) - Distributes jobs across SSH-accessible machines</li>
 </ol>
 <h3 id="local-runner"><a class="header" href="#local-runner">Local Runner</a></h3>
@@ -2388,7 +2390,7 @@ can even mix strategies across different runners for maximum flexibility.</p>
 only the affected jobs. Reinitialization handles this by detecting what changed and marking the
 appropriate jobs for re-execution.</p>
 <h2 id="when-to-use-reinitialization"><a class="header" href="#when-to-use-reinitialization">When to Use Reinitialization</a></h2>
-<p>Use <code>torc workflows reinitialize</code> when:</p>
+<p>Use <code>torc workflows reinit</code> when:</p>
 <ul>
 <li><strong>Input files changed</strong> — You modified an input file and want dependent jobs to rerun</li>
 <li><strong>Configuration updated</strong> — You changed user_data parameters</li>
@@ -2398,13 +2400,13 @@ appropriate jobs for re-execution.</p>
 </ul>
 <h2 id="basic-usage"><a class="header" href="#basic-usage">Basic Usage</a></h2>
 <pre><code class="language-bash"># Preview what would change (recommended first step)
-torc workflows reinitialize &lt;workflow_id&gt; --dry-run
+torc workflows reinit &lt;workflow_id&gt; --dry-run
 
 # Reinitialize the workflow
-torc workflows reinitialize &lt;workflow_id&gt;
+torc workflows reinit &lt;workflow_id&gt;
 
 # Force reinitialization even with warnings
-torc workflows reinitialize &lt;workflow_id&gt; --force
+torc workflows reinit &lt;workflow_id&gt; --force
 </code></pre>
 <h2 id="how-change-detection-works"><a class="header" href="#how-change-detection-works">How Change Detection Works</a></h2>
 <p>Reinitialization detects changes through three mechanisms:</p>
@@ -2416,7 +2418,7 @@ for re-execution.</p>
 echo "new data" &gt; input.json
 
 # Reinitialize detects the change
-torc workflows reinitialize &lt;workflow_id&gt;
+torc workflows reinit &lt;workflow_id&gt;
 # Output: Reset 3 jobs due to changed inputs
 </code></pre>
 <h3 id="2-job-attribute-and-user-data-hashing"><a class="header" href="#2-job-attribute-and-user-data-hashing">2. Job Attribute and User Data Hashing</a></h3>
@@ -2448,7 +2450,7 @@ postprocess (depends on process output) → also marked
 </code></pre>
 <h2 id="dry-run-mode"><a class="header" href="#dry-run-mode">Dry Run Mode</a></h2>
 <p>Always use <code>--dry-run</code> first to preview changes without modifying anything:</p>
-<pre><code class="language-bash">torc workflows reinitialize &lt;workflow_id&gt; --dry-run
+<pre><code class="language-bash">torc workflows reinit &lt;workflow_id&gt; --dry-run
 </code></pre>
 <p>Example output:</p>
 <pre><code>Dry run: 5 jobs would be reset due to changed inputs
@@ -2660,11 +2662,11 @@ files) to more advanced approaches (CLI, API).</p>
 <p>The easiest way to create workflows is with specification files. Torc supports YAML, JSON5, and KDL
 formats.</p>
 <h3 id="create-from-a-yaml-file"><a class="header" href="#create-from-a-yaml-file">Create from a YAML File</a></h3>
-<pre><code class="language-bash">torc workflows create workflow.yaml
+<pre><code class="language-bash">torc create workflow.yaml
 </code></pre>
 <h3 id="create-from-json5-or-kdl"><a class="header" href="#create-from-json5-or-kdl">Create from JSON5 or KDL</a></h3>
-<pre><code class="language-bash">torc workflows create workflow.json5
-torc workflows create workflow.kdl
+<pre><code class="language-bash">torc create workflow.json5
+torc create workflow.kdl
 </code></pre>
 <p>Torc detects the format from the file extension.</p>
 <h3 id="create-and-run-in-one-step"><a class="header" href="#create-and-run-in-one-step">Create and Run in One Step</a></h3>
@@ -2724,7 +2726,7 @@ by piece using the CLI.</p>
 </code></pre>
 <h3 id="step-5-initialize-and-run"><a class="header" href="#step-5-initialize-and-run">Step 5: Initialize and Run</a></h3>
 <pre><code class="language-bash"># Initialize the workflow (resolves dependencies)
-torc workflows initialize-jobs 1
+torc workflows init 1
 
 # Run the workflow
 torc run 1
@@ -2828,7 +2830,7 @@ similar to the Python client.</p>
 <h2 id="common-tasks"><a class="header" href="#common-tasks">Common Tasks</a></h2>
 <h3 id="validate-a-workflow-file-without-creating"><a class="header" href="#validate-a-workflow-file-without-creating">Validate a Workflow File Without Creating</a></h3>
 <p>Use <code>--dry-run</code> to validate a workflow specification without creating it on the server:</p>
-<pre><code class="language-bash">torc workflows create --dry-run workflow.yaml
+<pre><code class="language-bash">torc create --dry-run workflow.yaml
 </code></pre>
 <p>Example output:</p>
 <pre><code>Workflow Validation Results
@@ -2916,7 +2918,7 @@ suboptimal job-to-node matching:</p>
 </ol>
 <h4 id="bypassing-validation"><a class="header" href="#bypassing-validation">Bypassing Validation</a></h4>
 <p>To create a workflow despite validation warnings:</p>
-<pre><code class="language-bash">torc workflows create --skip-checks workflow.yaml
+<pre><code class="language-bash">torc create --skip-checks workflow.yaml
 </code></pre>
 <p>Note: This bypasses scheduler node validation checks (which are treated as errors), but does not
 bypass all errors. Errors such as missing references or circular dependencies will always prevent
@@ -2925,7 +2927,7 @@ creation.</p>
 <pre><code class="language-bash">torc workflows list
 </code></pre>
 <h3 id="delete-a-workflow"><a class="header" href="#delete-a-workflow">Delete a Workflow</a></h3>
-<pre><code class="language-bash">torc workflows delete &lt;workflow_id&gt;
+<pre><code class="language-bash">torc delete &lt;workflow_id&gt;
 </code></pre>
 <h3 id="view-workflow-details"><a class="header" href="#view-workflow-details">View Workflow Details</a></h3>
 <pre><code class="language-bash">torc workflows get &lt;workflow_id&gt;
@@ -3341,9 +3343,9 @@ without resource enforcement).</p>
 complete collection.</p>
 <h2 id="creating-workflows"><a class="header" href="#creating-workflows">Creating Workflows</a></h2>
 <p>All formats use the same command:</p>
-<pre><code class="language-bash">torc workflows create examples/yaml/sample_workflow.yaml
-torc workflows create examples/json/sample_workflow.json5
-torc workflows create examples/kdl/sample_workflow.kdl
+<pre><code class="language-bash">torc create examples/yaml/sample_workflow.yaml
+torc create examples/json/sample_workflow.json5
+torc create examples/kdl/sample_workflow.kdl
 </code></pre>
 <p>Or use the quick execution commands:</p>
 <pre><code class="language-bash"># Create and run locally
@@ -3615,13 +3617,13 @@ files) are automatically updated to use the new IDs.</p>
 <p>Imported jobs always start in the <code>uninitialized</code> status, regardless of their status in the exported
 file. After import, you need to initialize and run the workflow:</p>
 <pre><code class="language-bash"># Initialize the imported workflow
-torc workflows initialize 456
+torc workflows init 456
 
 # Run locally
-torc workflows run 456
+torc run 456
 
 # Or submit to scheduler
-torc workflows submit 456
+torc submit 456
 </code></pre>
 <h3 id="default-resource-requirements"><a class="header" href="#default-resource-requirements">Default Resource Requirements</a></h3>
 <p>Each workflow automatically gets a "default" resource requirements entry. During import, the
@@ -3684,7 +3686,7 @@ torc workflows import ./my_workflow.json
 </code></pre>
 <h3 id="jobs-not-running-after-import"><a class="header" href="#jobs-not-running-after-import">Jobs Not Running After Import</a></h3>
 <p>Imported jobs start in <code>uninitialized</code> status. You must initialize the workflow:</p>
-<pre><code class="language-bash">torc workflows initialize 456
+<pre><code class="language-bash">torc workflows init 456
 </code></pre>
 <p>Then check job status:</p>
 <pre><code class="language-bash">torc jobs list 456
@@ -3777,7 +3779,7 @@ torc workflows list --archived-only
 torc workflows get &lt;workflow_id&gt;
 
 # Check workflow status
-torc workflows status &lt;workflow_id&gt;
+torc status &lt;workflow_id&gt;
 </code></pre>
 <h2 id="impact-on-workflow-operations"><a class="header" href="#impact-on-workflow-operations">Impact on Workflow Operations</a></h2>
 <h3 id="operations-restricted-on-archived-workflows"><a class="header" href="#operations-restricted-on-archived-workflows">Operations Restricted on Archived Workflows</a></h3>
@@ -3888,7 +3890,7 @@ management in active projects where historical data is valuable but visual clutt
 <div style="break-before: page; page-break-before: always;"></div><h1 id="how-to-track-workflow-status"><a class="header" href="#how-to-track-workflow-status">How to Track Workflow Status</a></h1>
 <p>Monitor a running workflow's progress using the CLI, TUI, or dashboard.</p>
 <h2 id="quick-status-check"><a class="header" href="#quick-status-check">Quick Status Check</a></h2>
-<pre><code class="language-bash">torc reports summary &lt;workflow_id&gt;
+<pre><code class="language-bash">torc status &lt;workflow_id&gt;
 </code></pre>
 <p>Example output:</p>
 <pre><code>Workflow 42: data_pipeline
@@ -3901,7 +3903,7 @@ Jobs by Status:
 </code></pre>
 <h2 id="continuous-monitoring"><a class="header" href="#continuous-monitoring">Continuous Monitoring</a></h2>
 <p>Watch status update every 10 seconds:</p>
-<pre><code class="language-bash">watch -n 10 torc reports summary &lt;workflow_id&gt;
+<pre><code class="language-bash">watch -n 10 torc status &lt;workflow_id&gt;
 </code></pre>
 <h2 id="interactive-tui"><a class="header" href="#interactive-tui">Interactive TUI</a></h2>
 <p>Launch the terminal UI for a visual dashboard:</p>
@@ -3941,7 +3943,7 @@ fi
 <div style="break-before: page; page-break-before: always;"></div><h1 id="how-to-cancel-a-workflow"><a class="header" href="#how-to-cancel-a-workflow">How to Cancel a Workflow</a></h1>
 <p>Stop a running workflow and terminate its jobs.</p>
 <h2 id="cancel-a-workflow"><a class="header" href="#cancel-a-workflow">Cancel a Workflow</a></h2>
-<pre><code class="language-bash">torc workflows cancel &lt;workflow_id&gt;
+<pre><code class="language-bash">torc cancel &lt;workflow_id&gt;
 </code></pre>
 <p>This:</p>
 <ul>
@@ -3952,7 +3954,7 @@ fi
 </ul>
 <h2 id="check-cancellation-status"><a class="header" href="#check-cancellation-status">Check Cancellation Status</a></h2>
 <p>Verify the workflow was canceled:</p>
-<pre><code class="language-bash">torc workflows status &lt;workflow_id&gt;
+<pre><code class="language-bash">torc status &lt;workflow_id&gt;
 </code></pre>
 <p>Or check completion status:</p>
 <pre><code class="language-bash">torc workflows is-complete &lt;workflow_id&gt;
@@ -3965,11 +3967,12 @@ fi
 <h2 id="restart-after-cancellation"><a class="header" href="#restart-after-cancellation">Restart After Cancellation</a></h2>
 <p>To resume a canceled workflow:</p>
 <pre><code class="language-bash"># Reinitialize to reset canceled jobs
-torc workflows reinitialize &lt;workflow_id&gt;
+torc workflows reinit &lt;workflow_id&gt;
 
-# Run again
-torc workflows run &lt;workflow_id&gt;
-torc workflows submit &lt;workflow_id&gt;
+# Run again locally
+torc run &lt;workflow_id&gt;
+# Or submit to scheduler
+torc submit &lt;workflow_id&gt;
 </code></pre>
 <p>Jobs that completed before cancellation remain completed.</p>
 <h2 id="see-also-5"><a class="header" href="#see-also-5">See Also</a></h2>
@@ -3980,8 +3983,8 @@ torc workflows submit &lt;workflow_id&gt;
 <div style="break-before: page; page-break-before: always;"></div><h1 id="how-to-view-job-logs"><a class="header" href="#how-to-view-job-logs">How to View Job Logs</a></h1>
 <p>Find and read the stdout/stderr output from job execution.</p>
 <h2 id="find-log-file-paths"><a class="header" href="#find-log-file-paths">Find Log File Paths</a></h2>
-<pre><code class="language-bash">torc reports results &lt;workflow_id&gt;
-torc reports results &lt;workflow_id&gt; --job-id 15
+<pre><code class="language-bash">torc results list --include-logs &lt;workflow_id&gt;
+torc results list --include-logs &lt;workflow_id&gt; --job-id 15
 </code></pre>
 <p>Output includes:</p>
 <pre><code>{
@@ -4031,7 +4034,7 @@ job completion.</p>
 torc jobs list &lt;workflow_id&gt; --status failed
 
 # Then view each job's logs
-torc reports results &lt;workflow_id&gt; --job-id &lt;failed_job_id&gt;
+torc results list --include-logs &lt;workflow_id&gt; --job-id &lt;failed_job_id&gt;
 </code></pre>
 <h2 id="view-logs-in-tui-or-dashboard"><a class="header" href="#view-logs-in-tui-or-dashboard">View Logs in TUI or Dashboard</a></h2>
 <p>You can also view job logs interactively:</p>
@@ -4068,7 +4071,7 @@ torc reports results &lt;workflow_id&gt; --job-id &lt;failed_job_id&gt;
 </div>
 <h2 id="step-3-read-the-logs"><a class="header" href="#step-3-read-the-logs">Step 3: Read the Logs</a></h2>
 <pre><code class="language-bash"># Get log paths
-torc reports results &lt;workflow_id&gt; --job-id &lt;job_id&gt;
+torc results list --include-logs &lt;workflow_id&gt; --job-id &lt;job_id&gt;
 
 # View stderr (usually contains error messages)
 cat output/job_stdio/job_wf43_j15_r1_a1.e
@@ -4085,7 +4088,7 @@ exist. See <a href="core/how-to/../reference/workflow-spec.html#stdioconfig"><co
 </blockquote>
 <h2 id="step-4-check-resource-usage"><a class="header" href="#step-4-check-resource-usage">Step 4: Check Resource Usage</a></h2>
 <p>Did the job exceed its resource limits?</p>
-<pre><code class="language-bash">torc reports check-resource-utilization &lt;workflow_id&gt;
+<pre><code class="language-bash">torc workflows check-resources &lt;workflow_id&gt;
 </code></pre>
 <p>Look for:</p>
 <ul>
@@ -4113,9 +4116,10 @@ python process.py --input data.csv
 <pre><code class="language-bash"># Reinitialize to reset failed jobs
 torc workflows reset-status --failed --reinitialize &lt;workflow_id&gt;
 
-# Run again
-torc workflows run &lt;workflow_id&gt;
-torc submit-slurm &lt;workflow_id&gt;
+# Run again locally
+torc run &lt;workflow_id&gt;
+# Or re-submit to Slurm
+torc submit &lt;workflow_id&gt;
 </code></pre>
 <h2 id="see-also-7"><a class="header" href="#see-also-7">See Also</a></h2>
 <ul>
@@ -4176,7 +4180,7 @@ source ~/.config/torc/credentials
 <p>Compare actual resource usage against specified requirements to identify jobs that exceeded their
 limits.</p>
 <h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
-<pre><code class="language-bash">torc reports check-resource-utilization &lt;workflow_id&gt;
+<pre><code class="language-bash">torc workflows check-resources &lt;workflow_id&gt;
 </code></pre>
 <p>Example output:</p>
 <pre><code>⚠ Found 2 resource over-utilization violations:
@@ -4188,11 +4192,11 @@ Job ID | Job Name    | Resource | Specified | Peak Used | Over-Utilization
 </code></pre>
 <h2 id="show-all-jobs"><a class="header" href="#show-all-jobs">Show All Jobs</a></h2>
 <p>Include jobs that stayed within limits:</p>
-<pre><code class="language-bash">torc reports check-resource-utilization &lt;workflow_id&gt; --all
+<pre><code class="language-bash">torc workflows check-resources &lt;workflow_id&gt; --all
 </code></pre>
 <h2 id="check-a-specific-run"><a class="header" href="#check-a-specific-run">Check a Specific Run</a></h2>
 <p>For workflows that have been reinitialized multiple times:</p>
-<pre><code class="language-bash">torc reports check-resource-utilization &lt;workflow_id&gt; --run-id 2
+<pre><code class="language-bash">torc workflows check-resources &lt;workflow_id&gt; --run-id 2
 </code></pre>
 <h2 id="automatically-correct-requirements"><a class="header" href="#automatically-correct-requirements">Automatically Correct Requirements</a></h2>
 <p>Use the separate <code>correct-resources</code> command to automatically adjust resource allocations based on
@@ -4946,7 +4950,7 @@ jobs, each with its own parameter value substituted.</p>
 <h2 id="step-4-monitor-execution"><a class="header" href="#step-4-monitor-execution">Step 4: Monitor Execution</a></h2>
 <p>While the workflow runs, you can monitor progress:</p>
 <pre><code class="language-bash"># Check workflow status
-torc workflows status &lt;workflow_id&gt;
+torc status &lt;workflow_id&gt;
 
 # List jobs and their states
 torc jobs list &lt;workflow_id&gt;
@@ -5135,14 +5139,14 @@ echo -e "apple red\nbanana yellow\ncherry red\ndate brown" &gt; /tmp/input.txt
 </code></pre>
 <h2 id="step-3-create-and-initialize-the-workflow"><a class="header" href="#step-3-create-and-initialize-the-workflow">Step 3: Create and Initialize the Workflow</a></h2>
 <pre><code class="language-bash"># Create the workflow and capture the ID
-WORKFLOW_ID=$(torc workflows create diamond.yaml -f json | jq -r '.id')
+WORKFLOW_ID=$(torc create diamond.yaml -f json | jq -r '.id')
 echo "Created workflow: $WORKFLOW_ID"
 
 # Ensure the input file timestamp is current
 touch /tmp/input.txt
 
 # Initialize the workflow (builds dependency graph)
-torc workflows initialize-jobs $WORKFLOW_ID
+torc workflows init $WORKFLOW_ID
 </code></pre>
 <p>The <code>initialize-jobs</code> command is where Torc:</p>
 <ol>
@@ -5282,7 +5286,7 @@ jobs:
 </code></pre>
 <p>This expands to 10 jobs: <code>task_1</code>, <code>task_2</code>, ..., <code>task_10</code>.</p>
 <h2 id="step-2-create-and-run-the-workflow"><a class="header" href="#step-2-create-and-run-the-workflow">Step 2: Create and Run the Workflow</a></h2>
-<pre><code class="language-bash">WORKFLOW_ID=$(torc workflows create parallel_tasks.yaml -f json | jq -r '.id')
+<pre><code class="language-bash">WORKFLOW_ID=$(torc create parallel_tasks.yaml -f json | jq -r '.id')
 echo "Created workflow: $WORKFLOW_ID"
 
 torc run $WORKFLOW_ID
@@ -5354,10 +5358,10 @@ all 5 process jobs.</p>
 <li>All <code>evaluate_*</code> jobs → unblock <code>compare_results</code></li>
 </ol>
 <h2 id="step-2-create-and-initialize-the-workflow"><a class="header" href="#step-2-create-and-initialize-the-workflow">Step 2: Create and Initialize the Workflow</a></h2>
-<pre><code class="language-bash">WORKFLOW_ID=$(torc workflows create learning_rate_sweep.yaml -f json | jq -r '.id')
+<pre><code class="language-bash">WORKFLOW_ID=$(torc create learning_rate_sweep.yaml -f json | jq -r '.id')
 echo "Created workflow: $WORKFLOW_ID"
 
-torc workflows initialize-jobs $WORKFLOW_ID
+torc workflows init $WORKFLOW_ID
 </code></pre>
 <h2 id="step-3-verify-the-expansion-1"><a class="header" href="#step-3-verify-the-expansion-1">Step 3: Verify the Expansion</a></h2>
 <pre><code class="language-bash"># Count jobs (should be 11: 5 train + 5 evaluate + 1 compare)
@@ -5637,10 +5641,10 @@ resource_requirements:
 needs <code>parameters:</code> to match the parameterized <code>input_files</code>. This tells Torc: "this job depends on
 ALL 18 metrics files."</p>
 <h2 id="step-2-create-and-initialize-the-workflow-1"><a class="header" href="#step-2-create-and-initialize-the-workflow-1">Step 2: Create and Initialize the Workflow</a></h2>
-<pre><code class="language-bash">WORKFLOW_ID=$(torc workflows create grid_search.yaml -f json | jq -r '.id')
+<pre><code class="language-bash">WORKFLOW_ID=$(torc create grid_search.yaml -f json | jq -r '.id')
 echo "Created workflow: $WORKFLOW_ID"
 
-torc workflows initialize-jobs $WORKFLOW_ID
+torc workflows init $WORKFLOW_ID
 </code></pre>
 <h2 id="step-3-verify-the-expansion-2"><a class="header" href="#step-3-verify-the-expansion-2">Step 3: Verify the Expansion</a></h2>
 <p>Count the jobs:</p>
@@ -5693,7 +5697,7 @@ train_lr0.0100_bs64_optsgd
 </ol>
 <h2 id="step-6-monitor-progress"><a class="header" href="#step-6-monitor-progress">Step 6: Monitor Progress</a></h2>
 <pre><code class="language-bash"># Check status summary
-torc workflows status $WORKFLOW_ID
+torc status $WORKFLOW_ID
 
 # Watch job completion in real-time
 watch -n 10 'torc jobs list-by-status $WORKFLOW_ID'
@@ -6004,7 +6008,7 @@ jobs:
 <pre><code class="language-bash">mkdir -p output
 </code></pre>
 <h3 id="step-3-create-the-workflow"><a class="header" href="#step-3-create-the-workflow">Step 3: Create the Workflow</a></h3>
-<pre><code class="language-bash">torc workflows create barrier_demo.yaml
+<pre><code class="language-bash">torc create barrier_demo.yaml
 </code></pre>
 <p>You should see output like:</p>
 <pre><code>Created workflow with ID: 1
@@ -6016,7 +6020,7 @@ Total: 202 jobs, 201 dependencies
 </code></pre>
 <p>Compare this to <strong>10,000 dependencies</strong> without barriers!</p>
 <h3 id="step-4-run-the-workflow"><a class="header" href="#step-4-run-the-workflow">Step 4: Run the Workflow</a></h3>
-<pre><code class="language-bash">torc workflows run 1
+<pre><code class="language-bash">torc run 1
 </code></pre>
 <h3 id="step-5-monitor-progress"><a class="header" href="#step-5-monitor-progress">Step 5: Monitor Progress</a></h3>
 <pre><code class="language-bash">torc tui
@@ -6287,11 +6291,11 @@ resource_requirements:
 </ol>
 <h2 id="step-2-create-and-initialize-the-workflow-2"><a class="header" href="#step-2-create-and-initialize-the-workflow-2">Step 2: Create and Initialize the Workflow</a></h2>
 <pre><code class="language-bash"># Create the workflow
-WORKFLOW_ID=$(torc workflows create user_data_workflow.yaml -f json | jq -r '.id')
+WORKFLOW_ID=$(torc create user_data_workflow.yaml -f json | jq -r '.id')
 echo "Created workflow: $WORKFLOW_ID"
 
 # Initialize jobs
-torc workflows initialize-jobs $WORKFLOW_ID
+torc workflows init $WORKFLOW_ID
 </code></pre>
 <h2 id="step-3-check-initial-state"><a class="header" href="#step-3-check-initial-state">Step 3: Check Initial State</a></h2>
 <p>Before running, examine the user_data:</p>
@@ -6981,10 +6985,10 @@ refresh automatically.</p>
 </code></pre>
 <h2 id="generate-a-workflow-summary"><a class="header" href="#generate-a-workflow-summary">Generate a Workflow Summary</a></h2>
 <p>Once a workflow is complete, generate a summary report:</p>
-<pre><code class="language-bash">torc reports summary &lt;workflow_id&gt;
+<pre><code class="language-bash">torc status &lt;workflow_id&gt;
 </code></pre>
 <p>If you omit the workflow ID, you'll be prompted to select from your workflows:</p>
-<pre><code class="language-bash">torc reports summary
+<pre><code class="language-bash">torc status
 </code></pre>
 <p>Example output:</p>
 <pre><code>Workflow Summary
@@ -7020,7 +7024,7 @@ Total Execution Time: 45m 30s
 <h3 id="continuous-monitoring-1"><a class="header" href="#continuous-monitoring-1">Continuous Monitoring</a></h3>
 <p>This command can be very convenient, but be mindful of your workflow size (number of jobs) and
 network load if you are using a shared server.</p>
-<pre><code class="language-bash">watch -n 10 torc reports summary &lt;workflow_id&gt;
+<pre><code class="language-bash">watch -n 10 torc status &lt;workflow_id&gt;
 </code></pre>
 <h3 id="json-output"><a class="header" href="#json-output">JSON Output</a></h3>
 <p>This is useful for scripts:</p>
@@ -7065,7 +7069,7 @@ fi
 </code></pre>
 <h2 id="check-resource-utilization"><a class="header" href="#check-resource-utilization">Check Resource Utilization</a></h2>
 <p>After a workflow completes, check if any jobs exceeded their resource limits:</p>
-<pre><code class="language-bash">torc reports check-resource-utilization &lt;workflow_id&gt;
+<pre><code class="language-bash">torc workflows check-resources &lt;workflow_id&gt;
 </code></pre>
 <p>Example output when jobs stayed within limits:</p>
 <pre><code>Resource Utilization Report for Workflow 42
@@ -7090,10 +7094,10 @@ Recommendation: Increase memory allocation for affected jobs.
 risk of failure in future runs.</p>
 <h2 id="related-commands"><a class="header" href="#related-commands">Related Commands</a></h2>
 <ul>
-<li><code>torc workflows status &lt;id&gt;</code> - View current job status counts</li>
+<li><code>torc status &lt;id&gt;</code> - View current job status counts</li>
 <li><code>torc results list &lt;id&gt;</code> - List individual job results</li>
-<li><code>torc reports check-resource-utilization &lt;id&gt;</code> - Check for resource violations</li>
-<li><code>torc reports results &lt;id&gt;</code> - Generate detailed results with log file paths</li>
+<li><code>torc workflows check-resources &lt;id&gt;</code> - Check for resource violations</li>
+<li><code>torc results list --include-logs &lt;id&gt;</code> - Generate detailed results with log file paths</li>
 </ul>
 <h2 id="next-steps-12"><a class="header" href="#next-steps-12">Next Steps</a></h2>
 <ul>
@@ -7117,7 +7121,7 @@ jobs:
   # ... your jobs
 </code></pre>
 <p>To disable monitoring when creating a workflow:</p>
-<pre><code class="language-bash">torc workflows create my_workflow.yaml --no-resource-monitoring
+<pre><code class="language-bash">torc create my_workflow.yaml --no-resource-monitoring
 </code></pre>
 <h2 id="view-summary-metrics"><a class="header" href="#view-summary-metrics">View Summary Metrics</a></h2>
 <p>For workflows using summary mode (default), view resource metrics with:</p>
@@ -7127,13 +7131,13 @@ jobs:
 <h2 id="check-for-resource-violations"><a class="header" href="#check-for-resource-violations">Check for Resource Violations</a></h2>
 <p>Use <code>check-resource-utilization</code> to identify jobs that exceeded their specified requirements:</p>
 <pre><code class="language-bash"># Check latest run
-torc reports check-resource-utilization &lt;workflow_id&gt;
+torc workflows check-resources &lt;workflow_id&gt;
 
 # Check a specific run
-torc reports check-resource-utilization &lt;workflow_id&gt; --run-id &lt;run_id&gt;
+torc workflows check-resources &lt;workflow_id&gt; --run-id &lt;run_id&gt;
 
 # Show all jobs, not just violations
-torc reports check-resource-utilization &lt;workflow_id&gt; --all
+torc workflows check-resources &lt;workflow_id&gt; --all
 </code></pre>
 <p>Example output:</p>
 <pre><code>⚠ Found 3 resource over-utilization violations:
@@ -7245,8 +7249,8 @@ help you identify and resolve issues. The primary debugging tools are:</p>
 <ul>
 <li><strong><code>torc results list</code></strong>: Prints a table of return codes for each job execution (non-zero means
 failure)</li>
-<li><strong><code>torc reports results</code></strong>: Generates a detailed JSON report containing job results and all
-associated log file paths</li>
+<li><strong><code>torc results list --include-logs</code></strong>: Generates a detailed JSON report containing job results
+and all associated log file paths</li>
 <li><strong><code>torc logs analyze &lt;output-dir&gt;</code></strong>: Analyzes log files for known error patterns (see
 <a href="core/monitoring/working-with-logs.html">Working with Logs</a>)</li>
 <li><strong>torc-dash Debug tab</strong>: Interactive web interface for visual debugging with log file viewer</li>
@@ -7259,8 +7263,8 @@ associated log file paths</li>
 <li><strong>Slurm logs</strong>: Additional logs when using Slurm scheduler (see
 <a href="core/monitoring/debugging-slurm.html">Debugging Slurm Workflows</a>)</li>
 </ul>
-<p>The <code>reports results</code> command consolidates all this information into a single JSON report, making it
-easy to locate and examine relevant log files for debugging.</p>
+<p>The <code>results list --include-logs</code> command consolidates all this information into a single JSON
+report, making it easy to locate and examine relevant log files for debugging.</p>
 <h2 id="quick-start-3"><a class="header" href="#quick-start-3">Quick Start</a></h2>
 <p>View the job return codes in a table:</p>
 <pre><code class="language-bash">torc results list &lt;workflow_id&gt;
@@ -7288,20 +7292,20 @@ Total: 3 results
 </code></pre>
 <p>Generate a debugging report for a workflow:</p>
 <pre><code class="language-bash"># Generate report for a specific workflow
-torc reports results &lt;workflow_id&gt;
+torc results list --include-logs &lt;workflow_id&gt;
 
 # Specify custom output directory (default: "torc_output")
-torc reports results &lt;workflow_id&gt; --output-dir /path/to/output
+torc results list --include-logs &lt;workflow_id&gt; --output-dir /path/to/output
 
 # Include all workflow runs (default: only latest run)
-torc reports results &lt;workflow_id&gt; --all-runs
+torc results list --include-logs &lt;workflow_id&gt; --all-runs
 
 # Interactive workflow selection (if workflow_id omitted)
-torc reports results
+torc results list --include-logs
 </code></pre>
 <p>The command outputs a comprehensive JSON report to stdout. Redirect it to a file for easier
 analysis:</p>
-<pre><code class="language-bash">torc reports results &lt;workflow_id&gt; &gt; debug_report.json
+<pre><code class="language-bash">torc results list --include-logs &lt;workflow_id&gt; &gt; debug_report.json
 </code></pre>
 <h2 id="report-structure"><a class="header" href="#report-structure">Report Structure</a></h2>
 <h3 id="top-level-fields"><a class="header" href="#top-level-fields">Top-Level Fields</a></h3>
@@ -7496,7 +7500,7 @@ by default to help you focus on problematic jobs.</p>
 <li>You're investigating jobs and want to easily switch between stdout/stderr</li>
 <li>You prefer not to construct <code>jq</code> queries manually</li>
 </ul>
-<p><strong>Use CLI tools (<code>torc reports results</code>) when:</strong></p>
+<p><strong>Use CLI tools (<code>torc results list --include-logs</code>) when:</strong></p>
 <ul>
 <li>You need to automate failure detection in CI/CD</li>
 <li>You want to save reports for archival or version control</li>
@@ -7509,7 +7513,7 @@ by default to help you focus on problematic jobs.</p>
 <ol>
 <li>
 <p><strong>Generate the debug report</strong>:</p>
-<pre><code class="language-bash">torc reports results &lt;workflow_id&gt; &gt; debug_report.json
+<pre><code class="language-bash">torc results list --include-logs &lt;workflow_id&gt; &gt; debug_report.json
 </code></pre>
 </li>
 <li>
@@ -7595,7 +7599,7 @@ grep -r "Job process completed" torc_output/ | grep "return_code="
 </code></pre>
 <h3 id="example-complete-debugging-session"><a class="header" href="#example-complete-debugging-session">Example: Complete Debugging Session</a></h3>
 <pre><code class="language-bash"># 1. Generate report
-torc reports results 123 &gt; report.json
+torc results list --include-logs 123 &gt; report.json
 
 # 2. Check overall success/failure counts
 echo "Total jobs: $(jq '.total_results' report.json)"
@@ -7621,7 +7625,7 @@ jq -r '.results[] | select(.job_name == "generate_batch_2") | "\(.status) (exit 
 <h3 id="debugging-across-multiple-runs"><a class="header" href="#debugging-across-multiple-runs">Debugging Across Multiple Runs</a></h3>
 <p>When a workflow has been reinitialized multiple times, compare runs to identify regressions:</p>
 <pre><code class="language-bash"># Generate report with all historical runs
-torc reports results &lt;workflow_id&gt; --all-runs &gt; full_history.json
+torc results list --include-logs &lt;workflow_id&gt; --all-runs &gt; full_history.json
 
 # Compare return codes across runs for a specific job
 jq -r '.results[] | select(.job_name == "flaky_job") | "Run \(.run_id): exit code \(.return_code)"' full_history.json
@@ -7636,8 +7640,8 @@ jq -r '.results[] | select(.job_name == "flaky_job") | "Run \(.run_id): exit cod
 jq -r '.results[] | select(.job_name == "flaky_job" and .return_code != 0) | "Run \(.run_id): \(.job_stderr)"' full_history.json
 </code></pre>
 <h3 id="log-file-missing-warnings"><a class="header" href="#log-file-missing-warnings">Log File Missing Warnings</a></h3>
-<p>The <code>reports results</code> command automatically checks for log file existence and prints warnings to
-stderr if files are missing:</p>
+<p>The <code>results list --include-logs</code> command automatically checks for log file existence and prints
+warnings to stderr if files are missing:</p>
 <pre><code>Warning: job stdout log file does not exist for job 456: torc_output/job_stdio/job_456.o
 Warning: job runner log file does not exist for job 456: torc_output/job_runner_host1_123_1.log
 </code></pre>
@@ -7658,14 +7662,14 @@ execution</li>
 torc run &lt;workflow_id&gt; /path/to/my_output
 
 # Generate report using the same directory
-torc reports results &lt;workflow_id&gt; --output-dir /path/to/my_output
+torc results list --include-logs &lt;workflow_id&gt; --output-dir /path/to/my_output
 </code></pre>
 <h3 id="slurm-scheduler"><a class="header" href="#slurm-scheduler">Slurm Scheduler</a></h3>
 <pre><code class="language-bash"># Submit jobs to Slurm with output directory
 torc slurm schedule-nodes &lt;workflow_id&gt; --output-dir /path/to/my_output
 
 # Generate report using the same directory
-torc reports results &lt;workflow_id&gt; --output-dir /path/to/my_output
+torc results list --include-logs &lt;workflow_id&gt; --output-dir /path/to/my_output
 </code></pre>
 <p><strong>Default behavior</strong>: If <code>--output-dir</code> is not specified, both the runner and reports command
 default to <code>./output</code>.</p>
@@ -7677,7 +7681,7 @@ for easier troubleshooting</p>
 </li>
 <li>
 <p><strong>Archive reports with logs</strong>: Store the JSON report alongside log files for future reference</p>
-<pre><code class="language-bash">torc reports results "$WF_ID" &gt; "torc_output/report_${WF_ID}_$(date +%Y%m%d_%H%M%S).json"
+<pre><code class="language-bash">torc results list --include-logs "$WF_ID" &gt; "torc_output/report_${WF_ID}_$(date +%Y%m%d_%H%M%S).json"
 </code></pre>
 </li>
 <li>
@@ -7693,11 +7697,11 @@ report failures</p>
 configuration issues</p>
 </li>
 <li>
-<p><strong>Combine with resource monitoring</strong>: Use <code>reports results</code> for log files and
+<p><strong>Combine with resource monitoring</strong>: Use <code>results list --include-logs</code> for log files and
 <code>reports check-resource-utilization</code> for performance issues</p>
 <pre><code class="language-bash"># Check if job failed due to resource constraints
-torc reports check-resource-utilization "$WF_ID"
-torc reports results "$WF_ID" &gt; report.json
+torc workflows check-resources "$WF_ID"
+torc results list --include-logs "$WF_ID" &gt; report.json
 </code></pre>
 </li>
 <li>
@@ -7713,12 +7717,12 @@ jq '{workflow_id, workflow_name, results: [.results[] | select(.return_code != 0
 <p><strong>Cause</strong>: The specified <code>--output-dir</code> path doesn't exist.</p>
 <p><strong>Solution</strong>: Verify the directory exists and the path is correct:</p>
 <pre><code class="language-bash">ls -ld output/  # Check if directory exists
-torc reports results &lt;workflow_id&gt; --output-dir "$(pwd)/torc_output"
+torc results list --include-logs &lt;workflow_id&gt; --output-dir "$(pwd)/torc_output"
 </code></pre>
 <h3 id="empty-results-array"><a class="header" href="#empty-results-array">Empty Results Array</a></h3>
 <p><strong>Cause</strong>: No job results exist for the workflow (jobs not yet executed or initialized).</p>
 <p><strong>Solution</strong>: Check workflow status and ensure jobs have been completed:</p>
-<pre><code class="language-bash">torc workflows status &lt;workflow_id&gt;
+<pre><code class="language-bash">torc status &lt;workflow_id&gt;
 torc results list &lt;workflow_id&gt;  # Verify results exist
 </code></pre>
 <h3 id="all-log-paths-show-warnings"><a class="header" href="#all-log-paths-show-warnings">All Log Paths Show Warnings</a></h3>
@@ -7728,14 +7732,14 @@ torc results list &lt;workflow_id&gt;  # Verify results exist
 find . -name "job_*.o" -o -name "job_runner_*.log"
 
 # Use correct output directory in report
-torc reports results &lt;workflow_id&gt; --output-dir &lt;correct_path&gt;
+torc results list --include-logs &lt;workflow_id&gt; --output-dir &lt;correct_path&gt;
 </code></pre>
 <h2 id="related-commands-1"><a class="header" href="#related-commands-1">Related Commands</a></h2>
 <ul>
 <li><strong><code>torc results list</code></strong>: View summary of job results in table format</li>
-<li><strong><code>torc workflows status</code></strong>: Check overall workflow status</li>
-<li><strong><code>torc reports results</code></strong>: Generate debug report with all log file paths</li>
-<li><strong><code>torc reports check-resource-utilization</code></strong>: Analyze resource usage and find over-utilized jobs</li>
+<li><strong><code>torc status</code></strong>: Check overall workflow status</li>
+<li><strong><code>torc results list --include-logs</code></strong>: Generate debug report with all log file paths</li>
+<li><strong><code>torc workflows check-resources</code></strong>: Analyze resource usage and find over-utilized jobs</li>
 <li><strong><code>torc jobs list</code></strong>: View all jobs and their current status</li>
 <li><strong><code>torc-dash</code></strong>: Launch web interface with interactive Debugging tab</li>
 <li><strong><code>torc tui</code></strong>: Launch terminal UI for workflow monitoring</li>
@@ -7897,7 +7901,7 @@ torc logs analyze wf&lt;id&gt;/
 </code></pre>
 <h2 id="related-commands-2"><a class="header" href="#related-commands-2">Related Commands</a></h2>
 <ul>
-<li><strong><code>torc reports results</code></strong>: Generate JSON report with all log file paths</li>
+<li><strong><code>torc results list --include-logs</code></strong>: Generate JSON report with all log file paths</li>
 <li><strong><code>torc results list</code></strong>: View summary table of job return codes</li>
 <li><strong><code>torc slurm parse-logs</code></strong>: Parse Slurm logs for error patterns (Slurm-specific)</li>
 <li><strong><code>torc slurm sacct</code></strong>: Collect Slurm accounting data</li>
@@ -7927,24 +7931,37 @@ all common commands. Keep it handy!</p>
 <h1 id="torc-cli-cheat-sheet"><a class="header" href="#torc-cli-cheat-sheet">Torc CLI Cheat Sheet</a></h1>
 <h2 id="quick-start-4"><a class="header" href="#quick-start-4">Quick Start</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>torc workflows create &lt;spec&gt;</code></td><td>Create from spec file</td></tr>
+<tr><td><code>torc create &lt;spec&gt;</code></td><td>Create workflow from spec file</td></tr>
 <tr><td><code>torc run &lt;spec.yaml&gt;</code></td><td>Create workflow from spec and run locally</td></tr>
 <tr><td><code>torc submit &lt;spec.yaml&gt;</code></td><td>Create and submit to scheduler (needs actions)</td></tr>
-<tr><td><code>torc submit-slurm --account ACCT &lt;spec.yaml&gt;</code></td><td>Auto-generate Slurm schedulers and submit</td></tr>
-<tr><td><code>torc reports summary &lt;id&gt;</code></td><td>Workflow completion summary</td></tr>
+<tr><td><code>torc status &lt;id&gt;</code></td><td>Workflow status and job summary</td></tr>
 <tr><td><code>torc watch &lt;id&gt;</code></td><td>Monitor workflow until completion</td></tr>
 <tr><td><code>torc watch &lt;id&gt; --recover</code></td><td>Monitor and auto-recover from failures</td></tr>
 <tr><td><code>torc-dash</code></td><td>Launch web dashboard</td></tr>
 <tr><td><code>torc tui</code></td><td>Launch interactive terminal UI</td></tr>
 </tbody></table>
 </div>
-<h2 id="managing-workflows"><a class="header" href="#managing-workflows">Managing Workflows</a></h2>
+<h2 id="workflow-lifecycle"><a class="header" href="#workflow-lifecycle">Workflow Lifecycle</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>torc create &lt;spec&gt;</code></td><td>Create workflow from spec file</td></tr>
+<tr><td><code>torc run &lt;id&gt;</code></td><td>Run workflow locally</td></tr>
+<tr><td><code>torc submit &lt;id&gt;</code></td><td>Submit workflow to scheduler</td></tr>
+<tr><td><code>torc status &lt;id&gt;</code></td><td>Show workflow status and job summary</td></tr>
+<tr><td><code>torc cancel &lt;id&gt;</code></td><td>Cancel workflow and Slurm jobs</td></tr>
+<tr><td><code>torc delete &lt;id&gt;</code></td><td>Delete workflow</td></tr>
+</tbody></table>
+</div>
+<h2 id="workflow-state"><a class="header" href="#workflow-state">Workflow State</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>torc workflows init &lt;id&gt;</code></td><td>Initialize workflow dependencies</td></tr>
+<tr><td><code>torc workflows reinit &lt;id&gt;</code></td><td>Reinitialize workflow after changes</td></tr>
+<tr><td><code>torc workflows reset-status &lt;id&gt;</code></td><td>Reset workflow and job statuses</td></tr>
+</tbody></table>
+</div>
+<h2 id="workflow-query"><a class="header" href="#workflow-query">Workflow Query</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>torc workflows list</code></td><td>List your workflows</td></tr>
-<tr><td><code>torc workflows status &lt;id&gt;</code></td><td>Get job counts by status</td></tr>
 <tr><td><code>torc workflows get &lt;id&gt;</code></td><td>Get workflow details</td></tr>
-<tr><td><code>torc workflows cancel &lt;id&gt;</code></td><td>Cancel workflow and Slurm jobs</td></tr>
-<tr><td><code>torc workflows delete &lt;id&gt;</code></td><td>Delete workflow</td></tr>
 </tbody></table>
 </div>
 <h2 id="job-management-1"><a class="header" href="#job-management-1">Job Management</a></h2>
@@ -7958,9 +7975,9 @@ all common commands. Keep it handy!</p>
 </div>
 <h2 id="recovery--diagnostics"><a class="header" href="#recovery--diagnostics">Recovery &amp; Diagnostics</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>torc reports summary &lt;id&gt;</code></td><td>Workflow completion summary</td></tr>
-<tr><td><code>torc reports check-resource-utilization &lt;id&gt;</code></td><td>Check memory/CPU/time usage</td></tr>
-<tr><td><code>torc reports results &lt;id&gt;</code></td><td>JSON report of job results with log paths</td></tr>
+<tr><td><code>torc status &lt;id&gt;</code></td><td>Workflow status and job summary</td></tr>
+<tr><td><code>torc workflows check-resources &lt;id&gt;</code></td><td>Check memory/CPU/time usage</td></tr>
+<tr><td><code>torc results list &lt;id&gt; --include-logs</code></td><td>Job results with log paths</td></tr>
 <tr><td><code>torc recover &lt;id&gt;</code></td><td>One-shot recovery (diagnose + fix + resubmit)</td></tr>
 <tr><td><code>torc watch &lt;id&gt; --recover --auto-schedule</code></td><td>Full production recovery mode</td></tr>
 <tr><td><code>torc workflows sync-status &lt;id&gt;</code></td><td>Fix orphaned jobs (stuck in "running")</td></tr>
@@ -8000,7 +8017,7 @@ all common commands. Keep it handy!</p>
 <li><a href="core/reference/cli.html#torc"><code>torc</code></a></li>
 <li><a href="core/reference/cli.html#torc-run"><code>torc run</code></a></li>
 <li><a href="core/reference/cli.html#torc-submit"><code>torc submit</code></a></li>
-<li><a href="core/reference/cli.html#torc-submit-slurm"><code>torc submit-slurm</code></a></li>
+<li><a href="core/reference/cli.html#torc-submit-slurm"><code>torc slurm generate</code> + <code>torc submit</code></a></li>
 <li><a href="core/reference/cli.html#torc-watch"><code>torc watch</code></a></li>
 <li><a href="core/reference/cli.html#torc-recover"><code>torc recover</code></a></li>
 <li><a href="core/reference/cli.html#torc-workflows"><code>torc workflows</code></a></li>
@@ -8030,7 +8047,7 @@ all common commands. Keep it handy!</p>
 <li><code>run</code> — Run a workflow locally (create from spec file or run existing workflow by ID)</li>
 <li><code>submit</code> — Submit a workflow to scheduler (create from spec file or submit existing workflow by
 ID)</li>
-<li><code>submit-slurm</code> — Submit a workflow to Slurm with auto-generated schedulers</li>
+<li><code>slurm generate</code> + <code>submit</code> — Submit a workflow to Slurm with auto-generated schedulers</li>
 <li><code>watch</code> — Watch a workflow and automatically recover from failures</li>
 <li><code>recover</code> — Recover a Slurm workflow from failures (one-shot)</li>
 <li><code>workflows</code> — Workflow management commands</li>
@@ -8082,7 +8099,7 @@ Default: <code>false</code></li>
 <h2 id="torc-submit"><a class="header" href="#torc-submit"><code>torc submit</code></a></h2>
 <p>Submit a workflow to scheduler (create from spec file or submit existing workflow by ID)</p>
 <p>Requires workflow to have an on_workflow_start action with schedule_nodes. For Slurm workflows
-without pre-configured schedulers, use <code>submit-slurm</code> instead.</p>
+without pre-configured schedulers, use <code>slurm generate</code> + <code>submit</code> instead.</p>
 <p><strong>Usage:</strong> <code>torc submit [OPTIONS] &lt;WORKFLOW_SPEC_OR_ID&gt;</code></p>
 <h6 id="arguments-1"><a class="header" href="#arguments-1"><strong>Arguments:</strong></a></h6>
 <ul>
@@ -8094,7 +8111,7 @@ without pre-configured schedulers, use <code>submit-slurm</code> instead.</p>
 <li><code>--skip-checks</code> — Skip validation checks (e.g., scheduler node requirements). Use with caution.
 Default: <code>false</code></li>
 </ul>
-<h2 id="torc-submit-slurm"><a class="header" href="#torc-submit-slurm"><code>torc submit-slurm</code></a></h2>
+<h2 id="torc-slurm-generate--torc-submit"><a class="header" href="#torc-slurm-generate--torc-submit"><code>torc slurm generate</code> + <code>torc submit</code></a></h2>
 <p>Submit a workflow to Slurm with auto-generated schedulers</p>
 <p>Automatically generates Slurm schedulers based on job resource requirements and HPC profile.</p>
 <p>WARNING: This command uses heuristics to generate schedulers and workflow actions. For complex
@@ -8108,24 +8125,11 @@ submitting. You can save the output and submit manually:</p>
 <pre><code class="language-bash">torc slurm generate --account &lt;account&gt; -o workflow_with_schedulers.yaml workflow.yaml
 torc submit workflow_with_schedulers.yaml
 </code></pre>
-<p><strong>Usage:</strong> <code>torc submit-slurm [OPTIONS] --account &lt;ACCOUNT&gt; &lt;WORKFLOW_SPEC&gt;</code></p>
-<h6 id="arguments-2"><a class="header" href="#arguments-2"><strong>Arguments:</strong></a></h6>
-<ul>
-<li><code>&lt;WORKFLOW_SPEC&gt;</code> — Path to workflow spec file (JSON/JSON5/YAML/KDL)</li>
-</ul>
-<h6 id="options-3"><a class="header" href="#options-3"><strong>Options:</strong></a></h6>
-<ul>
-<li><code>--account &lt;ACCOUNT&gt;</code> — Slurm account to use for allocations</li>
-<li><code>--hpc-profile &lt;HPC_PROFILE&gt;</code> — HPC profile to use (auto-detected if not specified)</li>
-<li><code>--single-allocation</code> — Bundle all nodes into a single Slurm allocation per scheduler. By default,
-creates one Slurm allocation per node (N×1 mode), which allows jobs to start as nodes become
-available and provides better fault tolerance. With this flag, creates one large allocation with
-all nodes (1×N mode), which requires all nodes to be available simultaneously but uses a single
-sbatch.</li>
-<li><code>-i</code>, <code>--ignore-missing-data</code> — Ignore missing data. Default: <code>false</code></li>
-<li><code>--skip-checks</code> — Skip validation checks (e.g., scheduler node requirements). Use with caution.
-Default: <code>false</code></li>
-</ul>
+<p><strong>Usage:</strong></p>
+<pre><code class="language-bash">torc slurm generate [OPTIONS] --account &lt;ACCOUNT&gt; &lt;WORKFLOW_FILE&gt;
+torc submit &lt;OUTPUT_FILE&gt;
+</code></pre>
+<p>See <a href="core/reference/cli.html#torc-slurm-generate"><code>torc slurm generate</code></a> for full options.</p>
 <h2 id="torc-watch"><a class="header" href="#torc-watch"><code>torc watch</code></a></h2>
 <p>Watch a workflow and automatically recover from failures.</p>
 <p>Monitors a workflow until completion. With <code>--recover</code>, automatically diagnoses failures, adjusts
@@ -8154,11 +8158,11 @@ complete. Use <code>--max-retries</code> to limit recovery attempts.</p>
 using failure handlers that create retry jobs.</p>
 </li>
 </ol>
-<h3 id="arguments-3"><a class="header" href="#arguments-3">Arguments</a></h3>
+<h3 id="arguments-2"><a class="header" href="#arguments-2">Arguments</a></h3>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID to watch</li>
 </ul>
-<h3 id="options-4"><a class="header" href="#options-4">Options</a></h3>
+<h3 id="options-3"><a class="header" href="#options-3">Options</a></h3>
 <p><strong>Polling:</strong></p>
 <ul>
 <li><code>-p</code>, <code>--poll-interval &lt;POLL_INTERVAL&gt;</code> — Poll interval in seconds. Default: <code>60</code></li>
@@ -8245,11 +8249,11 @@ guide</li>
 a workflow has completed with failures. For continuous monitoring, use <code>torc watch --recover</code>
 instead.</p>
 <p><strong>Usage:</strong> <code>torc recover [OPTIONS] &lt;WORKFLOW_ID&gt;</code></p>
-<h3 id="arguments-4"><a class="header" href="#arguments-4">Arguments</a></h3>
+<h3 id="arguments-3"><a class="header" href="#arguments-3">Arguments</a></h3>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID to recover</li>
 </ul>
-<h3 id="options-5"><a class="header" href="#options-5">Options</a></h3>
+<h3 id="options-4"><a class="header" href="#options-4">Options</a></h3>
 <ul>
 <li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory for job files. Default: <code>output</code></li>
 <li><code>--memory-multiplier &lt;MEMORY_MULTIPLIER&gt;</code> — Memory multiplier for OOM failures. Default: <code>1.5</code></li>
@@ -8327,15 +8331,15 @@ reinitialized if an input_file or user_data record has changed</li>
 <li><code>sync-status</code> — Synchronize job statuses with Slurm (detect and fail orphaned jobs)</li>
 <li><code>correct-resources</code> — Correct resource requirements based on actual job usage</li>
 </ul>
-<h2 id="torc-workflows-create"><a class="header" href="#torc-workflows-create"><code>torc workflows create</code></a></h2>
+<h2 id="torc-create"><a class="header" href="#torc-create"><code>torc create</code></a></h2>
 <p>Create a workflow from a specification file (supports JSON, JSON5, YAML, and KDL formats)</p>
-<p><strong>Usage:</strong> <code>torc workflows create [OPTIONS] --user &lt;USER&gt; &lt;FILE&gt;</code></p>
-<h6 id="arguments-5"><a class="header" href="#arguments-5"><strong>Arguments:</strong></a></h6>
+<p><strong>Usage:</strong> <code>torc create [OPTIONS] --user &lt;USER&gt; &lt;FILE&gt;</code></p>
+<h6 id="arguments-4"><a class="header" href="#arguments-4"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;FILE&gt;</code> — Path to specification file containing WorkflowSpec. Supported formats: JSON (.json),
 JSON5 (.json5), YAML (.yaml, .yml), KDL (.kdl). Format is auto-detected from file extension.</li>
 </ul>
-<h6 id="options-6"><a class="header" href="#options-6"><strong>Options:</strong></a></h6>
+<h6 id="options-5"><a class="header" href="#options-5"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-u</code>, <code>--user &lt;USER&gt;</code> — User that owns the workflow (defaults to USER environment variable)</li>
 <li><code>--no-resource-monitoring</code> — Disable resource monitoring (default: enabled with summary
@@ -8345,16 +8349,16 @@ Default: <code>false</code></li>
 <li><code>--dry-run</code> — Validate the workflow specification without creating it (dry-run mode). Returns a
 summary of what would be created including job count after parameter expansion.</li>
 </ul>
-<h2 id="torc-workflows-create-slurm"><a class="header" href="#torc-workflows-create-slurm"><code>torc workflows create-slurm</code></a></h2>
+<h2 id="torc-create-slurm"><a class="header" href="#torc-create-slurm"><code>torc create-slurm</code></a></h2>
 <p>Create a workflow with auto-generated Slurm schedulers</p>
 <p>Automatically generates Slurm schedulers based on job resource requirements and HPC profile. For
 Slurm workflows without pre-configured schedulers.</p>
-<p><strong>Usage:</strong> <code>torc workflows create-slurm [OPTIONS] --account &lt;ACCOUNT&gt; --user &lt;USER&gt; &lt;FILE&gt;</code></p>
-<h6 id="arguments-6"><a class="header" href="#arguments-6"><strong>Arguments:</strong></a></h6>
+<p><strong>Usage:</strong> <code>torc create-slurm [OPTIONS] --account &lt;ACCOUNT&gt; --user &lt;USER&gt; &lt;FILE&gt;</code></p>
+<h6 id="arguments-5"><a class="header" href="#arguments-5"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;FILE&gt;</code> — Path to specification file containing WorkflowSpec</li>
 </ul>
-<h6 id="options-7"><a class="header" href="#options-7"><strong>Options:</strong></a></h6>
+<h6 id="options-6"><a class="header" href="#options-6"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--account &lt;ACCOUNT&gt;</code> — Slurm account to use for allocations</li>
 <li><code>--hpc-profile &lt;HPC_PROFILE&gt;</code> — HPC profile to use (auto-detected if not specified)</li>
@@ -8371,7 +8375,7 @@ Default: <code>false</code></li>
 <h2 id="torc-workflows-new"><a class="header" href="#torc-workflows-new"><code>torc workflows new</code></a></h2>
 <p>Create a new empty workflow</p>
 <p><strong>Usage:</strong> <code>torc workflows new [OPTIONS] --name &lt;NAME&gt; --user &lt;USER&gt;</code></p>
-<h6 id="options-8"><a class="header" href="#options-8"><strong>Options:</strong></a></h6>
+<h6 id="options-7"><a class="header" href="#options-7"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-n</code>, <code>--name &lt;NAME&gt;</code> — Name of the workflow</li>
 <li><code>-d</code>, <code>--description &lt;DESCRIPTION&gt;</code> — Description of the workflow</li>
@@ -8380,7 +8384,7 @@ Default: <code>false</code></li>
 <h2 id="torc-workflows-list"><a class="header" href="#torc-workflows-list"><code>torc workflows list</code></a></h2>
 <p>List workflows</p>
 <p><strong>Usage:</strong> <code>torc workflows list [OPTIONS]</code></p>
-<h6 id="options-9"><a class="header" href="#options-9"><strong>Options:</strong></a></h6>
+<h6 id="options-8"><a class="header" href="#options-8"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-u</code>, <code>--user &lt;USER&gt;</code> — User to filter by (defaults to USER environment variable)</li>
 <li><code>--all-users</code> — List workflows for all users (overrides --user)</li>
@@ -8394,42 +8398,42 @@ Default: <code>false</code></li>
 <h2 id="torc-workflows-get"><a class="header" href="#torc-workflows-get"><code>torc workflows get</code></a></h2>
 <p>Get a specific workflow by ID</p>
 <p><strong>Usage:</strong> <code>torc workflows get [OPTIONS] [ID]</code></p>
-<h6 id="arguments-7"><a class="header" href="#arguments-7"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-6"><a class="header" href="#arguments-6"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;ID&gt;</code> — ID of the workflow to get (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-10"><a class="header" href="#options-10"><strong>Options:</strong></a></h6>
+<h6 id="options-9"><a class="header" href="#options-9"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-u</code>, <code>--user &lt;USER&gt;</code> — User to filter by (defaults to USER environment variable)</li>
 </ul>
 <h2 id="torc-workflows-update"><a class="header" href="#torc-workflows-update"><code>torc workflows update</code></a></h2>
 <p>Update an existing workflow</p>
 <p><strong>Usage:</strong> <code>torc workflows update [OPTIONS] [ID]</code></p>
-<h6 id="arguments-8"><a class="header" href="#arguments-8"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-7"><a class="header" href="#arguments-7"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;ID&gt;</code> — ID of the workflow to update (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-11"><a class="header" href="#options-11"><strong>Options:</strong></a></h6>
+<h6 id="options-10"><a class="header" href="#options-10"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-n</code>, <code>--name &lt;NAME&gt;</code> — Name of the workflow</li>
 <li><code>-d</code>, <code>--description &lt;DESCRIPTION&gt;</code> — Description of the workflow</li>
 <li><code>--owner-user &lt;OWNER_USER&gt;</code> — User that owns the workflow</li>
 </ul>
-<h2 id="torc-workflows-cancel"><a class="header" href="#torc-workflows-cancel"><code>torc workflows cancel</code></a></h2>
+<h2 id="torc-cancel"><a class="header" href="#torc-cancel"><code>torc cancel</code></a></h2>
 <p>Cancel a workflow and all associated Slurm jobs</p>
-<p><strong>Usage:</strong> <code>torc workflows cancel [WORKFLOW_ID]</code></p>
-<h6 id="arguments-9"><a class="header" href="#arguments-9"><strong>Arguments:</strong></a></h6>
+<p><strong>Usage:</strong> <code>torc cancel [WORKFLOW_ID]</code></p>
+<h6 id="arguments-8"><a class="header" href="#arguments-8"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — ID of the workflow to cancel (optional - will prompt if not provided)</li>
 </ul>
-<h2 id="torc-workflows-delete"><a class="header" href="#torc-workflows-delete"><code>torc workflows delete</code></a></h2>
+<h2 id="torc-delete"><a class="header" href="#torc-delete"><code>torc delete</code></a></h2>
 <p>Delete one or more workflows</p>
-<p><strong>Usage:</strong> <code>torc workflows delete [OPTIONS] [IDS]...</code></p>
-<h6 id="arguments-10"><a class="header" href="#arguments-10"><strong>Arguments:</strong></a></h6>
+<p><strong>Usage:</strong> <code>torc delete [OPTIONS] [IDS]...</code></p>
+<h6 id="arguments-9"><a class="header" href="#arguments-9"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;IDS&gt;</code> — IDs of workflows to remove (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-12"><a class="header" href="#options-12"><strong>Options:</strong></a></h6>
+<h6 id="options-11"><a class="header" href="#options-11"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--no-prompts</code> — Skip confirmation prompt</li>
 <li><code>--force</code> — Force deletion even if workflow belongs to a different user</li>
@@ -8437,84 +8441,57 @@ Default: <code>false</code></li>
 <h2 id="torc-workflows-archive"><a class="header" href="#torc-workflows-archive"><code>torc workflows archive</code></a></h2>
 <p>Archive or unarchive one or more workflows</p>
 <p><strong>Usage:</strong> <code>torc workflows archive &lt;IS_ARCHIVED&gt; [WORKFLOW_IDS]...</code></p>
-<h6 id="arguments-11"><a class="header" href="#arguments-11"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-10"><a class="header" href="#arguments-10"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;IS_ARCHIVED&gt;</code> — Set to true to archive, false to unarchive</li>
 <li><code>&lt;WORKFLOW_IDS&gt;</code> — IDs of workflows to archive/unarchive (if empty, will prompt for selection)</li>
 </ul>
-<h2 id="torc-workflows-submit"><a class="header" href="#torc-workflows-submit"><code>torc workflows submit</code></a></h2>
-<p>Submit a workflow: initialize if needed and schedule nodes for on_workflow_start actions. This
-command requires the workflow to have an on_workflow_start action with schedule_nodes.</p>
-<p><strong>Usage:</strong> <code>torc workflows submit [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-12"><a class="header" href="#arguments-12"><strong>Arguments:</strong></a></h6>
-<ul>
-<li><code>&lt;WORKFLOW_ID&gt;</code> — ID of the workflow to submit (optional - will prompt if not provided)</li>
-</ul>
-<h6 id="options-13"><a class="header" href="#options-13"><strong>Options:</strong></a></h6>
-<ul>
-<li><code>--force</code> — If false, fail the operation if missing data is present. Default: <code>false</code></li>
-</ul>
-<h2 id="torc-workflows-run"><a class="header" href="#torc-workflows-run"><code>torc workflows run</code></a></h2>
-<p>Run a workflow locally on the current node</p>
-<p><strong>Usage:</strong> <code>torc workflows run [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-13"><a class="header" href="#arguments-13"><strong>Arguments:</strong></a></h6>
-<ul>
-<li><code>&lt;WORKFLOW_ID&gt;</code> — ID of the workflow to run (optional - will prompt if not provided)</li>
-</ul>
-<h6 id="options-14"><a class="header" href="#options-14"><strong>Options:</strong></a></h6>
-<ul>
-<li><code>-p</code>, <code>--poll-interval &lt;POLL_INTERVAL&gt;</code> — Poll interval in seconds for checking job completion.
-Default: <code>5.0</code></li>
-<li><code>--max-parallel-jobs &lt;MAX_PARALLEL_JOBS&gt;</code> — Maximum number of parallel jobs to run (defaults to
-available CPUs)</li>
-<li><code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory for job logs and results. Default: <code>output</code></li>
-</ul>
-<h2 id="torc-workflows-initialize"><a class="header" href="#torc-workflows-initialize"><code>torc workflows initialize</code></a></h2>
+<h2 id="torc-workflows-init"><a class="header" href="#torc-workflows-init"><code>torc workflows init</code></a></h2>
 <p>Initialize a workflow, including all job statuses</p>
-<p><strong>Usage:</strong> <code>torc workflows initialize [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-14"><a class="header" href="#arguments-14"><strong>Arguments:</strong></a></h6>
+<p><strong>Usage:</strong> <code>torc workflows init [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-11"><a class="header" href="#arguments-11"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — ID of the workflow to start (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-15"><a class="header" href="#options-15"><strong>Options:</strong></a></h6>
+<h6 id="options-12"><a class="header" href="#options-12"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--force</code> — If false, fail the operation if missing data is present. Default: <code>false</code></li>
 <li><code>--no-prompts</code> — Skip confirmation prompt</li>
 <li><code>--dry-run</code> — Perform a dry run without making changes</li>
 </ul>
-<h2 id="torc-workflows-reinitialize"><a class="header" href="#torc-workflows-reinitialize"><code>torc workflows reinitialize</code></a></h2>
+<h2 id="torc-workflows-reinit"><a class="header" href="#torc-workflows-reinit"><code>torc workflows reinit</code></a></h2>
 <p>Reinitialize a workflow. This will reinitialize all jobs with a status of canceled, submitting,
 pending, or terminated. Jobs with a status of done will also be reinitialized if an input_file or
 user_data record has changed.</p>
-<p><strong>Usage:</strong> <code>torc workflows reinitialize [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-15"><a class="header" href="#arguments-15"><strong>Arguments:</strong></a></h6>
+<p><strong>Usage:</strong> <code>torc workflows reinit [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-12"><a class="header" href="#arguments-12"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — ID of the workflow to reinitialize (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-16"><a class="header" href="#options-16"><strong>Options:</strong></a></h6>
+<h6 id="options-13"><a class="header" href="#options-13"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--force</code> — If false, fail the operation if missing data is present. Default: <code>false</code></li>
 <li><code>--dry-run</code> — Perform a dry run without making changes</li>
 </ul>
-<h2 id="torc-workflows-status"><a class="header" href="#torc-workflows-status"><code>torc workflows status</code></a></h2>
+<h2 id="torc-status"><a class="header" href="#torc-status"><code>torc status</code></a></h2>
 <p>Get workflow status</p>
-<p><strong>Usage:</strong> <code>torc workflows status [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-16"><a class="header" href="#arguments-16"><strong>Arguments:</strong></a></h6>
+<p><strong>Usage:</strong> <code>torc status [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-13"><a class="header" href="#arguments-13"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — ID of the workflow to get status for (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-17"><a class="header" href="#options-17"><strong>Options:</strong></a></h6>
+<h6 id="options-14"><a class="header" href="#options-14"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-u</code>, <code>--user &lt;USER&gt;</code> — User to filter by (defaults to USER environment variable)</li>
 </ul>
 <h2 id="torc-workflows-reset-status"><a class="header" href="#torc-workflows-reset-status"><code>torc workflows reset-status</code></a></h2>
 <p>Reset workflow and job status</p>
 <p><strong>Usage:</strong> <code>torc workflows reset-status [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-17"><a class="header" href="#arguments-17"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-14"><a class="header" href="#arguments-14"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — ID of the workflow to reset status for (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-18"><a class="header" href="#options-18"><strong>Options:</strong></a></h6>
+<h6 id="options-15"><a class="header" href="#options-15"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--failed-only</code> — Only reset failed jobs. Default: <code>false</code></li>
 <li><code>-r</code>, <code>--reinitialize</code> — Reinitialize the workflow after resetting status. Default: <code>false</code></li>
@@ -8525,18 +8502,18 @@ Default: <code>false</code></li>
 <h2 id="torc-workflows-execution-plan"><a class="header" href="#torc-workflows-execution-plan"><code>torc workflows execution-plan</code></a></h2>
 <p>Show the execution plan for a workflow specification or existing workflow</p>
 <p><strong>Usage:</strong> <code>torc workflows execution-plan &lt;SPEC_OR_ID&gt;</code></p>
-<h6 id="arguments-18"><a class="header" href="#arguments-18"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-15"><a class="header" href="#arguments-15"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;SPEC_OR_ID&gt;</code> — Path to specification file OR workflow ID</li>
 </ul>
 <h2 id="torc-workflows-list-actions"><a class="header" href="#torc-workflows-list-actions"><code>torc workflows list-actions</code></a></h2>
 <p>List workflow actions and their statuses (useful for debugging action triggers)</p>
 <p><strong>Usage:</strong> <code>torc workflows list-actions [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-19"><a class="header" href="#arguments-19"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-16"><a class="header" href="#arguments-16"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — ID of the workflow to show actions for (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-19"><a class="header" href="#options-19"><strong>Options:</strong></a></h6>
+<h6 id="options-16"><a class="header" href="#options-16"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-u</code>, <code>--user &lt;USER&gt;</code> — User to filter by when selecting workflow interactively (defaults to USER
 environment variable)</li>
@@ -8544,7 +8521,7 @@ environment variable)</li>
 <h2 id="torc-workflows-is-complete"><a class="header" href="#torc-workflows-is-complete"><code>torc workflows is-complete</code></a></h2>
 <p>Check if a workflow is complete</p>
 <p><strong>Usage:</strong> <code>torc workflows is-complete [ID]</code></p>
-<h6 id="arguments-20"><a class="header" href="#arguments-20"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-17"><a class="header" href="#arguments-17"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;ID&gt;</code> — ID of the workflow to check (optional - will prompt if not provided)</li>
 </ul>
@@ -8553,11 +8530,11 @@ environment variable)</li>
 <p>Creates a self-contained export that can be imported into the same or different torc-server
 instance. All entity IDs are preserved in the export and remapped during import.</p>
 <p><strong>Usage:</strong> <code>torc workflows export [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-21"><a class="header" href="#arguments-21"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-18"><a class="header" href="#arguments-18"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — ID of the workflow to export (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-20"><a class="header" href="#options-20"><strong>Options:</strong></a></h6>
+<h6 id="options-17"><a class="header" href="#options-17"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-o</code>, <code>--output &lt;OUTPUT&gt;</code> — Output file path (default: stdout)</li>
 <li><code>--include-results</code> — Include job results in export</li>
@@ -8581,11 +8558,11 @@ torc workflows export 123 --include-results --include-events -o complete.json
 <p>Imports a workflow that was previously exported. All entity IDs are remapped to new IDs assigned by
 the server. By default, all job statuses are reset to uninitialized for a fresh start.</p>
 <p><strong>Usage:</strong> <code>torc workflows import [OPTIONS] &lt;FILE&gt;</code></p>
-<h6 id="arguments-22"><a class="header" href="#arguments-22"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-19"><a class="header" href="#arguments-19"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;FILE&gt;</code> — Path to the exported workflow JSON file (use '-' for stdin)</li>
 </ul>
-<h6 id="options-21"><a class="header" href="#options-21"><strong>Options:</strong></a></h6>
+<h6 id="options-18"><a class="header" href="#options-18"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--name &lt;NAME&gt;</code> — Override the workflow name</li>
 <li><code>--skip-results</code> — Skip importing results even if present in export</li>
@@ -8616,11 +8593,11 @@ orphaned jobs as failed so the workflow can be recovered or restarted.</p>
 <li>You want to clean up workflow state before running <code>torc recover</code></li>
 </ul>
 <p><strong>Usage:</strong> <code>torc workflows sync-status [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-23"><a class="header" href="#arguments-23"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-20"><a class="header" href="#arguments-20"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — ID of the workflow to sync (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-22"><a class="header" href="#options-22"><strong>Options:</strong></a></h6>
+<h6 id="options-19"><a class="header" href="#options-19"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--dry-run</code> — Preview changes without applying them</li>
 </ul>
@@ -8643,11 +8620,11 @@ for future runs.</p>
 resources that are significantly over-allocated. Downsizing only considers successfully completed
 jobs (return code 0) and requires all jobs sharing a resource requirement to have peak usage data.</p>
 <p><strong>Usage:</strong> <code>torc workflows correct-resources [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-24"><a class="header" href="#arguments-24"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-21"><a class="header" href="#arguments-21"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — ID of the workflow to analyze (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-23"><a class="header" href="#options-23"><strong>Options:</strong></a></h6>
+<h6 id="options-20"><a class="header" href="#options-20"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--memory-multiplier &lt;MEMORY_MULTIPLIER&gt;</code> — Memory multiplier for jobs that exceeded memory.
 Default: <code>1.2</code></li>
@@ -8690,18 +8667,18 @@ torc -f json workflows correct-resources 123 --dry-run
 <h2 id="torc-compute-nodes-get"><a class="header" href="#torc-compute-nodes-get"><code>torc compute-nodes get</code></a></h2>
 <p>Get a specific compute node by ID</p>
 <p><strong>Usage:</strong> <code>torc compute-nodes get &lt;ID&gt;</code></p>
-<h6 id="arguments-25"><a class="header" href="#arguments-25"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-22"><a class="header" href="#arguments-22"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;ID&gt;</code> — ID of the compute node</li>
 </ul>
 <h2 id="torc-compute-nodes-list"><a class="header" href="#torc-compute-nodes-list"><code>torc compute-nodes list</code></a></h2>
 <p>List compute nodes for a workflow</p>
 <p><strong>Usage:</strong> <code>torc compute-nodes list [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-26"><a class="header" href="#arguments-26"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-23"><a class="header" href="#arguments-23"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — List compute nodes for this workflow (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-24"><a class="header" href="#options-24"><strong>Options:</strong></a></h6>
+<h6 id="options-21"><a class="header" href="#options-21"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of compute nodes to return. Default: <code>100000</code></li>
 <li><code>-o</code>, <code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
@@ -8724,11 +8701,11 @@ torc -f json workflows correct-resources 123 --dry-run
 <h2 id="torc-files-create"><a class="header" href="#torc-files-create"><code>torc files create</code></a></h2>
 <p>Create a new file</p>
 <p><strong>Usage:</strong> <code>torc files create --name &lt;NAME&gt; --path &lt;PATH&gt; [WORKFLOW_ID]</code></p>
-<h6 id="arguments-27"><a class="header" href="#arguments-27"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-24"><a class="header" href="#arguments-24"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Create the file in this workflow</li>
 </ul>
-<h6 id="options-25"><a class="header" href="#options-25"><strong>Options:</strong></a></h6>
+<h6 id="options-22"><a class="header" href="#options-22"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-n</code>, <code>--name &lt;NAME&gt;</code> — Name of the job</li>
 <li><code>-p</code>, <code>--path &lt;PATH&gt;</code> — Path of the file</li>
@@ -8736,11 +8713,11 @@ torc -f json workflows correct-resources 123 --dry-run
 <h2 id="torc-files-list"><a class="header" href="#torc-files-list"><code>torc files list</code></a></h2>
 <p>List files</p>
 <p><strong>Usage:</strong> <code>torc files list [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-28"><a class="header" href="#arguments-28"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-25"><a class="header" href="#arguments-25"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — List files for this workflow (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-26"><a class="header" href="#options-26"><strong>Options:</strong></a></h6>
+<h6 id="options-23"><a class="header" href="#options-23"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--produced-by-job-id &lt;PRODUCED_BY_JOB_ID&gt;</code> — Filter by job ID that produced the files</li>
 <li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of files to return. Default: <code>100000</code></li>
@@ -8751,18 +8728,18 @@ torc -f json workflows correct-resources 123 --dry-run
 <h2 id="torc-files-get"><a class="header" href="#torc-files-get"><code>torc files get</code></a></h2>
 <p>Get a specific file by ID</p>
 <p><strong>Usage:</strong> <code>torc files get &lt;ID&gt;</code></p>
-<h6 id="arguments-29"><a class="header" href="#arguments-29"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-26"><a class="header" href="#arguments-26"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;ID&gt;</code> — ID of the file to get</li>
 </ul>
 <h2 id="torc-files-update"><a class="header" href="#torc-files-update"><code>torc files update</code></a></h2>
 <p>Update an existing file</p>
 <p><strong>Usage:</strong> <code>torc files update [OPTIONS] &lt;ID&gt;</code></p>
-<h6 id="arguments-30"><a class="header" href="#arguments-30"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-27"><a class="header" href="#arguments-27"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;ID&gt;</code> — ID of the file to update</li>
 </ul>
-<h6 id="options-27"><a class="header" href="#options-27"><strong>Options:</strong></a></h6>
+<h6 id="options-24"><a class="header" href="#options-24"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-n</code>, <code>--name &lt;NAME&gt;</code> — Name of the file</li>
 <li><code>-p</code>, <code>--path &lt;PATH&gt;</code> — Path of the file</li>
@@ -8770,14 +8747,14 @@ torc -f json workflows correct-resources 123 --dry-run
 <h2 id="torc-files-delete"><a class="header" href="#torc-files-delete"><code>torc files delete</code></a></h2>
 <p>Delete a file</p>
 <p><strong>Usage:</strong> <code>torc files delete &lt;ID&gt;</code></p>
-<h6 id="arguments-31"><a class="header" href="#arguments-31"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-28"><a class="header" href="#arguments-28"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;ID&gt;</code> — ID of the file to remove</li>
 </ul>
 <h2 id="torc-files-list-required-existing"><a class="header" href="#torc-files-list-required-existing"><code>torc files list-required-existing</code></a></h2>
 <p>List required existing files for a workflow</p>
 <p><strong>Usage:</strong> <code>torc files list-required-existing [WORKFLOW_ID]</code></p>
-<h6 id="arguments-32"><a class="header" href="#arguments-32"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-29"><a class="header" href="#arguments-29"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — List required existing files for this workflow (optional - will prompt if not
 provided)</li>
@@ -8799,11 +8776,11 @@ provided)</li>
 <h2 id="torc-jobs-create"><a class="header" href="#torc-jobs-create"><code>torc jobs create</code></a></h2>
 <p>Create a new job</p>
 <p><strong>Usage:</strong> <code>torc jobs create [OPTIONS] --name &lt;NAME&gt; --command &lt;COMMAND&gt; [WORKFLOW_ID]</code></p>
-<h6 id="arguments-33"><a class="header" href="#arguments-33"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-30"><a class="header" href="#arguments-30"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Create the job in this workflow</li>
 </ul>
-<h6 id="options-28"><a class="header" href="#options-28"><strong>Options:</strong></a></h6>
+<h6 id="options-25"><a class="header" href="#options-25"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-n</code>, <code>--name &lt;NAME&gt;</code> — Name of the job</li>
 <li><code>-c</code>, <code>--command &lt;COMMAND&gt;</code> — Command to execute</li>
@@ -8823,13 +8800,13 @@ to avoid naming conflicts.</p>
 assigned.</p>
 <p>Example: <code>torc jobs create-from-file 123 batch_jobs.txt --cpus-per-job 4 --memory-per-job 8g</code></p>
 <p><strong>Usage:</strong> <code>torc jobs create-from-file [OPTIONS] &lt;WORKFLOW_ID&gt; &lt;FILE&gt;</code></p>
-<h6 id="arguments-34"><a class="header" href="#arguments-34"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-31"><a class="header" href="#arguments-31"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID to create jobs for</li>
 <li><code>&lt;FILE&gt;</code> — Path to text file containing job commands (one per line). File format: One command per
 line, lines starting with # are comments (ignored), empty lines are ignored.</li>
 </ul>
-<h6 id="options-29"><a class="header" href="#options-29"><strong>Options:</strong></a></h6>
+<h6 id="options-26"><a class="header" href="#options-26"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--cpus-per-job &lt;CPUS_PER_JOB&gt;</code> — Number of CPUs per job. Default: <code>1</code></li>
 <li><code>--memory-per-job &lt;MEMORY_PER_JOB&gt;</code> — Memory per job (e.g., "1m", "2g", "16g"). Default: <code>1m</code></li>
@@ -8839,11 +8816,11 @@ P0DT1M = 1 minute, P0DT30M = 30 minutes, P0DT2H = 2 hours, P1DT0H = 1 day. Defau
 <h2 id="torc-jobs-list"><a class="header" href="#torc-jobs-list"><code>torc jobs list</code></a></h2>
 <p>List jobs</p>
 <p><strong>Usage:</strong> <code>torc jobs list [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-35"><a class="header" href="#arguments-35"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-32"><a class="header" href="#arguments-32"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — List jobs for this workflow (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-30"><a class="header" href="#options-30"><strong>Options:</strong></a></h6>
+<h6 id="options-27"><a class="header" href="#options-27"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-s</code>, <code>--status &lt;STATUS&gt;</code> — Filter by job status</li>
 <li><code>--upstream-job-id &lt;UPSTREAM_JOB_ID&gt;</code> — Filter by upstream job ID (jobs that depend on this job)</li>
@@ -8857,18 +8834,18 @@ file/user_data IDs) - slower but more complete</li>
 <h2 id="torc-jobs-get"><a class="header" href="#torc-jobs-get"><code>torc jobs get</code></a></h2>
 <p>Get a specific job by ID</p>
 <p><strong>Usage:</strong> <code>torc jobs get &lt;ID&gt;</code></p>
-<h6 id="arguments-36"><a class="header" href="#arguments-36"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-33"><a class="header" href="#arguments-33"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;ID&gt;</code> — ID of the job to get</li>
 </ul>
 <h2 id="torc-jobs-update"><a class="header" href="#torc-jobs-update"><code>torc jobs update</code></a></h2>
 <p>Update an existing job</p>
 <p><strong>Usage:</strong> <code>torc jobs update [OPTIONS] &lt;ID&gt;</code></p>
-<h6 id="arguments-37"><a class="header" href="#arguments-37"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-34"><a class="header" href="#arguments-34"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;ID&gt;</code> — ID of the job to update</li>
 </ul>
-<h6 id="options-31"><a class="header" href="#options-31"><strong>Options:</strong></a></h6>
+<h6 id="options-28"><a class="header" href="#options-28"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-n</code>, <code>--name &lt;NAME&gt;</code> — Name of the job</li>
 <li><code>-c</code>, <code>--command &lt;COMMAND&gt;</code> — Command to execute</li>
@@ -8876,25 +8853,25 @@ file/user_data IDs) - slower but more complete</li>
 <h2 id="torc-jobs-delete"><a class="header" href="#torc-jobs-delete"><code>torc jobs delete</code></a></h2>
 <p>Delete one or more jobs</p>
 <p><strong>Usage:</strong> <code>torc jobs delete [IDS]...</code></p>
-<h6 id="arguments-38"><a class="header" href="#arguments-38"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-35"><a class="header" href="#arguments-35"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;IDS&gt;</code> — IDs of the jobs to remove</li>
 </ul>
 <h2 id="torc-jobs-delete-all"><a class="header" href="#torc-jobs-delete-all"><code>torc jobs delete-all</code></a></h2>
 <p>Delete all jobs for a workflow</p>
 <p><strong>Usage:</strong> <code>torc jobs delete-all [WORKFLOW_ID]</code></p>
-<h6 id="arguments-39"><a class="header" href="#arguments-39"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-36"><a class="header" href="#arguments-36"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID to delete all jobs from (optional - will prompt if not provided)</li>
 </ul>
 <h2 id="torc-jobs-list-resource-requirements"><a class="header" href="#torc-jobs-list-resource-requirements"><code>torc jobs list-resource-requirements</code></a></h2>
 <p>List jobs with their resource requirements</p>
 <p><strong>Usage:</strong> <code>torc jobs list-resource-requirements [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-40"><a class="header" href="#arguments-40"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-37"><a class="header" href="#arguments-37"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID to list jobs from (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-32"><a class="header" href="#options-32"><strong>Options:</strong></a></h6>
+<h6 id="options-29"><a class="header" href="#options-29"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-j</code>, <code>--job-id &lt;JOB_ID&gt;</code> — Filter by specific job ID</li>
 </ul>
@@ -8910,11 +8887,11 @@ file/user_data IDs) - slower but more complete</li>
 <h2 id="torc-job-dependencies-job-job"><a class="header" href="#torc-job-dependencies-job-job"><code>torc job-dependencies job-job</code></a></h2>
 <p>List job-to-job dependencies for a workflow</p>
 <p><strong>Usage:</strong> <code>torc job-dependencies job-job [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-41"><a class="header" href="#arguments-41"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-38"><a class="header" href="#arguments-38"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — ID of the workflow (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-33"><a class="header" href="#options-33"><strong>Options:</strong></a></h6>
+<h6 id="options-30"><a class="header" href="#options-30"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of dependencies to return. Default: <code>100000</code></li>
 <li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
@@ -8922,11 +8899,11 @@ file/user_data IDs) - slower but more complete</li>
 <h2 id="torc-job-dependencies-job-file"><a class="header" href="#torc-job-dependencies-job-file"><code>torc job-dependencies job-file</code></a></h2>
 <p>List job-file relationships for a workflow</p>
 <p><strong>Usage:</strong> <code>torc job-dependencies job-file [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-42"><a class="header" href="#arguments-42"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-39"><a class="header" href="#arguments-39"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — ID of the workflow (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-34"><a class="header" href="#options-34"><strong>Options:</strong></a></h6>
+<h6 id="options-31"><a class="header" href="#options-31"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of relationships to return. Default: <code>100000</code></li>
 <li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
@@ -8934,11 +8911,11 @@ file/user_data IDs) - slower but more complete</li>
 <h2 id="torc-job-dependencies-job-user-data"><a class="header" href="#torc-job-dependencies-job-user-data"><code>torc job-dependencies job-user-data</code></a></h2>
 <p>List job-user_data relationships for a workflow</p>
 <p><strong>Usage:</strong> <code>torc job-dependencies job-user-data [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-43"><a class="header" href="#arguments-43"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-40"><a class="header" href="#arguments-40"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — ID of the workflow (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-35"><a class="header" href="#options-35"><strong>Options:</strong></a></h6>
+<h6 id="options-32"><a class="header" href="#options-32"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of relationships to return. Default: <code>100000</code></li>
 <li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
@@ -8957,11 +8934,11 @@ file/user_data IDs) - slower but more complete</li>
 <h2 id="torc-resource-requirements-create"><a class="header" href="#torc-resource-requirements-create"><code>torc resource-requirements create</code></a></h2>
 <p>Create new resource requirements</p>
 <p><strong>Usage:</strong> <code>torc resource-requirements create [OPTIONS] --name &lt;NAME&gt; [WORKFLOW_ID]</code></p>
-<h6 id="arguments-44"><a class="header" href="#arguments-44"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-41"><a class="header" href="#arguments-41"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Create resource requirements in this workflow</li>
 </ul>
-<h6 id="options-36"><a class="header" href="#options-36"><strong>Options:</strong></a></h6>
+<h6 id="options-33"><a class="header" href="#options-33"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-n</code>, <code>--name &lt;NAME&gt;</code> — Name of the resource requirements</li>
 <li><code>--num-cpus &lt;NUM_CPUS&gt;</code> — Number of CPUs required. Default: <code>1</code></li>
@@ -8974,12 +8951,12 @@ Default: <code>P0DT1M</code></li>
 <h2 id="torc-resource-requirements-list"><a class="header" href="#torc-resource-requirements-list"><code>torc resource-requirements list</code></a></h2>
 <p>List resource requirements</p>
 <p><strong>Usage:</strong> <code>torc resource-requirements list [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-45"><a class="header" href="#arguments-45"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-42"><a class="header" href="#arguments-42"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — List resource requirements for this workflow (optional - will prompt if not
 provided)</li>
 </ul>
-<h6 id="options-37"><a class="header" href="#options-37"><strong>Options:</strong></a></h6>
+<h6 id="options-34"><a class="header" href="#options-34"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of resource requirements to return. Default: <code>100000</code></li>
 <li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
@@ -8989,18 +8966,18 @@ provided)</li>
 <h2 id="torc-resource-requirements-get"><a class="header" href="#torc-resource-requirements-get"><code>torc resource-requirements get</code></a></h2>
 <p>Get a specific resource requirement by ID</p>
 <p><strong>Usage:</strong> <code>torc resource-requirements get &lt;ID&gt;</code></p>
-<h6 id="arguments-46"><a class="header" href="#arguments-46"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-43"><a class="header" href="#arguments-43"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;ID&gt;</code> — ID of the resource requirement to get</li>
 </ul>
 <h2 id="torc-resource-requirements-update"><a class="header" href="#torc-resource-requirements-update"><code>torc resource-requirements update</code></a></h2>
 <p>Update existing resource requirements</p>
 <p><strong>Usage:</strong> <code>torc resource-requirements update [OPTIONS] &lt;ID&gt;</code></p>
-<h6 id="arguments-47"><a class="header" href="#arguments-47"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-44"><a class="header" href="#arguments-44"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;ID&gt;</code> — ID of the resource requirement to update</li>
 </ul>
-<h6 id="options-38"><a class="header" href="#options-38"><strong>Options:</strong></a></h6>
+<h6 id="options-35"><a class="header" href="#options-35"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-n</code>, <code>--name &lt;NAME&gt;</code> — Name of the resource requirements</li>
 <li><code>--num-cpus &lt;NUM_CPUS&gt;</code> — Number of CPUs required</li>
@@ -9012,7 +8989,7 @@ provided)</li>
 <h2 id="torc-resource-requirements-delete"><a class="header" href="#torc-resource-requirements-delete"><code>torc resource-requirements delete</code></a></h2>
 <p>Delete resource requirements</p>
 <p><strong>Usage:</strong> <code>torc resource-requirements delete &lt;ID&gt;</code></p>
-<h6 id="arguments-48"><a class="header" href="#arguments-48"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-45"><a class="header" href="#arguments-45"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;ID&gt;</code> — ID of the resource requirement to remove</li>
 </ul>
@@ -9030,22 +9007,22 @@ provided)</li>
 <h2 id="torc-events-create"><a class="header" href="#torc-events-create"><code>torc events create</code></a></h2>
 <p>Create a new event</p>
 <p><strong>Usage:</strong> <code>torc events create --data &lt;DATA&gt; [WORKFLOW_ID]</code></p>
-<h6 id="arguments-49"><a class="header" href="#arguments-49"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-46"><a class="header" href="#arguments-46"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Create the event in this workflow</li>
 </ul>
-<h6 id="options-39"><a class="header" href="#options-39"><strong>Options:</strong></a></h6>
+<h6 id="options-36"><a class="header" href="#options-36"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-d</code>, <code>--data &lt;DATA&gt;</code> — JSON data for the event</li>
 </ul>
 <h2 id="torc-events-list"><a class="header" href="#torc-events-list"><code>torc events list</code></a></h2>
 <p>List events for a workflow</p>
 <p><strong>Usage:</strong> <code>torc events list [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-50"><a class="header" href="#arguments-50"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-47"><a class="header" href="#arguments-47"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — List events for this workflow (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-40"><a class="header" href="#options-40"><strong>Options:</strong></a></h6>
+<h6 id="options-37"><a class="header" href="#options-37"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-c</code>, <code>--category &lt;CATEGORY&gt;</code> — Filter events by category</li>
 <li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of events to return. Default: <code>100000</code></li>
@@ -9056,11 +9033,11 @@ provided)</li>
 <h2 id="torc-events-monitor"><a class="header" href="#torc-events-monitor"><code>torc events monitor</code></a></h2>
 <p>Monitor events for a workflow in real-time</p>
 <p><strong>Usage:</strong> <code>torc events monitor [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-51"><a class="header" href="#arguments-51"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-48"><a class="header" href="#arguments-48"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Monitor events for this workflow (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-41"><a class="header" href="#options-41"><strong>Options:</strong></a></h6>
+<h6 id="options-38"><a class="header" href="#options-38"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-d</code>, <code>--duration &lt;DURATION&gt;</code> — Duration to monitor in minutes (default: infinite)</li>
 <li><code>-p</code>, <code>--poll-interval &lt;POLL_INTERVAL&gt;</code> — Poll interval in seconds. Default: <code>60</code></li>
@@ -9069,14 +9046,14 @@ provided)</li>
 <h2 id="torc-events-get-latest-event"><a class="header" href="#torc-events-get-latest-event"><code>torc events get-latest-event</code></a></h2>
 <p>Get the latest event for a workflow</p>
 <p><strong>Usage:</strong> <code>torc events get-latest-event [WORKFLOW_ID]</code></p>
-<h6 id="arguments-52"><a class="header" href="#arguments-52"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-49"><a class="header" href="#arguments-49"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Get the latest event for this workflow (optional - will prompt if not provided)</li>
 </ul>
 <h2 id="torc-events-delete"><a class="header" href="#torc-events-delete"><code>torc events delete</code></a></h2>
 <p>Delete an event</p>
 <p><strong>Usage:</strong> <code>torc events delete &lt;ID&gt;</code></p>
-<h6 id="arguments-53"><a class="header" href="#arguments-53"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-50"><a class="header" href="#arguments-50"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;ID&gt;</code> — ID of the event to remove</li>
 </ul>
@@ -9092,12 +9069,12 @@ provided)</li>
 <h2 id="torc-results-list"><a class="header" href="#torc-results-list"><code>torc results list</code></a></h2>
 <p>List results</p>
 <p><strong>Usage:</strong> <code>torc results list [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-54"><a class="header" href="#arguments-54"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-51"><a class="header" href="#arguments-51"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — List results for this workflow (optional - will prompt if not provided). By
 default, only lists results for the latest run of the workflow.</li>
 </ul>
-<h6 id="options-42"><a class="header" href="#options-42"><strong>Options:</strong></a></h6>
+<h6 id="options-39"><a class="header" href="#options-39"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-j</code>, <code>--job-id &lt;JOB_ID&gt;</code> — List results for this job</li>
 <li><code>-r</code>, <code>--run-id &lt;RUN_ID&gt;</code> — List results for this run_id</li>
@@ -9115,14 +9092,14 @@ done, ready, scheduled, running, pending, disabled)</li>
 <h2 id="torc-results-get"><a class="header" href="#torc-results-get"><code>torc results get</code></a></h2>
 <p>Get a specific result by ID</p>
 <p><strong>Usage:</strong> <code>torc results get &lt;ID&gt;</code></p>
-<h6 id="arguments-55"><a class="header" href="#arguments-55"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-52"><a class="header" href="#arguments-52"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;ID&gt;</code> — ID of the result to get</li>
 </ul>
 <h2 id="torc-results-delete"><a class="header" href="#torc-results-delete"><code>torc results delete</code></a></h2>
 <p>Delete a result</p>
 <p><strong>Usage:</strong> <code>torc results delete &lt;ID&gt;</code></p>
-<h6 id="arguments-56"><a class="header" href="#arguments-56"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-53"><a class="header" href="#arguments-53"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;ID&gt;</code> — ID of the result to remove</li>
 </ul>
@@ -9142,11 +9119,11 @@ done, ready, scheduled, running, pending, disabled)</li>
 <h2 id="torc-user-data-create"><a class="header" href="#torc-user-data-create"><code>torc user-data create</code></a></h2>
 <p>Create a new user data record</p>
 <p><strong>Usage:</strong> <code>torc user-data create [OPTIONS] --name &lt;NAME&gt; [WORKFLOW_ID]</code></p>
-<h6 id="arguments-57"><a class="header" href="#arguments-57"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-54"><a class="header" href="#arguments-54"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID</li>
 </ul>
-<h6 id="options-43"><a class="header" href="#options-43"><strong>Options:</strong></a></h6>
+<h6 id="options-40"><a class="header" href="#options-40"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-n</code>, <code>--name &lt;NAME&gt;</code> — Name of the data object</li>
 <li><code>-d</code>, <code>--data &lt;DATA&gt;</code> — JSON data content</li>
@@ -9157,11 +9134,11 @@ done, ready, scheduled, running, pending, disabled)</li>
 <h2 id="torc-user-data-list"><a class="header" href="#torc-user-data-list"><code>torc user-data list</code></a></h2>
 <p>List user data records</p>
 <p><strong>Usage:</strong> <code>torc user-data list [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-58"><a class="header" href="#arguments-58"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-55"><a class="header" href="#arguments-55"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID (if not provided, will be selected interactively)</li>
 </ul>
-<h6 id="options-44"><a class="header" href="#options-44"><strong>Options:</strong></a></h6>
+<h6 id="options-41"><a class="header" href="#options-41"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of records to return. Default: <code>50</code></li>
 <li><code>-o</code>, <code>--offset &lt;OFFSET&gt;</code> — Number of records to skip. Default: <code>0</code></li>
@@ -9175,18 +9152,18 @@ done, ready, scheduled, running, pending, disabled)</li>
 <h2 id="torc-user-data-get"><a class="header" href="#torc-user-data-get"><code>torc user-data get</code></a></h2>
 <p>Get a specific user data record</p>
 <p><strong>Usage:</strong> <code>torc user-data get &lt;ID&gt;</code></p>
-<h6 id="arguments-59"><a class="header" href="#arguments-59"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-56"><a class="header" href="#arguments-56"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;ID&gt;</code> — User data record ID</li>
 </ul>
 <h2 id="torc-user-data-update"><a class="header" href="#torc-user-data-update"><code>torc user-data update</code></a></h2>
 <p>Update a user data record</p>
 <p><strong>Usage:</strong> <code>torc user-data update [OPTIONS] &lt;ID&gt;</code></p>
-<h6 id="arguments-60"><a class="header" href="#arguments-60"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-57"><a class="header" href="#arguments-57"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;ID&gt;</code> — User data record ID</li>
 </ul>
-<h6 id="options-45"><a class="header" href="#options-45"><strong>Options:</strong></a></h6>
+<h6 id="options-42"><a class="header" href="#options-42"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-n</code>, <code>--name &lt;NAME&gt;</code> — New name for the data object</li>
 <li><code>-d</code>, <code>--data &lt;DATA&gt;</code> — New JSON data content</li>
@@ -9195,21 +9172,21 @@ done, ready, scheduled, running, pending, disabled)</li>
 <h2 id="torc-user-data-delete"><a class="header" href="#torc-user-data-delete"><code>torc user-data delete</code></a></h2>
 <p>Delete a user data record</p>
 <p><strong>Usage:</strong> <code>torc user-data delete &lt;ID&gt;</code></p>
-<h6 id="arguments-61"><a class="header" href="#arguments-61"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-58"><a class="header" href="#arguments-58"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;ID&gt;</code> — User data record ID</li>
 </ul>
 <h2 id="torc-user-data-delete-all"><a class="header" href="#torc-user-data-delete-all"><code>torc user-data delete-all</code></a></h2>
 <p>Delete all user data records for a workflow</p>
 <p><strong>Usage:</strong> <code>torc user-data delete-all &lt;WORKFLOW_ID&gt;</code></p>
-<h6 id="arguments-62"><a class="header" href="#arguments-62"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-59"><a class="header" href="#arguments-59"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID</li>
 </ul>
 <h2 id="torc-user-data-list-missing"><a class="header" href="#torc-user-data-list-missing"><code>torc user-data list-missing</code></a></h2>
 <p>List missing user data for a workflow</p>
 <p><strong>Usage:</strong> <code>torc user-data list-missing &lt;WORKFLOW_ID&gt;</code></p>
-<h6 id="arguments-63"><a class="header" href="#arguments-63"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-60"><a class="header" href="#arguments-60"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID</li>
 </ul>
@@ -9233,11 +9210,11 @@ done, ready, scheduled, running, pending, disabled)</li>
 <h2 id="torc-slurm-create"><a class="header" href="#torc-slurm-create"><code>torc slurm create</code></a></h2>
 <p>Add a Slurm config to the database</p>
 <p><strong>Usage:</strong> <code>torc slurm create [OPTIONS] --name &lt;NAME&gt; --account &lt;ACCOUNT&gt; [WORKFLOW_ID]</code></p>
-<h6 id="arguments-64"><a class="header" href="#arguments-64"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-61"><a class="header" href="#arguments-61"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID</li>
 </ul>
-<h6 id="options-46"><a class="header" href="#options-46"><strong>Options:</strong></a></h6>
+<h6 id="options-43"><a class="header" href="#options-43"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-n</code>, <code>--name &lt;NAME&gt;</code> — Name of config</li>
 <li><code>-a</code>, <code>--account &lt;ACCOUNT&gt;</code> — HPC account</li>
@@ -9254,11 +9231,11 @@ done, ready, scheduled, running, pending, disabled)</li>
 <h2 id="torc-slurm-update"><a class="header" href="#torc-slurm-update"><code>torc slurm update</code></a></h2>
 <p>Modify a Slurm config in the database</p>
 <p><strong>Usage:</strong> <code>torc slurm update [OPTIONS] &lt;SCHEDULER_ID&gt;</code></p>
-<h6 id="arguments-65"><a class="header" href="#arguments-65"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-62"><a class="header" href="#arguments-62"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;SCHEDULER_ID&gt;</code></li>
 </ul>
-<h6 id="options-47"><a class="header" href="#options-47"><strong>Options:</strong></a></h6>
+<h6 id="options-44"><a class="header" href="#options-44"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-N</code>, <code>--name &lt;NAME&gt;</code> — Name of config</li>
 <li><code>-a</code>, <code>--account &lt;ACCOUNT&gt;</code> — HPC account</li>
@@ -9274,11 +9251,11 @@ done, ready, scheduled, running, pending, disabled)</li>
 <h2 id="torc-slurm-list"><a class="header" href="#torc-slurm-list"><code>torc slurm list</code></a></h2>
 <p>Show the current Slurm configs in the database</p>
 <p><strong>Usage:</strong> <code>torc slurm list [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-66"><a class="header" href="#arguments-66"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-63"><a class="header" href="#arguments-63"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID</li>
 </ul>
-<h6 id="options-48"><a class="header" href="#options-48"><strong>Options:</strong></a></h6>
+<h6 id="options-45"><a class="header" href="#options-45"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of configs to return. Default: <code>100000</code></li>
 <li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
@@ -9286,25 +9263,25 @@ done, ready, scheduled, running, pending, disabled)</li>
 <h2 id="torc-slurm-get"><a class="header" href="#torc-slurm-get"><code>torc slurm get</code></a></h2>
 <p>Get a specific Slurm config by ID</p>
 <p><strong>Usage:</strong> <code>torc slurm get &lt;ID&gt;</code></p>
-<h6 id="arguments-67"><a class="header" href="#arguments-67"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-64"><a class="header" href="#arguments-64"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;ID&gt;</code> — ID of the Slurm config to get</li>
 </ul>
 <h2 id="torc-slurm-delete"><a class="header" href="#torc-slurm-delete"><code>torc slurm delete</code></a></h2>
 <p>Delete a Slurm config by ID</p>
 <p><strong>Usage:</strong> <code>torc slurm delete &lt;ID&gt;</code></p>
-<h6 id="arguments-68"><a class="header" href="#arguments-68"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-65"><a class="header" href="#arguments-65"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;ID&gt;</code> — ID of the Slurm config to delete</li>
 </ul>
 <h2 id="torc-slurm-schedule-nodes"><a class="header" href="#torc-slurm-schedule-nodes"><code>torc slurm schedule-nodes</code></a></h2>
 <p>Schedule compute nodes using Slurm</p>
 <p><strong>Usage:</strong> <code>torc slurm schedule-nodes [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-69"><a class="header" href="#arguments-69"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-66"><a class="header" href="#arguments-66"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID</li>
 </ul>
-<h6 id="options-49"><a class="header" href="#options-49"><strong>Options:</strong></a></h6>
+<h6 id="options-46"><a class="header" href="#options-46"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-j</code>, <code>--job-prefix &lt;JOB_PREFIX&gt;</code> — Job prefix for the Slurm job names. Default: empty</li>
 <li><code>--keep-submission-scripts</code> — Keep submission scripts after job submission. Default: <code>false</code></li>
@@ -9318,11 +9295,11 @@ done, ready, scheduled, running, pending, disabled)</li>
 <h2 id="torc-slurm-parse-logs"><a class="header" href="#torc-slurm-parse-logs"><code>torc slurm parse-logs</code></a></h2>
 <p>Parse Slurm log files for known error messages</p>
 <p><strong>Usage:</strong> <code>torc slurm parse-logs [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-70"><a class="header" href="#arguments-70"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-67"><a class="header" href="#arguments-67"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID</li>
 </ul>
-<h6 id="options-50"><a class="header" href="#options-50"><strong>Options:</strong></a></h6>
+<h6 id="options-47"><a class="header" href="#options-47"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory containing Slurm log files. Default: <code>output</code></li>
 <li><code>--errors-only</code> — Only show errors (skip warnings). Default: <code>false</code></li>
@@ -9330,11 +9307,11 @@ done, ready, scheduled, running, pending, disabled)</li>
 <h2 id="torc-slurm-sacct"><a class="header" href="#torc-slurm-sacct"><code>torc slurm sacct</code></a></h2>
 <p>Call sacct for scheduled compute nodes and display summary</p>
 <p><strong>Usage:</strong> <code>torc slurm sacct [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-71"><a class="header" href="#arguments-71"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-68"><a class="header" href="#arguments-68"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID</li>
 </ul>
-<h6 id="options-51"><a class="header" href="#options-51"><strong>Options:</strong></a></h6>
+<h6 id="options-48"><a class="header" href="#options-48"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory for sacct JSON files (only used with
 --save-json). Default: <code>output</code></li>
@@ -9343,22 +9320,22 @@ done, ready, scheduled, running, pending, disabled)</li>
 <h2 id="torc-slurm-stats"><a class="header" href="#torc-slurm-stats"><code>torc slurm stats</code></a></h2>
 <p>Show per-job Slurm accounting stats stored in the database</p>
 <p><strong>Usage:</strong> <code>torc slurm stats [OPTIONS] &lt;WORKFLOW_ID&gt;</code></p>
-<h6 id="arguments-72"><a class="header" href="#arguments-72"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-69"><a class="header" href="#arguments-69"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID</li>
 </ul>
-<h6 id="options-52"><a class="header" href="#options-52"><strong>Options:</strong></a></h6>
+<h6 id="options-49"><a class="header" href="#options-49"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--job-id &lt;JOB_ID&gt;</code> — Filter by job ID</li>
 </ul>
 <h2 id="torc-slurm-generate"><a class="header" href="#torc-slurm-generate"><code>torc slurm generate</code></a></h2>
 <p>Generate Slurm schedulers for a workflow based on job resource requirements</p>
 <p><strong>Usage:</strong> <code>torc slurm generate [OPTIONS] --account &lt;ACCOUNT&gt; &lt;WORKFLOW_FILE&gt;</code></p>
-<h6 id="arguments-73"><a class="header" href="#arguments-73"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-70"><a class="header" href="#arguments-70"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_FILE&gt;</code> — Path to workflow specification file (YAML, JSON, JSON5, or KDL)</li>
 </ul>
-<h6 id="options-53"><a class="header" href="#options-53"><strong>Options:</strong></a></h6>
+<h6 id="options-50"><a class="header" href="#options-50"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--account &lt;ACCOUNT&gt;</code> — Slurm account to use</li>
 <li><code>--profile &lt;PROFILE&gt;</code> — HPC profile to use (if not specified, tries to detect current system)</li>
@@ -9385,11 +9362,11 @@ them. Uses existing scheduler configurations as defaults for account, partition,
 <p>This is useful for recovery after job failures: update job resources, reset failed jobs, then
 regenerate schedulers to submit new allocations.</p>
 <p><strong>Usage:</strong> <code>torc slurm regenerate [OPTIONS] &lt;WORKFLOW_ID&gt;</code></p>
-<h6 id="arguments-74"><a class="header" href="#arguments-74"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-71"><a class="header" href="#arguments-71"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID</li>
 </ul>
-<h6 id="options-54"><a class="header" href="#options-54"><strong>Options:</strong></a></h6>
+<h6 id="options-51"><a class="header" href="#options-51"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--account &lt;ACCOUNT&gt;</code> — Slurm account to use (defaults to account from existing schedulers)</li>
 <li><code>--profile &lt;PROFILE&gt;</code> — HPC profile to use (if not specified, tries to detect current system)</li>
@@ -9432,7 +9409,7 @@ Default: <code>60</code></li>
 <p>Add one or more remote workers to a workflow</p>
 <p>Workers are stored in the database and used by subsequent commands. Format: [user@]hostname[:port]</p>
 <p><strong>Usage:</strong> <code>torc remote add-workers &lt;WORKFLOW_ID&gt; &lt;WORKERS&gt;...</code></p>
-<h6 id="arguments-75"><a class="header" href="#arguments-75"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-72"><a class="header" href="#arguments-72"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID</li>
 <li><code>&lt;WORKERS&gt;</code> — Worker addresses (format: [user@]hostname[:port])</li>
@@ -9441,7 +9418,7 @@ Default: <code>60</code></li>
 <p>Add remote workers to a workflow from a file</p>
 <p>Each line in the file should be a worker address. Lines starting with # are comments.</p>
 <p><strong>Usage:</strong> <code>torc remote add-workers-from-file &lt;WORKER_FILE&gt; [WORKFLOW_ID]</code></p>
-<h6 id="arguments-76"><a class="header" href="#arguments-76"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-73"><a class="header" href="#arguments-73"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKER_FILE&gt;</code> — Path to worker file listing remote machines</li>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID (optional - will prompt if not provided)</li>
@@ -9449,7 +9426,7 @@ Default: <code>60</code></li>
 <h2 id="torc-remote-remove-worker"><a class="header" href="#torc-remote-remove-worker"><code>torc remote remove-worker</code></a></h2>
 <p>Remove a remote worker from a workflow</p>
 <p><strong>Usage:</strong> <code>torc remote remove-worker &lt;WORKER&gt; [WORKFLOW_ID]</code></p>
-<h6 id="arguments-77"><a class="header" href="#arguments-77"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-74"><a class="header" href="#arguments-74"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKER&gt;</code> — Worker address to remove</li>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID (optional - will prompt if not provided)</li>
@@ -9457,7 +9434,7 @@ Default: <code>60</code></li>
 <h2 id="torc-remote-list-workers"><a class="header" href="#torc-remote-list-workers"><code>torc remote list-workers</code></a></h2>
 <p>List remote workers stored in the database for a workflow</p>
 <p><strong>Usage:</strong> <code>torc remote list-workers [WORKFLOW_ID]</code></p>
-<h6 id="arguments-78"><a class="header" href="#arguments-78"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-75"><a class="header" href="#arguments-75"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID (optional - will prompt if not provided)</li>
 </ul>
@@ -9466,11 +9443,11 @@ Default: <code>60</code></li>
 <p>SSH into each stored worker and start a torc worker process. Workers run detached (via nohup) and
 survive SSH disconnection. Use add-workers first, or provide --workers to add and run in one step.</p>
 <p><strong>Usage:</strong> <code>torc remote run [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-79"><a class="header" href="#arguments-79"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-76"><a class="header" href="#arguments-76"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID to run (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-55"><a class="header" href="#options-55"><strong>Options:</strong></a></h6>
+<h6 id="options-52"><a class="header" href="#options-52"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-w</code>, <code>--workers &lt;WORKERS&gt;</code> — Path to worker file (optional - adds workers before running)</li>
 <li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory on remote machines (relative to home).
@@ -9486,11 +9463,11 @@ Default: <code>torc_output</code></li>
 <h2 id="torc-remote-status"><a class="header" href="#torc-remote-status"><code>torc remote status</code></a></h2>
 <p>Check status of remote workers</p>
 <p><strong>Usage:</strong> <code>torc remote status [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-80"><a class="header" href="#arguments-80"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-77"><a class="header" href="#arguments-77"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-56"><a class="header" href="#options-56"><strong>Options:</strong></a></h6>
+<h6 id="options-53"><a class="header" href="#options-53"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Remote output directory (must match what was used in run). Default:
 <code>torc_output</code></li>
@@ -9499,11 +9476,11 @@ Default: <code>torc_output</code></li>
 <h2 id="torc-remote-stop"><a class="header" href="#torc-remote-stop"><code>torc remote stop</code></a></h2>
 <p>Stop workers on remote machines</p>
 <p><strong>Usage:</strong> <code>torc remote stop [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-81"><a class="header" href="#arguments-81"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-78"><a class="header" href="#arguments-78"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-57"><a class="header" href="#options-57"><strong>Options:</strong></a></h6>
+<h6 id="options-54"><a class="header" href="#options-54"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Remote output directory (must match what was used in run). Default:
 <code>torc_output</code></li>
@@ -9513,11 +9490,11 @@ Default: <code>torc_output</code></li>
 <h2 id="torc-remote-collect-logs"><a class="header" href="#torc-remote-collect-logs"><code>torc remote collect-logs</code></a></h2>
 <p>Collect logs from remote workers</p>
 <p><strong>Usage:</strong> <code>torc remote collect-logs [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-82"><a class="header" href="#arguments-82"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-79"><a class="header" href="#arguments-79"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-58"><a class="header" href="#options-58"><strong>Options:</strong></a></h6>
+<h6 id="options-55"><a class="header" href="#options-55"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-l</code>, <code>--local-output-dir &lt;LOCAL_OUTPUT_DIR&gt;</code> — Local directory to save collected logs. Default:
 <code>remote_logs</code></li>
@@ -9531,11 +9508,11 @@ run). Default: <code>torc_output</code></li>
 <p>Removes the output directory from all remote workers. Use collect-logs --delete to safely collect
 before deleting.</p>
 <p><strong>Usage:</strong> <code>torc remote delete-logs [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-83"><a class="header" href="#arguments-83"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-80"><a class="header" href="#arguments-80"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-59"><a class="header" href="#options-59"><strong>Options:</strong></a></h6>
+<h6 id="options-56"><a class="header" href="#options-56"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--remote-output-dir &lt;REMOTE_OUTPUT_DIR&gt;</code> — Remote output directory to delete (must match what was
 used in run). Default: <code>torc_output</code></li>
@@ -9553,19 +9530,19 @@ used in run). Default: <code>torc_output</code></li>
 <h2 id="torc-scheduled-compute-nodes-get"><a class="header" href="#torc-scheduled-compute-nodes-get"><code>torc scheduled-compute-nodes get</code></a></h2>
 <p>Get a scheduled compute node by ID</p>
 <p><strong>Usage:</strong> <code>torc scheduled-compute-nodes get &lt;ID&gt;</code></p>
-<h6 id="arguments-84"><a class="header" href="#arguments-84"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-81"><a class="header" href="#arguments-81"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;ID&gt;</code> — ID of the scheduled compute node</li>
 </ul>
 <h2 id="torc-scheduled-compute-nodes-list"><a class="header" href="#torc-scheduled-compute-nodes-list"><code>torc scheduled-compute-nodes list</code></a></h2>
 <p>List scheduled compute nodes for a workflow</p>
 <p><strong>Usage:</strong> <code>torc scheduled-compute-nodes list [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-85"><a class="header" href="#arguments-85"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-82"><a class="header" href="#arguments-82"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — List scheduled compute nodes for this workflow (optional - will prompt if not
 provided)</li>
 </ul>
-<h6 id="options-60"><a class="header" href="#options-60"><strong>Options:</strong></a></h6>
+<h6 id="options-57"><a class="header" href="#options-57"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of scheduled compute nodes to return. Default: <code>100000</code></li>
 <li><code>-o</code>, <code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
@@ -9578,7 +9555,7 @@ provided)</li>
 <h2 id="torc-scheduled-compute-nodes-list-jobs"><a class="header" href="#torc-scheduled-compute-nodes-list-jobs"><code>torc scheduled-compute-nodes list-jobs</code></a></h2>
 <p>List jobs that ran under a scheduled compute node</p>
 <p><strong>Usage:</strong> <code>torc scheduled-compute-nodes list-jobs &lt;ID&gt;</code></p>
-<h6 id="arguments-86"><a class="header" href="#arguments-86"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-83"><a class="header" href="#arguments-83"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;ID&gt;</code> — ID of the scheduled compute node</li>
 </ul>
@@ -9604,19 +9581,19 @@ dynamic profile is generated from the current cluster.</p>
 <h2 id="torc-hpc-show"><a class="header" href="#torc-hpc-show"><code>torc hpc show</code></a></h2>
 <p>Show details of an HPC profile</p>
 <p><strong>Usage:</strong> <code>torc hpc show &lt;NAME&gt;</code></p>
-<h6 id="arguments-87"><a class="header" href="#arguments-87"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-84"><a class="header" href="#arguments-84"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;NAME&gt;</code> — Profile name (e.g., "kestrel") or "slurm" for dynamically detected cluster</li>
 </ul>
 <h2 id="torc-hpc-partitions"><a class="header" href="#torc-hpc-partitions"><code>torc hpc partitions</code></a></h2>
 <p>Show partitions for an HPC profile</p>
 <p><strong>Usage:</strong> <code>torc hpc partitions [OPTIONS] [NAME]</code></p>
-<h6 id="arguments-88"><a class="header" href="#arguments-88"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-85"><a class="header" href="#arguments-85"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>[NAME]</code> — Profile name (e.g., "kestrel", "slurm"). If not specified, tries to detect current
 system.</li>
 </ul>
-<h6 id="options-61"><a class="header" href="#options-61"><strong>Options:</strong></a></h6>
+<h6 id="options-58"><a class="header" href="#options-58"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--gpu</code> — Filter to GPU partitions only</li>
 <li><code>--shared</code> — Filter to shared partitions</li>
@@ -9624,11 +9601,11 @@ system.</li>
 <h2 id="torc-hpc-match"><a class="header" href="#torc-hpc-match"><code>torc hpc match</code></a></h2>
 <p>Find partitions matching resource requirements</p>
 <p><strong>Usage:</strong> <code>torc hpc match [OPTIONS] [PROFILE]</code></p>
-<h6 id="arguments-89"><a class="header" href="#arguments-89"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-86"><a class="header" href="#arguments-86"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>[PROFILE]</code> — Profile name (if not specified, tries to detect current system)</li>
 </ul>
-<h6 id="options-62"><a class="header" href="#options-62"><strong>Options:</strong></a></h6>
+<h6 id="options-59"><a class="header" href="#options-59"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--cpus &lt;CPUS&gt;</code> — Number of CPUs required</li>
 <li><code>--memory &lt;MEMORY&gt;</code> — Memory required (e.g., "100g", "512m", or MB as number)</li>
@@ -9638,7 +9615,7 @@ system.</li>
 <h2 id="torc-hpc-generate"><a class="header" href="#torc-hpc-generate"><code>torc hpc generate</code></a></h2>
 <p>Generate an HPC profile configuration from the current Slurm cluster</p>
 <p><strong>Usage:</strong> <code>torc hpc generate [OPTIONS]</code></p>
-<h6 id="options-63"><a class="header" href="#options-63"><strong>Options:</strong></a></h6>
+<h6 id="options-60"><a class="header" href="#options-60"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-n</code>, <code>--name &lt;NAME&gt;</code> — Profile name (e.g., "kestrel")</li>
 <li><code>-d</code>, <code>--display-name &lt;DISPLAY_NAME&gt;</code> — Human-readable display name</li>
@@ -9655,14 +9632,14 @@ specified requirements</li>
 <li><code>results</code> — Generate a comprehensive JSON report of job results including all log file paths</li>
 <li><code>summary</code> — Generate a summary of workflow results (requires workflow to be complete)</li>
 </ul>
-<h2 id="torc-reports-check-resource-utilization"><a class="header" href="#torc-reports-check-resource-utilization"><code>torc reports check-resource-utilization</code></a></h2>
+<h2 id="torc-workflows-check-resources"><a class="header" href="#torc-workflows-check-resources"><code>torc workflows check-resources</code></a></h2>
 <p>Check resource utilization and report jobs that exceeded their specified requirements</p>
-<p><strong>Usage:</strong> <code>torc reports check-resource-utilization [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-90"><a class="header" href="#arguments-90"><strong>Arguments:</strong></a></h6>
+<p><strong>Usage:</strong> <code>torc workflows check-resources [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-87"><a class="header" href="#arguments-87"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID to analyze (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-64"><a class="header" href="#options-64"><strong>Options:</strong></a></h6>
+<h6 id="options-61"><a class="header" href="#options-61"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-r</code>, <code>--run-id &lt;RUN_ID&gt;</code> — Run ID to analyze (optional - analyzes latest run if not provided)</li>
 <li><code>-a</code>, <code>--all</code> — Show all jobs (default: only show jobs that exceeded requirements)</li>
@@ -9670,23 +9647,23 @@ specified requirements</li>
 <li><code>--min-over-utilization &lt;MIN_OVER_UTILIZATION&gt;</code> — Minimum over-utilization percentage to flag as
 violation (default: 1.0%)</li>
 </ul>
-<h2 id="torc-reports-results"><a class="header" href="#torc-reports-results"><code>torc reports results</code></a></h2>
+<h2 id="torc-results-list---include-logs"><a class="header" href="#torc-results-list---include-logs"><code>torc results list --include-logs</code></a></h2>
 <p>Generate a comprehensive JSON report of job results including all log file paths</p>
-<p><strong>Usage:</strong> <code>torc reports results [OPTIONS] [WORKFLOW_ID]</code></p>
-<h6 id="arguments-91"><a class="header" href="#arguments-91"><strong>Arguments:</strong></a></h6>
+<p><strong>Usage:</strong> <code>torc results list --include-logs [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-88"><a class="header" href="#arguments-88"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID to analyze (optional - will prompt if not provided)</li>
 </ul>
-<h6 id="options-65"><a class="header" href="#options-65"><strong>Options:</strong></a></h6>
+<h6 id="options-62"><a class="header" href="#options-62"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory (where job logs are stored, passed in
 <code>torc run</code> and <code>torc submit</code>). Default: <code>output</code></li>
 <li><code>--all-runs</code> — Include all runs for each job (default: only latest run)</li>
 </ul>
-<h2 id="torc-reports-summary"><a class="header" href="#torc-reports-summary"><code>torc reports summary</code></a></h2>
+<h2 id="torc-status-1"><a class="header" href="#torc-status-1"><code>torc status</code></a></h2>
 <p>Generate a summary of workflow results (requires workflow to be complete)</p>
-<p><strong>Usage:</strong> <code>torc reports summary [WORKFLOW_ID]</code></p>
-<h6 id="arguments-92"><a class="header" href="#arguments-92"><strong>Arguments:</strong></a></h6>
+<p><strong>Usage:</strong> <code>torc status [WORKFLOW_ID]</code></p>
+<h6 id="arguments-89"><a class="header" href="#arguments-89"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID to summarize (optional - will prompt if not provided)</li>
 </ul>
@@ -9703,7 +9680,7 @@ violation (default: 1.0%)</li>
 <h2 id="torc-config-show"><a class="header" href="#torc-config-show"><code>torc config show</code></a></h2>
 <p>Show the effective configuration (merged from all sources)</p>
 <p><strong>Usage:</strong> <code>torc config show [OPTIONS]</code></p>
-<h6 id="options-66"><a class="header" href="#options-66"><strong>Options:</strong></a></h6>
+<h6 id="options-63"><a class="header" href="#options-63"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-f</code>, <code>--format &lt;FORMAT&gt;</code> — Output format (toml or json). Default: <code>toml</code></li>
 </ul>
@@ -9713,7 +9690,7 @@ violation (default: 1.0%)</li>
 <h2 id="torc-config-init"><a class="header" href="#torc-config-init"><code>torc config init</code></a></h2>
 <p>Initialize a configuration file with defaults</p>
 <p><strong>Usage:</strong> <code>torc config init [OPTIONS]</code></p>
-<h6 id="options-67"><a class="header" href="#options-67"><strong>Options:</strong></a></h6>
+<h6 id="options-64"><a class="header" href="#options-64"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--system</code> — Create system-wide config (/etc/torc/config.toml)</li>
 <li><code>--user</code> — Create user config (~/.config/torc/config.toml)</li>
@@ -9726,7 +9703,7 @@ violation (default: 1.0%)</li>
 <h2 id="torc-tui"><a class="header" href="#torc-tui"><code>torc tui</code></a></h2>
 <p>Interactive terminal UI for managing workflows</p>
 <p><strong>Usage:</strong> <code>torc tui [OPTIONS]</code></p>
-<h6 id="options-68"><a class="header" href="#options-68"><strong>Options:</strong></a></h6>
+<h6 id="options-65"><a class="header" href="#options-65"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--standalone</code> — Start in standalone mode: automatically start a torc-server</li>
 <li><code>--port &lt;PORT&gt;</code> — Port for the server in standalone mode. Default: <code>8080</code></li>
@@ -9735,11 +9712,11 @@ violation (default: 1.0%)</li>
 <h2 id="torc-plot-resources"><a class="header" href="#torc-plot-resources"><code>torc plot-resources</code></a></h2>
 <p>Generate interactive HTML plots from resource monitoring data</p>
 <p><strong>Usage:</strong> <code>torc plot-resources [OPTIONS] &lt;DB_PATHS&gt;...</code></p>
-<h6 id="arguments-93"><a class="header" href="#arguments-93"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-90"><a class="header" href="#arguments-90"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;DB_PATHS&gt;</code> — Path to the resource metrics database file(s)</li>
 </ul>
-<h6 id="options-69"><a class="header" href="#options-69"><strong>Options:</strong></a></h6>
+<h6 id="options-66"><a class="header" href="#options-66"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory for generated plots (default: current
 directory). Default: <code>.</code></li>
@@ -9750,7 +9727,7 @@ directory). Default: <code>.</code></li>
 <h2 id="torc-completions"><a class="header" href="#torc-completions"><code>torc completions</code></a></h2>
 <p>Generate shell completions</p>
 <p><strong>Usage:</strong> <code>torc completions &lt;SHELL&gt;</code></p>
-<h6 id="arguments-94"><a class="header" href="#arguments-94"><strong>Arguments:</strong></a></h6>
+<h6 id="arguments-91"><a class="header" href="#arguments-91"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;SHELL&gt;</code> — The shell to generate completions for. Possible values: <code>bash</code>, <code>elvish</code>, <code>fish</code>,
 <code>powershell</code>, <code>zsh</code></li>
@@ -10707,6 +10684,80 @@ jobs:
 <li><strong>Use case</strong>: Service accounts or when system username differs from Torc identity</li>
 </ul>
 <p><strong>Note</strong>: Does not affect Slurm job submission, which always uses the real system user.</p>
+<h3 id="torc_api_url-1"><a class="header" href="#torc_api_url-1">TORC_API_URL</a></h3>
+<p>The URL of the Torc API server for CLI operations.</p>
+<ul>
+<li><strong>Type</strong>: String (URL)</li>
+<li><strong>Default</strong>: <code>http://localhost:8080/torc-service/v1</code></li>
+<li><strong>Use case</strong>: Connect to a remote Torc server or custom port</li>
+</ul>
+<pre><code class="language-bash">export TORC_API_URL=http://myserver:8080/torc-service/v1
+torc workflows list
+</code></pre>
+<p><strong>Note</strong>: Can also be set via the <code>--url</code> CLI flag.</p>
+<h3 id="torc_password"><a class="header" href="#torc_password">TORC_PASSWORD</a></h3>
+<p>Password for HTTP Basic authentication with the Torc server.</p>
+<ul>
+<li><strong>Type</strong>: String</li>
+<li><strong>Default</strong>: None (no authentication)</li>
+<li><strong>Use case</strong>: Authenticate with a password-protected Torc server</li>
+</ul>
+<pre><code class="language-bash">export TORC_PASSWORD=mysecretpassword
+torc workflows list
+</code></pre>
+<p><strong>Note</strong>: Username comes from <code>TORC_USERNAME</code> or system username. See
+<a href="core/reference/../../specialized/admin/authentication.html">Authentication</a> for server setup.</p>
+<h3 id="torc_tls_ca_cert"><a class="header" href="#torc_tls_ca_cert">TORC_TLS_CA_CERT</a></h3>
+<p>Path to a custom CA certificate for TLS verification.</p>
+<ul>
+<li><strong>Type</strong>: String (file path)</li>
+<li><strong>Default</strong>: System CA certificates</li>
+<li><strong>Use case</strong>: Connect to servers using self-signed or internal CA certificates</li>
+</ul>
+<pre><code class="language-bash">export TORC_TLS_CA_CERT=/path/to/ca-cert.pem
+torc workflows list
+</code></pre>
+<h3 id="torc_tls_insecure"><a class="header" href="#torc_tls_insecure">TORC_TLS_INSECURE</a></h3>
+<p>Skip TLS certificate verification (use with caution).</p>
+<ul>
+<li><strong>Type</strong>: Boolean (<code>true</code> or <code>1</code> to enable)</li>
+<li><strong>Default</strong>: <code>false</code> (TLS verification enabled)</li>
+<li><strong>Use case</strong>: Development/testing with self-signed certificates</li>
+</ul>
+<pre><code class="language-bash">export TORC_TLS_INSECURE=true
+torc workflows list
+</code></pre>
+<p><strong>Warning</strong>: Disabling TLS verification exposes connections to man-in-the-middle attacks. Only use
+in trusted development environments.</p>
+<h3 id="torc_cookie_header"><a class="header" href="#torc_cookie_header">TORC_COOKIE_HEADER</a></h3>
+<p>Cookie header value for cookie-based authentication.</p>
+<ul>
+<li><strong>Type</strong>: String</li>
+<li><strong>Default</strong>: None</li>
+<li><strong>Use case</strong>: Authenticate via session cookies (e.g., when behind an authentication proxy)</li>
+</ul>
+<pre><code class="language-bash">export TORC_COOKIE_HEADER="session=abc123; token=xyz789"
+torc workflows list
+</code></pre>
+<h3 id="rust_log"><a class="header" href="#rust_log">RUST_LOG</a></h3>
+<p>Control log verbosity for the Torc CLI.</p>
+<ul>
+<li><strong>Type</strong>: String (log level)</li>
+<li><strong>Default</strong>: <code>warn</code></li>
+<li><strong>Values</strong>: <code>error</code>, <code>warn</code>, <code>info</code>, <code>debug</code>, <code>trace</code></li>
+<li><strong>Use case</strong>: Debug CLI issues or see detailed API interactions</li>
+</ul>
+<pre><code class="language-bash"># Show info-level logs
+export RUST_LOG=info
+torc workflows list
+
+# Show debug logs for torc modules only
+export RUST_LOG=torc=debug
+torc run workflow.yaml
+
+# Show SQL queries (server debugging)
+RUST_LOG=sqlx=debug torc-server run
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="resource-monitoring-reference"><a class="header" href="#resource-monitoring-reference">Resource Monitoring Reference</a></h1>
 <p>Technical reference for Torc's resource monitoring system.</p>
 <h2 id="configuration-options"><a class="header" href="#configuration-options">Configuration Options</a></h2>
@@ -11476,15 +11527,15 @@ workflows on HPC systems—Torc handles this automatically.</p>
 <p>Running a workflow on Slurm requires just two things:</p>
 <ol>
 <li><strong>Define your jobs with resource requirements</strong></li>
-<li><strong>Submit with <code>submit-slurm</code></strong></li>
+<li><strong>Submit with <code>slurm generate</code> + <code>submit</code></strong></li>
 </ol>
 <p>That's it. Torc will analyze your workflow, generate appropriate Slurm configurations, and submit
 everything for execution.</p>
 <blockquote>
-<p><strong>⚠️ Important:</strong> The <code>submit-slurm</code> command uses heuristics to auto-generate Slurm schedulers and
-workflow actions. For complex workflows with unusual dependency patterns, the generated
-configuration may not be optimal and could result in suboptimal allocation timing. <strong>Always
-preview the configuration first</strong> using <code>torc slurm generate</code> (see
+<p><strong>⚠️ Important:</strong> The <code>slurm generate</code> + <code>submit</code> command uses heuristics to auto-generate Slurm
+schedulers and workflow actions. For complex workflows with unusual dependency patterns, the
+generated configuration may not be optimal and could result in suboptimal allocation timing.
+<strong>Always preview the configuration first</strong> using <code>torc slurm generate</code> (see
 <a href="specialized/hpc/slurm-workflows.html#previewing-generated-configuration">Previewing Generated Configuration</a>) before submitting
 production workflows.</p>
 </blockquote>
@@ -11531,7 +11582,8 @@ jobs:
     depends_on: [evaluate]
 </code></pre>
 <h3 id="submitting-the-workflow"><a class="header" href="#submitting-the-workflow">Submitting the Workflow</a></h3>
-<pre><code class="language-bash">torc submit-slurm --account myproject workflow.yaml
+<pre><code class="language-bash">torc slurm generate --account myproject workflow.yaml
+torc submit workflow.yaml
 </code></pre>
 <p>Torc will:</p>
 <ol>
@@ -11542,7 +11594,7 @@ jobs:
 <li>Submit the workflow for execution</li>
 </ol>
 <h2 id="how-it-works-4"><a class="header" href="#how-it-works-4">How It Works</a></h2>
-<p>When you use <code>submit-slurm</code>, Torc performs intelligent analysis of your workflow:</p>
+<p>When you use <code>slurm generate</code> + <code>submit</code>, Torc performs intelligent analysis of your workflow:</p>
 <h3 id="1-per-job-scheduler-generation"><a class="header" href="#1-per-job-scheduler-generation">1. Per-Job Scheduler Generation</a></h3>
 <p>Each job gets its own Slurm scheduler configuration based on its resource requirements. This means:</p>
 <ul>
@@ -11851,11 +11903,12 @@ jobs:
 torc run workflow.yaml
 
 # Then submit to HPC
-torc submit-slurm --account myproject workflow.yaml
+torc slurm generate --account myproject workflow.yaml
+torc submit workflow.yaml
 </code></pre>
 <h2 id="limitations-and-caveats"><a class="header" href="#limitations-and-caveats">Limitations and Caveats</a></h2>
-<p>The auto-generation in <code>submit-slurm</code> uses heuristics that work well for common workflow patterns
-but may not be optimal for all cases:</p>
+<p>The auto-generation in <code>torc slurm generate</code> uses heuristics that work well for common workflow
+patterns but may not be optimal for all cases:</p>
 <h3 id="when-auto-generation-works-well"><a class="header" href="#when-auto-generation-works-well">When Auto-Generation Works Well</a></h3>
 <ul>
 <li><strong>Linear pipelines</strong>: A → B → C → D</li>
@@ -11924,7 +11977,9 @@ and DAG visualization</li>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="submitting-slurm-workflows"><a class="header" href="#submitting-slurm-workflows">Submitting Slurm Workflows</a></h1>
 <p>Submit a workflow specification to a Slurm-based HPC system with automatic scheduler generation.</p>
 <h2 id="quick-start-5"><a class="header" href="#quick-start-5">Quick Start</a></h2>
-<pre><code class="language-bash">torc submit-slurm --account &lt;your-account&gt; workflow.yaml
+<p>Generate Slurm schedulers and submit in two steps:</p>
+<pre><code class="language-bash">torc slurm generate --account &lt;your-account&gt; workflow.yaml
+torc submit workflow.yaml
 </code></pre>
 <p>Torc will:</p>
 <ol>
@@ -11934,10 +11989,10 @@ and DAG visualization</li>
 <li>Submit everything for execution</li>
 </ol>
 <h2 id="preview-before-submitting-1"><a class="header" href="#preview-before-submitting-1">Preview Before Submitting</a></h2>
-<p>Always preview the generated configuration first:</p>
-<pre><code class="language-bash">torc slurm generate --account &lt;your-account&gt; workflow.yaml
+<p>Preview the generated configuration without creating anything:</p>
+<pre><code class="language-bash">torc slurm generate --account &lt;your-account&gt; --dry-run workflow.yaml
 </code></pre>
-<p>This shows the Slurm schedulers and workflow actions that would be created without submitting.</p>
+<p>This shows the Slurm schedulers and workflow actions that would be created.</p>
 <h2 id="requirements"><a class="header" href="#requirements">Requirements</a></h2>
 <p>Your workflow must define resource requirements for jobs:</p>
 <pre><code class="language-yaml">name: my_workflow
@@ -11953,9 +12008,10 @@ jobs:
     command: python process.py
     resource_requirements: standard
 </code></pre>
-<h2 id="options-70"><a class="header" href="#options-70">Options</a></h2>
+<h2 id="options-67"><a class="header" href="#options-67">Options</a></h2>
 <pre><code class="language-bash"># See all options
-torc submit-slurm --help
+torc slurm generate --help
+torc submit --help
 </code></pre>
 <h2 id="see-also-20"><a class="header" href="#see-also-20">See Also</a></h2>
 <ul>
@@ -12315,7 +12371,8 @@ wrap the command with <code>srun</code>.</p>
 schedule them independently across nodes for maximum throughput.</p>
 <h2 id="see-also-21"><a class="header" href="#see-also-21">See Also</a></h2>
 <ul>
-<li><a href="specialized/hpc/./slurm-workflows.html">Slurm Overview</a> — Auto-generated Slurm configuration with <code>submit-slurm</code></li>
+<li><a href="specialized/hpc/./slurm-workflows.html">Slurm Overview</a> — Auto-generated Slurm configuration with
+<code>slurm generate</code> + <code>submit</code></li>
 <li><a href="specialized/hpc/./slurm.html">Advanced Slurm Configuration</a> — Manual scheduler and srun wrapping details</li>
 <li><a href="specialized/hpc/../../core/reference/resources.html">Resource Requirements Reference</a> — Complete field reference</li>
 </ul>
@@ -12324,8 +12381,8 @@ schedule them independently across nodes for maximum throughput.</p>
 HPC workflows.</p>
 <blockquote>
 <p><strong>For most users</strong>: See <a href="specialized/hpc/./slurm-workflows.html">Slurm Overview</a> for the recommended approach using
-<code>torc submit-slurm</code>. You don't need to manually configure schedulers or actions—Torc handles this
-automatically.</p>
+<code>torc slurm generate</code> + <code>torc submit</code>. You don't need to manually configure schedulers or
+actions—Torc handles this automatically.</p>
 </blockquote>
 <h2 id="when-to-use-manual-configuration-1"><a class="header" href="#when-to-use-manual-configuration-1">When to Use Manual Configuration</a></h2>
 <p>Manual Slurm configuration is useful when you need:</p>
@@ -12523,8 +12580,8 @@ actions:
     num_allocations: 1
 </code></pre>
 <blockquote>
-<p><strong>Note</strong>: The <code>torc submit-slurm</code> command handles this automatically by analyzing job
-dependencies.</p>
+<p><strong>Note</strong>: The <code>torc slurm generate</code> + <code>torc submit</code> command handles this automatically by
+analyzing job dependencies.</p>
 </blockquote>
 <h2 id="custom-slurm-directives"><a class="header" href="#custom-slurm-directives">Custom Slurm Directives</a></h2>
 <p>Use the <code>extra</code> field for additional sbatch arguments:</p>
@@ -12699,7 +12756,7 @@ $ torc slurm sacct $WORKFLOW_ID
 ╰──────────────────────┴───────────────┴──────────╯
 </code></pre>
 <p><strong>Fix:</strong> Increase <code>memory</code> in resource requirements, or use
-<code>torc reports check-resource-utilization --correct</code> to auto-adjust based on peak usage.</p>
+<code>torc workflows check-resources --correct</code> to auto-adjust based on peak usage.</p>
 <h3 id="timeout-with-graceful-shutdown-exit-code-0"><a class="header" href="#timeout-with-graceful-shutdown-exit-code-0">Timeout with Graceful Shutdown (exit code 0)</a></h3>
 <p>The job received SIGTERM via <code>srun --signal</code>, saved a checkpoint, and called <code>sys.exit(0)</code>. From
 Slurm's perspective, the job completed normally.</p>
@@ -12713,8 +12770,8 @@ Slurm's perspective, the job completed normally.</p>
 <p>This is the expected outcome when using <code>srun_termination_signal</code>. The job handled the signal
 correctly but did not finish all its work. Reinitialize and re-submit to continue from the
 checkpoint:</p>
-<pre><code class="language-bash">torc workflows reinitialize $WORKFLOW_ID
-torc workflows submit $WORKFLOW_ID
+<pre><code class="language-bash">torc workflows reinit $WORKFLOW_ID
+torc submit $WORKFLOW_ID
 </code></pre>
 <p>See the <a href="specialized/hpc/../fault-tolerance/checkpointing.html">Graceful Job Termination</a> tutorial for a complete
 example with a Python signal handler.</p>
@@ -13003,7 +13060,7 @@ cat torc_output/sacct_&lt;slurm_job_id&gt;.json | jq '.jobs[].steps[].tres.reque
 </li>
 <li>
 <p><strong>Check the job's own stderr for application errors:</strong></p>
-<pre><code class="language-bash">torc reports results &lt;workflow_id&gt; &gt; report.json
+<pre><code class="language-bash">torc results list --include-logs &lt;workflow_id&gt; &gt; report.json
 jq -r '.results[] | select(.return_code != 0) | .job_stderr' report.json | xargs cat
 </code></pre>
 </li>
@@ -13122,7 +13179,7 @@ when:</p>
 <li><strong><code>torc slurm parse-logs</code></strong>: Parse Slurm logs for known error patterns</li>
 <li><strong><code>torc slurm sacct</code></strong>: Collect Slurm accounting data for workflow jobs</li>
 <li><strong><code>torc workflows sync-status</code></strong>: Detect and fix orphaned jobs from terminated Slurm allocations</li>
-<li><strong><code>torc reports results</code></strong>: Generate debug report with all log file paths</li>
+<li><strong><code>torc results list --include-logs</code></strong>: Generate debug report with all log file paths</li>
 <li><strong><code>torc results list</code></strong>: View summary of job results in table format</li>
 <li><strong><code>torc-dash</code></strong>: Launch web interface with Slurm log viewing</li>
 <li><strong><code>torc tui</code></strong>: Launch terminal UI with Slurm log viewing</li>
@@ -13247,8 +13304,8 @@ shared = false
 <p>HPC profiles are used by Slurm-related commands to automatically generate scheduler configurations.
 See <a href="specialized/hpc/./slurm.html">Advanced Slurm Configuration</a> for details on:</p>
 <ul>
-<li><code>torc submit-slurm</code> - Submit workflows with auto-generated schedulers</li>
-<li><code>torc workflows create-slurm</code> - Create workflows with auto-generated schedulers</li>
+<li><code>torc slurm generate</code> + <code>torc submit</code> - Submit workflows with auto-generated schedulers</li>
+<li><code>torc create-slurm</code> - Create workflows with auto-generated schedulers</li>
 </ul>
 <h2 id="see-also-24"><a class="header" href="#see-also-24">See Also</a></h2>
 <ul>
@@ -14048,10 +14105,10 @@ jobs:
 <h2 id="step-7-use-your-profile"><a class="header" href="#step-7-use-your-profile">Step 7: Use Your Profile</a></h2>
 <p>Now you can submit workflows using your custom profile:</p>
 <pre><code class="language-bash"># Auto-detect the profile (if on the cluster)
-torc submit-slurm --account my_project workflow.yaml
+torc slurm generate --account my_project workflow.yaml &amp;&amp; torc submit workflow.yaml
 
 # Or explicitly specify the profile
-torc submit-slurm --account my_project --hpc-profile research workflow.yaml
+torc slurm generate --account my_project --hpc-profile &amp;&amp; torc submit --hpc-profile research workflow.yaml
 </code></pre>
 <h2 id="advanced-configuration"><a class="header" href="#advanced-configuration">Advanced Configuration</a></h2>
 <h3 id="hostname-based-detection"><a class="header" href="#hostname-based-detection">Hostname-Based Detection</a></h3>
@@ -14147,7 +14204,7 @@ information and we'll add it for you.</p>
 <p>Torc supports three execution modes:</p>
 <ol>
 <li><strong>Local</strong> (<code>torc run</code>) - Jobs run on the current machine</li>
-<li><strong>HPC</strong> (<code>torc submit-slurm</code>) - Jobs run on Slurm-allocated nodes</li>
+<li><strong>HPC</strong> (<code>torc slurm generate</code> + <code>torc submit</code>) - Jobs run on Slurm-allocated nodes</li>
 <li><strong>Remote Workers</strong> (<code>torc remote run</code>) - Jobs run on SSH-accessible machines</li>
 </ol>
 <p>Remote workers are ideal for:</p>
@@ -14287,7 +14344,7 @@ torc remote collect-logs 42 --delete
 <ol>
 <li>
 <p><strong>Create a workflow:</strong></p>
-<pre><code class="language-console">torc workflows create my_workflow.yaml
+<pre><code class="language-console">torc create my_workflow.yaml
 </code></pre>
 </li>
 <li>
@@ -14387,7 +14444,7 @@ production).</p>
 <h3 id="workers-not-claiming-jobs"><a class="header" href="#workers-not-claiming-jobs">Workers Not Claiming Jobs</a></h3>
 <p>If workers start but don't claim jobs:</p>
 <ol>
-<li>Check the workflow is initialized: <code>torc workflows status &lt;id&gt;</code></li>
+<li>Check the workflow is initialized: <code>torc status &lt;id&gt;</code></li>
 <li>Check jobs are ready: <code>torc jobs list &lt;id&gt;</code></li>
 <li>Check resource requirements match available resources</li>
 </ol>
@@ -14517,7 +14574,7 @@ torc recover 42
 unexpectedly, leaving jobs stuck in "running" status. This is done automatically before checking
 preconditions.</p>
 </blockquote>
-<h3 id="options-71"><a class="header" href="#options-71">Options</a></h3>
+<h3 id="options-68"><a class="header" href="#options-68">Options</a></h3>
 <pre><code class="language-bash">torc recover &lt;workflow_id&gt; \
   --memory-multiplier 1.5 \     # Memory increase factor for OOM (default: 1.5)
   --runtime-multiplier 1.4 \    # Runtime increase factor for timeout (default: 1.4)
@@ -14553,7 +14610,7 @@ Reset 1 job(s). Slurm schedulers regenerated and submitted.
 <li>Resume monitoring</li>
 <li>Repeat until success (or max retries exceeded, if <code>--max-retries</code> is set)</li>
 </ol>
-<h3 id="options-72"><a class="header" href="#options-72">Options</a></h3>
+<h3 id="options-69"><a class="header" href="#options-69">Options</a></h3>
 <pre><code class="language-bash">torc watch &lt;workflow_id&gt; \
   -r \                          # Enable automatic recovery (--recover)
   -m 5 \                        # Optional: limit recovery attempts (--max-retries)
@@ -14631,7 +14688,7 @@ after the cooldown period.</p>
 those retries get scheduled without manual intervention.</p>
 <h3 id="example-failure-handler-with-auto-scheduling"><a class="header" href="#example-failure-handler-with-auto-scheduling">Example: Failure Handler with Auto-Scheduling</a></h3>
 <pre><code class="language-bash"># Submit a workflow with failure handlers
-torc submit-slurm --account my_project workflow.yaml
+torc slurm generate --account my_project workflow.yaml &amp;&amp; torc submit workflow.yaml
 
 # Watch with auto-scheduling enabled (uses defaults)
 torc watch $WORKFLOW_ID --auto-schedule
@@ -14654,7 +14711,7 @@ torc watch $WORKFLOW_ID --auto-schedule
 </div>
 <h2 id="complete-workflow-example"><a class="header" href="#complete-workflow-example">Complete Workflow Example</a></h2>
 <h3 id="1-submit-a-workflow"><a class="header" href="#1-submit-a-workflow">1. Submit a Workflow</a></h3>
-<pre><code class="language-bash">torc submit-slurm --account myproject workflow.yaml
+<pre><code class="language-bash">torc slurm generate --account myproject workflow.yaml &amp;&amp; torc submit workflow.yaml
 </code></pre>
 <p>Output:</p>
 <pre><code>Created workflow 42 with 100 jobs
@@ -14818,7 +14875,7 @@ torc watch 42 --recover --poll-interval 300 --show-job-counts
 </code></pre>
 <h3 id="5-check-resource-utilization-afterward"><a class="header" href="#5-check-resource-utilization-afterward">5. Check Resource Utilization Afterward</a></h3>
 <p>After completion, review actual usage:</p>
-<pre><code class="language-bash">torc reports check-resource-utilization 42
+<pre><code class="language-bash">torc workflows check-resources 42
 </code></pre>
 <p>This helps tune future job specifications.</p>
 <h2 id="troubleshooting-9"><a class="header" href="#troubleshooting-9">Troubleshooting</a></h2>
@@ -14878,7 +14935,7 @@ for more details.</p>
 <li>On completion, check for failures</li>
 <li>If failures and recover enabled:
 <ul>
-<li>Run <code>torc reports check-resource-utilization --include-failed</code></li>
+<li>Run <code>torc workflows check-resources --include-failed</code></li>
 <li>Parse results for <code>likely_oom</code> and <code>likely_timeout</code> flags</li>
 <li>Update resource requirements via API</li>
 <li>Run <code>torc workflows reset-status --failed-only --reinitialize</code></li>
@@ -15166,7 +15223,7 @@ retries.</p>
 <p>Use <code>torc watch --auto-schedule</code> to automatically submit new Slurm allocations when retry jobs are
 waiting:</p>
 <pre><code class="language-bash"># Submit a workflow with failure handlers
-torc submit-slurm --account my_project workflow.yaml
+torc slurm generate --account my_project workflow.yaml &amp;&amp; torc submit workflow.yaml
 
 # Watch with auto-scheduling enabled (uses defaults)
 torc watch $WORKFLOW_ID --auto-schedule
@@ -15188,7 +15245,7 @@ than the stranded timeout, schedulers are submitted anyway. This prevents jobs f
 stranded indefinitely when not enough failures occur to reach the threshold.</p>
 </li>
 </ol>
-<h3 id="options-73"><a class="header" href="#options-73">Options</a></h3>
+<h3 id="options-70"><a class="header" href="#options-70">Options</a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Option</th><th>Default</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>--auto-schedule</code></td><td>false</td><td>Enable automatic scheduling for stranded jobs</td></tr>
 <tr><td><code>--auto-schedule-threshold</code></td><td>5</td><td>Minimum retry jobs before scheduling (when active)</td></tr>
@@ -15649,8 +15706,8 @@ torc jobs list $WORKFLOW_ID --status pending_failed
 # (via MCP tools list_pending_failed_jobs and classify_and_resolve_failures)
 
 # After AI classification, reinitialize and continue
-torc workflows reinitialize $WORKFLOW_ID
-torc workflows run $WORKFLOW_ID
+torc workflows reinit $WORKFLOW_ID
+torc run $WORKFLOW_ID
 </code></pre>
 <h2 id="custom-mcp-servers"><a class="header" href="#custom-mcp-servers">Custom MCP Servers</a></h2>
 <p>You can create domain-specific MCP servers that the AI agent uses alongside torc:</p>
@@ -15949,10 +16006,12 @@ with code 0 once it finishes, so unused retries cost nothing.</p>
 </li>
 </ul>
 <h2 id="step-3-submit-and-run"><a class="header" href="#step-3-submit-and-run">Step 3: Submit and Run</a></h2>
-<pre><code class="language-bash">torc submit-slurm --account my_project graceful_termination.yaml
-</code></pre>
-<p>Or, if you already have schedulers configured in the spec:</p>
+<p>Since the spec already includes <code>slurm_schedulers</code> and <code>actions</code>, submit directly:</p>
 <pre><code class="language-bash">torc submit graceful_termination.yaml
+</code></pre>
+<p>Or, if you prefer to auto-generate schedulers from job resource requirements:</p>
+<pre><code class="language-bash">torc slurm generate --account my_project -o graceful_termination.yaml graceful_termination.yaml
+torc submit graceful_termination.yaml
 </code></pre>
 <h2 id="step-4-observe-the-behavior"><a class="header" href="#step-4-observe-the-behavior">Step 4: Observe the Behavior</a></h2>
 <p>Monitor the workflow:</p>
@@ -16496,7 +16555,7 @@ export TORC_CLIENT__API_URL="${CI_TORC_SERVER}"
 export TORC_CLIENT__FORMAT="json"
 
 torc run workflow.yaml
-result=$(torc workflows status $WORKFLOW_ID | jq -r '.status')
+result=$(torc status $WORKFLOW_ID | jq -r '.status')
 </code></pre>
 <h3 id="hpc-cluster"><a class="header" href="#hpc-cluster">HPC Cluster</a></h3>
 <pre><code class="language-toml"># Project-local torc.toml
@@ -16718,8 +16777,8 @@ export TORC_PASSWORD="${TORC_PASSWORD}"
 export TORC_API_URL=https://torc.hpc.nrel.gov:8080/torc-service/v1
 
 # Run workflow
-torc workflows create pipeline.yaml
-torc workflows start "${WORKFLOW_ID}"
+torc create pipeline.yaml
+torc submit "${WORKFLOW_ID}"
 </code></pre>
 <h3 id="remote-user-registration-hpc-environments"><a class="header" href="#remote-user-registration-hpc-environments">Remote User Registration (HPC Environments)</a></h3>
 <p>When users cannot directly access the server (e.g., HPC users connecting to a server they don't have
@@ -16912,13 +16971,13 @@ ca_cert = "/shared/certs/corporate-ca.pem"
 <p>If the connection succeeds, you're done. All Torc components — CLI, TUI, job runners, MCP server,
 and dashboard — use these settings automatically.</p>
 <h2 id="slurm--hpc"><a class="header" href="#slurm--hpc">Slurm / HPC</a></h2>
-<p>When you submit a workflow with <code>torc submit-slurm</code>, TLS settings from your config file (or CLI
-flags) are automatically propagated as CLI flags on the <code>torc-slurm-job-runner</code> command that runs on
-compute nodes. No extra environment variable setup is needed.</p>
+<p>When you submit a workflow with <code>torc slurm generate</code> + <code>torc submit</code>, TLS settings from your config
+file (or CLI flags) are automatically propagated as CLI flags on the <code>torc-slurm-job-runner</code> command
+that runs on compute nodes. No extra environment variable setup is needed.</p>
 <p>The only requirement is that the CA certificate file must be on a <strong>shared filesystem</strong> accessible
 from all compute nodes.</p>
 <pre><code class="language-bash"># Your config file handles TLS — just submit as normal
-torc submit-slurm --account myproject workflow.yaml
+torc slurm generate --account myproject workflow.yaml &amp;&amp; torc submit workflow.yaml
 </code></pre>
 <h2 id="advanced-configuration-1"><a class="header" href="#advanced-configuration-1">Advanced Configuration</a></h2>
 <h3 id="cli-flags"><a class="header" href="#cli-flags">CLI Flags</a></h3>
@@ -17105,7 +17164,7 @@ torc access-groups add-user 1 bob
 </code></pre>
 <h3 id="sharing-a-workflow-with-a-team"><a class="header" href="#sharing-a-workflow-with-a-team">Sharing a Workflow with a Team</a></h3>
 <pre><code class="language-bash"># 1. Create a workflow (using any method)
-torc workflows create examples/sample_workflow.yaml
+torc create examples/sample_workflow.yaml
 # Output: Created workflow 42
 
 # 2. Add the workflow to the team's group
@@ -17372,7 +17431,7 @@ resource_requirements:
     runtime: PT10M
 EOF
 
-WORKFLOW_ID=$(torc workflows create /tmp/ml_training.yaml -f json | jq -r '.id')
+WORKFLOW_ID=$(torc create /tmp/ml_training.yaml -f json | jq -r '.id')
 echo "Alice created workflow: $WORKFLOW_ID"
 </code></pre>
 <h3 id="as-carol-data-team"><a class="header" href="#as-carol-data-team">As Carol (Data Team)</a></h3>
@@ -17395,7 +17454,7 @@ resource_requirements:
     runtime: PT10M
 EOF
 
-torc workflows create /tmp/data_pipeline.yaml
+torc create /tmp/data_pipeline.yaml
 </code></pre>
 <h2 id="step-7-observe-access-control-in-action"><a class="header" href="#step-7-observe-access-control-in-action">Step 7: Observe Access Control in Action</a></h2>
 <h3 id="carol-cannot-access-alices-workflow"><a class="header" href="#carol-cannot-access-alices-workflow">Carol Cannot Access Alice's Workflow</a></h3>
@@ -17779,7 +17838,7 @@ torc alice workflows list
 Password: ****
 
 # Acceptable: CI/CD with secrets
-TORC_PASSWORD=${{ secrets.TORC_PASSWORD }} torc workflows create
+TORC_PASSWORD=${{ secrets.TORC_PASSWORD }} torc create
 
 # Bad: Command-line argument (visible in `ps`)
 torc --password mypassword workflows list
@@ -18788,7 +18847,7 @@ because torc-dash binds to 127.0.0.1 by default.</p>
 </ol>
 <p><strong>Via CLI:</strong></p>
 <pre><code class="language-bash"># Create workflow with Slurm actions
-torc workflows create my_slurm_workflow.yaml
+torc create my_slurm_workflow.yaml
 
 # Submit to Slurm
 torc submit &lt;workflow_id&gt;
@@ -18882,8 +18941,8 @@ torc-dash binds (127.0.0.1:8090).</p>
 export TORC_API_URL="http://shared-server:8080/torc-service/v1"
 
 # Create and run workflows
-torc workflows create my_workflow.yaml
-torc workflows run &lt;workflow_id&gt;
+torc create my_workflow.yaml
+torc run &lt;workflow_id&gt;
 </code></pre>
 <h3 id="authentication-1"><a class="header" href="#authentication-1">Authentication</a></h3>
 <p>For multi-user environments, enable authentication:</p>
@@ -20225,7 +20284,7 @@ torc --url &lt;type-url&gt;
 torc --format &lt;TAB&gt;   # table, json
 
 # Complex commands
-torc workflows create --&lt;TAB&gt;
+torc create --&lt;TAB&gt;
 # Shows all available flags for the create command
 </code></pre>
 <h2 id="updating-completions"><a class="header" href="#updating-completions">Updating Completions</a></h2>
@@ -20428,6 +20487,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 <p>Internal design documentation for developers.</p>
 <ul>
 <li><a href="specialized/design/./client.html">Client Architecture</a> - Torc client design</li>
+<li><a href="specialized/design/./http-api.html">HTTP API Design</a> - REST API conventions and design principles</li>
 <li><a href="specialized/design/./workflow-actions.html">Workflow Actions</a> - Workflow action system</li>
 <li><a href="specialized/design/./dashboard.html">Web Dashboard Design</a> - Dashboard architecture</li>
 <li><a href="specialized/design/./server.html">Server API Handler</a> - Server implementation</li>
@@ -20493,6 +20553,276 @@ examples.</p>
 </ul>
 <p>See <a href="specialized/design/../../core/workflows/creating-workflows.html#using-the-julia-api">Creating Workflows</a> for usage
 examples.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="http-api-design"><a class="header" href="#http-api-design">HTTP API Design</a></h1>
+<p>This document describes the design principles and conventions of Torc's HTTP API.</p>
+<h2 id="design-philosophy"><a class="header" href="#design-philosophy">Design Philosophy</a></h2>
+<p>The API follows REST conventions where appropriate, with pragmatic deviations for workflow
+orchestration operations that don't map cleanly to CRUD semantics.</p>
+<p><strong>Core principles:</strong></p>
+<ul>
+<li><strong>Resource-oriented</strong>: Primary entities (workflows, jobs, files) have standard CRUD endpoints</li>
+<li><strong>Predictable URLs</strong>: Consistent naming and structure across all resources</li>
+<li><strong>JSON everywhere</strong>: All request and response bodies use <code>application/json</code></li>
+<li><strong>Explicit over implicit</strong>: Required fields are marked required; optional fields have sensible
+defaults</li>
+</ul>
+<h2 id="base-url-and-versioning"><a class="header" href="#base-url-and-versioning">Base URL and Versioning</a></h2>
+<p>The API is served under a versioned base path:</p>
+<pre><code>/torc-service/v1
+</code></pre>
+<p><strong>Versioning strategy:</strong></p>
+<ul>
+<li>The version in the URL path (<code>v1</code>) represents the major API version</li>
+<li>The detailed version (e.g., <code>0.12.0</code>) is in the OpenAPI spec and server responses</li>
+<li>Breaking changes increment the major version; non-breaking changes increment minor/patch</li>
+<li>The version is single-sourced in <code>src/api_version.rs</code> and propagates to all artifacts</li>
+</ul>
+<h2 id="url-structure"><a class="header" href="#url-structure">URL Structure</a></h2>
+<h3 id="resource-collections"><a class="header" href="#resource-collections">Resource Collections</a></h3>
+<pre><code>GET    /resources              # List all (with pagination)
+POST   /resources              # Create new
+</code></pre>
+<h3 id="individual-resources"><a class="header" href="#individual-resources">Individual Resources</a></h3>
+<pre><code>GET    /resources/{id}         # Get by ID
+PUT    /resources/{id}         # Update (full replacement)
+PATCH  /resources/{id}         # Partial update (where supported)
+DELETE /resources/{id}         # Delete
+</code></pre>
+<h3 id="nested-resources"><a class="header" href="#nested-resources">Nested Resources</a></h3>
+<p>Resources that belong to a parent use nested URLs:</p>
+<pre><code>GET    /workflows/{id}/jobs              # Jobs in workflow
+GET    /workflows/{id}/files             # Files in workflow
+GET    /access_groups/{id}/members       # Members in group
+</code></pre>
+<h3 id="action-endpoints-rpc-style"><a class="header" href="#action-endpoints-rpc-style">Action Endpoints (RPC-Style)</a></h3>
+<p>Operations that don't map to CRUD use verb-based paths under the resource:</p>
+<pre><code>POST   /workflows/{id}/initialize_jobs           # Build dependency graph
+POST   /workflows/{id}/claim_next_jobs           # Atomically claim ready jobs
+POST   /workflows/{id}/cancel                    # Cancel workflow execution
+POST   /workflows/{id}/reset_status              # Reset workflow state
+POST   /workflows/{id}/process_changed_job_inputs # Detect and handle input changes
+POST   /jobs/{id}/complete                       # Mark job completed
+POST   /jobs/{id}/manage_status_change           # Transition job status
+</code></pre>
+<p><strong>When to use action endpoints:</strong></p>
+<ul>
+<li>Operations with side effects beyond simple CRUD</li>
+<li>Operations requiring atomicity (like <code>claim_next_jobs</code>)</li>
+<li>State machine transitions</li>
+<li>Batch operations</li>
+</ul>
+<h2 id="http-methods"><a class="header" href="#http-methods">HTTP Methods</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Method</th><th>Semantics</th><th>Idempotent</th><th>Request Body</th></tr></thead><tbody>
+<tr><td>GET</td><td>Read resource(s)</td><td>Yes</td><td>No</td></tr>
+<tr><td>POST</td><td>Create resource or trigger action</td><td>No</td><td>Yes</td></tr>
+<tr><td>PUT</td><td>Replace resource entirely</td><td>Yes</td><td>Yes</td></tr>
+<tr><td>PATCH</td><td>Partial update</td><td>No</td><td>Yes</td></tr>
+<tr><td>DELETE</td><td>Remove resource</td><td>Yes</td><td>No</td></tr>
+</tbody></table>
+</div>
+<p><strong>Notes:</strong></p>
+<ul>
+<li><code>PUT</code> expects the complete resource representation</li>
+<li><code>PATCH</code> accepts partial updates (only fields to change)</li>
+<li><code>DELETE</code> on non-existent resources returns 404 (not 204)</li>
+</ul>
+<h2 id="request-format"><a class="header" href="#request-format">Request Format</a></h2>
+<p>All request bodies use JSON with <code>Content-Type: application/json</code>.</p>
+<h3 id="creating-resources"><a class="header" href="#creating-resources">Creating Resources</a></h3>
+<pre><code class="language-json">POST /workflows
+{
+  "name": "my-workflow",
+  "user": "dthom",
+  "description": "Example workflow"
+}
+</code></pre>
+<h3 id="bulk-operations"><a class="header" href="#bulk-operations">Bulk Operations</a></h3>
+<p>Some endpoints accept arrays for batch creation:</p>
+<pre><code class="language-json">POST /bulk_jobs
+{
+  "jobs": [
+    {"name": "job1", "workflow_id": 1, "command": "echo hello"},
+    {"name": "job2", "workflow_id": 1, "command": "echo world"}
+  ]
+}
+</code></pre>
+<h2 id="response-format"><a class="header" href="#response-format">Response Format</a></h2>
+<h3 id="success-responses"><a class="header" href="#success-responses">Success Responses</a></h3>
+<p>Single resource:</p>
+<pre><code class="language-json">{
+  "id": 1,
+  "name": "my-workflow",
+  "user": "dthom",
+  "status": "ready"
+}
+</code></pre>
+<p>List response (with pagination metadata):</p>
+<pre><code class="language-json">{
+  "items": [...],
+  "offset": 0,
+  "count": 10,
+  "total_count": 42,
+  "max_limit": 10000,
+  "has_more": true
+}
+</code></pre>
+<h3 id="error-responses"><a class="header" href="#error-responses">Error Responses</a></h3>
+<p>All errors use the <code>ErrorResponse</code> schema:</p>
+<pre><code class="language-json">{
+  "error": {
+    "error": "NotFound",
+    "message": "Workflow 999 not found"
+  }
+}
+</code></pre>
+<p>Or with additional context:</p>
+<pre><code class="language-json">{
+  "error": {
+    "error": "ValidationError",
+    "message": "Invalid job status transition"
+  },
+  "errorMessage": "Cannot transition from 'completed' to 'ready'",
+  "code": 422
+}
+</code></pre>
+<h2 id="http-status-codes"><a class="header" href="#http-status-codes">HTTP Status Codes</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Code</th><th>Meaning</th><th>When Used</th></tr></thead><tbody>
+<tr><td>200</td><td>OK</td><td>Successful GET, PUT, PATCH, DELETE, or POST action</td></tr>
+<tr><td>201</td><td>Created</td><td>Resource created (some POST endpoints)</td></tr>
+<tr><td>400</td><td>Bad Request</td><td>Malformed JSON, missing required fields</td></tr>
+<tr><td>403</td><td>Forbidden</td><td>User lacks permission for this resource</td></tr>
+<tr><td>404</td><td>Not Found</td><td>Resource doesn't exist</td></tr>
+<tr><td>422</td><td>Unprocessable Entity</td><td>Valid JSON but invalid semantics (e.g., bad status transition)</td></tr>
+<tr><td>500</td><td>Internal Server Error</td><td>Unexpected server failure</td></tr>
+</tbody></table>
+</div>
+<h2 id="pagination"><a class="header" href="#pagination">Pagination</a></h2>
+<p>All list endpoints support offset-based pagination:</p>
+<div class="table-wrapper"><table><thead><tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>offset</code></td><td>integer</td><td>0</td><td>Number of records to skip</td></tr>
+<tr><td><code>limit</code></td><td>integer</td><td>10000</td><td>Maximum records to return</td></tr>
+</tbody></table>
+</div>
+<p><strong>Constraints:</strong></p>
+<ul>
+<li>Maximum <code>limit</code>: 10,000 records (enforced server-side)</li>
+<li>Response includes <code>has_more</code> boolean for client-side iteration</li>
+<li>Response includes <code>total_count</code> for progress indication</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code>GET /workflows?offset=0&amp;limit=50
+GET /workflows?offset=50&amp;limit=50  # Next page
+</code></pre>
+<h2 id="filtering-and-sorting"><a class="header" href="#filtering-and-sorting">Filtering and Sorting</a></h2>
+<h3 id="filtering"><a class="header" href="#filtering">Filtering</a></h3>
+<p>List endpoints support query parameters for filtering:</p>
+<pre><code>GET /workflows?user=dthom&amp;is_archived=false
+GET /jobs?workflow_id=1&amp;status=ready
+GET /compute_nodes?workflow_id=1&amp;is_active=true
+</code></pre>
+<p>Common filter parameters:</p>
+<ul>
+<li><code>workflow_id</code>: Filter by parent workflow (required for nested resources)</li>
+<li><code>name</code>: Filter by name (often substring match)</li>
+<li><code>user</code>: Filter by owner</li>
+<li><code>status</code>: Filter by status value</li>
+</ul>
+<h3 id="sorting"><a class="header" href="#sorting">Sorting</a></h3>
+<pre><code>GET /workflows?sort_by=created_at&amp;reverse_sort=true
+GET /jobs?sort_by=name&amp;reverse_sort=false
+</code></pre>
+<div class="table-wrapper"><table><thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>sort_by</code></td><td>string</td><td>Field name to sort by</td></tr>
+<tr><td><code>reverse_sort</code></td><td>boolean</td><td>If true, sort descending</td></tr>
+</tbody></table>
+</div>
+<h2 id="authentication-2"><a class="header" href="#authentication-2">Authentication</a></h2>
+<p>The server supports multiple authentication modes:</p>
+<h3 id="http-basic-auth"><a class="header" href="#http-basic-auth">HTTP Basic Auth</a></h3>
+<pre><code>Authorization: Basic base64(username:password)
+</code></pre>
+<p>Credentials are validated against an htpasswd file when <code>--htpasswd-file</code> is specified.</p>
+<h3 id="anonymous-access"><a class="header" href="#anonymous-access">Anonymous Access</a></h3>
+<p>When authentication is not enforced (<code>--no-auth</code> or no htpasswd file), requests are accepted with
+the username derived from the <code>X-Remote-User</code> header or defaulting to "anonymous".</p>
+<h3 id="authorization-model"><a class="header" href="#authorization-model">Authorization Model</a></h3>
+<p>Access control is resource-based:</p>
+<ol>
+<li><strong>Workflow ownership</strong>: Users can access workflows they own</li>
+<li><strong>Group membership</strong>: Users can access workflows shared with their groups</li>
+<li><strong>System administrators</strong>: Full access to all resources</li>
+</ol>
+<p>The <code>enforce_access_control</code> server flag controls whether authorization is checked.</p>
+<h2 id="resource-organization"><a class="header" href="#resource-organization">Resource Organization</a></h2>
+<p>The API is organized into logical resource groups (OpenAPI tags):</p>
+<div class="table-wrapper"><table><thead><tr><th>Tag</th><th>Resources</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>workflows</code></td><td>Workflows, workflow operations</td><td>Core workflow management</td></tr>
+<tr><td><code>jobs</code></td><td>Jobs, job status, job operations</td><td>Job execution and tracking</td></tr>
+<tr><td><code>files</code></td><td>File records</td><td>Input/output file tracking</td></tr>
+<tr><td><code>user_data</code></td><td>User data records</td><td>Key-value data dependencies</td></tr>
+<tr><td><code>events</code></td><td>Workflow events</td><td>Audit log and event stream</td></tr>
+<tr><td><code>compute_nodes</code></td><td>Compute node records</td><td>Worker node tracking</td></tr>
+<tr><td><code>slurm_schedulers</code></td><td>Slurm scheduler configs</td><td>Slurm integration</td></tr>
+<tr><td><code>remote_workers</code></td><td>Remote worker registrations</td><td>Distributed execution</td></tr>
+<tr><td><code>access_control</code></td><td>Groups, memberships, permissions</td><td>Authorization management</td></tr>
+<tr><td><code>workflow_actions</code></td><td>Scheduled actions</td><td>Automated workflow operations</td></tr>
+<tr><td><code>failure_handlers</code></td><td>Failure handler configs</td><td>Error handling rules</td></tr>
+<tr><td><code>ro_crate_entities</code></td><td>RO-Crate metadata</td><td>Research object packaging</td></tr>
+<tr><td><code>system</code></td><td>Health, version</td><td>Server status</td></tr>
+</tbody></table>
+</div>
+<h2 id="thread-safety-and-concurrency"><a class="header" href="#thread-safety-and-concurrency">Thread Safety and Concurrency</a></h2>
+<p>Certain endpoints are designed for concurrent access from multiple workers:</p>
+<h3 id="claim_next_jobs"><a class="header" href="#claim_next_jobs"><code>claim_next_jobs</code></a></h3>
+<pre><code>POST /workflows/{id}/claim_next_jobs?limit=5
+</code></pre>
+<p>This endpoint uses database-level write locks (<code>BEGIN IMMEDIATE TRANSACTION</code>) to ensure that
+multiple workers calling simultaneously will not receive the same jobs. Each job is allocated to
+exactly one worker.</p>
+<h3 id="claim_jobs_based_on_resources"><a class="header" href="#claim_jobs_based_on_resources"><code>claim_jobs_based_on_resources</code></a></h3>
+<p>Similar to <code>claim_next_jobs</code> but factors in resource requirements (CPU, memory, GPU) and available
+capacity on the requesting worker.</p>
+<h2 id="content-types"><a class="header" href="#content-types">Content Types</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Content-Type</th><th>Usage</th></tr></thead><tbody>
+<tr><td><code>application/json</code></td><td>All request and response bodies</td></tr>
+<tr><td><code>text/event-stream</code></td><td>Server-Sent Events (dashboard real-time updates)</td></tr>
+</tbody></table>
+</div>
+<h2 id="data-type-conventions"><a class="header" href="#data-type-conventions">Data Type Conventions</a></h2>
+<h3 id="ids"><a class="header" href="#ids">IDs</a></h3>
+<p>All resource IDs are 64-bit integers (<code>int64</code> in OpenAPI).</p>
+<h3 id="timestamps"><a class="header" href="#timestamps">Timestamps</a></h3>
+<p>Timestamps use Unix epoch format as <code>float64</code> (seconds with fractional milliseconds).</p>
+<h3 id="durations"><a class="header" href="#durations">Durations</a></h3>
+<p>Runtime durations use ISO 8601 format: <code>PT30M</code> (30 minutes), <code>PT2H</code> (2 hours).</p>
+<h3 id="memory-sizes"><a class="header" href="#memory-sizes">Memory Sizes</a></h3>
+<p>Memory specifications use string format with units: <code>"512m"</code>, <code>"2g"</code>, <code>"100k"</code>.</p>
+<h3 id="job-status"><a class="header" href="#job-status">Job Status</a></h3>
+<p>Job status is stored and transmitted as integers (0-10):</p>
+<div class="table-wrapper"><table><thead><tr><th>Value</th><th>Status</th></tr></thead><tbody>
+<tr><td>0</td><td>uninitialized</td></tr>
+<tr><td>1</td><td>blocked</td></tr>
+<tr><td>2</td><td>ready</td></tr>
+<tr><td>3</td><td>pending</td></tr>
+<tr><td>4</td><td>running</td></tr>
+<tr><td>5</td><td>completed</td></tr>
+<tr><td>6</td><td>failed</td></tr>
+<tr><td>7</td><td>canceled</td></tr>
+<tr><td>8</td><td>terminated</td></tr>
+<tr><td>9</td><td>disabled</td></tr>
+<tr><td>10</td><td>pending_failed</td></tr>
+</tbody></table>
+</div>
+<h2 id="api-evolution"><a class="header" href="#api-evolution">API Evolution</a></h2>
+<p>When evolving the API:</p>
+<ol>
+<li><strong>Additive changes</strong> (new fields, new endpoints) don't require version bumps</li>
+<li><strong>Breaking changes</strong> (removed fields, changed semantics) require major version increment</li>
+<li><strong>Deprecation</strong> should be communicated via documentation before removal</li>
+<li>The OpenAPI spec is the authoritative contract; regenerate clients after spec changes</li>
+</ol>
+<p>See <a href="specialized/design/./api-generation.html">API Generation Architecture</a> for the code-first workflow that maintains
+the API contract.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="workflow-actions-1"><a class="header" href="#workflow-actions-1">Workflow Actions</a></h1>
 <p>Workflow actions enable automatic execution of commands and resource allocation in response to
 workflow lifecycle events. Actions provide hooks for setup, teardown, monitoring, and dynamic
@@ -20859,14 +21189,14 @@ torc-dash: returns response to browser
 <p>These endpoints execute the <code>torc</code> CLI as subprocesses, enabling operations that require local file
 access or complex orchestration:</p>
 <div class="table-wrapper"><table><thead><tr><th>Endpoint</th><th>CLI Command</th><th>Purpose</th></tr></thead><tbody>
-<tr><td><code>POST /api/cli/create</code></td><td><code>torc workflows create</code></td><td>Create workflow from spec file</td></tr>
-<tr><td><code>POST /api/cli/run</code></td><td><code>torc workflows run</code></td><td>Run workflow locally</td></tr>
-<tr><td><code>POST /api/cli/submit</code></td><td><code>torc workflows submit</code></td><td>Submit to scheduler</td></tr>
-<tr><td><code>POST /api/cli/initialize</code></td><td><code>torc workflows initialize</code></td><td>Initialize job dependencies</td></tr>
-<tr><td><code>POST /api/cli/delete</code></td><td><code>torc workflows delete</code></td><td>Delete workflow</td></tr>
-<tr><td><code>POST /api/cli/reinitialize</code></td><td><code>torc workflows reinitialize</code></td><td>Reinitialize workflow</td></tr>
+<tr><td><code>POST /api/cli/create</code></td><td><code>torc create</code></td><td>Create workflow from spec file</td></tr>
+<tr><td><code>POST /api/cli/run</code></td><td><code>torc run</code></td><td>Run workflow locally</td></tr>
+<tr><td><code>POST /api/cli/submit</code></td><td><code>torc submit</code></td><td>Submit to scheduler</td></tr>
+<tr><td><code>POST /api/cli/initialize</code></td><td><code>torc workflows init</code></td><td>Initialize job dependencies</td></tr>
+<tr><td><code>POST /api/cli/delete</code></td><td><code>torc delete</code></td><td>Delete workflow</td></tr>
+<tr><td><code>POST /api/cli/reinitialize</code></td><td><code>torc workflows reinit</code></td><td>Reinitialize workflow</td></tr>
 <tr><td><code>POST /api/cli/reset-status</code></td><td><code>torc workflows reset-status</code></td><td>Reset job statuses</td></tr>
-<tr><td><code>GET /api/cli/run-stream</code></td><td><code>torc workflows run</code></td><td>SSE streaming execution</td></tr>
+<tr><td><code>GET /api/cli/run-stream</code></td><td><code>torc run</code></td><td>SSE streaming execution</td></tr>
 </tbody></table>
 </div>
 <h3 id="server-management-endpoints"><a class="header" href="#server-management-endpoints">Server Management Endpoints</a></h3>
@@ -21168,8 +21498,7 @@ prevents them from firing again and creating duplicate allocations:</p>
 </pre>
 <h3 id="step-2-group-jobs-using-workflowgraph"><a class="header" href="#step-2-group-jobs-using-workflowgraph">Step 2: Group Jobs Using WorkflowGraph</a></h3>
 <p>The system builds a <code>WorkflowGraph</code> from pending jobs and uses <code>scheduler_groups()</code> to group them by
-<code>(resource_requirements, has_dependencies)</code>. This aligns with the behavior of
-<code>torc workflows create-slurm</code>:</p>
+<code>(resource_requirements, has_dependencies)</code>. This aligns with the behavior of <code>torc create-slurm</code>:</p>
 <ul>
 <li><strong>Jobs without dependencies</strong>: Can be scheduled immediately with <code>on_workflow_start</code></li>
 <li><strong>Jobs with dependencies</strong> (deferred): Need <code>on_jobs_ready</code> recovery actions to schedule when they

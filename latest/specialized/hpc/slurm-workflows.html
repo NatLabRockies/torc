@@ -192,15 +192,15 @@ workflows on HPC systems—Torc handles this automatically.</p>
 <p>Running a workflow on Slurm requires just two things:</p>
 <ol>
 <li><strong>Define your jobs with resource requirements</strong></li>
-<li><strong>Submit with <code>submit-slurm</code></strong></li>
+<li><strong>Submit with <code>slurm generate</code> + <code>submit</code></strong></li>
 </ol>
 <p>That's it. Torc will analyze your workflow, generate appropriate Slurm configurations, and submit
 everything for execution.</p>
 <blockquote>
-<p><strong>⚠️ Important:</strong> The <code>submit-slurm</code> command uses heuristics to auto-generate Slurm schedulers and
-workflow actions. For complex workflows with unusual dependency patterns, the generated
-configuration may not be optimal and could result in suboptimal allocation timing. <strong>Always
-preview the configuration first</strong> using <code>torc slurm generate</code> (see
+<p><strong>⚠️ Important:</strong> The <code>slurm generate</code> + <code>submit</code> command uses heuristics to auto-generate Slurm
+schedulers and workflow actions. For complex workflows with unusual dependency patterns, the
+generated configuration may not be optimal and could result in suboptimal allocation timing.
+<strong>Always preview the configuration first</strong> using <code>torc slurm generate</code> (see
 <a href="#previewing-generated-configuration">Previewing Generated Configuration</a>) before submitting
 production workflows.</p>
 </blockquote>
@@ -247,7 +247,8 @@ jobs:
     depends_on: [evaluate]
 </code></pre>
 <h3 id="submitting-the-workflow"><a class="header" href="#submitting-the-workflow">Submitting the Workflow</a></h3>
-<pre><code class="language-bash">torc submit-slurm --account myproject workflow.yaml
+<pre><code class="language-bash">torc slurm generate --account myproject workflow.yaml
+torc submit workflow.yaml
 </code></pre>
 <p>Torc will:</p>
 <ol>
@@ -258,7 +259,7 @@ jobs:
 <li>Submit the workflow for execution</li>
 </ol>
 <h2 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h2>
-<p>When you use <code>submit-slurm</code>, Torc performs intelligent analysis of your workflow:</p>
+<p>When you use <code>slurm generate</code> + <code>submit</code>, Torc performs intelligent analysis of your workflow:</p>
 <h3 id="1-per-job-scheduler-generation"><a class="header" href="#1-per-job-scheduler-generation">1. Per-Job Scheduler Generation</a></h3>
 <p>Each job gets its own Slurm scheduler configuration based on its resource requirements. This means:</p>
 <ul>
@@ -567,11 +568,12 @@ jobs:
 torc run workflow.yaml
 
 # Then submit to HPC
-torc submit-slurm --account myproject workflow.yaml
+torc slurm generate --account myproject workflow.yaml
+torc submit workflow.yaml
 </code></pre>
 <h2 id="limitations-and-caveats"><a class="header" href="#limitations-and-caveats">Limitations and Caveats</a></h2>
-<p>The auto-generation in <code>submit-slurm</code> uses heuristics that work well for common workflow patterns
-but may not be optimal for all cases:</p>
+<p>The auto-generation in <code>torc slurm generate</code> uses heuristics that work well for common workflow
+patterns but may not be optimal for all cases:</p>
 <h3 id="when-auto-generation-works-well"><a class="header" href="#when-auto-generation-works-well">When Auto-Generation Works Well</a></h3>
 <ul>
 <li><strong>Linear pipelines</strong>: A → B → C → D</li>

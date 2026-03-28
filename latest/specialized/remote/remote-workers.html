@@ -190,7 +190,7 @@
 <p>Torc supports three execution modes:</p>
 <ol>
 <li><strong>Local</strong> (<code>torc run</code>) - Jobs run on the current machine</li>
-<li><strong>HPC</strong> (<code>torc submit-slurm</code>) - Jobs run on Slurm-allocated nodes</li>
+<li><strong>HPC</strong> (<code>torc slurm generate</code> + <code>torc submit</code>) - Jobs run on Slurm-allocated nodes</li>
 <li><strong>Remote Workers</strong> (<code>torc remote run</code>) - Jobs run on SSH-accessible machines</li>
 </ol>
 <p>Remote workers are ideal for:</p>
@@ -330,7 +330,7 @@ torc remote collect-logs 42 --delete
 <ol>
 <li>
 <p><strong>Create a workflow:</strong></p>
-<pre><code class="language-console">torc workflows create my_workflow.yaml
+<pre><code class="language-console">torc create my_workflow.yaml
 </code></pre>
 </li>
 <li>
@@ -430,7 +430,7 @@ production).</p>
 <h3 id="workers-not-claiming-jobs"><a class="header" href="#workers-not-claiming-jobs">Workers Not Claiming Jobs</a></h3>
 <p>If workers start but don't claim jobs:</p>
 <ol>
-<li>Check the workflow is initialized: <code>torc workflows status &lt;id&gt;</code></li>
+<li>Check the workflow is initialized: <code>torc status &lt;id&gt;</code></li>
 <li>Check jobs are ready: <code>torc jobs list &lt;id&gt;</code></li>
 <li>Check resource requirements match available resources</li>
 </ol>

@@ -189,8 +189,8 @@
 HPC workflows.</p>
 <blockquote>
 <p><strong>For most users</strong>: See <a href="./slurm-workflows.html">Slurm Overview</a> for the recommended approach using
-<code>torc submit-slurm</code>. You don't need to manually configure schedulers or actions—Torc handles this
-automatically.</p>
+<code>torc slurm generate</code> + <code>torc submit</code>. You don't need to manually configure schedulers or
+actions—Torc handles this automatically.</p>
 </blockquote>
 <h2 id="when-to-use-manual-configuration"><a class="header" href="#when-to-use-manual-configuration">When to Use Manual Configuration</a></h2>
 <p>Manual Slurm configuration is useful when you need:</p>
@@ -388,8 +388,8 @@ actions:
     num_allocations: 1
 </code></pre>
 <blockquote>
-<p><strong>Note</strong>: The <code>torc submit-slurm</code> command handles this automatically by analyzing job
-dependencies.</p>
+<p><strong>Note</strong>: The <code>torc slurm generate</code> + <code>torc submit</code> command handles this automatically by
+analyzing job dependencies.</p>
 </blockquote>
 <h2 id="custom-slurm-directives"><a class="header" href="#custom-slurm-directives">Custom Slurm Directives</a></h2>
 <p>Use the <code>extra</code> field for additional sbatch arguments:</p>

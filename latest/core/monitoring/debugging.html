@@ -190,8 +190,8 @@ help you identify and resolve issues. The primary debugging tools are:</p>
 <ul>
 <li><strong><code>torc results list</code></strong>: Prints a table of return codes for each job execution (non-zero means
 failure)</li>
-<li><strong><code>torc reports results</code></strong>: Generates a detailed JSON report containing job results and all
-associated log file paths</li>
+<li><strong><code>torc results list --include-logs</code></strong>: Generates a detailed JSON report containing job results
+and all associated log file paths</li>
 <li><strong><code>torc logs analyze &lt;output-dir&gt;</code></strong>: Analyzes log files for known error patterns (see
 <a href="working-with-logs.html">Working with Logs</a>)</li>
 <li><strong>torc-dash Debug tab</strong>: Interactive web interface for visual debugging with log file viewer</li>
@@ -204,8 +204,8 @@ associated log file paths</li>
 <li><strong>Slurm logs</strong>: Additional logs when using Slurm scheduler (see
 <a href="debugging-slurm.html">Debugging Slurm Workflows</a>)</li>
 </ul>
-<p>The <code>reports results</code> command consolidates all this information into a single JSON report, making it
-easy to locate and examine relevant log files for debugging.</p>
+<p>The <code>results list --include-logs</code> command consolidates all this information into a single JSON
+report, making it easy to locate and examine relevant log files for debugging.</p>
 <h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
 <p>View the job return codes in a table:</p>
 <pre><code class="language-bash">torc results list &lt;workflow_id&gt;
@@ -233,20 +233,20 @@ Total: 3 results
 </code></pre>
 <p>Generate a debugging report for a workflow:</p>
 <pre><code class="language-bash"># Generate report for a specific workflow
-torc reports results &lt;workflow_id&gt;
+torc results list --include-logs &lt;workflow_id&gt;
 
 # Specify custom output directory (default: "torc_output")
-torc reports results &lt;workflow_id&gt; --output-dir /path/to/output
+torc results list --include-logs &lt;workflow_id&gt; --output-dir /path/to/output
 
 # Include all workflow runs (default: only latest run)
-torc reports results &lt;workflow_id&gt; --all-runs
+torc results list --include-logs &lt;workflow_id&gt; --all-runs
 
 # Interactive workflow selection (if workflow_id omitted)
-torc reports results
+torc results list --include-logs
 </code></pre>
 <p>The command outputs a comprehensive JSON report to stdout. Redirect it to a file for easier
 analysis:</p>
-<pre><code class="language-bash">torc reports results &lt;workflow_id&gt; &gt; debug_report.json
+<pre><code class="language-bash">torc results list --include-logs &lt;workflow_id&gt; &gt; debug_report.json
 </code></pre>
 <h2 id="report-structure"><a class="header" href="#report-structure">Report Structure</a></h2>
 <h3 id="top-level-fields"><a class="header" href="#top-level-fields">Top-Level Fields</a></h3>
@@ -441,7 +441,7 @@ by default to help you focus on problematic jobs.</p>
 <li>You're investigating jobs and want to easily switch between stdout/stderr</li>
 <li>You prefer not to construct <code>jq</code> queries manually</li>
 </ul>
-<p><strong>Use CLI tools (<code>torc reports results</code>) when:</strong></p>
+<p><strong>Use CLI tools (<code>torc results list --include-logs</code>) when:</strong></p>
 <ul>
 <li>You need to automate failure detection in CI/CD</li>
 <li>You want to save reports for archival or version control</li>
@@ -454,7 +454,7 @@ by default to help you focus on problematic jobs.</p>
 <ol>
 <li>
 <p><strong>Generate the debug report</strong>:</p>
-<pre><code class="language-bash">torc reports results &lt;workflow_id&gt; &gt; debug_report.json
+<pre><code class="language-bash">torc results list --include-logs &lt;workflow_id&gt; &gt; debug_report.json
 </code></pre>
 </li>
 <li>
@@ -540,7 +540,7 @@ grep -r "Job process completed" torc_output/ | grep "return_code="
 </code></pre>
 <h3 id="example-complete-debugging-session"><a class="header" href="#example-complete-debugging-session">Example: Complete Debugging Session</a></h3>
 <pre><code class="language-bash"># 1. Generate report
-torc reports results 123 &gt; report.json
+torc results list --include-logs 123 &gt; report.json
 
 # 2. Check overall success/failure counts
 echo "Total jobs: $(jq '.total_results' report.json)"
@@ -566,7 +566,7 @@ jq -r '.results[] | select(.job_name == "generate_batch_2") | "\(.status) (exit 
 <h3 id="debugging-across-multiple-runs"><a class="header" href="#debugging-across-multiple-runs">Debugging Across Multiple Runs</a></h3>
 <p>When a workflow has been reinitialized multiple times, compare runs to identify regressions:</p>
 <pre><code class="language-bash"># Generate report with all historical runs
-torc reports results &lt;workflow_id&gt; --all-runs &gt; full_history.json
+torc results list --include-logs &lt;workflow_id&gt; --all-runs &gt; full_history.json
 
 # Compare return codes across runs for a specific job
 jq -r '.results[] | select(.job_name == "flaky_job") | "Run \(.run_id): exit code \(.return_code)"' full_history.json
@@ -581,8 +581,8 @@ jq -r '.results[] | select(.job_name == "flaky_job") | "Run \(.run_id): exit cod
 jq -r '.results[] | select(.job_name == "flaky_job" and .return_code != 0) | "Run \(.run_id): \(.job_stderr)"' full_history.json
 </code></pre>
 <h3 id="log-file-missing-warnings"><a class="header" href="#log-file-missing-warnings">Log File Missing Warnings</a></h3>
-<p>The <code>reports results</code> command automatically checks for log file existence and prints warnings to
-stderr if files are missing:</p>
+<p>The <code>results list --include-logs</code> command automatically checks for log file existence and prints
+warnings to stderr if files are missing:</p>
 <pre><code>Warning: job stdout log file does not exist for job 456: torc_output/job_stdio/job_456.o
 Warning: job runner log file does not exist for job 456: torc_output/job_runner_host1_123_1.log
 </code></pre>
@@ -603,14 +603,14 @@ execution</li>
 torc run &lt;workflow_id&gt; /path/to/my_output
 
 # Generate report using the same directory
-torc reports results &lt;workflow_id&gt; --output-dir /path/to/my_output
+torc results list --include-logs &lt;workflow_id&gt; --output-dir /path/to/my_output
 </code></pre>
 <h3 id="slurm-scheduler"><a class="header" href="#slurm-scheduler">Slurm Scheduler</a></h3>
 <pre><code class="language-bash"># Submit jobs to Slurm with output directory
 torc slurm schedule-nodes &lt;workflow_id&gt; --output-dir /path/to/my_output
 
 # Generate report using the same directory
-torc reports results &lt;workflow_id&gt; --output-dir /path/to/my_output
+torc results list --include-logs &lt;workflow_id&gt; --output-dir /path/to/my_output
 </code></pre>
 <p><strong>Default behavior</strong>: If <code>--output-dir</code> is not specified, both the runner and reports command
 default to <code>./output</code>.</p>
@@ -622,7 +622,7 @@ for easier troubleshooting</p>
 </li>
 <li>
 <p><strong>Archive reports with logs</strong>: Store the JSON report alongside log files for future reference</p>
-<pre><code class="language-bash">torc reports results "$WF_ID" &gt; "torc_output/report_${WF_ID}_$(date +%Y%m%d_%H%M%S).json"
+<pre><code class="language-bash">torc results list --include-logs "$WF_ID" &gt; "torc_output/report_${WF_ID}_$(date +%Y%m%d_%H%M%S).json"
 </code></pre>
 </li>
 <li>
@@ -638,11 +638,11 @@ report failures</p>
 configuration issues</p>
 </li>
 <li>
-<p><strong>Combine with resource monitoring</strong>: Use <code>reports results</code> for log files and
+<p><strong>Combine with resource monitoring</strong>: Use <code>results list --include-logs</code> for log files and
 <code>reports check-resource-utilization</code> for performance issues</p>
 <pre><code class="language-bash"># Check if job failed due to resource constraints
-torc reports check-resource-utilization "$WF_ID"
-torc reports results "$WF_ID" &gt; report.json
+torc workflows check-resources "$WF_ID"
+torc results list --include-logs "$WF_ID" &gt; report.json
 </code></pre>
 </li>
 <li>
@@ -658,12 +658,12 @@ jq '{workflow_id, workflow_name, results: [.results[] | select(.return_code != 0
 <p><strong>Cause</strong>: The specified <code>--output-dir</code> path doesn't exist.</p>
 <p><strong>Solution</strong>: Verify the directory exists and the path is correct:</p>
 <pre><code class="language-bash">ls -ld output/  # Check if directory exists
-torc reports results &lt;workflow_id&gt; --output-dir "$(pwd)/torc_output"
+torc results list --include-logs &lt;workflow_id&gt; --output-dir "$(pwd)/torc_output"
 </code></pre>
 <h3 id="empty-results-array"><a class="header" href="#empty-results-array">Empty Results Array</a></h3>
 <p><strong>Cause</strong>: No job results exist for the workflow (jobs not yet executed or initialized).</p>
 <p><strong>Solution</strong>: Check workflow status and ensure jobs have been completed:</p>
-<pre><code class="language-bash">torc workflows status &lt;workflow_id&gt;
+<pre><code class="language-bash">torc status &lt;workflow_id&gt;
 torc results list &lt;workflow_id&gt;  # Verify results exist
 </code></pre>
 <h3 id="all-log-paths-show-warnings"><a class="header" href="#all-log-paths-show-warnings">All Log Paths Show Warnings</a></h3>
@@ -673,14 +673,14 @@ torc results list &lt;workflow_id&gt;  # Verify results exist
 find . -name "job_*.o" -o -name "job_runner_*.log"
 
 # Use correct output directory in report
-torc reports results &lt;workflow_id&gt; --output-dir &lt;correct_path&gt;
+torc results list --include-logs &lt;workflow_id&gt; --output-dir &lt;correct_path&gt;
 </code></pre>
 <h2 id="related-commands"><a class="header" href="#related-commands">Related Commands</a></h2>
 <ul>
 <li><strong><code>torc results list</code></strong>: View summary of job results in table format</li>
-<li><strong><code>torc workflows status</code></strong>: Check overall workflow status</li>
-<li><strong><code>torc reports results</code></strong>: Generate debug report with all log file paths</li>
-<li><strong><code>torc reports check-resource-utilization</code></strong>: Analyze resource usage and find over-utilized jobs</li>
+<li><strong><code>torc status</code></strong>: Check overall workflow status</li>
+<li><strong><code>torc results list --include-logs</code></strong>: Generate debug report with all log file paths</li>
+<li><strong><code>torc workflows check-resources</code></strong>: Analyze resource usage and find over-utilized jobs</li>
 <li><strong><code>torc jobs list</code></strong>: View all jobs and their current status</li>
 <li><strong><code>torc-dash</code></strong>: Launch web interface with interactive Debugging tab</li>
 <li><strong><code>torc tui</code></strong>: Launch terminal UI for workflow monitoring</li>

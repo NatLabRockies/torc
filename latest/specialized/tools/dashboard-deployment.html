@@ -375,7 +375,7 @@ because torc-dash binds to 127.0.0.1 by default.</p>
 </ol>
 <p><strong>Via CLI:</strong></p>
 <pre><code class="language-bash"># Create workflow with Slurm actions
-torc workflows create my_slurm_workflow.yaml
+torc create my_slurm_workflow.yaml
 
 # Submit to Slurm
 torc submit &lt;workflow_id&gt;
@@ -469,8 +469,8 @@ torc-dash binds (127.0.0.1:8090).</p>
 export TORC_API_URL="http://shared-server:8080/torc-service/v1"
 
 # Create and run workflows
-torc workflows create my_workflow.yaml
-torc workflows run &lt;workflow_id&gt;
+torc create my_workflow.yaml
+torc run &lt;workflow_id&gt;
 </code></pre>
 <h3 id="authentication"><a class="header" href="#authentication">Authentication</a></h3>
 <p>For multi-user environments, enable authentication:</p>

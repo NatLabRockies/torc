@@ -288,13 +288,13 @@ files) are automatically updated to use the new IDs.</p>
 <p>Imported jobs always start in the <code>uninitialized</code> status, regardless of their status in the exported
 file. After import, you need to initialize and run the workflow:</p>
 <pre><code class="language-bash"># Initialize the imported workflow
-torc workflows initialize 456
+torc workflows init 456
 
 # Run locally
-torc workflows run 456
+torc run 456
 
 # Or submit to scheduler
-torc workflows submit 456
+torc submit 456
 </code></pre>
 <h3 id="default-resource-requirements"><a class="header" href="#default-resource-requirements">Default Resource Requirements</a></h3>
 <p>Each workflow automatically gets a "default" resource requirements entry. During import, the
@@ -357,7 +357,7 @@ torc workflows import ./my_workflow.json
 </code></pre>
 <h3 id="jobs-not-running-after-import"><a class="header" href="#jobs-not-running-after-import">Jobs Not Running After Import</a></h3>
 <p>Imported jobs start in <code>uninitialized</code> status. You must initialize the workflow:</p>
-<pre><code class="language-bash">torc workflows initialize 456
+<pre><code class="language-bash">torc workflows init 456
 </code></pre>
 <p>Then check job status:</p>
 <pre><code class="language-bash">torc jobs list 456
