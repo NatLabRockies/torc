@@ -721,9 +721,14 @@ pub fn build_results_report(
                     }
                     "slurm" => {
                         // For slurm runner, extract slurm job ID from scheduler JSON
+                        // The value may be stored as either a string or integer
                         if let Some(scheduler_value) = &compute_node.scheduler
                             && let Some(slurm_job_id_val) = scheduler_value.get("slurm_job_id")
-                            && let Some(slurm_job_id_str) = slurm_job_id_val.as_str()
+                            && let Some(slurm_job_id_str) = slurm_job_id_val
+                                .as_str()
+                                .map(|s| s.to_string())
+                                .or_else(|| slurm_job_id_val.as_i64().map(|n| n.to_string()))
+                                .as_deref()
                         {
                             slurm_job_id = Some(slurm_job_id_str.to_string());
 
