@@ -1,6 +1,6 @@
 # Execution Modes
 
-Torc supports two execution modes that determine how jobs are launched and managed. The execution
+Torc supports three execution modes that determine how jobs are launched and managed. The execution
 mode affects resource enforcement, job termination, and integration with cluster schedulers like
 Slurm.
 
@@ -10,13 +10,19 @@ Slurm.
 | -------- | ---------------------------------------------------------------------------- |
 | `direct` | Torc manages job execution directly without Slurm step wrapping (default)    |
 | `slurm`  | Jobs are wrapped with `srun`, letting Slurm manage resources and termination |
+| `auto`   | Selects `slurm` if `SLURM_JOB_ID` is set, otherwise `direct`                 |
 
 Configure the execution mode in your workflow specification:
 
 ```yaml
 execution_config:
-  mode: direct  # or "slurm"
+  mode: direct  # or "slurm" or "auto"
 ```
+
+> **Warning**: Use `auto` with caution. If your workflow runs inside a Slurm allocation (where
+> `SLURM_JOB_ID` is set), `auto` will silently select slurm mode, which wraps every job with `srun`.
+> This may not be what you want if your workflow is designed for direct execution. Prefer setting
+> the mode explicitly to avoid surprises.
 
 ## When to Use Each Mode
 

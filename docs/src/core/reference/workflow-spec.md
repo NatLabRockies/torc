@@ -181,7 +181,7 @@ creation time.
 
 | Name                       | Type                        | Default    | Description                                            |
 | -------------------------- | --------------------------- | ---------- | ------------------------------------------------------ |
-| `mode`                     | string                      | `"direct"` | Execution mode: `"direct"` or `"slurm"`                |
+| `mode`                     | string                      | `"direct"` | Execution mode: `"direct"`, `"slurm"`, or `"auto"`     |
 | `sigkill_headroom_seconds` | integer                     | `60`       | Seconds before end_time for SIGKILL or srun --time     |
 | `timeout_exit_code`        | integer                     | `152`      | Exit code for timed-out jobs (matches Slurm TIMEOUT)   |
 | `staggered_start`          | boolean                     | `true`     | Stagger job runner startup to mitigate thundering herd |
@@ -190,7 +190,8 @@ creation time.
 ### Direct mode fields
 
 These fields only apply when the effective mode is `direct`. Setting them with `mode: slurm`
-produces a validation error.
+produces a validation error. When `mode: auto`, validation checks the effective mode based on
+whether Slurm schedulers are present in the spec.
 
 | Name                   | Type    | Default     | Description                                           |
 | ---------------------- | ------- | ----------- | ----------------------------------------------------- |
@@ -202,7 +203,8 @@ produces a validation error.
 ### Slurm mode fields
 
 These fields only apply when the effective mode is `slurm`. Setting them with `mode: direct`
-produces a validation error.
+produces a validation error. When `mode: auto`, validation checks the effective mode based on
+whether Slurm schedulers are present in the spec.
 
 | Name                      | Type    | Default | Description                             |
 | ------------------------- | ------- | ------- | --------------------------------------- |
@@ -264,6 +266,10 @@ jobs:
 | -------- | ----------------------------------------------------------------------- |
 | `direct` | Torc manages job execution directly (default). Works everywhere         |
 | `slurm`  | Jobs wrapped with `srun`. Slurm manages resource limits and termination |
+| `auto`   | Selects `slurm` if `SLURM_JOB_ID` is set, otherwise `direct`            |
+
+> **Warning**: `auto` will silently select slurm mode when running inside a Slurm allocation. Prefer
+> setting the mode explicitly to avoid unexpected behavior.
 
 ### Direct Mode Example
 
