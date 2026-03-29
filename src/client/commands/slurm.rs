@@ -1890,7 +1890,7 @@ pub fn create_compute_node(
     scheduler: serde_json::Value,
 ) -> models::ComputeNodeModel {
     let pid = std::process::id() as i64;
-    let compute_node = models::ComputeNodeModel::new(
+    let mut compute_node = models::ComputeNodeModel::new(
         workflow_id,
         hostname.to_string(),
         pid,
@@ -1902,6 +1902,7 @@ pub fn create_compute_node(
         "slurm".to_string(),
         Some(scheduler),
     );
+    compute_node.is_active = Some(true);
 
     match utils::send_with_retries(
         config,
