@@ -375,7 +375,7 @@ fn infer_gpu_from_name(name: &str) -> Option<(u32, String)> {
 }
 
 /// Parse GRES string to extract GPU count and type
-fn parse_gres(gres: &Option<String>) -> (Option<u32>, Option<String>) {
+pub(crate) fn parse_gres(gres: &Option<String>) -> (Option<u32>, Option<String>) {
     let gres = match gres {
         Some(g) => g,
         None => return (None, None),

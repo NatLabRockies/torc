@@ -207,6 +207,25 @@ fn main() {
             skip_checks,
         } => {
             let workflow_id = if is_spec_file(workflow_spec_or_id) {
+                // Pre-validate scheduler resources and prompt if needed
+                let mut effective_skip_checks = *skip_checks;
+                if !effective_skip_checks {
+                    match WorkflowSpec::validate_scheduler_resources_from_file(workflow_spec_or_id)
+                    {
+                        Ok(warnings) if !warnings.is_empty() => {
+                            if !WorkflowSpec::prompt_scheduler_warnings(&warnings) {
+                                std::process::exit(1);
+                            }
+                            effective_skip_checks = true;
+                        }
+                        Err(e) => {
+                            eprintln!("Error validating spec: {}", e);
+                            std::process::exit(1);
+                        }
+                        _ => {}
+                    }
+                }
+
                 // Create workflow from spec file
                 let user = torc::get_username();
                 match WorkflowSpec::create_workflow_from_spec(
@@ -214,7 +233,7 @@ fn main() {
                     workflow_spec_or_id,
                     &user,
                     true,
-                    *skip_checks,
+                    effective_skip_checks,
                 ) {
                     Ok(id) => {
                         print_workflow_message(&format, id, &format!("Created workflow {}", id));
@@ -315,6 +334,25 @@ fn main() {
                     std::process::exit(1);
                 }
 
+                // Pre-validate scheduler resources and prompt if needed
+                let mut effective_skip_checks = *skip_checks;
+                if !effective_skip_checks {
+                    match WorkflowSpec::validate_scheduler_resources_from_file(workflow_spec_or_id)
+                    {
+                        Ok(warnings) if !warnings.is_empty() => {
+                            if !WorkflowSpec::prompt_scheduler_warnings(&warnings) {
+                                std::process::exit(1);
+                            }
+                            effective_skip_checks = true;
+                        }
+                        Err(e) => {
+                            eprintln!("Error validating spec: {}", e);
+                            std::process::exit(1);
+                        }
+                        _ => {}
+                    }
+                }
+
                 // Create workflow from spec
                 let user = torc::get_username();
 
@@ -323,7 +361,7 @@ fn main() {
                     workflow_spec_or_id,
                     &user,
                     true,
-                    *skip_checks,
+                    effective_skip_checks,
                 ) {
                     Ok(id) => {
                         print_workflow_message(&format, id, &format!("Created workflow {}", id));

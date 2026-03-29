@@ -2618,13 +2618,31 @@ pub fn handle_create(
         return;
     }
 
+    // Pre-validate scheduler resources and prompt if needed
+    let mut effective_skip_checks = skip_checks;
+    if !effective_skip_checks {
+        match WorkflowSpec::validate_scheduler_resources_from_file(file) {
+            Ok(warnings) if !warnings.is_empty() => {
+                if !WorkflowSpec::prompt_scheduler_warnings(&warnings) {
+                    std::process::exit(1);
+                }
+                effective_skip_checks = true;
+            }
+            Err(e) => {
+                eprintln!("Error validating spec: {}", e);
+                std::process::exit(1);
+            }
+            _ => {}
+        }
+    }
+
     // Normal create mode
     match WorkflowSpec::create_workflow_from_spec(
         config,
         file,
         user,
         !no_resource_monitoring,
-        skip_checks,
+        effective_skip_checks,
     ) {
         Ok(workflow_id) => {
             if format == "json" {

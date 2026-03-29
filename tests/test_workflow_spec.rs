@@ -1875,13 +1875,14 @@ fn test_create_workflows_from_all_example_files(start_server: &ServerProcess) {
 
         let user = spec.user.unwrap_or_else(|| "test_user".to_string());
 
-        // Create the workflow
+        // Create the workflow (skip resource checks since example files may have
+        // intentional mismatches for demonstration purposes)
         let workflow_id = WorkflowSpec::create_workflow_from_spec(
             &start_server.config,
             &spec_file,
             &user,
             false,
-            false,
+            true, // skip_checks
         )
         .unwrap_or_else(|e| panic!("Failed to create workflow from {:?}: {}", spec_file, e));
 
