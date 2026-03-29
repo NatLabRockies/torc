@@ -1402,7 +1402,14 @@ impl WorkflowSpec {
                     .mem
                     .as_ref()
                     .and_then(|m| crate::memory_utils::memory_string_to_bytes(m).ok());
-                let (gpu_count, _) = crate::client::hpc::slurm::parse_gres(&sched.gres);
+                let gpu_count = if sched.gres.as_ref().is_some_and(|g| !g.trim().is_empty()) {
+                    let (parsed, _) = crate::client::hpc::slurm::parse_gres(&sched.gres);
+                    // Non-empty but unparseable gres → treat as 0 GPUs so validation
+                    // isn't silently bypassed
+                    Some(parsed.unwrap_or(0))
+                } else {
+                    None
+                };
                 Some(ParsedScheduler {
                     name,
                     sched,
@@ -1435,6 +1442,14 @@ impl WorkflowSpec {
                 .map(|s| s as u64);
             let job_memory_bytes = crate::memory_utils::memory_string_to_bytes(&rr.memory).ok();
             let job_gpus = rr.num_gpus;
+
+            if job_gpus < 0 {
+                warnings.push(format!(
+                    "Job '{}': invalid negative num_gpus {}",
+                    job.name, job_gpus,
+                ));
+                continue;
+            }
 
             if let Some(ref scheduler_name) = job.scheduler {
                 // Job has an explicit scheduler — check each dimension against it
@@ -1565,6 +1580,8 @@ impl WorkflowSpec {
     /// Pre-validate a spec file for interactive CLI callers.
     /// Node requirement failures are hard errors. Resource mismatches prompt the user.
     /// Exits the process if validation fails or the user declines.
+    /// Note: CLI-only. Calls `process::exit` on failure — use `validate_for_creation`
+    /// for non-interactive/library contexts.
     pub fn prevalidate_or_exit<P: AsRef<Path>>(path: P) {
         let mut spec = match Self::from_spec_file(&path) {
             Ok(s) => s,
@@ -1594,7 +1611,7 @@ impl WorkflowSpec {
     /// Display scheduler resource warnings and prompt the user for confirmation.
     /// Returns true if the user confirms (or if there are no warnings).
     /// In non-interactive contexts (stdin is not a TTY), prints a message and returns false.
-    pub fn prompt_scheduler_warnings(warnings: &[String]) -> bool {
+    fn prompt_scheduler_warnings(warnings: &[String]) -> bool {
         use std::io::{IsTerminal, Write};
 
         if warnings.is_empty() {
@@ -1609,7 +1626,9 @@ impl WorkflowSpec {
 
         if std::io::stdin().is_terminal() {
             eprint!("Proceed anyway? [y/N] ");
-            std::io::stderr().flush().unwrap();
+            if std::io::stderr().flush().is_err() {
+                return false;
+            }
             let mut input = String::new();
             if std::io::stdin().read_line(&mut input).is_ok() {
                 return input.trim().eq_ignore_ascii_case("y");
