@@ -1554,8 +1554,6 @@ impl WorkflowSpec {
         warnings
     }
 
-    /// Pre-validate scheduler resources from a spec file without creating anything.
-    /// Parses the spec, expands parameters, and returns resource warnings.
     /// Validate a spec file for creation by non-interactive callers (MCP server, TUI).
     /// Runs node requirement and resource checks, returning an error if any fail.
     pub fn validate_for_creation<P: AsRef<Path>>(
@@ -1712,14 +1710,11 @@ impl WorkflowSpec {
         }
 
         // Step 4: Validate scheduler node requirements
-        // This is an error by default (same as create_workflow_from_spec with skip_checks=false)
         if let Err(e) = spec.validate_scheduler_node_requirements() {
             errors.push(format!("{}", e));
         }
 
         // Step 4.5: Validate scheduler resources (runtime, memory, GPUs)
-        // These are errors in dry-run mode (matching create_workflow_from_spec behavior
-        // for non-interactive callers)
         let resource_warnings = spec.validate_scheduler_resources();
         errors.extend(resource_warnings);
 

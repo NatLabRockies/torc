@@ -2326,12 +2326,13 @@ fn test_scheduler_node_validation_passes_with_matching_nodes(start_server: &Serv
     }
 }
 
-/// Test that skip_checks=true bypasses the validation
+/// Test that validate_for_creation catches node mismatches but create_workflow_from_spec
+/// (which no longer validates) still succeeds for the same spec.
 #[rstest]
-fn test_scheduler_node_validation_skipped_with_skip_checks(start_server: &ServerProcess) {
+fn test_validation_separate_from_creation(start_server: &ServerProcess) {
     let workflow_data = serde_json::json!({
         "name": "skip_checks_workflow",
-        "description": "Workflow that would fail validation but uses skip_checks",
+        "description": "Workflow that fails validation but can be created",
         "jobs": [
             {
                 "name": "job1",
@@ -2376,17 +2377,20 @@ fn test_scheduler_node_validation_skipped_with_skip_checks(start_server: &Server
     )
     .expect("Failed to write temp file");
 
+    // validate_for_creation should catch the node mismatch
+    let validation = WorkflowSpec::validate_for_creation(temp_file.path());
+    assert!(validation.is_err(), "Expected validation to fail");
+
+    // create_workflow_from_spec succeeds because it doesn't validate
     let result = WorkflowSpec::create_workflow_from_spec(
         &start_server.config,
         temp_file.path(),
         "test_user",
         false,
     );
-
-    // Should succeed because skip_checks is true
     assert!(
         result.is_ok(),
-        "Expected success with skip_checks=true, got: {:?}",
+        "Expected creation to succeed, got: {:?}",
         result.err()
     );
 
