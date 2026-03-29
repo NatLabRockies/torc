@@ -350,6 +350,11 @@ fn poll_until_complete(
     let mut workflow_complete = false;
     // Track when we last auto-scheduled (or started watching) for stranded job detection
     let mut last_auto_schedule: Instant = Instant::now();
+    // Track consecutive polls with no valid Slurm allocation. Orphan cleanup only
+    // runs after multiple consecutive misses to avoid racing with Slurm jobs that
+    // are just starting up (squeue may not reflect the new job immediately).
+    let mut consecutive_no_allocation: u32 = 0;
+    const ORPHAN_DETECTION_THRESHOLD: u32 = 3;
 
     loop {
         // Check if workflow is complete
@@ -409,6 +414,7 @@ fn poll_until_complete(
         // skip the expensive per-allocation orphan detection. This reduces N squeue calls
         // to just 1-2 calls when jobs are queued or running normally.
         if has_valid_slurm_allocation(config, workflow_id) {
+            consecutive_no_allocation = 0;
             // Check if we should auto-schedule for retry jobs even though schedulers exist
             if auto_schedule.enabled {
                 let cooldown_passed = last_auto_schedule.elapsed() >= auto_schedule.cooldown;
@@ -493,8 +499,23 @@ fn poll_until_complete(
             continue;
         }
 
-        // No valid Slurm allocations found - check for orphaned jobs
-        debug!("No valid Slurm allocations, checking for orphaned jobs...");
+        // No valid Slurm allocations found — increment counter and only run
+        // orphan cleanup after the condition persists across multiple polls.
+        // This prevents racing with Slurm jobs that are just starting up.
+        consecutive_no_allocation += 1;
+        if consecutive_no_allocation < ORPHAN_DETECTION_THRESHOLD {
+            debug!(
+                "No valid Slurm allocations (poll {}/{}), waiting before orphan detection...",
+                consecutive_no_allocation, ORPHAN_DETECTION_THRESHOLD
+            );
+            std::thread::sleep(Duration::from_secs(poll_interval));
+            continue;
+        }
+
+        debug!(
+            "No valid Slurm allocations for {} consecutive polls, checking for orphaned jobs...",
+            consecutive_no_allocation
+        );
 
         // Use shared orphan detection to check for:
         // 1. Orphaned Slurm jobs (active allocations that are no longer running)
