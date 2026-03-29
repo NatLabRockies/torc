@@ -395,9 +395,13 @@ impl AsyncCliCommand {
                 }
             } else {
                 // In direct mode with limit_resources, enforce memory limits via OOM detection
+                // Skip memory limit enforcement for the "default" resource
+                // requirement — it's a placeholder with no real limits, matching
+                // srun mode which omits --mem for default RRs.
                 let memory_limit_bytes =
                     if limit_resources && execution_mode == ExecutionMode::Direct {
                         resource_requirements
+                            .filter(|rr| rr.name != "default")
                             .and_then(|rr| memory_string_to_bytes(&rr.memory).ok())
                             .map(|b| b as u64)
                             .filter(|&b| b > 0)
