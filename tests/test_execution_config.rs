@@ -259,11 +259,12 @@ fn test_effective_mode_auto_with_slurm_env() {
 // =============================================================================
 
 #[test]
-fn test_validation_signal_time_less_than_headroom() {
-    // Valid: signal at 60s, headroom at 120s - signal will be sent before kill
+fn test_validation_returns_no_warnings() {
+    // srun_termination_signal and sigkill_headroom_seconds are independent —
+    // the signal fires relative to the step's --time, not the allocation end.
     let config = ExecutionConfig {
-        srun_termination_signal: Some("TERM@60".to_string()),
-        sigkill_headroom_seconds: Some(120),
+        srun_termination_signal: Some("TERM@120".to_string()),
+        sigkill_headroom_seconds: Some(60),
         ..Default::default()
     };
     let warnings = config.validate();
@@ -272,47 +273,6 @@ fn test_validation_signal_time_less_than_headroom() {
         "Expected no warnings, got: {:?}",
         warnings
     );
-}
-
-#[test]
-fn test_validation_signal_time_equals_headroom() {
-    // Invalid: signal at 60s, headroom at 60s - signal won't be sent in time
-    let config = ExecutionConfig {
-        srun_termination_signal: Some("TERM@60".to_string()),
-        sigkill_headroom_seconds: Some(60),
-        ..Default::default()
-    };
-    let warnings = config.validate();
-    assert_eq!(warnings.len(), 1);
-    assert!(warnings[0].contains("TERM@60"));
-    assert!(warnings[0].contains("60s"));
-    assert!(warnings[0].contains("sigkill_headroom_seconds"));
-}
-
-#[test]
-fn test_validation_signal_time_exceeds_headroom() {
-    // Invalid: signal at 120s, headroom at 60s - signal would be sent after kill
-    let config = ExecutionConfig {
-        srun_termination_signal: Some("TERM@120".to_string()),
-        sigkill_headroom_seconds: Some(60),
-        ..Default::default()
-    };
-    let warnings = config.validate();
-    assert_eq!(warnings.len(), 1);
-    assert!(warnings[0].contains("TERM@120"));
-    assert!(warnings[0].contains("120s"));
-}
-
-#[test]
-fn test_validation_signal_without_time() {
-    // No time specified in signal - no validation needed
-    let config = ExecutionConfig {
-        srun_termination_signal: Some("TERM".to_string()),
-        sigkill_headroom_seconds: Some(60),
-        ..Default::default()
-    };
-    let warnings = config.validate();
-    assert!(warnings.is_empty());
 }
 
 #[test]
