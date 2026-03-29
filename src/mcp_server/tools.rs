@@ -551,7 +551,7 @@ pub fn create_workflow(
             // Create local workflow using the library function
             let workflow_id =
                 crate::client::workflow_spec::WorkflowSpec::create_workflow_from_spec(
-                    config, temp_path, user, false, false,
+                    config, temp_path, user, false, false, false,
                 )
                 .map_err(|e| internal_error(format!("Failed to create workflow: {}", e)))?;
 

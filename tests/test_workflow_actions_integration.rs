@@ -67,9 +67,15 @@ actions:
     let spec_path = create_spec_file(temp_dir.path(), &spec_content);
 
     // Create workflow from spec
-    let workflow_id =
-        WorkflowSpec::create_workflow_from_spec(config, &spec_path, "test_user", false, false)
-            .expect("Failed to create workflow from spec");
+    let workflow_id = WorkflowSpec::create_workflow_from_spec(
+        config,
+        &spec_path,
+        "test_user",
+        false,
+        false,
+        false,
+    )
+    .expect("Failed to create workflow from spec");
 
     // Verify action was created
     let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
@@ -208,9 +214,15 @@ actions:
     let spec_path = create_spec_file(temp_dir.path(), &spec_content);
 
     // Create workflow from spec
-    let workflow_id =
-        WorkflowSpec::create_workflow_from_spec(config, &spec_path, "test_user", false, false)
-            .expect("Failed to create workflow from spec");
+    let workflow_id = WorkflowSpec::create_workflow_from_spec(
+        config,
+        &spec_path,
+        "test_user",
+        false,
+        false,
+        false,
+    )
+    .expect("Failed to create workflow from spec");
 
     // Verify action was created
     let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
@@ -319,9 +331,15 @@ actions:
     let spec_path = create_spec_file(temp_dir.path(), &spec_content);
 
     // Create workflow from spec
-    let workflow_id =
-        WorkflowSpec::create_workflow_from_spec(config, &spec_path, "test_user", false, false)
-            .expect("Failed to create workflow from spec");
+    let workflow_id = WorkflowSpec::create_workflow_from_spec(
+        config,
+        &spec_path,
+        "test_user",
+        false,
+        false,
+        false,
+    )
+    .expect("Failed to create workflow from spec");
 
     // Get workflow and initialize using WorkflowManager
     let workflow =
@@ -429,9 +447,15 @@ actions:
     let spec_path = create_spec_file(temp_dir.path(), &spec_content);
 
     // Create workflow from spec
-    let workflow_id =
-        WorkflowSpec::create_workflow_from_spec(config, &spec_path, "test_user", false, false)
-            .expect("Failed to create workflow from spec");
+    let workflow_id = WorkflowSpec::create_workflow_from_spec(
+        config,
+        &spec_path,
+        "test_user",
+        false,
+        false,
+        false,
+    )
+    .expect("Failed to create workflow from spec");
 
     // Verify action was created with correct job_ids (should match 3 training jobs)
     let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
@@ -546,9 +570,15 @@ actions:
     let spec_path = create_spec_file(temp_dir.path(), &spec_content);
 
     // Create workflow from spec
-    let workflow_id =
-        WorkflowSpec::create_workflow_from_spec(config, &spec_path, "test_user", false, false)
-            .expect("Failed to create workflow from spec");
+    let workflow_id = WorkflowSpec::create_workflow_from_spec(
+        config,
+        &spec_path,
+        "test_user",
+        false,
+        false,
+        false,
+    )
+    .expect("Failed to create workflow from spec");
 
     // Verify all 3 actions were created
     let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
@@ -667,9 +697,15 @@ actions:
     let spec_path = create_spec_file(temp_dir.path(), &spec_content);
 
     // Create workflow from spec
-    let workflow_id =
-        WorkflowSpec::create_workflow_from_spec(config, &spec_path, "test_user", false, false)
-            .expect("Failed to create workflow from spec");
+    let workflow_id = WorkflowSpec::create_workflow_from_spec(
+        config,
+        &spec_path,
+        "test_user",
+        false,
+        false,
+        false,
+    )
+    .expect("Failed to create workflow from spec");
 
     let workflow =
         apis::workflows_api::get_workflow(config, workflow_id).expect("Failed to get workflow");
@@ -793,9 +829,15 @@ actions:
     let spec_path = create_spec_file(temp_dir.path(), &spec_content);
 
     // Create workflow from spec
-    let workflow_id =
-        WorkflowSpec::create_workflow_from_spec(config, &spec_path, "test_user", false, false)
-            .expect("Failed to create workflow from spec");
+    let workflow_id = WorkflowSpec::create_workflow_from_spec(
+        config,
+        &spec_path,
+        "test_user",
+        false,
+        false,
+        false,
+    )
+    .expect("Failed to create workflow from spec");
 
     // Verify action was created with persistent=true
     let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
@@ -933,9 +975,15 @@ actions:
     let spec_path = create_spec_file(temp_dir.path(), &spec_content);
 
     // Create workflow from spec
-    let workflow_id =
-        WorkflowSpec::create_workflow_from_spec(config, &spec_path, "test_user", false, false)
-            .expect("Failed to create workflow from spec");
+    let workflow_id = WorkflowSpec::create_workflow_from_spec(
+        config,
+        &spec_path,
+        "test_user",
+        false,
+        false,
+        false,
+    )
+    .expect("Failed to create workflow from spec");
 
     // Verify action was created with persistent=true
     let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
@@ -1072,9 +1120,15 @@ actions:
     let spec_path = create_spec_file(temp_dir.path(), &spec_content);
 
     // Create workflow from spec
-    let workflow_id =
-        WorkflowSpec::create_workflow_from_spec(config, &spec_path, "test_user", false, false)
-            .expect("Failed to create workflow from spec");
+    let workflow_id = WorkflowSpec::create_workflow_from_spec(
+        config,
+        &spec_path,
+        "test_user",
+        false,
+        false,
+        false,
+    )
+    .expect("Failed to create workflow from spec");
 
     // Verify action was created with persistent=false (default)
     let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
@@ -1213,9 +1267,15 @@ actions:
     let spec_path = create_spec_file(temp_dir.path(), &spec_content);
 
     // Create workflow from spec
-    let workflow_id =
-        WorkflowSpec::create_workflow_from_spec(config, &spec_path, "test_user", false, false)
-            .expect("Failed to create workflow from spec");
+    let workflow_id = WorkflowSpec::create_workflow_from_spec(
+        config,
+        &spec_path,
+        "test_user",
+        false,
+        false,
+        false,
+    )
+    .expect("Failed to create workflow from spec");
 
     // Verify action was created
     let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
@@ -1323,9 +1383,15 @@ actions:
     let spec_path = create_spec_file(temp_dir.path(), &spec_content);
 
     // Create workflow from spec
-    let workflow_id =
-        WorkflowSpec::create_workflow_from_spec(config, &spec_path, "test_user", false, false)
-            .expect("Failed to create workflow from spec");
+    let workflow_id = WorkflowSpec::create_workflow_from_spec(
+        config,
+        &spec_path,
+        "test_user",
+        false,
+        false,
+        false,
+    )
+    .expect("Failed to create workflow from spec");
 
     let workflow =
         apis::workflows_api::get_workflow(config, workflow_id).expect("Failed to get workflow");

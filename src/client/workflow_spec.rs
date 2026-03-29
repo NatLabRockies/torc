@@ -1549,6 +1549,25 @@ impl WorkflowSpec {
         Ok(spec.validate_scheduler_resources())
     }
 
+    /// Pre-validate scheduler resources from a spec file and prompt if there are warnings.
+    /// Returns `true` if resource checks should be skipped (user confirmed or no warnings).
+    /// Exits the process if the user declines or the spec can't be parsed.
+    pub fn prevalidate_or_exit<P: AsRef<Path>>(path: P) -> bool {
+        match Self::validate_scheduler_resources_from_file(path) {
+            Ok(warnings) if !warnings.is_empty() => {
+                if !Self::prompt_scheduler_warnings(&warnings) {
+                    std::process::exit(1);
+                }
+                true
+            }
+            Err(e) => {
+                eprintln!("Error validating spec: {}", e);
+                std::process::exit(1);
+            }
+            _ => false,
+        }
+    }
+
     /// Display scheduler resource warnings and prompt the user for confirmation.
     /// Returns true if the user confirms (or if there are no warnings).
     /// In non-interactive contexts (stdin is not a TTY), prints a message and returns false.
@@ -1607,7 +1626,7 @@ impl WorkflowSpec {
     /// A `ValidationResult` containing validation status and summary
     pub fn validate_spec<P: AsRef<Path>>(path: P) -> ValidationResult {
         let mut errors = Vec::new();
-        let mut warnings = Vec::new();
+        let warnings = Vec::new();
 
         // Step 1: Try to parse the spec file
         let mut spec = match Self::from_spec_file(&path) {
@@ -1657,8 +1676,10 @@ impl WorkflowSpec {
         }
 
         // Step 4.5: Validate scheduler resources (runtime, memory, GPUs)
+        // These are errors in dry-run mode (matching create_workflow_from_spec behavior
+        // for non-interactive callers)
         let resource_warnings = spec.validate_scheduler_resources();
-        warnings.extend(resource_warnings);
+        errors.extend(resource_warnings);
 
         // Step 5: Validate variable substitution
         if let Err(e) = spec.substitute_variables() {
@@ -2041,12 +2062,14 @@ impl WorkflowSpec {
     /// * `user` - User that owns the workflow
     /// * `enable_resource_monitoring` - Whether to enable resource monitoring by default
     /// * `skip_checks` - Skip validation checks (use with caution)
+    /// * `skip_resource_checks` - Skip resource validation (runtime, memory, GPU) checks
     pub fn create_workflow_from_spec<P: AsRef<Path>>(
         config: &Configuration,
         path: P,
         user: &str,
         enable_resource_monitoring: bool,
         skip_checks: bool,
+        skip_resource_checks: bool,
     ) -> Result<i64, Box<dyn std::error::Error>> {
         // Step 1: Deserialize the WorkflowSpecification from spec file
         let mut spec = Self::from_spec_file(path)?;
@@ -2068,9 +2091,16 @@ impl WorkflowSpec {
         // Step 1.4: Validate workflow actions
         spec.validate_actions()?;
 
-        // Step 1.45: Validate scheduler node requirements
+        // Step 1.45: Validate scheduler node requirements (hard constraint, always checked
+        // unless --skip-checks)
         if !skip_checks {
             spec.validate_scheduler_node_requirements()?;
+        }
+
+        // Step 1.46: Validate scheduler resources (runtime, memory, GPUs)
+        // Separate from node checks so that accepting resource warnings via interactive
+        // prompt doesn't also bypass node validation.
+        if !skip_checks && !skip_resource_checks {
             let resource_warnings = spec.validate_scheduler_resources();
             if !resource_warnings.is_empty() {
                 return Err(format!(

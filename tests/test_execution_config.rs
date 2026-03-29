@@ -831,6 +831,7 @@ fn test_create_workflow_with_execution_config(start_server: &ServerProcess) {
         "test_user",
         false,
         false,
+        false,
     )
     .expect("Failed to create workflow from spec file");
 
@@ -873,6 +874,7 @@ fn test_create_workflow_with_slurm_execution_config(start_server: &ServerProcess
         "test_user",
         false,
         false,
+        false,
     )
     .expect("Failed to create workflow from spec file");
 
@@ -911,6 +913,7 @@ fn test_create_workflow_without_execution_config(start_server: &ServerProcess) {
         "test_user",
         false,
         false,
+        false,
     )
     .expect("Failed to create workflow from spec file");
 
@@ -941,6 +944,7 @@ fn test_create_workflow_with_auto_mode(start_server: &ServerProcess) {
         &start_server.config,
         temp_file.path(),
         "test_user",
+        false,
         false,
         false,
     )
@@ -1183,6 +1187,7 @@ fn test_direct_mode_simple_job_execution(start_server: &ServerProcess) {
         "test_user",
         false,
         false,
+        false,
     )
     .expect("Failed to create workflow");
 
@@ -1228,6 +1233,7 @@ fn test_direct_mode_with_resource_limits(start_server: &ServerProcess) {
         "test_user",
         false,
         false,
+        false,
     )
     .expect("Failed to create workflow");
 
@@ -1264,6 +1270,7 @@ fn test_direct_mode_disabled_resource_limits(start_server: &ServerProcess) {
         "test_user",
         false,
         false,
+        false,
     )
     .expect("Failed to create workflow");
 
@@ -1297,6 +1304,7 @@ fn test_limit_resources_false_rejected_with_slurm_mode(start_server: &ServerProc
         &start_server.config,
         temp_file.path(),
         "test_user",
+        false,
         false,
         false,
     );
@@ -1351,6 +1359,7 @@ fn test_limit_resources_false_rejected_with_auto_mode_and_slurm_schedulers(
         "test_user",
         false,
         false,
+        false,
     );
 
     assert!(
@@ -1378,6 +1387,7 @@ fn assert_spec_rejected(
         config,
         temp_file.path(),
         "test_user",
+        false,
         false,
         false,
     );
@@ -1506,6 +1516,7 @@ fn test_enable_cpu_bind_false_allowed_with_direct_mode(start_server: &ServerProc
         "test_user",
         false,
         false,
+        false,
     );
 
     assert!(
@@ -1589,6 +1600,7 @@ fn test_multiple_incompatible_fields_reported_together(start_server: &ServerProc
         "test_user",
         false,
         false,
+        false,
     );
 
     assert!(result.is_err(), "Should reject all incompatible fields");
@@ -1629,6 +1641,7 @@ fn test_direct_mode_custom_exit_codes(start_server: &ServerProcess) {
         &start_server.config,
         temp_file.path(),
         "test_user",
+        false,
         false,
         false,
     )

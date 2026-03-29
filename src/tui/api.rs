@@ -308,6 +308,7 @@ impl TorcClient {
             &user,
             false, // enable_resource_monitoring
             false, // skip_checks
+            false, // skip_resource_checks
         )
         .map_err(|e| anyhow::anyhow!("{}", e))?;
 

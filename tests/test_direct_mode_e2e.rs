@@ -41,6 +41,7 @@ fn create_workflow_from_yaml(
         "test_user",
         false,
         false,
+        false,
     )
 }
 
