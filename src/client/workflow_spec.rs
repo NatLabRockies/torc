@@ -873,41 +873,8 @@ impl ExecutionConfig {
     }
 
     /// Validate the configuration, returning any warnings.
-    ///
-    /// Returns a list of warning messages for potential issues:
-    /// - If `srun_termination_signal` time value is >= `sigkill_headroom_seconds`,
-    ///   the signal won't be sent before Slurm kills the step.
     pub fn validate(&self) -> Vec<String> {
-        let mut warnings = Vec::new();
-
-        // Check srun_termination_signal vs sigkill_headroom_seconds
-        if let Some(ref signal_spec) = self.srun_termination_signal
-            && let Some(signal_seconds) = Self::parse_srun_signal_seconds(signal_spec)
-        {
-            let headroom = self.sigkill_headroom_seconds();
-            if signal_seconds >= headroom {
-                warnings.push(format!(
-                    "srun_termination_signal '{}' specifies {}s, which is >= sigkill_headroom_seconds ({}s). \
-                     The signal will not be sent before Slurm kills the step. \
-                     Consider increasing sigkill_headroom_seconds or reducing the signal time.",
-                    signal_spec, signal_seconds, headroom
-                ));
-            }
-        }
-
-        warnings
-    }
-
-    /// Parse the seconds value from an srun --signal spec like "TERM@120".
-    /// Returns None if the spec doesn't contain a valid time value.
-    fn parse_srun_signal_seconds(signal_spec: &str) -> Option<i64> {
-        // Format: "<signal>@<seconds>" or just "<signal>"
-        if let Some(at_pos) = signal_spec.find('@') {
-            let seconds_str = &signal_spec[at_pos + 1..];
-            seconds_str.parse::<i64>().ok()
-        } else {
-            None
-        }
+        Vec::new()
     }
 
     /// Build from a WorkflowModel's execution_config or legacy slurm_config JSON blob.

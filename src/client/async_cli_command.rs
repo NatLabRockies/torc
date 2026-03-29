@@ -627,10 +627,6 @@ impl AsyncCliCommand {
     /// **Warning**: Using "SIGKILL" bypasses graceful shutdown entirely. Jobs will not
     /// have a chance to checkpoint or clean up. Prefer "SIGTERM" for graceful termination.
     ///
-    /// **Note**: This parses signal names for process signaling. This is distinct from
-    /// `ExecutionConfig::parse_srun_signal_seconds()` which parses srun `--signal` specs
-    /// like "TERM@120" to extract timing information.
-    ///
     /// **Note**: This method does not wait for the process to exit. Call
     /// [`wait_for_completion()`] afterwards to wait for the process and capture its exit code.
     #[cfg(unix)]
