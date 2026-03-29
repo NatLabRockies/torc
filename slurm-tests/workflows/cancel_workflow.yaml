@@ -8,7 +8,7 @@ name: cancel_workflow
 description: Workflow cancellation test — cancel while jobs are running
 project: slurm-tests
 execution_config:
-  mode: slurm
+  mode: direct
 
 resource_requirements:
   - name: sleep_resources

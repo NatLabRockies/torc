@@ -8,7 +8,7 @@ name: resource_monitoring
 description: Resource monitoring validation — CPU and memory usage captured
 project: slurm-tests
 execution_config:
-  mode: slurm
+  mode: direct
 
 resource_monitor:
   enabled: true

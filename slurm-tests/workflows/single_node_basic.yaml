@@ -7,7 +7,7 @@ name: single_node_basic
 description: Single node with 3 sequential jobs (a -> b -> c)
 project: slurm-tests
 execution_config:
-  mode: slurm
+  mode: direct
 
 resource_requirements:
   - name: basic
