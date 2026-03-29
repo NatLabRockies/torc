@@ -1541,30 +1541,53 @@ impl WorkflowSpec {
 
     /// Pre-validate scheduler resources from a spec file without creating anything.
     /// Parses the spec, expands parameters, and returns resource warnings.
-    pub fn validate_scheduler_resources_from_file<P: AsRef<Path>>(
+    /// Validate a spec file for creation by non-interactive callers (MCP server, TUI).
+    /// Runs node requirement and resource checks, returning an error if any fail.
+    pub fn validate_for_creation<P: AsRef<Path>>(
         path: P,
-    ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut spec = Self::from_spec_file(path)?;
         spec.expand_parameters()?;
-        Ok(spec.validate_scheduler_resources())
+
+        spec.validate_scheduler_node_requirements()?;
+
+        let resource_warnings = spec.validate_scheduler_resources();
+        if !resource_warnings.is_empty() {
+            return Err(format!(
+                "Resource validation failed:\n  - {}",
+                resource_warnings.join("\n  - ")
+            )
+            .into());
+        }
+        Ok(())
     }
 
-    /// Pre-validate scheduler resources from a spec file and prompt if there are warnings.
-    /// Returns `true` if resource checks should be skipped (user confirmed or no warnings).
-    /// Exits the process if the user declines or the spec can't be parsed.
-    pub fn prevalidate_or_exit<P: AsRef<Path>>(path: P) -> bool {
-        match Self::validate_scheduler_resources_from_file(path) {
-            Ok(warnings) if !warnings.is_empty() => {
-                if !Self::prompt_scheduler_warnings(&warnings) {
-                    std::process::exit(1);
-                }
-                true
-            }
+    /// Pre-validate a spec file for interactive CLI callers.
+    /// Node requirement failures are hard errors. Resource mismatches prompt the user.
+    /// Exits the process if validation fails or the user declines.
+    pub fn prevalidate_or_exit<P: AsRef<Path>>(path: P) {
+        let mut spec = match Self::from_spec_file(&path) {
+            Ok(s) => s,
             Err(e) => {
-                eprintln!("Error validating spec: {}", e);
+                eprintln!("Error reading spec: {}", e);
                 std::process::exit(1);
             }
-            _ => false,
+        };
+        if let Err(e) = spec.expand_parameters() {
+            eprintln!("Error expanding parameters: {}", e);
+            std::process::exit(1);
+        }
+
+        // Node requirements are hard errors (no prompt)
+        if let Err(e) = spec.validate_scheduler_node_requirements() {
+            eprintln!("Validation error: {}", e);
+            std::process::exit(1);
+        }
+
+        // Resource checks are interactive warnings
+        let warnings = spec.validate_scheduler_resources();
+        if !warnings.is_empty() && !Self::prompt_scheduler_warnings(&warnings) {
+            std::process::exit(1);
         }
     }
 
@@ -2061,15 +2084,11 @@ impl WorkflowSpec {
     /// * `path` - Path to the workflow specification file
     /// * `user` - User that owns the workflow
     /// * `enable_resource_monitoring` - Whether to enable resource monitoring by default
-    /// * `skip_checks` - Skip validation checks (use with caution)
-    /// * `skip_resource_checks` - Skip resource validation (runtime, memory, GPU) checks
     pub fn create_workflow_from_spec<P: AsRef<Path>>(
         config: &Configuration,
         path: P,
         user: &str,
         enable_resource_monitoring: bool,
-        skip_checks: bool,
-        skip_resource_checks: bool,
     ) -> Result<i64, Box<dyn std::error::Error>> {
         // Step 1: Deserialize the WorkflowSpecification from spec file
         let mut spec = Self::from_spec_file(path)?;
@@ -2090,26 +2109,6 @@ impl WorkflowSpec {
 
         // Step 1.4: Validate workflow actions
         spec.validate_actions()?;
-
-        // Step 1.45: Validate scheduler node requirements (hard constraint, always checked
-        // unless --skip-checks)
-        if !skip_checks {
-            spec.validate_scheduler_node_requirements()?;
-        }
-
-        // Step 1.46: Validate scheduler resources (runtime, memory, GPUs)
-        // Separate from node checks so that accepting resource warnings via interactive
-        // prompt doesn't also bypass node validation.
-        if !skip_checks && !skip_resource_checks {
-            let resource_warnings = spec.validate_scheduler_resources();
-            if !resource_warnings.is_empty() {
-                return Err(format!(
-                    "Resource validation failed (use --skip-checks to bypass):\n  - {}",
-                    resource_warnings.join("\n  - ")
-                )
-                .into());
-            }
-        }
 
         // Step 1.5: Perform variable substitution in commands
         spec.substitute_variables()?;

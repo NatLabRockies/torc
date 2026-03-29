@@ -72,8 +72,6 @@ fn test_two_node_allocation_single_worker_multi_node_step(start_server: &ServerP
         temp_file.path(),
         "test_user",
         false,
-        false, // skip_checks = false — validation must pass
-        false,
     );
 
     assert!(
@@ -229,8 +227,6 @@ fn test_two_node_allocation_one_worker_per_node_parallel_jobs(start_server: &Ser
         &start_server.config,
         temp_file.path(),
         "test_user",
-        false,
-        false, // skip_checks = false — validation must pass
         false,
     );
 

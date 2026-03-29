@@ -298,6 +298,10 @@ impl TorcClient {
     }
 
     pub fn create_workflow_from_file(&self, path: &str) -> Result<i64> {
+        // Validate before creating (non-interactive: all issues are errors)
+        WorkflowSpec::validate_for_creation(path)
+            .map_err(|e| anyhow::anyhow!("Validation failed: {}", e))?;
+
         // Get current user
         let user = crate::get_username();
 
@@ -307,8 +311,6 @@ impl TorcClient {
             path,
             &user,
             false, // enable_resource_monitoring
-            false, // skip_checks
-            false, // skip_resource_checks
         )
         .map_err(|e| anyhow::anyhow!("{}", e))?;
 

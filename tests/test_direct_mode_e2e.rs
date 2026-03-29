@@ -35,14 +35,7 @@ fn create_workflow_from_yaml(
     let temp_file = NamedTempFile::new()?;
     fs::write(temp_file.path(), yaml)?;
 
-    WorkflowSpec::create_workflow_from_spec(
-        &server.config,
-        temp_file.path(),
-        "test_user",
-        false,
-        false,
-        false,
-    )
+    WorkflowSpec::create_workflow_from_spec(&server.config, temp_file.path(), "test_user", false)
 }
 
 fn verify_all_jobs_completed(server: &ServerProcess, workflow_id: i64) {

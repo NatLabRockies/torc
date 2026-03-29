@@ -207,9 +207,9 @@ fn main() {
             skip_checks,
         } => {
             let workflow_id = if is_spec_file(workflow_spec_or_id) {
-                // Pre-validate scheduler resources and prompt if needed
-                let skip_resource_checks =
-                    *skip_checks || WorkflowSpec::prevalidate_or_exit(workflow_spec_or_id);
+                if !*skip_checks {
+                    WorkflowSpec::prevalidate_or_exit(workflow_spec_or_id);
+                }
 
                 // Create workflow from spec file
                 let user = torc::get_username();
@@ -218,8 +218,6 @@ fn main() {
                     workflow_spec_or_id,
                     &user,
                     true,
-                    *skip_checks,
-                    skip_resource_checks,
                 ) {
                     Ok(id) => {
                         print_workflow_message(&format, id, &format!("Created workflow {}", id));
@@ -320,9 +318,9 @@ fn main() {
                     std::process::exit(1);
                 }
 
-                // Pre-validate scheduler resources and prompt if needed
-                let skip_resource_checks =
-                    *skip_checks || WorkflowSpec::prevalidate_or_exit(workflow_spec_or_id);
+                if !*skip_checks {
+                    WorkflowSpec::prevalidate_or_exit(workflow_spec_or_id);
+                }
 
                 // Create workflow from spec
                 let user = torc::get_username();
@@ -332,8 +330,6 @@ fn main() {
                     workflow_spec_or_id,
                     &user,
                     true,
-                    *skip_checks,
-                    skip_resource_checks,
                 ) {
                     Ok(id) => {
                         print_workflow_message(&format, id, &format!("Created workflow {}", id));
