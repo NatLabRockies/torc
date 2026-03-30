@@ -995,6 +995,18 @@ fn get_scheduler_dry_run(
 // Interactive recovery wizard
 // ---------------------------------------------------------------------------
 
+const MAX_DISPLAY_ROWS: usize = 500;
+
+/// Print a list of names, one per line, truncated to `max` entries.
+fn print_truncated_names<S: AsRef<str>>(names: &[S], max: usize) {
+    for name in names.iter().take(max) {
+        eprintln!("    {}", name.as_ref());
+    }
+    if names.len() > max {
+        eprintln!("    ... and {} more not shown", names.len() - max);
+    }
+}
+
 /// Read a line from stdin, trimmed. Returns the default if the user presses Enter.
 fn prompt_line(prompt: &str) -> Result<String, String> {
     eprint!("{}", prompt);
@@ -1099,7 +1111,7 @@ fn recover_workflow_interactive(
             "  {:<8} {:<30} {:<6} {:<10} {:<14} ------",
             "---", "----", "---", "------", "-----------"
         );
-        for v in &oom_jobs {
+        for v in oom_jobs.iter().take(MAX_DISPLAY_ROWS) {
             eprintln!(
                 "  {:<8} {:<30} {:<6} {:<10} {:<14} {}",
                 v.job_id,
@@ -1108,6 +1120,12 @@ fn recover_workflow_interactive(
                 &v.configured_memory,
                 v.peak_memory_formatted.as_deref().unwrap_or("-"),
                 v.oom_reason.as_deref().unwrap_or("-"),
+            );
+        }
+        if oom_jobs.len() > MAX_DISPLAY_ROWS {
+            eprintln!(
+                "  ... and {} more OOM failures not shown",
+                oom_jobs.len() - MAX_DISPLAY_ROWS
             );
         }
         eprintln!();
@@ -1127,7 +1145,7 @@ fn recover_workflow_interactive(
             "  {:<8} {:<30} {:<6} {:<12} {:<12} ------",
             "---", "----", "---", "-------", "----------"
         );
-        for v in &timeout_jobs {
+        for v in timeout_jobs.iter().take(MAX_DISPLAY_ROWS) {
             eprintln!(
                 "  {:<8} {:<30} {:<6} {:<12} {:<12.1} {}",
                 v.job_id,
@@ -1136,6 +1154,12 @@ fn recover_workflow_interactive(
                 &v.configured_runtime,
                 v.exec_time_minutes,
                 v.timeout_reason.as_deref().unwrap_or("-"),
+            );
+        }
+        if timeout_jobs.len() > MAX_DISPLAY_ROWS {
+            eprintln!(
+                "  ... and {} more timeout failures not shown",
+                timeout_jobs.len() - MAX_DISPLAY_ROWS
             );
         }
         eprintln!();
@@ -1152,13 +1176,19 @@ fn recover_workflow_interactive(
             "  {:<8} {:<30} {:<6} {:<10}",
             "---", "----", "---", "------"
         );
-        for v in &unknown_jobs {
+        for v in unknown_jobs.iter().take(MAX_DISPLAY_ROWS) {
             eprintln!(
                 "  {:<8} {:<30} {:<6} {:<10}",
                 v.job_id,
                 truncate(&v.job_name, 30),
                 v.return_code,
                 &v.configured_memory,
+            );
+        }
+        if unknown_jobs.len() > MAX_DISPLAY_ROWS {
+            eprintln!(
+                "  ... and {} more unknown failures not shown",
+                unknown_jobs.len() - MAX_DISPLAY_ROWS
             );
         }
         eprintln!();
@@ -1284,25 +1314,25 @@ fn recover_workflow_interactive(
         for adj in &correction_result.adjustments {
             if adj.memory_adjusted {
                 eprintln!(
-                    "  Memory: {} -> {} ({}x) for {} job{}: {}",
+                    "  Memory: {} -> {} ({}x) for {} job{}",
                     adj.original_memory.as_deref().unwrap_or("?"),
                     adj.new_memory.as_deref().unwrap_or("?"),
                     memory_multiplier,
                     adj.job_names.len(),
                     plural(adj.job_names.len()),
-                    adj.job_names.join(", "),
                 );
+                print_truncated_names(&adj.job_names, MAX_DISPLAY_ROWS);
             }
             if adj.runtime_adjusted {
                 eprintln!(
-                    "  Runtime: {} -> {} ({}x) for {} job{}: {}",
+                    "  Runtime: {} -> {} ({}x) for {} job{}",
                     adj.original_runtime.as_deref().unwrap_or("?"),
                     adj.new_runtime.as_deref().unwrap_or("?"),
                     runtime_multiplier,
                     adj.job_names.len(),
                     plural(adj.job_names.len()),
-                    adj.job_names.join(", "),
                 );
+                print_truncated_names(&adj.job_names, MAX_DISPLAY_ROWS);
             }
         }
     }
@@ -1314,11 +1344,11 @@ fn recover_workflow_interactive(
             .map(|v| v.job_name.as_str())
             .collect();
         eprintln!(
-            "  Retry as-is: {} job{}: {}",
+            "  Retry as-is: {} job{}",
             unknown_job_ids.len(),
             plural(unknown_job_ids.len()),
-            unknown_names.join(", "),
         );
+        print_truncated_names(&unknown_names, MAX_DISPLAY_ROWS);
     }
 
     let mut all_jobs_to_retry: Vec<i64> = Vec::new();
