@@ -518,7 +518,7 @@ async fn main() -> Result<()> {
     let app = Router::new()
         // Static files and dashboard
         .route("/", get(index_handler))
-        .route("/static/*path", get(static_handler))
+        .route("/static/{*path}", get(static_handler))
         // CLI command endpoints
         .route("/api/cli/create", post(cli_create_handler))
         .route("/api/cli/create-slurm", post(cli_create_slurm_handler))
@@ -568,7 +568,7 @@ async fn main() -> Result<()> {
         .route("/api/user", get(user_handler))
         // API proxy - catch all /torc-service/* requests
         .route(
-            "/torc-service/*path",
+            "/torc-service/{*path}",
             get(proxy_handler)
                 .post(proxy_handler)
                 .put(proxy_handler)
