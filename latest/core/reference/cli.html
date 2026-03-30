@@ -422,6 +422,10 @@ guide</li>
 <p>Diagnoses job failures (OOM, timeout), adjusts resource requirements, and resubmits jobs. Use after
 a workflow has completed with failures. For continuous monitoring, use <code>torc watch --recover</code>
 instead.</p>
+<p>By default, runs an interactive wizard that displays failed jobs, lets you choose per-category
+actions (retry with adjusted resources or skip), select a Slurm scheduler, and confirm before
+executing. Use <code>--no-prompts</code> to skip the wizard and apply heuristics automatically. When stdin is
+not a terminal (e.g., piped or scripted), non-interactive mode is used automatically.</p>
 <p><strong>Usage:</strong> <code>torc recover [OPTIONS] &lt;WORKFLOW_ID&gt;</code></p>
 <h3 id="arguments-3"><a class="header" href="#arguments-3">Arguments</a></h3>
 <ul>
@@ -436,6 +440,7 @@ instead.</p>
 <li><code>--retry-unknown</code> — Also retry jobs with unknown failure causes</li>
 <li><code>--recovery-hook &lt;RECOVERY_HOOK&gt;</code> — Custom recovery script for unknown failures</li>
 <li><code>--dry-run</code> — Show what would be done without making any changes</li>
+<li><code>--no-prompts</code> — Skip interactive wizard and apply heuristics automatically</li>
 </ul>
 <h3 id="when-to-use"><a class="header" href="#when-to-use">When to Use</a></h3>
 <p>Use <code>torc recover</code> for:</p>
@@ -451,11 +456,14 @@ instead.</p>
 <li>Production workflows that should self-heal</li>
 </ul>
 <h3 id="examples-1"><a class="header" href="#examples-1">Examples</a></h3>
-<pre><code class="language-bash"># Basic recovery
+<pre><code class="language-bash"># Interactive recovery (default)
 torc recover 123
 
 # Dry run to preview changes without modifying anything
 torc recover 123 --dry-run
+
+# Skip interactive prompts (for scripting)
+torc recover 123 --no-prompts
 
 # Custom resource multipliers
 torc recover 123 --memory-multiplier 2.0 --runtime-multiplier 1.5
