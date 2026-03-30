@@ -1597,6 +1597,36 @@ fn prompt_scheduler_choice(
             }
         };
 
+        // Prompt for walltime override
+        let walltime_input = prompt_line(&format!(
+            "  Walltime [default: {}] (press Enter to keep): ",
+            &scheduler.walltime
+        ))?;
+
+        let (final_id, final_name) = if walltime_input.is_empty() {
+            (id, scheduler.name.clone().unwrap_or_default())
+        } else {
+            // Create a new scheduler cloned from the selected one with the new walltime
+            eprintln!(
+                "  Creating new scheduler with walltime {}...",
+                &walltime_input
+            );
+            let mut new_sched = scheduler.clone();
+            new_sched.id = None;
+            new_sched.walltime = walltime_input;
+            let base_name = scheduler.name.as_deref().unwrap_or("scheduler");
+            new_sched.name = Some(format!("{}_recovery", base_name));
+            let created = apis::slurm_schedulers_api::create_slurm_scheduler(config, new_sched)
+                .map_err(|e| format!("Failed to create scheduler: {}", e))?;
+            let new_id = created.id.ok_or("Created scheduler missing ID")?;
+            let new_name = created.name.unwrap_or_default();
+            eprintln!(
+                "  Created scheduler '{}' (ID {}) with walltime {}",
+                &new_name, new_id, &created.walltime
+            );
+            (new_id, new_name)
+        };
+
         // Prompt for number of allocations
         let default_allocs = 1;
         let num_allocations = loop {
@@ -1614,8 +1644,8 @@ fn prompt_scheduler_choice(
         };
 
         return Ok(SchedulerChoice::Existing {
-            scheduler_id: id,
-            scheduler_name: scheduler.name.clone().unwrap_or_default(),
+            scheduler_id: final_id,
+            scheduler_name: final_name,
             num_allocations,
         });
     }
