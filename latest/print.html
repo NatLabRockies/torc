@@ -23844,6 +23844,37 @@ cargo clippy --all-targets --all-features -- -D warnings
 <li>Reference to any related issues</li>
 <li>Test results</li>
 </ul>
+<h2 id="pre-release-slurm-integration-tests"><a class="header" href="#pre-release-slurm-integration-tests">Pre-Release: Slurm Integration Tests</a></h2>
+<p>Before tagging a release, run the Slurm integration test suite on an HPC cluster to verify that job
+submission, multi-node execution, failure recovery, and resource monitoring work correctly under a
+real Slurm scheduler.</p>
+<h3 id="prerequisites-24"><a class="header" href="#prerequisites-24">Prerequisites</a></h3>
+<ul>
+<li>Access to an HPC cluster with Slurm</li>
+<li><code>torc</code>, <code>torc-server</code>, and <code>torc-htpasswd</code> binaries built
+(<code>cargo build --release --all-features</code>)</li>
+<li><code>jq</code> and Slurm CLI tools (<code>sbatch</code>, etc.) available on the login node</li>
+</ul>
+<h3 id="running-the-suite"><a class="header" href="#running-the-suite">Running the Suite</a></h3>
+<p>From the repository root on a login node:</p>
+<pre><code class="language-bash">./slurm-tests/run_all.sh --account &lt;SLURM_ACCOUNT&gt; --host &lt;LOGIN_NODE_HOSTNAME&gt;
+</code></pre>
+<p>Common options:</p>
+<pre><code class="language-bash"># Use a specific partition (default: debug)
+./slurm-tests/run_all.sh --account myproject --host login1.hpc.example.com \
+  --partition gpu
+
+# Run a single test by name substring
+./slurm-tests/run_all.sh --account myproject --host login1.hpc.example.com \
+  --test oom_detection
+
+# Adjust timeout and parallelism
+./slurm-tests/run_all.sh --account myproject --host login1.hpc.example.com \
+  --timeout 60 --max-parallel-jobs 8
+</code></pre>
+<p>The runner starts a temporary Torc server, executes each test as a child workflow under Slurm, and
+writes results to <code>slurm-tests/output/run_&lt;timestamp&gt;/results.json</code>. All tests must pass before a
+release is tagged.</p>
 <h2 id="pull-request-guidelines"><a class="header" href="#pull-request-guidelines">Pull Request Guidelines</a></h2>
 <ul>
 <li><strong>Keep PRs focused</strong> - One feature or fix per PR</li>
