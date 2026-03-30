@@ -1375,7 +1375,37 @@ fn recover_workflow_interactive(
         });
     }
 
+    // --- Scheduler selection ----------------------------------------------------
+    eprintln!("\n--- Slurm Scheduler ---\n");
+
+    let scheduler_choice = prompt_scheduler_choice(config, args)?;
+
     // Confirm before executing
+    match &scheduler_choice {
+        SchedulerChoice::Regenerate {
+            partition,
+            walltime,
+        } => {
+            eprintln!("\n  Scheduler: auto-generate new schedulers");
+            if let Some(p) = partition {
+                eprintln!("  Partition: {}", p);
+            }
+            if let Some(w) = walltime {
+                eprintln!("  Walltime: {}", w);
+            }
+        }
+        SchedulerChoice::Existing {
+            scheduler_id,
+            scheduler_name,
+            num_allocations,
+        } => {
+            eprintln!(
+                "\n  Scheduler: {} (ID {}), {} allocation(s)",
+                scheduler_name, scheduler_id, num_allocations
+            );
+        }
+    }
+
     let confirm = prompt_choice("\nProceed with recovery? (y/N): ", &["y", "n"], "n")?;
     if confirm != "y" {
         return Err("Recovery cancelled.".to_string());
@@ -1411,9 +1441,37 @@ fn recover_workflow_interactive(
     info!("Reinitializing workflow...");
     reinitialize_workflow(config, args.workflow_id)?;
 
-    // Regenerate and submit Slurm schedulers
-    info!("Regenerating and submitting Slurm schedulers...");
-    regenerate_and_submit(args.workflow_id, &args.output_dir, None, None)?;
+    // Submit Slurm schedulers
+    match &scheduler_choice {
+        SchedulerChoice::Regenerate {
+            partition,
+            walltime,
+        } => {
+            info!("Regenerating and submitting Slurm schedulers...");
+            regenerate_and_submit(
+                args.workflow_id,
+                &args.output_dir,
+                partition.as_deref(),
+                walltime.as_deref(),
+            )?;
+        }
+        SchedulerChoice::Existing {
+            scheduler_id,
+            num_allocations,
+            ..
+        } => {
+            info!(
+                "Submitting {} allocation(s) with scheduler ID {}...",
+                num_allocations, scheduler_id
+            );
+            submit_existing_scheduler(
+                args.workflow_id,
+                *scheduler_id,
+                *num_allocations,
+                &args.output_dir,
+            )?;
+        }
+    }
 
     eprintln!(
         "\nRecovery complete. {} job(s) reset for retry.",
@@ -1429,6 +1487,176 @@ fn recover_workflow_interactive(
         adjustments: real_result.adjustments,
         slurm_dry_run: None,
     })
+}
+
+/// User's choice for how to handle Slurm scheduler submission.
+enum SchedulerChoice {
+    /// Auto-generate new schedulers via `torc slurm regenerate --submit`
+    Regenerate {
+        partition: Option<String>,
+        walltime: Option<String>,
+    },
+    /// Reuse an existing scheduler config
+    Existing {
+        scheduler_id: i64,
+        scheduler_name: String,
+        num_allocations: i32,
+    },
+}
+
+/// Prompt the user to choose between auto-generating schedulers or reusing an existing one.
+fn prompt_scheduler_choice(
+    config: &Configuration,
+    args: &RecoverArgs,
+) -> Result<SchedulerChoice, String> {
+    // List existing schedulers for the workflow
+    let schedulers = apis::slurm_schedulers_api::list_slurm_schedulers(
+        config,
+        args.workflow_id,
+        None,
+        None,
+        None,
+        None,
+    )
+    .map_err(|e| format!("Failed to list schedulers: {}", e))?;
+
+    if schedulers.items.is_empty() {
+        eprintln!("No existing schedulers found. Will auto-generate new ones.");
+        return Ok(SchedulerChoice::Regenerate {
+            partition: None,
+            walltime: None,
+        });
+    }
+
+    // Display existing schedulers
+    eprintln!("Existing schedulers for this workflow:\n");
+    eprintln!(
+        "  {:<6} {:<25} {:<14} {:<14} {:<12} {:<6}",
+        "ID", "Name", "Account", "Partition", "Walltime", "Nodes"
+    );
+    eprintln!(
+        "  {:<6} {:<25} {:<14} {:<14} {:<12} {:<6}",
+        "---", "----", "-------", "---------", "--------", "-----"
+    );
+    for s in &schedulers.items {
+        eprintln!(
+            "  {:<6} {:<25} {:<14} {:<14} {:<12} {:<6}",
+            s.id.unwrap_or(0),
+            truncate(s.name.as_deref().unwrap_or("-"), 25),
+            truncate(&s.account, 14),
+            s.partition.as_deref().unwrap_or("-"),
+            &s.walltime,
+            s.nodes,
+        );
+    }
+
+    eprintln!();
+    let choice = prompt_choice(
+        "Scheduler: [A]uto-generate new / [E]xisting (enter ID) (default: A): ",
+        &["a", "e"],
+        "a",
+    )?;
+
+    if choice == "a" {
+        // Optionally let user specify partition/walltime overrides
+        let partition = {
+            let input = prompt_line("  Partition override (press Enter to auto-detect): ")?;
+            if input.is_empty() { None } else { Some(input) }
+        };
+        let walltime = {
+            let input = prompt_line(
+                "  Walltime override (e.g., 04:00:00, press Enter to auto-calculate): ",
+            )?;
+            if input.is_empty() { None } else { Some(input) }
+        };
+        return Ok(SchedulerChoice::Regenerate {
+            partition,
+            walltime,
+        });
+    }
+
+    // User chose existing scheduler — prompt for ID
+    loop {
+        let id_input = prompt_line("  Enter scheduler ID: ")?;
+        let id = match id_input.parse::<i64>() {
+            Ok(id) => id,
+            Err(_) => {
+                eprintln!("  Invalid ID. Please enter a number.");
+                continue;
+            }
+        };
+
+        let scheduler = match schedulers.items.iter().find(|s| s.id == Some(id)) {
+            Some(s) => s,
+            None => {
+                eprintln!(
+                    "  Scheduler ID {} not found. Choose from the list above.",
+                    id
+                );
+                continue;
+            }
+        };
+
+        // Prompt for number of allocations
+        let default_allocs = 1;
+        let num_allocations = loop {
+            let input = prompt_line(&format!(
+                "  Number of allocations [default: {}]: ",
+                default_allocs
+            ))?;
+            if input.is_empty() {
+                break default_allocs;
+            }
+            match input.parse::<i32>() {
+                Ok(n) if n > 0 => break n,
+                _ => eprintln!("  Please enter a positive integer."),
+            }
+        };
+
+        return Ok(SchedulerChoice::Existing {
+            scheduler_id: id,
+            scheduler_name: scheduler.name.clone().unwrap_or_default(),
+            num_allocations,
+        });
+    }
+}
+
+/// Submit allocations using an existing scheduler config via `torc slurm schedule-nodes`.
+fn submit_existing_scheduler(
+    workflow_id: i64,
+    scheduler_id: i64,
+    num_allocations: i32,
+    output_dir: &Path,
+) -> Result<(), String> {
+    let mut cmd = torc_command()?;
+    let output = cmd
+        .args([
+            "slurm",
+            "schedule-nodes",
+            &workflow_id.to_string(),
+            "--scheduler-config-id",
+            &scheduler_id.to_string(),
+            "--num-hpc-jobs",
+            &num_allocations.to_string(),
+            "-o",
+            output_dir.to_str().unwrap_or("torc_output"),
+        ])
+        .output()
+        .map_err(|e| format!("Failed to run slurm schedule-nodes: {}", e))?;
+
+    if !output.stdout.is_empty() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines() {
+            info!("  {}", line);
+        }
+    }
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("slurm schedule-nodes failed: {}", stderr));
+    }
+
+    Ok(())
 }
 
 fn plural(n: usize) -> &'static str {
