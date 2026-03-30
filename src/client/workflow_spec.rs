@@ -873,10 +873,6 @@ impl ExecutionConfig {
     }
 
     /// Validate the configuration, returning any warnings.
-    pub fn validate(&self) -> Vec<String> {
-        Vec::new()
-    }
-
     /// Build from a WorkflowModel's execution_config or legacy slurm_config JSON blob.
     ///
     /// Checks execution_config first; falls back to slurm_config for old workflows.
@@ -1359,39 +1355,57 @@ impl WorkflowSpec {
             gpu_count: Option<u32>,
         }
 
-        let parsed_schedulers: Vec<ParsedScheduler> = schedulers
-            .iter()
-            .filter_map(|sched| {
-                let name = sched.name.as_deref()?;
-                let walltime_secs =
-                    crate::client::commands::slurm::parse_walltime_secs(&sched.walltime).ok();
-                let memory_bytes = sched
-                    .mem
-                    .as_ref()
-                    .and_then(|m| crate::memory_utils::memory_string_to_bytes(m).ok());
-                let gpu_count = if sched.gres.as_ref().is_some_and(|g| !g.trim().is_empty()) {
-                    let (parsed, _) = crate::client::hpc::slurm::parse_gres(&sched.gres);
-                    // Non-empty but unparseable gres → treat as 0 GPUs so validation
-                    // isn't silently bypassed
-                    Some(parsed.unwrap_or(0))
-                } else {
-                    None
-                };
-                Some(ParsedScheduler {
-                    name,
-                    sched,
-                    walltime_secs,
-                    memory_bytes,
-                    gpu_count,
-                })
-            })
-            .collect();
+        let mut warnings: Vec<String> = Vec::new();
 
-        if parsed_schedulers.is_empty() {
-            return Vec::new();
+        let mut parsed_schedulers: Vec<ParsedScheduler> = Vec::new();
+        for sched in &schedulers {
+            let Some(name) = sched.name.as_deref() else {
+                continue;
+            };
+            let walltime_secs =
+                match crate::client::commands::slurm::parse_walltime_secs(&sched.walltime) {
+                    Ok(v) => Some(v),
+                    Err(e) => {
+                        warnings.push(format!(
+                            "Scheduler '{}': invalid walltime '{}': {}",
+                            name, sched.walltime, e,
+                        ));
+                        None
+                    }
+                };
+            let memory_bytes = match sched.mem.as_ref() {
+                Some(m) => match crate::memory_utils::memory_string_to_bytes(m) {
+                    Ok(v) => Some(v),
+                    Err(e) => {
+                        warnings.push(format!(
+                            "Scheduler '{}': invalid memory '{}': {}",
+                            name, m, e,
+                        ));
+                        None
+                    }
+                },
+                None => None,
+            };
+            let gpu_count = if sched.gres.as_ref().is_some_and(|g| !g.trim().is_empty()) {
+                let (parsed, _) = crate::client::hpc::slurm::parse_gres(&sched.gres);
+                // Non-empty but unparseable gres → treat as 0 GPUs so validation
+                // isn't silently bypassed
+                Some(parsed.unwrap_or(0))
+            } else {
+                None
+            };
+            parsed_schedulers.push(ParsedScheduler {
+                name,
+                sched,
+                walltime_secs,
+                memory_bytes,
+                gpu_count,
+            });
         }
 
-        let mut warnings: Vec<String> = Vec::new();
+        if parsed_schedulers.is_empty() {
+            return warnings;
+        }
 
         for job in &self.jobs {
             let rr_name = match &job.resource_requirements {
@@ -1404,10 +1418,27 @@ impl WorkflowSpec {
             };
 
             // Parse job resource values
-            let job_runtime_secs = crate::time_utils::duration_string_to_seconds(&rr.runtime)
-                .ok()
-                .map(|s| s as u64);
-            let job_memory_bytes = crate::memory_utils::memory_string_to_bytes(&rr.memory).ok();
+            let job_runtime_secs = match crate::time_utils::duration_string_to_seconds(&rr.runtime)
+            {
+                Ok(secs) => Some(secs as u64),
+                Err(e) => {
+                    warnings.push(format!(
+                        "Job '{}': invalid runtime '{}': {}",
+                        job.name, rr.runtime, e,
+                    ));
+                    None
+                }
+            };
+            let job_memory_bytes = match crate::memory_utils::memory_string_to_bytes(&rr.memory) {
+                Ok(bytes) => Some(bytes),
+                Err(e) => {
+                    warnings.push(format!(
+                        "Job '{}': invalid memory '{}': {}",
+                        job.name, rr.memory, e,
+                    ));
+                    None
+                }
+            };
             let job_gpus = rr.num_gpus;
 
             if job_gpus < 0 {
@@ -1522,10 +1553,11 @@ impl WorkflowSpec {
     }
 
     /// Validate a spec file for creation by non-interactive callers (MCP server, TUI).
-    /// Runs node requirement and resource checks, returning an error if any fail.
+    /// Runs node requirement and resource checks, returning the parsed spec on success
+    /// so callers can reuse it for creation without re-reading the file.
     pub fn validate_for_creation<P: AsRef<Path>>(
         path: P,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<WorkflowSpec, Box<dyn std::error::Error>> {
         let mut spec = Self::from_spec_file(path)?;
         spec.expand_parameters()?;
 
@@ -1539,7 +1571,7 @@ impl WorkflowSpec {
             )
             .into());
         }
-        Ok(())
+        Ok(spec)
     }
 
     /// Pre-validate a spec file for interactive CLI callers.
@@ -2071,11 +2103,22 @@ impl WorkflowSpec {
         user: &str,
         enable_resource_monitoring: bool,
     ) -> Result<i64, Box<dyn std::error::Error>> {
-        // Step 1: Deserialize the WorkflowSpecification from spec file
         let mut spec = Self::from_spec_file(path)?;
-        spec.user = Some(user.to_string());
+        Self::prepare_spec_for_creation(&mut spec, user, enable_resource_monitoring)?;
+        Self::create_from_prepared_spec(config, spec)
+    }
 
-        // Apply default resource monitoring if enabled and not already configured
+    /// Create a workflow from a pre-parsed and validated spec.
+    /// Use this after `validate_for_creation` to avoid re-reading the file.
+    pub fn create_from_validated_spec(
+        config: &Configuration,
+        mut spec: WorkflowSpec,
+        user: &str,
+        enable_resource_monitoring: bool,
+    ) -> Result<i64, Box<dyn std::error::Error>> {
+        // validate_for_creation already expanded parameters, but we still need
+        // the remaining preparation steps (user, monitoring, actions, variables).
+        spec.user = Some(user.to_string());
         if enable_resource_monitoring && spec.resource_monitor.is_none() {
             spec.resource_monitor = Some(crate::client::resource_monitor::ResourceMonitorConfig {
                 enabled: true,
@@ -2084,16 +2127,38 @@ impl WorkflowSpec {
                 generate_plots: false,
             });
         }
-
-        // Step 1.25: Expand parameterized jobs and files
-        spec.expand_parameters()?;
-
-        // Step 1.4: Validate workflow actions
         spec.validate_actions()?;
-
-        // Step 1.5: Perform variable substitution in commands
         spec.substitute_variables()?;
+        Self::create_from_prepared_spec(config, spec)
+    }
 
+    /// Prepare a spec for creation: set user, expand parameters, validate, substitute.
+    fn prepare_spec_for_creation(
+        spec: &mut WorkflowSpec,
+        user: &str,
+        enable_resource_monitoring: bool,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        spec.user = Some(user.to_string());
+        if enable_resource_monitoring && spec.resource_monitor.is_none() {
+            spec.resource_monitor = Some(crate::client::resource_monitor::ResourceMonitorConfig {
+                enabled: true,
+                granularity: crate::client::resource_monitor::MonitorGranularity::Summary,
+                sample_interval_seconds: 10,
+                generate_plots: false,
+            });
+        }
+        spec.expand_parameters()?;
+        spec.validate_actions()?;
+        spec.substitute_variables()?;
+        Ok(())
+    }
+
+    /// Create a workflow from a spec that has already been prepared (user set,
+    /// parameters expanded, actions validated, variables substituted).
+    fn create_from_prepared_spec(
+        config: &Configuration,
+        mut spec: WorkflowSpec,
+    ) -> Result<i64, Box<dyn std::error::Error>> {
         // Step 1.6: Collect per-job stdio overrides into execution_config
         {
             let overrides: HashMap<String, StdioConfig> = spec
@@ -2252,17 +2317,12 @@ impl WorkflowSpec {
         }
 
         // Store execution_config as JSON if any non-default settings are configured
-        if let Some(ref execution_config) = spec.execution_config {
-            // Validate and warn about potential issues
-            for warning in execution_config.validate() {
-                log::warn!("{}", warning);
-            }
-
-            if *execution_config != ExecutionConfig::default() {
-                let execution_config_json = serde_json::to_string(execution_config)
-                    .map_err(|e| format!("Failed to serialize execution_config: {}", e))?;
-                workflow_model.execution_config = Some(execution_config_json);
-            }
+        if let Some(ref execution_config) = spec.execution_config
+            && *execution_config != ExecutionConfig::default()
+        {
+            let execution_config_json = serde_json::to_string(execution_config)
+                .map_err(|e| format!("Failed to serialize execution_config: {}", e))?;
+            workflow_model.execution_config = Some(execution_config_json);
         }
 
         // Validate that execution_config fields match the effective mode.

@@ -1,8 +1,8 @@
 # Test: Job-Based Parallelism
 #
-# 1-node allocation with NO resource_requirements on jobs.
-# Jobs get the auto-assigned "default" RR, so srun skips resource limit flags
-# and each job can use the full allocation's resources.
+# 1-node allocation with NO resource_requirements on jobs (direct mode).
+# Jobs get the auto-assigned "default" RR and run directly (no srun wrapper),
+# so each job can use the full allocation's resources.
 #
 # Concurrency is controlled by --max-parallel-jobs (passed via torc submit).
 # The test submits with --max-parallel-jobs 2, so 2 of the 4 jobs run at a time.

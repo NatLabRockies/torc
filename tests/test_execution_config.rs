@@ -255,54 +255,6 @@ fn test_effective_mode_auto_with_slurm_env() {
 }
 
 // =============================================================================
-// Validation tests
-// =============================================================================
-
-#[test]
-fn test_validation_returns_no_warnings() {
-    // srun_termination_signal and sigkill_headroom_seconds are independent —
-    // the signal fires relative to the step's --time, not the allocation end.
-    let config = ExecutionConfig {
-        srun_termination_signal: Some("TERM@120".to_string()),
-        sigkill_headroom_seconds: Some(60),
-        ..Default::default()
-    };
-    let warnings = config.validate();
-    assert!(
-        warnings.is_empty(),
-        "Expected no warnings, got: {:?}",
-        warnings
-    );
-}
-
-#[test]
-fn test_validation_no_signal_configured() {
-    // No srun_termination_signal - no validation needed
-    let config = ExecutionConfig {
-        sigkill_headroom_seconds: Some(60),
-        ..Default::default()
-    };
-    let warnings = config.validate();
-    assert!(warnings.is_empty());
-}
-
-#[test]
-fn test_validation_signal_with_default_headroom() {
-    // srun_termination_signal and sigkill_headroom_seconds are independent —
-    // no warning should be produced regardless of their relative values.
-    let config = ExecutionConfig {
-        srun_termination_signal: Some("TERM@90".to_string()),
-        ..Default::default()
-    };
-    let warnings = config.validate();
-    assert!(
-        warnings.is_empty(),
-        "Expected no warnings, got: {:?}",
-        warnings
-    );
-}
-
-// =============================================================================
 // WorkflowSpec integration tests
 // =============================================================================
 
@@ -1063,30 +1015,6 @@ fn test_execution_config_custom_exit_codes() {
     };
     assert_eq!(config.timeout_exit_code(), 124);
     assert_eq!(config.oom_exit_code(), 125);
-}
-
-#[test]
-fn test_validation_with_various_signal_formats() {
-    // srun_termination_signal and sigkill_headroom_seconds are independent —
-    // validate() should never produce warnings for any signal format.
-    let signal_specs = vec![
-        "TERM@30", "INT@60", "USR1@120", "TERM", "KILL", "@60", "TERM@abc", "TERM@",
-    ];
-
-    for signal_spec in signal_specs {
-        let config = ExecutionConfig {
-            srun_termination_signal: Some(signal_spec.to_string()),
-            sigkill_headroom_seconds: Some(90),
-            ..Default::default()
-        };
-        let warnings = config.validate();
-        assert!(
-            warnings.is_empty(),
-            "Expected no warnings for {}, got: {:?}",
-            signal_spec,
-            warnings
-        );
-    }
 }
 
 // =============================================================================

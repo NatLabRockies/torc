@@ -581,14 +581,13 @@ SEE ALSO:
         #[arg(long)]
         dry_run: bool,
 
-        /// Enable interactive recovery wizard
+        /// [EXPERIMENTAL] Enable interactive recovery wizard
         ///
         /// Walks you through a guided recovery process:
         /// 1. Display failed jobs with diagnosed failure reasons
         /// 2. For each failure category, choose: retry as-is / adjust resources / skip
         /// 3. Confirm resource adjustments (memory, runtime multipliers)
-        /// 4. Select or create Slurm scheduler configuration
-        /// 5. Confirm and execute recovery
+        /// 4. Confirm and execute recovery
         #[arg(long)]
         interactive: bool,
 
