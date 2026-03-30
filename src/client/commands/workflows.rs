@@ -1914,10 +1914,7 @@ pub fn handle_initialize(
                 // Normal initialization (not dry-run)
                 match apis::workflows_api::is_workflow_uninitialized(config, selected_workflow_id) {
                     Ok(response) => {
-                        if !response.as_bool().unwrap_or(true)
-                            && !no_prompts
-                            && format != "json"
-                        {
+                        if !response.as_bool().unwrap_or(true) && !no_prompts && format != "json" {
                             println!("\nWarning: This workflow has already been initialized.");
                             println!("Some jobs already have initialized status.");
                             print!("\nDo you want to continue? (y/N): ");
