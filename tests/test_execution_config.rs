@@ -288,14 +288,18 @@ fn test_validation_no_signal_configured() {
 
 #[test]
 fn test_validation_signal_with_default_headroom() {
-    // Signal at 90s, default headroom is 60s - should warn
+    // srun_termination_signal and sigkill_headroom_seconds are independent —
+    // no warning should be produced regardless of their relative values.
     let config = ExecutionConfig {
         srun_termination_signal: Some("TERM@90".to_string()),
         ..Default::default()
     };
     let warnings = config.validate();
-    assert_eq!(warnings.len(), 1);
-    assert!(warnings[0].contains("TERM@90"));
+    assert!(
+        warnings.is_empty(),
+        "Expected no warnings, got: {:?}",
+        warnings
+    );
 }
 
 // =============================================================================
