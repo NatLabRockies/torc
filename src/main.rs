@@ -1,3 +1,5 @@
+use std::io::IsTerminal;
+
 use clap::{CommandFactory, Parser};
 
 use torc::cli::{Cli, Commands};
@@ -467,10 +469,11 @@ fn main() {
             retry_unknown,
             recovery_hook,
             dry_run,
-            interactive,
+            no_prompts,
             ai_recovery,
             ai_agent,
         } => {
+            let interactive = !no_prompts && std::io::stdin().is_terminal();
             let args = RecoverArgs {
                 workflow_id: *workflow_id,
                 output_dir: output_dir.clone(),
@@ -479,7 +482,7 @@ fn main() {
                 retry_unknown: *retry_unknown,
                 recovery_hook: recovery_hook.clone(),
                 dry_run: *dry_run,
-                interactive: *interactive,
+                interactive,
                 ai_recovery: *ai_recovery,
                 ai_agent: ai_agent.clone(),
             };

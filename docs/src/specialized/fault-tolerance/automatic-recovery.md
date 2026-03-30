@@ -92,14 +92,92 @@ This data is analyzed to determine failure causes:
 For one-shot recovery when a workflow has failed:
 
 ```bash
-# Preview what would be done (recommended first step)
+# Interactive recovery (default when running in a terminal)
+torc recover 42
+
+# Preview what would be done without making changes
 torc recover 42 --dry-run
 
-# Execute the recovery
-torc recover 42
+# Skip interactive prompts (for scripting)
+torc recover 42 --no-prompts
 ```
 
-This command:
+### Interactive Recovery Wizard
+
+By default, `torc recover` runs an interactive wizard that guides you through the recovery process
+step by step:
+
+1. **Diagnose failures** — Categorizes failed jobs into OOM, timeout, and unknown failures and
+   displays a summary table
+2. **Per-category decisions** — For each failure category, choose to retry with adjusted resources,
+   customize the multiplier, or skip
+3. **Scheduler selection** — Choose to auto-generate new Slurm schedulers or reuse an existing one
+   (with optional walltime override and allocation count)
+4. **Review and confirm** — Shows the full recovery plan and asks for confirmation before executing
+
+The wizard runs automatically when stdin is a terminal. When piped or scripted (non-TTY), the
+command falls back to automatic mode. Use `--no-prompts` to explicitly skip the wizard.
+
+#### Example Session
+
+```
+=== Recovery Wizard ===
+
+Diagnosing failures for workflow 42...
+
+OOM Failures (3 jobs):
+  ID       Name                           RC     Memory     Peak Memory    Reason
+  ---      ----                           ---    ------     -----------    ------
+  107      train_model_7                  137    8g         10.2 GB        sigkill_137
+  112      train_model_12                 137    8g         9.8 GB         memory_exceeded
+  123      train_model_23                 137    8g         11.1 GB        sigkill_137
+
+Timeout Failures (1 job):
+  ID       Name                           RC     Runtime      Exec (min)   Reason
+  ---      ----                           ---    -------      ----------   ------
+  145      postprocess                    152    PT30M        29.8         sigxcpu_152
+
+OOM failures (3 jobs): [R]etry with 1.5x memory / [A]djust multiplier / [S]kip (default: R): r
+Timeout failures (1 job): [R]etry with 1.4x runtime / [A]djust multiplier / [S]kip (default: R): a
+  Enter runtime multiplier [default: 1.4]: 2.0
+
+--- Recovery Plan ---
+
+  Memory: 8g -> 12g (1.5x) for 3 jobs: train_model_7, train_model_12, train_model_23
+  Runtime: PT30M -> PT1H (2x) for 1 job: postprocess
+
+  Total: 4 jobs to retry
+
+--- Slurm Scheduler ---
+
+Existing schedulers for this workflow:
+
+  ID     Name                      Account        Partition      Walltime     Nodes
+  ---    ----                      -------        ---------      --------     -----
+  5      gpu_scheduler             myproject      gpu            04:00:00     1
+
+Scheduler: [A]uto-generate new / [E]xisting (enter ID) (default: A): e
+  Enter scheduler ID: 5
+  Walltime [default: 04:00:00] (press Enter to keep): 06:00:00
+  Creating new scheduler with walltime 06:00:00...
+  Created scheduler 'gpu_scheduler_recovery' (ID 8) with walltime 06:00:00
+  Number of allocations [default: 1]: 2
+
+  Scheduler: gpu_scheduler_recovery (ID 8), 2 allocation(s)
+
+Proceed with recovery? (y/N): y
+```
+
+### Non-Interactive Mode
+
+Use `--no-prompts` to skip the wizard and apply recovery heuristics automatically. This is useful
+for scripting or when you want the default behavior without interaction:
+
+```bash
+torc recover 42 --no-prompts
+```
+
+In non-interactive mode, the command:
 
 1. Detects and cleans up orphaned jobs from terminated Slurm allocations
 2. Checks that the workflow is complete and no workers are active
@@ -109,9 +187,8 @@ This command:
 6. Resets failed jobs and regenerates Slurm schedulers
 7. Submits new allocations
 
-> **Note:** Step 1 (orphan cleanup) handles the case where Slurm terminated an allocation
-> unexpectedly, leaving jobs stuck in "running" status. This is done automatically before checking
-> preconditions.
+> **Note:** Orphan cleanup handles the case where Slurm terminated an allocation unexpectedly,
+> leaving jobs stuck in "running" status. This is done automatically before checking preconditions.
 
 ### Options
 
@@ -121,25 +198,8 @@ torc recover <workflow_id> \
   --runtime-multiplier 1.4 \    # Runtime increase factor for timeout (default: 1.4)
   --retry-unknown \             # Also retry jobs with unknown failure causes
   --recovery-hook "bash fix.sh" \  # Custom script for unknown failures
-  --dry-run                     # Preview without making changes
-```
-
-### Example Output
-
-```
-Diagnosing failures...
-Applying recovery heuristics...
-  Job 107 (train_model): OOM detected, increasing memory 8g -> 12g
-  Applied fixes: 1 OOM, 0 timeout
-Resetting 1 job(s) for retry...
-  Reset 1 job(s)
-Reinitializing workflow...
-Regenerating Slurm schedulers...
-  Submitted Slurm allocation with 1 job
-
-Recovery complete for workflow 42
-  - 1 job(s) had memory increased
-Reset 1 job(s). Slurm schedulers regenerated and submitted.
+  --dry-run \                   # Preview without making changes
+  --no-prompts                  # Skip interactive wizard
 ```
 
 ## The `torc watch --recover` Command
@@ -263,13 +323,13 @@ With default settings:
 
 ## Choosing the Right Command
 
-| Use Case                          | Command                  |
-| --------------------------------- | ------------------------ |
-| One-shot recovery after failure   | `torc recover`           |
-| Continuous monitoring             | `torc watch -r`          |
-| Preview what recovery would do    | `torc recover --dry-run` |
-| Production long-running workflows | `torc watch -r`          |
-| Manual investigation, then retry  | `torc recover`           |
+| Use Case                           | Command                     |
+| ---------------------------------- | --------------------------- |
+| Interactive recovery after failure | `torc recover`              |
+| Automatic recovery (scripting)     | `torc recover --no-prompts` |
+| Continuous monitoring              | `torc watch -r`             |
+| Preview what recovery would do     | `torc recover --dry-run`    |
+| Production long-running workflows  | `torc watch -r`             |
 
 ## Complete Workflow Example
 
@@ -530,16 +590,16 @@ If jobs are requesting more resources than partitions allow:
 2. Use smaller multipliers
 3. Consider splitting jobs into smaller pieces
 
-## Comparison: Automatic vs Manual Recovery
+## Comparison: Interactive vs Automatic vs AI-Assisted Recovery
 
-| Feature                | Automatic            | Manual/AI-Assisted      |
-| ---------------------- | -------------------- | ----------------------- |
-| Human involvement      | None                 | Interactive             |
-| Speed                  | Fast                 | Depends on human        |
-| Handles OOM/timeout    | Yes                  | Yes                     |
-| Handles unknown errors | Retry only           | Full investigation      |
-| Cost optimization      | Basic                | Can be sophisticated    |
-| Use case               | Production workflows | Debugging, optimization |
+| Feature                | Interactive (`torc recover`) | Automatic (`--no-prompts`) | AI-Assisted   |
+| ---------------------- | ---------------------------- | -------------------------- | ------------- |
+| Human involvement      | Guided wizard                | None                       | AI + human    |
+| Speed                  | Minutes                      | Fast                       | Varies        |
+| Handles OOM/timeout    | Yes                          | Yes                        | Yes           |
+| Handles unknown errors | User chooses                 | Retry only                 | Investigation |
+| Scheduler control      | Choose or auto-generate      | Auto-generate              | Manual        |
+| Use case               | Most recovery scenarios      | Scripting, `torc watch`    | Complex bugs  |
 
 ## Implementation Details
 

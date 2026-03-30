@@ -488,19 +488,17 @@ SEE ALSO:
     /// Diagnoses job failures (OOM, timeout), adjusts resource requirements,
     /// and resubmits jobs. Use after a workflow has completed with failures.
     ///
-    /// This command:
+    /// By default, runs an interactive wizard that walks you through:
     ///
-    /// 1. Checks preconditions (workflow complete, no active workers)
+    /// 1. Displaying failed jobs grouped by failure type (OOM, timeout, unknown)
     ///
-    /// 2. Diagnoses failures using resource utilization data
+    /// 2. Choosing per-category actions: retry with adjusted resources or skip
     ///
-    /// 3. Applies recovery heuristics (increase memory/runtime)
+    /// 3. Selecting Slurm scheduler (auto-generate or reuse existing)
     ///
-    /// 4. Runs optional recovery hook for custom logic
+    /// 4. Confirming and executing recovery
     ///
-    /// 5. Resets failed jobs and regenerates Slurm schedulers
-    ///
-    /// 6. Submits new allocations
+    /// Use --no-prompts to skip the wizard and apply heuristics automatically.
     ///
     /// For continuous monitoring with automatic recovery, use `torc watch --recover`.
     #[command(
@@ -508,13 +506,16 @@ SEE ALSO:
         after_long_help = "\
 EXAMPLES:
 
-    # Basic recovery
+    # Interactive recovery (default)
     torc recover 123
 
     # Dry run to preview changes without modifying anything
     torc recover 123 --dry-run
 
-    # Custom resource multipliers
+    # Skip interactive prompts (for scripting)
+    torc recover 123 --no-prompts
+
+    # Custom resource multipliers (with or without prompts)
     torc recover 123 --memory-multiplier 2.0 --runtime-multiplier 1.5
 
     # Also retry unknown failures (not just OOM/timeout)
@@ -581,15 +582,14 @@ SEE ALSO:
         #[arg(long)]
         dry_run: bool,
 
-        /// [EXPERIMENTAL] Enable interactive recovery wizard
+        /// Skip interactive prompts and apply recovery automatically
         ///
-        /// Walks you through a guided recovery process:
-        /// 1. Display failed jobs with diagnosed failure reasons
-        /// 2. For each failure category, choose: retry as-is / adjust resources / skip
-        /// 3. Confirm resource adjustments (memory, runtime multipliers)
-        /// 4. Confirm and execute recovery
+        /// By default, `torc recover` runs an interactive wizard that lets you
+        /// review failures, choose which jobs to retry, adjust resource multipliers,
+        /// and select Slurm schedulers. Use --no-prompts to skip the wizard and
+        /// apply recovery heuristics automatically (useful for scripting).
         #[arg(long)]
-        interactive: bool,
+        no_prompts: bool,
 
         /// [EXPERIMENTAL] Enable AI-assisted recovery for pending_failed jobs
         ///

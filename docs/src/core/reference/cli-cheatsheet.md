@@ -58,7 +58,8 @@
 | `torc status <id>`                          | Workflow status and job summary                |
 | `torc workflows check-resources <id>`       | Check memory/CPU/time usage                    |
 | `torc results list <id> --include-logs`     | Job results with log paths                     |
-| `torc recover <id>`                         | One-shot recovery (diagnose + fix + resubmit)  |
+| `torc recover <id>`                         | Interactive recovery wizard (default)          |
+| `torc recover <id> --no-prompts`            | Automatic recovery (no prompts, for scripting) |
 | `torc watch <id> --recover --auto-schedule` | Full production recovery mode                  |
 | `torc workflows sync-status <id>`           | Fix orphaned jobs (stuck in "running")         |
 | `torc workflows correct-resources <id>`     | Upscale violated + downsize over-allocated RRs |

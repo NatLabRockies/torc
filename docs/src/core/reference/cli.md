@@ -279,6 +279,11 @@ Diagnoses job failures (OOM, timeout), adjusts resource requirements, and resubm
 a workflow has completed with failures. For continuous monitoring, use `torc watch --recover`
 instead.
 
+By default, runs an interactive wizard that displays failed jobs, lets you choose per-category
+actions (retry with adjusted resources or skip), select a Slurm scheduler, and confirm before
+executing. Use `--no-prompts` to skip the wizard and apply heuristics automatically. When stdin is
+not a terminal (e.g., piped or scripted), non-interactive mode is used automatically.
+
 **Usage:** `torc recover [OPTIONS] <WORKFLOW_ID>`
 
 ### Arguments
@@ -294,6 +299,7 @@ instead.
 - `--retry-unknown` — Also retry jobs with unknown failure causes
 - `--recovery-hook <RECOVERY_HOOK>` — Custom recovery script for unknown failures
 - `--dry-run` — Show what would be done without making any changes
+- `--no-prompts` — Skip interactive wizard and apply heuristics automatically
 
 ### When to Use
 
@@ -312,11 +318,14 @@ Use `torc watch --recover` instead for:
 ### Examples
 
 ```bash
-# Basic recovery
+# Interactive recovery (default)
 torc recover 123
 
 # Dry run to preview changes without modifying anything
 torc recover 123 --dry-run
+
+# Skip interactive prompts (for scripting)
+torc recover 123 --no-prompts
 
 # Custom resource multipliers
 torc recover 123 --memory-multiplier 2.0 --runtime-multiplier 1.5

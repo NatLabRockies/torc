@@ -45,7 +45,7 @@ pub struct RecoverArgs {
     pub retry_unknown: bool,
     pub recovery_hook: Option<String>,
     pub dry_run: bool,
-    /// Enable interactive recovery wizard
+    /// Run the interactive recovery wizard (default when stdin is a TTY)
     pub interactive: bool,
     /// [EXPERIMENTAL] Enable AI-assisted recovery for pending_failed jobs
     pub ai_recovery: bool,
@@ -1044,17 +1044,14 @@ fn prompt_multiplier(label: &str, default: f64) -> Result<f64, String> {
     }
 }
 
-/// Interactive recovery wizard — guides the user through failure diagnosis,
-/// resource adjustment selection, and confirmation before executing recovery.
+/// Interactive recovery wizard (default when stdin is a TTY). Guides the user
+/// through failure diagnosis, resource adjustment, and scheduler selection.
 fn recover_workflow_interactive(
     config: &Configuration,
     args: &RecoverArgs,
 ) -> Result<RecoveryResult, String> {
     // --- Diagnose failures ---------------------------------------------------
-    eprintln!("\n=== Recovery Wizard [EXPERIMENTAL] ===\n");
-    eprintln!(
-        "Note: Interactive recovery is experimental. Use --dry-run to preview without changes.\n"
-    );
+    eprintln!("\n=== Recovery Wizard ===\n");
     eprintln!("Diagnosing failures for workflow {}...\n", args.workflow_id);
 
     let diagnosis = diagnose_failures(config, args.workflow_id)?;
