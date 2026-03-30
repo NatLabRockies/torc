@@ -4,7 +4,7 @@
 //! - Config parsing and serialization (YAML, JSON)
 //! - Mode detection (direct, slurm, auto)
 //! - Backward compatibility with legacy SlurmConfig
-//! - Validation of srun_termination_signal vs sigkill_headroom_seconds
+//! - Validation
 //! - Default values and helper methods
 
 mod common;
@@ -1067,52 +1067,25 @@ fn test_execution_config_custom_exit_codes() {
 
 #[test]
 fn test_validation_with_various_signal_formats() {
-    // Test various srun signal formats
-    let test_cases = vec![
-        ("TERM@30", Some(30)),
-        ("INT@60", Some(60)),
-        ("USR1@120", Some(120)),
-        ("TERM", None),     // No time
-        ("KILL", None),     // No time
-        ("@60", Some(60)),  // Just time (unusual but parseable)
-        ("TERM@abc", None), // Invalid time
-        ("TERM@", None),    // Empty time
+    // srun_termination_signal and sigkill_headroom_seconds are independent —
+    // validate() should never produce warnings for any signal format.
+    let signal_specs = vec![
+        "TERM@30", "INT@60", "USR1@120", "TERM", "KILL", "@60", "TERM@abc", "TERM@",
     ];
 
-    for (signal_spec, expected_seconds) in test_cases {
+    for signal_spec in signal_specs {
         let config = ExecutionConfig {
             srun_termination_signal: Some(signal_spec.to_string()),
             sigkill_headroom_seconds: Some(90),
             ..Default::default()
         };
         let warnings = config.validate();
-
-        match expected_seconds {
-            Some(secs) if secs >= 90 => {
-                assert!(
-                    !warnings.is_empty(),
-                    "Expected warning for {} >= 90s headroom",
-                    signal_spec
-                );
-            }
-            Some(secs) if secs < 90 => {
-                assert!(
-                    warnings.is_empty(),
-                    "Expected no warning for {} < 90s headroom, got: {:?}",
-                    signal_spec,
-                    warnings
-                );
-            }
-            None => {
-                assert!(
-                    warnings.is_empty(),
-                    "Expected no warning for {} without time, got: {:?}",
-                    signal_spec,
-                    warnings
-                );
-            }
-            _ => {}
-        }
+        assert!(
+            warnings.is_empty(),
+            "Expected no warnings for {}, got: {:?}",
+            signal_spec,
+            warnings
+        );
     }
 }
 
