@@ -1553,8 +1553,16 @@ impl WorkflowSpec {
     }
 
     /// Validate a spec file for creation by non-interactive callers (MCP server, TUI).
-    /// Runs node requirement and resource checks, returning the parsed spec on success
-    /// so callers can reuse it for creation without re-reading the file.
+    ///
+    /// Runs parameter expansion, scheduler node requirement checks, and scheduler
+    /// resource checks (memory, runtime, GPUs). Returns the parsed spec on success
+    /// so callers can pass it to [`create_from_validated_spec`] without re-reading
+    /// the file.
+    ///
+    /// **Note:** This is a partial validation step. Action validation and variable
+    /// substitution are performed later by [`create_from_validated_spec`]. A spec
+    /// that passes this function can still fail during creation if it has invalid
+    /// actions or unresolvable variable references.
     pub fn validate_for_creation<P: AsRef<Path>>(
         path: P,
     ) -> Result<WorkflowSpec, Box<dyn std::error::Error>> {
@@ -2091,6 +2099,11 @@ impl WorkflowSpec {
     ///
     /// This function will create the workflow and all associated models (files, user data, etc.)
     /// If any errors occur, the workflow will be deleted (which cascades to all other objects)
+    ///
+    /// **Note:** This function does not run scheduler resource validation
+    /// (node requirements, memory/runtime limits). The CLI performs those checks
+    /// interactively before calling this. Non-interactive callers (MCP, TUI)
+    /// should use [`validate_for_creation`] followed by [`create_from_validated_spec`].
     ///
     /// # Arguments
     /// * `config` - Server configuration
