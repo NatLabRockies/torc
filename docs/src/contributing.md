@@ -131,6 +131,48 @@ Go to the original repository and open a pull request with:
 - Reference to any related issues
 - Test results
 
+## Pre-Release: Slurm Integration Tests
+
+Before tagging a release, run the Slurm integration test suite on an HPC cluster to verify that job
+submission, multi-node execution, failure recovery, and resource monitoring work correctly under a
+real Slurm scheduler.
+
+### Prerequisites
+
+- Access to an HPC cluster with Slurm
+- `torc`, `torc-server`, and `torc-htpasswd` binaries built
+  (`cargo build --release
+  --all-features`)
+- `jq` and Slurm CLI tools (`sbatch`, etc.) available on the login node
+
+### Running the Suite
+
+From the repository root on a login node:
+
+```bash
+./slurm-tests/run_all.sh --account <SLURM_ACCOUNT> --host <LOGIN_NODE_HOSTNAME>
+```
+
+Common options:
+
+```bash
+# Use a specific partition (default: debug)
+./slurm-tests/run_all.sh --account myproject --host login1.hpc.example.com \
+  --partition gpu
+
+# Run a single test by name substring
+./slurm-tests/run_all.sh --account myproject --host login1.hpc.example.com \
+  --test oom_detection
+
+# Adjust timeout and parallelism
+./slurm-tests/run_all.sh --account myproject --host login1.hpc.example.com \
+  --timeout 60 --max-parallel-jobs 8
+```
+
+The runner starts a temporary Torc server, executes each test as a child workflow under Slurm, and
+writes results to `slurm-tests/output/run_<timestamp>/results.json`. All tests must pass before a
+release is tagged.
+
 ## Pull Request Guidelines
 
 - **Keep PRs focused** - One feature or fix per PR
