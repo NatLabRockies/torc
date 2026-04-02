@@ -1,0 +1,405 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Working with Logs - Torc Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Distributed workflow orchestration for complex computational pipelines">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+        <link rel="stylesheet" href="../../pagetoc.css">
+        <link rel="stylesheet" href="../../version-selector.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Torc Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc/tree/v0.22.1/docs/src/core/monitoring/working-with-logs.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="working-with-logs"><a class="header" href="#working-with-logs">Working with Logs</a></h1>
+<p>Torc provides tools for bundling and analyzing workflow logs. These are useful for:</p>
+<ul>
+<li><strong>Sharing logs</strong> with colleagues for help debugging</li>
+<li><strong>Archiving</strong> completed workflow logs for later reference</li>
+<li><strong>Scanning for errors</strong> across all log files at once</li>
+</ul>
+<h2 id="log-file-overview"><a class="header" href="#log-file-overview">Log File Overview</a></h2>
+<p>Torc generates several types of log files during workflow execution:</p>
+<div class="table-wrapper"><table><thead><tr><th>Log Type</th><th>Path Pattern</th><th>Contents</th></tr></thead><tbody>
+<tr><td>Job stdout</td><td><code>output/job_stdio/job_wf&lt;id&gt;_j&lt;job&gt;_r&lt;run&gt;_a&lt;attempt&gt;.o</code></td><td>Standard output from job commands</td></tr>
+<tr><td>Job stderr</td><td><code>output/job_stdio/job_wf&lt;id&gt;_j&lt;job&gt;_r&lt;run&gt;_a&lt;attempt&gt;.e</code></td><td>Error output, stack traces</td></tr>
+<tr><td>Job combined</td><td><code>output/job_stdio/job_wf&lt;id&gt;_j&lt;job&gt;_r&lt;run&gt;_a&lt;attempt&gt;.log</code></td><td>Combined stdout+stderr (combined mode)</td></tr>
+<tr><td>Job runner</td><td><code>output/job_runner_*.log</code></td><td>Torc job runner internal logs</td></tr>
+<tr><td>Slurm stdout</td><td><code>output/slurm_output_wf&lt;id&gt;_sl&lt;slurm_id&gt;.o</code></td><td>Slurm job allocation output</td></tr>
+<tr><td>Slurm stderr</td><td><code>output/slurm_output_wf&lt;id&gt;_sl&lt;slurm_id&gt;.e</code></td><td>Slurm-specific errors</td></tr>
+<tr><td>Slurm env</td><td><code>output/slurm_env_*.log</code></td><td>Slurm environment variables</td></tr>
+<tr><td>dmesg</td><td><code>output/dmesg_slurm_*.log</code></td><td>Kernel messages (on failure)</td></tr>
+</tbody></table>
+</div>
+<blockquote>
+<p><strong>Note:</strong> The file extensions depend on the
+<a href="../reference/workflow-spec.html#stdioconfig"><code>stdio</code> configuration</a>. In <code>separate</code> mode (default),
+jobs produce <code>.o</code> and <code>.e</code> files. In <code>combined</code> mode, a single <code>.log</code> file is created. Modes like
+<code>no_stdout</code>, <code>no_stderr</code>, or <code>none</code> suppress some or all output files. If <code>delete_on_success</code> is
+enabled, files are removed when a job completes with exit code 0.</p>
+</blockquote>
+<p>For detailed information about log file contents, see <a href="debugging.html">Debugging Workflows</a> and
+<a href="debugging-slurm.html">Debugging Slurm Workflows</a>.</p>
+<h2 id="bundling-logs"><a class="header" href="#bundling-logs">Bundling Logs</a></h2>
+<p>The <code>torc logs bundle</code> command packages all logs for a workflow into a compressed tarball:</p>
+<pre><code class="language-bash"># Bundle all logs for a workflow
+torc logs bundle &lt;workflow_id&gt;
+
+# Specify custom output directory (where logs are located)
+torc logs bundle &lt;workflow_id&gt; --output-dir /path/to/output
+
+# Save bundle to a specific directory
+torc logs bundle &lt;workflow_id&gt; --bundle-dir /path/to/bundles
+</code></pre>
+<p>This creates a <code>wf&lt;id&gt;.tar.gz</code> file containing:</p>
+<ul>
+<li>All job stdout/stderr files (<code>job_wf*_j*_r*.o/e</code>)</li>
+<li>Job runner logs (<code>job_runner_*.log</code>)</li>
+<li>Slurm output files (<code>slurm_output_wf*_sl*.o/e</code>)</li>
+<li>Slurm environment logs (<code>slurm_env_wf*_sl*.log</code>)</li>
+<li>dmesg logs (<code>dmesg_slurm_wf*_sl*.log</code>)</li>
+<li>Bundle metadata (workflow info, collection timestamp)</li>
+</ul>
+<h3 id="example-sharing-logs"><a class="header" href="#example-sharing-logs">Example: Sharing Logs</a></h3>
+<pre><code class="language-bash"># Bundle workflow logs
+torc logs bundle 123 --bundle-dir ./bundles
+
+# Share the bundle
+ls ./bundles/
+# wf123.tar.gz
+
+# Recipient can extract and analyze
+tar -xzf wf123.tar.gz
+torc logs analyze wf123/
+</code></pre>
+<h2 id="analyzing-logs"><a class="header" href="#analyzing-logs">Analyzing Logs</a></h2>
+<p>The <code>torc logs analyze</code> command scans log files for known error patterns:</p>
+<pre><code class="language-bash"># Analyze a log bundle tarball
+torc logs analyze wf123.tar.gz
+
+# Analyze a log directory directly (auto-detects workflow if only one present)
+torc logs analyze output/
+
+# Analyze a directory with multiple workflows (specify which one)
+torc logs analyze output/ --workflow-id 123
+</code></pre>
+<h3 id="detected-error-patterns"><a class="header" href="#detected-error-patterns">Detected Error Patterns</a></h3>
+<p>The analyzer scans for common failure patterns including:</p>
+<p><strong>Memory Errors:</strong></p>
+<ul>
+<li>Out of memory, OOM kills</li>
+<li><code>std::bad_alloc</code> (C++)</li>
+<li><code>MemoryError</code> (Python)</li>
+</ul>
+<p><strong>Slurm Errors:</strong></p>
+<ul>
+<li>Time limit exceeded</li>
+<li>Node failures</li>
+<li>Preemption</li>
+</ul>
+<p><strong>GPU/CUDA Errors:</strong></p>
+<ul>
+<li>CUDA out of memory</li>
+<li>GPU memory exceeded</li>
+</ul>
+<p><strong>Crashes:</strong></p>
+<ul>
+<li>Segmentation faults</li>
+<li>Bus errors</li>
+<li>Signal kills</li>
+</ul>
+<p><strong>Python Errors:</strong></p>
+<ul>
+<li>Tracebacks</li>
+<li>Import errors</li>
+</ul>
+<p><strong>File System Errors:</strong></p>
+<ul>
+<li>No space left on device</li>
+<li>Permission denied</li>
+</ul>
+<p><strong>Network Errors:</strong></p>
+<ul>
+<li>Connection refused/timed out</li>
+</ul>
+<h3 id="example-output"><a class="header" href="#example-output">Example Output</a></h3>
+<pre><code>Log Analysis Results
+====================
+
+Analyzing: output/
+
+Files with detected errors:
+
+  output/job_stdio/job_wf123_j456_r1_a1.e
+    Line 42: MemoryError: Unable to allocate 8.00 GiB
+    Severity: critical
+    Type: Python Memory Error
+
+  output/slurm_output_wf123_sl789.e
+    Line 15: slurmstepd: error: Detected 1 oom-kill event(s)
+    Severity: critical
+    Type: Out of Memory (OOM) Kill
+
+Summary:
+  Total files scanned: 24
+  Files with errors: 2
+  Error types found: MemoryError, OOM Kill
+</code></pre>
+<h3 id="excluding-files"><a class="header" href="#excluding-files">Excluding Files</a></h3>
+<p>Environment variable files (<code>slurm_env_*.log</code>) are automatically excluded from error analysis since
+they contain configuration data, not error logs.</p>
+<h2 id="workflow-bundle-and-share"><a class="header" href="#workflow-bundle-and-share">Workflow: Bundle and Share</a></h2>
+<p>A common pattern when asking for help:</p>
+<pre><code class="language-bash"># 1. Bundle the workflow logs
+torc logs bundle &lt;workflow_id&gt;
+
+# 2. Analyze locally first to understand the issue
+torc logs analyze wf&lt;id&gt;.tar.gz
+
+# 3. Share the bundle with your colleague/support
+#    They can extract and analyze:
+tar -xzf wf&lt;id&gt;.tar.gz
+torc logs analyze wf&lt;id&gt;/
+</code></pre>
+<h2 id="related-commands"><a class="header" href="#related-commands">Related Commands</a></h2>
+<ul>
+<li><strong><code>torc results list --include-logs</code></strong>: Generate JSON report with all log file paths</li>
+<li><strong><code>torc results list</code></strong>: View summary table of job return codes</li>
+<li><strong><code>torc slurm parse-logs</code></strong>: Parse Slurm logs for error patterns (Slurm-specific)</li>
+<li><strong><code>torc slurm sacct</code></strong>: Collect Slurm accounting data</li>
+</ul>
+<h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>
+<ul>
+<li><a href="debugging.html">Debugging Workflows</a> — General debugging workflow and log file details</li>
+<li><a href="debugging-slurm.html">Debugging Slurm Workflows</a> — Slurm-specific debugging tools</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../core/monitoring/debugging.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../core/reference/index.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../core/monitoring/debugging.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../core/reference/index.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../mermaid.min.js"></script>
+        <script src="../../mermaid-init.js"></script>
+        <script src="../../pagetoc.js"></script>
+        <script src="../../version-selector.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

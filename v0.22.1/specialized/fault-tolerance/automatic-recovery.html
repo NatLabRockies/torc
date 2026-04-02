@@ -1,0 +1,791 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Automatic Failure Recovery - Torc Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Distributed workflow orchestration for complex computational pipelines">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+        <link rel="stylesheet" href="../../pagetoc.css">
+        <link rel="stylesheet" href="../../version-selector.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Torc Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc/tree/v0.22.1/docs/src/specialized/fault-tolerance/automatic-recovery.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="automatic-failure-recovery"><a class="header" href="#automatic-failure-recovery">Automatic Failure Recovery</a></h1>
+<p>This guide explains how to use Torc's automatic recovery features to handle workflow failures
+without manual intervention.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>Torc provides <strong>automatic failure recovery</strong> through two commands:</p>
+<ul>
+<li><strong><code>torc recover</code></strong> - One-shot recovery for Slurm workflows</li>
+<li><strong><code>torc watch --recover</code></strong> - Continuous monitoring with automatic recovery</li>
+</ul>
+<p>When jobs fail, the system:</p>
+<ol>
+<li>Diagnoses the failure cause (OOM, timeout, or unknown)</li>
+<li>Applies heuristics to adjust resource requirements</li>
+<li>Resets failed jobs and submits new Slurm allocations</li>
+<li>(watch only) Resumes monitoring until completion or max retries</li>
+</ol>
+<p>This deterministic approach handles the majority of HPC failures without human intervention.</p>
+<h2 id="why-deterministic-recovery"><a class="header" href="#why-deterministic-recovery">Why Deterministic Recovery?</a></h2>
+<p>Most HPC job failures fall into predictable categories:</p>
+<div class="table-wrapper"><table><thead><tr><th>Failure Type</th><th>Frequency</th><th>Solution</th></tr></thead><tbody>
+<tr><td>Out of Memory</td><td>~60%</td><td>Increase memory allocation</td></tr>
+<tr><td>Timeout</td><td>~25%</td><td>Increase runtime limit</td></tr>
+<tr><td>Transient errors</td><td>~10%</td><td>Simple retry</td></tr>
+<tr><td>Code bugs</td><td>~5%</td><td>Manual intervention</td></tr>
+</tbody></table>
+</div>
+<p>For 85-90% of failures, the solution is mechanical: increase resources and retry. This doesn't
+require AI judgment—simple heuristics work well.</p>
+<h2 id="recovery-architecture"><a class="header" href="#recovery-architecture">Recovery Architecture</a></h2>
+<pre class="mermaid">flowchart LR
+    A[torc watch&lt;br/&gt;polling] --&gt; B{Workflow&lt;br/&gt;complete?}
+    B --&gt;|No| A
+    B --&gt;|Yes, with failures| C[Diagnose failures&lt;br/&gt;check resources]
+    C --&gt; D[Apply heuristics&lt;br/&gt;adjust resources]
+    D --&gt; E[Submit new&lt;br/&gt;allocations]
+    E --&gt; A
+    B --&gt;|Yes, success| F[Exit 0]
+
+    style A fill:#4a9eff,color:#fff
+    style B fill:#6c757d,color:#fff
+    style C fill:#ffc107,color:#000
+    style D fill:#ffc107,color:#000
+    style E fill:#28a745,color:#fff
+    style F fill:#28a745,color:#fff
+</pre>
+<h3 id="failure-detection"><a class="header" href="#failure-detection">Failure Detection</a></h3>
+<p>Torc tracks resource usage during job execution:</p>
+<ul>
+<li>Memory usage (RSS and peak)</li>
+<li>CPU utilization</li>
+<li>Execution time</li>
+</ul>
+<p>This data is analyzed to determine failure causes:</p>
+<p><strong>OOM Detection:</strong></p>
+<ul>
+<li>Peak memory exceeds specified limit</li>
+<li>Exit code 137 (SIGKILL from OOM killer)</li>
+<li>Flag: <code>likely_oom: true</code></li>
+</ul>
+<p><strong>Timeout Detection:</strong></p>
+<ul>
+<li>Execution time within 10% of runtime limit</li>
+<li>Job was killed (not graceful exit)</li>
+<li>Flag: <code>likely_timeout: true</code></li>
+</ul>
+<h3 id="recovery-heuristics"><a class="header" href="#recovery-heuristics">Recovery Heuristics</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Failure Type</th><th>Detection</th><th>Default Action</th></tr></thead><tbody>
+<tr><td>Out of Memory</td><td>Peak memory &gt; limit, exit code 137</td><td>Increase memory by 1.5x</td></tr>
+<tr><td>Timeout</td><td>Execution time near limit</td><td>Increase runtime by 1.5x</td></tr>
+<tr><td>Unknown</td><td>Other exit codes</td><td><strong>Skip</strong> (likely bug)</td></tr>
+</tbody></table>
+</div>
+<blockquote>
+<p><strong>Note:</strong> By default, jobs with unknown failure causes are <strong>not</strong> retried, since they likely have
+script or data bugs that won't be fixed by retrying. Use <code>--retry-unknown</code> to also retry these
+jobs (e.g., to handle transient errors like network issues).</p>
+</blockquote>
+<h2 id="the-torc-recover-command"><a class="header" href="#the-torc-recover-command">The <code>torc recover</code> Command</a></h2>
+<p>For one-shot recovery when a workflow has failed:</p>
+<pre><code class="language-bash"># Interactive recovery (default when running in a terminal)
+torc recover 42
+
+# Preview what would be done without making changes
+torc recover 42 --dry-run
+
+# Skip interactive prompts (for scripting)
+torc recover 42 --no-prompts
+</code></pre>
+<h3 id="interactive-recovery-wizard"><a class="header" href="#interactive-recovery-wizard">Interactive Recovery Wizard</a></h3>
+<p>By default, <code>torc recover</code> runs an interactive wizard that guides you through the recovery process
+step by step:</p>
+<ol>
+<li><strong>Diagnose failures</strong> — Categorizes failed jobs into OOM, timeout, and unknown failures and
+displays a summary table</li>
+<li><strong>Per-category decisions</strong> — For each failure category, choose to retry with adjusted resources,
+customize the multiplier, or skip</li>
+<li><strong>Scheduler selection</strong> — Choose to auto-generate new Slurm schedulers or reuse an existing one
+(with optional walltime override and allocation count)</li>
+<li><strong>Review and confirm</strong> — Shows the full recovery plan and asks for confirmation before executing</li>
+</ol>
+<p>The wizard runs automatically when stdin is a terminal. When piped or scripted (non-TTY), the
+command falls back to automatic mode. Use <code>--no-prompts</code> to explicitly skip the wizard.</p>
+<h4 id="example-session"><a class="header" href="#example-session">Example Session</a></h4>
+<pre><code>=== Recovery Wizard ===
+
+Diagnosing failures for workflow 42...
+
+OOM Failures (3 jobs):
+  ID       Name                           RC     Memory     Peak Memory    Reason
+  ---      ----                           ---    ------     -----------    ------
+  107      train_model_7                  137    8g         10.2 GB        sigkill_137
+  112      train_model_12                 137    8g         9.8 GB         memory_exceeded
+  123      train_model_23                 137    8g         11.1 GB        sigkill_137
+
+Timeout Failures (1 job):
+  ID       Name                           RC     Runtime      Exec (min)   Reason
+  ---      ----                           ---    -------      ----------   ------
+  145      postprocess                    152    PT30M        29.8         sigxcpu_152
+
+OOM failures (3 jobs): [R]etry with 1.5x memory / [A]djust multiplier / [S]kip (default: R): r
+Timeout failures (1 job): [R]etry with 1.4x runtime / [A]djust multiplier / [S]kip (default: R): a
+  Enter runtime multiplier [default: 1.4]: 2.0
+
+--- Recovery Plan ---
+
+  Memory: 8g -&gt; 12g (1.5x) for 3 jobs: train_model_7, train_model_12, train_model_23
+  Runtime: PT30M -&gt; PT1H (2x) for 1 job: postprocess
+
+  Total: 4 jobs to retry
+
+--- Slurm Scheduler ---
+
+Existing schedulers for this workflow:
+
+  ID     Name                      Account        Partition      Walltime     Nodes
+  ---    ----                      -------        ---------      --------     -----
+  5      gpu_scheduler             myproject      gpu            04:00:00     1
+
+Scheduler: [A]uto-generate new / [E]xisting (enter ID) (default: A): e
+  Enter scheduler ID: 5
+  Walltime [default: 04:00:00] (press Enter to keep): 06:00:00
+  Creating new scheduler with walltime 06:00:00...
+  Created scheduler 'gpu_scheduler_recovery' (ID 8) with walltime 06:00:00
+  Number of allocations [default: 1]: 2
+
+  Scheduler: gpu_scheduler_recovery (ID 8), 2 allocation(s)
+
+Proceed with recovery? (y/N): y
+</code></pre>
+<h3 id="non-interactive-mode"><a class="header" href="#non-interactive-mode">Non-Interactive Mode</a></h3>
+<p>Use <code>--no-prompts</code> to skip the wizard and apply recovery heuristics automatically. This is useful
+for scripting or when you want the default behavior without interaction:</p>
+<pre><code class="language-bash">torc recover 42 --no-prompts
+</code></pre>
+<p>In non-interactive mode, the command:</p>
+<ol>
+<li>Detects and cleans up orphaned jobs from terminated Slurm allocations</li>
+<li>Checks that the workflow is complete and no workers are active</li>
+<li>Diagnoses failure causes (OOM, timeout, etc.)</li>
+<li>Adjusts resource requirements based on heuristics</li>
+<li>Runs optional recovery hook for custom logic</li>
+<li>Resets failed jobs and regenerates Slurm schedulers</li>
+<li>Submits new allocations</li>
+</ol>
+<blockquote>
+<p><strong>Note:</strong> Orphan cleanup handles the case where Slurm terminated an allocation unexpectedly,
+leaving jobs stuck in "running" status. This is done automatically before checking preconditions.</p>
+</blockquote>
+<h3 id="options"><a class="header" href="#options">Options</a></h3>
+<pre><code class="language-bash">torc recover &lt;workflow_id&gt; \
+  --memory-multiplier 1.5 \     # Memory increase factor for OOM (default: 1.5)
+  --runtime-multiplier 1.4 \    # Runtime increase factor for timeout (default: 1.4)
+  --retry-unknown \             # Also retry jobs with unknown failure causes
+  --recovery-hook "bash fix.sh" \  # Custom script for unknown failures
+  --dry-run \                   # Preview without making changes
+  --no-prompts                  # Skip interactive wizard
+</code></pre>
+<h2 id="the-torc-watch---recover-command"><a class="header" href="#the-torc-watch---recover-command">The <code>torc watch --recover</code> Command</a></h2>
+<p>The <code>torc watch</code> command can automatically recover from common failures:</p>
+<pre><code class="language-bash">torc watch 42 --recover
+</code></pre>
+<p>This will:</p>
+<ol>
+<li>Poll the workflow until completion</li>
+<li>On failure, diagnose the cause (OOM, timeout, etc.)</li>
+<li>Adjust resource requirements based on heuristics</li>
+<li>Reset failed jobs and submit new Slurm allocations</li>
+<li>Resume monitoring</li>
+<li>Repeat until success (or max retries exceeded, if <code>--max-retries</code> is set)</li>
+</ol>
+<h3 id="options-1"><a class="header" href="#options-1">Options</a></h3>
+<pre><code class="language-bash">torc watch &lt;workflow_id&gt; \
+  -r \                          # Enable automatic recovery (--recover)
+  -m 5 \                        # Optional: limit recovery attempts (--max-retries)
+  --memory-multiplier 1.5 \     # Memory increase factor for OOM
+  --runtime-multiplier 1.5 \    # Runtime increase factor for timeout
+  --retry-unknown \             # Also retry jobs with unknown failures
+  --recovery-hook "bash fix.sh" \  # Custom recovery script
+  -p 60 \                       # Seconds between status checks (--poll-interval)
+  -o torc_output \                   # Directory for job output files (--output-dir)
+  -s \                          # Display job counts during polling (--show-job-counts)
+  --auto-schedule \             # Automatically schedule nodes for stranded jobs
+  --auto-schedule-threshold 5 \ # Min retry jobs before scheduling (default: 5)
+  --auto-schedule-cooldown 1800 \      # Seconds between auto-schedule attempts (default: 1800)
+  --auto-schedule-stranded-timeout 7200 \ # Schedule stranded jobs after this time (default: 7200)
+  --partition standard \        # Fixed Slurm partition (bypass auto-detection)
+  --walltime 04:00:00           # Fixed walltime (bypass auto-calculation)
+</code></pre>
+<h3 id="custom-recovery-hooks"><a class="header" href="#custom-recovery-hooks">Custom Recovery Hooks</a></h3>
+<p>For failures that torc can't handle automatically (not OOM or timeout), you can provide a custom
+recovery script using <code>--recovery-hook</code>. This is useful for domain-specific recovery logic, such as
+adjusting Apache Spark cluster sizes or fixing configuration issues.</p>
+<pre><code class="language-bash">torc watch 42 --recover --recovery-hook "bash fix-spark-cluster.sh"
+</code></pre>
+<p>The hook receives the workflow ID in two ways:</p>
+<ul>
+<li><strong>As an argument</strong>: <code>bash fix-spark-cluster.sh 42</code></li>
+<li><strong>As an environment variable</strong>: <code>TORC_WORKFLOW_ID=42</code></li>
+</ul>
+<p>Your script can use torc CLI commands to query and modify the workflow:</p>
+<pre><code class="language-bash">#!/bin/bash
+# fix-spark-cluster.sh - Example recovery hook for Spark jobs
+
+WORKFLOW_ID=$1  # or use $TORC_WORKFLOW_ID
+
+# Find failed jobs
+FAILED_JOBS=$(torc jobs list $WORKFLOW_ID --status failed -f json | jq -r '.[].id')
+
+for JOB_ID in $FAILED_JOBS; do
+    # Get current resource requirements
+    JOB_INFO=$(torc jobs get $JOB_ID -f json)
+    RR_ID=$(echo "$JOB_INFO" | jq -r '.resource_requirements_id')
+
+    # Check if this is a Spark job that needs more nodes
+    # (your logic here - parse logs, check error messages, etc.)
+
+    # Update resource requirements
+    torc resource-requirements update $RR_ID --num-nodes 16
+
+    echo "Updated job $JOB_ID to use 16 nodes"
+done
+</code></pre>
+<p>When a recovery hook is provided:</p>
+<ol>
+<li>Jobs with unknown failures are automatically included for retry</li>
+<li>The hook runs <strong>before</strong> <code>reset-status</code> is called</li>
+<li>If the hook fails (non-zero exit), auto-recovery stops with an error</li>
+<li>After the hook succeeds, failed jobs are reset and retried</li>
+</ol>
+<h2 id="auto-scheduling-for-failure-handlers"><a class="header" href="#auto-scheduling-for-failure-handlers">Auto-Scheduling for Failure Handlers</a></h2>
+<p>When using <a href="./failure-handlers.html">failure handlers</a> that create retry jobs, the originally planned
+compute capacity may not be sufficient. The <code>--auto-schedule</code> option enables automatic scheduling of
+additional Slurm nodes when:</p>
+<ol>
+<li>
+<p><strong>No schedulers available</strong>: If there are ready jobs but no active or pending Slurm allocations,
+new schedulers are immediately regenerated and submitted.</p>
+</li>
+<li>
+<p><strong>Retry jobs accumulating</strong>: If there are active schedulers but retry jobs (jobs with
+<code>attempt_id &gt; 1</code>) are accumulating beyond the threshold, additional schedulers are submitted
+after the cooldown period.</p>
+</li>
+</ol>
+<p>This is particularly useful for workflows with failure handlers that retry failed jobs, ensuring
+those retries get scheduled without manual intervention.</p>
+<h3 id="example-failure-handler-with-auto-scheduling"><a class="header" href="#example-failure-handler-with-auto-scheduling">Example: Failure Handler with Auto-Scheduling</a></h3>
+<pre><code class="language-bash"># Submit a workflow with failure handlers
+torc slurm generate --account my_project workflow.yaml &amp;&amp; torc submit workflow.yaml
+
+# Watch with auto-scheduling enabled (uses defaults)
+torc watch $WORKFLOW_ID --auto-schedule
+</code></pre>
+<p>With default settings:</p>
+<ul>
+<li>If all Slurm allocations complete but retry jobs remain, new allocations are submitted</li>
+<li>If 5+ retry jobs accumulate while allocations are running, additional capacity is scheduled</li>
+<li>After scheduling, the system waits 30 minutes before considering another auto-schedule</li>
+<li>If fewer than 5 retry jobs are waiting for 2 hours, they're scheduled anyway (stranded timeout)</li>
+</ul>
+<h2 id="choosing-the-right-command"><a class="header" href="#choosing-the-right-command">Choosing the Right Command</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Use Case</th><th>Command</th></tr></thead><tbody>
+<tr><td>Interactive recovery after failure</td><td><code>torc recover</code></td></tr>
+<tr><td>Automatic recovery (scripting)</td><td><code>torc recover --no-prompts</code></td></tr>
+<tr><td>Continuous monitoring</td><td><code>torc watch -r</code></td></tr>
+<tr><td>Preview what recovery would do</td><td><code>torc recover --dry-run</code></td></tr>
+<tr><td>Production long-running workflows</td><td><code>torc watch -r</code></td></tr>
+</tbody></table>
+</div>
+<h2 id="complete-workflow-example"><a class="header" href="#complete-workflow-example">Complete Workflow Example</a></h2>
+<h3 id="1-submit-a-workflow"><a class="header" href="#1-submit-a-workflow">1. Submit a Workflow</a></h3>
+<pre><code class="language-bash">torc slurm generate --account myproject workflow.yaml &amp;&amp; torc submit workflow.yaml
+</code></pre>
+<p>Output:</p>
+<pre><code>Created workflow 42 with 100 jobs
+Submitted to Slurm with 10 allocations
+</code></pre>
+<h3 id="2-start-watching-with-auto-recovery"><a class="header" href="#2-start-watching-with-auto-recovery">2. Start Watching with Auto-Recovery</a></h3>
+<pre><code class="language-bash">torc watch 42 --recover --show-job-counts
+</code></pre>
+<blockquote>
+<p><strong>Note:</strong> The <code>--show-job-counts</code> flag is optional. Without it, the command polls silently until
+completion, which reduces server load for large workflows.</p>
+</blockquote>
+<p>Output:</p>
+<pre><code>Watching workflow 42 (poll interval: 60s, recover enabled, unlimited retries, job counts enabled)
+  completed=0, running=10, pending=0, failed=0, blocked=90
+  completed=25, running=10, pending=0, failed=0, blocked=65
+  ...
+  completed=95, running=0, pending=0, failed=5, blocked=0
+Workflow 42 is complete
+
+Workflow completed with failures:
+  - Failed: 5
+  - Canceled: 0
+  - Terminated: 0
+  - Completed: 95
+
+Attempting automatic recovery (attempt 1)
+
+Diagnosing failures...
+Applying recovery heuristics...
+  Job 107 (train_model_7): OOM detected, increasing memory 8g -&gt; 12g
+  Job 112 (train_model_12): OOM detected, increasing memory 8g -&gt; 12g
+  Job 123 (train_model_23): OOM detected, increasing memory 8g -&gt; 12g
+  Job 131 (train_model_31): OOM detected, increasing memory 8g -&gt; 12g
+  Job 145 (train_model_45): OOM detected, increasing memory 8g -&gt; 12g
+  Applied fixes: 5 OOM, 0 timeout
+
+Resetting failed jobs...
+Regenerating Slurm schedulers and submitting...
+
+Recovery initiated. Resuming monitoring...
+
+Watching workflow 42 (poll interval: 60s, recover enabled, unlimited retries, job counts enabled)
+  completed=95, running=5, pending=0, failed=0, blocked=0
+  ...
+Workflow 42 is complete
+
+Workflow completed successfully (100 jobs)
+</code></pre>
+<h3 id="3-if-no-recoverable-jobs-found"><a class="header" href="#3-if-no-recoverable-jobs-found">3. If No Recoverable Jobs Found</a></h3>
+<p>If all failures are from unknown causes (not OOM or timeout):</p>
+<pre><code>Applying recovery heuristics...
+  2 job(s) with unknown failure cause (skipped, use --retry-unknown to include)
+
+No recoverable jobs found. 2 job(s) failed with unknown causes.
+Use --retry-unknown to retry jobs with unknown failure causes.
+Or use the Torc MCP server with your AI assistant to investigate.
+</code></pre>
+<p>This prevents wasting allocation time on jobs that likely have script or data bugs.</p>
+<h3 id="4-if-max-retries-exceeded"><a class="header" href="#4-if-max-retries-exceeded">4. If Max Retries Exceeded</a></h3>
+<p>If <code>--max-retries</code> is set and failures persist after that many attempts:</p>
+<pre><code>Max retries (3) exceeded. Manual intervention required.
+Use the Torc MCP server with your AI assistant to investigate.
+</code></pre>
+<p>At this point, you can use the MCP server with an AI assistant to investigate the root cause.</p>
+<h2 id="log-files"><a class="header" href="#log-files">Log Files</a></h2>
+<p>All <code>torc watch</code> output is logged to both the terminal and a log file:</p>
+<pre><code>&lt;output-dir&gt;/watch_&lt;hostname&gt;_&lt;workflow_id&gt;.log
+</code></pre>
+<p>For example: <code>torc_output/watch_myhost_42.log</code></p>
+<p>This ensures you have a complete record of the watch session even if your terminal disconnects.</p>
+<h2 id="when-to-use-manual-recovery"><a class="header" href="#when-to-use-manual-recovery">When to Use Manual Recovery</a></h2>
+<p>Automatic recovery works well for resource-related failures, but some situations require manual
+intervention:</p>
+<h3 id="use-manual-recovery-when"><a class="header" href="#use-manual-recovery-when">Use Manual Recovery When:</a></h3>
+<ol>
+<li>
+<p><strong>Jobs keep failing after max retries</strong></p>
+<ul>
+<li>The heuristics aren't solving the problem</li>
+<li>Need to investigate root cause</li>
+</ul>
+</li>
+<li>
+<p><strong>Unknown failure modes</strong></p>
+<ul>
+<li>Exit codes that don't indicate OOM/timeout</li>
+<li>Application-specific errors</li>
+</ul>
+</li>
+<li>
+<p><strong>Code bugs</strong></p>
+<ul>
+<li>Jobs fail consistently with same error</li>
+<li>No resource issue detected</li>
+</ul>
+</li>
+<li>
+<p><strong>Cost optimization</strong></p>
+<ul>
+<li>Want to analyze actual usage before increasing</li>
+<li>Need to decide whether job is worth more resources</li>
+</ul>
+</li>
+</ol>
+<h3 id="mcp-server-for-manual-recovery"><a class="header" href="#mcp-server-for-manual-recovery">MCP Server for Manual Recovery</a></h3>
+<p>The Torc MCP server provides tools for AI-assisted investigation:</p>
+<div class="table-wrapper"><table><thead><tr><th>Tool</th><th>Purpose</th></tr></thead><tbody>
+<tr><td><code>get_workflow_status</code></td><td>Get overall workflow status</td></tr>
+<tr><td><code>list_failed_jobs</code></td><td>List failed jobs with error info</td></tr>
+<tr><td><code>get_job_logs</code></td><td>Read stdout/stderr logs</td></tr>
+<tr><td><code>check_resource_utilization</code></td><td>Detailed resource analysis</td></tr>
+<tr><td><code>update_job_resources</code></td><td>Manually adjust resources</td></tr>
+<tr><td><code>resubmit_workflow</code></td><td>Regenerate Slurm schedulers</td></tr>
+</tbody></table>
+</div>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h3 id="1-start-with-conservative-resources"><a class="header" href="#1-start-with-conservative-resources">1. Start with Conservative Resources</a></h3>
+<p>Set initial resource requests lower and let auto-recovery increase them:</p>
+<ul>
+<li>Jobs that succeed keep their original allocation</li>
+<li>Only failing jobs get increased resources</li>
+<li>Avoids wasting HPC resources on over-provisioned jobs</li>
+</ul>
+<h3 id="2-set-max-retries-when-appropriate"><a class="header" href="#2-set-max-retries-when-appropriate">2. Set Max Retries When Appropriate</a></h3>
+<p>By default, <code>torc watch</code> retries indefinitely until the workflow succeeds. Use <code>--max-retries</code> to
+limit recovery attempts if needed:</p>
+<pre><code class="language-bash">--max-retries 5  # Limit to 5 recovery attempts
+</code></pre>
+<p>This can prevent wasting allocation time on jobs that will never succeed.</p>
+<h3 id="3-use-appropriate-multipliers"><a class="header" href="#3-use-appropriate-multipliers">3. Use Appropriate Multipliers</a></h3>
+<p>For memory-bound jobs:</p>
+<pre><code class="language-bash">--memory-multiplier 2.0  # Double on OOM
+</code></pre>
+<p>For time-sensitive jobs where you want larger increases:</p>
+<pre><code class="language-bash">--runtime-multiplier 2.0  # Double runtime on timeout
+</code></pre>
+<h3 id="4-run-in-tmux-or-screen"><a class="header" href="#4-run-in-tmux-or-screen">4. Run in tmux or screen</a></h3>
+<p><strong>Always run <code>torc watch</code> inside tmux or screen</strong> for long-running workflows. HPC workflows can run
+for hours or days, and you don't want to lose your monitoring session if:</p>
+<ul>
+<li>Your SSH connection drops</li>
+<li>Your laptop goes to sleep</li>
+<li>You need to disconnect and reconnect later</li>
+</ul>
+<p>Using <a href="https://github.com/tmux/tmux/wiki">tmux</a> (recommended):</p>
+<pre><code class="language-bash"># Start a new tmux session
+tmux new -s torc-watch
+
+# Run the watch command
+torc watch 42 --recover --poll-interval 300 --show-job-counts
+
+# Detach from session: press Ctrl+b, then d
+# Reattach later: tmux attach -t torc-watch
+</code></pre>
+<p>Using screen:</p>
+<pre><code class="language-bash">screen -S torc-watch
+torc watch 42 --recover --poll-interval 300 --show-job-counts
+# Detach: Ctrl+a, then d
+# Reattach: screen -r torc-watch
+</code></pre>
+<h3 id="5-check-resource-utilization-afterward"><a class="header" href="#5-check-resource-utilization-afterward">5. Check Resource Utilization Afterward</a></h3>
+<p>After completion, review actual usage:</p>
+<pre><code class="language-bash">torc workflows check-resources 42
+</code></pre>
+<p>This helps tune future job specifications.</p>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="jobs-stuck-in-running-status"><a class="header" href="#jobs-stuck-in-running-status">Jobs Stuck in "Running" Status</a></h3>
+<p>If jobs appear stuck in "running" status after a Slurm allocation ended:</p>
+<ol>
+<li>This usually means the allocation was terminated unexpectedly (timeout, node failure, etc.)</li>
+<li>The <code>torc recover</code> command automatically handles this as its first step</li>
+<li>To manually clean up without triggering recovery, use:
+<pre><code class="language-bash">torc workflows sync-status &lt;workflow_id&gt;
+</code></pre>
+</li>
+<li>To preview what would be cleaned up:
+<pre><code class="language-bash">torc workflows sync-status &lt;workflow_id&gt; --dry-run
+</code></pre>
+</li>
+</ol>
+<p>See <a href="../hpc/debugging-slurm.html#orphaned-jobs-and-status-synchronization">Debugging Slurm Workflows</a>
+for more details.</p>
+<h3 id="jobs-keep-failing-after-recovery"><a class="header" href="#jobs-keep-failing-after-recovery">Jobs Keep Failing After Recovery</a></h3>
+<p>If jobs fail repeatedly with the same error:</p>
+<ol>
+<li>Check if the error is resource-related (OOM/timeout)</li>
+<li>Review job logs: <code>torc jobs logs &lt;job_id&gt;</code></li>
+<li>Check if there's a code bug</li>
+<li>Use MCP server with AI assistant to investigate</li>
+</ol>
+<h3 id="no-slurm-schedulers-generated"><a class="header" href="#no-slurm-schedulers-generated">No Slurm Schedulers Generated</a></h3>
+<p>If <code>slurm regenerate</code> fails:</p>
+<ol>
+<li>Ensure workflow was created with <code>--account</code> option</li>
+<li>Check HPC profile is detected: <code>torc hpc detect</code></li>
+<li>Specify profile explicitly: <code>--profile kestrel</code></li>
+</ol>
+<h3 id="resource-limits-too-high"><a class="header" href="#resource-limits-too-high">Resource Limits Too High</a></h3>
+<p>If jobs are requesting more resources than partitions allow:</p>
+<ol>
+<li>Check partition limits: <code>torc hpc partitions &lt;profile&gt;</code></li>
+<li>Use smaller multipliers</li>
+<li>Consider splitting jobs into smaller pieces</li>
+</ol>
+<h2 id="comparison-interactive-vs-automatic-vs-ai-assisted-recovery"><a class="header" href="#comparison-interactive-vs-automatic-vs-ai-assisted-recovery">Comparison: Interactive vs Automatic vs AI-Assisted Recovery</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Feature</th><th>Interactive (<code>torc recover</code>)</th><th>Automatic (<code>--no-prompts</code>)</th><th>AI-Assisted</th></tr></thead><tbody>
+<tr><td>Human involvement</td><td>Guided wizard</td><td>None</td><td>AI + human</td></tr>
+<tr><td>Speed</td><td>Minutes</td><td>Fast</td><td>Varies</td></tr>
+<tr><td>Handles OOM/timeout</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+<tr><td>Handles unknown errors</td><td>User chooses</td><td>Retry only</td><td>Investigation</td></tr>
+<tr><td>Scheduler control</td><td>Choose or auto-generate</td><td>Auto-generate</td><td>Manual</td></tr>
+<tr><td>Use case</td><td>Most recovery scenarios</td><td>Scripting, <code>torc watch</code></td><td>Complex bugs</td></tr>
+</tbody></table>
+</div>
+<h2 id="implementation-details"><a class="header" href="#implementation-details">Implementation Details</a></h2>
+<h3 id="the-watch-command-flow"><a class="header" href="#the-watch-command-flow">The Watch Command Flow</a></h3>
+<ol>
+<li>Poll <code>is_workflow_complete</code> API</li>
+<li>Print status updates</li>
+<li>On completion, check for failures</li>
+<li>If failures and recover enabled:
+<ul>
+<li>Run <code>torc workflows check-resources --include-failed</code></li>
+<li>Parse results for <code>likely_oom</code> and <code>likely_timeout</code> flags</li>
+<li>Update resource requirements via API</li>
+<li>Run <code>torc workflows reset-status --failed-only --reinitialize</code></li>
+<li>Run <code>torc slurm regenerate --submit</code></li>
+<li>Increment retry counter</li>
+<li>Resume polling</li>
+</ul>
+</li>
+<li>Exit 0 on success, exit 1 on max retries exceeded (if <code>--max-retries</code> is set)</li>
+</ol>
+<h3 id="the-regenerate-command-flow"><a class="header" href="#the-regenerate-command-flow">The Regenerate Command Flow</a></h3>
+<ol>
+<li>Query jobs with status uninitialized/ready/blocked</li>
+<li>Group by resource requirements</li>
+<li>For each group:
+<ul>
+<li>Find best partition using HPC profile</li>
+<li>Calculate jobs per node</li>
+<li>Determine number of allocations needed</li>
+<li>Create scheduler config</li>
+</ul>
+</li>
+<li>Update jobs with new scheduler reference</li>
+<li>Submit allocations via sbatch</li>
+</ol>
+<h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>
+<ul>
+<li><a href="./failure-handlers.html">Configurable Failure Handlers</a> - Per-job retry with exit-code-specific
+recovery</li>
+<li><a href="../../core/monitoring/resource-monitoring.html">Resource Monitoring</a> - Understanding resource
+tracking</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../specialized/fault-tolerance/index.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../specialized/fault-tolerance/failure-handlers.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../specialized/fault-tolerance/index.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../specialized/fault-tolerance/failure-handlers.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../mermaid.min.js"></script>
+        <script src="../../mermaid-init.js"></script>
+        <script src="../../pagetoc.js"></script>
+        <script src="../../version-selector.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
