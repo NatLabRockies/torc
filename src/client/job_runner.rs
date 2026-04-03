@@ -1804,23 +1804,15 @@ impl JobRunner {
         Self::reserved_node_count(rr) > 1
     }
 
-    fn allocation_per_node_capacity(&self) -> (i64, f64, i64) {
-        let num_nodes = self.orig_resources.num_nodes.max(1);
-        (
-            self.orig_resources.num_cpus / num_nodes,
-            self.orig_resources.memory_gb / num_nodes as f64,
-            self.orig_resources.num_gpus / num_nodes,
-        )
-    }
-
     fn decrement_resources(&mut self, rr: &ResourceRequirementsModel) {
         if Self::is_multi_node_job(rr) {
+            // Resource requirements are per-node values, so multiply by the
+            // number of nodes the job reserves to get the total consumption.
             let reserved_nodes = Self::reserved_node_count(rr);
-            let (cpus_per_node, memory_gb_per_node, gpus_per_node) =
-                self.allocation_per_node_capacity();
-            self.resources.memory_gb -= memory_gb_per_node * reserved_nodes as f64;
-            self.resources.num_cpus -= cpus_per_node * reserved_nodes;
-            self.resources.num_gpus -= gpus_per_node * reserved_nodes;
+            let job_memory_gb = memory_string_to_gb(&rr.memory);
+            self.resources.memory_gb -= job_memory_gb * reserved_nodes as f64;
+            self.resources.num_cpus -= rr.num_cpus * reserved_nodes;
+            self.resources.num_gpus -= rr.num_gpus * reserved_nodes;
             self.resources.num_nodes -= reserved_nodes;
         } else {
             let job_memory_gb = memory_string_to_gb(&rr.memory);
@@ -1837,11 +1829,10 @@ impl JobRunner {
     fn increment_resources(&mut self, rr: &ResourceRequirementsModel) {
         if Self::is_multi_node_job(rr) {
             let reserved_nodes = Self::reserved_node_count(rr);
-            let (cpus_per_node, memory_gb_per_node, gpus_per_node) =
-                self.allocation_per_node_capacity();
-            self.resources.memory_gb += memory_gb_per_node * reserved_nodes as f64;
-            self.resources.num_cpus += cpus_per_node * reserved_nodes;
-            self.resources.num_gpus += gpus_per_node * reserved_nodes;
+            let job_memory_gb = memory_string_to_gb(&rr.memory);
+            self.resources.memory_gb += job_memory_gb * reserved_nodes as f64;
+            self.resources.num_cpus += rr.num_cpus * reserved_nodes;
+            self.resources.num_gpus += rr.num_gpus * reserved_nodes;
             self.resources.num_nodes += reserved_nodes;
         } else {
             let job_memory_gb = memory_string_to_gb(&rr.memory);
@@ -3069,9 +3060,11 @@ mod tests {
     }
 
     #[test]
-    fn test_multi_node_job_reserves_full_nodes() {
+    fn test_multi_node_job_reserves_per_node_resources() {
+        // Allocation: 4 nodes, 64 CPUs, 256 GB, 4 GPUs total
         let resources = ComputeNodesResources::new(64, 256.0, 4, 4);
         let mut runner = make_runner(resources);
+        // Job: 2 nodes, 16 CPUs/node, 0 GPUs/node, 64g/node
         let rr = ResourceRequirementsModel {
             id: Some(1),
             workflow_id: 1,
@@ -3085,10 +3078,36 @@ mod tests {
 
         runner.decrement_resources(&rr);
 
+        // Should decrement by job requirements × num_nodes, not allocation capacity
         assert_eq!(runner.resources.num_nodes, 2);
-        assert_eq!(runner.resources.num_cpus, 32);
-        assert!((runner.resources.memory_gb - 128.0).abs() < 0.01);
-        assert_eq!(runner.resources.num_gpus, 2);
+        assert_eq!(runner.resources.num_cpus, 32); // 64 - 16*2
+        assert!((runner.resources.memory_gb - 128.0).abs() < 0.01); // 256 - 64*2
+        assert_eq!(runner.resources.num_gpus, 4); // 4 - 0*2 (job needs no GPUs)
+    }
+
+    #[test]
+    fn test_multi_node_gpu_job_reserves_correct_gpus() {
+        // Allocation: 2 nodes, 16 CPUs, 64 GB, 4 GPUs total (2 per node)
+        let resources = ComputeNodesResources::new(16, 64.0, 4, 2);
+        let mut runner = make_runner(resources);
+        // Job: 2 nodes, 8 CPUs/node, 1 GPU/node, 16g/node
+        let rr = ResourceRequirementsModel {
+            id: Some(1),
+            workflow_id: 1,
+            name: "gpu_mpi".to_string(),
+            num_cpus: 8,
+            num_gpus: 1,
+            num_nodes: 2,
+            memory: "16g".to_string(),
+            runtime: "PT1H".to_string(),
+        };
+
+        runner.decrement_resources(&rr);
+
+        assert_eq!(runner.resources.num_nodes, 0);
+        assert_eq!(runner.resources.num_cpus, 0); // 16 - 8*2
+        assert!((runner.resources.memory_gb - 32.0).abs() < 0.01); // 64 - 16*2
+        assert_eq!(runner.resources.num_gpus, 2); // 4 - 1*2
     }
 
     #[test]
