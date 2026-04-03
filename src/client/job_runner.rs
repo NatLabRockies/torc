@@ -3134,6 +3134,262 @@ mod tests {
         assert_eq!(runner.resources.num_gpus, resources.num_gpus);
     }
 
+    /// The original bug: a single-node GPU job followed by a multi-node job
+    /// would over-decrement GPUs and panic on the assertion.
+    #[test]
+    fn test_single_node_then_multi_node_no_panic() {
+        // 2 nodes, 4 GPUs total (2 per node), 16 CPUs, 64 GB
+        let resources = ComputeNodesResources::new(16, 64.0, 4, 2);
+        let mut runner = make_runner(resources);
+
+        // Single-node job takes 1 GPU
+        let single = ResourceRequirementsModel {
+            id: Some(1),
+            workflow_id: 1,
+            name: "single_gpu".to_string(),
+            num_cpus: 4,
+            num_gpus: 1,
+            num_nodes: 1,
+            memory: "8g".to_string(),
+            runtime: "PT1H".to_string(),
+        };
+        runner.decrement_resources(&single);
+        assert_eq!(runner.resources.num_gpus, 3);
+        assert_eq!(runner.resources.num_nodes, 2);
+
+        // 2-node job takes 1 GPU/node = 2 GPUs total
+        let multi = ResourceRequirementsModel {
+            id: Some(2),
+            workflow_id: 1,
+            name: "multi_gpu".to_string(),
+            num_cpus: 4,
+            num_gpus: 1,
+            num_nodes: 2,
+            memory: "8g".to_string(),
+            runtime: "PT1H".to_string(),
+        };
+        runner.decrement_resources(&multi);
+        assert_eq!(runner.resources.num_gpus, 1); // 3 - 1*2
+        assert_eq!(runner.resources.num_nodes, 0);
+
+        // Release both
+        runner.increment_resources(&multi);
+        assert_eq!(runner.resources.num_gpus, 3);
+        assert_eq!(runner.resources.num_nodes, 2);
+
+        runner.increment_resources(&single);
+        assert_eq!(runner.resources.num_gpus, 4);
+        assert_eq!(runner.resources.num_nodes, 2);
+    }
+
+    /// Multi-node job completes, then single-node jobs use freed resources.
+    #[test]
+    fn test_multi_node_then_single_node_jobs() {
+        // 2 nodes, 4 GPUs total (2 per node)
+        let resources = ComputeNodesResources::new(16, 64.0, 4, 2);
+        let mut runner = make_runner(resources);
+
+        // 2-node job takes all nodes but only 1 GPU/node
+        let multi = ResourceRequirementsModel {
+            id: Some(1),
+            workflow_id: 1,
+            name: "multi".to_string(),
+            num_cpus: 4,
+            num_gpus: 1,
+            num_nodes: 2,
+            memory: "8g".to_string(),
+            runtime: "PT1H".to_string(),
+        };
+        runner.decrement_resources(&multi);
+        assert_eq!(runner.resources.num_gpus, 2); // 4 - 1*2
+        assert_eq!(runner.resources.num_nodes, 0);
+
+        // resources_per_node reports 0 nodes → server won't claim any jobs
+        let per_node = runner.resources_per_node();
+        assert_eq!(per_node.num_nodes, 0);
+
+        // Multi-node job finishes
+        runner.increment_resources(&multi);
+        assert_eq!(runner.resources.num_gpus, 4);
+        assert_eq!(runner.resources.num_nodes, 2);
+
+        // Now single-node jobs can run
+        let single = ResourceRequirementsModel {
+            id: Some(2),
+            workflow_id: 1,
+            name: "single".to_string(),
+            num_cpus: 8,
+            num_gpus: 2,
+            num_nodes: 1,
+            memory: "16g".to_string(),
+            runtime: "PT1H".to_string(),
+        };
+        runner.decrement_resources(&single);
+        assert_eq!(runner.resources.num_gpus, 2);
+        assert_eq!(runner.resources.num_cpus, 8);
+    }
+
+    /// Two multi-node jobs run sequentially without resource corruption.
+    #[test]
+    fn test_sequential_multi_node_jobs() {
+        // 4 nodes, 8 GPUs total (2 per node)
+        let resources = ComputeNodesResources::new(32, 128.0, 8, 4);
+        let mut runner = make_runner(resources.clone());
+
+        let job_a = ResourceRequirementsModel {
+            id: Some(1),
+            workflow_id: 1,
+            name: "job_a".to_string(),
+            num_cpus: 8,
+            num_gpus: 2,
+            num_nodes: 4,
+            memory: "32g".to_string(),
+            runtime: "PT1H".to_string(),
+        };
+        runner.decrement_resources(&job_a);
+        assert_eq!(runner.resources.num_gpus, 0); // 8 - 2*4
+        assert_eq!(runner.resources.num_nodes, 0);
+
+        runner.increment_resources(&job_a);
+
+        // Second job with different resource needs
+        let job_b = ResourceRequirementsModel {
+            id: Some(2),
+            workflow_id: 1,
+            name: "job_b".to_string(),
+            num_cpus: 4,
+            num_gpus: 1,
+            num_nodes: 2,
+            memory: "16g".to_string(),
+            runtime: "PT1H".to_string(),
+        };
+        runner.decrement_resources(&job_b);
+        assert_eq!(runner.resources.num_gpus, 6); // 8 - 1*2
+        assert_eq!(runner.resources.num_nodes, 2);
+
+        runner.increment_resources(&job_b);
+        assert_eq!(runner.resources.num_gpus, resources.num_gpus);
+        assert_eq!(runner.resources.num_nodes, resources.num_nodes);
+    }
+
+    /// Mixed single-node and multi-node jobs with GPUs interleaved.
+    #[test]
+    fn test_mixed_single_and_multi_node_interleaved() {
+        // 4 nodes, 16 GPUs total (4 per node), 64 CPUs
+        let resources = ComputeNodesResources::new(64, 256.0, 16, 4);
+        let mut runner = make_runner(resources.clone());
+
+        // Start a single-node job: 1 GPU, 4 CPUs
+        let s1 = ResourceRequirementsModel {
+            id: Some(1),
+            workflow_id: 1,
+            name: "s1".to_string(),
+            num_cpus: 4,
+            num_gpus: 1,
+            num_nodes: 1,
+            memory: "16g".to_string(),
+            runtime: "PT1H".to_string(),
+        };
+        runner.decrement_resources(&s1);
+        assert_eq!(runner.resources.num_gpus, 15);
+
+        // Start a 2-node job: 2 GPUs/node
+        let m1 = ResourceRequirementsModel {
+            id: Some(2),
+            workflow_id: 1,
+            name: "m1".to_string(),
+            num_cpus: 8,
+            num_gpus: 2,
+            num_nodes: 2,
+            memory: "32g".to_string(),
+            runtime: "PT1H".to_string(),
+        };
+        runner.decrement_resources(&m1);
+        assert_eq!(runner.resources.num_gpus, 11); // 15 - 2*2
+        assert_eq!(runner.resources.num_nodes, 2);
+
+        // Start another single-node job
+        let s2 = ResourceRequirementsModel {
+            id: Some(3),
+            workflow_id: 1,
+            name: "s2".to_string(),
+            num_cpus: 4,
+            num_gpus: 3,
+            num_nodes: 1,
+            memory: "16g".to_string(),
+            runtime: "PT1H".to_string(),
+        };
+        runner.decrement_resources(&s2);
+        assert_eq!(runner.resources.num_gpus, 8); // 11 - 3
+
+        // Complete multi-node job
+        runner.increment_resources(&m1);
+        assert_eq!(runner.resources.num_gpus, 12); // 8 + 2*2
+        assert_eq!(runner.resources.num_nodes, 4);
+
+        // Complete both single-node jobs
+        runner.increment_resources(&s1);
+        runner.increment_resources(&s2);
+        assert_eq!(runner.resources.num_gpus, resources.num_gpus);
+        assert_eq!(runner.resources.num_cpus, resources.num_cpus);
+        assert_eq!(runner.resources.num_nodes, resources.num_nodes);
+    }
+
+    /// resources_per_node divides remaining totals by remaining nodes, so the
+    /// server sees accurate per-node availability for claiming.
+    #[test]
+    fn test_resources_per_node_after_multi_node_decrement() {
+        // 4 nodes, 8 GPUs total (2 per node), 32 CPUs (8 per node)
+        let resources = ComputeNodesResources::new(32, 128.0, 8, 4);
+        let mut runner = make_runner(resources);
+
+        // 2-node job takes 1 GPU/node, 4 CPUs/node
+        let rr = ResourceRequirementsModel {
+            id: Some(1),
+            workflow_id: 1,
+            name: "multi".to_string(),
+            num_cpus: 4,
+            num_gpus: 1,
+            num_nodes: 2,
+            memory: "16g".to_string(),
+            runtime: "PT1H".to_string(),
+        };
+        runner.decrement_resources(&rr);
+
+        let per_node = runner.resources_per_node();
+        // 2 nodes remain, 6 GPUs remain → 3 GPUs/node reported
+        assert_eq!(per_node.num_nodes, 2);
+        assert_eq!(per_node.num_gpus, 3); // 6 / 2
+        assert_eq!(per_node.num_cpus, 12); // 24 / 2
+    }
+
+    /// When all nodes are consumed, resources_per_node reports 0 nodes so the
+    /// server cannot claim any more jobs.
+    #[test]
+    fn test_resources_per_node_all_nodes_consumed() {
+        // 2 nodes, 4 GPUs total
+        let resources = ComputeNodesResources::new(16, 64.0, 4, 2);
+        let mut runner = make_runner(resources);
+
+        let rr = ResourceRequirementsModel {
+            id: Some(1),
+            workflow_id: 1,
+            name: "full".to_string(),
+            num_cpus: 4,
+            num_gpus: 1,
+            num_nodes: 2,
+            memory: "16g".to_string(),
+            runtime: "PT1H".to_string(),
+        };
+        runner.decrement_resources(&rr);
+
+        let per_node = runner.resources_per_node();
+        assert_eq!(per_node.num_nodes, 0);
+        // num_nodes.max(1) in resources_per_node prevents division by zero;
+        // remaining GPUs/CPUs are still visible but 0 nodes blocks claiming.
+        assert_eq!(per_node.num_gpus, 2); // 2 GPUs left but 0 nodes
+    }
+
     // =========================================================================
     // GPU device allocation tests
     // =========================================================================
