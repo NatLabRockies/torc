@@ -4035,3 +4035,82 @@ fn test_subgraph_workflow_execution_plan_spec_vs_database() {
 
     eprintln!("✓ Execution plan from spec matches execution plan from database");
 }
+
+/// Test that large workflows with many parameterized jobs can be created successfully.
+/// This is a regression test for the axum 0.8 default body limit issue where workflows
+/// with >2MB of job data would fail with "length limit exceeded".
+#[rstest]
+fn test_large_workflow_creation_regression(start_server: &ServerProcess) {
+    // Create a workflow with 100,000 parameterized jobs - this creates a payload well over 2MB
+    // which would fail with axum 0.8's default 2MB body limit if not raised.
+    let workflow_yaml = r#"
+name: large_workflow_test
+description: Regression test for large workflow body limit
+
+parameters:
+  task_id: "0:99999"
+
+jobs:
+  - name: task_{task_id:05d}
+    command: "echo 'Processing task {task_id}'"
+    resource_requirements: minimal
+    use_parameters:
+      - task_id
+
+resource_requirements:
+  - name: minimal
+    num_cpus: 1
+    num_gpus: 0
+    num_nodes: 1
+    memory: "100m"
+    runtime: "PT1M"
+"#;
+
+    let temp_file = NamedTempFile::new().expect("Failed to create temp file");
+    fs::write(temp_file.path(), workflow_yaml).expect("Failed to write workflow spec");
+
+    // This should succeed - if the body limit is not disabled, it will fail with:
+    // "Failed to create batch 1 of jobs: ResponseError(ResponseContent { status: 413,
+    //  content: \"Failed to buffer the request body: length limit exceeded\", entity: None })"
+    let result = WorkflowSpec::create_workflow_from_spec(
+        &start_server.config,
+        temp_file.path(),
+        "test_user",
+        false,
+    );
+
+    assert!(
+        result.is_ok(),
+        "Large workflow creation should succeed. Error: {:?}",
+        result.err()
+    );
+
+    let workflow_id = result.unwrap();
+
+    // Verify the workflow has the expected number of jobs
+    let jobs = apis::jobs_api::list_jobs(
+        &start_server.config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list jobs");
+
+    assert_eq!(
+        jobs.items.len(),
+        100_000,
+        "Workflow should have 100,000 jobs, got {}",
+        jobs.items.len()
+    );
+
+    // Clean up
+    apis::workflows_api::delete_workflow(&start_server.config, workflow_id)
+        .expect("Failed to delete workflow");
+}

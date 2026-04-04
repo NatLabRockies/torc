@@ -11,7 +11,7 @@ use crate::server::transport_types::auth_types::{AuthData, Authorization, Scopes
 use crate::server::transport_types::context_types::{EmptyContext, Push, XSpanIdString};
 use axum::Router;
 use axum::body::Body;
-use axum::extract::{Path, Query, Request, State};
+use axum::extract::{DefaultBodyLimit, Path, Query, Request, State};
 use axum::http::header::{HeaderName, HeaderValue};
 use axum::http::{Response, StatusCode};
 use axum::middleware::{self, Next};
@@ -342,6 +342,8 @@ pub fn app_router(state: LiveRouterState) -> Router {
             state.auth.clone(),
             inject_request_context,
         ))
+        // Raise axum's default 2MB limit to 200 MiB for large workflow/job payloads
+        .layer(DefaultBodyLimit::max(200 * 1024 * 1024))
         .with_state(state)
 }
 
