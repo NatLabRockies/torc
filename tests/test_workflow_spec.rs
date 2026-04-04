@@ -6,10 +6,10 @@ use std::path::PathBuf;
 use common::{ServerProcess, start_server};
 use rstest::rstest;
 use tempfile::NamedTempFile;
-use torc::client::apis;
 use torc::client::workflow_spec::{
     FileSpec, JobSpec, ResourceRequirementsSpec, SlurmSchedulerSpec, UserDataSpec, WorkflowSpec,
 };
+use torc::client::{Configuration, apis};
 
 #[test]
 fn test_job_specification_new() {
@@ -4087,6 +4087,21 @@ resource_requirements:
 
     let workflow_id = result.unwrap();
 
+    // RAII guard to ensure workflow cleanup even if assertions fail
+    struct CleanupGuard<'a> {
+        config: &'a Configuration,
+        workflow_id: i64,
+    }
+    impl Drop for CleanupGuard<'_> {
+        fn drop(&mut self) {
+            let _ = apis::workflows_api::delete_workflow(self.config, self.workflow_id);
+        }
+    }
+    let _cleanup = CleanupGuard {
+        config: &start_server.config,
+        workflow_id,
+    };
+
     // Verify the workflow has the expected number of jobs
     let jobs = apis::jobs_api::list_jobs(
         &start_server.config,
@@ -4110,7 +4125,5 @@ resource_requirements:
         jobs.items.len()
     );
 
-    // Clean up
-    apis::workflows_api::delete_workflow(&start_server.config, workflow_id)
-        .expect("Failed to delete workflow");
+    // Cleanup handled by CleanupGuard drop
 }
