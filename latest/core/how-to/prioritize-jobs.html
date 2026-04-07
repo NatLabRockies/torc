@@ -200,7 +200,9 @@
 <li>Priority affects both queue-depth claims and resource-based claims</li>
 <li>A high-priority job still must fit the requesting runner's resources to be claimed</li>
 </ul>
-<p>If two ready jobs have the same priority, Torc uses a stable tie-breaker.</p>
+<p>If two ready jobs have the same priority, <code>claim_next_jobs</code> uses a stable tie-breaker. For
+resource-based claims, Torc prefers GPU jobs first within the same priority so GPU-capable work is
+not starved behind CPU-only jobs.</p>
 <h2 id="yaml-example"><a class="header" href="#yaml-example">YAML Example</a></h2>
 <pre><code class="language-yaml">name: priority_example
 
