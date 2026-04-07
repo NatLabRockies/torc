@@ -11282,6 +11282,7 @@ completion_check_interval_secs = 5
 <tr><td><code>TORC_LOG_DIR</code></td><td>Server</td><td>Log directory</td></tr>
 <tr><td><code>TORC_COMPLETION_CHECK_INTERVAL_SECS</code></td><td>Server</td><td>Completion check interval</td></tr>
 <tr><td><code>TORC_ADMIN_USERS</code></td><td>Server</td><td>Comma-separated list of admin usernames</td></tr>
+<tr><td><code>TORC_MAX_REQUEST_BODY_MB</code></td><td>Server</td><td>Bulk job upload request-body limit (MiB)</td></tr>
 <tr><td><code>DATABASE_URL</code></td><td>Server</td><td>SQLite database URL</td></tr>
 <tr><td><code>RUST_LOG</code></td><td>All</td><td>Log level filter</td></tr>
 </tbody></table>
@@ -16286,12 +16287,16 @@ RUST_LOG=debug torc-server run --log-dir /var/log/torc
 <ul>
 <li><code>TORC_LOG_DIR</code>: Default log directory</li>
 <li><code>RUST_LOG</code>: Default log level</li>
+<li><code>TORC_MAX_REQUEST_BODY_MB</code>: Override the bulk job upload request-body limit in MiB</li>
 </ul>
 <p>Example:</p>
 <pre><code class="language-bash">export TORC_LOG_DIR=/var/log/torc
 export RUST_LOG=info
+export TORC_MAX_REQUEST_BODY_MB=500
 torc-server run
 </code></pre>
+<p><code>TORC_MAX_REQUEST_BODY_MB</code> applies to <code>POST /torc-service/v1/bulk_jobs</code>. Other JSON routes still use
+Axum's default <code>2 MiB</code> body limit.</p>
 <h2 id="daemonization-unixlinux-only"><a class="header" href="#daemonization-unixlinux-only">Daemonization (Unix/Linux Only)</a></h2>
 <p>Run torc-server as a background daemon:</p>
 <pre><code class="language-bash">torc-server run --daemon --log-dir /var/log/torc
