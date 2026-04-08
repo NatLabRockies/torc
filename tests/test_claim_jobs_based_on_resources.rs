@@ -150,6 +150,75 @@ fn test_claim_jobs_based_on_resources_skips_high_priority_job_that_does_not_fit(
 }
 
 #[rstest]
+fn test_claim_jobs_based_on_resources_backfills_beyond_first_candidate_page(
+    start_server: &ServerProcess,
+) {
+    let config = &start_server.config;
+    let workflow = models::WorkflowModel::new(
+        "priority_backfill_paging_test".to_string(),
+        "test_user".to_string(),
+    );
+    let created_workflow =
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
+    let workflow_id = created_workflow.id.unwrap();
+
+    let high_rr = create_test_resource_requirements(
+        config,
+        workflow_id,
+        "high_priority_rr",
+        3,
+        1,
+        1,
+        "3g",
+        "PT10M",
+    );
+    let low_rr = create_test_resource_requirements(
+        config,
+        workflow_id,
+        "low_priority_rr",
+        1,
+        0,
+        1,
+        "1g",
+        "PT10M",
+    );
+
+    for i in 0..257 {
+        let mut job = models::JobModel::new(
+            workflow_id,
+            format!("high_priority_gpu_{i}"),
+            format!("echo high {i}"),
+        );
+        job.priority = Some(100);
+        job.resource_requirements_id = Some(high_rr.id.unwrap());
+        apis::jobs_api::create_job(config, job).expect("Failed to create high-priority job");
+    }
+
+    let mut low_job = models::JobModel::new(
+        workflow_id,
+        "lower_priority_cpu_backfill".to_string(),
+        "echo low".to_string(),
+    );
+    low_job.priority = Some(10);
+    low_job.resource_requirements_id = Some(low_rr.id.unwrap());
+    apis::jobs_api::create_job(config, low_job).expect("Failed to create low-priority job");
+
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+        .expect("Failed to initialize jobs");
+
+    let resources = models::ComputeNodesResources::new(4, 4.0, 1, 1);
+    let result =
+        apis::workflows_api::claim_jobs_based_on_resources(config, workflow_id, 2, resources, None)
+            .expect("claim_jobs_based_on_resources should succeed");
+
+    let returned_jobs = result.jobs.expect("Server must return jobs array");
+    assert_eq!(returned_jobs.len(), 2);
+    assert_eq!(returned_jobs[0].priority, Some(100));
+    assert_eq!(returned_jobs[1].name, "lower_priority_cpu_backfill");
+    assert_eq!(returned_jobs[1].priority, Some(10));
+}
+
+#[rstest]
 fn test_claim_jobs_based_on_resources_strict_scheduler_match_controls_fallback(
     start_server: &ServerProcess,
 ) {

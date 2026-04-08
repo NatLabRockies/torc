@@ -8,6 +8,8 @@ use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::path::Path;
 
+use crate::client::workflow_spec::SlurmWorkerMpiMode;
+
 use super::common::{HpcJobInfo, HpcJobStats, HpcJobStatus};
 
 /// Defines the interface for managing an HPC scheduler
@@ -55,6 +57,7 @@ pub trait HpcInterface: Send + Sync {
     /// * `filename` - Path where the submission script should be written
     /// * `config` - Configuration parameters for the HPC scheduler
     /// * `start_one_worker_per_node` - Whether to launch one worker per node via srun
+    /// * `slurm_worker_mpi_mode` - MPI mode for the outer worker-launch `srun`
     /// * `tls_ca_cert` - Optional path to a PEM-encoded CA certificate
     /// * `tls_insecure` - Whether to skip certificate verification
     /// * `startup_delay_seconds` - Maximum startup jitter in seconds (0 to disable)
@@ -70,6 +73,7 @@ pub trait HpcInterface: Send + Sync {
         filename: &Path,
         config: &HashMap<String, String>,
         start_one_worker_per_node: bool,
+        slurm_worker_mpi_mode: SlurmWorkerMpiMode,
         tls_ca_cert: Option<&str>,
         tls_insecure: bool,
         startup_delay_seconds: u64,

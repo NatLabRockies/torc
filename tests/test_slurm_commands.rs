@@ -17,6 +17,7 @@ use torc::client::hpc::common::HpcJobStatus;
 use torc::client::hpc::hpc_interface::HpcInterface;
 use torc::client::hpc::slurm_interface::SlurmInterface;
 use torc::client::workflow_manager::WorkflowManager;
+use torc::client::workflow_spec::SlurmWorkerMpiMode;
 use torc::models;
 
 #[rstest]
@@ -378,6 +379,7 @@ fn test_create_submission_script() {
         &script_path,
         &config,
         false,
+        SlurmWorkerMpiMode::Default,
         None,
         false,
         0,
@@ -457,6 +459,7 @@ fn test_create_submission_script_with_extra() {
         &script_path,
         &config,
         false,
+        SlurmWorkerMpiMode::Default,
         None,
         false,
         0,
@@ -504,6 +507,7 @@ fn test_create_submission_script_without_srun() {
         &script_path,
         &config,
         false,
+        SlurmWorkerMpiMode::Default,
         None,
         false,
         0,
@@ -559,6 +563,7 @@ fn test_create_submission_script_with_srun() {
         &script_path,
         &config,
         true,
+        SlurmWorkerMpiMode::Default,
         None,
         false,
         0,
@@ -610,6 +615,50 @@ fn test_compute_startup_delay() {
 }
 
 #[test]
+fn test_create_submission_script_with_srun_mpi_none() {
+    let interface = SlurmInterface::new().expect("Failed to create SlurmInterface");
+
+    let temp_dir = env::temp_dir();
+    let script_path = temp_dir.join("test_submission_script_with_srun_mpi_none.sh");
+
+    let mut config = std::collections::HashMap::new();
+    config.insert("account".to_string(), "test_account".to_string());
+    config.insert("walltime".to_string(), "01:00:00".to_string());
+
+    let result = interface.create_submission_script(
+        "test_srun_job",
+        "http://localhost:8080/torc-service/v1",
+        11111,
+        "/tmp/output",
+        5,
+        None,
+        &script_path,
+        &config,
+        true,
+        SlurmWorkerMpiMode::None,
+        None,
+        false,
+        0,
+    );
+
+    assert!(
+        result.is_ok(),
+        "Failed to create submission script: {:?}",
+        result.err()
+    );
+
+    let script_content =
+        fs::read_to_string(&script_path).expect("Failed to read submission script");
+
+    assert!(
+        script_content.contains("srun --mpi=none --ntasks-per-node=1 "),
+        "Should include --mpi=none in the outer srun wrapper"
+    );
+
+    let _ = fs::remove_file(&script_path);
+}
+
+#[test]
 fn test_create_submission_script_with_startup_delay() {
     let interface = SlurmInterface::new().expect("Failed to create SlurmInterface");
 
@@ -630,6 +679,7 @@ fn test_create_submission_script_with_startup_delay() {
         &script_path,
         &config,
         false,
+        SlurmWorkerMpiMode::Default,
         None,
         false,
         30,
@@ -673,6 +723,7 @@ fn test_create_submission_script_without_startup_delay() {
         &script_path,
         &config,
         false,
+        SlurmWorkerMpiMode::Default,
         None,
         false,
         0,

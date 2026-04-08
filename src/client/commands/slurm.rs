@@ -1748,6 +1748,7 @@ pub fn schedule_slurm_nodes(
             Path::new(&script_path),
             &config_map,
             start_one_worker_per_node,
+            execution_config.slurm_worker_mpi_mode(),
             tls_ca_cert,
             tls_insecure,
             startup_delay_seconds,

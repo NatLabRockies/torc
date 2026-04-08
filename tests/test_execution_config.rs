@@ -17,7 +17,7 @@ use std::fs;
 use tempfile::NamedTempFile;
 use torc::client::apis;
 use torc::client::workflow_spec::{
-    ExecutionConfig, ExecutionMode, StdioConfig, StdioMode, WorkflowSpec,
+    ExecutionConfig, ExecutionMode, SlurmWorkerMpiMode, StdioConfig, StdioMode, WorkflowSpec,
 };
 
 // =============================================================================
@@ -122,6 +122,18 @@ fn test_execution_config_json_parsing() {
     assert_eq!(config.sigkill_headroom_seconds, Some(120));
 }
 
+#[test]
+fn test_execution_config_slurm_worker_mpi_mode_parsing() {
+    let yaml = r#"
+        mode: direct
+        slurm_worker_mpi_mode: none
+    "#;
+    let config: ExecutionConfig = serde_yaml::from_str(yaml).unwrap();
+
+    assert_eq!(config.mode, ExecutionMode::Direct);
+    assert_eq!(config.slurm_worker_mpi_mode, Some(SlurmWorkerMpiMode::None));
+}
+
 // =============================================================================
 // Default value tests
 // =============================================================================
@@ -137,6 +149,7 @@ fn test_execution_config_default_values() {
     assert_eq!(config.sigkill_headroom_seconds, None);
     assert_eq!(config.timeout_exit_code, None);
     assert_eq!(config.oom_exit_code, None);
+    assert_eq!(config.slurm_worker_mpi_mode, None);
     assert_eq!(config.srun_termination_signal, None);
     assert_eq!(config.enable_cpu_bind, None);
 }
@@ -164,6 +177,7 @@ fn test_execution_config_default_accessor_values() {
         config.oom_exit_code(),
         ExecutionConfig::DEFAULT_OOM_EXIT_CODE
     );
+    assert_eq!(config.slurm_worker_mpi_mode(), SlurmWorkerMpiMode::Default);
     assert!(!config.enable_cpu_bind()); // default false
 }
 
@@ -338,6 +352,7 @@ fn test_execution_config_yaml_roundtrip() {
         sigkill_headroom_seconds: Some(60),
         timeout_exit_code: Some(152),
         oom_exit_code: Some(137),
+        slurm_worker_mpi_mode: Some(SlurmWorkerMpiMode::None),
         srun_termination_signal: None,
         enable_cpu_bind: None,
         staggered_start: None,
@@ -361,6 +376,7 @@ fn test_execution_config_json_roundtrip() {
         sigkill_headroom_seconds: Some(120),
         timeout_exit_code: None,
         oom_exit_code: None,
+        slurm_worker_mpi_mode: None,
         srun_termination_signal: Some("TERM@90".to_string()),
         enable_cpu_bind: Some(true),
         staggered_start: None,
@@ -949,6 +965,7 @@ fn test_execution_config_kdl_roundtrip() {
             sigkill_headroom_seconds: 90
             timeout_exit_code: 152
             oom_exit_code: 137
+            slurm_worker_mpi_mode: none
     "#;
     let original: WorkflowSpec = serde_yaml::from_str(yaml).expect("Failed to parse YAML");
 
@@ -964,6 +981,10 @@ fn test_execution_config_kdl_roundtrip() {
     assert_eq!(exec_config.termination_signal, Some("SIGTERM".to_string()));
     assert_eq!(exec_config.sigterm_lead_seconds, Some(45));
     assert_eq!(exec_config.sigkill_headroom_seconds, Some(90));
+    assert_eq!(
+        exec_config.slurm_worker_mpi_mode,
+        Some(SlurmWorkerMpiMode::None)
+    );
 }
 
 // =============================================================================
@@ -980,6 +1001,7 @@ fn test_execution_config_with_all_fields() {
         sigkill_headroom_seconds: 45
         timeout_exit_code: 200
         oom_exit_code: 201
+        slurm_worker_mpi_mode: none
         srun_termination_signal: "USR1@30"
         enable_cpu_bind: true
     "#;
@@ -993,6 +1015,7 @@ fn test_execution_config_with_all_fields() {
     assert_eq!(config.sigkill_headroom_seconds, Some(45));
     assert_eq!(config.timeout_exit_code, Some(200));
     assert_eq!(config.oom_exit_code, Some(201));
+    assert_eq!(config.slurm_worker_mpi_mode, Some(SlurmWorkerMpiMode::None));
     assert_eq!(config.srun_termination_signal, Some("USR1@30".to_string()));
     assert_eq!(config.enable_cpu_bind, Some(true));
 }
@@ -1519,4 +1542,66 @@ fn test_direct_mode_kdl_with_limit_resources() {
     assert_eq!(exec_config.termination_signal, Some("SIGTERM".to_string()));
     assert_eq!(exec_config.sigterm_lead_seconds, Some(30));
     assert_eq!(exec_config.sigkill_headroom_seconds, Some(60));
+}
+
+#[test]
+fn test_direct_mode_kdl_with_slurm_worker_mpi_mode() {
+    let kdl = r#"
+        name "kdl_direct_mode_mpi_none"
+        user "test_user"
+
+        execution_config {
+            mode "direct"
+            slurm_worker_mpi_mode "none"
+        }
+
+        job "job1" {
+            command "echo hello"
+        }
+    "#;
+
+    let spec = WorkflowSpec::from_spec_file_content(kdl, "kdl").expect("Failed to parse KDL");
+
+    let exec_config = spec.execution_config.unwrap();
+    assert_eq!(exec_config.mode, ExecutionMode::Direct);
+    assert_eq!(
+        exec_config.slurm_worker_mpi_mode,
+        Some(SlurmWorkerMpiMode::None)
+    );
+}
+
+#[rstest]
+fn test_slurm_worker_mpi_mode_rejected_with_slurm_mode(start_server: &ServerProcess) {
+    assert_spec_rejected(
+        &start_server.config,
+        r#"
+            name: slurm_worker_mpi_mode_slurm_rejected
+            user: test_user
+            jobs:
+              - name: job1
+                command: "echo test"
+            execution_config:
+                mode: slurm
+                slurm_worker_mpi_mode: none
+        "#,
+        "slurm_worker_mpi_mode",
+    );
+}
+
+#[rstest]
+fn test_slurm_worker_mpi_mode_rejected_with_auto_mode(start_server: &ServerProcess) {
+    assert_spec_rejected(
+        &start_server.config,
+        r#"
+            name: slurm_worker_mpi_mode_auto_rejected
+            user: test_user
+            jobs:
+              - name: job1
+                command: "echo test"
+            execution_config:
+                mode: auto
+                slurm_worker_mpi_mode: none
+        "#,
+        "slurm_worker_mpi_mode",
+    );
 }

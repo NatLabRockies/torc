@@ -693,6 +693,17 @@ pub enum ExecutionMode {
     Auto,
 }
 
+/// MPI mode for the outer `srun` that launches one direct-mode worker per node.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum SlurmWorkerMpiMode {
+    /// Preserve the current Slurm behavior by omitting `--mpi`.
+    #[default]
+    Default,
+    /// Disable MPI bootstrapping for the outer worker launch.
+    None,
+}
+
 /// Unified execution configuration that controls how jobs are run.
 ///
 /// This replaces the old `SlurmConfig` with a mode-based approach that clearly
@@ -754,6 +765,10 @@ pub struct ExecutionConfig {
     /// In slurm mode, Slurm manages OOM detection.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub oom_exit_code: Option<i32>,
+
+    /// MPI mode for the outer `srun` used by `start_one_worker_per_node` in direct mode.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slurm_worker_mpi_mode: Option<SlurmWorkerMpiMode>,
 
     // ========== Slurm mode only ==========
     /// Signal specification for srun steps, passed as `srun --signal=<value>` (slurm mode only).
@@ -850,6 +865,11 @@ impl ExecutionConfig {
         self.oom_exit_code.unwrap_or(Self::DEFAULT_OOM_EXIT_CODE)
     }
 
+    /// MPI mode for the outer direct-mode worker launch.
+    pub fn slurm_worker_mpi_mode(&self) -> SlurmWorkerMpiMode {
+        self.slurm_worker_mpi_mode.clone().unwrap_or_default()
+    }
+
     /// Whether staggered startup is enabled for Slurm job runners.
     pub fn staggered_start(&self) -> bool {
         self.staggered_start.unwrap_or(true)
@@ -919,6 +939,7 @@ impl ExecutionConfig {
             sigkill_headroom_seconds: None,
             timeout_exit_code: None,
             oom_exit_code: None,
+            slurm_worker_mpi_mode: None,
             staggered_start: None,
             stdio: None,
             job_stdio_overrides: None,
@@ -2404,6 +2425,14 @@ impl WorkflowSpec {
                             .to_string(),
                     );
                 }
+            }
+
+            if ec.slurm_worker_mpi_mode.is_some() && ec.mode != ExecutionMode::Direct {
+                errors.push(
+                    "slurm_worker_mpi_mode is only supported in direct mode. \
+                    It controls the outer srun used by start_one_worker_per_node."
+                        .to_string(),
+                );
             }
 
             if !errors.is_empty() {
@@ -3944,7 +3973,9 @@ impl WorkflowSpec {
                                 obj.insert(key.to_string(), serde_json::Value::Bool(b));
                             }
                         }
-                        "termination_signal" | "srun_termination_signal" => {
+                        "termination_signal"
+                        | "srun_termination_signal"
+                        | "slurm_worker_mpi_mode" => {
                             if let Some(s) = value.as_string() {
                                 obj.insert(
                                     key.to_string(),
@@ -4490,6 +4521,13 @@ impl WorkflowSpec {
             }
             if let Some(code) = exec_config.oom_exit_code {
                 lines.push(format!("    oom_exit_code {}", code));
+            }
+            if let Some(ref mpi_mode) = exec_config.slurm_worker_mpi_mode {
+                let value = match mpi_mode {
+                    SlurmWorkerMpiMode::Default => "default",
+                    SlurmWorkerMpiMode::None => "none",
+                };
+                lines.push(format!("    slurm_worker_mpi_mode {}", kdl_escape(value)));
             }
             if let Some(ref signal) = exec_config.srun_termination_signal {
                 lines.push(format!(
@@ -6151,6 +6189,7 @@ jobs:
         assert!(config.sigkill_headroom_seconds.is_none());
         assert!(config.timeout_exit_code.is_none());
         assert!(config.oom_exit_code.is_none());
+        assert!(config.slurm_worker_mpi_mode.is_none());
     }
 
     #[test]
@@ -6162,6 +6201,7 @@ jobs:
         assert_eq!(config.sigkill_headroom_seconds(), 60);
         assert_eq!(config.timeout_exit_code(), 152);
         assert_eq!(config.oom_exit_code(), 137);
+        assert_eq!(config.slurm_worker_mpi_mode(), SlurmWorkerMpiMode::Default);
     }
 
     #[test]
@@ -6174,6 +6214,7 @@ jobs:
             sigkill_headroom_seconds: Some(120),
             timeout_exit_code: Some(200),
             oom_exit_code: Some(201),
+            slurm_worker_mpi_mode: Some(SlurmWorkerMpiMode::None),
             srun_termination_signal: None,
             enable_cpu_bind: None,
             staggered_start: None,

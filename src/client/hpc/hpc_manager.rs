@@ -5,6 +5,8 @@ use log::{error, info, trace};
 use std::collections::HashMap;
 use std::path::Path;
 
+use crate::client::workflow_spec::SlurmWorkerMpiMode;
+
 use super::common::{HpcJobStats, HpcJobStatus, HpcType};
 use super::hpc_interface::HpcInterface;
 
@@ -135,6 +137,7 @@ impl HpcManager {
         max_parallel_jobs: Option<i32>,
         start_one_worker_per_node: bool,
         keep_submission_script: bool,
+        slurm_worker_mpi_mode: SlurmWorkerMpiMode,
         tls_ca_cert: Option<&str>,
         tls_insecure: bool,
         startup_delay_seconds: u64,
@@ -151,6 +154,7 @@ impl HpcManager {
             &filename,
             &self.config,
             start_one_worker_per_node,
+            slurm_worker_mpi_mode,
             tls_ca_cert,
             tls_insecure,
             startup_delay_seconds,

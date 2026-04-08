@@ -13,6 +13,8 @@ use std::thread;
 use std::time::Duration;
 use sysinfo::{RefreshKind, System, SystemExt};
 
+use crate::client::workflow_spec::SlurmWorkerMpiMode;
+
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
@@ -215,6 +217,7 @@ impl HpcInterface for SlurmInterface {
         filename: &Path,
         config: &HashMap<String, String>,
         start_one_worker_per_node: bool,
+        slurm_worker_mpi_mode: SlurmWorkerMpiMode,
         tls_ca_cert: Option<&str>,
         tls_insecure: bool,
         startup_delay_seconds: u64,
@@ -291,7 +294,15 @@ impl HpcInterface for SlurmInterface {
         script.push_str("unset SLURM_MEM_PER_CPU SLURM_MEM_PER_GPU\n");
         if start_one_worker_per_node {
             command.push_str(" --is-subtask");
-            script.push_str("srun --ntasks-per-node=1 ");
+            script.push_str("srun ");
+            if slurm_worker_mpi_mode == SlurmWorkerMpiMode::None {
+                debug!(
+                    "Using outer worker launch with srun --mpi=none for workflow_id={}",
+                    workflow_id
+                );
+                script.push_str("--mpi=none ");
+            }
+            script.push_str("--ntasks-per-node=1 ");
         }
         script.push_str(&command);
         script.push('\n');

@@ -1044,8 +1044,12 @@ where
 
         let memory_bytes = (resources.memory_gb * 1024.0 * 1024.0 * 1024.0) as i64;
 
+        const CLAIM_JOBS_PAGE_SIZE: i64 = 256;
+
         let ready_status = models::JobStatus::Ready.to_int();
         let order_by_clause = "ORDER BY job.priority DESC, job.id ASC";
+        let selection_limit =
+            usize::try_from(limit).map_err(|_| ApiError("Invalid limit".to_string()))?;
 
         let query_with_scheduler = format!(
             r#"
@@ -1079,99 +1083,45 @@ where
             AND (job.scheduler_id IS NULL OR job.scheduler_id = $8)
             {}
             LIMIT $9
+            OFFSET $10
             "#,
             order_by_clause
         );
-
-        let mut rows = match sqlx::query(&query_with_scheduler)
-            .bind(workflow_id)
-            .bind(ready_status)
-            .bind(memory_bytes)
-            .bind(resources.num_cpus)
-            .bind(resources.num_gpus)
-            .bind(resources.num_nodes)
-            .bind(time_limit_seconds)
-            .bind(resources.scheduler_config_id)
-            .bind(limit)
-            .fetch_all(&mut *conn)
-            .await
-        {
-            Ok(rows) => rows,
-            Err(e) => {
-                error!("Database error in get_ready_jobs: {}", e);
-                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-                return Err(ApiError("Database error".to_string()));
-            }
-        };
-
-        if rows.is_empty() && !strict_scheduler_match {
-            let query_without_scheduler = format!(
-                r#"
-                SELECT
-                    job.workflow_id,
-                    job.id AS job_id,
-                    job.name,
-                    job.command,
-                    job.invocation_script,
-                    job.status,
-                    job.cancel_on_blocking_job_failure,
-                    job.supports_termination,
-                    job.failure_handler_id,
-                    job.attempt_id,
-                    job.priority,
-                    rr.id AS resource_requirements_id,
-                    rr.memory_bytes,
-                    rr.num_cpus,
-                    rr.num_gpus,
-                    rr.num_nodes,
-                    rr.runtime_s
-                FROM job
-                JOIN resource_requirements rr ON job.resource_requirements_id = rr.id
-                WHERE job.workflow_id = $1
-                AND job.status = $2
-                AND rr.memory_bytes <= $3
-                AND rr.num_cpus <= $4
-                AND rr.num_gpus <= $5
-                AND rr.num_nodes <= $6
-                AND rr.runtime_s <= $7
-                {}
-                LIMIT $8
-                "#,
-                order_by_clause
-            );
-
-            rows = match sqlx::query(&query_without_scheduler)
-                .bind(workflow_id)
-                .bind(ready_status)
-                .bind(memory_bytes)
-                .bind(resources.num_cpus)
-                .bind(resources.num_gpus)
-                .bind(resources.num_nodes)
-                .bind(time_limit_seconds)
-                .bind(limit)
-                .fetch_all(&mut *conn)
-                .await
-            {
-                Ok(rows) => rows,
-                Err(e) => {
-                    error!(
-                        "Database error in get_ready_jobs (no scheduler filter): {}",
-                        e
-                    );
-                    let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-                    return Err(ApiError("Database error".to_string()));
-                }
-            };
-
-            if !rows.is_empty() {
-                info!(
-                    "Worker with scheduler_config_id={:?} found {} ready jobs after removing scheduler filter \
-                     (strict_scheduler_match=false).",
-                    resources.scheduler_config_id,
-                    rows.len()
-                );
-            }
-        }
+        let query_without_scheduler = format!(
+            r#"
+            SELECT
+                job.workflow_id,
+                job.id AS job_id,
+                job.name,
+                job.command,
+                job.invocation_script,
+                job.status,
+                job.cancel_on_blocking_job_failure,
+                job.supports_termination,
+                job.failure_handler_id,
+                job.attempt_id,
+                job.priority,
+                rr.id AS resource_requirements_id,
+                rr.memory_bytes,
+                rr.num_cpus,
+                rr.num_gpus,
+                rr.num_nodes,
+                rr.runtime_s
+            FROM job
+            JOIN resource_requirements rr ON job.resource_requirements_id = rr.id
+            WHERE job.workflow_id = $1
+            AND job.status = $2
+            AND rr.memory_bytes <= $3
+            AND rr.num_cpus <= $4
+            AND rr.num_gpus <= $5
+            AND rr.num_nodes <= $6
+            AND rr.runtime_s <= $7
+            {}
+            LIMIT $8
+            OFFSET $9
+            "#,
+            order_by_clause
+        );
 
         let per_node_cpus = resources.num_cpus;
         let per_node_memory = memory_bytes;
@@ -1185,11 +1135,204 @@ where
         let mut selected_jobs = Vec::new();
         let mut job_ids_to_update = Vec::new();
 
+        fn process_rows(
+            rows: Vec<sqlx::sqlite::SqliteRow>,
+            per_node_cpus: i64,
+            per_node_memory: i64,
+            per_node_gpus: i64,
+            total_nodes: i64,
+            selection_limit: usize,
+            consumed_memory_bytes: &mut i64,
+            consumed_cpus: &mut i64,
+            consumed_gpus: &mut i64,
+            exclusive_nodes: &mut i64,
+            selected_jobs: &mut Vec<models::JobModel>,
+            job_ids_to_update: &mut Vec<i64>,
+        ) -> Result<(usize, usize), ApiError> {
+            let mut rows_scanned = 0usize;
+            let mut rows_skipped = 0usize;
+
+            for row in rows {
+                rows_scanned += 1;
+
+                let job_memory: i64 = row.get("memory_bytes");
+                let job_cpus: i64 = row.get("num_cpus");
+                let job_gpus: i64 = row.get("num_gpus");
+                let job_nodes: i64 = row.get("num_nodes");
+                let reserved_nodes = job_nodes.max(1);
+
+                let fits = if reserved_nodes > 1 {
+                    let shared_nodes_after = total_nodes - *exclusive_nodes - reserved_nodes;
+                    *exclusive_nodes + reserved_nodes <= total_nodes
+                        && *consumed_cpus <= shared_nodes_after * per_node_cpus
+                        && *consumed_memory_bytes <= shared_nodes_after * per_node_memory
+                        && *consumed_gpus <= shared_nodes_after * per_node_gpus
+                } else {
+                    let shared_capacity_cpus = (total_nodes - *exclusive_nodes) * per_node_cpus;
+                    let shared_capacity_memory = (total_nodes - *exclusive_nodes) * per_node_memory;
+                    let shared_capacity_gpus = (total_nodes - *exclusive_nodes) * per_node_gpus;
+                    *consumed_cpus + job_cpus <= shared_capacity_cpus
+                        && *consumed_memory_bytes + job_memory <= shared_capacity_memory
+                        && *consumed_gpus + job_gpus <= shared_capacity_gpus
+                };
+
+                if fits {
+                    if reserved_nodes > 1 {
+                        *exclusive_nodes += reserved_nodes;
+                    } else {
+                        *consumed_memory_bytes += job_memory;
+                        *consumed_cpus += job_cpus;
+                        *consumed_gpus += job_gpus;
+                    }
+
+                    let job_id: i64 = row.get("job_id");
+                    job_ids_to_update.push(job_id);
+
+                    let status = models::JobStatus::from_int(row.get::<i64, _>("status") as i32)
+                        .map_err(|e| {
+                            error!("Failed to parse job status: {}", e);
+                            ApiError("Invalid job status".to_string())
+                        })?;
+
+                    if status != models::JobStatus::Ready {
+                        return Err(ApiError("Invalid job status in ready queue".to_string()));
+                    }
+                    let job = models::JobModel {
+                        id: Some(job_id),
+                        workflow_id: row.get("workflow_id"),
+                        name: row.get("name"),
+                        command: row.get("command"),
+                        invocation_script: row.get("invocation_script"),
+                        status: Some(models::JobStatus::Pending),
+                        schedule_compute_nodes: None,
+                        cancel_on_blocking_job_failure: Some(
+                            row.get("cancel_on_blocking_job_failure"),
+                        ),
+                        supports_termination: Some(row.get("supports_termination")),
+                        depends_on_job_ids: None,
+                        input_file_ids: None,
+                        output_file_ids: None,
+                        input_user_data_ids: None,
+                        output_user_data_ids: None,
+                        resource_requirements_id: Some(row.get("resource_requirements_id")),
+                        scheduler_id: None,
+                        failure_handler_id: row.get("failure_handler_id"),
+                        attempt_id: row.get("attempt_id"),
+                        priority: Some(row.get("priority")),
+                    };
+
+                    selected_jobs.push(job);
+                    if selected_jobs.len() >= selection_limit {
+                        break;
+                    }
+                } else {
+                    rows_skipped += 1;
+
+                    let reason = if reserved_nodes > 1 {
+                        let available = total_nodes - *exclusive_nodes;
+                        format!(
+                            "multi-node job needs {} free nodes, {} available \
+                             (exclusive_nodes={}, shared cpus={}/{})",
+                            reserved_nodes,
+                            available,
+                            *exclusive_nodes,
+                            *consumed_cpus,
+                            (total_nodes - *exclusive_nodes) * per_node_cpus
+                        )
+                    } else {
+                        let shared_nodes = total_nodes - *exclusive_nodes;
+                        format!(
+                            "cpus: {}/{}, memory: {}/{}, gpus: {}/{}",
+                            *consumed_cpus + job_cpus,
+                            shared_nodes * per_node_cpus,
+                            *consumed_memory_bytes + job_memory,
+                            shared_nodes * per_node_memory,
+                            *consumed_gpus + job_gpus,
+                            shared_nodes * per_node_gpus
+                        )
+                    };
+
+                    debug!(
+                        "Skipping job {} - would exceed resource limits ({})",
+                        row.get::<i64, _>("job_id"),
+                        reason
+                    );
+                }
+            }
+
+            Ok((rows_scanned, rows_skipped))
+        }
+
+        let mut scheduler_rows_scanned = 0usize;
+        let mut scheduler_rows_skipped = 0usize;
+        let mut scheduler_page = 0i64;
+        while selected_jobs.len() < selection_limit {
+            let offset = scheduler_page * CLAIM_JOBS_PAGE_SIZE;
+            let rows = match sqlx::query(&query_with_scheduler)
+                .bind(workflow_id)
+                .bind(ready_status)
+                .bind(memory_bytes)
+                .bind(resources.num_cpus)
+                .bind(resources.num_gpus)
+                .bind(resources.num_nodes)
+                .bind(time_limit_seconds)
+                .bind(resources.scheduler_config_id)
+                .bind(CLAIM_JOBS_PAGE_SIZE)
+                .bind(offset)
+                .fetch_all(&mut *conn)
+                .await
+            {
+                Ok(rows) => rows,
+                Err(e) => {
+                    error!("Database error in get_ready_jobs: {}", e);
+                    let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                    return Err(ApiError("Database error".to_string()));
+                }
+            };
+
+            if rows.is_empty() {
+                break;
+            }
+
+            let page_len = rows.len();
+            let (rows_scanned, rows_skipped) = match process_rows(
+                rows,
+                per_node_cpus,
+                per_node_memory,
+                per_node_gpus,
+                total_nodes,
+                selection_limit,
+                &mut consumed_memory_bytes,
+                &mut consumed_cpus,
+                &mut consumed_gpus,
+                &mut exclusive_nodes,
+                &mut selected_jobs,
+                &mut job_ids_to_update,
+            ) {
+                Ok(stats) => stats,
+                Err(err) => {
+                    error!("Expected job status to be Ready during resource claim");
+                    let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                    return Err(err);
+                }
+            };
+            scheduler_rows_scanned += rows_scanned;
+            scheduler_rows_skipped += rows_skipped;
+
+            if page_len < CLAIM_JOBS_PAGE_SIZE as usize {
+                break;
+            }
+            scheduler_page += 1;
+        }
+
         debug!(
-            "get_ready_jobs: Found {} potential jobs for workflow {} with resources: \
-             per_node(cpus={}, memory_bytes={}, gpus={}), nodes={}, time_limit={:?}",
-            rows.len(),
+            "get_ready_jobs: workflow_id={} scheduler_filter=true page_size={} rows_scanned={} selected={} skipped_for_fit={} \
+             per_node(cpus={}, memory_bytes={}, gpus={}) nodes={} time_limit={:?}",
             workflow_id,
+            CLAIM_JOBS_PAGE_SIZE,
+            scheduler_rows_scanned,
+            selected_jobs.len(),
+            scheduler_rows_skipped,
             per_node_cpus,
             per_node_memory,
             per_node_gpus,
@@ -1197,105 +1340,94 @@ where
             resources.time_limit
         );
 
-        for row in rows {
-            let job_memory: i64 = row.get("memory_bytes");
-            let job_cpus: i64 = row.get("num_cpus");
-            let job_gpus: i64 = row.get("num_gpus");
-            let job_nodes: i64 = row.get("num_nodes");
-            let reserved_nodes = job_nodes.max(1);
+        if scheduler_rows_scanned == 0 && !strict_scheduler_match {
+            let mut fallback_rows_scanned = 0usize;
+            let mut fallback_rows_skipped = 0usize;
+            let mut fallback_page = 0i64;
 
-            let fits = if reserved_nodes > 1 {
-                let shared_nodes_after = total_nodes - exclusive_nodes - reserved_nodes;
-                exclusive_nodes + reserved_nodes <= total_nodes
-                    && consumed_cpus <= shared_nodes_after * per_node_cpus
-                    && consumed_memory_bytes <= shared_nodes_after * per_node_memory
-                    && consumed_gpus <= shared_nodes_after * per_node_gpus
-            } else {
-                let shared_capacity_cpus = (total_nodes - exclusive_nodes) * per_node_cpus;
-                let shared_capacity_memory = (total_nodes - exclusive_nodes) * per_node_memory;
-                let shared_capacity_gpus = (total_nodes - exclusive_nodes) * per_node_gpus;
-                consumed_cpus + job_cpus <= shared_capacity_cpus
-                    && consumed_memory_bytes + job_memory <= shared_capacity_memory
-                    && consumed_gpus + job_gpus <= shared_capacity_gpus
-            };
-
-            if fits {
-                if reserved_nodes > 1 {
-                    exclusive_nodes += reserved_nodes;
-                } else {
-                    consumed_memory_bytes += job_memory;
-                    consumed_cpus += job_cpus;
-                    consumed_gpus += job_gpus;
-                }
-
-                let job_id: i64 = row.get("job_id");
-                job_ids_to_update.push(job_id);
-
-                let status = models::JobStatus::from_int(row.get::<i64, _>("status") as i32)
-                    .map_err(|e| {
-                        error!("Failed to parse job status: {}", e);
-                        ApiError("Invalid job status".to_string())
-                    })?;
-
-                if status != models::JobStatus::Ready {
-                    error!("Expected job status to be Ready, but got: {}", status);
-                    let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-                    return Err(ApiError("Invalid job status in ready queue".to_string()));
-                }
-                let job = models::JobModel {
-                    id: Some(job_id),
-                    workflow_id: row.get("workflow_id"),
-                    name: row.get("name"),
-                    command: row.get("command"),
-                    invocation_script: row.get("invocation_script"),
-                    status: Some(models::JobStatus::Pending),
-                    schedule_compute_nodes: None,
-                    cancel_on_blocking_job_failure: Some(row.get("cancel_on_blocking_job_failure")),
-                    supports_termination: Some(row.get("supports_termination")),
-                    depends_on_job_ids: None,
-                    input_file_ids: None,
-                    output_file_ids: None,
-                    input_user_data_ids: None,
-                    output_user_data_ids: None,
-                    resource_requirements_id: Some(row.get("resource_requirements_id")),
-                    scheduler_id: None,
-                    failure_handler_id: row.get("failure_handler_id"),
-                    attempt_id: row.get("attempt_id"),
-                    priority: Some(row.get("priority")),
+            while selected_jobs.len() < selection_limit {
+                let offset = fallback_page * CLAIM_JOBS_PAGE_SIZE;
+                let rows = match sqlx::query(&query_without_scheduler)
+                    .bind(workflow_id)
+                    .bind(ready_status)
+                    .bind(memory_bytes)
+                    .bind(resources.num_cpus)
+                    .bind(resources.num_gpus)
+                    .bind(resources.num_nodes)
+                    .bind(time_limit_seconds)
+                    .bind(CLAIM_JOBS_PAGE_SIZE)
+                    .bind(offset)
+                    .fetch_all(&mut *conn)
+                    .await
+                {
+                    Ok(rows) => rows,
+                    Err(e) => {
+                        error!(
+                            "Database error in get_ready_jobs (no scheduler filter): {}",
+                            e
+                        );
+                        let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                        return Err(ApiError("Database error".to_string()));
+                    }
                 };
 
-                selected_jobs.push(job);
-            } else {
-                let reason = if reserved_nodes > 1 {
-                    let available = total_nodes - exclusive_nodes;
-                    format!(
-                        "multi-node job needs {} free nodes, {} available \
-                         (exclusive_nodes={}, shared cpus={}/{})",
-                        reserved_nodes,
-                        available,
-                        exclusive_nodes,
-                        consumed_cpus,
-                        (total_nodes - exclusive_nodes) * per_node_cpus
-                    )
-                } else {
-                    let shared_nodes = total_nodes - exclusive_nodes;
-                    format!(
-                        "cpus: {}/{}, memory: {}/{}, gpus: {}/{}",
-                        consumed_cpus + job_cpus,
-                        shared_nodes * per_node_cpus,
-                        consumed_memory_bytes + job_memory,
-                        shared_nodes * per_node_memory,
-                        consumed_gpus + job_gpus,
-                        shared_nodes * per_node_gpus
-                    )
-                };
+                if rows.is_empty() {
+                    break;
+                }
 
-                debug!(
-                    "Skipping job {} - would exceed resource limits ({})",
-                    row.get::<i64, _>("job_id"),
-                    reason
+                let page_len = rows.len();
+                let (rows_scanned, rows_skipped) = match process_rows(
+                    rows,
+                    per_node_cpus,
+                    per_node_memory,
+                    per_node_gpus,
+                    total_nodes,
+                    selection_limit,
+                    &mut consumed_memory_bytes,
+                    &mut consumed_cpus,
+                    &mut consumed_gpus,
+                    &mut exclusive_nodes,
+                    &mut selected_jobs,
+                    &mut job_ids_to_update,
+                ) {
+                    Ok(stats) => stats,
+                    Err(err) => {
+                        error!("Expected job status to be Ready during resource claim");
+                        let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                        return Err(err);
+                    }
+                };
+                fallback_rows_scanned += rows_scanned;
+                fallback_rows_skipped += rows_skipped;
+
+                if page_len < CLAIM_JOBS_PAGE_SIZE as usize {
+                    break;
+                }
+                fallback_page += 1;
+            }
+
+            if fallback_rows_scanned > 0 {
+                info!(
+                    "Worker with scheduler_config_id={:?} found {} ready jobs after removing scheduler filter \
+                     (strict_scheduler_match=false).",
+                    resources.scheduler_config_id, fallback_rows_scanned
                 );
             }
+
+            debug!(
+                "get_ready_jobs: workflow_id={} scheduler_filter=false page_size={} rows_scanned={} selected={} skipped_for_fit={} \
+                 per_node(cpus={}, memory_bytes={}, gpus={}) nodes={} time_limit={:?}",
+                workflow_id,
+                CLAIM_JOBS_PAGE_SIZE,
+                fallback_rows_scanned,
+                selected_jobs.len(),
+                fallback_rows_skipped,
+                per_node_cpus,
+                per_node_memory,
+                per_node_gpus,
+                total_nodes,
+                resources.time_limit
+            );
         }
 
         let mut output_files_map: std::collections::HashMap<i64, Vec<i64>> =
