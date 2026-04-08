@@ -29,9 +29,10 @@ use crate::client::resource_monitor::ResourceMonitor;
 use crate::client::slurm_utils::{parse_slurm_cpu_time, parse_slurm_memory};
 use crate::client::workflow_spec::{ExecutionMode, StdioMode};
 use crate::memory_utils::{memory_string_to_bytes, memory_string_to_mb};
-use crate::models::{JobModel, JobStatus, ResourceRequirementsModel, ResultModel, SlurmStatsModel};
+use crate::models::{JobModel, JobStatus, ResourceRequirementsModel, ResultModel};
 use chrono::{DateTime, Utc};
 use log::{self, debug, error, info, warn};
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
@@ -148,10 +149,10 @@ pub struct AsyncCliCommand {
     workflow_id: Option<i64>,
     run_id: Option<i64>,
     attempt_id: Option<i64>,
+    /// Slurm allocation ID when running inside an allocation.
+    slurm_job_id: Option<String>,
     /// Slurm step name set when running inside an allocation (for sacct lookup).
     step_name: Option<String>,
-    /// Slurm accounting stats collected via sacct after step completion.
-    slurm_stats: Option<SlurmStatsModel>,
     handle: Option<Child>,
     pid: Option<u32>,
     pub is_running: bool,
@@ -177,8 +178,8 @@ impl AsyncCliCommand {
             workflow_id: None,
             run_id: None,
             attempt_id: None,
+            slurm_job_id: None,
             step_name: None,
-            slurm_stats: None,
             handle: None,
             pid: None,
             is_running: false,
@@ -197,6 +198,11 @@ impl AsyncCliCommand {
     /// Set after `start()` is called.
     pub fn step_name(&self) -> Option<&str> {
         self.step_name.as_deref()
+    }
+
+    /// Returns the Slurm allocation ID, if running inside an allocation.
+    pub fn slurm_job_id(&self) -> Option<&str> {
+        self.slurm_job_id.as_deref()
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -355,6 +361,7 @@ impl AsyncCliCommand {
         self.workflow_id = Some(workflow_id);
         self.run_id = Some(run_id);
         self.attempt_id = Some(attempt_id);
+        self.slurm_job_id = slurm_job_id;
         self.is_running = true;
         self.start_time = Utc::now();
         self.status = JobStatus::Running;
@@ -504,12 +511,6 @@ impl AsyncCliCommand {
         result.avg_cpu_percent = avg_cpu;
 
         result
-    }
-
-    /// Returns the Slurm accounting stats collected for this job step, if any.
-    /// Only populated when the job ran inside a Slurm allocation and sacct succeeded.
-    pub fn take_slurm_stats(&mut self) -> Option<SlurmStatsModel> {
-        self.slurm_stats.take()
     }
 
     /// Immediately kills the job process using SIGKILL.
@@ -739,71 +740,6 @@ impl AsyncCliCommand {
         self.return_code = Some(return_code);
         self.handle = None;
 
-        // Collect Slurm accounting stats via sacct when running inside an allocation.
-        // Note: collect_sacct_stats is synchronous and may delay this polling cycle: it sleeps
-        // 5 seconds between retry attempts (up to 6 attempts, worst-case ~25 seconds) when the
-        // Slurm accounting daemon hasn't written the step record yet.
-        if let (Ok(slurm_job_id), Some(step_name)) =
-            (std::env::var("SLURM_JOB_ID"), self.step_name.as_deref())
-        {
-            info!(
-                "Collecting sacct stats for workflow_id={} job_id={} step={}",
-                self.workflow_id.unwrap_or(0),
-                self.job_id,
-                step_name
-            );
-            if let Some(stats) = collect_sacct_stats(&slurm_job_id, step_name)
-                && let (Some(workflow_id), Some(run_id), Some(attempt_id)) =
-                    (self.workflow_id, self.run_id, self.attempt_id)
-            {
-                // Override the return code based on sacct State.
-                // When Slurm's cgroup OOM-kills a step, srun exits with code 1
-                // and sacct ExitCode is 0:125 — neither produces the conventional
-                // 137 (128+SIGKILL) that recovery heuristics check. The sacct State
-                // field reliably reports OUT_OF_MEMORY / TIMEOUT.
-                //
-                // TIMEOUT is only overridden when the process did not exit cleanly
-                // (return_code != 0). When the process handled SIGTERM (from
-                // --signal) and exited 0, we keep the successful result even though
-                // sacct may report State=TIMEOUT for the step.
-                //
-                // TIMEOUT maps to Terminated (system-initiated kill due to walltime)
-                // rather than Failed (job error), matching the old behaviour where
-                // the runner would send SIGTERM before the allocation expired.
-                if let Some(ref state) = stats.state {
-                    let override_rc = match state.as_str() {
-                        "OUT_OF_MEMORY" => Some((137i64, JobStatus::Failed)),
-                        "TIMEOUT" if return_code != 0 => Some((152i64, JobStatus::Terminated)),
-                        _ => None,
-                    };
-                    if let Some((sacct_rc, sacct_status)) = override_rc {
-                        info!(
-                            "Overriding srun return_code {} with {} (sacct State={}) for \
-                             workflow_id={} job_id={} step={}",
-                            return_code, sacct_rc, state, workflow_id, self.job_id, step_name
-                        );
-                        self.return_code = Some(sacct_rc);
-                        self.status = sacct_status;
-                    }
-                }
-
-                let mut slurm_stats =
-                    SlurmStatsModel::new(workflow_id, self.job_id, run_id, attempt_id);
-                slurm_stats.slurm_job_id = Some(slurm_job_id);
-                slurm_stats.max_rss_bytes = stats.max_rss_bytes;
-                slurm_stats.max_vm_size_bytes = stats.max_vm_size_bytes;
-                slurm_stats.max_disk_read_bytes = stats.max_disk_read_bytes;
-                slurm_stats.max_disk_write_bytes = stats.max_disk_write_bytes;
-                slurm_stats.ave_cpu_seconds = stats.ave_cpu_seconds;
-                slurm_stats.node_list = stats.node_list;
-                info!(
-                    "Sacct stats collected workflow_id={} job_id={} step={}",
-                    workflow_id, self.job_id, step_name
-                );
-                self.slurm_stats = Some(slurm_stats);
-            }
-        }
-
         let final_rc = self.return_code.unwrap_or(return_code);
         let final_status = format!("{:?}", self.status).to_lowercase();
         info!(
@@ -894,18 +830,29 @@ impl AsyncCliCommand {
 }
 
 /// Slurm accounting stats collected from `sacct` after step completion.
-struct SacctStats {
-    max_rss_bytes: Option<i64>,
-    max_vm_size_bytes: Option<i64>,
-    max_disk_read_bytes: Option<i64>,
-    max_disk_write_bytes: Option<i64>,
-    ave_cpu_seconds: Option<f64>,
-    node_list: Option<String>,
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct SacctStats {
+    pub(crate) max_rss_bytes: Option<i64>,
+    pub(crate) max_vm_size_bytes: Option<i64>,
+    pub(crate) max_disk_read_bytes: Option<i64>,
+    pub(crate) max_disk_write_bytes: Option<i64>,
+    pub(crate) ave_cpu_seconds: Option<f64>,
+    pub(crate) node_list: Option<String>,
     /// Slurm step state (e.g. "COMPLETED", "OUT_OF_MEMORY", "TIMEOUT", "FAILED").
     /// When Slurm's cgroup OOM-kills a step, the ExitCode is often `0:0` and `srun`
     /// exits with code 1, losing the OOM signal. The State field is the reliable way
     /// to detect OOM kills and timeouts.
-    state: Option<String>,
+    pub(crate) state: Option<String>,
+}
+
+fn sacct_stats_have_useful_data(stats: &SacctStats) -> bool {
+    stats.max_rss_bytes.is_some()
+        || stats.max_vm_size_bytes.is_some()
+        || stats.max_disk_read_bytes.is_some()
+        || stats.max_disk_write_bytes.is_some()
+        || stats.ave_cpu_seconds.is_some()
+        || stats.node_list.is_some()
+        || stats.state.is_some()
 }
 
 /// Convert a `std::process::ExitStatus` to a return code.
@@ -941,9 +888,17 @@ fn exit_status_to_return_code(status: &std::process::ExitStatus) -> i64 {
 /// Returns `None` if sacct is unavailable, returns no data for the step after all retries, or
 /// the output cannot be parsed. This is a best-effort call — failures are logged at debug level
 /// and do not affect job result reporting.
-fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats> {
+pub(crate) fn collect_sacct_stats_for_steps(
+    slurm_job_id: &str,
+    expected_step_names: &HashSet<String>,
+) -> HashMap<String, SacctStats> {
     const MAX_SACCT_ATTEMPTS: u32 = 6;
     const SACCT_RETRY_DELAY: std::time::Duration = std::time::Duration::from_secs(5);
+    let mut collected = HashMap::new();
+
+    if expected_step_names.is_empty() {
+        return collected;
+    }
 
     // Allow tests to substitute a fake sacct binary via TORC_FAKE_SACCT.
     let sacct_binary = std::env::var("TORC_FAKE_SACCT").unwrap_or_else(|_| "sacct".to_string());
@@ -969,8 +924,8 @@ fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats
             "-n", // no header
         ]);
         debug!(
-            "sacct command for step {} (attempt {}/{}): {:?}",
-            step_name, attempt, MAX_SACCT_ATTEMPTS, sacct_cmd
+            "sacct command for allocation {} (attempt {}/{}): {:?}",
+            slurm_job_id, attempt, MAX_SACCT_ATTEMPTS, sacct_cmd
         );
         let output = sacct_cmd.output();
 
@@ -978,10 +933,10 @@ fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats
             Ok(o) => o,
             Err(e) => {
                 debug!(
-                    "sacct not available or failed for step {}: {}",
-                    step_name, e
+                    "sacct not available or failed for allocation {}: {}",
+                    slurm_job_id, e
                 );
-                return None;
+                return collected;
             }
         };
 
@@ -989,8 +944,8 @@ fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats
             let stderr = String::from_utf8_lossy(&output.stderr);
             if attempt < MAX_SACCT_ATTEMPTS {
                 debug!(
-                    "sacct returned non-zero exit code for step {} (attempt {}/{}): {}",
-                    step_name,
+                    "sacct returned non-zero exit code for allocation {} (attempt {}/{}): {}",
+                    slurm_job_id,
                     attempt,
                     MAX_SACCT_ATTEMPTS,
                     stderr.trim()
@@ -998,68 +953,74 @@ fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats
                 continue;
             } else {
                 warn!(
-                    "sacct returned non-zero exit code for step {} after {} attempts: {}",
-                    step_name,
+                    "sacct returned non-zero exit code for allocation {} after {} attempts: {}",
+                    slurm_job_id,
                     MAX_SACCT_ATTEMPTS,
                     stderr.trim()
                 );
-                return None;
+                return collected;
             }
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         debug!(
-            "sacct output for step {} (attempt {}/{}): {:?}",
-            step_name,
+            "sacct output for allocation {} (attempt {}/{}): {:?}",
+            slurm_job_id,
             attempt,
             MAX_SACCT_ATTEMPTS,
             stdout.as_ref()
         );
-        // sacct returns one row per step (and one for the allocation itself).
-        // Match by JobName only — do NOT also require non-empty memory fields: clusters
-        // without cgroup memory accounting return an otherwise valid step row with empty
-        // memory columns, and filtering those out causes all retries to fail silently.
-        let line = stdout.lines().find(|l| {
-            let fields: Vec<&str> = l.split('|').collect();
-            fields.len() >= 2 && fields[0].trim() == step_name
-        });
 
-        match line {
-            Some(line) => {
-                let stats = parse_sacct_line(line, step_name);
-                // The step row can appear with node_list populated but MaxRSS/AveCPU still
-                // empty while slurmdbd is committing the accounting data asynchronously.
-                // Retry if we have no useful data yet, rather than returning empty stats.
-                let has_data = stats
-                    .as_ref()
-                    .is_some_and(|s| s.max_rss_bytes.is_some() || s.ave_cpu_seconds.is_some());
-                if has_data || attempt == MAX_SACCT_ATTEMPTS {
-                    return stats;
-                }
-                debug!(
-                    "sacct row for step {} found but data fields are empty (attempt {}/{}), retrying",
-                    step_name, attempt, MAX_SACCT_ATTEMPTS
-                );
+        let mut found_this_attempt = HashMap::new();
+        for line in stdout.lines() {
+            let fields: Vec<&str> = line.split('|').collect();
+            if fields.len() < 2 {
+                continue;
             }
-            None => {
-                if attempt < MAX_SACCT_ATTEMPTS {
-                    debug!(
-                        "sacct has no record for step {} yet (attempt {}/{}), retrying",
-                        step_name, attempt, MAX_SACCT_ATTEMPTS
-                    );
-                } else {
-                    warn!(
-                        "sacct has no record for step {} after {} attempts; \
-                         raw sacct output: {:?}",
-                        step_name,
-                        MAX_SACCT_ATTEMPTS,
-                        stdout.as_ref()
-                    );
-                }
+            let step_name = fields[0].trim();
+            if !expected_step_names.contains(step_name) {
+                continue;
+            }
+            if let Some(stats) = parse_sacct_line(line, step_name)
+                && (sacct_stats_have_useful_data(&stats) || attempt == MAX_SACCT_ATTEMPTS)
+            {
+                found_this_attempt.insert(step_name.to_string(), stats);
+            }
+        }
+
+        collected.extend(found_this_attempt);
+
+        let missing_steps: Vec<&String> = expected_step_names
+            .iter()
+            .filter(|step_name| !collected.contains_key(*step_name))
+            .collect();
+        if missing_steps.is_empty() {
+            return collected;
+        }
+
+        if attempt < MAX_SACCT_ATTEMPTS {
+            debug!(
+                "sacct missing {} step(s) for allocation {} (attempt {}/{}): {:?}",
+                missing_steps.len(),
+                slurm_job_id,
+                attempt,
+                MAX_SACCT_ATTEMPTS,
+                missing_steps
+            );
+        } else {
+            warn!(
+                "sacct missing {} step(s) for allocation {} after {} attempts: {:?}",
+                missing_steps.len(),
+                slurm_job_id,
+                MAX_SACCT_ATTEMPTS,
+                missing_steps
+            );
+            if !collected.is_empty() {
+                return collected;
             }
         }
     }
-    None
+    collected
 }
 
 /// Parse a single pipe-separated `sacct` output line into a [`SacctStats`].
@@ -1131,6 +1092,15 @@ impl Drop for AsyncCliCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
+    use std::path::PathBuf;
+
+    fn fake_sacct_path() -> String {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/scripts/fake_sacct.sh")
+            .to_string_lossy()
+            .to_string()
+    }
 
     #[test]
     fn test_parse_sacct_line_with_state() {
@@ -1192,5 +1162,48 @@ mod tests {
         let line = "step1|1024K|2048K";
         let stats = parse_sacct_line(line, "step1");
         assert!(stats.is_none());
+    }
+
+    #[test]
+    #[serial]
+    fn test_collect_sacct_stats_for_steps_batches_multiple_matches() {
+        unsafe {
+            std::env::set_var("TORC_FAKE_SACCT", fake_sacct_path());
+        }
+        let expected = HashSet::from([
+            "wf1_j1_r1_a1".to_string(),
+            "wf1_j2_r1_a1".to_string(),
+            "missing_step".to_string(),
+        ]);
+
+        let stats = collect_sacct_stats_for_steps("12345", &expected);
+
+        assert_eq!(stats.len(), 2);
+        assert!(stats.contains_key("wf1_j1_r1_a1"));
+        assert!(stats.contains_key("wf1_j2_r1_a1"));
+        assert!(!stats.contains_key("missing_step"));
+
+        unsafe {
+            std::env::remove_var("TORC_FAKE_SACCT");
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_collect_sacct_stats_for_steps_returns_empty_on_failure() {
+        unsafe {
+            std::env::set_var("TORC_FAKE_SACCT", fake_sacct_path());
+            std::env::set_var("TORC_FAKE_SACCT_FAIL", "1");
+        }
+        let expected = HashSet::from(["wf1_j1_r1_a1".to_string()]);
+
+        let stats = collect_sacct_stats_for_steps("12345", &expected);
+
+        assert!(stats.is_empty());
+
+        unsafe {
+            std::env::remove_var("TORC_FAKE_SACCT_FAIL");
+            std::env::remove_var("TORC_FAKE_SACCT");
+        }
     }
 }
