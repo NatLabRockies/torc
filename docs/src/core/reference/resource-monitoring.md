@@ -227,9 +227,10 @@ metrics.
 
 ## Slurm Accounting Stats
 
-When running inside a Slurm allocation, Torc calls `sacct` after each job step completes and stores
-the results in the `slurm_stats` table. These complement the sysinfo-based metrics above with
-Slurm-native cgroup measurements.
+When running inside a Slurm allocation, Torc queues completed job steps for asynchronous `sacct`
+collection and stores the results in the `slurm_stats` table. Lookups are batched by allocation so
+job completion does not wait on Slurm accounting latency. These complement the sysinfo-based metrics
+above with Slurm-native cgroup measurements.
 
 ### Fields
 
@@ -245,7 +246,8 @@ Slurm-native cgroup measurements.
 Additional identifying fields stored per record: `workflow_id`, `job_id`, `run_id`, `attempt_id`,
 `slurm_job_id`.
 
-Fields are `null` when:
+Because `sacct` lookup is asynchronous, these rows may appear shortly after job completion instead
+of immediately. Fields are `null` when:
 
 - The job ran locally (no `SLURM_JOB_ID` in the environment)
 - `sacct` is not available on the node

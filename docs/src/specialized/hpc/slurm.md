@@ -397,8 +397,9 @@ if enabled.
 
 ### Slurm Accounting Stats
 
-After each job step exits, Torc calls `sacct` once to collect the following Slurm-native accounting
-fields and stores them in the `slurm_stats` table:
+After each job step exits, Torc records completion immediately and queues Slurm accounting
+collection on a background worker. That worker batches `sacct` lookups by allocation and stores the
+following Slurm-native accounting fields in the `slurm_stats` table:
 
 | Field                  | sacct source   | Description                           |
 | ---------------------- | -------------- | ------------------------------------- |
@@ -412,7 +413,9 @@ fields and stores them in the `slurm_stats` table:
 These fields complement the existing sysinfo-based metrics (`peak_memory_bytes`, `peak_cpu_percent`,
 etc.) and are available via `torc slurm stats <workflow_id>`.
 
-`sacct` data is collected on a best-effort basis. Fields are `null` when:
+`sacct` data is collected on a best-effort basis. Because lookup runs asynchronously, stats may
+appear shortly after job completion rather than inline with the completion path. Fields are `null`
+when:
 
 - The job ran locally (no `SLURM_JOB_ID`)
 - `sacct` is not available on the node
