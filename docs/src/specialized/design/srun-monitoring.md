@@ -234,15 +234,16 @@ sstat calls for completed steps return non-zero exit codes. These are logged at 
 
 ## sacct Collection
 
-**Module:** `src/client/async_cli_command.rs`
+**Modules:** `src/client/job_runner.rs`, `src/client/async_cli_command.rs`
 
-After a job step exits, `collect_sacct_stats()` retrieves the final Slurm accounting record. This is
-a blocking call that runs on the job runner thread.
+After a job step exits, the job runner records completion first and enqueues the step for a
+background `sacct` worker. That worker batches lookups by Slurm allocation and calls
+`collect_sacct_stats_for_steps()` off the completion path.
 
 ### Retry Logic
 
 The Slurm accounting daemon (`slurmdbd`) often has a delay between step completion and record
-availability. The collector retries up to 6 times with 5-second delays:
+availability. The background collector retries up to 6 times with 5-second delays:
 
 ```mermaid
 flowchart TD
