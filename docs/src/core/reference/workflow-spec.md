@@ -193,12 +193,13 @@ These fields only apply when the effective mode is `direct`. Setting them with `
 produces a validation error. When `mode: auto`, validation checks the effective mode based on
 whether Slurm schedulers are present in the spec.
 
-| Name                   | Type    | Default     | Description                                           |
-| ---------------------- | ------- | ----------- | ----------------------------------------------------- |
-| `limit_resources`      | boolean | `true`      | Monitor memory/CPU and kill jobs that exceed limits   |
-| `termination_signal`   | string  | `"SIGTERM"` | Signal to send before SIGKILL for graceful shutdown   |
-| `sigterm_lead_seconds` | integer | `30`        | Seconds before SIGKILL to send the termination signal |
-| `oom_exit_code`        | integer | `137`       | Exit code for OOM-killed jobs (128 + SIGKILL)         |
+| Name                    | Type    | Default     | Description                                           |
+| ----------------------- | ------- | ----------- | ----------------------------------------------------- |
+| `limit_resources`       | boolean | `true`      | Monitor memory/CPU and kill jobs that exceed limits   |
+| `termination_signal`    | string  | `"SIGTERM"` | Signal to send before SIGKILL for graceful shutdown   |
+| `sigterm_lead_seconds`  | integer | `30`        | Seconds before SIGKILL to send the termination signal |
+| `oom_exit_code`         | integer | `137`       | Exit code for OOM-killed jobs (128 + SIGKILL)         |
+| `slurm_worker_mpi_mode` | string  | `"default"` | Outer `srun` MPI mode for `start_one_worker_per_node` |
 
 ### Slurm mode fields
 
@@ -277,12 +278,17 @@ jobs:
 execution_config:
   mode: direct
   limit_resources: true
+  slurm_worker_mpi_mode: none
   termination_signal: SIGTERM
   sigterm_lead_seconds: 30
   sigkill_headroom_seconds: 60
   timeout_exit_code: 152
   oom_exit_code: 137
 ```
+
+`slurm_worker_mpi_mode` accepts `"default"` or `"none"`. It only affects the outer worker-launch
+`srun` used by `start_one_worker_per_node` in direct mode. Set it to `"none"` when you want the
+worker to start with `srun --mpi=none`.
 
 ### Slurm Mode Example
 

@@ -204,6 +204,30 @@ actions:
     num_allocations: 1
 ```
 
+If you also enable `start_one_worker_per_node: true`, Torc launches one worker per node using an
+outer `srun`. In that configuration:
+
+- Set `execution_config.slurm_worker_mpi_mode: none` when the outer worker is not itself an MPI
+  rank.
+- If your job command launches an inner `srun`, include `--overlap` and set `--nodes` and `--ntasks`
+  explicitly.
+
+For example, a 2-GPU direct-mode job on one node should look like:
+
+```yaml
+execution_config:
+  mode: direct
+  slurm_worker_mpi_mode: none
+
+jobs:
+  - name: train
+    command: srun --overlap --nodes=1 --ntasks=2 ./agent --config train.yaml
+```
+
+Without `--overlap`, Slurm may refuse to create the inner step because the outer worker-launch
+`srun` already holds the node resources, which usually appears as
+`step creation temporarily disabled` or `Requested nodes are busy`.
+
 ## Choosing Between the Patterns
 
 | Question                                      | Pattern 1 (single-node jobs) | Pattern 2 (multi-node jobs) |
@@ -397,6 +421,27 @@ command: python train.py
 
 If you need explicit control over `mpirun`, use `execution_config.mode: direct` so Torc does not
 wrap the command with `srun`.
+
+### Using inner `srun` in direct mode without explicit overlap and sizing
+
+Direct mode lets your command choose its own launcher, but when `start_one_worker_per_node: true` is
+enabled there is already an outer worker-launch `srun` per node. If the job command starts a second
+`srun`, treat it as a nested Slurm step and configure it explicitly.
+
+```yaml
+# WRONG: nested srun can block waiting for busy nodes
+command: srun ./agent --config train.yaml
+
+# WRONG: task count is implicit and easy to mis-size
+command: srun --overlap ./agent --config train.yaml
+
+# CORRECT: allow overlap with the worker-launch step and size the step explicitly
+command: srun --overlap --nodes=1 --ntasks=2 ./agent --config train.yaml
+```
+
+Use `--nodes` to state how many nodes the inner step should span and `--ntasks` to state how many
+ranks or worker processes it should launch. For single-node multi-GPU jobs, `--nodes=1` with
+`--ntasks=<gpu_count>` is the common pattern.
 
 ### Using `num_nodes > 1` for independent jobs
 
