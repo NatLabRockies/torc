@@ -247,13 +247,24 @@ torc-dash
       --server-port &lt;PORT&gt;    Server port in standalone mode (0 = auto-detect) [default: 0]
       --database &lt;PATH&gt;       Database path for standalone server
       --completion-check-interval-secs &lt;SECS&gt;  Server polling interval [default: 5]
-      --anthropic-api-key           Anthropic API key [env: ANTHROPIC_API_KEY]
+      --torc-mcp-server-bin        Path to torc-mcp-server [default: torc-mcp-server]
+
+  AI Chat options:
+      --llm-provider               LLM provider: anthropic, openai, ollama, github [env: LLM_PROVIDER]
+      --anthropic-api-key          Anthropic API key [env: ANTHROPIC_API_KEY]
       --anthropic-foundry-api-key  Foundry API key [env: ANTHROPIC_FOUNDRY_API_KEY]
       --anthropic-foundry-resource Foundry resource [env: ANTHROPIC_FOUNDRY_RESOURCE]
       --anthropic-base-url         Override API base URL [env: ANTHROPIC_BASE_URL]
       --anthropic-auth-header      Override auth header name [env: ANTHROPIC_AUTH_HEADER]
-      --torc-mcp-server-bin        Path to torc-mcp-server [default: torc-mcp-server]
       --anthropic-model            Claude model [default: claude-sonnet-4-20250514]
+      --openai-api-key             OpenAI API key [env: OPENAI_API_KEY]
+      --openai-base-url            OpenAI API URL [default: https://api.openai.com/v1]
+      --openai-model               OpenAI model [default: gpt-4o] [env: OPENAI_MODEL]
+      --ollama-base-url            Ollama API URL [default: http://localhost:11434/v1]
+      --ollama-model               Ollama model [default: llama3.2] [env: OLLAMA_MODEL]
+      --github-token               GitHub token for GitHub Models [env: GITHUB_TOKEN]
+      --github-models-base-url     GitHub Models URL [default: https://models.inference.ai.azure.com]
+      --github-models-model        GitHub Models model [default: gpt-4o] [env: GITHUB_MODELS_MODEL]
 </code></pre>
 <h2 id="features"><a class="header" href="#features">Features</a></h2>
 <h3 id="workflows-tab"><a class="header" href="#workflows-tab">Workflows Tab</a></h3>
@@ -348,33 +359,83 @@ torc-dash
 </ol>
 <p>Requires workflows run with <code>granularity: "time_series"</code> in <code>resource_monitor</code> config.</p>
 <h3 id="ai-chat-tab"><a class="header" href="#ai-chat-tab">AI Chat Tab</a></h3>
-<p>The AI Chat tab provides an AI assistant powered by Claude that can interact with your workflows
-using natural language. The assistant uses the Torc MCP server to access workflow data, job logs,
-and management tools.</p>
+<p>The AI Chat tab provides an AI assistant that can interact with your workflows using natural
+language. The assistant uses the Torc MCP server to access workflow data, job logs, and management
+tools.</p>
+<p><strong>Supported Providers:</strong></p>
+<p>The dashboard supports multiple LLM providers:</p>
+<ul>
+<li><strong>Anthropic Claude</strong> (direct API or Azure AI Foundry)</li>
+<li><strong>OpenAI</strong> (GPT-4o, GPT-4o-mini, o1, etc.)</li>
+<li><strong>Ollama</strong> (local, no API key required)</li>
+<li><strong>GitHub Models</strong> (Azure-hosted models with GitHub token)</li>
+</ul>
 <p><strong>Setup:</strong></p>
-<p>The AI Chat tab requires an API key so the dashboard can call Claude directly. There are two
-supported API backends:</p>
-<p><em>Option 1: Direct Anthropic API</em></p>
+<p><em>Option 1: Anthropic Claude (Direct API)</em></p>
 <pre><code class="language-bash">export ANTHROPIC_API_KEY="sk-ant-..."
 torc-dash
 </code></pre>
 <p><em>Option 2: Microsoft Azure AI Foundry</em></p>
-<p>If you access Claude through Azure AI Foundry, set the Foundry-specific variables instead:</p>
+<p>If you access Claude through Azure AI Foundry:</p>
 <pre><code class="language-bash">export ANTHROPIC_FOUNDRY_API_KEY="your-foundry-key"
 export ANTHROPIC_FOUNDRY_RESOURCE="your-resource-name"
 torc-dash
 </code></pre>
 <p>The dashboard constructs the Foundry endpoint automatically:
 <code>https://{resource}.services.ai.azure.com/anthropic/v1/messages</code></p>
-<p>When both direct and Foundry keys are set, Foundry takes precedence.</p>
-<p>You also need the <code>torc-mcp-server</code> binary in your PATH (built alongside <code>torc-dash</code> when using
+<p><em>Option 3: OpenAI</em></p>
+<p>Use OpenAI's GPT models:</p>
+<pre><code class="language-bash">export OPENAI_API_KEY="sk-..."
+LLM_PROVIDER=openai torc-dash
+
+# Or specify a different model
+LLM_PROVIDER=openai OPENAI_MODEL=gpt-4o-mini torc-dash
+</code></pre>
+<p>You can also use OpenAI-compatible services by setting a custom base URL:</p>
+<pre><code class="language-bash">LLM_PROVIDER=openai torc-dash --openai-base-url https://my-openai-proxy.example.com/v1
+</code></pre>
+<p><em>Option 4: Ollama (Local)</em></p>
+<p>Run AI completely locally with <a href="https://ollama.ai">Ollama</a>. No API key required:</p>
+<pre><code class="language-bash"># First, start Ollama and pull a model
+ollama pull qwen3.5:35b-a3b
+
+# Then start torc-dash with Ollama provider
+LLM_PROVIDER=ollama torc-dash
+
+# Or specify a different model
+LLM_PROVIDER=ollama OLLAMA_MODEL=qwen3.5:35b-a3b torc-dash
+</code></pre>
+<p>Ollama runs at <code>http://localhost:11434</code> by default. For remote Ollama servers:</p>
+<pre><code class="language-bash">LLM_PROVIDER=ollama torc-dash --ollama-base-url http://ollama-server:11434/v1
+</code></pre>
+<p><em>Option 5: GitHub Models</em></p>
+<p>Use models hosted on GitHub Models (requires a GitHub token with <code>models:read</code> scope):</p>
+<pre><code class="language-bash">export GITHUB_TOKEN="ghp_..."
+LLM_PROVIDER=github torc-dash
+
+# Or specify a different model
+LLM_PROVIDER=github GITHUB_MODELS_MODEL=Meta-Llama-3.1-70B-Instruct torc-dash
+</code></pre>
+<p>Available models include <code>gpt-4o</code>, <code>gpt-4o-mini</code>, <code>Meta-Llama-3.1-70B-Instruct</code>, and others. See
+<a href="https://github.com/marketplace/models">GitHub Models</a> for the full list.</p>
+<p><strong>Runtime Configuration:</strong></p>
+<p>You can also configure the provider through the dashboard UI without environment variables:</p>
+<ol>
+<li>Open the AI Chat tab</li>
+<li>If not configured, a setup dialog appears</li>
+<li>Select your provider from the dropdown</li>
+<li>Enter credentials and model as needed</li>
+<li>Click "Connect"</li>
+</ol>
+<p>Credentials configured this way are stored in memory only for the current session.</p>
+<p><strong>MCP Server:</strong></p>
+<p>You need the <code>torc-mcp-server</code> binary in your PATH (built alongside <code>torc-dash</code> when using
 <code>--all-features</code> or <code>--features mcp-server</code>). If installed elsewhere, specify its location:</p>
 <pre><code class="language-bash">torc-dash --torc-mcp-server-bin /path/to/torc-mcp-server
 </code></pre>
-<p><strong>Don't have an API key?</strong></p>
-<p>If you use Claude through a subscription (Claude Pro/Max) or GitHub Copilot through an enterprise
-account, those credentials cannot be used with the dashboard's built-in chat. However, you can still
-get AI-assisted workflow management by connecting <code>torc-mcp-server</code> directly to your AI tool:</p>
+<p><strong>Alternative: Use Your Own AI Tool</strong></p>
+<p>If you prefer to use Claude through a subscription (Claude Pro/Max) or GitHub Copilot through an
+enterprise account, you can connect <code>torc-mcp-server</code> directly to your AI tool:</p>
 <ul>
 <li><strong>Claude Code</strong> (Pro/Max/Team/Enterprise): Add <code>torc-mcp-server</code> as an MCP server -- see
 <a href="../../specialized/tools/ai-assistant.html#quick-setup-claude-code">AI-Assisted Workflow Management</a></li>
@@ -401,16 +462,25 @@ terminal or editor instead of the dashboard.</p>
 </ul>
 <p><strong>Configuration:</strong></p>
 <div class="table-wrapper"><table><thead><tr><th>Setting</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>LLM_PROVIDER</code></td><td><code>anthropic</code></td><td>Provider: anthropic, openai, ollama, github</td></tr>
 <tr><td><code>ANTHROPIC_API_KEY</code></td><td>(none)</td><td>API key for direct Anthropic API</td></tr>
 <tr><td><code>ANTHROPIC_FOUNDRY_API_KEY</code></td><td>(none)</td><td>API key for Azure AI Foundry</td></tr>
 <tr><td><code>ANTHROPIC_FOUNDRY_RESOURCE</code></td><td>(none)</td><td>Foundry resource name</td></tr>
 <tr><td><code>--anthropic-model</code></td><td><code>claude-sonnet-4-20250514</code></td><td>Claude model to use</td></tr>
+<tr><td><code>OPENAI_API_KEY</code></td><td>(none)</td><td>OpenAI API key</td></tr>
+<tr><td><code>OPENAI_MODEL</code></td><td><code>gpt-4o</code></td><td>OpenAI model to use</td></tr>
+<tr><td><code>--openai-base-url</code></td><td><code>https://api.openai.com/v1</code></td><td>OpenAI API URL</td></tr>
+<tr><td><code>OLLAMA_MODEL</code></td><td><code>llama3.2</code></td><td>Ollama model to use</td></tr>
+<tr><td><code>--ollama-base-url</code></td><td><code>http://localhost:11434/v1</code></td><td>Ollama API URL</td></tr>
+<tr><td><code>GITHUB_TOKEN</code></td><td>(none)</td><td>GitHub token for GitHub Models</td></tr>
+<tr><td><code>GITHUB_MODELS_MODEL</code></td><td><code>gpt-4o</code></td><td>GitHub Models model to use</td></tr>
+<tr><td><code>--github-models-base-url</code></td><td><code>https://models.inference.ai.azure.com</code></td><td>GitHub Models API URL</td></tr>
 <tr><td><code>--torc-mcp-server-bin</code></td><td><code>torc-mcp-server</code></td><td>Path to MCP server binary</td></tr>
 </tbody></table>
 </div>
-<p>At least one of <code>ANTHROPIC_API_KEY</code> or <code>ANTHROPIC_FOUNDRY_API_KEY</code> (with
-<code>ANTHROPIC_FOUNDRY_RESOURCE</code>) must be set. If neither is configured, the AI Chat tab appears
-disabled in the sidebar.</p>
+<p>For Anthropic, at least one of <code>ANTHROPIC_API_KEY</code> or <code>ANTHROPIC_FOUNDRY_API_KEY</code> (with
+<code>ANTHROPIC_FOUNDRY_RESOURCE</code>) must be set. For OpenAI, <code>OPENAI_API_KEY</code> is required. For GitHub
+Models, <code>GITHUB_TOKEN</code> is required. Ollama requires no credentials (runs locally).</p>
 <blockquote>
 <p><strong>Note:</strong> The API key is kept server-side and never sent to the browser. All AI requests are
 proxied through the <code>torc-dash</code> backend.</p>

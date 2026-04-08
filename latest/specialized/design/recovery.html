@@ -331,7 +331,7 @@ prevents them from firing again and creating duplicate allocations:</p>
 </pre>
 <h3 id="step-2-group-jobs-using-workflowgraph"><a class="header" href="#step-2-group-jobs-using-workflowgraph">Step 2: Group Jobs Using WorkflowGraph</a></h3>
 <p>The system builds a <code>WorkflowGraph</code> from pending jobs and uses <code>scheduler_groups()</code> to group them by
-<code>(resource_requirements, has_dependencies)</code>. This aligns with the behavior of <code>torc create-slurm</code>:</p>
+<code>(resource_requirements, has_dependencies)</code>. This aligns with the behavior of <code>torc slurm generate</code>:</p>
 <ul>
 <li><strong>Jobs without dependencies</strong>: Can be scheduled immediately with <code>on_workflow_start</code></li>
 <li><strong>Jobs with dependencies</strong> (deferred): Need <code>on_jobs_ready</code> recovery actions to schedule when they
@@ -447,7 +447,7 @@ torc slurm regenerate &lt;workflow_id&gt; --account &lt;account&gt; --profile ke
 <li><strong>WorkflowGraph construction</strong>: A <code>WorkflowGraph</code> is built from pending jobs using <code>from_jobs()</code>,
 which reconstructs the dependency structure from <code>depends_on_job_ids</code></li>
 <li><strong>Scheduler grouping</strong>: Jobs are grouped using <code>scheduler_groups()</code> by
-<code>(resource_requirements, has_dependencies)</code>, matching <code>create-slurm</code> behavior</li>
+<code>(resource_requirements, has_dependencies)</code>, matching <code>slurm generate</code> behavior</li>
 <li><strong>Deferred schedulers</strong>: Groups with dependencies get a <code>_deferred</code> suffix in the scheduler name</li>
 <li><strong>Allocation calculation</strong>: Number of allocations is based on job count and resources per node</li>
 <li><strong>Recovery actions</strong>: Only deferred groups (jobs with dependencies) get <code>on_jobs_ready</code> recovery
