@@ -88,5 +88,3 @@ class ClaimActionRequest(BaseModel):
             "compute_node_id": obj.get("compute_node_id")
         })
         return _obj
-
-

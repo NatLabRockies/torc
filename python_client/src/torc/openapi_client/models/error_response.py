@@ -109,5 +109,3 @@ class ErrorResponse(BaseModel):
             "errorNum": obj.get("errorNum")
         })
         return _obj
-
-

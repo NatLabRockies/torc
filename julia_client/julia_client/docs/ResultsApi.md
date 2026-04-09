@@ -4,12 +4,12 @@ All URIs are relative to *http://localhost/torc-service/v1*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
-[**create_result**](ResultsApi.md#create_result) | **POST** /results | 
-[**delete_result**](ResultsApi.md#delete_result) | **DELETE** /results/{id} | 
-[**delete_results**](ResultsApi.md#delete_results) | **DELETE** /results | 
-[**get_result**](ResultsApi.md#get_result) | **GET** /results/{id} | 
-[**list_results**](ResultsApi.md#list_results) | **GET** /results | 
-[**update_result**](ResultsApi.md#update_result) | **PUT** /results/{id} | 
+[**create_result**](ResultsApi.md#create_result) | **POST** /results |
+[**delete_result**](ResultsApi.md#delete_result) | **DELETE** /results/{id} |
+[**delete_results**](ResultsApi.md#delete_results) | **DELETE** /results |
+[**get_result**](ResultsApi.md#get_result) | **GET** /results/{id} |
+[**list_results**](ResultsApi.md#list_results) | **GET** /results |
+[**update_result**](ResultsApi.md#update_result) | **PUT** /results/{id} |
 
 
 # **create_result**
@@ -22,7 +22,7 @@ Method | HTTP request | Description
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **ResultsApi** | API context | 
+ **_api** | **ResultsApi** | API context |
 **result_model** | [**ResultModel**](ResultModel.md) |  |
 
 ### Return type
@@ -50,7 +50,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **ResultsApi** | API context | 
+ **_api** | **ResultsApi** | API context |
 **id** | **Int64** | Results ID |
 
 ### Return type
@@ -78,7 +78,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **ResultsApi** | API context | 
+ **_api** | **ResultsApi** | API context |
 **workflow_id** | **Int64** |  |
 
 ### Return type
@@ -106,7 +106,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **ResultsApi** | API context | 
+ **_api** | **ResultsApi** | API context |
 **id** | **Int64** | Results ID |
 
 ### Return type
@@ -134,7 +134,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **ResultsApi** | API context | 
+ **_api** | **ResultsApi** | API context |
 **workflow_id** | **Int64** |  |
 
 ### Optional Parameters
@@ -177,7 +177,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **ResultsApi** | API context | 
+ **_api** | **ResultsApi** | API context |
 **id** | **Int64** | Result ID |
 **result_model** | [**ResultModel**](ResultModel.md) |  |
 
@@ -195,4 +195,3 @@ No authorization required
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
-

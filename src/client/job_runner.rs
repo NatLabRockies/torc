@@ -32,14 +32,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, Sender};
 use std::thread;
-use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::async_cli_command::{AsyncCliCommand, collect_sacct_stats_for_steps};
+use crate::client::async_cli_command::{
+    AsyncCliCommand, SacctStats, collect_sacct_stats_for_steps,
+};
 use crate::client::resource_correction::format_duration_iso8601;
 use crate::client::resource_monitor::{ResourceMonitor, ResourceMonitorConfig};
 use crate::client::utils;
@@ -201,10 +201,24 @@ struct PendingSlurmStats {
     step_name: String,
 }
 
-#[derive(Debug)]
-struct SacctBatchRequest {
-    slurm_job_id: String,
-    steps: Vec<PendingSlurmStats>,
+#[derive(Debug, Clone)]
+struct CompletedJobContext {
+    job_name: String,
+    attempt_id: i64,
+    failure_handler_id: Option<i64>,
+    stdout_path: Option<String>,
+    stderr_path: Option<String>,
+    delete_stdio_on_success: bool,
+}
+
+#[derive(Debug, Clone)]
+struct PendingJobCompletion {
+    job_id: i64,
+    result: ResultModel,
+    process_return_code: i64,
+    output_file_ids: Option<Vec<i64>>,
+    context: CompletedJobContext,
+    pending_slurm_stats: Option<PendingSlurmStats>,
 }
 
 /// Outcome of attempting to recover a failed job via failure handler.
@@ -292,8 +306,6 @@ pub struct JobRunner {
     execution_config: ExecutionConfig,
     rules: ComputeNodeRules,
     resource_monitor: Option<ResourceMonitor>,
-    sacct_batch_tx: Option<Sender<SacctBatchRequest>>,
-    sacct_worker_handle: Option<JoinHandle<()>>,
     /// Flag set when SIGTERM is received. Shared with signal handler.
     termination_requested: Arc<AtomicBool>,
     /// Monotonic timestamp of when a job was last claimed. Used for idle timeout.
@@ -531,14 +543,6 @@ impl JobRunner {
             None
         };
 
-        let (sacct_batch_tx, sacct_worker_handle) =
-            if execution_config.effective_mode() == ExecutionMode::Slurm {
-                let (tx, handle) = Self::spawn_sacct_worker(config.clone());
-                (Some(tx), Some(handle))
-            } else {
-                (None, None)
-            };
-
         JobRunner {
             config,
             torc_config,
@@ -568,8 +572,6 @@ impl JobRunner {
             execution_config,
             rules,
             resource_monitor,
-            sacct_batch_tx,
-            sacct_worker_handle,
             termination_requested: Arc::new(AtomicBool::new(false)),
             last_job_claimed_time: None,
             had_failures: false,
@@ -605,61 +607,6 @@ impl JobRunner {
         result.map_err(|err| {
             Box::new(JobRunnerApiError(err.to_string())) as Box<dyn std::error::Error>
         })
-    }
-
-    fn spawn_sacct_worker(config: Configuration) -> (Sender<SacctBatchRequest>, JoinHandle<()>) {
-        let (tx, rx) = mpsc::channel::<SacctBatchRequest>();
-        let handle = thread::spawn(move || {
-            while let Ok(request) = rx.recv() {
-                let expected_step_names: HashSet<String> = request
-                    .steps
-                    .iter()
-                    .map(|step| step.step_name.clone())
-                    .collect();
-                let stats_by_step =
-                    collect_sacct_stats_for_steps(&request.slurm_job_id, &expected_step_names);
-
-                for step in request.steps {
-                    let Some(stats) = stats_by_step.get(&step.step_name) else {
-                        debug!(
-                            "No sacct stats available yet for workflow_id={} job_id={} step={}",
-                            step.workflow_id, step.job_id, step.step_name
-                        );
-                        continue;
-                    };
-
-                    let mut slurm_stats = SlurmStatsModel::new(
-                        step.workflow_id,
-                        step.job_id,
-                        step.run_id,
-                        step.attempt_id,
-                    );
-                    slurm_stats.slurm_job_id = Some(step.slurm_job_id.clone());
-                    slurm_stats.max_rss_bytes = stats.max_rss_bytes;
-                    slurm_stats.max_vm_size_bytes = stats.max_vm_size_bytes;
-                    slurm_stats.max_disk_read_bytes = stats.max_disk_read_bytes;
-                    slurm_stats.max_disk_write_bytes = stats.max_disk_write_bytes;
-                    slurm_stats.ave_cpu_seconds = stats.ave_cpu_seconds;
-                    slurm_stats.node_list = stats.node_list.clone();
-
-                    match apis::slurm_stats_api::create_slurm_stats(&config, slurm_stats) {
-                        Ok(_) => {
-                            info!(
-                                "Stored slurm_stats workflow_id={} job_id={} step={}",
-                                step.workflow_id, step.job_id, step.step_name
-                            );
-                        }
-                        Err(e) => {
-                            warn!(
-                                "Failed to store slurm_stats workflow_id={} job_id={} step={} error={}",
-                                step.workflow_id, step.job_id, step.step_name, e
-                            );
-                        }
-                    }
-                }
-            }
-        });
-        (tx, handle)
     }
 
     /// Atomically claim a workflow action for execution.
@@ -921,14 +868,6 @@ impl JobRunner {
             monitor.shutdown();
         }
 
-        // Stop the background sacct worker after all queued accounting work is flushed.
-        self.sacct_batch_tx.take();
-        if let Some(handle) = self.sacct_worker_handle.take()
-            && let Err(e) = handle.join()
-        {
-            error!("Failed to join sacct worker thread: {:?}", e);
-        }
-
         // Deactivate compute node and set duration
         self.deactivate_compute_node();
 
@@ -1003,7 +942,34 @@ impl JobRunner {
                         self.compute_node_id,
                         self.resource_monitor.as_ref(),
                     );
-                    results.push((*job_id, result));
+                    let pending_slurm_stats = async_job
+                        .slurm_job_id()
+                        .zip(async_job.step_name())
+                        .map(|(slurm_job_id, step_name)| PendingSlurmStats {
+                            workflow_id: self.workflow_id,
+                            job_id: *job_id,
+                            run_id: self.run_id,
+                            attempt_id,
+                            slurm_job_id: slurm_job_id.to_string(),
+                            step_name: step_name.to_string(),
+                        });
+                    results.push(PendingJobCompletion {
+                        job_id: *job_id,
+                        process_return_code: result.return_code,
+                        output_file_ids: async_job.job.output_file_ids.clone(),
+                        context: CompletedJobContext {
+                            job_name: async_job.job.name.clone(),
+                            attempt_id,
+                            failure_handler_id: async_job.job.failure_handler_id,
+                            stdout_path: async_job.stdout_path.clone(),
+                            stderr_path: async_job.stderr_path.clone(),
+                            delete_stdio_on_success: self
+                                .execution_config
+                                .delete_stdio_on_success(&async_job.job.name),
+                        },
+                        result,
+                        pending_slurm_stats,
+                    });
                     Ok(())
                 }
                 Err(e) => {
@@ -1012,9 +978,7 @@ impl JobRunner {
                 }
             };
         }
-        for (job_id, result) in results {
-            self.handle_job_completion(job_id, result);
-        }
+        self.finalize_pending_job_completions(results, false);
     }
 
     /// Returns when direct-mode timeout handling should start for a given end time.
@@ -1188,13 +1152,36 @@ impl JobRunner {
             } else {
                 JobStatus::Terminated
             };
-            results.push((*job_id, result));
+            let pending_slurm_stats = async_job.slurm_job_id().zip(async_job.step_name()).map(
+                |(slurm_job_id, step_name)| PendingSlurmStats {
+                    workflow_id: self.workflow_id,
+                    job_id: *job_id,
+                    run_id: self.run_id,
+                    attempt_id,
+                    slurm_job_id: slurm_job_id.to_string(),
+                    step_name: step_name.to_string(),
+                },
+            );
+            results.push(PendingJobCompletion {
+                job_id: *job_id,
+                process_return_code: result.return_code,
+                output_file_ids: async_job.job.output_file_ids.clone(),
+                context: CompletedJobContext {
+                    job_name: async_job.job.name.clone(),
+                    attempt_id,
+                    failure_handler_id: async_job.job.failure_handler_id,
+                    stdout_path: async_job.stdout_path.clone(),
+                    stderr_path: async_job.stderr_path.clone(),
+                    delete_stdio_on_success: self
+                        .execution_config
+                        .delete_stdio_on_success(&async_job.job.name),
+                },
+                result,
+                pending_slurm_stats,
+            });
         }
 
-        // Final pass: handle completions (notify server)
-        for (job_id, result) in results {
-            self.handle_job_completion(job_id, result);
-        }
+        self.finalize_pending_job_completions(results, false);
     }
 
     /// Check the status of running jobs and remove completed ones.
@@ -1228,7 +1215,23 @@ impl JobRunner {
                                 step_name: step_name.to_string(),
                             });
 
-                        job_results.push((*job_id, result, output_file_ids, pending_slurm_stats));
+                        job_results.push(PendingJobCompletion {
+                            job_id: *job_id,
+                            process_return_code: result.return_code,
+                            output_file_ids,
+                            context: CompletedJobContext {
+                                job_name: async_job.job.name.clone(),
+                                attempt_id,
+                                failure_handler_id: async_job.job.failure_handler_id,
+                                stdout_path: async_job.stdout_path.clone(),
+                                stderr_path: async_job.stderr_path.clone(),
+                                delete_stdio_on_success: self
+                                    .execution_config
+                                    .delete_stdio_on_success(&async_job.job.name),
+                            },
+                            result,
+                            pending_slurm_stats,
+                        });
                     }
                 }
                 Err(e) => {
@@ -1237,57 +1240,168 @@ impl JobRunner {
             }
         }
 
-        // Second pass: validate output files and complete jobs
-        let mut pending_sacct_stats = Vec::new();
-        for (job_id, mut result, output_file_ids, pending_slurm_stats) in job_results {
-            // Validate output files if job completed successfully
-            if result.return_code == 0
-                && let Err(e) = self.validate_and_update_output_files(job_id, &output_file_ids)
-            {
-                error!("Output file validation failed for job {}: {}", job_id, e);
-                result.return_code = 1;
-                result.status = JobStatus::Failed;
-            }
+        self.finalize_pending_job_completions(job_results, true);
+    }
 
-            if self.handle_job_completion(job_id, result)
-                && let Some(step) = pending_slurm_stats
-            {
-                pending_sacct_stats.push(step);
+    fn finalize_pending_job_completions(
+        &mut self,
+        mut completions: Vec<PendingJobCompletion>,
+        validate_outputs: bool,
+    ) {
+        if completions.is_empty() {
+            return;
+        }
+
+        for completion in &completions {
+            self.release_completed_job_resources(completion.job_id);
+        }
+
+        if validate_outputs {
+            for completion in &mut completions {
+                if completion.result.return_code == 0
+                    && let Err(e) = self.validate_and_update_output_files(
+                        completion.job_id,
+                        &completion.output_file_ids,
+                    )
+                {
+                    error!(
+                        "Output file validation failed for job {}: {}",
+                        completion.job_id, e
+                    );
+                    completion.result.return_code = 1;
+                    completion.result.status = JobStatus::Failed;
+                }
             }
         }
 
-        if !pending_sacct_stats.is_empty() {
-            self.enqueue_sacct_stats(pending_sacct_stats);
+        let slurm_stats_by_job = self.collect_sacct_stats_for_completions(&completions);
+
+        for mut completion in completions {
+            let slurm_stats = slurm_stats_by_job.get(&completion.job_id).cloned();
+            if let Some((pending_step, sacct_stats, slurm_stats_model)) = completion
+                .pending_slurm_stats
+                .as_ref()
+                .zip(slurm_stats.as_ref())
+                .map(|(step, (stats, model))| (step, stats, model))
+            {
+                self.apply_sacct_state_override(
+                    &mut completion.result,
+                    completion.process_return_code,
+                    pending_step,
+                    sacct_stats,
+                );
+                backfill_sacct_into_result(&mut completion.result, slurm_stats_model);
+            }
+
+            self.handle_job_completion(
+                completion.job_id,
+                completion.result,
+                &completion.context,
+                slurm_stats.map(|(_, model)| model),
+            );
         }
     }
 
-    fn enqueue_sacct_stats(&self, steps: Vec<PendingSlurmStats>) {
-        let Some(tx) = &self.sacct_batch_tx else {
+    fn collect_sacct_stats_for_completions(
+        &self,
+        completions: &[PendingJobCompletion],
+    ) -> HashMap<i64, (SacctStats, SlurmStatsModel)> {
+        let mut by_allocation: HashMap<String, Vec<PendingSlurmStats>> = HashMap::new();
+        for completion in completions {
+            if let Some(step) = completion.pending_slurm_stats.clone() {
+                by_allocation
+                    .entry(step.slurm_job_id.clone())
+                    .or_default()
+                    .push(step);
+            }
+        }
+
+        let mut stats_by_job = HashMap::new();
+        for (slurm_job_id, steps) in by_allocation {
+            let expected_step_names: HashSet<String> =
+                steps.iter().map(|step| step.step_name.clone()).collect();
+            let stats_by_step = collect_sacct_stats_for_steps(&slurm_job_id, &expected_step_names);
+
+            for step in steps {
+                let Some(stats) = stats_by_step.get(&step.step_name).cloned() else {
+                    debug!(
+                        "No sacct stats available for workflow_id={} job_id={} step={}",
+                        step.workflow_id, step.job_id, step.step_name
+                    );
+                    continue;
+                };
+
+                let slurm_stats = Self::slurm_stats_model_from_sacct(&step, &stats);
+                stats_by_job.insert(step.job_id, (stats, slurm_stats));
+            }
+        }
+
+        stats_by_job
+    }
+
+    fn slurm_stats_model_from_sacct(
+        step: &PendingSlurmStats,
+        stats: &SacctStats,
+    ) -> SlurmStatsModel {
+        let mut slurm_stats =
+            SlurmStatsModel::new(step.workflow_id, step.job_id, step.run_id, step.attempt_id);
+        slurm_stats.slurm_job_id = Some(step.slurm_job_id.clone());
+        slurm_stats.max_rss_bytes = stats.max_rss_bytes;
+        slurm_stats.max_vm_size_bytes = stats.max_vm_size_bytes;
+        slurm_stats.max_disk_read_bytes = stats.max_disk_read_bytes;
+        slurm_stats.max_disk_write_bytes = stats.max_disk_write_bytes;
+        slurm_stats.ave_cpu_seconds = stats.ave_cpu_seconds;
+        slurm_stats.node_list = stats.node_list.clone();
+        slurm_stats
+    }
+
+    fn apply_sacct_state_override(
+        &self,
+        result: &mut ResultModel,
+        process_return_code: i64,
+        pending_step: &PendingSlurmStats,
+        sacct_stats: &SacctStats,
+    ) {
+        let Some(state) = sacct_stats.state.as_deref() else {
             return;
         };
 
-        let mut by_allocation: HashMap<String, Vec<PendingSlurmStats>> = HashMap::new();
-        for step in steps {
-            by_allocation
-                .entry(step.slurm_job_id.clone())
-                .or_default()
-                .push(step);
-        }
+        let override_result = match state {
+            "OUT_OF_MEMORY" => Some((
+                self.execution_config.oom_exit_code() as i64,
+                JobStatus::Failed,
+            )),
+            "TIMEOUT" if process_return_code != 0 => Some((
+                self.execution_config.timeout_exit_code() as i64,
+                JobStatus::Terminated,
+            )),
+            _ => None,
+        };
 
-        for (slurm_job_id, steps) in by_allocation {
-            let step_count = steps.len();
-            if let Err(e) = tx.send(SacctBatchRequest {
-                slurm_job_id,
-                steps,
-            }) {
-                warn!("Failed to enqueue sacct batch request: {}", e);
-            } else {
-                debug!(
-                    "Enqueued async sacct batch for {} completed step(s)",
-                    step_count
-                );
-            }
+        if let Some((sacct_return_code, sacct_status)) = override_result {
+            info!(
+                "Overriding return_code {} with {} (sacct State={}) for workflow_id={} job_id={} step={}",
+                result.return_code,
+                sacct_return_code,
+                state,
+                pending_step.workflow_id,
+                pending_step.job_id,
+                pending_step.step_name
+            );
+            result.return_code = sacct_return_code;
+            result.status = sacct_status;
         }
+    }
+
+    fn release_completed_job_resources(&mut self, job_id: i64) {
+        if let Some(job_rr) = self.job_resources.get(&job_id).cloned() {
+            self.increment_node_resources(job_id, &job_rr);
+            self.increment_resources(&job_rr);
+        }
+        self.last_job_claimed_time = Some(Instant::now());
+        self.running_jobs.remove(&job_id);
+        self.job_resources.remove(&job_id);
+        self.release_gpu_devices(job_id);
     }
 
     /// Handle OOM violations detected by the resource monitor.
@@ -1376,14 +1490,27 @@ impl JobRunner {
                 );
                 result.return_code = oom_exit_code as i64;
                 result.status = JobStatus::Failed;
-                results.push((*job_id, result));
+                results.push(PendingJobCompletion {
+                    job_id: *job_id,
+                    process_return_code: result.return_code,
+                    output_file_ids: async_job.job.output_file_ids.clone(),
+                    context: CompletedJobContext {
+                        job_name: async_job.job.name.clone(),
+                        attempt_id,
+                        failure_handler_id: async_job.job.failure_handler_id,
+                        stdout_path: async_job.stdout_path.clone(),
+                        stderr_path: async_job.stderr_path.clone(),
+                        delete_stdio_on_success: self
+                            .execution_config
+                            .delete_stdio_on_success(&async_job.job.name),
+                    },
+                    result,
+                    pending_slurm_stats: None,
+                });
             }
         }
 
-        // Third pass: handle completions (notify server)
-        for (job_id, result) in results {
-            self.handle_job_completion(job_id, result);
-        }
+        self.finalize_pending_job_completions(results, false);
     }
 
     /// Validate that all expected output files exist and update their st_mtime
@@ -1586,30 +1713,26 @@ impl JobRunner {
         }
     }
 
-    fn handle_job_completion(&mut self, job_id: i64, mut final_result: ResultModel) -> bool {
-        // Get job info before removing from running_jobs
-        let job_info = self.running_jobs.get(&job_id).map(|cmd| {
-            (
-                cmd.job.name.clone(),
-                cmd.job.attempt_id.unwrap_or(1),
-                cmd.job.failure_handler_id,
-            )
-        });
-
+    fn handle_job_completion(
+        &mut self,
+        job_id: i64,
+        mut final_result: ResultModel,
+        context: &CompletedJobContext,
+        slurm_stats: Option<SlurmStatsModel>,
+    ) {
         // Check if we should try to recover a failed or terminated job
         if matches!(
             final_result.status,
             JobStatus::Failed | JobStatus::Terminated
-        ) && let Some((job_name, attempt_id, failure_handler_id)) = &job_info
-        {
+        ) {
             let return_code = final_result.return_code;
             // Try to recover the job if it has a failure handler
             let outcome = self.try_recover_job(
                 job_id,
-                job_name,
+                &context.job_name,
                 return_code,
-                *attempt_id,
-                *failure_handler_id,
+                context.attempt_id,
+                context.failure_handler_id,
             );
 
             match outcome {
@@ -1617,16 +1740,9 @@ impl JobRunner {
                     // Job was successfully scheduled for retry - clean up but don't mark as failed
                     info!(
                         "Job retry scheduled workflow_id={} job_id={} job_name={} return_code={} attempt_id={}",
-                        self.workflow_id, job_id, job_name, return_code, attempt_id
+                        self.workflow_id, job_id, context.job_name, return_code, context.attempt_id
                     );
-                    if let Some(job_rr) = self.job_resources.get(&job_id).cloned() {
-                        self.increment_node_resources(job_id, &job_rr);
-                        self.increment_resources(&job_rr);
-                    }
-                    self.last_job_claimed_time = Some(Instant::now());
-                    self.running_jobs.remove(&job_id);
-                    self.job_resources.remove(&job_id);
-                    return false;
+                    return;
                 }
                 RecoveryOutcome::NoHandler | RecoveryOutcome::NoMatchingRule => {
                     // Check if workflow has use_pending_failed enabled
@@ -1634,14 +1750,14 @@ impl JobRunner {
                         // Use PendingFailed status for AI-assisted recovery
                         info!(
                             "Job pending_failed workflow_id={} job_id={} job_name={} return_code={} reason={:?}",
-                            self.workflow_id, job_id, job_name, return_code, outcome
+                            self.workflow_id, job_id, context.job_name, return_code, outcome
                         );
                         final_result.status = JobStatus::PendingFailed;
                     } else {
                         // Use Failed status (default behavior)
                         debug!(
                             "Job failed workflow_id={} job_id={} job_name={} return_code={} reason={:?}",
-                            self.workflow_id, job_id, job_name, return_code, outcome
+                            self.workflow_id, job_id, context.job_name, return_code, outcome
                         );
                         // Keep status as Failed
                     }
@@ -1679,23 +1795,12 @@ impl JobRunner {
                     "Job completed workflow_id={} job_id={} run_id={} status={}",
                     self.workflow_id, job_id, final_result.run_id, status_str
                 );
-                if let Some(job_rr) = self.job_resources.get(&job_id).cloned() {
-                    self.increment_node_resources(job_id, &job_rr);
-                    self.increment_resources(&job_rr);
-                }
-                // Reset the idle timer when a job completes, since blocked jobs may now
-                // become ready. This gives dependent jobs time to be picked up before
-                // the runner exits due to no jobs being claimed.
-                self.last_job_claimed_time = Some(Instant::now());
-
                 // Delete stdio files on successful completion if configured
-                if final_result.return_code == 0
-                    && let Some(cmd) = self.running_jobs.get(&job_id)
-                {
-                    let job_name = &cmd.job.name;
-                    if self.execution_config.delete_stdio_on_success(job_name) {
-                        Self::cleanup_stdio_files(cmd);
-                    }
+                if final_result.return_code == 0 && context.delete_stdio_on_success {
+                    cleanup_job_stdio_files(
+                        context.stdout_path.as_deref(),
+                        context.stderr_path.as_deref(),
+                    );
                 }
             }
             Err(e) => {
@@ -1705,15 +1810,23 @@ impl JobRunner {
                 );
             }
         }
-        self.running_jobs.remove(&job_id);
-        self.job_resources.remove(&job_id);
-        self.release_gpu_devices(job_id);
-        true
-    }
 
-    /// Delete stdio files for a completed job.
-    fn cleanup_stdio_files(cmd: &AsyncCliCommand) {
-        cleanup_job_stdio_files(cmd.stdout_path.as_deref(), cmd.stderr_path.as_deref());
+        if let Some(stats) = slurm_stats {
+            match apis::slurm_stats_api::create_slurm_stats(&self.config, stats) {
+                Ok(_) => {
+                    info!(
+                        "Stored slurm_stats workflow_id={} job_id={}",
+                        self.workflow_id, job_id
+                    );
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to store slurm_stats workflow_id={} job_id={}: {}",
+                        self.workflow_id, job_id, e
+                    );
+                }
+            }
+        }
     }
 
     /// Run a recovery script with environment variables set.
@@ -2863,7 +2976,6 @@ pub fn cleanup_job_stdio_files(stdout_path: Option<&str>, stderr_path: Option<&s
 /// from the sstat time-series if TimeSeries monitoring was configured.
 /// This ensures that even when sstat time-series monitoring missed a spike, the sacct
 /// post-mortem data fills in accurate resource usage.
-#[cfg(test)]
 fn backfill_sacct_into_result(result: &mut ResultModel, stats: &SlurmStatsModel) {
     if let Some(max_rss) = stats.max_rss_bytes {
         // sacct MaxRSS is the job-lifetime peak memory. Take the max against any
@@ -2972,6 +3084,18 @@ mod tests {
         s
     }
 
+    fn make_sacct_stats(state: Option<&str>) -> SacctStats {
+        SacctStats {
+            max_rss_bytes: None,
+            max_vm_size_bytes: None,
+            max_disk_read_bytes: None,
+            max_disk_write_bytes: None,
+            ave_cpu_seconds: None,
+            node_list: Some("node001".to_string()),
+            state: state.map(|state| state.to_string()),
+        }
+    }
+
     fn make_runner(resources: ComputeNodesResources) -> JobRunner {
         let mut workflow = WorkflowModel::new("test".to_string(), "user".to_string());
         workflow.id = Some(1);
@@ -3038,6 +3162,58 @@ mod tests {
         let stats = make_stats(None, None);
         backfill_sacct_into_result(&mut result, &stats);
         assert_eq!(result.peak_memory_bytes, None);
+    }
+
+    #[test]
+    fn test_apply_sacct_state_override_marks_out_of_memory_failed() {
+        let runner = make_runner(ComputeNodesResources::new(1, 1.0, 0, 1));
+        let pending_step = PendingSlurmStats {
+            workflow_id: 1,
+            job_id: 1,
+            run_id: 1,
+            attempt_id: 1,
+            slurm_job_id: "12345".to_string(),
+            step_name: "wf1_j1_r1_a1".to_string(),
+        };
+        let mut result = make_result(None, None, None, 1.0);
+        result.return_code = 1;
+        result.status = JobStatus::Failed;
+
+        runner.apply_sacct_state_override(
+            &mut result,
+            1,
+            &pending_step,
+            &make_sacct_stats(Some("OUT_OF_MEMORY")),
+        );
+
+        assert_eq!(result.return_code, 137);
+        assert_eq!(result.status, JobStatus::Failed);
+    }
+
+    #[test]
+    fn test_apply_sacct_state_override_keeps_clean_timeout_exit_successful() {
+        let runner = make_runner(ComputeNodesResources::new(1, 1.0, 0, 1));
+        let pending_step = PendingSlurmStats {
+            workflow_id: 1,
+            job_id: 1,
+            run_id: 1,
+            attempt_id: 1,
+            slurm_job_id: "12345".to_string(),
+            step_name: "wf1_j1_r1_a1".to_string(),
+        };
+        let mut result = make_result(None, None, None, 1.0);
+        result.return_code = 0;
+        result.status = JobStatus::Completed;
+
+        runner.apply_sacct_state_override(
+            &mut result,
+            0,
+            &pending_step,
+            &make_sacct_stats(Some("TIMEOUT")),
+        );
+
+        assert_eq!(result.return_code, 0);
+        assert_eq!(result.status, JobStatus::Completed);
     }
 
     #[test]

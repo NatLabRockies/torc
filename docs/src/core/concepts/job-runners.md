@@ -79,13 +79,13 @@ resource_requirements:
     memory: "200g"
     runtime: "PT4H"
     num_nodes: 1
-    
+
 parameters:
   i: "1:100"
 jobs:
   - name: "work_{i}"
     command: bash my_script.sh {i}
-    resource_requirements: work_resources  
+    resource_requirements: work_resources
     use_parameters:
     - i
 ```

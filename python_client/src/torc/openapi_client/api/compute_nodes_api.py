@@ -815,9 +815,9 @@ class ComputeNodesApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -1440,37 +1440,37 @@ class ComputeNodesApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         if offset is not None:
-            
+
             _query_params.append(('offset', offset))
-            
+
         if limit is not None:
-            
+
             _query_params.append(('limit', limit))
-            
+
         if sort_by is not None:
-            
+
             _query_params.append(('sort_by', sort_by))
-            
+
         if reverse_sort is not None:
-            
+
             _query_params.append(('reverse_sort', reverse_sort))
-            
+
         if hostname is not None:
-            
+
             _query_params.append(('hostname', hostname))
-            
+
         if is_active is not None:
-            
+
             _query_params.append(('is_active', is_active))
-            
+
         if scheduled_compute_node_id is not None:
-            
+
             _query_params.append(('scheduled_compute_node_id', scheduled_compute_node_id))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -1797,5 +1797,3 @@ class ComputeNodesApi:
             _host=_host,
             _request_auth=_request_auth
         )
-
-

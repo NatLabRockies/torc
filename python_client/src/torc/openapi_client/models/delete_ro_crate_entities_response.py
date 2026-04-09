@@ -85,5 +85,3 @@ class DeleteRoCrateEntitiesResponse(BaseModel):
             "message": obj.get("message")
         })
         return _obj
-
-

@@ -31,7 +31,7 @@
       ]
     }
   ],
-  
+
   // Resource requirements
   "resource_requirements": [
     {
@@ -59,7 +59,7 @@
       "runtime": "PT4H"
     }
   ],
-  
+
   // Slurm schedulers
   "slurm_schedulers": [
     {
@@ -71,7 +71,7 @@
       "gres": "gpu:1"
     }
   ],
-  
+
   // Workflow actions
   "actions": [
     {

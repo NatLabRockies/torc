@@ -612,29 +612,29 @@ class SlurmStatsApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         if job_id is not None:
-            
+
             _query_params.append(('job_id', job_id))
-            
+
         if run_id is not None:
-            
+
             _query_params.append(('run_id', run_id))
-            
+
         if attempt_id is not None:
-            
+
             _query_params.append(('attempt_id', attempt_id))
-            
+
         if offset is not None:
-            
+
             _query_params.append(('offset', offset))
-            
+
         if limit is not None:
-            
+
             _query_params.append(('limit', limit))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -667,5 +667,3 @@ class SlurmStatsApi:
             _host=_host,
             _request_auth=_request_auth
         )
-
-

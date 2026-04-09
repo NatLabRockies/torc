@@ -4,12 +4,12 @@ All URIs are relative to *http://localhost/torc-service/v1*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
-[**create_event**](EventsApi.md#create_event) | **POST** /events | 
-[**delete_event**](EventsApi.md#delete_event) | **DELETE** /events/{id} | 
-[**delete_events**](EventsApi.md#delete_events) | **DELETE** /events | 
-[**get_event**](EventsApi.md#get_event) | **GET** /events/{id} | 
-[**list_events**](EventsApi.md#list_events) | **GET** /events | 
-[**update_event**](EventsApi.md#update_event) | **PUT** /events/{id} | 
+[**create_event**](EventsApi.md#create_event) | **POST** /events |
+[**delete_event**](EventsApi.md#delete_event) | **DELETE** /events/{id} |
+[**delete_events**](EventsApi.md#delete_events) | **DELETE** /events |
+[**get_event**](EventsApi.md#get_event) | **GET** /events/{id} |
+[**list_events**](EventsApi.md#list_events) | **GET** /events |
+[**update_event**](EventsApi.md#update_event) | **PUT** /events/{id} |
 
 
 # **create_event**
@@ -22,7 +22,7 @@ Method | HTTP request | Description
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **EventsApi** | API context | 
+ **_api** | **EventsApi** | API context |
 **event_model** | [**EventModel**](EventModel.md) |  |
 
 ### Return type
@@ -50,7 +50,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **EventsApi** | API context | 
+ **_api** | **EventsApi** | API context |
 **id** | **Int64** | ID of the event record. |
 
 ### Return type
@@ -78,7 +78,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **EventsApi** | API context | 
+ **_api** | **EventsApi** | API context |
 **workflow_id** | **Int64** |  |
 
 ### Return type
@@ -106,7 +106,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **EventsApi** | API context | 
+ **_api** | **EventsApi** | API context |
 **id** | **Int64** | ID of the event record. |
 
 ### Return type
@@ -134,7 +134,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **EventsApi** | API context | 
+ **_api** | **EventsApi** | API context |
 **workflow_id** | **Int64** |  |
 
 ### Optional Parameters
@@ -173,7 +173,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **EventsApi** | API context | 
+ **_api** | **EventsApi** | API context |
 **id** | **Int64** | ID of the event. |
 **body** | **Any** |  |
 
@@ -191,4 +191,3 @@ No authorization required
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
-

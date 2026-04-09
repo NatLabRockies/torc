@@ -110,5 +110,3 @@ class ComputeNodesResources(BaseModel):
             "time_limit": obj.get("time_limit")
         })
         return _obj
-
-

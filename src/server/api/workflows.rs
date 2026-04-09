@@ -1402,10 +1402,10 @@ where
         // Update the workflow status
         let result = match sqlx::query!(
             r#"
-            UPDATE workflow_status 
-            SET run_id = ?, 
-                has_detected_need_to_run_completion_script = ?, 
-                is_canceled = ?, 
+            UPDATE workflow_status
+            SET run_id = ?,
+                has_detected_need_to_run_completion_script = ?,
+                is_canceled = ?,
                 is_archived = ?
             WHERE id = ?
             "#,

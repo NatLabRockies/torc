@@ -4,12 +4,12 @@ All URIs are relative to *http://localhost/torc-service/v1*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
-[**create_local_scheduler**](LocalSchedulersApi.md#create_local_scheduler) | **POST** /local_schedulers | 
-[**delete_local_scheduler**](LocalSchedulersApi.md#delete_local_scheduler) | **DELETE** /local_schedulers/{id} | 
-[**delete_local_schedulers**](LocalSchedulersApi.md#delete_local_schedulers) | **DELETE** /local_schedulers | 
-[**get_local_scheduler**](LocalSchedulersApi.md#get_local_scheduler) | **GET** /local_schedulers/{id} | 
-[**list_local_schedulers**](LocalSchedulersApi.md#list_local_schedulers) | **GET** /local_schedulers | 
-[**update_local_scheduler**](LocalSchedulersApi.md#update_local_scheduler) | **PUT** /local_schedulers/{id} | 
+[**create_local_scheduler**](LocalSchedulersApi.md#create_local_scheduler) | **POST** /local_schedulers |
+[**delete_local_scheduler**](LocalSchedulersApi.md#delete_local_scheduler) | **DELETE** /local_schedulers/{id} |
+[**delete_local_schedulers**](LocalSchedulersApi.md#delete_local_schedulers) | **DELETE** /local_schedulers |
+[**get_local_scheduler**](LocalSchedulersApi.md#get_local_scheduler) | **GET** /local_schedulers/{id} |
+[**list_local_schedulers**](LocalSchedulersApi.md#list_local_schedulers) | **GET** /local_schedulers |
+[**update_local_scheduler**](LocalSchedulersApi.md#update_local_scheduler) | **PUT** /local_schedulers/{id} |
 
 
 # **create_local_scheduler**
@@ -22,7 +22,7 @@ Method | HTTP request | Description
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **LocalSchedulersApi** | API context | 
+ **_api** | **LocalSchedulersApi** | API context |
 **local_scheduler_model** | [**LocalSchedulerModel**](LocalSchedulerModel.md) |  |
 
 ### Return type
@@ -50,7 +50,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **LocalSchedulersApi** | API context | 
+ **_api** | **LocalSchedulersApi** | API context |
 **id** | **Int64** | Local scheduler ID |
 
 ### Return type
@@ -78,7 +78,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **LocalSchedulersApi** | API context | 
+ **_api** | **LocalSchedulersApi** | API context |
 **workflow_id** | **Int64** |  |
 
 ### Return type
@@ -106,7 +106,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **LocalSchedulersApi** | API context | 
+ **_api** | **LocalSchedulersApi** | API context |
 **id** | **Int64** | ID of the local scheduler record |
 
 ### Return type
@@ -134,7 +134,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **LocalSchedulersApi** | API context | 
+ **_api** | **LocalSchedulersApi** | API context |
 **workflow_id** | **Int64** |  |
 
 ### Optional Parameters
@@ -173,7 +173,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **LocalSchedulersApi** | API context | 
+ **_api** | **LocalSchedulersApi** | API context |
 **id** | **Int64** | ID of the local scheduler. |
 **local_scheduler_model** | [**LocalSchedulerModel**](LocalSchedulerModel.md) |  |
 
@@ -191,4 +191,3 @@ No authorization required
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
-

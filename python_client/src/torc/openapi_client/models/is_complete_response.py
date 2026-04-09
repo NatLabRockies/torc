@@ -87,5 +87,3 @@ class IsCompleteResponse(BaseModel):
             "needs_to_run_completion_script": obj.get("needs_to_run_completion_script")
         })
         return _obj
-
-

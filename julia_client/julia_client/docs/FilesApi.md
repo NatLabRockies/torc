@@ -4,12 +4,12 @@ All URIs are relative to *http://localhost/torc-service/v1*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
-[**create_file**](FilesApi.md#create_file) | **POST** /files | 
-[**delete_file**](FilesApi.md#delete_file) | **DELETE** /files/{id} | 
-[**delete_files**](FilesApi.md#delete_files) | **DELETE** /files | 
-[**get_file**](FilesApi.md#get_file) | **GET** /files/{id} | 
-[**list_files**](FilesApi.md#list_files) | **GET** /files | 
-[**update_file**](FilesApi.md#update_file) | **PUT** /files/{id} | 
+[**create_file**](FilesApi.md#create_file) | **POST** /files |
+[**delete_file**](FilesApi.md#delete_file) | **DELETE** /files/{id} |
+[**delete_files**](FilesApi.md#delete_files) | **DELETE** /files |
+[**get_file**](FilesApi.md#get_file) | **GET** /files/{id} |
+[**list_files**](FilesApi.md#list_files) | **GET** /files |
+[**update_file**](FilesApi.md#update_file) | **PUT** /files/{id} |
 
 
 # **create_file**
@@ -22,7 +22,7 @@ Method | HTTP request | Description
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **FilesApi** | API context | 
+ **_api** | **FilesApi** | API context |
 **file_model** | [**FileModel**](FileModel.md) |  |
 
 ### Return type
@@ -50,7 +50,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **FilesApi** | API context | 
+ **_api** | **FilesApi** | API context |
 **id** | **Int64** | File ID |
 
 ### Return type
@@ -78,7 +78,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **FilesApi** | API context | 
+ **_api** | **FilesApi** | API context |
 **workflow_id** | **Int64** |  |
 
 ### Return type
@@ -106,7 +106,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **FilesApi** | API context | 
+ **_api** | **FilesApi** | API context |
 **id** | **Int64** | ID of the file record |
 
 ### Return type
@@ -134,7 +134,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **FilesApi** | API context | 
+ **_api** | **FilesApi** | API context |
 **workflow_id** | **Int64** |  |
 
 ### Optional Parameters
@@ -175,7 +175,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **FilesApi** | API context | 
+ **_api** | **FilesApi** | API context |
 **id** | **Int64** | ID of the file. |
 **file_model** | [**FileModel**](FileModel.md) |  |
 
@@ -193,4 +193,3 @@ No authorization required
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
-

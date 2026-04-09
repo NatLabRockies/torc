@@ -91,5 +91,3 @@ class JobsModel(BaseModel):
             "jobs": [JobModel.from_dict(_item) for _item in obj["jobs"]] if obj.get("jobs") is not None else None
         })
         return _obj
-
-

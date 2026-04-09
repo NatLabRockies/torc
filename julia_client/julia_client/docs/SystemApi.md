@@ -4,8 +4,8 @@ All URIs are relative to *http://localhost/torc-service/v1*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
-[**get_version**](SystemApi.md#get_version) | **GET** /version | 
-[**ping**](SystemApi.md#ping) | **GET** /ping | 
+[**get_version**](SystemApi.md#get_version) | **GET** /version |
+[**ping**](SystemApi.md#ping) | **GET** /ping |
 
 
 # **get_version**
@@ -55,4 +55,3 @@ No authorization required
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
-

@@ -101,5 +101,3 @@ class ListResourceRequirementsResponse(BaseModel):
             "total_count": obj.get("total_count")
         })
         return _obj
-
-

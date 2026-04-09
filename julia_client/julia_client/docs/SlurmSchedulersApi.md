@@ -4,12 +4,12 @@ All URIs are relative to *http://localhost/torc-service/v1*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
-[**create_slurm_scheduler**](SlurmSchedulersApi.md#create_slurm_scheduler) | **POST** /slurm_schedulers | 
-[**delete_slurm_scheduler**](SlurmSchedulersApi.md#delete_slurm_scheduler) | **DELETE** /slurm_schedulers/{id} | 
-[**delete_slurm_schedulers**](SlurmSchedulersApi.md#delete_slurm_schedulers) | **DELETE** /slurm_schedulers | 
-[**get_slurm_scheduler**](SlurmSchedulersApi.md#get_slurm_scheduler) | **GET** /slurm_schedulers/{id} | 
-[**list_slurm_schedulers**](SlurmSchedulersApi.md#list_slurm_schedulers) | **GET** /slurm_schedulers | 
-[**update_slurm_scheduler**](SlurmSchedulersApi.md#update_slurm_scheduler) | **PUT** /slurm_schedulers/{id} | 
+[**create_slurm_scheduler**](SlurmSchedulersApi.md#create_slurm_scheduler) | **POST** /slurm_schedulers |
+[**delete_slurm_scheduler**](SlurmSchedulersApi.md#delete_slurm_scheduler) | **DELETE** /slurm_schedulers/{id} |
+[**delete_slurm_schedulers**](SlurmSchedulersApi.md#delete_slurm_schedulers) | **DELETE** /slurm_schedulers |
+[**get_slurm_scheduler**](SlurmSchedulersApi.md#get_slurm_scheduler) | **GET** /slurm_schedulers/{id} |
+[**list_slurm_schedulers**](SlurmSchedulersApi.md#list_slurm_schedulers) | **GET** /slurm_schedulers |
+[**update_slurm_scheduler**](SlurmSchedulersApi.md#update_slurm_scheduler) | **PUT** /slurm_schedulers/{id} |
 
 
 # **create_slurm_scheduler**
@@ -22,7 +22,7 @@ Method | HTTP request | Description
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **SlurmSchedulersApi** | API context | 
+ **_api** | **SlurmSchedulersApi** | API context |
 **slurm_scheduler_model** | [**SlurmSchedulerModel**](SlurmSchedulerModel.md) |  |
 
 ### Return type
@@ -50,7 +50,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **SlurmSchedulersApi** | API context | 
+ **_api** | **SlurmSchedulersApi** | API context |
 **id** | **Int64** | Slurm compute node configuration ID |
 
 ### Return type
@@ -78,7 +78,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **SlurmSchedulersApi** | API context | 
+ **_api** | **SlurmSchedulersApi** | API context |
 **workflow_id** | **Int64** |  |
 
 ### Return type
@@ -106,7 +106,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **SlurmSchedulersApi** | API context | 
+ **_api** | **SlurmSchedulersApi** | API context |
 **id** | **Int64** | Slurm compute node configuration ID |
 
 ### Return type
@@ -134,7 +134,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **SlurmSchedulersApi** | API context | 
+ **_api** | **SlurmSchedulersApi** | API context |
 **workflow_id** | **Int64** |  |
 
 ### Optional Parameters
@@ -171,7 +171,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **SlurmSchedulersApi** | API context | 
+ **_api** | **SlurmSchedulersApi** | API context |
 **id** | **Int64** | Slurm compute node configuration ID |
 **slurm_scheduler_model** | [**SlurmSchedulerModel**](SlurmSchedulerModel.md) |  |
 
@@ -189,4 +189,3 @@ No authorization required
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
-

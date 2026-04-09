@@ -815,9 +815,9 @@ class LocalSchedulersApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -1427,33 +1427,33 @@ class LocalSchedulersApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         if offset is not None:
-            
+
             _query_params.append(('offset', offset))
-            
+
         if limit is not None:
-            
+
             _query_params.append(('limit', limit))
-            
+
         if sort_by is not None:
-            
+
             _query_params.append(('sort_by', sort_by))
-            
+
         if reverse_sort is not None:
-            
+
             _query_params.append(('reverse_sort', reverse_sort))
-            
+
         if memory is not None:
-            
+
             _query_params.append(('memory', memory))
-            
+
         if num_cpus is not None:
-            
+
             _query_params.append(('num_cpus', num_cpus))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -1780,5 +1780,3 @@ class LocalSchedulersApi:
             _host=_host,
             _request_auth=_request_auth
         )
-
-

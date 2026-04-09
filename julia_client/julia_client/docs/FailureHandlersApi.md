@@ -4,10 +4,10 @@ All URIs are relative to *http://localhost/torc-service/v1*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
-[**create_failure_handler**](FailureHandlersApi.md#create_failure_handler) | **POST** /failure_handlers | 
-[**delete_failure_handler**](FailureHandlersApi.md#delete_failure_handler) | **DELETE** /failure_handlers/{id} | 
-[**get_failure_handler**](FailureHandlersApi.md#get_failure_handler) | **GET** /failure_handlers/{id} | 
-[**list_failure_handlers**](FailureHandlersApi.md#list_failure_handlers) | **GET** /workflows/{id}/failure_handlers | 
+[**create_failure_handler**](FailureHandlersApi.md#create_failure_handler) | **POST** /failure_handlers |
+[**delete_failure_handler**](FailureHandlersApi.md#delete_failure_handler) | **DELETE** /failure_handlers/{id} |
+[**get_failure_handler**](FailureHandlersApi.md#get_failure_handler) | **GET** /failure_handlers/{id} |
+[**list_failure_handlers**](FailureHandlersApi.md#list_failure_handlers) | **GET** /workflows/{id}/failure_handlers |
 
 
 # **create_failure_handler**
@@ -20,7 +20,7 @@ Method | HTTP request | Description
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **FailureHandlersApi** | API context | 
+ **_api** | **FailureHandlersApi** | API context |
 **failure_handler_model** | [**FailureHandlerModel**](FailureHandlerModel.md) |  |
 
 ### Return type
@@ -48,7 +48,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **FailureHandlersApi** | API context | 
+ **_api** | **FailureHandlersApi** | API context |
 **id** | **Int64** | Failure handler ID |
 
 ### Return type
@@ -76,7 +76,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **FailureHandlersApi** | API context | 
+ **_api** | **FailureHandlersApi** | API context |
 **id** | **Int64** | Failure handler ID |
 
 ### Return type
@@ -104,7 +104,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **FailureHandlersApi** | API context | 
+ **_api** | **FailureHandlersApi** | API context |
 **id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
@@ -128,4 +128,3 @@ No authorization required
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
-

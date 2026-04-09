@@ -4,10 +4,10 @@ All URIs are relative to *http://localhost/torc-service/v1*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
-[**claim_action**](WorkflowActionsApi.md#claim_action) | **POST** /workflows/{id}/actions/{action_id}/claim | 
-[**create_workflow_action**](WorkflowActionsApi.md#create_workflow_action) | **POST** /workflows/{id}/actions | 
-[**get_pending_actions**](WorkflowActionsApi.md#get_pending_actions) | **GET** /workflows/{id}/actions/pending | 
-[**get_workflow_actions**](WorkflowActionsApi.md#get_workflow_actions) | **GET** /workflows/{id}/actions | 
+[**claim_action**](WorkflowActionsApi.md#claim_action) | **POST** /workflows/{id}/actions/{action_id}/claim |
+[**create_workflow_action**](WorkflowActionsApi.md#create_workflow_action) | **POST** /workflows/{id}/actions |
+[**get_pending_actions**](WorkflowActionsApi.md#get_pending_actions) | **GET** /workflows/{id}/actions/pending |
+[**get_workflow_actions**](WorkflowActionsApi.md#get_workflow_actions) | **GET** /workflows/{id}/actions |
 
 
 # **claim_action**
@@ -20,7 +20,7 @@ Method | HTTP request | Description
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **WorkflowActionsApi** | API context | 
+ **_api** | **WorkflowActionsApi** | API context |
 **id** | **Int64** | Workflow ID |
 **action_id** | **Int64** | Action ID |
 **claim_action_request** | [**ClaimActionRequest**](ClaimActionRequest.md) |  |
@@ -50,7 +50,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **WorkflowActionsApi** | API context | 
+ **_api** | **WorkflowActionsApi** | API context |
 **id** | **Int64** | Workflow ID |
 **workflow_action_model** | [**WorkflowActionModel**](WorkflowActionModel.md) |  |
 
@@ -79,7 +79,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **WorkflowActionsApi** | API context | 
+ **_api** | **WorkflowActionsApi** | API context |
 **id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
@@ -113,7 +113,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **WorkflowActionsApi** | API context | 
+ **_api** | **WorkflowActionsApi** | API context |
 **id** | **Int64** | Workflow ID |
 
 ### Return type
@@ -130,4 +130,3 @@ No authorization required
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
-

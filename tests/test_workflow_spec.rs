@@ -956,7 +956,7 @@ fn test_from_spec_file_json5_format() {
     let json5_content = r#"{
         // JSON5 test with comments
         "name": "test_workflow",
-        "user": "test_user", 
+        "user": "test_user",
         "description": "JSON5 test",
         "jobs": [],
         "files": null,

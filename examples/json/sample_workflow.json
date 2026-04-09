@@ -102,7 +102,7 @@
       "runtime": "PT30M"
     },
     {
-      "name": "large_job", 
+      "name": "large_job",
       "num_cpus": 4,
       "num_gpus": 1,
       "num_nodes": 1,
@@ -123,11 +123,11 @@
     },
     {
       "name": "gpu_scheduler",
-      "account": "gpu_project", 
+      "account": "gpu_project",
       "gres": "gpu:1",
       "nodes": 1,
       "partition": "gpu",
-      "tmp": "50G", 
+      "tmp": "50G",
       "walltime": "04:00:00",
       "extra": "--constraint=v100"
     }

@@ -4,12 +4,12 @@ All URIs are relative to *http://localhost/torc-service/v1*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
-[**create_compute_node**](ComputeNodesApi.md#create_compute_node) | **POST** /compute_nodes | 
-[**delete_compute_node**](ComputeNodesApi.md#delete_compute_node) | **DELETE** /compute_nodes/{id} | 
-[**delete_compute_nodes**](ComputeNodesApi.md#delete_compute_nodes) | **DELETE** /compute_nodes | 
-[**get_compute_node**](ComputeNodesApi.md#get_compute_node) | **GET** /compute_nodes/{id} | 
-[**list_compute_nodes**](ComputeNodesApi.md#list_compute_nodes) | **GET** /compute_nodes | 
-[**update_compute_node**](ComputeNodesApi.md#update_compute_node) | **PUT** /compute_nodes/{id} | 
+[**create_compute_node**](ComputeNodesApi.md#create_compute_node) | **POST** /compute_nodes |
+[**delete_compute_node**](ComputeNodesApi.md#delete_compute_node) | **DELETE** /compute_nodes/{id} |
+[**delete_compute_nodes**](ComputeNodesApi.md#delete_compute_nodes) | **DELETE** /compute_nodes |
+[**get_compute_node**](ComputeNodesApi.md#get_compute_node) | **GET** /compute_nodes/{id} |
+[**list_compute_nodes**](ComputeNodesApi.md#list_compute_nodes) | **GET** /compute_nodes |
+[**update_compute_node**](ComputeNodesApi.md#update_compute_node) | **PUT** /compute_nodes/{id} |
 
 
 # **create_compute_node**
@@ -22,7 +22,7 @@ Method | HTTP request | Description
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **ComputeNodesApi** | API context | 
+ **_api** | **ComputeNodesApi** | API context |
 **compute_node_model** | [**ComputeNodeModel**](ComputeNodeModel.md) |  |
 
 ### Return type
@@ -50,7 +50,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **ComputeNodesApi** | API context | 
+ **_api** | **ComputeNodesApi** | API context |
 **id** | **Int64** | Compute node ID |
 
 ### Return type
@@ -78,7 +78,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **ComputeNodesApi** | API context | 
+ **_api** | **ComputeNodesApi** | API context |
 **workflow_id** | **Int64** |  |
 
 ### Return type
@@ -106,7 +106,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **ComputeNodesApi** | API context | 
+ **_api** | **ComputeNodesApi** | API context |
 **id** | **Int64** | ID of the compute node record |
 
 ### Return type
@@ -134,7 +134,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **ComputeNodesApi** | API context | 
+ **_api** | **ComputeNodesApi** | API context |
 **workflow_id** | **Int64** |  |
 
 ### Optional Parameters
@@ -174,7 +174,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **ComputeNodesApi** | API context | 
+ **_api** | **ComputeNodesApi** | API context |
 **id** | **Int64** | ID of the compute node. |
 **compute_node_model** | [**ComputeNodeModel**](ComputeNodeModel.md) |  |
 
@@ -192,4 +192,3 @@ No authorization required
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
-

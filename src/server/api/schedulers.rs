@@ -598,7 +598,7 @@ where
 
         let record = match sqlx::query(
             r#"
-            SELECT id, workflow_id, name, account, gres, mem, nodes, ntasks_per_node, 
+            SELECT id, workflow_id, name, account, gres, mem, nodes, ntasks_per_node,
                    partition, qos, tmp, walltime, extra
             FROM slurm_scheduler
             WHERE id = $1

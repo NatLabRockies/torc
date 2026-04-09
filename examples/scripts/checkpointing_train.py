@@ -10,7 +10,6 @@ Expected environment variables (set by torc or the calling shell):
     MODEL_INDEX    - index suffix for the output model file
 """
 
-import json
 import numpy as np
 import os
 import pickle

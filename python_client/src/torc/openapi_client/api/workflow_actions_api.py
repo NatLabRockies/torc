@@ -862,9 +862,9 @@ class WorkflowActionsApi:
             _path_params['id'] = id
         # process the query parameters
         if trigger_type is not None:
-            
+
             _query_params.append(('trigger_type', trigger_type))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -1154,5 +1154,3 @@ class WorkflowActionsApi:
             _host=_host,
             _request_auth=_request_auth
         )
-
-

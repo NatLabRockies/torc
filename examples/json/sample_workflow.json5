@@ -72,7 +72,7 @@
       "scheduler": "gpu_scheduler"
     }
   ],
-  
+
   // File definitions
   "files": [
     {
@@ -96,7 +96,7 @@
       "path": "/scripts/analyze_data.py"
     }
   ],
-  
+
   // User data
   "user_data": [
     {
@@ -130,7 +130,7 @@
       "is_ephemeral": false
     }
   ],
-  
+
   // Resource requirements
   "resource_requirements": [
     {
@@ -150,7 +150,7 @@
       "runtime": "PT2H"
     }
   ],
-  
+
   // Slurm schedulers
   "slurm_schedulers": [
     {

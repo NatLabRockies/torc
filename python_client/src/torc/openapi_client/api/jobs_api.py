@@ -1416,9 +1416,9 @@ class JobsApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -2067,45 +2067,45 @@ class JobsApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         if status is not None:
-            
+
             _query_params.append(('status', status.value))
-            
+
         if needs_file_id is not None:
-            
+
             _query_params.append(('needs_file_id', needs_file_id))
-            
+
         if upstream_job_id is not None:
-            
+
             _query_params.append(('upstream_job_id', upstream_job_id))
-            
+
         if offset is not None:
-            
+
             _query_params.append(('offset', offset))
-            
+
         if limit is not None:
-            
+
             _query_params.append(('limit', limit))
-            
+
         if sort_by is not None:
-            
+
             _query_params.append(('sort_by', sort_by))
-            
+
         if reverse_sort is not None:
-            
+
             _query_params.append(('reverse_sort', reverse_sort))
-            
+
         if include_relationships is not None:
-            
+
             _query_params.append(('include_relationships', include_relationships))
-            
+
         if active_compute_node_id is not None:
-            
+
             _query_params.append(('active_compute_node_id', active_compute_node_id))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -2700,9 +2700,9 @@ class JobsApi:
             _path_params['run_id'] = run_id
         # process the query parameters
         if max_retries is not None:
-            
+
             _query_params.append(('max_retries', max_retries))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -3325,5 +3325,3 @@ class JobsApi:
             _host=_host,
             _request_auth=_request_auth
         )
-
-

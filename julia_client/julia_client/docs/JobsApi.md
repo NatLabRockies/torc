@@ -4,17 +4,17 @@ All URIs are relative to *http://localhost/torc-service/v1*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
-[**complete_job**](JobsApi.md#complete_job) | **POST** /jobs/{id}/complete_job/{status}/{run_id} | 
-[**create_job**](JobsApi.md#create_job) | **POST** /jobs | 
-[**create_jobs**](JobsApi.md#create_jobs) | **POST** /bulk_jobs | 
-[**delete_job**](JobsApi.md#delete_job) | **DELETE** /jobs/{id} | 
-[**delete_jobs**](JobsApi.md#delete_jobs) | **DELETE** /jobs | 
-[**get_job**](JobsApi.md#get_job) | **GET** /jobs/{id} | 
-[**list_jobs**](JobsApi.md#list_jobs) | **GET** /jobs | 
-[**manage_status_change**](JobsApi.md#manage_status_change) | **PUT** /jobs/{id}/manage_status_change/{status}/{run_id} | 
-[**retry_job**](JobsApi.md#retry_job) | **POST** /jobs/{id}/retry/{run_id} | 
-[**start_job**](JobsApi.md#start_job) | **PUT** /jobs/{id}/start_job/{run_id}/{compute_node_id} | 
-[**update_job**](JobsApi.md#update_job) | **PUT** /jobs/{id} | 
+[**complete_job**](JobsApi.md#complete_job) | **POST** /jobs/{id}/complete_job/{status}/{run_id} |
+[**create_job**](JobsApi.md#create_job) | **POST** /jobs |
+[**create_jobs**](JobsApi.md#create_jobs) | **POST** /bulk_jobs |
+[**delete_job**](JobsApi.md#delete_job) | **DELETE** /jobs/{id} |
+[**delete_jobs**](JobsApi.md#delete_jobs) | **DELETE** /jobs |
+[**get_job**](JobsApi.md#get_job) | **GET** /jobs/{id} |
+[**list_jobs**](JobsApi.md#list_jobs) | **GET** /jobs |
+[**manage_status_change**](JobsApi.md#manage_status_change) | **PUT** /jobs/{id}/manage_status_change/{status}/{run_id} |
+[**retry_job**](JobsApi.md#retry_job) | **POST** /jobs/{id}/retry/{run_id} |
+[**start_job**](JobsApi.md#start_job) | **PUT** /jobs/{id}/start_job/{run_id}/{compute_node_id} |
+[**update_job**](JobsApi.md#update_job) | **PUT** /jobs/{id} |
 
 
 # **complete_job**
@@ -27,7 +27,7 @@ Method | HTTP request | Description
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **JobsApi** | API context | 
+ **_api** | **JobsApi** | API context |
 **id** | **Int64** | Job ID |
 **status** | [**JobStatus**](.md) | New job status. |
 **run_id** | **Int64** | Current job run ID |
@@ -58,7 +58,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **JobsApi** | API context | 
+ **_api** | **JobsApi** | API context |
 **job_model** | [**JobModel**](JobModel.md) |  |
 
 ### Return type
@@ -86,7 +86,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **JobsApi** | API context | 
+ **_api** | **JobsApi** | API context |
 **jobs_model** | [**JobsModel**](JobsModel.md) |  |
 
 ### Return type
@@ -114,7 +114,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **JobsApi** | API context | 
+ **_api** | **JobsApi** | API context |
 **id** | **Int64** | Job ID |
 
 ### Return type
@@ -142,7 +142,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **JobsApi** | API context | 
+ **_api** | **JobsApi** | API context |
 **workflow_id** | **Int64** |  |
 
 ### Return type
@@ -170,7 +170,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **JobsApi** | API context | 
+ **_api** | **JobsApi** | API context |
 **id** | **Int64** | ID of the job record |
 
 ### Return type
@@ -198,7 +198,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **JobsApi** | API context | 
+ **_api** | **JobsApi** | API context |
 **workflow_id** | **Int64** |  |
 
 ### Optional Parameters
@@ -240,7 +240,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **JobsApi** | API context | 
+ **_api** | **JobsApi** | API context |
 **id** | **Int64** | Job ID |
 **status** | [**JobStatus**](.md) | New job status |
 **run_id** | **Int64** | Current job run ID |
@@ -270,7 +270,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **JobsApi** | API context | 
+ **_api** | **JobsApi** | API context |
 **id** | **Int64** | Job ID |
 **run_id** | **Int64** | Current workflow run ID |
 **max_retries** | **Int64** |  |
@@ -300,7 +300,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **JobsApi** | API context | 
+ **_api** | **JobsApi** | API context |
 **id** | **Int64** | Job ID |
 **run_id** | **Int64** | Current job run ID |
 **compute_node_id** | **Int64** | Compute node ID that started the job |
@@ -330,7 +330,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **JobsApi** | API context | 
+ **_api** | **JobsApi** | API context |
 **id** | **Int64** | ID of the job. |
 **job_model** | [**JobModel**](JobModel.md) |  |
 
@@ -348,4 +348,3 @@ No authorization required
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
-

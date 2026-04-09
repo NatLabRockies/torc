@@ -17,7 +17,9 @@ print(f"Loading {num_matrices} product matrices...")
 matrices = []
 for i in range(num_matrices):
     path = os.path.join(scratch_dir, f"product_{i:02d}.bin")
-    matrices.append(np.fromfile(path, dtype=np.float64).reshape(matrix_size, matrix_size))
+    matrices.append(
+        np.fromfile(path, dtype=np.float64).reshape(matrix_size, matrix_size)
+    )
 
 combined = sum(matrices) / len(matrices)
 print("Computing eigenvalue decomposition (CPU-intensive)...")

@@ -815,9 +815,9 @@ class ResultsApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -1479,49 +1479,49 @@ class ResultsApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         if job_id is not None:
-            
+
             _query_params.append(('job_id', job_id))
-            
+
         if run_id is not None:
-            
+
             _query_params.append(('run_id', run_id))
-            
+
         if return_code is not None:
-            
+
             _query_params.append(('return_code', return_code))
-            
+
         if status is not None:
-            
+
             _query_params.append(('status', status.value))
-            
+
         if compute_node_id is not None:
-            
+
             _query_params.append(('compute_node_id', compute_node_id))
-            
+
         if offset is not None:
-            
+
             _query_params.append(('offset', offset))
-            
+
         if limit is not None:
-            
+
             _query_params.append(('limit', limit))
-            
+
         if sort_by is not None:
-            
+
             _query_params.append(('sort_by', sort_by))
-            
+
         if reverse_sort is not None:
-            
+
             _query_params.append(('reverse_sort', reverse_sort))
-            
+
         if all_runs is not None:
-            
+
             _query_params.append(('all_runs', all_runs))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -1848,5 +1848,3 @@ class ResultsApi:
             _host=_host,
             _request_auth=_request_auth
         )
-
-

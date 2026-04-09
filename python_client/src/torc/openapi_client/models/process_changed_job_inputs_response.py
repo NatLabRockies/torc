@@ -83,5 +83,3 @@ class ProcessChangedJobInputsResponse(BaseModel):
             "reinitialized_jobs": obj.get("reinitialized_jobs")
         })
         return _obj
-
-

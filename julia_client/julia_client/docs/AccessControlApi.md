@@ -4,19 +4,19 @@ All URIs are relative to *http://localhost/torc-service/v1*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
-[**add_user_to_group**](AccessControlApi.md#add_user_to_group) | **POST** /access_groups/{id}/members | 
-[**add_workflow_to_group**](AccessControlApi.md#add_workflow_to_group) | **POST** /workflows/{id}/access_groups/{group_id} | 
-[**check_workflow_access**](AccessControlApi.md#check_workflow_access) | **GET** /access_check/{workflow_id}/{user_name} | 
-[**create_access_group**](AccessControlApi.md#create_access_group) | **POST** /access_groups | 
-[**delete_access_group**](AccessControlApi.md#delete_access_group) | **DELETE** /access_groups/{id} | 
-[**get_access_group**](AccessControlApi.md#get_access_group) | **GET** /access_groups/{id} | 
-[**list_access_groups**](AccessControlApi.md#list_access_groups) | **GET** /access_groups | 
-[**list_group_members**](AccessControlApi.md#list_group_members) | **GET** /access_groups/{id}/members | 
-[**list_user_groups**](AccessControlApi.md#list_user_groups) | **GET** /users/{user_name}/groups | 
-[**list_workflow_groups**](AccessControlApi.md#list_workflow_groups) | **GET** /workflows/{id}/access_groups | 
-[**reload_auth**](AccessControlApi.md#reload_auth) | **POST** /admin/reload-auth | 
-[**remove_user_from_group**](AccessControlApi.md#remove_user_from_group) | **DELETE** /access_groups/{id}/members/{user_name} | 
-[**remove_workflow_from_group**](AccessControlApi.md#remove_workflow_from_group) | **DELETE** /workflows/{id}/access_groups/{group_id} | 
+[**add_user_to_group**](AccessControlApi.md#add_user_to_group) | **POST** /access_groups/{id}/members |
+[**add_workflow_to_group**](AccessControlApi.md#add_workflow_to_group) | **POST** /workflows/{id}/access_groups/{group_id} |
+[**check_workflow_access**](AccessControlApi.md#check_workflow_access) | **GET** /access_check/{workflow_id}/{user_name} |
+[**create_access_group**](AccessControlApi.md#create_access_group) | **POST** /access_groups |
+[**delete_access_group**](AccessControlApi.md#delete_access_group) | **DELETE** /access_groups/{id} |
+[**get_access_group**](AccessControlApi.md#get_access_group) | **GET** /access_groups/{id} |
+[**list_access_groups**](AccessControlApi.md#list_access_groups) | **GET** /access_groups |
+[**list_group_members**](AccessControlApi.md#list_group_members) | **GET** /access_groups/{id}/members |
+[**list_user_groups**](AccessControlApi.md#list_user_groups) | **GET** /users/{user_name}/groups |
+[**list_workflow_groups**](AccessControlApi.md#list_workflow_groups) | **GET** /workflows/{id}/access_groups |
+[**reload_auth**](AccessControlApi.md#reload_auth) | **POST** /admin/reload-auth |
+[**remove_user_from_group**](AccessControlApi.md#remove_user_from_group) | **DELETE** /access_groups/{id}/members/{user_name} |
+[**remove_workflow_from_group**](AccessControlApi.md#remove_workflow_from_group) | **DELETE** /workflows/{id}/access_groups/{group_id} |
 
 
 # **add_user_to_group**
@@ -29,7 +29,7 @@ Method | HTTP request | Description
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **AccessControlApi** | API context | 
+ **_api** | **AccessControlApi** | API context |
 **id** | **Int64** | Access group ID |
 **user_group_membership_model** | [**UserGroupMembershipModel**](UserGroupMembershipModel.md) |  |
 
@@ -58,7 +58,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **AccessControlApi** | API context | 
+ **_api** | **AccessControlApi** | API context |
 **id** | **Int64** | Workflow ID |
 **group_id** | **Int64** | Access group ID |
 
@@ -87,7 +87,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **AccessControlApi** | API context | 
+ **_api** | **AccessControlApi** | API context |
 **workflow_id** | **Int64** | Workflow ID |
 **user_name** | **String** | Username |
 
@@ -116,7 +116,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **AccessControlApi** | API context | 
+ **_api** | **AccessControlApi** | API context |
 **access_group_model** | [**AccessGroupModel**](AccessGroupModel.md) |  |
 
 ### Return type
@@ -144,7 +144,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **AccessControlApi** | API context | 
+ **_api** | **AccessControlApi** | API context |
 **id** | **Int64** | Access group ID |
 
 ### Return type
@@ -172,7 +172,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **AccessControlApi** | API context | 
+ **_api** | **AccessControlApi** | API context |
 **id** | **Int64** | Access group ID |
 
 ### Return type
@@ -200,7 +200,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **AccessControlApi** | API context | 
+ **_api** | **AccessControlApi** | API context |
 
 ### Optional Parameters
 
@@ -234,7 +234,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **AccessControlApi** | API context | 
+ **_api** | **AccessControlApi** | API context |
 **id** | **Int64** | Access group ID |
 
 ### Optional Parameters
@@ -269,7 +269,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **AccessControlApi** | API context | 
+ **_api** | **AccessControlApi** | API context |
 **user_name** | **String** | Username |
 
 ### Optional Parameters
@@ -304,7 +304,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **AccessControlApi** | API context | 
+ **_api** | **AccessControlApi** | API context |
 **id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
@@ -363,7 +363,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **AccessControlApi** | API context | 
+ **_api** | **AccessControlApi** | API context |
 **id** | **Int64** | Access group ID |
 **user_name** | **String** | Username |
 
@@ -392,7 +392,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **AccessControlApi** | API context | 
+ **_api** | **AccessControlApi** | API context |
 **id** | **Int64** | Workflow ID |
 **group_id** | **Int64** | Access group ID |
 
@@ -410,4 +410,3 @@ No authorization required
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
-

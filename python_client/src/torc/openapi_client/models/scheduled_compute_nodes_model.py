@@ -98,5 +98,3 @@ class ScheduledComputeNodesModel(BaseModel):
             "workflow_id": obj.get("workflow_id")
         })
         return _obj
-
-

@@ -4,9 +4,9 @@ All URIs are relative to *http://localhost/torc-service/v1*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
-[**create_remote_workers**](RemoteWorkersApi.md#create_remote_workers) | **POST** /workflows/{id}/remote_workers | 
-[**delete_remote_worker**](RemoteWorkersApi.md#delete_remote_worker) | **DELETE** /workflows/{id}/remote_workers/{worker} | 
-[**list_remote_workers**](RemoteWorkersApi.md#list_remote_workers) | **GET** /workflows/{id}/remote_workers | 
+[**create_remote_workers**](RemoteWorkersApi.md#create_remote_workers) | **POST** /workflows/{id}/remote_workers |
+[**delete_remote_worker**](RemoteWorkersApi.md#delete_remote_worker) | **DELETE** /workflows/{id}/remote_workers/{worker} |
+[**list_remote_workers**](RemoteWorkersApi.md#list_remote_workers) | **GET** /workflows/{id}/remote_workers |
 
 
 # **create_remote_workers**
@@ -19,7 +19,7 @@ Method | HTTP request | Description
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **RemoteWorkersApi** | API context | 
+ **_api** | **RemoteWorkersApi** | API context |
 **id** | **Int64** | Workflow ID |
 **request_body** | [**Vector{String}**](String.md) |  |
 
@@ -48,7 +48,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **RemoteWorkersApi** | API context | 
+ **_api** | **RemoteWorkersApi** | API context |
 **id** | **Int64** | Workflow ID |
 **worker** | **String** | Worker address |
 
@@ -77,7 +77,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **RemoteWorkersApi** | API context | 
+ **_api** | **RemoteWorkersApi** | API context |
 **id** | **Int64** | Workflow ID |
 
 ### Return type
@@ -94,4 +94,3 @@ No authorization required
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
-

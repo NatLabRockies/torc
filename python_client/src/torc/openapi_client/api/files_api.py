@@ -815,9 +815,9 @@ class FilesApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -1453,41 +1453,41 @@ class FilesApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         if produced_by_job_id is not None:
-            
+
             _query_params.append(('produced_by_job_id', produced_by_job_id))
-            
+
         if offset is not None:
-            
+
             _query_params.append(('offset', offset))
-            
+
         if limit is not None:
-            
+
             _query_params.append(('limit', limit))
-            
+
         if sort_by is not None:
-            
+
             _query_params.append(('sort_by', sort_by))
-            
+
         if reverse_sort is not None:
-            
+
             _query_params.append(('reverse_sort', reverse_sort))
-            
+
         if name is not None:
-            
+
             _query_params.append(('name', name))
-            
+
         if path is not None:
-            
+
             _query_params.append(('path', path))
-            
+
         if is_output is not None:
-            
+
             _query_params.append(('is_output', is_output))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -1814,5 +1814,3 @@ class FilesApi:
             _host=_host,
             _request_auth=_request_auth
         )
-
-

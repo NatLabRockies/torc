@@ -83,5 +83,3 @@ class MessageResponse(BaseModel):
             "message": obj.get("message")
         })
         return _obj
-
-

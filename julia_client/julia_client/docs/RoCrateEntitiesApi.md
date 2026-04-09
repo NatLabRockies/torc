@@ -4,12 +4,12 @@ All URIs are relative to *http://localhost/torc-service/v1*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
-[**create_ro_crate_entity**](RoCrateEntitiesApi.md#create_ro_crate_entity) | **POST** /ro_crate_entities | 
-[**delete_ro_crate_entities**](RoCrateEntitiesApi.md#delete_ro_crate_entities) | **DELETE** /workflows/{id}/ro_crate_entities | 
-[**delete_ro_crate_entity**](RoCrateEntitiesApi.md#delete_ro_crate_entity) | **DELETE** /ro_crate_entities/{id} | 
-[**get_ro_crate_entity**](RoCrateEntitiesApi.md#get_ro_crate_entity) | **GET** /ro_crate_entities/{id} | 
-[**list_ro_crate_entities**](RoCrateEntitiesApi.md#list_ro_crate_entities) | **GET** /workflows/{id}/ro_crate_entities | 
-[**update_ro_crate_entity**](RoCrateEntitiesApi.md#update_ro_crate_entity) | **PUT** /ro_crate_entities/{id} | 
+[**create_ro_crate_entity**](RoCrateEntitiesApi.md#create_ro_crate_entity) | **POST** /ro_crate_entities |
+[**delete_ro_crate_entities**](RoCrateEntitiesApi.md#delete_ro_crate_entities) | **DELETE** /workflows/{id}/ro_crate_entities |
+[**delete_ro_crate_entity**](RoCrateEntitiesApi.md#delete_ro_crate_entity) | **DELETE** /ro_crate_entities/{id} |
+[**get_ro_crate_entity**](RoCrateEntitiesApi.md#get_ro_crate_entity) | **GET** /ro_crate_entities/{id} |
+[**list_ro_crate_entities**](RoCrateEntitiesApi.md#list_ro_crate_entities) | **GET** /workflows/{id}/ro_crate_entities |
+[**update_ro_crate_entity**](RoCrateEntitiesApi.md#update_ro_crate_entity) | **PUT** /ro_crate_entities/{id} |
 
 
 # **create_ro_crate_entity**
@@ -22,7 +22,7 @@ Method | HTTP request | Description
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **RoCrateEntitiesApi** | API context | 
+ **_api** | **RoCrateEntitiesApi** | API context |
 **ro_crate_entity_model** | [**RoCrateEntityModel**](RoCrateEntityModel.md) |  |
 
 ### Return type
@@ -50,7 +50,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **RoCrateEntitiesApi** | API context | 
+ **_api** | **RoCrateEntitiesApi** | API context |
 **id** | **Int64** | Workflow ID |
 
 ### Return type
@@ -78,7 +78,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **RoCrateEntitiesApi** | API context | 
+ **_api** | **RoCrateEntitiesApi** | API context |
 **id** | **Int64** | Entity ID |
 
 ### Return type
@@ -106,7 +106,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **RoCrateEntitiesApi** | API context | 
+ **_api** | **RoCrateEntitiesApi** | API context |
 **id** | **Int64** | Entity ID |
 
 ### Return type
@@ -134,7 +134,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **RoCrateEntitiesApi** | API context | 
+ **_api** | **RoCrateEntitiesApi** | API context |
 **id** | **Int64** | Workflow ID |
 
 ### Optional Parameters
@@ -171,7 +171,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **RoCrateEntitiesApi** | API context | 
+ **_api** | **RoCrateEntitiesApi** | API context |
 **id** | **Int64** | Entity ID |
 **ro_crate_entity_model** | [**RoCrateEntityModel**](RoCrateEntityModel.md) |  |
 
@@ -189,4 +189,3 @@ No authorization required
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
-

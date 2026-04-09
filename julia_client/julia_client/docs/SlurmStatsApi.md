@@ -4,8 +4,8 @@ All URIs are relative to *http://localhost/torc-service/v1*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
-[**create_slurm_stats**](SlurmStatsApi.md#create_slurm_stats) | **POST** /slurm_stats | 
-[**list_slurm_stats**](SlurmStatsApi.md#list_slurm_stats) | **GET** /slurm_stats | 
+[**create_slurm_stats**](SlurmStatsApi.md#create_slurm_stats) | **POST** /slurm_stats |
+[**list_slurm_stats**](SlurmStatsApi.md#list_slurm_stats) | **GET** /slurm_stats |
 
 
 # **create_slurm_stats**
@@ -18,7 +18,7 @@ Method | HTTP request | Description
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **SlurmStatsApi** | API context | 
+ **_api** | **SlurmStatsApi** | API context |
 **slurm_stats_model** | [**SlurmStatsModel**](SlurmStatsModel.md) |  |
 
 ### Return type
@@ -46,7 +46,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **SlurmStatsApi** | API context | 
+ **_api** | **SlurmStatsApi** | API context |
 **workflow_id** | **Int64** |  |
 
 ### Optional Parameters
@@ -73,4 +73,3 @@ No authorization required
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
-

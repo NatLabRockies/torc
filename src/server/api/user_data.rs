@@ -231,7 +231,7 @@ where
         // This will cascade delete associated job input/output relationships
         let result = match sqlx::query!(
             r#"
-            DELETE FROM user_data 
+            DELETE FROM user_data
             WHERE workflow_id = $1
             "#,
             workflow_id
@@ -648,7 +648,7 @@ where
         // This will cascade delete associated job input/output relationships
         let result = match sqlx::query!(
             r#"
-            DELETE FROM user_data 
+            DELETE FROM user_data
             WHERE id = $1
             "#,
             id

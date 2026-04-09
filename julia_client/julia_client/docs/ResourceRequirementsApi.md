@@ -4,12 +4,12 @@ All URIs are relative to *http://localhost/torc-service/v1*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
-[**create_resource_requirements**](ResourceRequirementsApi.md#create_resource_requirements) | **POST** /resource_requirements | 
-[**delete_resource_requirement**](ResourceRequirementsApi.md#delete_resource_requirement) | **DELETE** /resource_requirements/{id} | 
-[**delete_resource_requirements**](ResourceRequirementsApi.md#delete_resource_requirements) | **DELETE** /resource_requirements | 
-[**get_resource_requirements**](ResourceRequirementsApi.md#get_resource_requirements) | **GET** /resource_requirements/{id} | 
-[**list_resource_requirements**](ResourceRequirementsApi.md#list_resource_requirements) | **GET** /resource_requirements | 
-[**update_resource_requirements**](ResourceRequirementsApi.md#update_resource_requirements) | **PUT** /resource_requirements/{id} | 
+[**create_resource_requirements**](ResourceRequirementsApi.md#create_resource_requirements) | **POST** /resource_requirements |
+[**delete_resource_requirement**](ResourceRequirementsApi.md#delete_resource_requirement) | **DELETE** /resource_requirements/{id} |
+[**delete_resource_requirements**](ResourceRequirementsApi.md#delete_resource_requirements) | **DELETE** /resource_requirements |
+[**get_resource_requirements**](ResourceRequirementsApi.md#get_resource_requirements) | **GET** /resource_requirements/{id} |
+[**list_resource_requirements**](ResourceRequirementsApi.md#list_resource_requirements) | **GET** /resource_requirements |
+[**update_resource_requirements**](ResourceRequirementsApi.md#update_resource_requirements) | **PUT** /resource_requirements/{id} |
 
 
 # **create_resource_requirements**
@@ -22,7 +22,7 @@ Method | HTTP request | Description
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **ResourceRequirementsApi** | API context | 
+ **_api** | **ResourceRequirementsApi** | API context |
 **resource_requirements_model** | [**ResourceRequirementsModel**](ResourceRequirementsModel.md) |  |
 
 ### Return type
@@ -50,7 +50,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **ResourceRequirementsApi** | API context | 
+ **_api** | **ResourceRequirementsApi** | API context |
 **id** | **Int64** | Resource requirements ID |
 
 ### Return type
@@ -78,7 +78,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **ResourceRequirementsApi** | API context | 
+ **_api** | **ResourceRequirementsApi** | API context |
 **workflow_id** | **Int64** |  |
 
 ### Return type
@@ -106,7 +106,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **ResourceRequirementsApi** | API context | 
+ **_api** | **ResourceRequirementsApi** | API context |
 **id** | **Int64** | Resource requirements ID |
 
 ### Return type
@@ -134,7 +134,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **ResourceRequirementsApi** | API context | 
+ **_api** | **ResourceRequirementsApi** | API context |
 **workflow_id** | **Int64** |  |
 
 ### Optional Parameters
@@ -178,7 +178,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **ResourceRequirementsApi** | API context | 
+ **_api** | **ResourceRequirementsApi** | API context |
 **id** | **Int64** | Resource requirements ID |
 **resource_requirements_model** | [**ResourceRequirementsModel**](ResourceRequirementsModel.md) |  |
 
@@ -196,4 +196,3 @@ No authorization required
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
-

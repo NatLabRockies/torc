@@ -295,13 +295,13 @@ class UserDataApi:
         # process the path parameters
         # process the query parameters
         if consumer_job_id is not None:
-            
+
             _query_params.append(('consumer_job_id', consumer_job_id))
-            
+
         if producer_job_id is not None:
-            
+
             _query_params.append(('producer_job_id', producer_job_id))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -582,9 +582,9 @@ class UserDataApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -1486,41 +1486,41 @@ class UserDataApi:
         # process the path parameters
         # process the query parameters
         if workflow_id is not None:
-            
+
             _query_params.append(('workflow_id', workflow_id))
-            
+
         if consumer_job_id is not None:
-            
+
             _query_params.append(('consumer_job_id', consumer_job_id))
-            
+
         if producer_job_id is not None:
-            
+
             _query_params.append(('producer_job_id', producer_job_id))
-            
+
         if offset is not None:
-            
+
             _query_params.append(('offset', offset))
-            
+
         if limit is not None:
-            
+
             _query_params.append(('limit', limit))
-            
+
         if sort_by is not None:
-            
+
             _query_params.append(('sort_by', sort_by))
-            
+
         if reverse_sort is not None:
-            
+
             _query_params.append(('reverse_sort', reverse_sort))
-            
+
         if name is not None:
-            
+
             _query_params.append(('name', name))
-            
+
         if is_ephemeral is not None:
-            
+
             _query_params.append(('is_ephemeral', is_ephemeral))
-            
+
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -1847,5 +1847,3 @@ class UserDataApi:
             _host=_host,
             _request_auth=_request_auth
         )
-
-

@@ -48,6 +48,24 @@ done
 # Pipe-separated, no-header mode (used by collect_sacct_stats in async_cli_command.rs)
 # Format: JobName,MaxRSS,MaxVMSize,MaxDiskRead,MaxDiskWrite,AveCPU,NodeList
 if $PIPE_SEPARATED && $NO_HEADER; then
+    if [ "$TORC_FAKE_SACCT_STAGE_MODE" = "partial_then_full" ]; then
+        ATTEMPT_FILE="${TORC_FAKE_SACCT_STAGE_FILE:-${TMPDIR:-/tmp}/fake_sacct_attempt.txt}"
+        ATTEMPT=0
+        if [ -f "$ATTEMPT_FILE" ]; then
+            ATTEMPT=$(cat "$ATTEMPT_FILE" 2>/dev/null || echo 0)
+        fi
+        ATTEMPT=$((ATTEMPT + 1))
+        printf '%s\n' "$ATTEMPT" > "$ATTEMPT_FILE"
+
+        echo "batch|1024K|2048K|100M|50M|00:00:01|node001|COMPLETED"
+        if [ "$ATTEMPT" -eq 1 ]; then
+            echo "wf1_j1_r1_a1||||||node001|COMPLETED"
+        else
+            echo "wf1_j1_r1_a1|512K|1024K|50M|25M|00:00:01|node001|COMPLETED"
+        fi
+        exit 0
+    fi
+
     # Return fake step records for any wf*_j*_r*_a* step names the runner asks about.
     # The runner queries by slurm_job_id and filters by step_name in code.
     # We return a batch step plus generic srun step records with mock accounting data.

@@ -580,7 +580,7 @@ impl FilesApiImpl {
             INNER JOIN job j ON jif.job_id = j.id
             WHERE j.workflow_id = $1
             AND jif.file_id NOT IN (
-                SELECT jof.file_id 
+                SELECT jof.file_id
                 FROM job_output_file jof
             )
             "#,

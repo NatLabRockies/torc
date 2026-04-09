@@ -845,14 +845,52 @@ pub(crate) struct SacctStats {
     pub(crate) state: Option<String>,
 }
 
-fn sacct_stats_have_useful_data(stats: &SacctStats) -> bool {
+fn sacct_stats_have_accounting_data(stats: &SacctStats) -> bool {
     stats.max_rss_bytes.is_some()
         || stats.max_vm_size_bytes.is_some()
         || stats.max_disk_read_bytes.is_some()
         || stats.max_disk_write_bytes.is_some()
         || stats.ave_cpu_seconds.is_some()
-        || stats.node_list.is_some()
-        || stats.state.is_some()
+}
+
+fn merge_sacct_stats(existing: Option<SacctStats>, candidate: SacctStats) -> SacctStats {
+    let Some(mut merged) = existing else {
+        return candidate;
+    };
+
+    if candidate.max_rss_bytes.is_some() {
+        merged.max_rss_bytes = candidate.max_rss_bytes;
+    }
+    if candidate.max_vm_size_bytes.is_some() {
+        merged.max_vm_size_bytes = candidate.max_vm_size_bytes;
+    }
+    if candidate.max_disk_read_bytes.is_some() {
+        merged.max_disk_read_bytes = candidate.max_disk_read_bytes;
+    }
+    if candidate.max_disk_write_bytes.is_some() {
+        merged.max_disk_write_bytes = candidate.max_disk_write_bytes;
+    }
+    if candidate.ave_cpu_seconds.is_some() {
+        merged.ave_cpu_seconds = candidate.ave_cpu_seconds;
+    }
+    if candidate.node_list.is_some() {
+        merged.node_list = candidate.node_list;
+    }
+    if candidate.state.is_some() {
+        merged.state = candidate.state;
+    }
+
+    merged
+}
+
+fn sacct_retry_delay() -> std::time::Duration {
+    if let Ok(ms) = std::env::var("TORC_SACCT_RETRY_DELAY_MS")
+        && let Ok(ms) = ms.parse::<u64>()
+    {
+        return std::time::Duration::from_millis(ms);
+    }
+
+    std::time::Duration::from_secs(5)
 }
 
 /// Convert a `std::process::ExitStatus` to a return code.
@@ -893,7 +931,7 @@ pub(crate) fn collect_sacct_stats_for_steps(
     expected_step_names: &HashSet<String>,
 ) -> HashMap<String, SacctStats> {
     const MAX_SACCT_ATTEMPTS: u32 = 6;
-    const SACCT_RETRY_DELAY: std::time::Duration = std::time::Duration::from_secs(5);
+    let sacct_retry_delay = sacct_retry_delay();
     let mut collected = HashMap::new();
 
     if expected_step_names.is_empty() {
@@ -906,7 +944,7 @@ pub(crate) fn collect_sacct_stats_for_steps(
     for attempt in 1..=MAX_SACCT_ATTEMPTS {
         // slurmdbd may not have written the step record yet; wait before retries.
         if attempt > 1 {
-            std::thread::sleep(SACCT_RETRY_DELAY);
+            std::thread::sleep(sacct_retry_delay);
         }
 
         let mut sacct_cmd = std::process::Command::new(&sacct_binary);
@@ -971,7 +1009,6 @@ pub(crate) fn collect_sacct_stats_for_steps(
             stdout.as_ref()
         );
 
-        let mut found_this_attempt = HashMap::new();
         for line in stdout.lines() {
             let fields: Vec<&str> = line.split('|').collect();
             if fields.len() < 2 {
@@ -981,39 +1018,40 @@ pub(crate) fn collect_sacct_stats_for_steps(
             if !expected_step_names.contains(step_name) {
                 continue;
             }
-            if let Some(stats) = parse_sacct_line(line, step_name)
-                && (sacct_stats_have_useful_data(&stats) || attempt == MAX_SACCT_ATTEMPTS)
-            {
-                found_this_attempt.insert(step_name.to_string(), stats);
+            if let Some(stats) = parse_sacct_line(line, step_name) {
+                let existing = collected.remove(step_name);
+                collected.insert(step_name.to_string(), merge_sacct_stats(existing, stats));
             }
         }
 
-        collected.extend(found_this_attempt);
-
-        let missing_steps: Vec<&String> = expected_step_names
+        let missing_or_incomplete_steps: Vec<&String> = expected_step_names
             .iter()
-            .filter(|step_name| !collected.contains_key(*step_name))
+            .filter(|step_name| {
+                !collected
+                    .get(*step_name)
+                    .is_some_and(sacct_stats_have_accounting_data)
+            })
             .collect();
-        if missing_steps.is_empty() {
+        if missing_or_incomplete_steps.is_empty() {
             return collected;
         }
 
         if attempt < MAX_SACCT_ATTEMPTS {
             debug!(
-                "sacct missing {} step(s) for allocation {} (attempt {}/{}): {:?}",
-                missing_steps.len(),
+                "sacct still waiting on {} step(s) for allocation {} (attempt {}/{}): {:?}",
+                missing_or_incomplete_steps.len(),
                 slurm_job_id,
                 attempt,
                 MAX_SACCT_ATTEMPTS,
-                missing_steps
+                missing_or_incomplete_steps
             );
         } else {
             warn!(
-                "sacct missing {} step(s) for allocation {} after {} attempts: {:?}",
-                missing_steps.len(),
+                "sacct still missing accounting data for {} step(s) for allocation {} after {} attempts: {:?}",
+                missing_or_incomplete_steps.len(),
                 slurm_job_id,
                 MAX_SACCT_ATTEMPTS,
-                missing_steps
+                missing_or_incomplete_steps
             );
             if !collected.is_empty() {
                 return collected;
@@ -1094,6 +1132,7 @@ mod tests {
     use super::*;
     use serial_test::serial;
     use std::path::PathBuf;
+    use tempfile::NamedTempFile;
 
     fn fake_sacct_path() -> String {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -1203,6 +1242,40 @@ mod tests {
 
         unsafe {
             std::env::remove_var("TORC_FAKE_SACCT_FAIL");
+            std::env::remove_var("TORC_FAKE_SACCT");
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_collect_sacct_stats_for_steps_retries_until_accounting_fields_arrive() {
+        let attempt_file = NamedTempFile::new().expect("Failed to create temp file");
+
+        unsafe {
+            std::env::set_var("TORC_FAKE_SACCT", fake_sacct_path());
+            std::env::set_var("TORC_FAKE_SACCT_STAGE_MODE", "partial_then_full");
+            std::env::set_var(
+                "TORC_FAKE_SACCT_STAGE_FILE",
+                attempt_file.path().to_string_lossy().to_string(),
+            );
+            std::env::set_var("TORC_SACCT_RETRY_DELAY_MS", "1");
+        }
+
+        let expected = HashSet::from(["wf1_j1_r1_a1".to_string()]);
+        let stats = collect_sacct_stats_for_steps("12345", &expected);
+        let step = stats
+            .get("wf1_j1_r1_a1")
+            .expect("Expected staged sacct row to be collected");
+
+        assert_eq!(step.max_rss_bytes, Some(512 * 1024));
+        assert_eq!(step.ave_cpu_seconds, Some(1.0));
+        assert_eq!(step.node_list, Some("node001".to_string()));
+        assert_eq!(step.state, Some("COMPLETED".to_string()));
+
+        unsafe {
+            std::env::remove_var("TORC_SACCT_RETRY_DELAY_MS");
+            std::env::remove_var("TORC_FAKE_SACCT_STAGE_FILE");
+            std::env::remove_var("TORC_FAKE_SACCT_STAGE_MODE");
             std::env::remove_var("TORC_FAKE_SACCT");
         }
     }

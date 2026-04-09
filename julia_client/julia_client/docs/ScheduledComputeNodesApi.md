@@ -4,12 +4,12 @@ All URIs are relative to *http://localhost/torc-service/v1*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
-[**create_scheduled_compute_node**](ScheduledComputeNodesApi.md#create_scheduled_compute_node) | **POST** /scheduled_compute_nodes | 
-[**delete_scheduled_compute_node**](ScheduledComputeNodesApi.md#delete_scheduled_compute_node) | **DELETE** /scheduled_compute_nodes/{id} | 
-[**delete_scheduled_compute_nodes**](ScheduledComputeNodesApi.md#delete_scheduled_compute_nodes) | **DELETE** /scheduled_compute_nodes | 
-[**get_scheduled_compute_node**](ScheduledComputeNodesApi.md#get_scheduled_compute_node) | **GET** /scheduled_compute_nodes/{id} | 
-[**list_scheduled_compute_nodes**](ScheduledComputeNodesApi.md#list_scheduled_compute_nodes) | **GET** /scheduled_compute_nodes | 
-[**update_scheduled_compute_node**](ScheduledComputeNodesApi.md#update_scheduled_compute_node) | **PUT** /scheduled_compute_nodes/{id} | 
+[**create_scheduled_compute_node**](ScheduledComputeNodesApi.md#create_scheduled_compute_node) | **POST** /scheduled_compute_nodes |
+[**delete_scheduled_compute_node**](ScheduledComputeNodesApi.md#delete_scheduled_compute_node) | **DELETE** /scheduled_compute_nodes/{id} |
+[**delete_scheduled_compute_nodes**](ScheduledComputeNodesApi.md#delete_scheduled_compute_nodes) | **DELETE** /scheduled_compute_nodes |
+[**get_scheduled_compute_node**](ScheduledComputeNodesApi.md#get_scheduled_compute_node) | **GET** /scheduled_compute_nodes/{id} |
+[**list_scheduled_compute_nodes**](ScheduledComputeNodesApi.md#list_scheduled_compute_nodes) | **GET** /scheduled_compute_nodes |
+[**update_scheduled_compute_node**](ScheduledComputeNodesApi.md#update_scheduled_compute_node) | **PUT** /scheduled_compute_nodes/{id} |
 
 
 # **create_scheduled_compute_node**
@@ -22,7 +22,7 @@ Method | HTTP request | Description
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **ScheduledComputeNodesApi** | API context | 
+ **_api** | **ScheduledComputeNodesApi** | API context |
 **scheduled_compute_nodes_model** | [**ScheduledComputeNodesModel**](ScheduledComputeNodesModel.md) |  |
 
 ### Return type
@@ -50,7 +50,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **ScheduledComputeNodesApi** | API context | 
+ **_api** | **ScheduledComputeNodesApi** | API context |
 **id** | **Int64** | Scheduled compute node ID |
 
 ### Return type
@@ -78,7 +78,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **ScheduledComputeNodesApi** | API context | 
+ **_api** | **ScheduledComputeNodesApi** | API context |
 **workflow_id** | **Int64** |  |
 
 ### Return type
@@ -106,7 +106,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **ScheduledComputeNodesApi** | API context | 
+ **_api** | **ScheduledComputeNodesApi** | API context |
 **id** | **Int64** | ID of the scheduled_compute_nodes record |
 
 ### Return type
@@ -134,7 +134,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **ScheduledComputeNodesApi** | API context | 
+ **_api** | **ScheduledComputeNodesApi** | API context |
 **workflow_id** | **Int64** |  |
 
 ### Optional Parameters
@@ -174,7 +174,7 @@ No authorization required
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **_api** | **ScheduledComputeNodesApi** | API context | 
+ **_api** | **ScheduledComputeNodesApi** | API context |
 **id** | **Int64** | Scheduled compute node ID |
 **scheduled_compute_nodes_model** | [**ScheduledComputeNodesModel**](ScheduledComputeNodesModel.md) |  |
 
@@ -192,4 +192,3 @@ No authorization required
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
-
