@@ -129,6 +129,7 @@ pub fn build_file_entity(
 /// Build an RO-Crate File entity with provenance linking to a CreateAction.
 ///
 /// For output files, includes `prov:wasGeneratedBy` linking to the job's CreateAction entity.
+#[allow(clippy::too_many_arguments)]
 pub fn build_file_entity_with_provenance(
     workflow_id: i64,
     run_id: i64,
@@ -479,6 +480,7 @@ pub fn create_ro_crate_entity_for_file(
 ///
 /// This is a non-blocking operation - warnings are logged but errors don't fail
 /// the calling operation.
+#[allow(clippy::too_many_arguments)]
 pub fn create_ro_crate_entity_for_output_file(
     config: &Configuration,
     workflow_id: i64,
