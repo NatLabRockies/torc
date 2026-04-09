@@ -979,6 +979,18 @@ impl JobRunner {
             job_id
         );
 
+        crate::client::ro_crate_utils::create_workflow_provenance_entities(
+            &self.config,
+            self.workflow_id,
+            self.run_id,
+            &self.workflow.name,
+        );
+        crate::client::ro_crate_utils::create_software_entities(
+            &self.config,
+            self.workflow_id,
+            self.run_id,
+        );
+
         // Fetch the job model to get job name for CreateAction
         let job = match self.send_with_retries(|| default_api::get_job(&self.config, job_id)) {
             Ok(job) => job,
@@ -994,6 +1006,25 @@ impl JobRunner {
         // Use run_id as the attempt_id for the CreateAction
         let attempt_id = self.run_id;
 
+        let input_file_paths: Vec<String> = job
+            .input_file_ids
+            .clone()
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|file_id| {
+                match self.send_with_retries(|| default_api::get_file(&self.config, file_id)) {
+                    Ok(file) => Some(file.path),
+                    Err(e) => {
+                        warn!(
+                            "Could not fetch input file {} for RO-Crate creation on job {}: {}",
+                            file_id, job_id, e
+                        );
+                        None
+                    }
+                }
+            })
+            .collect();
+
         // Collect output file paths for the CreateAction
         let output_file_paths: Vec<String> = output_files.iter().map(|f| f.path.clone()).collect();
 
@@ -1004,6 +1035,7 @@ impl JobRunner {
             self.run_id,
             &job,
             attempt_id,
+            &input_file_paths,
             &output_file_paths,
         );
 
@@ -1020,6 +1052,7 @@ impl JobRunner {
                 content_size,
                 job_id,
                 attempt_id,
+                &input_file_paths,
             );
         }
     }

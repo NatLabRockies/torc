@@ -36,8 +36,10 @@ When automatic generation is enabled:
 
 - **Input files** (files that exist on disk) get File entities created during workflow
   initialization
-- **Output files** get File entities with provenance (`wasGeneratedBy`) created when jobs complete
-- **Jobs** get CreateAction entities linking to their output files
+- **Output files** get File entities with provenance (`prov:wasGeneratedBy`) created when jobs
+  complete
+- **Jobs** get CreateAction entities linking inputs, outputs, plan, and run metadata
+- **Workflow runs** get `#torc-workflow` and `#torc-run-{run_id}` provenance entities
 
 After running the workflow, export the metadata:
 
@@ -50,10 +52,11 @@ The exported document includes complete provenance:
 ```json
 {
   "@id": "data/output.csv",
-  "@type": "File",
+  "@type": ["File", "prov:Entity"],
   "name": "output.csv",
   "encodingFormat": "text/csv",
-  "wasGeneratedBy": { "@id": "#job-1-attempt-1" }
+  "prov:wasGeneratedBy": { "@id": "#job-1-attempt-1" },
+  "prov:wasAttributedTo": { "@id": "#torc-run-1" }
 }
 ```
 
@@ -86,7 +89,7 @@ Each RO-Crate entity has:
 | `file_id`   | Optional link to a Torc file record                                           |
 
 Entities are stored per-workflow. The `export` command assembles them into a complete RO-Crate
-document with the required metadata descriptor and root dataset.
+document with the required metadata descriptor, root dataset, and PROV-aware context.
 
 ## Creating Entities
 
@@ -300,7 +303,10 @@ The exported document has this structure:
 
 ```json
 {
-  "@context": "https://w3id.org/ro/crate/1.1/context",
+  "@context": [
+    "https://w3id.org/ro/crate/1.1/context",
+    { "prov": "http://www.w3.org/ns/prov#" }
+  ],
   "@graph": [
     {
       "@id": "ro-crate-metadata.json",
@@ -312,6 +318,7 @@ The exported document has this structure:
       "@id": "./",
       "@type": "Dataset",
       "name": "my_workflow",
+      "localEvidenceGraph": {"@id": "provenance-graph.html"},
       "hasPart": [
         {"@id": "data/output.parquet"},
         {"@id": "https://example.com/simulation/v2.1"}
@@ -319,13 +326,14 @@ The exported document has this structure:
     },
     {
       "@id": "data/output.parquet",
-      "@type": "File",
+      "@type": ["File", "prov:Entity"],
       "name": "Simulation Output",
-      "encodingFormat": "application/x-parquet"
+      "encodingFormat": "application/x-parquet",
+      "prov:wasGeneratedBy": {"@id": "#job-1-attempt-1"}
     },
     {
       "@id": "https://example.com/simulation/v2.1",
-      "@type": "SoftwareApplication",
+      "@type": ["SoftwareApplication", "prov:SoftwareAgent"],
       "name": "My Simulation",
       "version": "2.1.0"
     }
@@ -333,8 +341,8 @@ The exported document has this structure:
 }
 ```
 
-The `@id` and `@type` fields are always set from the entity record, overriding any values in the
-metadata JSON.
+Torc preserves any explicit `@id` and `@type` already present in the stored metadata. If either
+field is missing, the exporter fills it in from the entity record.
 
 ## Workflow Export/Import
 

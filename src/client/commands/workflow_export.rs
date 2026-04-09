@@ -229,7 +229,7 @@ impl IdMappings {
     ///
     /// This handles:
     /// - entity_id patterns like `#job-{old_id}-attempt-{n}`
-    /// - metadata JSON containing `wasGeneratedBy: {"@id": "#job-{old_id}-attempt-{n}"}`
+    /// - metadata JSON containing `prov:wasGeneratedBy: {"@id": "#job-{old_id}-attempt-{n}"}`
     ///
     /// Returns the updated (entity_id, metadata) tuple.
     pub fn remap_ro_crate_job_ids(&self, entity_id: &str, metadata: &str) -> (String, String) {
@@ -291,8 +291,9 @@ mod tests {
         let mut mappings = IdMappings::new();
         mappings.jobs.insert(42, 99);
 
-        // Test wasGeneratedBy in metadata
-        let metadata = r##"{"@id": "output.csv", "wasGeneratedBy": {"@id": "#job-42-attempt-1"}}"##;
+        // Test prov:wasGeneratedBy in metadata
+        let metadata =
+            r##"{"@id": "output.csv", "prov:wasGeneratedBy": {"@id": "#job-42-attempt-1"}}"##;
         let (_, new_metadata) = mappings.remap_ro_crate_job_ids("output.csv", metadata);
         assert!(new_metadata.contains("#job-99-attempt-1"));
         assert!(!new_metadata.contains("#job-42-attempt-1"));

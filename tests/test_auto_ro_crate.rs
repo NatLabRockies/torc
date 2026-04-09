@@ -231,7 +231,8 @@ fn test_auto_ro_crate_input_files_on_initialize(start_server: &ServerProcess) {
     // Parse and verify metadata
     let metadata: serde_json::Value =
         serde_json::from_str(&entity.metadata).expect("Failed to parse entity metadata");
-    assert_eq!(metadata["@type"], "File");
+    assert!(metadata["@type"].is_array(), "Should have array @type");
+    assert_eq!(metadata["@type"][0], "File");
     assert!(
         metadata["encodingFormat"].as_str().is_some(),
         "Should have encodingFormat"
@@ -313,10 +314,11 @@ fn test_auto_ro_crate_output_files_on_job_completion(start_server: &ServerProces
     // Parse and verify metadata includes provenance
     let metadata: serde_json::Value =
         serde_json::from_str(&entity.metadata).expect("Failed to parse entity metadata");
-    assert_eq!(metadata["@type"], "File");
+    assert!(metadata["@type"].is_array(), "Should have array @type");
+    assert_eq!(metadata["@type"][0], "File");
     assert!(
-        metadata["wasGeneratedBy"].is_object(),
-        "Output file entity should have wasGeneratedBy for provenance"
+        metadata["prov:wasGeneratedBy"].is_object(),
+        "Output file entity should have prov:wasGeneratedBy for provenance"
     );
 
     // Find the CreateAction entity
@@ -329,11 +331,16 @@ fn test_auto_ro_crate_output_files_on_job_completion(start_server: &ServerProces
     let action = create_action.unwrap();
     let action_metadata: serde_json::Value =
         serde_json::from_str(&action.metadata).expect("Failed to parse CreateAction metadata");
-    assert_eq!(action_metadata["@type"], "CreateAction");
+    assert!(action_metadata["@type"].is_array(), "CreateAction should have array @type");
+    assert_eq!(action_metadata["@type"][0], "CreateAction");
     assert_eq!(action_metadata["name"], "process");
     assert!(
         action_metadata["result"].is_array(),
         "CreateAction should have result array"
+    );
+    assert!(
+        action_metadata["prov:hadPlan"].is_object(),
+        "CreateAction should have prov:hadPlan"
     );
 }
 
@@ -515,7 +522,8 @@ fn test_auto_ro_crate_diamond_workflow(start_server: &ServerProcess) {
     for action in create_actions {
         let metadata: serde_json::Value =
             serde_json::from_str(&action.metadata).expect("Failed to parse CreateAction metadata");
-        assert_eq!(metadata["@type"], "CreateAction");
+        assert!(metadata["@type"].is_array(), "CreateAction should have array @type");
+        assert_eq!(metadata["@type"][0], "CreateAction");
         assert!(
             metadata["name"].as_str().is_some(),
             "CreateAction should have name"
@@ -590,16 +598,12 @@ fn test_auto_ro_crate_second_run_replaces_entities(start_server: &ServerProcess)
         "Should have File entities after first run"
     );
 
-    // Verify run_id=0 in file entity metadata
+    // Verify the first run captured a hash for the input entity
     let input_entity_run1 = items_run1
         .iter()
         .find(|e| e.file_id == Some(input_file_id))
         .expect("Should have input file entity");
     let meta_run1: serde_json::Value = serde_json::from_str(&input_entity_run1.metadata).unwrap();
-    assert_eq!(
-        meta_run1["torc:run_id"], 0,
-        "First run should have run_id=0"
-    );
 
     // Get the SHA256 of the input file from the first run
     let input_sha_run1 = meta_run1["sha256"].as_str().map(|s| s.to_string());
@@ -667,16 +671,12 @@ fn test_auto_ro_crate_second_run_replaces_entities(start_server: &ServerProcess)
         software_entities_run2.len()
     );
 
-    // Verify the input file entity now has run_id=1
+    // Verify the input file entity still exists after the second run
     let input_entity_run2 = items_run2
         .iter()
         .find(|e| e.file_id == Some(input_file_id))
         .expect("Should still have input file entity");
     let meta_run2: serde_json::Value = serde_json::from_str(&input_entity_run2.metadata).unwrap();
-    assert_eq!(
-        meta_run2["torc:run_id"], 1,
-        "Second run should have run_id=1 in input file entity"
-    );
 
     // Verify the SHA256 changed (input file was modified)
     let input_sha_run2 = meta_run2["sha256"].as_str().map(|s| s.to_string());
@@ -687,19 +687,20 @@ fn test_auto_ro_crate_second_run_replaces_entities(start_server: &ServerProcess)
         );
     }
 
-    // Verify the output file entity also has run_id=1
+    // Verify the output file entity was refreshed for the second run
     let output_entity_run2 = items_run2
         .iter()
         .find(|e| e.file_id == Some(output_file_id))
         .expect("Should still have output file entity");
     let output_meta_run2: serde_json::Value =
         serde_json::from_str(&output_entity_run2.metadata).unwrap();
-    assert_eq!(
-        output_meta_run2["torc:run_id"], 1,
-        "Second run should have run_id=1 in output file entity"
-    );
     assert!(
-        output_meta_run2["wasGeneratedBy"].is_object(),
-        "Output file entity should still have wasGeneratedBy provenance"
+        output_meta_run2["prov:wasGeneratedBy"].is_object(),
+        "Output file entity should still have prov:wasGeneratedBy provenance"
+    );
+    assert_eq!(
+        output_meta_run2["prov:wasAttributedTo"]["@id"],
+        "#torc-run-1",
+        "Output file should be attributed to the second workflow run"
     );
 }

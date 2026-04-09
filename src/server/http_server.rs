@@ -4171,6 +4171,16 @@ where
                     "enable_ro_crate is true for workflow {}, creating input file entities",
                     id
                 );
+                if let Err(e) = self
+                    .ro_crate_api
+                    .create_workflow_provenance_entities(id)
+                    .await
+                {
+                    warn!(
+                        "Failed to create workflow-level RO-Crate provenance entities: {}",
+                        e
+                    );
+                }
                 if let Err(e) = self.ro_crate_api.create_entities_for_input_files(id).await {
                     // Non-blocking: log warning but don't fail initialization
                     warn!("Failed to create RO-Crate entities for input files: {}", e);

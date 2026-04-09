@@ -1,9 +1,9 @@
 # RO-Crate Provenance Tracking
 
 Torc supports [Research Object Crate (RO-Crate)](https://www.researchobject.org/ro-crate/), a
-community standard for packaging research data with machine-readable metadata. This enables tracking
-of data provenance—knowing which jobs produced which outputs, what inputs they consumed, and when
-the data was created.
+community standard for packaging research data with machine-readable metadata. This enables
+tracking of data provenance—knowing which jobs produced which outputs, what inputs they consumed,
+and when the data was created.
 
 ## What is RO-Crate?
 
@@ -31,8 +31,9 @@ other research object with JSON-LD properties. Entities can be:
 ### Always recorded (all workflows)
 
 During workflow initialization, Torc creates **SoftwareApplication** entities for the torc binaries
-(server, job runner, etc.) that processed the workflow. These record the software name and version,
-providing a baseline provenance record even when full RO-Crate tracking is not enabled.
+(server, CLI, job runner, etc.) that processed the workflow. In the current model, these are
+written as both `SoftwareApplication` and `prov:SoftwareAgent` so the exported RO-Crate matches the
+data team's PROV-shaped format.
 
 ### When `enable_ro_crate: true`
 
@@ -42,12 +43,15 @@ When you enable RO-Crate on a workflow, Torc additionally creates file and job p
 
 - File entities are created for all **input files** (files that exist on disk)
 - Entities include MIME type inference, file size, and modification date
+- Torc creates workflow-level provenance entities: `#torc-workflow` and `#torc-run-{run_id}`
 
 **When jobs complete successfully:**
 
 - File entities are created for all **output files**
 - CreateAction entities are created for each job (provenance)
-- Output files are linked to their producing job via `wasGeneratedBy`
+- Output files are linked to their producing job via `prov:wasGeneratedBy`
+- Output files are linked to the workflow run via `prov:wasAttributedTo`
+- Output files are linked to file inputs via `prov:wasDerivedFrom`
 
 This creates a complete provenance graph linking inputs → jobs → outputs.
 
@@ -58,13 +62,15 @@ Automatically generated File entities include:
 ```json
 {
   "@id": "data/output.csv",
-  "@type": "File",
+  "@type": ["File", "prov:Entity"],
   "name": "output.csv",
   "encodingFormat": "text/csv",
   "contentSize": 1024,
   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "dateModified": "2024-01-01T00:00:00Z",
-  "wasGeneratedBy": { "@id": "#job-42-attempt-1" }
+  "prov:wasGeneratedBy": { "@id": "#job-42-attempt-1" },
+  "prov:wasAttributedTo": { "@id": "#torc-run-1" },
+  "prov:wasDerivedFrom": { "@id": "data/input.csv" }
 }
 ```
 
@@ -75,12 +81,18 @@ Job provenance is captured as CreateAction entities:
 ```json
 {
   "@id": "#job-42-attempt-1",
-  "@type": "CreateAction",
+  "@type": ["CreateAction", "prov:Activity"],
   "name": "process_data",
-  "instrument": { "@id": "#workflow-123" },
+  "prov:hadPlan": { "@id": "#torc-workflow" },
+  "isPartOf": { "@id": "#torc-run-1" },
+  "instrument": { "@id": "#software-torc-run-1" },
+  "prov:used": { "@id": "data/input.csv" },
   "result": [{ "@id": "data/output.csv" }]
 }
 ```
+
+The exported root dataset also includes `localEvidenceGraph`, and the exported `@context` includes
+the `prov` namespace.
 
 ## Enabling Automatic RO-Crate
 
@@ -111,8 +123,9 @@ workflow is created. Files that exist are marked as inputs; files that don't exi
 After running this workflow:
 
 - `input_data` will have an RO-Crate File entity (created during initialization)
-- `output_data` will have an RO-Crate File entity with `wasGeneratedBy` linking to the job
+- `output_data` will have an RO-Crate File entity with `prov:wasGeneratedBy` linking to the job
 - A CreateAction entity will describe the `process` job execution
+- `#torc-workflow` and `#torc-run-{run_id}` will describe the workflow plan and run activity
 
 ## Dataset Entities for Directories
 
@@ -123,7 +136,8 @@ instead of File entities.
 ### Why Datasets?
 
 - **Efficiency** — One metadata record instead of thousands of File entities
-- **Appropriate granularity** — The directory is the meaningful unit, not individual partition files
+- **Appropriate granularity** — The directory is the meaningful unit, not individual partition
+  files
 - **Integrity verification** — Manifest-based hashing detects changes without reading all file
   contents
 
@@ -149,11 +163,11 @@ Dataset entities include file count, total size, and an optional hash:
 
 Torc supports three hash modes for datasets:
 
-| Mode       | Description                               | Speed   | Detects                            |
-| ---------- | ----------------------------------------- | ------- | ---------------------------------- |
-| `manifest` | Hash of sorted (path, size, mtime) list   | Fast    | File additions, deletions, renames |
-| `content`  | SHA256 of all file contents (Merkle tree) | Slow    | Any content change                 |
-| `none`     | No hash, only file count and size         | Fastest | Nothing (stats only)               |
+| Mode       | Description                      | Speed   | Detects                    |
+| ---------- | -------------------------------- | ------- | -------------------------- |
+| `manifest` | Hash of sorted path/size/mtime   | Fast    | Additions, deletions, move |
+| `content`  | SHA256 of all file contents      | Slow    | Any content change         |
+| `none`     | No hash, only file count and size| Fastest | Nothing                    |
 
 For large datasets, `manifest` mode provides a good balance—it detects structural changes without
 the I/O cost of reading terabytes of data.
@@ -191,8 +205,8 @@ RO-Crate is valuable when you need to:
 | Custom metadata   | Basic (name, type, size, date) | Full control over properties    |
 | External entities | Not created                    | Can add software, datasets, etc |
 
-For most workflows, enable automatic generation and add manual entities only for external references
-(software versions, related datasets, etc.).
+For most workflows, enable automatic generation and add manual entities only for external
+references (software versions, related datasets, etc.).
 
 ## See Also
 

@@ -635,6 +635,14 @@ impl WorkflowManager {
             self.workflow_id
         );
 
+        let run_id = self.get_run_id().unwrap_or(0);
+        crate::client::ro_crate_utils::create_workflow_provenance_entities(
+            &self.config,
+            self.workflow_id,
+            run_id,
+            &workflow.name,
+        );
+
         // Collect all files with st_mtime set (input files)
         let params = FileListParams::new();
         let files_iterator = iter_files(&self.config, self.workflow_id, params);
@@ -660,7 +668,6 @@ impl WorkflowManager {
                 "Creating RO-Crate entities for {} input files",
                 input_files.len()
             );
-            let run_id = self.get_run_id().unwrap_or(0);
             crate::client::ro_crate_utils::create_entities_for_input_files(
                 &self.config,
                 self.workflow_id,
