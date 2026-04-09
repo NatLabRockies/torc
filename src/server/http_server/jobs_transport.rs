@@ -1,5 +1,6 @@
 use super::*;
 use crate::server::api::{EventsApi, JobsApi, ResultsApi, WorkflowsApi};
+use std::collections::HashMap;
 
 #[allow(clippy::too_many_arguments)]
 impl<C> Server<C>
@@ -1000,16 +1001,17 @@ where
             Has::<XSpanIdString>::get(context).0.clone()
         );
 
-        let workflow_exists = sqlx::query("SELECT id FROM workflow WHERE id = $1")
-            .bind(workflow_id)
-            .fetch_optional(&mut *conn)
-            .await
-            .map_err(|e| {
-                error!("Database error checking workflow existence: {}", e);
-                ApiError("Database error".to_string())
-            })?;
+        let workflow_record =
+            sqlx::query("SELECT id, execution_config FROM workflow WHERE id = $1")
+                .bind(workflow_id)
+                .fetch_optional(&mut *conn)
+                .await
+                .map_err(|e| {
+                    error!("Database error checking workflow existence: {}", e);
+                    ApiError("Database error".to_string())
+                })?;
 
-        if workflow_exists.is_none() {
+        let Some(workflow_record) = workflow_record else {
             let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
 
             let error_response = models::ErrorResponse::new(serde_json::json!({
@@ -1018,7 +1020,15 @@ where
             return Ok(ClaimJobsBasedOnResources::NotFoundErrorResponse(
                 error_response,
             ));
-        }
+        };
+
+        let downstream_buffer_multiplier = workflow_record
+            .get::<Option<String>, _>("execution_config")
+            .as_deref()
+            .and_then(|json| {
+                serde_json::from_str::<crate::client::workflow_spec::ExecutionConfig>(json).ok()
+            })
+            .and_then(|config| config.downstream_buffer_multiplier());
 
         let time_limit_seconds = if let Some(ref time_limit) = resources.time_limit {
             match duration_string_to_seconds(time_limit) {
@@ -1134,20 +1144,299 @@ where
         let mut exclusive_nodes = 0i64;
         let mut selected_jobs = Vec::new();
         let mut job_ids_to_update = Vec::new();
+        let mut job_family_cache: HashMap<i64, Vec<DownstreamFamilyKey>> = HashMap::new();
+        let mut family_state_cache: HashMap<DownstreamFamilyKey, Option<DownstreamBufferState>> =
+            HashMap::new();
 
-        fn process_rows(
+        #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+        struct DownstreamFamilyKey {
+            resource_requirements_id: i64,
+            scheduler_id: Option<i64>,
+        }
+
+        #[derive(Clone, Debug)]
+        struct DownstreamBufferState {
+            occupancy: usize,
+            buffer_limit: usize,
+        }
+
+        fn calculate_downstream_capacity(
+            total_cpus: i64,
+            total_memory_bytes: i64,
+            total_gpus: i64,
+            total_nodes: i64,
+            rr_cpus: i64,
+            rr_memory_bytes: i64,
+            rr_gpus: i64,
+            rr_nodes: i64,
+        ) -> usize {
+            let mut capacities = Vec::new();
+            if rr_cpus > 0 {
+                capacities.push(total_cpus / rr_cpus);
+            }
+            if rr_memory_bytes > 0 {
+                capacities.push(total_memory_bytes / rr_memory_bytes);
+            }
+            if rr_gpus > 0 {
+                capacities.push(total_gpus / rr_gpus);
+            }
+            if rr_nodes > 1 {
+                capacities.push(total_nodes / rr_nodes);
+            }
+            capacities.into_iter().min().unwrap_or(0).max(0) as usize
+        }
+
+        async fn load_job_families(
+            conn: &mut sqlx::SqliteConnection,
+            workflow_id: i64,
+            job_id: i64,
+        ) -> Result<Vec<DownstreamFamilyKey>, ApiError> {
+            let rows = sqlx::query(
+                r#"
+                SELECT DISTINCT
+                    downstream.resource_requirements_id AS resource_requirements_id,
+                    downstream.scheduler_id AS scheduler_id
+                FROM job_depends_on dep
+                JOIN job downstream ON downstream.id = dep.job_id
+                WHERE dep.workflow_id = $1
+                AND dep.depends_on_job_id = $2
+                AND downstream.resource_requirements_id IS NOT NULL
+                "#,
+            )
+            .bind(workflow_id)
+            .bind(job_id)
+            .fetch_all(&mut *conn)
+            .await
+            .map_err(|e| {
+                error!(
+                    "Database error loading downstream families workflow_id={} job_id={}: {}",
+                    workflow_id, job_id, e
+                );
+                ApiError("Database error".to_string())
+            })?;
+
+            Ok(rows
+                .into_iter()
+                .map(|row| DownstreamFamilyKey {
+                    resource_requirements_id: row.get("resource_requirements_id"),
+                    scheduler_id: row.get("scheduler_id"),
+                })
+                .collect())
+        }
+
+        async fn load_family_state(
+            conn: &mut sqlx::SqliteConnection,
+            workflow_id: i64,
+            family: &DownstreamFamilyKey,
+            downstream_buffer_multiplier: usize,
+        ) -> Result<Option<DownstreamBufferState>, ApiError> {
+            let rr_row = sqlx::query(
+                r#"
+                SELECT memory_bytes, num_cpus, num_gpus, num_nodes
+                FROM resource_requirements
+                WHERE id = $1
+                "#,
+            )
+            .bind(family.resource_requirements_id)
+            .fetch_optional(&mut *conn)
+            .await
+            .map_err(|e| {
+                error!(
+                    "Database error loading downstream resource requirements rr_id={}: {}",
+                    family.resource_requirements_id, e
+                );
+                ApiError("Database error".to_string())
+            })?;
+
+            let Some(rr_row) = rr_row else {
+                return Ok(None);
+            };
+
+            let capacity_row = if let Some(scheduler_id) = family.scheduler_id {
+                sqlx::query(
+                    r#"
+                    SELECT
+                        COUNT(*) AS active_count,
+                        COALESCE(SUM(num_cpus), 0) AS total_cpus,
+                        COALESCE(SUM(memory_gb), 0.0) AS total_memory_gb,
+                        COALESCE(SUM(num_gpus), 0) AS total_gpus,
+                        COALESCE(SUM(num_nodes), 0) AS total_nodes
+                    FROM compute_node
+                    WHERE workflow_id = $1
+                    AND is_active = 1
+                    AND scheduler_config_id = $2
+                    "#,
+                )
+                .bind(workflow_id)
+                .bind(scheduler_id)
+                .fetch_one(&mut *conn)
+                .await
+            } else {
+                sqlx::query(
+                    r#"
+                    SELECT
+                        COUNT(*) AS active_count,
+                        COALESCE(SUM(num_cpus), 0) AS total_cpus,
+                        COALESCE(SUM(memory_gb), 0.0) AS total_memory_gb,
+                        COALESCE(SUM(num_gpus), 0) AS total_gpus,
+                        COALESCE(SUM(num_nodes), 0) AS total_nodes
+                    FROM compute_node
+                    WHERE workflow_id = $1
+                    AND is_active = 1
+                    "#,
+                )
+                .bind(workflow_id)
+                .fetch_one(&mut *conn)
+                .await
+            }
+            .map_err(|e| {
+                error!(
+                    "Database error loading downstream capacity workflow_id={} family={:?}: {}",
+                    workflow_id, family, e
+                );
+                ApiError("Database error".to_string())
+            })?;
+
+            let active_count: i64 = capacity_row.get("active_count");
+            if active_count == 0 {
+                return Ok(None);
+            }
+
+            let downstream_capacity = calculate_downstream_capacity(
+                capacity_row.get("total_cpus"),
+                (capacity_row.get::<f64, _>("total_memory_gb") * 1024.0 * 1024.0 * 1024.0) as i64,
+                capacity_row.get("total_gpus"),
+                capacity_row.get("total_nodes"),
+                rr_row.get("num_cpus"),
+                rr_row.get("memory_bytes"),
+                rr_row.get("num_gpus"),
+                rr_row.get("num_nodes"),
+            );
+
+            let upstream_status_rows = if let Some(scheduler_id) = family.scheduler_id {
+                sqlx::query(
+                    r#"
+                    SELECT COUNT(DISTINCT upstream.id) AS count
+                    FROM job upstream
+                    JOIN job_depends_on dep ON dep.depends_on_job_id = upstream.id
+                    JOIN job downstream ON downstream.id = dep.job_id
+                    WHERE upstream.workflow_id = $1
+                    AND dep.workflow_id = $1
+                    AND downstream.workflow_id = $1
+                    AND downstream.resource_requirements_id = $2
+                    AND downstream.scheduler_id = $3
+                    AND upstream.status IN ($4, $5)
+                    "#,
+                )
+                .bind(workflow_id)
+                .bind(family.resource_requirements_id)
+                .bind(scheduler_id)
+                .bind(models::JobStatus::Pending.to_int())
+                .bind(models::JobStatus::Running.to_int())
+                .fetch_one(&mut *conn)
+                .await
+            } else {
+                sqlx::query(
+                    r#"
+                    SELECT COUNT(DISTINCT upstream.id) AS count
+                    FROM job upstream
+                    JOIN job_depends_on dep ON dep.depends_on_job_id = upstream.id
+                    JOIN job downstream ON downstream.id = dep.job_id
+                    WHERE upstream.workflow_id = $1
+                    AND dep.workflow_id = $1
+                    AND downstream.workflow_id = $1
+                    AND downstream.resource_requirements_id = $2
+                    AND downstream.scheduler_id IS NULL
+                    AND upstream.status IN ($3, $4)
+                    "#,
+                )
+                .bind(workflow_id)
+                .bind(family.resource_requirements_id)
+                .bind(models::JobStatus::Pending.to_int())
+                .bind(models::JobStatus::Running.to_int())
+                .fetch_one(&mut *conn)
+                .await
+            }
+            .map_err(|e| {
+                error!(
+                    "Database error loading upstream occupancy workflow_id={} family={:?}: {}",
+                    workflow_id, family, e
+                );
+                ApiError("Database error".to_string())
+            })?;
+
+            let downstream_status_rows = if let Some(scheduler_id) = family.scheduler_id {
+                sqlx::query(
+                    r#"
+                    SELECT COUNT(*) AS count
+                    FROM job downstream
+                    WHERE downstream.workflow_id = $1
+                    AND downstream.resource_requirements_id = $2
+                    AND downstream.scheduler_id = $3
+                    AND downstream.status IN ($4, $5, $6)
+                    "#,
+                )
+                .bind(workflow_id)
+                .bind(family.resource_requirements_id)
+                .bind(scheduler_id)
+                .bind(models::JobStatus::Ready.to_int())
+                .bind(models::JobStatus::Pending.to_int())
+                .bind(models::JobStatus::Running.to_int())
+                .fetch_one(&mut *conn)
+                .await
+            } else {
+                sqlx::query(
+                    r#"
+                    SELECT COUNT(*) AS count
+                    FROM job downstream
+                    WHERE downstream.workflow_id = $1
+                    AND downstream.resource_requirements_id = $2
+                    AND downstream.scheduler_id IS NULL
+                    AND downstream.status IN ($3, $4, $5)
+                    "#,
+                )
+                .bind(workflow_id)
+                .bind(family.resource_requirements_id)
+                .bind(models::JobStatus::Ready.to_int())
+                .bind(models::JobStatus::Pending.to_int())
+                .bind(models::JobStatus::Running.to_int())
+                .fetch_one(&mut *conn)
+                .await
+            }
+            .map_err(|e| {
+                error!(
+                    "Database error loading downstream occupancy workflow_id={} family={:?}: {}",
+                    workflow_id, family, e
+                );
+                ApiError("Database error".to_string())
+            })?;
+
+            let occupancy = upstream_status_rows.get::<i64, _>("count")
+                + downstream_status_rows.get::<i64, _>("count");
+            Ok(Some(DownstreamBufferState {
+                occupancy: occupancy.max(0) as usize,
+                buffer_limit: downstream_capacity.saturating_mul(downstream_buffer_multiplier),
+            }))
+        }
+
+        async fn process_rows(
+            conn: &mut sqlx::SqliteConnection,
             rows: Vec<sqlx::sqlite::SqliteRow>,
             per_node_cpus: i64,
             per_node_memory: i64,
             per_node_gpus: i64,
             total_nodes: i64,
             selection_limit: usize,
+            workflow_id: i64,
+            downstream_buffer_multiplier: Option<usize>,
             consumed_memory_bytes: &mut i64,
             consumed_cpus: &mut i64,
             consumed_gpus: &mut i64,
             exclusive_nodes: &mut i64,
             selected_jobs: &mut Vec<models::JobModel>,
             job_ids_to_update: &mut Vec<i64>,
+            job_family_cache: &mut HashMap<i64, Vec<DownstreamFamilyKey>>,
+            family_state_cache: &mut HashMap<DownstreamFamilyKey, Option<DownstreamBufferState>>,
         ) -> Result<(usize, usize), ApiError> {
             let mut rows_scanned = 0usize;
             let mut rows_skipped = 0usize;
@@ -1176,7 +1465,53 @@ where
                         && *consumed_gpus + job_gpus <= shared_capacity_gpus
                 };
 
+                let job_id: i64 = row.get("job_id");
                 if fits {
+                    let downstream_families = if downstream_buffer_multiplier.is_some() {
+                        if let Some(families) = job_family_cache.get(&job_id) {
+                            families.clone()
+                        } else {
+                            let families = load_job_families(conn, workflow_id, job_id).await?;
+                            job_family_cache.insert(job_id, families.clone());
+                            families
+                        }
+                    } else {
+                        Vec::new()
+                    };
+
+                    let mut blocked_by_downstream_buffer = None;
+                    if let Some(multiplier) = downstream_buffer_multiplier {
+                        for family in &downstream_families {
+                            if !family_state_cache.contains_key(family) {
+                                let state =
+                                    load_family_state(conn, workflow_id, family, multiplier)
+                                        .await?;
+                                family_state_cache.insert(family.clone(), state);
+                            }
+
+                            if let Some(Some(state)) = family_state_cache.get(family)
+                                && state.occupancy >= state.buffer_limit
+                            {
+                                blocked_by_downstream_buffer =
+                                    Some((family.clone(), state.occupancy, state.buffer_limit));
+                                break;
+                            }
+                        }
+                    }
+
+                    if let Some((family, occupancy, buffer_limit)) = blocked_by_downstream_buffer {
+                        rows_skipped += 1;
+                        debug!(
+                            "Skipping job {} - downstream buffer full for rr_id={} scheduler_id={:?} ({}/{})",
+                            job_id,
+                            family.resource_requirements_id,
+                            family.scheduler_id,
+                            occupancy,
+                            buffer_limit
+                        );
+                        continue;
+                    }
+
                     if reserved_nodes > 1 {
                         *exclusive_nodes += reserved_nodes;
                     } else {
@@ -1185,7 +1520,12 @@ where
                         *consumed_gpus += job_gpus;
                     }
 
-                    let job_id: i64 = row.get("job_id");
+                    for family in &downstream_families {
+                        if let Some(Some(state)) = family_state_cache.get_mut(family) {
+                            state.occupancy += 1;
+                        }
+                    }
+
                     job_ids_to_update.push(job_id);
 
                     let status = models::JobStatus::from_int(row.get::<i64, _>("status") as i32)
@@ -1254,8 +1594,7 @@ where
 
                     debug!(
                         "Skipping job {} - would exceed resource limits ({})",
-                        row.get::<i64, _>("job_id"),
-                        reason
+                        job_id, reason
                     );
                 }
             }
@@ -1296,19 +1635,26 @@ where
 
             let page_len = rows.len();
             let (rows_scanned, rows_skipped) = match process_rows(
+                &mut conn,
                 rows,
                 per_node_cpus,
                 per_node_memory,
                 per_node_gpus,
                 total_nodes,
                 selection_limit,
+                workflow_id,
+                downstream_buffer_multiplier,
                 &mut consumed_memory_bytes,
                 &mut consumed_cpus,
                 &mut consumed_gpus,
                 &mut exclusive_nodes,
                 &mut selected_jobs,
                 &mut job_ids_to_update,
-            ) {
+                &mut job_family_cache,
+                &mut family_state_cache,
+            )
+            .await
+            {
                 Ok(stats) => stats,
                 Err(err) => {
                     error!("Expected job status to be Ready during resource claim");
@@ -1377,19 +1723,26 @@ where
 
                 let page_len = rows.len();
                 let (rows_scanned, rows_skipped) = match process_rows(
+                    &mut conn,
                     rows,
                     per_node_cpus,
                     per_node_memory,
                     per_node_gpus,
                     total_nodes,
                     selection_limit,
+                    workflow_id,
+                    downstream_buffer_multiplier,
                     &mut consumed_memory_bytes,
                     &mut consumed_cpus,
                     &mut consumed_gpus,
                     &mut exclusive_nodes,
                     &mut selected_jobs,
                     &mut job_ids_to_update,
-                ) {
+                    &mut job_family_cache,
+                    &mut family_state_cache,
+                )
+                .await
+                {
                     Ok(stats) => stats,
                     Err(err) => {
                         error!("Expected job status to be Ready during resource claim");

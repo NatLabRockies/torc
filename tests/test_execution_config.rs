@@ -134,6 +134,18 @@ fn test_execution_config_slurm_worker_mpi_mode_parsing() {
     assert_eq!(config.slurm_worker_mpi_mode, Some(SlurmWorkerMpiMode::None));
 }
 
+#[test]
+fn test_execution_config_downstream_buffer_multiplier_parsing() {
+    let yaml = r#"
+        mode: direct
+        downstream_buffer_multiplier: 5
+    "#;
+    let config: ExecutionConfig = serde_yaml::from_str(yaml).unwrap();
+
+    assert_eq!(config.mode, ExecutionMode::Direct);
+    assert_eq!(config.downstream_buffer_multiplier, Some(5));
+}
+
 // =============================================================================
 // Default value tests
 // =============================================================================
@@ -150,6 +162,7 @@ fn test_execution_config_default_values() {
     assert_eq!(config.timeout_exit_code, None);
     assert_eq!(config.oom_exit_code, None);
     assert_eq!(config.slurm_worker_mpi_mode, None);
+    assert_eq!(config.downstream_buffer_multiplier, None);
     assert_eq!(config.srun_termination_signal, None);
     assert_eq!(config.enable_cpu_bind, None);
 }
@@ -177,6 +190,7 @@ fn test_execution_config_default_accessor_values() {
         config.oom_exit_code(),
         ExecutionConfig::DEFAULT_OOM_EXIT_CODE
     );
+    assert_eq!(config.downstream_buffer_multiplier(), None);
     assert_eq!(config.slurm_worker_mpi_mode(), SlurmWorkerMpiMode::Default);
     assert!(!config.enable_cpu_bind()); // default false
 }
@@ -353,6 +367,7 @@ fn test_execution_config_yaml_roundtrip() {
         timeout_exit_code: Some(152),
         oom_exit_code: Some(137),
         slurm_worker_mpi_mode: Some(SlurmWorkerMpiMode::None),
+        downstream_buffer_multiplier: Some(5),
         srun_termination_signal: None,
         enable_cpu_bind: None,
         staggered_start: None,
@@ -377,6 +392,7 @@ fn test_execution_config_json_roundtrip() {
         timeout_exit_code: None,
         oom_exit_code: None,
         slurm_worker_mpi_mode: None,
+        downstream_buffer_multiplier: None,
         srun_termination_signal: Some("TERM@90".to_string()),
         enable_cpu_bind: Some(true),
         staggered_start: None,
@@ -1603,5 +1619,23 @@ fn test_slurm_worker_mpi_mode_rejected_with_auto_mode(start_server: &ServerProce
                 slurm_worker_mpi_mode: none
         "#,
         "slurm_worker_mpi_mode",
+    );
+}
+
+#[rstest]
+fn test_downstream_buffer_multiplier_zero_rejected(start_server: &ServerProcess) {
+    assert_spec_rejected(
+        &start_server.config,
+        r#"
+            name: downstream_buffer_multiplier_zero_rejected
+            user: test_user
+            jobs:
+              - name: job1
+                command: "echo test"
+            execution_config:
+                mode: direct
+                downstream_buffer_multiplier: 0
+        "#,
+        "downstream_buffer_multiplier",
     );
 }

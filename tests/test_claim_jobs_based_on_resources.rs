@@ -6,6 +6,7 @@ use common::{
 };
 use rstest::rstest;
 use torc::client::apis;
+use torc::client::workflow_spec::ExecutionConfig;
 use torc::models;
 
 #[rstest]
@@ -282,4 +283,123 @@ fn test_claim_jobs_based_on_resources_strict_scheduler_match_controls_fallback(
     let returned_jobs = relaxed.jobs.expect("Server must return jobs array");
     assert_eq!(returned_jobs.len(), 1);
     assert_eq!(returned_jobs[0].name, "scheduler_bound_job");
+}
+
+fn create_downstream_buffer_test_workflow(
+    config: &apis::configuration::Configuration,
+    workflow_name: &str,
+    downstream_buffer_multiplier: u32,
+    setup_job_count: usize,
+) -> i64 {
+    let mut workflow =
+        models::WorkflowModel::new(workflow_name.to_string(), "test_user".to_string());
+    workflow.execution_config = Some(
+        serde_json::to_string(&ExecutionConfig {
+            downstream_buffer_multiplier: Some(downstream_buffer_multiplier),
+            ..Default::default()
+        })
+        .expect("execution config should serialize"),
+    );
+    let created_workflow =
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
+    let workflow_id = created_workflow.id.unwrap();
+
+    let setup_rr =
+        create_test_resource_requirements(config, workflow_id, "setup_rr", 1, 0, 1, "1g", "PT5M");
+    let gpu_rr =
+        create_test_resource_requirements(config, workflow_id, "gpu_rr", 1, 1, 1, "1g", "PT5M");
+
+    for i in 0..setup_job_count {
+        let mut setup =
+            models::JobModel::new(workflow_id, format!("setup_{i}"), format!("echo setup {i}"));
+        setup.resource_requirements_id = Some(setup_rr.id.unwrap());
+        let setup = apis::jobs_api::create_job(config, setup).expect("Failed to create setup job");
+        let setup_id = setup.id.unwrap();
+
+        let mut gpu =
+            models::JobModel::new(workflow_id, format!("gpu_{i}"), format!("echo gpu {i}"));
+        gpu.resource_requirements_id = Some(gpu_rr.id.unwrap());
+        gpu.depends_on_job_ids = Some(vec![setup_id]);
+        apis::jobs_api::create_job(config, gpu).expect("Failed to create gpu job");
+    }
+
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+        .expect("Failed to initialize jobs");
+
+    workflow_id
+}
+
+fn create_active_compute_node(
+    config: &apis::configuration::Configuration,
+    workflow_id: i64,
+    num_cpus: i64,
+    memory_gb: f64,
+    num_gpus: i64,
+) {
+    let mut compute_node = models::ComputeNodeModel::new(
+        workflow_id,
+        "gpu-node".to_string(),
+        std::process::id() as i64,
+        chrono::Utc::now().to_rfc3339(),
+        num_cpus,
+        memory_gb,
+        num_gpus,
+        1,
+        "slurm".to_string(),
+        None,
+    );
+    compute_node.is_active = Some(true);
+    apis::compute_nodes_api::create_compute_node(config, compute_node)
+        .expect("Failed to create active compute node");
+}
+
+#[rstest]
+fn test_claim_jobs_based_on_resources_downstream_buffer_inactive_without_active_compute_nodes(
+    start_server: &ServerProcess,
+) {
+    let config = &start_server.config;
+    let workflow_id =
+        create_downstream_buffer_test_workflow(config, "downstream_buffer_inactive_test", 2, 6);
+
+    let resources = models::ComputeNodesResources::new(6, 6.0, 0, 1);
+    let result =
+        apis::workflows_api::claim_jobs_based_on_resources(config, workflow_id, 6, resources, None)
+            .expect("claim_jobs_based_on_resources should succeed");
+
+    let returned_jobs = result.jobs.expect("Server must return jobs array");
+    assert_eq!(returned_jobs.len(), 6);
+    assert!(
+        returned_jobs
+            .iter()
+            .all(|job| job.name.starts_with("setup_"))
+    );
+}
+
+#[rstest]
+fn test_claim_jobs_based_on_resources_downstream_buffer_uses_active_compute_node_capacity(
+    start_server: &ServerProcess,
+) {
+    let config = &start_server.config;
+    let workflow_id =
+        create_downstream_buffer_test_workflow(config, "downstream_buffer_active_test", 2, 6);
+    create_active_compute_node(config, workflow_id, 8, 8.0, 2);
+
+    let resources = models::ComputeNodesResources::new(6, 6.0, 0, 1);
+    let first = apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        6,
+        resources.clone(),
+        None,
+    )
+    .expect("first claim should succeed");
+    let first_jobs = first.jobs.expect("Server must return jobs array");
+    assert_eq!(first_jobs.len(), 4);
+    assert!(first_jobs.iter().all(|job| job.name.starts_with("setup_")));
+
+    let second =
+        apis::workflows_api::claim_jobs_based_on_resources(config, workflow_id, 6, resources, None)
+            .expect("second claim should succeed");
+    let second_jobs = second.jobs.expect("Server must return jobs array");
+    assert_eq!(second_jobs.len(), 0);
 }

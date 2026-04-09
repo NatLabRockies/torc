@@ -741,6 +741,14 @@ pub struct ExecutionConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub staggered_start: Option<bool>,
 
+    /// Limit how far upstream work may run ahead of an active downstream stage.
+    ///
+    /// When set, Torc computes the downstream stage's live concurrent capacity
+    /// from active compute nodes and allows at most `capacity * multiplier`
+    /// items to be admitted ahead of that stage.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub downstream_buffer_multiplier: Option<u32>,
+
     // ========== Direct mode only ==========
     /// When true (default), monitor memory/CPU usage and kill jobs that exceed
     /// their resource requirements (OOM enforcement). Only applies in direct mode.
@@ -875,6 +883,13 @@ impl ExecutionConfig {
         self.staggered_start.unwrap_or(true)
     }
 
+    /// Workflow-wide multiplier for downstream buffering, if enabled.
+    pub fn downstream_buffer_multiplier(&self) -> Option<usize> {
+        self.downstream_buffer_multiplier
+            .filter(|multiplier| *multiplier > 0)
+            .map(|multiplier| multiplier as usize)
+    }
+
     /// Resolve the effective `StdioConfig` for a job, checking per-job overrides first.
     pub fn stdio_for_job(&self, job_name: &str) -> StdioConfig {
         if let Some(ref overrides) = self.job_stdio_overrides
@@ -941,6 +956,7 @@ impl ExecutionConfig {
             oom_exit_code: None,
             slurm_worker_mpi_mode: None,
             staggered_start: None,
+            downstream_buffer_multiplier: None,
             stdio: None,
             job_stdio_overrides: None,
         }
@@ -2432,6 +2448,11 @@ impl WorkflowSpec {
                     "slurm_worker_mpi_mode is only supported in direct mode. \
                     It controls the outer srun used by start_one_worker_per_node."
                         .to_string(),
+                );
+            }
+            if ec.downstream_buffer_multiplier == Some(0) {
+                errors.push(
+                    "downstream_buffer_multiplier must be greater than 0 when set.".to_string(),
                 );
             }
 
@@ -3983,7 +4004,9 @@ impl WorkflowSpec {
                                 );
                             }
                         }
-                        "sigterm_lead_seconds" | "sigkill_headroom_seconds" => {
+                        "sigterm_lead_seconds"
+                        | "sigkill_headroom_seconds"
+                        | "downstream_buffer_multiplier" => {
                             if let Some(i) = value.as_integer() {
                                 obj.insert(
                                     key.to_string(),
@@ -4521,6 +4544,9 @@ impl WorkflowSpec {
             }
             if let Some(code) = exec_config.oom_exit_code {
                 lines.push(format!("    oom_exit_code {}", code));
+            }
+            if let Some(multiplier) = exec_config.downstream_buffer_multiplier {
+                lines.push(format!("    downstream_buffer_multiplier {}", multiplier));
             }
             if let Some(ref mpi_mode) = exec_config.slurm_worker_mpi_mode {
                 let value = match mpi_mode {
@@ -6189,6 +6215,7 @@ jobs:
         assert!(config.sigkill_headroom_seconds.is_none());
         assert!(config.timeout_exit_code.is_none());
         assert!(config.oom_exit_code.is_none());
+        assert!(config.downstream_buffer_multiplier.is_none());
         assert!(config.slurm_worker_mpi_mode.is_none());
     }
 
@@ -6201,6 +6228,7 @@ jobs:
         assert_eq!(config.sigkill_headroom_seconds(), 60);
         assert_eq!(config.timeout_exit_code(), 152);
         assert_eq!(config.oom_exit_code(), 137);
+        assert_eq!(config.downstream_buffer_multiplier(), None);
         assert_eq!(config.slurm_worker_mpi_mode(), SlurmWorkerMpiMode::Default);
     }
 
@@ -6214,6 +6242,7 @@ jobs:
             sigkill_headroom_seconds: Some(120),
             timeout_exit_code: Some(200),
             oom_exit_code: Some(201),
+            downstream_buffer_multiplier: Some(4),
             slurm_worker_mpi_mode: Some(SlurmWorkerMpiMode::None),
             srun_termination_signal: None,
             enable_cpu_bind: None,
@@ -6227,6 +6256,7 @@ jobs:
         assert_eq!(config.sigkill_headroom_seconds(), 120);
         assert_eq!(config.timeout_exit_code(), 200);
         assert_eq!(config.oom_exit_code(), 201);
+        assert_eq!(config.downstream_buffer_multiplier(), Some(4));
     }
 
     #[test]
