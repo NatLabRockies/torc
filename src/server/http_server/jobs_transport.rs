@@ -993,75 +993,76 @@ where
                 ApiError("Database lock error".to_string())
             })?;
 
-        debug!(
-            "get_ready_jobs: workflow_id={}, limit={}, resources={:?} - X-Span-ID: {:?}",
-            workflow_id,
-            limit,
-            resources,
-            Has::<XSpanIdString>::get(context).0.clone()
-        );
+        let result: Result<ClaimJobsBasedOnResources, ApiError> = async {
+            debug!(
+                "get_ready_jobs: workflow_id={}, limit={}, resources={:?} - X-Span-ID: {:?}",
+                workflow_id,
+                limit,
+                resources,
+                Has::<XSpanIdString>::get(context).0.clone()
+            );
 
-        let workflow_record =
-            sqlx::query("SELECT id, execution_config FROM workflow WHERE id = $1")
-                .bind(workflow_id)
-                .fetch_optional(&mut *conn)
-                .await
-                .map_err(|e| {
-                    error!("Database error checking workflow existence: {}", e);
-                    ApiError("Database error".to_string())
-                })?;
+            let workflow_record =
+                sqlx::query("SELECT id, execution_config FROM workflow WHERE id = $1")
+                    .bind(workflow_id)
+                    .fetch_optional(&mut *conn)
+                    .await
+                    .map_err(|e| {
+                        error!("Database error checking workflow existence: {}", e);
+                        ApiError("Database error".to_string())
+                    })?;
 
-        let Some(workflow_record) = workflow_record else {
-            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+            let Some(workflow_record) = workflow_record else {
+                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
 
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("Workflow not found with ID: {}", workflow_id)
-            }));
-            return Ok(ClaimJobsBasedOnResources::NotFoundErrorResponse(
-                error_response,
-            ));
-        };
+                let error_response = models::ErrorResponse::new(serde_json::json!({
+                    "message": format!("Workflow not found with ID: {}", workflow_id)
+                }));
+                return Ok(ClaimJobsBasedOnResources::NotFoundErrorResponse(
+                    error_response,
+                ));
+            };
 
-        let downstream_buffer_multiplier = workflow_record
-            .get::<Option<String>, _>("execution_config")
-            .as_deref()
-            .and_then(|json| {
-                serde_json::from_str::<crate::client::workflow_spec::ExecutionConfig>(json).ok()
-            })
-            .and_then(|config| config.downstream_buffer_multiplier());
+            let downstream_buffer_multiplier = workflow_record
+                .get::<Option<String>, _>("execution_config")
+                .as_deref()
+                .and_then(|json| {
+                    serde_json::from_str::<crate::client::workflow_spec::ExecutionConfig>(json).ok()
+                })
+                .and_then(|config| config.downstream_buffer_multiplier());
 
-        let time_limit_seconds = if let Some(ref time_limit) = resources.time_limit {
-            match duration_string_to_seconds(time_limit) {
-                Ok(seconds) => seconds,
-                Err(e) => {
-                    let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+            let time_limit_seconds = if let Some(ref time_limit) = resources.time_limit {
+                match duration_string_to_seconds(time_limit) {
+                    Ok(seconds) => seconds,
+                    Err(e) => {
+                        let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
 
-                    let error_response = models::ErrorResponse::new(serde_json::json!({
-                        "message": format!("Invalid time_limit format '{}': {}", time_limit, e),
-                        "field": "time_limit",
-                        "value": time_limit
-                    }));
-                    return Ok(
-                        ClaimJobsBasedOnResources::UnprocessableContentErrorResponse(
-                            error_response,
-                        ),
-                    );
+                        let error_response = models::ErrorResponse::new(serde_json::json!({
+                            "message": format!("Invalid time_limit format '{}': {}", time_limit, e),
+                            "field": "time_limit",
+                            "value": time_limit
+                        }));
+                        return Ok(
+                            ClaimJobsBasedOnResources::UnprocessableContentErrorResponse(
+                                error_response,
+                            ),
+                        );
+                    }
                 }
-            }
-        } else {
-            i64::MAX
-        };
+            } else {
+                i64::MAX
+            };
 
-        let memory_bytes = (resources.memory_gb * 1024.0 * 1024.0 * 1024.0) as i64;
+            let memory_bytes = (resources.memory_gb * 1024.0 * 1024.0 * 1024.0) as i64;
 
-        const CLAIM_JOBS_PAGE_SIZE: i64 = 256;
+            const CLAIM_JOBS_PAGE_SIZE: i64 = 256;
 
-        let ready_status = models::JobStatus::Ready.to_int();
-        let order_by_clause = "ORDER BY job.priority DESC, job.id ASC";
-        let selection_limit =
-            usize::try_from(limit).map_err(|_| ApiError("Invalid limit".to_string()))?;
+            let ready_status = models::JobStatus::Ready.to_int();
+            let order_by_clause = "ORDER BY job.priority DESC, job.id ASC";
+            let selection_limit =
+                usize::try_from(limit).map_err(|_| ApiError("Invalid limit".to_string()))?;
 
-        let query_with_scheduler = format!(
+            let query_with_scheduler = format!(
             r#"
             SELECT
                 job.workflow_id,
@@ -1097,7 +1098,7 @@ where
             "#,
             order_by_clause
         );
-        let query_without_scheduler = format!(
+            let query_without_scheduler = format!(
             r#"
             SELECT
                 job.workflow_id,
@@ -1133,20 +1134,20 @@ where
             order_by_clause
         );
 
-        let per_node_cpus = resources.num_cpus;
-        let per_node_memory = memory_bytes;
-        let per_node_gpus = resources.num_gpus;
-        let total_nodes = resources.num_nodes.max(1);
+            let per_node_cpus = resources.num_cpus;
+            let per_node_memory = memory_bytes;
+            let per_node_gpus = resources.num_gpus;
+            let total_nodes = resources.num_nodes.max(1);
 
-        let mut consumed_memory_bytes = 0i64;
-        let mut consumed_cpus = 0i64;
-        let mut consumed_gpus = 0i64;
-        let mut exclusive_nodes = 0i64;
-        let mut selected_jobs = Vec::new();
-        let mut job_ids_to_update = Vec::new();
-        let mut job_family_cache: HashMap<i64, Vec<DownstreamFamilyKey>> = HashMap::new();
-        let mut family_state_cache: HashMap<DownstreamFamilyKey, Option<DownstreamBufferState>> =
-            HashMap::new();
+            let mut consumed_memory_bytes = 0i64;
+            let mut consumed_cpus = 0i64;
+            let mut consumed_gpus = 0i64;
+            let mut exclusive_nodes = 0i64;
+            let mut selected_jobs = Vec::new();
+            let mut job_ids_to_update = Vec::new();
+            let mut job_family_cache: HashMap<i64, Vec<DownstreamFamilyKey>> = HashMap::new();
+            let mut family_state_cache: HashMap<DownstreamFamilyKey, Option<DownstreamBufferState>> =
+                HashMap::new();
 
         #[derive(Clone, Debug, Eq, Hash, PartialEq)]
         struct DownstreamFamilyKey {
@@ -1602,10 +1603,10 @@ where
             Ok((rows_scanned, rows_skipped))
         }
 
-        let mut scheduler_rows_scanned = 0usize;
-        let mut scheduler_rows_skipped = 0usize;
-        let mut scheduler_page = 0i64;
-        while selected_jobs.len() < selection_limit {
+            let mut scheduler_rows_scanned = 0usize;
+            let mut scheduler_rows_skipped = 0usize;
+            let mut scheduler_page = 0i64;
+            while selected_jobs.len() < selection_limit {
             let offset = scheduler_page * CLAIM_JOBS_PAGE_SIZE;
             let rows = match sqlx::query(&query_with_scheduler)
                 .bind(workflow_id)
@@ -1671,7 +1672,7 @@ where
             scheduler_page += 1;
         }
 
-        debug!(
+            debug!(
             "get_ready_jobs: workflow_id={} scheduler_filter=true page_size={} rows_scanned={} selected={} skipped_for_fit={} \
              per_node(cpus={}, memory_bytes={}, gpus={}) nodes={} time_limit={:?}",
             workflow_id,
@@ -1686,7 +1687,7 @@ where
             resources.time_limit
         );
 
-        if scheduler_rows_scanned == 0 && !strict_scheduler_match {
+            if scheduler_rows_scanned == 0 && !strict_scheduler_match {
             let mut fallback_rows_scanned = 0usize;
             let mut fallback_rows_skipped = 0usize;
             let mut fallback_page = 0i64;
@@ -1783,12 +1784,12 @@ where
             );
         }
 
-        let mut output_files_map: std::collections::HashMap<i64, Vec<i64>> =
-            std::collections::HashMap::new();
-        let mut output_user_data_map: std::collections::HashMap<i64, Vec<i64>> =
-            std::collections::HashMap::new();
+            let mut output_files_map: std::collections::HashMap<i64, Vec<i64>> =
+                std::collections::HashMap::new();
+            let mut output_user_data_map: std::collections::HashMap<i64, Vec<i64>> =
+                std::collections::HashMap::new();
 
-        if !job_ids_to_update.is_empty() {
+            if !job_ids_to_update.is_empty() {
             let output_files = match sqlx::query(
                 "SELECT job_id, file_id FROM job_output_file WHERE workflow_id = $1",
             )
@@ -1837,14 +1838,14 @@ where
             }
         }
 
-        for job in &mut selected_jobs {
+            for job in &mut selected_jobs {
             if let Some(job_id) = job.id {
                 job.output_file_ids = output_files_map.get(&job_id).cloned();
                 job.output_user_data_ids = output_user_data_map.get(&job_id).cloned();
             }
         }
 
-        if !job_ids_to_update.is_empty() {
+            if !job_ids_to_update.is_empty() {
             let pending = models::JobStatus::Pending.to_int();
             let job_ids_str = job_ids_to_update
                 .iter()
@@ -1868,19 +1869,27 @@ where
             );
         }
 
-        if let Err(e) = sqlx::query("COMMIT").execute(&mut *conn).await {
-            error!("Failed to commit transaction: {}", e);
-            if let Err(rollback_err) = sqlx::query("ROLLBACK").execute(&mut *conn).await {
-                error!("Failed to rollback after commit failure: {}", rollback_err);
+            if let Err(e) = sqlx::query("COMMIT").execute(&mut *conn).await {
+                error!("Failed to commit transaction: {}", e);
+                if let Err(rollback_err) = sqlx::query("ROLLBACK").execute(&mut *conn).await {
+                    error!("Failed to rollback after commit failure: {}", rollback_err);
+                }
+                return Err(ApiError("Database commit error".to_string()));
             }
-            return Err(ApiError("Database commit error".to_string()));
+
+            let response = models::ClaimJobsBasedOnResources {
+                jobs: Some(selected_jobs),
+                reason: None,
+            };
+
+            Ok(ClaimJobsBasedOnResources::SuccessfulResponse(response))
+        }
+        .await;
+
+        if result.is_err() {
+            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
         }
 
-        let response = models::ClaimJobsBasedOnResources {
-            jobs: Some(selected_jobs),
-            reason: None,
-        };
-
-        Ok(ClaimJobsBasedOnResources::SuccessfulResponse(response))
+        result
     }
 }

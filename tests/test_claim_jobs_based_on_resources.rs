@@ -32,6 +32,40 @@ fn test_claim_jobs_based_on_resources_honors_limit(start_server: &ServerProcess)
 }
 
 #[rstest]
+fn test_claim_jobs_based_on_resources_invalid_limit_does_not_poison_connection(
+    start_server: &ServerProcess,
+) {
+    let config = &start_server.config;
+    let jobs = create_minimal_resources_workflow(config, true);
+    let workflow_id = jobs
+        .values()
+        .next()
+        .expect("Should have at least one job")
+        .workflow_id;
+
+    let resources = models::ComputeNodesResources::new(2, 2.0, 0, 1);
+    let invalid_result = apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        -1,
+        resources.clone(),
+        None,
+    );
+    assert!(
+        invalid_result.is_err(),
+        "negative limits should be rejected before selecting jobs"
+    );
+
+    let valid_result =
+        apis::workflows_api::claim_jobs_based_on_resources(config, workflow_id, 1, resources, None)
+            .expect("connection should remain usable after invalid limit");
+
+    let returned_jobs = valid_result.jobs.expect("Server must return jobs array");
+    assert_eq!(returned_jobs.len(), 1);
+    assert_eq!(returned_jobs[0].status, Some(models::JobStatus::Pending));
+}
+
+#[rstest]
 fn test_claim_jobs_based_on_resources_priority_ordering(start_server: &ServerProcess) {
     let config = &start_server.config;
 
