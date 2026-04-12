@@ -3,7 +3,972 @@ use crate::server::api::{
     EventsApi, JobsApi, ResultsApi, WorkflowsApi, begin_immediate_transaction,
     rollback_immediate_transaction,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::time::Instant;
+
+const CLAIM_JOBS_PAGE_SIZE: i64 = 256;
+const CLAIM_JOB_ID_CHUNK_SIZE: usize = 256;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ClaimSchedulerMode {
+    Scoped,
+    Fallback,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct DownstreamFamilyKey {
+    resource_requirements_id: i64,
+    scheduler_id: Option<i64>,
+}
+
+#[derive(Clone, Debug)]
+struct DownstreamBufferState {
+    occupancy: usize,
+    buffer_limit: usize,
+}
+
+#[derive(Clone, Debug)]
+struct FamilyResourceShape {
+    memory_bytes: i64,
+    num_cpus: i64,
+    num_gpus: i64,
+    num_nodes: i64,
+}
+
+#[derive(Clone, Debug)]
+struct ClaimJobCandidate {
+    workflow_id: i64,
+    job_id: i64,
+    name: String,
+    command: String,
+    invocation_script: Option<String>,
+    status: i64,
+    cancel_on_blocking_job_failure: bool,
+    supports_termination: bool,
+    failure_handler_id: Option<i64>,
+    attempt_id: Option<i64>,
+    priority: i64,
+    resource_requirements_id: i64,
+    scheduler_id: Option<i64>,
+    memory_bytes: i64,
+    num_cpus: i64,
+    num_gpus: i64,
+    num_nodes: i64,
+    runtime_s: i64,
+}
+
+impl ClaimJobCandidate {
+    fn from_row(row: sqlx::sqlite::SqliteRow) -> Self {
+        Self {
+            workflow_id: row.get("workflow_id"),
+            job_id: row.get("job_id"),
+            name: row.get("name"),
+            command: row.get("command"),
+            invocation_script: row.get("invocation_script"),
+            status: row.get("status"),
+            cancel_on_blocking_job_failure: row.get("cancel_on_blocking_job_failure"),
+            supports_termination: row.get("supports_termination"),
+            failure_handler_id: row.get("failure_handler_id"),
+            attempt_id: row.get("attempt_id"),
+            priority: row.get("priority"),
+            resource_requirements_id: row.get("resource_requirements_id"),
+            scheduler_id: row.get("scheduler_id"),
+            memory_bytes: row.get("memory_bytes"),
+            num_cpus: row.get("num_cpus"),
+            num_gpus: row.get("num_gpus"),
+            num_nodes: row.get("num_nodes"),
+            runtime_s: row.get("runtime_s"),
+        }
+    }
+
+    fn to_job_model(&self) -> Result<models::JobModel, ApiError> {
+        let status =
+            models::JobStatus::from_int(self.status as i32).map_err(|e| ApiError(e.to_string()))?;
+        if status != models::JobStatus::Ready {
+            return Err(ApiError("Invalid job status in ready queue".to_string()));
+        }
+
+        Ok(models::JobModel {
+            id: Some(self.job_id),
+            workflow_id: self.workflow_id,
+            name: self.name.clone(),
+            command: self.command.clone(),
+            invocation_script: self.invocation_script.clone(),
+            status: Some(models::JobStatus::Pending),
+            schedule_compute_nodes: None,
+            cancel_on_blocking_job_failure: Some(self.cancel_on_blocking_job_failure),
+            supports_termination: Some(self.supports_termination),
+            depends_on_job_ids: None,
+            input_file_ids: None,
+            output_file_ids: None,
+            input_user_data_ids: None,
+            output_user_data_ids: None,
+            resource_requirements_id: Some(self.resource_requirements_id),
+            scheduler_id: None,
+            failure_handler_id: self.failure_handler_id,
+            attempt_id: self.attempt_id,
+            priority: Some(self.priority),
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+struct ClaimSelectionSpec {
+    workflow_id: i64,
+    selection_limit: usize,
+    scheduler_mode: ClaimSchedulerMode,
+    scheduler_config_id: Option<i64>,
+    requested_memory_bytes: i64,
+    requested_num_cpus: i64,
+    requested_num_gpus: i64,
+    requested_num_nodes: i64,
+    total_nodes_for_fit: i64,
+    time_limit_seconds: i64,
+    downstream_buffer_multiplier: Option<usize>,
+}
+
+impl ClaimSelectionSpec {
+    fn scheduler_allows(&self, scheduler_id: Option<i64>) -> bool {
+        match self.scheduler_mode {
+            ClaimSchedulerMode::Scoped => {
+                scheduler_id.is_none() || scheduler_id == self.scheduler_config_id
+            }
+            ClaimSchedulerMode::Fallback => true,
+        }
+    }
+
+    fn candidate_matches_request(&self, candidate: &ClaimJobCandidate) -> bool {
+        candidate.status == i64::from(models::JobStatus::Ready.to_int())
+            && self.scheduler_allows(candidate.scheduler_id)
+            && candidate.memory_bytes <= self.requested_memory_bytes
+            && candidate.num_cpus <= self.requested_num_cpus
+            && candidate.num_gpus <= self.requested_num_gpus
+            && candidate.num_nodes <= self.requested_num_nodes
+            && candidate.runtime_s <= self.time_limit_seconds
+    }
+}
+
+#[derive(Default)]
+struct ClaimSelectionState {
+    consumed_memory_bytes: i64,
+    consumed_cpus: i64,
+    consumed_gpus: i64,
+    exclusive_nodes: i64,
+    selected_candidates: Vec<ClaimJobCandidate>,
+    job_family_cache: HashMap<i64, Vec<DownstreamFamilyKey>>,
+    family_resource_cache: HashMap<DownstreamFamilyKey, Option<FamilyResourceShape>>,
+    family_state_cache: HashMap<DownstreamFamilyKey, Option<DownstreamBufferState>>,
+}
+
+impl ClaimSelectionState {
+    fn selected_job_ids(&self) -> Vec<i64> {
+        self.selected_candidates
+            .iter()
+            .map(|candidate| candidate.job_id)
+            .collect()
+    }
+
+    fn claim_candidate(
+        &mut self,
+        candidate: ClaimJobCandidate,
+        downstream_families: &[DownstreamFamilyKey],
+    ) {
+        let reserved_nodes = candidate.num_nodes.max(1);
+        if reserved_nodes > 1 {
+            self.exclusive_nodes += reserved_nodes;
+        } else {
+            self.consumed_memory_bytes += candidate.memory_bytes;
+            self.consumed_cpus += candidate.num_cpus;
+            self.consumed_gpus += candidate.num_gpus;
+        }
+
+        for family in downstream_families {
+            if let Some(Some(state)) = self.family_state_cache.get_mut(family) {
+                state.occupancy += 1;
+            }
+        }
+
+        self.selected_candidates.push(candidate);
+    }
+}
+
+#[derive(Default)]
+struct ClaimSelectionStats {
+    rows_scanned: usize,
+    skipped_for_fit: usize,
+    skipped_for_downstream_buffer: usize,
+    skipped_for_status: usize,
+    skipped_for_scheduler: usize,
+    skipped_for_request_limits: usize,
+}
+
+#[derive(Default)]
+struct ClaimQueryStats {
+    rows_scanned: usize,
+    pages_scanned: usize,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn calculate_downstream_capacity(
+    total_cpus: i64,
+    total_memory_bytes: i64,
+    total_gpus: i64,
+    total_nodes: i64,
+    rr_cpus: i64,
+    rr_memory_bytes: i64,
+    rr_gpus: i64,
+    rr_nodes: i64,
+) -> usize {
+    let mut capacities = Vec::new();
+    if rr_cpus > 0 {
+        capacities.push(total_cpus / rr_cpus);
+    }
+    if rr_memory_bytes > 0 {
+        capacities.push(total_memory_bytes / rr_memory_bytes);
+    }
+    if rr_gpus > 0 {
+        capacities.push(total_gpus / rr_gpus);
+    }
+    if rr_nodes > 1 {
+        capacities.push(total_nodes / rr_nodes);
+    }
+    capacities.into_iter().min().unwrap_or(0).max(0) as usize
+}
+
+fn claim_overfetch_multiplier(limit: usize) -> usize {
+    match limit {
+        0..=4 => 4,
+        5..=32 => 3,
+        _ => 2,
+    }
+}
+
+fn candidate_fits_accumulated_resources(
+    spec: &ClaimSelectionSpec,
+    state: &ClaimSelectionState,
+    candidate: &ClaimJobCandidate,
+) -> bool {
+    let reserved_nodes = candidate.num_nodes.max(1);
+
+    if reserved_nodes > 1 {
+        let shared_nodes_after = spec.total_nodes_for_fit - state.exclusive_nodes - reserved_nodes;
+        state.exclusive_nodes + reserved_nodes <= spec.total_nodes_for_fit
+            && state.consumed_cpus <= shared_nodes_after * spec.requested_num_cpus
+            && state.consumed_memory_bytes <= shared_nodes_after * spec.requested_memory_bytes
+            && state.consumed_gpus <= shared_nodes_after * spec.requested_num_gpus
+    } else {
+        let shared_capacity_cpus =
+            (spec.total_nodes_for_fit - state.exclusive_nodes) * spec.requested_num_cpus;
+        let shared_capacity_memory =
+            (spec.total_nodes_for_fit - state.exclusive_nodes) * spec.requested_memory_bytes;
+        let shared_capacity_gpus =
+            (spec.total_nodes_for_fit - state.exclusive_nodes) * spec.requested_num_gpus;
+
+        state.consumed_cpus + candidate.num_cpus <= shared_capacity_cpus
+            && state.consumed_memory_bytes + candidate.memory_bytes <= shared_capacity_memory
+            && state.consumed_gpus + candidate.num_gpus <= shared_capacity_gpus
+    }
+}
+
+async fn load_job_families(
+    conn: &mut sqlx::SqliteConnection,
+    workflow_id: i64,
+    job_id: i64,
+) -> Result<Vec<DownstreamFamilyKey>, ApiError> {
+    let rows = sqlx::query(
+        r#"
+        SELECT DISTINCT
+            downstream.resource_requirements_id AS resource_requirements_id,
+            downstream.scheduler_id AS scheduler_id
+        FROM job_depends_on dep
+        JOIN job downstream ON downstream.id = dep.job_id
+        WHERE dep.workflow_id = $1
+        AND dep.depends_on_job_id = $2
+        AND downstream.resource_requirements_id IS NOT NULL
+        "#,
+    )
+    .bind(workflow_id)
+    .bind(job_id)
+    .fetch_all(&mut *conn)
+    .await
+    .map_err(|e| {
+        error!(
+            "Database error loading downstream families workflow_id={} job_id={}: {}",
+            workflow_id, job_id, e
+        );
+        ApiError("Database error".to_string())
+    })?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| DownstreamFamilyKey {
+            resource_requirements_id: row.get("resource_requirements_id"),
+            scheduler_id: row.get("scheduler_id"),
+        })
+        .collect())
+}
+
+async fn load_family_state(
+    conn: &mut sqlx::SqliteConnection,
+    workflow_id: i64,
+    family: &DownstreamFamilyKey,
+    downstream_buffer_multiplier: usize,
+    family_resource_cache: &mut HashMap<DownstreamFamilyKey, Option<FamilyResourceShape>>,
+) -> Result<Option<DownstreamBufferState>, ApiError> {
+    if !family_resource_cache.contains_key(family) {
+        let rr_row = sqlx::query(
+            r#"
+            SELECT memory_bytes, num_cpus, num_gpus, num_nodes
+            FROM resource_requirements
+            WHERE id = $1
+            "#,
+        )
+        .bind(family.resource_requirements_id)
+        .fetch_optional(&mut *conn)
+        .await
+        .map_err(|e| {
+            error!(
+                "Database error loading downstream resource requirements rr_id={}: {}",
+                family.resource_requirements_id, e
+            );
+            ApiError("Database error".to_string())
+        })?;
+
+        let resource_shape = rr_row.map(|row| FamilyResourceShape {
+            memory_bytes: row.get("memory_bytes"),
+            num_cpus: row.get("num_cpus"),
+            num_gpus: row.get("num_gpus"),
+            num_nodes: row.get("num_nodes"),
+        });
+        family_resource_cache.insert(family.clone(), resource_shape);
+    }
+
+    let Some(resource_shape) = family_resource_cache.get(family).cloned().flatten() else {
+        return Ok(None);
+    };
+
+    let capacity_row = if let Some(scheduler_id) = family.scheduler_id {
+        sqlx::query(
+            r#"
+            SELECT
+                COUNT(*) AS active_count,
+                COALESCE(SUM(num_cpus), 0) AS total_cpus,
+                COALESCE(SUM(memory_gb), 0.0) AS total_memory_gb,
+                COALESCE(SUM(num_gpus), 0) AS total_gpus,
+                COALESCE(SUM(num_nodes), 0) AS total_nodes
+            FROM compute_node
+            WHERE workflow_id = $1
+            AND is_active = 1
+            AND scheduler_config_id = $2
+            "#,
+        )
+        .bind(workflow_id)
+        .bind(scheduler_id)
+        .fetch_one(&mut *conn)
+        .await
+    } else {
+        sqlx::query(
+            r#"
+            SELECT
+                COUNT(*) AS active_count,
+                COALESCE(SUM(num_cpus), 0) AS total_cpus,
+                COALESCE(SUM(memory_gb), 0.0) AS total_memory_gb,
+                COALESCE(SUM(num_gpus), 0) AS total_gpus,
+                COALESCE(SUM(num_nodes), 0) AS total_nodes
+            FROM compute_node
+            WHERE workflow_id = $1
+            AND is_active = 1
+            "#,
+        )
+        .bind(workflow_id)
+        .fetch_one(&mut *conn)
+        .await
+    }
+    .map_err(|e| {
+        error!(
+            "Database error loading downstream capacity workflow_id={} family={:?}: {}",
+            workflow_id, family, e
+        );
+        ApiError("Database error".to_string())
+    })?;
+
+    let active_count: i64 = capacity_row.get("active_count");
+    if active_count == 0 {
+        return Ok(None);
+    }
+
+    let downstream_capacity = calculate_downstream_capacity(
+        capacity_row.get("total_cpus"),
+        (capacity_row.get::<f64, _>("total_memory_gb") * 1024.0 * 1024.0 * 1024.0) as i64,
+        capacity_row.get("total_gpus"),
+        capacity_row.get("total_nodes"),
+        resource_shape.num_cpus,
+        resource_shape.memory_bytes,
+        resource_shape.num_gpus,
+        resource_shape.num_nodes,
+    );
+
+    let upstream_status_rows = if let Some(scheduler_id) = family.scheduler_id {
+        sqlx::query(
+            r#"
+            SELECT COUNT(DISTINCT upstream.id) AS count
+            FROM job upstream
+            JOIN job_depends_on dep ON dep.depends_on_job_id = upstream.id
+            JOIN job downstream ON downstream.id = dep.job_id
+            WHERE upstream.workflow_id = $1
+            AND dep.workflow_id = $1
+            AND downstream.workflow_id = $1
+            AND downstream.resource_requirements_id = $2
+            AND downstream.scheduler_id = $3
+            AND upstream.status IN ($4, $5)
+            "#,
+        )
+        .bind(workflow_id)
+        .bind(family.resource_requirements_id)
+        .bind(scheduler_id)
+        .bind(models::JobStatus::Pending.to_int())
+        .bind(models::JobStatus::Running.to_int())
+        .fetch_one(&mut *conn)
+        .await
+    } else {
+        sqlx::query(
+            r#"
+            SELECT COUNT(DISTINCT upstream.id) AS count
+            FROM job upstream
+            JOIN job_depends_on dep ON dep.depends_on_job_id = upstream.id
+            JOIN job downstream ON downstream.id = dep.job_id
+            WHERE upstream.workflow_id = $1
+            AND dep.workflow_id = $1
+            AND downstream.workflow_id = $1
+            AND downstream.resource_requirements_id = $2
+            AND downstream.scheduler_id IS NULL
+            AND upstream.status IN ($3, $4)
+            "#,
+        )
+        .bind(workflow_id)
+        .bind(family.resource_requirements_id)
+        .bind(models::JobStatus::Pending.to_int())
+        .bind(models::JobStatus::Running.to_int())
+        .fetch_one(&mut *conn)
+        .await
+    }
+    .map_err(|e| {
+        error!(
+            "Database error loading upstream occupancy workflow_id={} family={:?}: {}",
+            workflow_id, family, e
+        );
+        ApiError("Database error".to_string())
+    })?;
+
+    let downstream_status_rows = if let Some(scheduler_id) = family.scheduler_id {
+        sqlx::query(
+            r#"
+            SELECT COUNT(*) AS count
+            FROM job downstream
+            WHERE downstream.workflow_id = $1
+            AND downstream.resource_requirements_id = $2
+            AND downstream.scheduler_id = $3
+            AND downstream.status IN ($4, $5, $6)
+            "#,
+        )
+        .bind(workflow_id)
+        .bind(family.resource_requirements_id)
+        .bind(scheduler_id)
+        .bind(models::JobStatus::Ready.to_int())
+        .bind(models::JobStatus::Pending.to_int())
+        .bind(models::JobStatus::Running.to_int())
+        .fetch_one(&mut *conn)
+        .await
+    } else {
+        sqlx::query(
+            r#"
+            SELECT COUNT(*) AS count
+            FROM job downstream
+            WHERE downstream.workflow_id = $1
+            AND downstream.resource_requirements_id = $2
+            AND downstream.scheduler_id IS NULL
+            AND downstream.status IN ($3, $4, $5)
+            "#,
+        )
+        .bind(workflow_id)
+        .bind(family.resource_requirements_id)
+        .bind(models::JobStatus::Ready.to_int())
+        .bind(models::JobStatus::Pending.to_int())
+        .bind(models::JobStatus::Running.to_int())
+        .fetch_one(&mut *conn)
+        .await
+    }
+    .map_err(|e| {
+        error!(
+            "Database error loading downstream occupancy workflow_id={} family={:?}: {}",
+            workflow_id, family, e
+        );
+        ApiError("Database error".to_string())
+    })?;
+
+    let occupancy =
+        upstream_status_rows.get::<i64, _>("count") + downstream_status_rows.get::<i64, _>("count");
+    Ok(Some(DownstreamBufferState {
+        occupancy: occupancy.max(0) as usize,
+        buffer_limit: downstream_capacity.saturating_mul(downstream_buffer_multiplier),
+    }))
+}
+
+async fn process_candidate_batch(
+    conn: &mut sqlx::SqliteConnection,
+    spec: &ClaimSelectionSpec,
+    candidates: Vec<ClaimJobCandidate>,
+    target_count: usize,
+    state: &mut ClaimSelectionState,
+    stats: &mut ClaimSelectionStats,
+) -> Result<(), ApiError> {
+    for candidate in candidates {
+        if state.selected_candidates.len() >= target_count {
+            break;
+        }
+
+        stats.rows_scanned += 1;
+
+        if candidate.status != i64::from(models::JobStatus::Ready.to_int()) {
+            stats.skipped_for_status += 1;
+            continue;
+        }
+
+        if !spec.scheduler_allows(candidate.scheduler_id) {
+            stats.skipped_for_scheduler += 1;
+            continue;
+        }
+
+        if !spec.candidate_matches_request(&candidate) {
+            stats.skipped_for_request_limits += 1;
+            continue;
+        }
+
+        if !candidate_fits_accumulated_resources(spec, state, &candidate) {
+            stats.skipped_for_fit += 1;
+
+            let reserved_nodes = candidate.num_nodes.max(1);
+            let reason = if reserved_nodes > 1 {
+                let available = spec.total_nodes_for_fit - state.exclusive_nodes;
+                format!(
+                    "multi-node job needs {} free nodes, {} available (exclusive_nodes={}, shared cpus={}/{})",
+                    reserved_nodes,
+                    available,
+                    state.exclusive_nodes,
+                    state.consumed_cpus,
+                    (spec.total_nodes_for_fit - state.exclusive_nodes) * spec.requested_num_cpus
+                )
+            } else {
+                let shared_nodes = spec.total_nodes_for_fit - state.exclusive_nodes;
+                format!(
+                    "cpus: {}/{}, memory: {}/{}, gpus: {}/{}",
+                    state.consumed_cpus + candidate.num_cpus,
+                    shared_nodes * spec.requested_num_cpus,
+                    state.consumed_memory_bytes + candidate.memory_bytes,
+                    shared_nodes * spec.requested_memory_bytes,
+                    state.consumed_gpus + candidate.num_gpus,
+                    shared_nodes * spec.requested_num_gpus
+                )
+            };
+
+            debug!(
+                "Skipping job {} - would exceed resource limits ({})",
+                candidate.job_id, reason
+            );
+            continue;
+        }
+
+        let downstream_families = if let Some(multiplier) = spec.downstream_buffer_multiplier {
+            let families = if let Some(families) = state.job_family_cache.get(&candidate.job_id) {
+                families.clone()
+            } else {
+                let families = load_job_families(conn, spec.workflow_id, candidate.job_id).await?;
+                state
+                    .job_family_cache
+                    .insert(candidate.job_id, families.clone());
+                families
+            };
+
+            let mut blocked_by_downstream_buffer = None;
+            for family in &families {
+                if !state.family_state_cache.contains_key(family) {
+                    let family_state = load_family_state(
+                        conn,
+                        spec.workflow_id,
+                        family,
+                        multiplier,
+                        &mut state.family_resource_cache,
+                    )
+                    .await?;
+                    state
+                        .family_state_cache
+                        .insert(family.clone(), family_state);
+                }
+
+                if let Some(Some(state)) = state.family_state_cache.get(family)
+                    && state.occupancy >= state.buffer_limit
+                {
+                    blocked_by_downstream_buffer =
+                        Some((family.clone(), state.occupancy, state.buffer_limit));
+                    break;
+                }
+            }
+
+            if let Some((family, occupancy, buffer_limit)) = blocked_by_downstream_buffer {
+                stats.skipped_for_downstream_buffer += 1;
+                debug!(
+                    "Skipping job {} - downstream buffer full for rr_id={} scheduler_id={:?} ({}/{})",
+                    candidate.job_id,
+                    family.resource_requirements_id,
+                    family.scheduler_id,
+                    occupancy,
+                    buffer_limit
+                );
+                continue;
+            }
+
+            families
+        } else {
+            Vec::new()
+        };
+
+        state.claim_candidate(candidate, &downstream_families);
+    }
+
+    Ok(())
+}
+
+async fn fetch_candidate_page(
+    conn: &mut sqlx::SqliteConnection,
+    spec: &ClaimSelectionSpec,
+    offset: i64,
+) -> Result<Vec<ClaimJobCandidate>, ApiError> {
+    let rows = match spec.scheduler_mode {
+        ClaimSchedulerMode::Scoped => {
+            sqlx::query(
+                r#"
+                SELECT
+                    job.workflow_id,
+                    job.id AS job_id,
+                    job.name,
+                    job.command,
+                    job.invocation_script,
+                    job.status,
+                    job.cancel_on_blocking_job_failure,
+                    job.supports_termination,
+                    job.failure_handler_id,
+                    job.attempt_id,
+                    job.priority,
+                    job.scheduler_id,
+                    rr.id AS resource_requirements_id,
+                    rr.memory_bytes,
+                    rr.num_cpus,
+                    rr.num_gpus,
+                    rr.num_nodes,
+                    rr.runtime_s
+                FROM job
+                JOIN resource_requirements rr ON job.resource_requirements_id = rr.id
+                WHERE job.workflow_id = $1
+                AND job.status = $2
+                AND rr.memory_bytes <= $3
+                AND rr.num_cpus <= $4
+                AND rr.num_gpus <= $5
+                AND rr.num_nodes <= $6
+                AND rr.runtime_s <= $7
+                AND (job.scheduler_id IS NULL OR job.scheduler_id = $8)
+                ORDER BY job.priority DESC, job.id ASC
+                LIMIT $9
+                OFFSET $10
+                "#,
+            )
+            .bind(spec.workflow_id)
+            .bind(models::JobStatus::Ready.to_int())
+            .bind(spec.requested_memory_bytes)
+            .bind(spec.requested_num_cpus)
+            .bind(spec.requested_num_gpus)
+            .bind(spec.requested_num_nodes)
+            .bind(spec.time_limit_seconds)
+            .bind(spec.scheduler_config_id)
+            .bind(CLAIM_JOBS_PAGE_SIZE)
+            .bind(offset)
+            .fetch_all(&mut *conn)
+            .await
+        }
+        ClaimSchedulerMode::Fallback => {
+            sqlx::query(
+                r#"
+                SELECT
+                    job.workflow_id,
+                    job.id AS job_id,
+                    job.name,
+                    job.command,
+                    job.invocation_script,
+                    job.status,
+                    job.cancel_on_blocking_job_failure,
+                    job.supports_termination,
+                    job.failure_handler_id,
+                    job.attempt_id,
+                    job.priority,
+                    job.scheduler_id,
+                    rr.id AS resource_requirements_id,
+                    rr.memory_bytes,
+                    rr.num_cpus,
+                    rr.num_gpus,
+                    rr.num_nodes,
+                    rr.runtime_s
+                FROM job
+                JOIN resource_requirements rr ON job.resource_requirements_id = rr.id
+                WHERE job.workflow_id = $1
+                AND job.status = $2
+                AND rr.memory_bytes <= $3
+                AND rr.num_cpus <= $4
+                AND rr.num_gpus <= $5
+                AND rr.num_nodes <= $6
+                AND rr.runtime_s <= $7
+                ORDER BY job.priority DESC, job.id ASC
+                LIMIT $8
+                OFFSET $9
+                "#,
+            )
+            .bind(spec.workflow_id)
+            .bind(models::JobStatus::Ready.to_int())
+            .bind(spec.requested_memory_bytes)
+            .bind(spec.requested_num_cpus)
+            .bind(spec.requested_num_gpus)
+            .bind(spec.requested_num_nodes)
+            .bind(spec.time_limit_seconds)
+            .bind(CLAIM_JOBS_PAGE_SIZE)
+            .bind(offset)
+            .fetch_all(&mut *conn)
+            .await
+        }
+    }
+    .map_err(|e| {
+        error!(
+            "Database error fetching claim candidate page workflow_id={} scheduler_mode={:?}: {}",
+            spec.workflow_id, spec.scheduler_mode, e
+        );
+        ApiError("Database error".to_string())
+    })?;
+
+    Ok(rows.into_iter().map(ClaimJobCandidate::from_row).collect())
+}
+
+async fn collect_phase_candidates(
+    conn: &mut sqlx::SqliteConnection,
+    spec: &ClaimSelectionSpec,
+    target_count: usize,
+) -> Result<(ClaimSelectionState, ClaimSelectionStats, ClaimQueryStats), ApiError> {
+    let mut state = ClaimSelectionState::default();
+    let mut selection_stats = ClaimSelectionStats::default();
+    let mut query_stats = ClaimQueryStats::default();
+    let mut page = 0i64;
+
+    while state.selected_candidates.len() < target_count {
+        let offset = page * CLAIM_JOBS_PAGE_SIZE;
+        let candidates = fetch_candidate_page(conn, spec, offset).await?;
+        if candidates.is_empty() {
+            break;
+        }
+
+        let page_len = candidates.len();
+        query_stats.rows_scanned += page_len;
+        query_stats.pages_scanned += 1;
+
+        process_candidate_batch(
+            conn,
+            spec,
+            candidates,
+            target_count,
+            &mut state,
+            &mut selection_stats,
+        )
+        .await?;
+
+        if page_len < CLAIM_JOBS_PAGE_SIZE as usize {
+            break;
+        }
+
+        page += 1;
+    }
+
+    Ok((state, selection_stats, query_stats))
+}
+
+async fn fetch_claim_candidates_by_ids(
+    conn: &mut sqlx::SqliteConnection,
+    workflow_id: i64,
+    candidate_ids: &[i64],
+) -> Result<Vec<ClaimJobCandidate>, ApiError> {
+    if candidate_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut candidates = Vec::new();
+    for chunk in candidate_ids.chunks(CLAIM_JOB_ID_CHUNK_SIZE) {
+        let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new(
+            r#"
+            SELECT
+                job.workflow_id,
+                job.id AS job_id,
+                job.name,
+                job.command,
+                job.invocation_script,
+                job.status,
+                job.cancel_on_blocking_job_failure,
+                job.supports_termination,
+                job.failure_handler_id,
+                job.attempt_id,
+                job.priority,
+                job.scheduler_id,
+                rr.id AS resource_requirements_id,
+                rr.memory_bytes,
+                rr.num_cpus,
+                rr.num_gpus,
+                rr.num_nodes,
+                rr.runtime_s
+            FROM job
+            JOIN resource_requirements rr ON job.resource_requirements_id = rr.id
+            WHERE job.workflow_id = "#,
+        );
+        builder.push_bind(workflow_id).push(" AND job.id IN (");
+
+        let mut separated = builder.separated(", ");
+        for job_id in chunk {
+            separated.push_bind(job_id);
+        }
+        separated.push_unseparated(")");
+
+        let rows = builder.build().fetch_all(&mut *conn).await.map_err(|e| {
+            error!(
+                "Database error fetching buffered claim candidates workflow_id={}: {}",
+                workflow_id, e
+            );
+            ApiError("Database error".to_string())
+        })?;
+
+        candidates.extend(rows.into_iter().map(ClaimJobCandidate::from_row));
+    }
+
+    candidates.sort_by(|left, right| {
+        right
+            .priority
+            .cmp(&left.priority)
+            .then_with(|| left.job_id.cmp(&right.job_id))
+    });
+
+    Ok(candidates)
+}
+
+async fn update_claimed_jobs_to_pending(
+    conn: &mut sqlx::SqliteConnection,
+    claimed_job_ids: &[i64],
+) -> Result<(), ApiError> {
+    if claimed_job_ids.is_empty() {
+        return Ok(());
+    }
+
+    for chunk in claimed_job_ids.chunks(CLAIM_JOB_ID_CHUNK_SIZE) {
+        let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new("UPDATE job SET status = ");
+        builder
+            .push_bind(models::JobStatus::Pending.to_int())
+            .push(" WHERE id IN (");
+
+        let mut separated = builder.separated(", ");
+        for job_id in chunk {
+            separated.push_bind(job_id);
+        }
+        separated.push_unseparated(")");
+
+        builder.build().execute(&mut *conn).await.map_err(|e| {
+            error!("Failed to update claimed jobs to pending: {}", e);
+            ApiError("Database update error".to_string())
+        })?;
+    }
+
+    Ok(())
+}
+
+async fn hydrate_claimed_job_outputs(
+    conn: &mut sqlx::SqliteConnection,
+    workflow_id: i64,
+    selected_jobs: &mut [models::JobModel],
+) -> Result<(), ApiError> {
+    if selected_jobs.is_empty() {
+        return Ok(());
+    }
+
+    let selected_job_ids = selected_jobs
+        .iter()
+        .filter_map(|job| job.id)
+        .collect::<Vec<_>>();
+
+    let mut output_files_map: HashMap<i64, Vec<i64>> = HashMap::new();
+    let mut output_user_data_map: HashMap<i64, Vec<i64>> = HashMap::new();
+
+    for chunk in selected_job_ids.chunks(CLAIM_JOB_ID_CHUNK_SIZE) {
+        let mut file_builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new(
+            "SELECT job_id, file_id FROM job_output_file WHERE workflow_id = ",
+        );
+        file_builder.push_bind(workflow_id).push(" AND job_id IN (");
+        let mut file_ids = file_builder.separated(", ");
+        for job_id in chunk {
+            file_ids.push_bind(job_id);
+        }
+        file_ids.push_unseparated(")");
+
+        let output_files = file_builder
+            .build()
+            .fetch_all(&mut *conn)
+            .await
+            .map_err(|e| {
+                error!("Failed to query output files for claimed jobs: {}", e);
+                ApiError("Database query error".to_string())
+            })?;
+
+        for row in output_files {
+            let job_id: i64 = row.get("job_id");
+            let file_id: i64 = row.get("file_id");
+            output_files_map.entry(job_id).or_default().push(file_id);
+        }
+
+        let mut user_data_builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new(
+            "SELECT job_id, user_data_id FROM job_output_user_data WHERE job_id IN (",
+        );
+        let mut user_data_ids = user_data_builder.separated(", ");
+        for job_id in chunk {
+            user_data_ids.push_bind(job_id);
+        }
+        user_data_ids.push_unseparated(")");
+
+        let output_user_data = user_data_builder
+            .build()
+            .fetch_all(&mut *conn)
+            .await
+            .map_err(|e| {
+                error!("Failed to query output user_data for claimed jobs: {}", e);
+                ApiError("Database query error".to_string())
+            })?;
+
+        for row in output_user_data {
+            let job_id: i64 = row.get("job_id");
+            let user_data_id: i64 = row.get("user_data_id");
+            output_user_data_map
+                .entry(job_id)
+                .or_default()
+                .push(user_data_id);
+        }
+    }
+
+    for job in selected_jobs {
+        if let Some(job_id) = job.id {
+            job.output_file_ids = output_files_map.get(&job_id).cloned();
+            job.output_user_data_ids = output_user_data_map.get(&job_id).cloned();
+        }
+    }
+
+    Ok(())
+}
 
 #[allow(clippy::too_many_arguments)]
 impl<C> Server<C>
@@ -983,932 +1948,258 @@ where
         context: &C,
     ) -> Result<ClaimJobsBasedOnResources, ApiError> {
         let strict_scheduler_match = strict_scheduler_match.unwrap_or(false);
+        let claim_started = Instant::now();
+
+        debug!(
+            "get_ready_jobs: workflow_id={}, limit={}, resources={:?} - X-Span-ID: {:?}",
+            workflow_id,
+            limit,
+            resources,
+            Has::<XSpanIdString>::get(context).0.clone()
+        );
+
         let mut conn = self.pool.acquire().await.map_err(|e| {
             error!("Failed to acquire database connection: {}", e);
             ApiError("Database connection error".to_string())
         })?;
+
+        let workflow_record =
+            sqlx::query("SELECT id, execution_config FROM workflow WHERE id = $1")
+                .bind(workflow_id)
+                .fetch_optional(&mut *conn)
+                .await
+                .map_err(|e| {
+                    error!("Database error checking workflow existence: {}", e);
+                    ApiError("Database error".to_string())
+                })?;
+
+        let Some(workflow_record) = workflow_record else {
+            let error_response = models::ErrorResponse::new(serde_json::json!({
+                "message": format!("Workflow not found with ID: {}", workflow_id)
+            }));
+            return Ok(ClaimJobsBasedOnResources::NotFoundErrorResponse(
+                error_response,
+            ));
+        };
+
+        let selection_limit =
+            usize::try_from(limit).map_err(|_| ApiError("Invalid limit".to_string()))?;
+
+        let downstream_buffer_multiplier = workflow_record
+            .get::<Option<String>, _>("execution_config")
+            .as_deref()
+            .and_then(|json| {
+                serde_json::from_str::<crate::client::workflow_spec::ExecutionConfig>(json).ok()
+            })
+            .and_then(|config| config.downstream_buffer_multiplier());
+
+        let time_limit_seconds = if let Some(ref time_limit) = resources.time_limit {
+            match duration_string_to_seconds(time_limit) {
+                Ok(seconds) => seconds,
+                Err(e) => {
+                    let error_response = models::ErrorResponse::new(serde_json::json!({
+                        "message": format!("Invalid time_limit format '{}': {}", time_limit, e),
+                        "field": "time_limit",
+                        "value": time_limit
+                    }));
+                    return Ok(
+                        ClaimJobsBasedOnResources::UnprocessableContentErrorResponse(
+                            error_response,
+                        ),
+                    );
+                }
+            }
+        } else {
+            i64::MAX
+        };
+
+        if selection_limit == 0 {
+            debug!(
+                "get_ready_jobs: workflow_id={} read_candidates=0 overfetch_multiplier=1 write_candidates=0 lost_to_race=0 lock_hold_ms=0 total_ms={}",
+                workflow_id,
+                claim_started.elapsed().as_millis()
+            );
+            return Ok(ClaimJobsBasedOnResources::SuccessfulResponse(
+                models::ClaimJobsBasedOnResources {
+                    jobs: Some(Vec::new()),
+                    reason: None,
+                },
+            ));
+        }
+
+        let memory_bytes = (resources.memory_gb * 1024.0 * 1024.0 * 1024.0) as i64;
+        let overfetch_multiplier = claim_overfetch_multiplier(selection_limit);
+        let buffered_target = selection_limit.saturating_mul(overfetch_multiplier);
+
+        let base_spec = ClaimSelectionSpec {
+            workflow_id,
+            selection_limit,
+            scheduler_mode: ClaimSchedulerMode::Scoped,
+            scheduler_config_id: resources.scheduler_config_id,
+            requested_memory_bytes: memory_bytes,
+            requested_num_cpus: resources.num_cpus,
+            requested_num_gpus: resources.num_gpus,
+            requested_num_nodes: resources.num_nodes,
+            total_nodes_for_fit: resources.num_nodes.max(1),
+            time_limit_seconds,
+            downstream_buffer_multiplier,
+        };
+
+        let read_phase_started = Instant::now();
+        let (mut read_state, read_selection_stats, scoped_query_stats) =
+            collect_phase_candidates(&mut conn, &base_spec, buffered_target).await?;
+        let mut read_scheduler_mode = ClaimSchedulerMode::Scoped;
+
+        debug!(
+            "get_ready_jobs read phase: workflow_id={} scheduler_mode={:?} pages={} rows_scanned={} read_candidates={} target_candidates={} skipped_for_fit={} skipped_for_downstream_buffer={}",
+            workflow_id,
+            read_scheduler_mode,
+            scoped_query_stats.pages_scanned,
+            scoped_query_stats.rows_scanned,
+            read_state.selected_candidates.len(),
+            buffered_target,
+            read_selection_stats.skipped_for_fit,
+            read_selection_stats.skipped_for_downstream_buffer
+        );
+
+        if scoped_query_stats.rows_scanned == 0 && !strict_scheduler_match {
+            let fallback_spec = ClaimSelectionSpec {
+                scheduler_mode: ClaimSchedulerMode::Fallback,
+                ..base_spec.clone()
+            };
+            let (fallback_state, fallback_selection_stats, fallback_query_stats) =
+                collect_phase_candidates(&mut conn, &fallback_spec, buffered_target).await?;
+
+            if fallback_query_stats.rows_scanned > 0 {
+                info!(
+                    "Worker with scheduler_config_id={:?} found {} ready jobs after removing scheduler filter (strict_scheduler_match=false).",
+                    resources.scheduler_config_id, fallback_query_stats.rows_scanned
+                );
+            }
+
+            debug!(
+                "get_ready_jobs read phase: workflow_id={} scheduler_mode={:?} pages={} rows_scanned={} read_candidates={} target_candidates={} skipped_for_fit={} skipped_for_downstream_buffer={}",
+                workflow_id,
+                ClaimSchedulerMode::Fallback,
+                fallback_query_stats.pages_scanned,
+                fallback_query_stats.rows_scanned,
+                fallback_state.selected_candidates.len(),
+                buffered_target,
+                fallback_selection_stats.skipped_for_fit,
+                fallback_selection_stats.skipped_for_downstream_buffer
+            );
+
+            read_state = fallback_state;
+            read_scheduler_mode = ClaimSchedulerMode::Fallback;
+        }
+
+        let buffered_candidate_ids = read_state.selected_job_ids();
+        let read_duration = read_phase_started.elapsed();
 
         begin_immediate_transaction(&mut conn).await.map_err(|e| {
             error!("Failed to begin immediate transaction: {}", e);
             ApiError("Database lock error".to_string())
         })?;
 
-        let result: Result<ClaimJobsBasedOnResources, ApiError> = async {
-            debug!(
-                "get_ready_jobs: workflow_id={}, limit={}, resources={:?} - X-Span-ID: {:?}",
-                workflow_id,
-                limit,
-                resources,
-                Has::<XSpanIdString>::get(context).0.clone()
-            );
-
-            let workflow_record =
-                sqlx::query("SELECT id, execution_config FROM workflow WHERE id = $1")
-                    .bind(workflow_id)
-                    .fetch_optional(&mut *conn)
-                    .await
-                    .map_err(|e| {
-                        error!("Database error checking workflow existence: {}", e);
-                        ApiError("Database error".to_string())
-                    })?;
-
-            let Some(workflow_record) = workflow_record else {
-                rollback_immediate_transaction(&mut conn, "prepare_ready_jobs workflow missing")
-                    .await;
-
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("Workflow not found with ID: {}", workflow_id)
-                }));
-                return Ok(ClaimJobsBasedOnResources::NotFoundErrorResponse(
-                    error_response,
-                ));
+        let lock_started = Instant::now();
+        let write_result: Result<(Vec<ClaimJobCandidate>, u128), ApiError> = async {
+            let recheck_spec = ClaimSelectionSpec {
+                scheduler_mode: read_scheduler_mode,
+                ..base_spec.clone()
             };
 
-            let downstream_buffer_multiplier = workflow_record
-                .get::<Option<String>, _>("execution_config")
-                .as_deref()
-                .and_then(|json| {
-                    serde_json::from_str::<crate::client::workflow_spec::ExecutionConfig>(json).ok()
-                })
-                .and_then(|config| config.downstream_buffer_multiplier());
-
-            let time_limit_seconds = if let Some(ref time_limit) = resources.time_limit {
-                match duration_string_to_seconds(time_limit) {
-                    Ok(seconds) => seconds,
-                    Err(e) => {
-                        rollback_immediate_transaction(
-                            &mut conn,
-                            "prepare_ready_jobs invalid time_limit",
-                        )
-                        .await;
-
-                        let error_response = models::ErrorResponse::new(serde_json::json!({
-                            "message": format!("Invalid time_limit format '{}': {}", time_limit, e),
-                            "field": "time_limit",
-                            "value": time_limit
-                        }));
-                        return Ok(
-                            ClaimJobsBasedOnResources::UnprocessableContentErrorResponse(
-                                error_response,
-                            ),
-                        );
-                    }
-                }
-            } else {
-                i64::MAX
-            };
-
-            let memory_bytes = (resources.memory_gb * 1024.0 * 1024.0 * 1024.0) as i64;
-
-            const CLAIM_JOBS_PAGE_SIZE: i64 = 256;
-
-            let ready_status = models::JobStatus::Ready.to_int();
-            let order_by_clause = "ORDER BY job.priority DESC, job.id ASC";
-            let selection_limit =
-                usize::try_from(limit).map_err(|_| ApiError("Invalid limit".to_string()))?;
-
-            let query_with_scheduler = format!(
-            r#"
-            SELECT
-                job.workflow_id,
-                job.id AS job_id,
-                job.name,
-                job.command,
-                job.invocation_script,
-                job.status,
-                job.cancel_on_blocking_job_failure,
-                job.supports_termination,
-                job.failure_handler_id,
-                job.attempt_id,
-                job.priority,
-                rr.id AS resource_requirements_id,
-                rr.memory_bytes,
-                rr.num_cpus,
-                rr.num_gpus,
-                rr.num_nodes,
-                rr.runtime_s
-            FROM job
-            JOIN resource_requirements rr ON job.resource_requirements_id = rr.id
-            WHERE job.workflow_id = $1
-            AND job.status = $2
-            AND rr.memory_bytes <= $3
-            AND rr.num_cpus <= $4
-            AND rr.num_gpus <= $5
-            AND rr.num_nodes <= $6
-            AND rr.runtime_s <= $7
-            AND (job.scheduler_id IS NULL OR job.scheduler_id = $8)
-            {}
-            LIMIT $9
-            OFFSET $10
-            "#,
-            order_by_clause
-        );
-            let query_without_scheduler = format!(
-            r#"
-            SELECT
-                job.workflow_id,
-                job.id AS job_id,
-                job.name,
-                job.command,
-                job.invocation_script,
-                job.status,
-                job.cancel_on_blocking_job_failure,
-                job.supports_termination,
-                job.failure_handler_id,
-                job.attempt_id,
-                job.priority,
-                rr.id AS resource_requirements_id,
-                rr.memory_bytes,
-                rr.num_cpus,
-                rr.num_gpus,
-                rr.num_nodes,
-                rr.runtime_s
-            FROM job
-            JOIN resource_requirements rr ON job.resource_requirements_id = rr.id
-            WHERE job.workflow_id = $1
-            AND job.status = $2
-            AND rr.memory_bytes <= $3
-            AND rr.num_cpus <= $4
-            AND rr.num_gpus <= $5
-            AND rr.num_nodes <= $6
-            AND rr.runtime_s <= $7
-            {}
-            LIMIT $8
-            OFFSET $9
-            "#,
-            order_by_clause
-        );
-
-            let per_node_cpus = resources.num_cpus;
-            let per_node_memory = memory_bytes;
-            let per_node_gpus = resources.num_gpus;
-            let total_nodes = resources.num_nodes.max(1);
-
-            let mut consumed_memory_bytes = 0i64;
-            let mut consumed_cpus = 0i64;
-            let mut consumed_gpus = 0i64;
-            let mut exclusive_nodes = 0i64;
-            let mut selected_jobs = Vec::new();
-            let mut job_ids_to_update = Vec::new();
-            let mut job_family_cache: HashMap<i64, Vec<DownstreamFamilyKey>> = HashMap::new();
-            let mut family_state_cache: HashMap<DownstreamFamilyKey, Option<DownstreamBufferState>> =
-                HashMap::new();
-
-        #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-        struct DownstreamFamilyKey {
-            resource_requirements_id: i64,
-            scheduler_id: Option<i64>,
-        }
-
-        #[derive(Clone, Debug)]
-        struct DownstreamBufferState {
-            occupancy: usize,
-            buffer_limit: usize,
-        }
-
-        fn calculate_downstream_capacity(
-            total_cpus: i64,
-            total_memory_bytes: i64,
-            total_gpus: i64,
-            total_nodes: i64,
-            rr_cpus: i64,
-            rr_memory_bytes: i64,
-            rr_gpus: i64,
-            rr_nodes: i64,
-        ) -> usize {
-            let mut capacities = Vec::new();
-            if rr_cpus > 0 {
-                capacities.push(total_cpus / rr_cpus);
-            }
-            if rr_memory_bytes > 0 {
-                capacities.push(total_memory_bytes / rr_memory_bytes);
-            }
-            if rr_gpus > 0 {
-                capacities.push(total_gpus / rr_gpus);
-            }
-            if rr_nodes > 1 {
-                capacities.push(total_nodes / rr_nodes);
-            }
-            capacities.into_iter().min().unwrap_or(0).max(0) as usize
-        }
-
-        async fn load_job_families(
-            conn: &mut sqlx::SqliteConnection,
-            workflow_id: i64,
-            job_id: i64,
-        ) -> Result<Vec<DownstreamFamilyKey>, ApiError> {
-            let rows = sqlx::query(
-                r#"
-                SELECT DISTINCT
-                    downstream.resource_requirements_id AS resource_requirements_id,
-                    downstream.scheduler_id AS scheduler_id
-                FROM job_depends_on dep
-                JOIN job downstream ON downstream.id = dep.job_id
-                WHERE dep.workflow_id = $1
-                AND dep.depends_on_job_id = $2
-                AND downstream.resource_requirements_id IS NOT NULL
-                "#,
-            )
-            .bind(workflow_id)
-            .bind(job_id)
-            .fetch_all(&mut *conn)
-            .await
-            .map_err(|e| {
-                error!(
-                    "Database error loading downstream families workflow_id={} job_id={}: {}",
-                    workflow_id, job_id, e
-                );
-                ApiError("Database error".to_string())
-            })?;
-
-            Ok(rows
-                .into_iter()
-                .map(|row| DownstreamFamilyKey {
-                    resource_requirements_id: row.get("resource_requirements_id"),
-                    scheduler_id: row.get("scheduler_id"),
-                })
-                .collect())
-        }
-
-        async fn load_family_state(
-            conn: &mut sqlx::SqliteConnection,
-            workflow_id: i64,
-            family: &DownstreamFamilyKey,
-            downstream_buffer_multiplier: usize,
-        ) -> Result<Option<DownstreamBufferState>, ApiError> {
-            let rr_row = sqlx::query(
-                r#"
-                SELECT memory_bytes, num_cpus, num_gpus, num_nodes
-                FROM resource_requirements
-                WHERE id = $1
-                "#,
-            )
-            .bind(family.resource_requirements_id)
-            .fetch_optional(&mut *conn)
-            .await
-            .map_err(|e| {
-                error!(
-                    "Database error loading downstream resource requirements rr_id={}: {}",
-                    family.resource_requirements_id, e
-                );
-                ApiError("Database error".to_string())
-            })?;
-
-            let Some(rr_row) = rr_row else {
-                return Ok(None);
-            };
-
-            let capacity_row = if let Some(scheduler_id) = family.scheduler_id {
-                sqlx::query(
-                    r#"
-                    SELECT
-                        COUNT(*) AS active_count,
-                        COALESCE(SUM(num_cpus), 0) AS total_cpus,
-                        COALESCE(SUM(memory_gb), 0.0) AS total_memory_gb,
-                        COALESCE(SUM(num_gpus), 0) AS total_gpus,
-                        COALESCE(SUM(num_nodes), 0) AS total_nodes
-                    FROM compute_node
-                    WHERE workflow_id = $1
-                    AND is_active = 1
-                    AND scheduler_config_id = $2
-                    "#,
-                )
-                .bind(workflow_id)
-                .bind(scheduler_id)
-                .fetch_one(&mut *conn)
-                .await
-            } else {
-                sqlx::query(
-                    r#"
-                    SELECT
-                        COUNT(*) AS active_count,
-                        COALESCE(SUM(num_cpus), 0) AS total_cpus,
-                        COALESCE(SUM(memory_gb), 0.0) AS total_memory_gb,
-                        COALESCE(SUM(num_gpus), 0) AS total_gpus,
-                        COALESCE(SUM(num_nodes), 0) AS total_nodes
-                    FROM compute_node
-                    WHERE workflow_id = $1
-                    AND is_active = 1
-                    "#,
-                )
-                .bind(workflow_id)
-                .fetch_one(&mut *conn)
-                .await
-            }
-            .map_err(|e| {
-                error!(
-                    "Database error loading downstream capacity workflow_id={} family={:?}: {}",
-                    workflow_id, family, e
-                );
-                ApiError("Database error".to_string())
-            })?;
-
-            let active_count: i64 = capacity_row.get("active_count");
-            if active_count == 0 {
-                return Ok(None);
-            }
-
-            let downstream_capacity = calculate_downstream_capacity(
-                capacity_row.get("total_cpus"),
-                (capacity_row.get::<f64, _>("total_memory_gb") * 1024.0 * 1024.0 * 1024.0) as i64,
-                capacity_row.get("total_gpus"),
-                capacity_row.get("total_nodes"),
-                rr_row.get("num_cpus"),
-                rr_row.get("memory_bytes"),
-                rr_row.get("num_gpus"),
-                rr_row.get("num_nodes"),
-            );
-
-            let upstream_status_rows = if let Some(scheduler_id) = family.scheduler_id {
-                sqlx::query(
-                    r#"
-                    SELECT COUNT(DISTINCT upstream.id) AS count
-                    FROM job upstream
-                    JOIN job_depends_on dep ON dep.depends_on_job_id = upstream.id
-                    JOIN job downstream ON downstream.id = dep.job_id
-                    WHERE upstream.workflow_id = $1
-                    AND dep.workflow_id = $1
-                    AND downstream.workflow_id = $1
-                    AND downstream.resource_requirements_id = $2
-                    AND downstream.scheduler_id = $3
-                    AND upstream.status IN ($4, $5)
-                    "#,
-                )
-                .bind(workflow_id)
-                .bind(family.resource_requirements_id)
-                .bind(scheduler_id)
-                .bind(models::JobStatus::Pending.to_int())
-                .bind(models::JobStatus::Running.to_int())
-                .fetch_one(&mut *conn)
-                .await
-            } else {
-                sqlx::query(
-                    r#"
-                    SELECT COUNT(DISTINCT upstream.id) AS count
-                    FROM job upstream
-                    JOIN job_depends_on dep ON dep.depends_on_job_id = upstream.id
-                    JOIN job downstream ON downstream.id = dep.job_id
-                    WHERE upstream.workflow_id = $1
-                    AND dep.workflow_id = $1
-                    AND downstream.workflow_id = $1
-                    AND downstream.resource_requirements_id = $2
-                    AND downstream.scheduler_id IS NULL
-                    AND upstream.status IN ($3, $4)
-                    "#,
-                )
-                .bind(workflow_id)
-                .bind(family.resource_requirements_id)
-                .bind(models::JobStatus::Pending.to_int())
-                .bind(models::JobStatus::Running.to_int())
-                .fetch_one(&mut *conn)
-                .await
-            }
-            .map_err(|e| {
-                error!(
-                    "Database error loading upstream occupancy workflow_id={} family={:?}: {}",
-                    workflow_id, family, e
-                );
-                ApiError("Database error".to_string())
-            })?;
-
-            let downstream_status_rows = if let Some(scheduler_id) = family.scheduler_id {
-                sqlx::query(
-                    r#"
-                    SELECT COUNT(*) AS count
-                    FROM job downstream
-                    WHERE downstream.workflow_id = $1
-                    AND downstream.resource_requirements_id = $2
-                    AND downstream.scheduler_id = $3
-                    AND downstream.status IN ($4, $5, $6)
-                    "#,
-                )
-                .bind(workflow_id)
-                .bind(family.resource_requirements_id)
-                .bind(scheduler_id)
-                .bind(models::JobStatus::Ready.to_int())
-                .bind(models::JobStatus::Pending.to_int())
-                .bind(models::JobStatus::Running.to_int())
-                .fetch_one(&mut *conn)
-                .await
-            } else {
-                sqlx::query(
-                    r#"
-                    SELECT COUNT(*) AS count
-                    FROM job downstream
-                    WHERE downstream.workflow_id = $1
-                    AND downstream.resource_requirements_id = $2
-                    AND downstream.scheduler_id IS NULL
-                    AND downstream.status IN ($3, $4, $5)
-                    "#,
-                )
-                .bind(workflow_id)
-                .bind(family.resource_requirements_id)
-                .bind(models::JobStatus::Ready.to_int())
-                .bind(models::JobStatus::Pending.to_int())
-                .bind(models::JobStatus::Running.to_int())
-                .fetch_one(&mut *conn)
-                .await
-            }
-            .map_err(|e| {
-                error!(
-                    "Database error loading downstream occupancy workflow_id={} family={:?}: {}",
-                    workflow_id, family, e
-                );
-                ApiError("Database error".to_string())
-            })?;
-
-            let occupancy = upstream_status_rows.get::<i64, _>("count")
-                + downstream_status_rows.get::<i64, _>("count");
-            Ok(Some(DownstreamBufferState {
-                occupancy: occupancy.max(0) as usize,
-                buffer_limit: downstream_capacity.saturating_mul(downstream_buffer_multiplier),
-            }))
-        }
-
-        async fn process_rows(
-            conn: &mut sqlx::SqliteConnection,
-            rows: Vec<sqlx::sqlite::SqliteRow>,
-            per_node_cpus: i64,
-            per_node_memory: i64,
-            per_node_gpus: i64,
-            total_nodes: i64,
-            selection_limit: usize,
-            workflow_id: i64,
-            downstream_buffer_multiplier: Option<usize>,
-            consumed_memory_bytes: &mut i64,
-            consumed_cpus: &mut i64,
-            consumed_gpus: &mut i64,
-            exclusive_nodes: &mut i64,
-            selected_jobs: &mut Vec<models::JobModel>,
-            job_ids_to_update: &mut Vec<i64>,
-            job_family_cache: &mut HashMap<i64, Vec<DownstreamFamilyKey>>,
-            family_state_cache: &mut HashMap<DownstreamFamilyKey, Option<DownstreamBufferState>>,
-        ) -> Result<(usize, usize), ApiError> {
-            let mut rows_scanned = 0usize;
-            let mut rows_skipped = 0usize;
-
-            for row in rows {
-                rows_scanned += 1;
-
-                let job_memory: i64 = row.get("memory_bytes");
-                let job_cpus: i64 = row.get("num_cpus");
-                let job_gpus: i64 = row.get("num_gpus");
-                let job_nodes: i64 = row.get("num_nodes");
-                let reserved_nodes = job_nodes.max(1);
-
-                let fits = if reserved_nodes > 1 {
-                    let shared_nodes_after = total_nodes - *exclusive_nodes - reserved_nodes;
-                    *exclusive_nodes + reserved_nodes <= total_nodes
-                        && *consumed_cpus <= shared_nodes_after * per_node_cpus
-                        && *consumed_memory_bytes <= shared_nodes_after * per_node_memory
-                        && *consumed_gpus <= shared_nodes_after * per_node_gpus
-                } else {
-                    let shared_capacity_cpus = (total_nodes - *exclusive_nodes) * per_node_cpus;
-                    let shared_capacity_memory = (total_nodes - *exclusive_nodes) * per_node_memory;
-                    let shared_capacity_gpus = (total_nodes - *exclusive_nodes) * per_node_gpus;
-                    *consumed_cpus + job_cpus <= shared_capacity_cpus
-                        && *consumed_memory_bytes + job_memory <= shared_capacity_memory
-                        && *consumed_gpus + job_gpus <= shared_capacity_gpus
-                };
-
-                let job_id: i64 = row.get("job_id");
-                if fits {
-                    let downstream_families = if downstream_buffer_multiplier.is_some() {
-                        if let Some(families) = job_family_cache.get(&job_id) {
-                            families.clone()
-                        } else {
-                            let families = load_job_families(conn, workflow_id, job_id).await?;
-                            job_family_cache.insert(job_id, families.clone());
-                            families
-                        }
-                    } else {
-                        Vec::new()
-                    };
-
-                    let mut blocked_by_downstream_buffer = None;
-                    if let Some(multiplier) = downstream_buffer_multiplier {
-                        for family in &downstream_families {
-                            if !family_state_cache.contains_key(family) {
-                                let state =
-                                    load_family_state(conn, workflow_id, family, multiplier)
-                                        .await?;
-                                family_state_cache.insert(family.clone(), state);
-                            }
-
-                            if let Some(Some(state)) = family_state_cache.get(family)
-                                && state.occupancy >= state.buffer_limit
-                            {
-                                blocked_by_downstream_buffer =
-                                    Some((family.clone(), state.occupancy, state.buffer_limit));
-                                break;
-                            }
-                        }
-                    }
-
-                    if let Some((family, occupancy, buffer_limit)) = blocked_by_downstream_buffer {
-                        rows_skipped += 1;
-                        debug!(
-                            "Skipping job {} - downstream buffer full for rr_id={} scheduler_id={:?} ({}/{})",
-                            job_id,
-                            family.resource_requirements_id,
-                            family.scheduler_id,
-                            occupancy,
-                            buffer_limit
-                        );
-                        continue;
-                    }
-
-                    if reserved_nodes > 1 {
-                        *exclusive_nodes += reserved_nodes;
-                    } else {
-                        *consumed_memory_bytes += job_memory;
-                        *consumed_cpus += job_cpus;
-                        *consumed_gpus += job_gpus;
-                    }
-
-                    for family in &downstream_families {
-                        if let Some(Some(state)) = family_state_cache.get_mut(family) {
-                            state.occupancy += 1;
-                        }
-                    }
-
-                    job_ids_to_update.push(job_id);
-
-                    let status = models::JobStatus::from_int(row.get::<i64, _>("status") as i32)
-                        .map_err(|e| {
-                            error!("Failed to parse job status: {}", e);
-                            ApiError("Invalid job status".to_string())
-                        })?;
-
-                    if status != models::JobStatus::Ready {
-                        return Err(ApiError("Invalid job status in ready queue".to_string()));
-                    }
-                    let job = models::JobModel {
-                        id: Some(job_id),
-                        workflow_id: row.get("workflow_id"),
-                        name: row.get("name"),
-                        command: row.get("command"),
-                        invocation_script: row.get("invocation_script"),
-                        status: Some(models::JobStatus::Pending),
-                        schedule_compute_nodes: None,
-                        cancel_on_blocking_job_failure: Some(
-                            row.get("cancel_on_blocking_job_failure"),
-                        ),
-                        supports_termination: Some(row.get("supports_termination")),
-                        depends_on_job_ids: None,
-                        input_file_ids: None,
-                        output_file_ids: None,
-                        input_user_data_ids: None,
-                        output_user_data_ids: None,
-                        resource_requirements_id: Some(row.get("resource_requirements_id")),
-                        scheduler_id: None,
-                        failure_handler_id: row.get("failure_handler_id"),
-                        attempt_id: row.get("attempt_id"),
-                        priority: Some(row.get("priority")),
-                    };
-
-                    selected_jobs.push(job);
-                    if selected_jobs.len() >= selection_limit {
-                        break;
-                    }
-                } else {
-                    rows_skipped += 1;
-
-                    let reason = if reserved_nodes > 1 {
-                        let available = total_nodes - *exclusive_nodes;
-                        format!(
-                            "multi-node job needs {} free nodes, {} available \
-                             (exclusive_nodes={}, shared cpus={}/{})",
-                            reserved_nodes,
-                            available,
-                            *exclusive_nodes,
-                            *consumed_cpus,
-                            (total_nodes - *exclusive_nodes) * per_node_cpus
-                        )
-                    } else {
-                        let shared_nodes = total_nodes - *exclusive_nodes;
-                        format!(
-                            "cpus: {}/{}, memory: {}/{}, gpus: {}/{}",
-                            *consumed_cpus + job_cpus,
-                            shared_nodes * per_node_cpus,
-                            *consumed_memory_bytes + job_memory,
-                            shared_nodes * per_node_memory,
-                            *consumed_gpus + job_gpus,
-                            shared_nodes * per_node_gpus
-                        )
-                    };
-
-                    debug!(
-                        "Skipping job {} - would exceed resource limits ({})",
-                        job_id, reason
-                    );
-                }
-            }
-
-            Ok((rows_scanned, rows_skipped))
-        }
-
-            let mut scheduler_rows_scanned = 0usize;
-            let mut scheduler_rows_skipped = 0usize;
-            let mut scheduler_page = 0i64;
-            while selected_jobs.len() < selection_limit {
-            let offset = scheduler_page * CLAIM_JOBS_PAGE_SIZE;
-            let rows = match sqlx::query(&query_with_scheduler)
-                .bind(workflow_id)
-                .bind(ready_status)
-                .bind(memory_bytes)
-                .bind(resources.num_cpus)
-                .bind(resources.num_gpus)
-                .bind(resources.num_nodes)
-                .bind(time_limit_seconds)
-                .bind(resources.scheduler_config_id)
-                .bind(CLAIM_JOBS_PAGE_SIZE)
-                .bind(offset)
-                .fetch_all(&mut *conn)
-                .await
-            {
-                Ok(rows) => rows,
-                Err(e) => {
-                    error!("Database error in get_ready_jobs: {}", e);
-                    rollback_immediate_transaction(&mut conn, "prepare_ready_jobs scheduler query")
-                        .await;
-                    return Err(ApiError("Database error".to_string()));
-                }
-            };
-
-            if rows.is_empty() {
-                break;
-            }
-
-            let page_len = rows.len();
-            let (rows_scanned, rows_skipped) = match process_rows(
-                &mut conn,
-                rows,
-                per_node_cpus,
-                per_node_memory,
-                per_node_gpus,
-                total_nodes,
-                selection_limit,
-                workflow_id,
-                downstream_buffer_multiplier,
-                &mut consumed_memory_bytes,
-                &mut consumed_cpus,
-                &mut consumed_gpus,
-                &mut exclusive_nodes,
-                &mut selected_jobs,
-                &mut job_ids_to_update,
-                &mut job_family_cache,
-                &mut family_state_cache,
-            )
-            .await
-                {
-                    Ok(stats) => stats,
-                    Err(err) => {
-                        error!("Expected job status to be Ready during resource claim");
-                        rollback_immediate_transaction(
-                            &mut conn,
-                            "prepare_ready_jobs scheduler row processing",
-                        )
-                        .await;
-                        return Err(err);
-                    }
-                };
-            scheduler_rows_scanned += rows_scanned;
-            scheduler_rows_skipped += rows_skipped;
-
-            if page_len < CLAIM_JOBS_PAGE_SIZE as usize {
-                break;
-            }
-            scheduler_page += 1;
-        }
-
-            debug!(
-            "get_ready_jobs: workflow_id={} scheduler_filter=true page_size={} rows_scanned={} selected={} skipped_for_fit={} \
-             per_node(cpus={}, memory_bytes={}, gpus={}) nodes={} time_limit={:?}",
-            workflow_id,
-            CLAIM_JOBS_PAGE_SIZE,
-            scheduler_rows_scanned,
-            selected_jobs.len(),
-            scheduler_rows_skipped,
-            per_node_cpus,
-            per_node_memory,
-            per_node_gpus,
-            total_nodes,
-            resources.time_limit
-        );
-
-            if scheduler_rows_scanned == 0 && !strict_scheduler_match {
-            let mut fallback_rows_scanned = 0usize;
-            let mut fallback_rows_skipped = 0usize;
-            let mut fallback_page = 0i64;
-
-            while selected_jobs.len() < selection_limit {
-                let offset = fallback_page * CLAIM_JOBS_PAGE_SIZE;
-                let rows = match sqlx::query(&query_without_scheduler)
-                    .bind(workflow_id)
-                    .bind(ready_status)
-                    .bind(memory_bytes)
-                    .bind(resources.num_cpus)
-                    .bind(resources.num_gpus)
-                    .bind(resources.num_nodes)
-                    .bind(time_limit_seconds)
-                    .bind(CLAIM_JOBS_PAGE_SIZE)
-                    .bind(offset)
-                    .fetch_all(&mut *conn)
-                    .await
-                {
-                    Ok(rows) => rows,
-                    Err(e) => {
-                        error!(
-                            "Database error in get_ready_jobs (no scheduler filter): {}",
-                            e
-                        );
-                        rollback_immediate_transaction(
-                            &mut conn,
-                            "prepare_ready_jobs fallback query",
-                        )
-                        .await;
-                        return Err(ApiError("Database error".to_string()));
-                    }
-                };
-
-                if rows.is_empty() {
-                    break;
-                }
-
-                let page_len = rows.len();
-                let (rows_scanned, rows_skipped) = match process_rows(
-                    &mut conn,
-                    rows,
-                    per_node_cpus,
-                    per_node_memory,
-                    per_node_gpus,
-                    total_nodes,
-                    selection_limit,
-                    workflow_id,
-                    downstream_buffer_multiplier,
-                    &mut consumed_memory_bytes,
-                    &mut consumed_cpus,
-                    &mut consumed_gpus,
-                    &mut exclusive_nodes,
-                    &mut selected_jobs,
-                    &mut job_ids_to_update,
-                    &mut job_family_cache,
-                    &mut family_state_cache,
-                )
-                .await
-                {
-                    Ok(stats) => stats,
-                    Err(err) => {
-                        error!("Expected job status to be Ready during resource claim");
-                        rollback_immediate_transaction(
-                            &mut conn,
-                            "prepare_ready_jobs fallback row processing",
-                        )
-                        .await;
-                        return Err(err);
-                    }
-                };
-                fallback_rows_scanned += rows_scanned;
-                fallback_rows_skipped += rows_skipped;
-
-                if page_len < CLAIM_JOBS_PAGE_SIZE as usize {
-                    break;
-                }
-                fallback_page += 1;
-            }
-
-            if fallback_rows_scanned > 0 {
-                info!(
-                    "Worker with scheduler_config_id={:?} found {} ready jobs after removing scheduler filter \
-                     (strict_scheduler_match=false).",
-                    resources.scheduler_config_id, fallback_rows_scanned
-                );
-            }
-
-            debug!(
-                "get_ready_jobs: workflow_id={} scheduler_filter=false page_size={} rows_scanned={} selected={} skipped_for_fit={} \
-                 per_node(cpus={}, memory_bytes={}, gpus={}) nodes={} time_limit={:?}",
-                workflow_id,
-                CLAIM_JOBS_PAGE_SIZE,
-                fallback_rows_scanned,
-                selected_jobs.len(),
-                fallback_rows_skipped,
-                per_node_cpus,
-                per_node_memory,
-                per_node_gpus,
-                total_nodes,
-                resources.time_limit
-            );
-        }
-
-            let mut output_files_map: std::collections::HashMap<i64, Vec<i64>> =
-                std::collections::HashMap::new();
-            let mut output_user_data_map: std::collections::HashMap<i64, Vec<i64>> =
-                std::collections::HashMap::new();
-
-            if !job_ids_to_update.is_empty() {
-            let output_files = match sqlx::query(
-                "SELECT job_id, file_id FROM job_output_file WHERE workflow_id = $1",
-            )
-            .bind(workflow_id)
-            .fetch_all(&mut *conn)
-            .await
-            {
-                Ok(rows) => rows,
-                Err(e) => {
-                    error!("Failed to query output files: {}", e);
-                    rollback_immediate_transaction(&mut conn, "prepare_ready_jobs output files")
-                        .await;
-                    return Err(ApiError("Database query error".to_string()));
-                }
-            };
-
-            for row in output_files {
-                let job_id: i64 = row.get("job_id");
-                let file_id: i64 = row.get("file_id");
-                if job_ids_to_update.contains(&job_id) {
-                    output_files_map.entry(job_id).or_default().push(file_id);
-                }
-            }
-
-            let output_user_data = match sqlx::query("SELECT job_id, user_data_id FROM job_output_user_data WHERE job_id IN (SELECT id FROM job WHERE workflow_id = $1)")
-                .bind(workflow_id)
-                .fetch_all(&mut *conn)
-                .await
-            {
-                Ok(rows) => rows,
-                Err(e) => {
-                    error!("Failed to query output user_data: {}", e);
-                    rollback_immediate_transaction(&mut conn, "prepare_ready_jobs output user_data")
-                        .await;
-                    return Err(ApiError("Database query error".to_string()));
-                }
-            };
-
-            for row in output_user_data {
-                let job_id: i64 = row.get("job_id");
-                let user_data_id: i64 = row.get("user_data_id");
-                if job_ids_to_update.contains(&job_id) {
-                    output_user_data_map
-                        .entry(job_id)
-                        .or_default()
-                        .push(user_data_id);
-                }
-            }
-        }
-
-            for job in &mut selected_jobs {
-            if let Some(job_id) = job.id {
-                job.output_file_ids = output_files_map.get(&job_id).cloned();
-                job.output_user_data_ids = output_user_data_map.get(&job_id).cloned();
-            }
-        }
-
-            if !job_ids_to_update.is_empty() {
-            let pending = models::JobStatus::Pending.to_int();
-            let job_ids_str = job_ids_to_update
+            let write_candidates =
+                fetch_claim_candidates_by_ids(&mut conn, workflow_id, &buffered_candidate_ids)
+                    .await?;
+            let fetched_candidate_ids = write_candidates
                 .iter()
-                .map(|id| id.to_string())
-                .collect::<Vec<_>>()
-                .join(",");
-            let sql = format!(
-                "UPDATE job SET status = {} WHERE id IN ({})",
-                pending, job_ids_str
-            );
-            if let Err(e) = sqlx::query(&sql).execute(&mut *conn).await {
-                error!("Failed to update job status: {}", e);
-                rollback_immediate_transaction(&mut conn, "prepare_ready_jobs update status")
-                    .await;
-                return Err(ApiError("Database update error".to_string()));
-            }
+                .map(|candidate| candidate.job_id)
+                .collect::<HashSet<_>>();
+            let missing_candidates = buffered_candidate_ids
+                .iter()
+                .filter(|job_id| !fetched_candidate_ids.contains(job_id))
+                .count();
 
-            debug!(
-                "Updated {} jobs to pending status for workflow {}",
-                job_ids_to_update.len(),
-                workflow_id
-            );
-        }
-
-            if let Err(e) = sqlx::query("COMMIT").execute(&mut *conn).await {
-                error!("Failed to commit transaction: {}", e);
-                rollback_immediate_transaction(&mut conn, "prepare_ready_jobs commit").await;
-                return Err(ApiError("Database commit error".to_string()));
-            }
-
-            let response = models::ClaimJobsBasedOnResources {
-                jobs: Some(selected_jobs),
-                reason: None,
+            let mut write_state = ClaimSelectionState {
+                job_family_cache: read_state.job_family_cache.clone(),
+                family_resource_cache: read_state.family_resource_cache.clone(),
+                ..ClaimSelectionState::default()
             };
+            let mut write_stats = ClaimSelectionStats::default();
+            process_candidate_batch(
+                &mut conn,
+                &recheck_spec,
+                write_candidates,
+                recheck_spec.selection_limit,
+                &mut write_state,
+                &mut write_stats,
+            )
+            .await?;
 
-            Ok(ClaimJobsBasedOnResources::SuccessfulResponse(response))
+            let claimed_job_ids = write_state.selected_job_ids();
+            update_claimed_jobs_to_pending(&mut conn, &claimed_job_ids).await?;
+
+            sqlx::query("COMMIT")
+                .execute(&mut *conn)
+                .await
+                .map_err(|e| {
+                    error!("Failed to commit transaction: {}", e);
+                    ApiError("Database commit error".to_string())
+                })?;
+
+            let jobs_lost_to_race = missing_candidates + write_stats.skipped_for_status;
+            debug!(
+                "get_ready_jobs write phase: workflow_id={} write_candidates={} claimed={} lost_to_race={} skipped_for_scheduler={} skipped_for_request_limits={} skipped_for_fit={} skipped_for_downstream_buffer={} lock_hold_ms={}",
+                workflow_id,
+                fetched_candidate_ids.len(),
+                claimed_job_ids.len(),
+                jobs_lost_to_race,
+                write_stats.skipped_for_scheduler,
+                write_stats.skipped_for_request_limits,
+                write_stats.skipped_for_fit,
+                write_stats.skipped_for_downstream_buffer,
+                lock_started.elapsed().as_millis()
+            );
+
+            Ok((write_state.selected_candidates, lock_started.elapsed().as_millis()))
         }
         .await;
 
-        if result.is_err() {
+        if write_result.is_err() {
             rollback_immediate_transaction(&mut conn, "prepare_ready_jobs error exit").await;
         }
 
-        result
+        let (claimed_candidates, lock_hold_ms) = write_result?;
+        let mut selected_jobs = claimed_candidates
+            .iter()
+            .map(ClaimJobCandidate::to_job_model)
+            .collect::<Result<Vec<_>, _>>()?;
+
+        if let Err(e) =
+            hydrate_claimed_job_outputs(&mut conn, workflow_id, &mut selected_jobs).await
+        {
+            warn!(
+                "Failed to hydrate claimed job outputs after commit for workflow {}: {}",
+                workflow_id, e
+            );
+        }
+
+        debug!(
+            "get_ready_jobs: workflow_id={} read_candidates={} overfetch_multiplier={} claimed={} read_ms={} lock_hold_ms={} total_ms={}",
+            workflow_id,
+            buffered_candidate_ids.len(),
+            overfetch_multiplier,
+            selected_jobs.len(),
+            read_duration.as_millis(),
+            lock_hold_ms,
+            claim_started.elapsed().as_millis()
+        );
+
+        Ok(ClaimJobsBasedOnResources::SuccessfulResponse(
+            models::ClaimJobsBasedOnResources {
+                jobs: Some(selected_jobs),
+                reason: None,
+            },
+        ))
     }
 }

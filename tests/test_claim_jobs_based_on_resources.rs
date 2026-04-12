@@ -1,10 +1,13 @@
 mod common;
 
 use common::{
-    ServerProcess, create_minimal_resources_workflow, create_test_resource_requirements,
-    start_server,
+    ServerProcess, create_minimal_resources_workflow, create_test_compute_node,
+    create_test_resource_requirements, start_server,
 };
 use rstest::rstest;
+use std::collections::HashSet;
+use std::sync::{Arc, Barrier};
+use std::thread;
 use torc::client::apis;
 use torc::client::workflow_spec::ExecutionConfig;
 use torc::models;
@@ -63,6 +66,152 @@ fn test_claim_jobs_based_on_resources_invalid_limit_does_not_poison_connection(
     let returned_jobs = valid_result.jobs.expect("Server must return jobs array");
     assert_eq!(returned_jobs.len(), 1);
     assert_eq!(returned_jobs[0].status, Some(models::JobStatus::Pending));
+}
+
+#[rstest]
+fn test_claim_jobs_based_on_resources_concurrent_claimers_do_not_double_claim_or_poison_follow_up(
+    start_server: &ServerProcess,
+) {
+    let config = &start_server.config;
+    let workflow = models::WorkflowModel::new(
+        "concurrent_resource_claim_test".to_string(),
+        "test_user".to_string(),
+    );
+    let created_workflow =
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
+    let workflow_id = created_workflow.id.unwrap();
+
+    let rr = create_test_resource_requirements(
+        config,
+        workflow_id,
+        "concurrent_claim_rr",
+        1,
+        0,
+        1,
+        "1g",
+        "PT10M",
+    );
+
+    let total_jobs = 16usize;
+    for i in 0..total_jobs {
+        let mut job = models::JobModel::new(
+            workflow_id,
+            format!("concurrent_job_{i}"),
+            format!("echo concurrent {i}"),
+        );
+        job.resource_requirements_id = Some(rr.id.unwrap());
+        job.priority = Some((total_jobs - i) as i64);
+        apis::jobs_api::create_job(config, job).expect("Failed to create concurrent claim job");
+    }
+
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+        .expect("Failed to initialize jobs");
+
+    let resources = models::ComputeNodesResources::new(1, 1.0, 0, 1);
+    let claimers = 8usize;
+    let barrier = Arc::new(Barrier::new(claimers));
+    let handles = (0..claimers)
+        .map(|_| {
+            let barrier = Arc::clone(&barrier);
+            let config = config.clone();
+            let resources = resources.clone();
+            thread::spawn(move || {
+                barrier.wait();
+                apis::workflows_api::claim_jobs_based_on_resources(
+                    &config,
+                    workflow_id,
+                    1,
+                    resources,
+                    None,
+                )
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let mut claimed_job_ids = HashSet::new();
+    for handle in handles {
+        let claim_result = handle.join().expect("claimer thread should not panic");
+        let claim_result = claim_result.unwrap_or_else(|err| {
+            panic!("concurrent claim should succeed without lock errors: {err:?}")
+        });
+        let jobs = claim_result.jobs.expect("Server must return jobs array");
+        assert!(
+            jobs.len() <= 1,
+            "each concurrent claimer requested at most one job"
+        );
+
+        for job in jobs {
+            let job_id = job.id.expect("claimed job should have an id");
+            assert!(
+                claimed_job_ids.insert(job_id),
+                "job {job_id} was claimed more than once during concurrent claims"
+            );
+        }
+    }
+
+    loop {
+        let follow_up = apis::workflows_api::claim_jobs_based_on_resources(
+            config,
+            workflow_id,
+            1,
+            resources.clone(),
+            None,
+        )
+        .expect("follow-up claim should succeed after concurrent claims");
+        let jobs = follow_up.jobs.expect("Server must return jobs array");
+        if jobs.is_empty() {
+            break;
+        }
+
+        let job_id = jobs[0].id.expect("claimed job should have an id");
+        assert!(
+            claimed_job_ids.insert(job_id),
+            "follow-up claim returned duplicate job_id={job_id}"
+        );
+    }
+
+    assert_eq!(
+        claimed_job_ids.len(),
+        total_jobs,
+        "all jobs should eventually be claimable without duplicate claims"
+    );
+
+    let compute_node_id = create_test_compute_node(config, workflow_id)
+        .id
+        .expect("compute node should have an id");
+    let completed_job_id = *claimed_job_ids
+        .iter()
+        .next()
+        .expect("at least one job should have been claimed");
+    let run_id = 0;
+
+    apis::jobs_api::manage_status_change(
+        config,
+        completed_job_id,
+        models::JobStatus::Running,
+        run_id,
+    )
+    .expect("manage_status_change should succeed after concurrent claims");
+
+    let completion = models::ResultModel::new(
+        completed_job_id,
+        workflow_id,
+        run_id,
+        1,
+        compute_node_id,
+        0,
+        0.1,
+        chrono::Utc::now().to_rfc3339(),
+        models::JobStatus::Completed,
+    );
+    apis::jobs_api::complete_job(
+        config,
+        completed_job_id,
+        completion.status,
+        run_id,
+        completion,
+    )
+    .expect("complete_job should succeed after concurrent claims");
 }
 
 #[rstest]
