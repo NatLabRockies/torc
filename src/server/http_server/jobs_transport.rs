@@ -1,5 +1,8 @@
 use super::*;
-use crate::server::api::{EventsApi, JobsApi, ResultsApi, WorkflowsApi};
+use crate::server::api::{
+    EventsApi, JobsApi, ResultsApi, WorkflowsApi, begin_immediate_transaction,
+    rollback_immediate_transaction,
+};
 use std::collections::HashMap;
 
 #[allow(clippy::too_many_arguments)]
@@ -985,13 +988,10 @@ where
             ApiError("Database connection error".to_string())
         })?;
 
-        sqlx::query("BEGIN IMMEDIATE")
-            .execute(&mut *conn)
-            .await
-            .map_err(|e| {
-                error!("Failed to begin immediate transaction: {}", e);
-                ApiError("Database lock error".to_string())
-            })?;
+        begin_immediate_transaction(&mut conn).await.map_err(|e| {
+            error!("Failed to begin immediate transaction: {}", e);
+            ApiError("Database lock error".to_string())
+        })?;
 
         let result: Result<ClaimJobsBasedOnResources, ApiError> = async {
             debug!(
@@ -1013,7 +1013,8 @@ where
                     })?;
 
             let Some(workflow_record) = workflow_record else {
-                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                rollback_immediate_transaction(&mut conn, "prepare_ready_jobs workflow missing")
+                    .await;
 
                 let error_response = models::ErrorResponse::new(serde_json::json!({
                     "message": format!("Workflow not found with ID: {}", workflow_id)
@@ -1035,7 +1036,11 @@ where
                 match duration_string_to_seconds(time_limit) {
                     Ok(seconds) => seconds,
                     Err(e) => {
-                        let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                        rollback_immediate_transaction(
+                            &mut conn,
+                            "prepare_ready_jobs invalid time_limit",
+                        )
+                        .await;
 
                         let error_response = models::ErrorResponse::new(serde_json::json!({
                             "message": format!("Invalid time_limit format '{}': {}", time_limit, e),
@@ -1625,7 +1630,8 @@ where
                 Ok(rows) => rows,
                 Err(e) => {
                     error!("Database error in get_ready_jobs: {}", e);
-                    let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                    rollback_immediate_transaction(&mut conn, "prepare_ready_jobs scheduler query")
+                        .await;
                     return Err(ApiError("Database error".to_string()));
                 }
             };
@@ -1655,14 +1661,18 @@ where
                 &mut family_state_cache,
             )
             .await
-            {
-                Ok(stats) => stats,
-                Err(err) => {
-                    error!("Expected job status to be Ready during resource claim");
-                    let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-                    return Err(err);
-                }
-            };
+                {
+                    Ok(stats) => stats,
+                    Err(err) => {
+                        error!("Expected job status to be Ready during resource claim");
+                        rollback_immediate_transaction(
+                            &mut conn,
+                            "prepare_ready_jobs scheduler row processing",
+                        )
+                        .await;
+                        return Err(err);
+                    }
+                };
             scheduler_rows_scanned += rows_scanned;
             scheduler_rows_skipped += rows_skipped;
 
@@ -1713,7 +1723,11 @@ where
                             "Database error in get_ready_jobs (no scheduler filter): {}",
                             e
                         );
-                        let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                        rollback_immediate_transaction(
+                            &mut conn,
+                            "prepare_ready_jobs fallback query",
+                        )
+                        .await;
                         return Err(ApiError("Database error".to_string()));
                     }
                 };
@@ -1747,7 +1761,11 @@ where
                     Ok(stats) => stats,
                     Err(err) => {
                         error!("Expected job status to be Ready during resource claim");
-                        let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                        rollback_immediate_transaction(
+                            &mut conn,
+                            "prepare_ready_jobs fallback row processing",
+                        )
+                        .await;
                         return Err(err);
                     }
                 };
@@ -1800,7 +1818,8 @@ where
                 Ok(rows) => rows,
                 Err(e) => {
                     error!("Failed to query output files: {}", e);
-                    let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                    rollback_immediate_transaction(&mut conn, "prepare_ready_jobs output files")
+                        .await;
                     return Err(ApiError("Database query error".to_string()));
                 }
             };
@@ -1821,7 +1840,8 @@ where
                 Ok(rows) => rows,
                 Err(e) => {
                     error!("Failed to query output user_data: {}", e);
-                    let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                    rollback_immediate_transaction(&mut conn, "prepare_ready_jobs output user_data")
+                        .await;
                     return Err(ApiError("Database query error".to_string()));
                 }
             };
@@ -1858,7 +1878,8 @@ where
             );
             if let Err(e) = sqlx::query(&sql).execute(&mut *conn).await {
                 error!("Failed to update job status: {}", e);
-                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                rollback_immediate_transaction(&mut conn, "prepare_ready_jobs update status")
+                    .await;
                 return Err(ApiError("Database update error".to_string()));
             }
 
@@ -1871,9 +1892,7 @@ where
 
             if let Err(e) = sqlx::query("COMMIT").execute(&mut *conn).await {
                 error!("Failed to commit transaction: {}", e);
-                if let Err(rollback_err) = sqlx::query("ROLLBACK").execute(&mut *conn).await {
-                    error!("Failed to rollback after commit failure: {}", rollback_err);
-                }
+                rollback_immediate_transaction(&mut conn, "prepare_ready_jobs commit").await;
                 return Err(ApiError("Database commit error".to_string()));
             }
 
@@ -1887,7 +1906,7 @@ where
         .await;
 
         if result.is_err() {
-            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+            rollback_immediate_transaction(&mut conn, "prepare_ready_jobs error exit").await;
         }
 
         result

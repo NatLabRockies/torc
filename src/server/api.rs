@@ -2,7 +2,7 @@
 
 use crate::server::transport_types::context_types::ApiError;
 use log::{debug, error, info};
-use sqlx::sqlite::SqlitePool;
+use sqlx::{Sqlite, pool::PoolConnection, sqlite::SqlitePool};
 use std::sync::Arc;
 
 pub use crate::MAX_RECORD_TRANSFER_COUNT;
@@ -50,6 +50,29 @@ pub fn database_lock_aware_error(e: impl std::fmt::Display, msg: impl Into<Strin
 pub fn json_parse_error(e: impl std::fmt::Display) -> ApiError {
     info!("Failed to parse JSON data: {}", e);
     ApiError("Failed to parse event data".to_string())
+}
+
+pub async fn begin_immediate_transaction(
+    conn: &mut PoolConnection<Sqlite>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("BEGIN IMMEDIATE").execute(&mut **conn).await?;
+    Ok(())
+}
+
+pub async fn rollback_immediate_transaction(
+    conn: &mut PoolConnection<Sqlite>,
+    context: &str,
+) -> bool {
+    if let Err(e) = sqlx::query("ROLLBACK").execute(&mut **conn).await {
+        error!(
+            "Failed to rollback transaction ({}): {}; closing connection on drop",
+            context, e
+        );
+        conn.close_on_drop();
+        false
+    } else {
+        true
+    }
 }
 
 /// Escape SQL LIKE wildcard characters in user input.

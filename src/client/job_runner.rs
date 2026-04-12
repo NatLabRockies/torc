@@ -321,6 +321,17 @@ pub struct JobRunner {
 }
 
 impl JobRunner {
+    fn format_error_chain(err: &dyn std::error::Error) -> String {
+        let mut message = err.to_string();
+        let mut source = err.source();
+        while let Some(err) = source {
+            message.push_str(": ");
+            message.push_str(&err.to_string());
+            source = err.source();
+        }
+        message
+    }
+
     fn parse_visible_devices_list(value: &str) -> Vec<String> {
         value
             .split(',')
@@ -1807,6 +1818,12 @@ impl JobRunner {
                 error!(
                     "Job complete failed workflow_id={} job_id={} error={}",
                     self.workflow_id, job_id, e
+                );
+                error!(
+                    "Job complete error chain workflow_id={} job_id={} details={}",
+                    self.workflow_id,
+                    job_id,
+                    Self::format_error_chain(e.as_ref())
                 );
             }
         }

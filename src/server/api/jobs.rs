@@ -21,7 +21,10 @@ use crate::server::api_responses::{
 
 use crate::models::{self as models, JobStatus};
 
-use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg};
+use super::{
+    ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, begin_immediate_transaction,
+    database_error_with_msg, rollback_immediate_transaction,
+};
 
 /// Trait defining job-related API operations
 #[async_trait]
@@ -2298,13 +2301,10 @@ where
             ));
         }
 
-        sqlx::query("BEGIN IMMEDIATE")
-            .execute(&mut *conn)
-            .await
-            .map_err(|e| {
-                error!("Failed to begin immediate transaction: {}", e);
-                ApiError("Database lock error".to_string())
-            })?;
+        begin_immediate_transaction(&mut conn).await.map_err(|e| {
+            error!("Failed to begin immediate transaction: {}", e);
+            ApiError("Database lock error".to_string())
+        })?;
 
         let ready_status = models::JobStatus::Ready.to_int();
         let query = r#"
@@ -2336,7 +2336,7 @@ where
             Ok(rows) => rows,
             Err(e) => {
                 error!("Database error in claim_next_jobs: {}", e);
-                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                rollback_immediate_transaction(&mut conn, "claim_next_jobs query").await;
                 return Err(ApiError("Database error".to_string()));
             }
         };
@@ -2393,7 +2393,7 @@ where
                 Ok(rows) => rows,
                 Err(e) => {
                     error!("Failed to query output files: {}", e);
-                    let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                    rollback_immediate_transaction(&mut conn, "claim_next_jobs output files").await;
                     return Err(ApiError("Database query error".to_string()));
                 }
             };
@@ -2416,7 +2416,8 @@ where
                 Ok(rows) => rows,
                 Err(e) => {
                     error!("Failed to query output user_data: {}", e);
-                    let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                    rollback_immediate_transaction(&mut conn, "claim_next_jobs output user_data")
+                        .await;
                     return Err(ApiError("Database query error".to_string()));
                 }
             };
@@ -2453,7 +2454,7 @@ where
             );
             if let Err(e) = sqlx::query(&sql).execute(&mut *conn).await {
                 error!("Failed to update job status: {}", e);
-                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                rollback_immediate_transaction(&mut conn, "claim_next_jobs update status").await;
                 return Err(ApiError("Database update error".to_string()));
             }
 
@@ -2466,9 +2467,7 @@ where
 
         if let Err(e) = sqlx::query("COMMIT").execute(&mut *conn).await {
             error!("Failed to commit transaction: {}", e);
-            if let Err(rollback_err) = sqlx::query("ROLLBACK").execute(&mut *conn).await {
-                error!("Failed to rollback after commit failure: {}", rollback_err);
-            }
+            rollback_immediate_transaction(&mut conn, "claim_next_jobs commit").await;
             return Err(ApiError("Database commit error".to_string()));
         }
 
@@ -2786,7 +2785,7 @@ where
             }
         };
 
-        if let Err(e) = sqlx::query("BEGIN IMMEDIATE").execute(&mut *conn).await {
+        if let Err(e) = begin_immediate_transaction(&mut conn).await {
             return Err(database_error_with_msg(
                 e,
                 "Failed to begin immediate transaction for retry",
@@ -2813,14 +2812,14 @@ where
         {
             Ok(Some(record)) => record,
             Ok(None) => {
-                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                rollback_immediate_transaction(&mut conn, "retry_job not found").await;
                 let error_response = models::ErrorResponse::new(serde_json::json!({
                     "message": format!("Job not found with ID: {}", id)
                 }));
                 return Ok(RetryJobResponse::NotFoundErrorResponse(error_response));
             }
             Err(e) => {
-                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                rollback_immediate_transaction(&mut conn, "retry_job fetch record").await;
                 return Err(database_error_with_msg(e, "Failed to get job record for retry"));
             }
         };
@@ -2843,7 +2842,7 @@ where
 
         // Verify run_id matches
         if workflow_run_id != run_id {
-            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+            rollback_immediate_transaction(&mut conn, "retry_job run_id mismatch").await;
             let error_response = models::ErrorResponse::new(serde_json::json!({
                 "message": format!(
                     "Run ID mismatch: provided {} but workflow is at run {}",
@@ -2862,7 +2861,7 @@ where
         let current_status = match JobStatus::from_int(status_int) {
             Ok(s) => s,
             Err(e) => {
-                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                rollback_immediate_transaction(&mut conn, "retry_job invalid status").await;
                 error!("Failed to parse job status: {}", e);
                 return Err(ApiError(format!("Failed to parse job status: {}", e)));
             }
@@ -2872,7 +2871,7 @@ where
             && current_status != JobStatus::Failed
             && current_status != JobStatus::Terminated
         {
-            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+            rollback_immediate_transaction(&mut conn, "retry_job disallowed status").await;
             let error_response = models::ErrorResponse::new(serde_json::json!({
                 "message": format!(
                     "Job cannot be retried: status is {:?}, must be Running, Failed, or Terminated",
@@ -2886,7 +2885,7 @@ where
 
         // Validate max_retries (server-side enforcement)
         if attempt_id >= max_retries as i64 {
-            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+            rollback_immediate_transaction(&mut conn, "retry_job max retries exceeded").await;
             let error_response = models::ErrorResponse::new(serde_json::json!({
                 "message": format!(
                     "Job cannot be retried: attempt_id {} >= max_retries {}",
@@ -2916,7 +2915,7 @@ where
         .execute(&mut *conn)
         .await
         {
-            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+            rollback_immediate_transaction(&mut conn, "retry_job update status").await;
             return Err(database_error_with_msg(
                 e,
                 "Failed to update job status for retry",
@@ -2955,9 +2954,7 @@ where
         // the transaction may remain active. Best-effort ROLLBACK to avoid returning
         // a pooled connection with an open transaction/write lock.
         if let Err(e) = sqlx::query("COMMIT").execute(&mut *conn).await {
-            if let Err(rollback_err) = sqlx::query("ROLLBACK").execute(&mut *conn).await {
-                error!("Failed to rollback after commit failure: {}", rollback_err);
-            }
+            rollback_immediate_transaction(&mut conn, "retry_job commit").await;
             return Err(database_error_with_msg(e, "Failed to commit transaction"));
         }
 

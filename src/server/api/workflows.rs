@@ -19,8 +19,8 @@ use crate::server::api_responses::{
 use crate::models;
 
 use super::{
-    ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg,
-    escape_like_pattern,
+    ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, begin_immediate_transaction,
+    database_error_with_msg, escape_like_pattern, rollback_immediate_transaction,
 };
 
 /// Trait defining workflow-related API operations
@@ -1510,8 +1510,7 @@ where
         // Wrap all deletes in a transaction for atomicity. If anything fails,
         // the transaction rolls back and we re-enable FK checks in the cleanup below.
         let result = async {
-            sqlx::query("BEGIN IMMEDIATE")
-                .execute(&mut *conn)
+            begin_immediate_transaction(&mut conn)
                 .await
                 .map_err(|e| database_error_with_msg(e, "Failed to begin transaction"))?;
 
@@ -1662,13 +1661,10 @@ where
 
         // On error, ROLLBACK to close the transaction before restoring FK checks.
         // PRAGMA foreign_keys is a no-op inside an open transaction, so we must
-        // close it first. If rollback fails, detach the connection to prevent
-        // returning it to the pool with an open write lock.
+        // close it first. If rollback fails, mark the pooled connection to close
+        // on drop so it is not returned with an open write lock.
         if let Err(delete_err) = result {
-            if let Err(rb_err) = sqlx::query("ROLLBACK").execute(&mut *conn).await {
-                error!("Failed to rollback transaction: {rb_err}; dropping connection");
-                conn.detach();
-            } else {
+            if rollback_immediate_transaction(&mut conn, "delete_workflow").await {
                 // Rollback succeeded. Re-enable FK checks before returning.
                 let _ = sqlx::query("PRAGMA foreign_keys = ON")
                     .execute(&mut *conn)
