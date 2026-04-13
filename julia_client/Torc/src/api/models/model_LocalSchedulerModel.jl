@@ -2,37 +2,37 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""local_scheduler_model
+@doc raw"""LocalSchedulerModel
 
     LocalSchedulerModel(;
         id=nothing,
-        workflow_id=nothing,
-        name="default",
         memory=nothing,
+        name=nothing,
         num_cpus=nothing,
+        workflow_id=nothing,
     )
 
     - id::Int64
-    - workflow_id::Int64
-    - name::String
     - memory::String
+    - name::String
     - num_cpus::Int64
+    - workflow_id::Int64
 """
 Base.@kwdef mutable struct LocalSchedulerModel <: OpenAPI.APIModel
     id::Union{Nothing, Int64} = nothing
-    workflow_id::Union{Nothing, Int64} = nothing
-    name::Union{Nothing, String} = "default"
     memory::Union{Nothing, String} = nothing
+    name::Union{Nothing, String} = nothing
     num_cpus::Union{Nothing, Int64} = nothing
+    workflow_id::Union{Nothing, Int64} = nothing
 
-    function LocalSchedulerModel(id, workflow_id, name, memory, num_cpus, )
-        o = new(id, workflow_id, name, memory, num_cpus, )
+    function LocalSchedulerModel(id, memory, name, num_cpus, workflow_id, )
+        o = new(id, memory, name, num_cpus, workflow_id, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type LocalSchedulerModel
 
-const _property_types_LocalSchedulerModel = Dict{Symbol,String}(Symbol("id")=>"Int64", Symbol("workflow_id")=>"Int64", Symbol("name")=>"String", Symbol("memory")=>"String", Symbol("num_cpus")=>"Int64", )
+const _property_types_LocalSchedulerModel = Dict{Symbol,String}(Symbol("id")=>"Int64", Symbol("memory")=>"String", Symbol("name")=>"String", Symbol("num_cpus")=>"Int64", Symbol("workflow_id")=>"Int64", )
 OpenAPI.property_type(::Type{ LocalSchedulerModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_LocalSchedulerModel[name]))}
 
 function OpenAPI.check_required(o::LocalSchedulerModel)
@@ -42,16 +42,25 @@ end
 
 function OpenAPI.validate_properties(o::LocalSchedulerModel)
     OpenAPI.validate_property(LocalSchedulerModel, Symbol("id"), o.id)
-    OpenAPI.validate_property(LocalSchedulerModel, Symbol("workflow_id"), o.workflow_id)
-    OpenAPI.validate_property(LocalSchedulerModel, Symbol("name"), o.name)
     OpenAPI.validate_property(LocalSchedulerModel, Symbol("memory"), o.memory)
+    OpenAPI.validate_property(LocalSchedulerModel, Symbol("name"), o.name)
     OpenAPI.validate_property(LocalSchedulerModel, Symbol("num_cpus"), o.num_cpus)
+    OpenAPI.validate_property(LocalSchedulerModel, Symbol("workflow_id"), o.workflow_id)
 end
 
 function OpenAPI.validate_property(::Type{ LocalSchedulerModel }, name::Symbol, val)
 
+    if name === Symbol("id")
+        OpenAPI.validate_param(name, "LocalSchedulerModel", :format, val, "int64")
+    end
 
 
 
+    if name === Symbol("num_cpus")
+        OpenAPI.validate_param(name, "LocalSchedulerModel", :format, val, "int64")
+    end
 
+    if name === Symbol("workflow_id")
+        OpenAPI.validate_param(name, "LocalSchedulerModel", :format, val, "int64")
+    end
 end

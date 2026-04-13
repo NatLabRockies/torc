@@ -7,7 +7,8 @@ Job runners are worker processes that execute jobs on compute resources.
 Torc supports three execution modes:
 
 1. **Local Runner** (`torc run`) - Runs jobs on the local machine with resource tracking
-2. **HPC/Slurm Runner** (`torc submit-slurm`) - Runs jobs on Slurm-allocated compute nodes
+2. **HPC/Slurm Runner** (`torc slurm generate` + `torc submit`) - Runs jobs on Slurm-allocated
+   compute nodes
 3. **Remote Workers** (`torc remote run`) - Distributes jobs across SSH-accessible machines
 
 ### Local Runner

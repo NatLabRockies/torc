@@ -8,8 +8,8 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::utils;
 
 // Re-export shared recovery types and functions from the recover module
@@ -27,12 +27,32 @@ pub use super::orphan_detection::ORPHANED_JOB_RETURN_CODE;
 /// Default wait time for database connectivity issues (in minutes)
 const WAIT_FOR_HEALTHY_DATABASE_MINUTES: u64 = 20;
 
+#[derive(Debug)]
+struct RetryApiError(String);
+
+impl std::fmt::Display for RetryApiError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for RetryApiError {}
+
+fn box_retry_error<T, E>(result: Result<T, E>) -> Result<T, Box<dyn std::error::Error>>
+where
+    E: std::fmt::Display,
+{
+    result.map_err(|err| Box::new(RetryApiError(err.to_string())) as Box<dyn std::error::Error>)
+}
+
 /// Execute an API call with automatic retries for network errors.
 /// This wraps utils::send_with_retries with a default timeout.
-fn send_with_retries<T, E, F>(config: &Configuration, api_call: F) -> Result<T, E>
+fn send_with_retries<T, F>(
+    config: &Configuration,
+    api_call: F,
+) -> Result<T, Box<dyn std::error::Error>>
 where
-    F: FnMut() -> Result<T, E>,
-    E: std::fmt::Display,
+    F: FnMut() -> Result<T, Box<dyn std::error::Error>>,
 {
     utils::send_with_retries(config, api_call, WAIT_FOR_HEALTHY_DATABASE_MINUTES)
 }
@@ -67,7 +87,7 @@ pub struct WatchArgs {
     pub workflow_id: i64,
     pub poll_interval: u64,
     pub recover: bool,
-    pub max_retries: u32,
+    pub max_retries: Option<u32>,
     pub memory_multiplier: f64,
     pub runtime_multiplier: f64,
     pub retry_unknown: bool,
@@ -87,6 +107,10 @@ pub struct WatchArgs {
     pub ai_recovery: bool,
     /// AI agent CLI to use for --ai-recovery (e.g., "claude")
     pub ai_agent: String,
+    /// Fixed Slurm partition for regenerated schedulers (bypasses auto-selection)
+    pub partition: Option<String>,
+    /// Fixed Slurm walltime for regenerated schedulers (bypasses auto-calculation)
+    pub walltime: Option<String>,
 }
 
 /// Get job counts by status for a workflow
@@ -138,7 +162,7 @@ fn count_ready_retry_jobs(config: &Configuration, workflow_id: i64) -> Result<(i
 fn has_active_workers(config: &Configuration, workflow_id: i64) -> bool {
     // Check for active compute nodes (is_active=true)
     if let Ok(response) = send_with_retries(config, || {
-        default_api::list_compute_nodes(
+        box_retry_error(apis::compute_nodes_api::list_compute_nodes(
             config,
             workflow_id,
             None,       // offset
@@ -148,9 +172,8 @@ fn has_active_workers(config: &Configuration, workflow_id: i64) -> bool {
             None,       // hostname
             Some(true), // is_active = true
             None,       // scheduled_compute_node_id
-        )
-    }) && let Some(nodes) = response.items
-        && !nodes.is_empty()
+        ))
+    }) && !response.items.is_empty()
     {
         return true;
     }
@@ -165,38 +188,40 @@ fn has_active_workers(config: &Configuration, workflow_id: i64) -> bool {
 fn has_any_scheduled_compute_nodes(config: &Configuration, workflow_id: i64) -> bool {
     // Check for pending allocations
     if let Ok(response) = send_with_retries(config, || {
-        default_api::list_scheduled_compute_nodes(
-            config,
-            workflow_id,
-            None,            // offset
-            Some(1),         // limit - just need one
-            None,            // sort_by
-            None,            // reverse_sort
-            None,            // scheduler_id
-            None,            // scheduler_config_id
-            Some("pending"), // status
+        box_retry_error(
+            apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
+                config,
+                workflow_id,
+                None,            // offset
+                Some(1),         // limit - just need one
+                None,            // sort_by
+                None,            // reverse_sort
+                None,            // scheduler_id
+                None,            // scheduler_config_id
+                Some("pending"), // status
+            ),
         )
-    }) && let Some(nodes) = response.items
-        && !nodes.is_empty()
+    }) && !response.items.is_empty()
     {
         return true;
     }
 
     // Check for active allocations
     if let Ok(response) = send_with_retries(config, || {
-        default_api::list_scheduled_compute_nodes(
-            config,
-            workflow_id,
-            None,           // offset
-            Some(1),        // limit - just need one
-            None,           // sort_by
-            None,           // reverse_sort
-            None,           // scheduler_id
-            None,           // scheduler_config_id
-            Some("active"), // status
+        box_retry_error(
+            apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
+                config,
+                workflow_id,
+                None,           // offset
+                Some(1),        // limit - just need one
+                None,           // sort_by
+                None,           // reverse_sort
+                None,           // scheduler_id
+                None,           // scheduler_config_id
+                Some("active"), // status
+            ),
         )
-    }) && let Some(nodes) = response.items
-        && !nodes.is_empty()
+    }) && !response.items.is_empty()
     {
         return true;
     }
@@ -216,23 +241,23 @@ fn has_valid_slurm_allocation(config: &Configuration, workflow_id: i64) -> bool 
 
     // First check for active allocations
     let active_nodes = send_with_retries(config, || {
-        default_api::list_scheduled_compute_nodes(
-            config,
-            workflow_id,
-            None,           // offset
-            Some(1),        // limit - just need one
-            None,           // sort_by
-            None,           // reverse_sort
-            None,           // scheduler_id
-            None,           // scheduler_config_id
-            Some("active"), // status
+        box_retry_error(
+            apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
+                config,
+                workflow_id,
+                None,           // offset
+                Some(1),        // limit - just need one
+                None,           // sort_by
+                None,           // reverse_sort
+                None,           // scheduler_id
+                None,           // scheduler_config_id
+                Some("active"), // status
+            ),
         )
     });
 
-    if let Ok(response) = active_nodes
-        && let Some(nodes) = response.items
-    {
-        for node in nodes {
+    if let Ok(response) = active_nodes {
+        for node in response.items {
             if node.scheduler_type.to_lowercase() == "slurm" {
                 // Check if this Slurm job is still running
                 if let Ok(slurm) = SlurmInterface::new() {
@@ -254,23 +279,23 @@ fn has_valid_slurm_allocation(config: &Configuration, workflow_id: i64) -> bool 
 
     // Check for pending allocations
     let pending_nodes = send_with_retries(config, || {
-        default_api::list_scheduled_compute_nodes(
-            config,
-            workflow_id,
-            None,            // offset
-            Some(1),         // limit - just need one
-            None,            // sort_by
-            None,            // reverse_sort
-            None,            // scheduler_id
-            None,            // scheduler_config_id
-            Some("pending"), // status
+        box_retry_error(
+            apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
+                config,
+                workflow_id,
+                None,            // offset
+                Some(1),         // limit - just need one
+                None,            // sort_by
+                None,            // reverse_sort
+                None,            // scheduler_id
+                None,            // scheduler_config_id
+                Some("pending"), // status
+            ),
         )
     });
 
-    if let Ok(response) = pending_nodes
-        && let Some(nodes) = response.items
-    {
-        for node in nodes {
+    if let Ok(response) = pending_nodes {
+        for node in response.items {
             if node.scheduler_type.to_lowercase() == "slurm" {
                 // Check if this Slurm job is still queued
                 if let Ok(slurm) = SlurmInterface::new() {
@@ -304,6 +329,8 @@ struct AutoScheduleOptions {
     cooldown: Duration,
     stranded_timeout: Duration,
     output_dir: PathBuf,
+    partition: Option<String>,
+    walltime: Option<String>,
 }
 
 /// Poll until workflow is complete, optionally printing status updates.
@@ -323,12 +350,20 @@ fn poll_until_complete(
     let mut workflow_complete = false;
     // Track when we last auto-scheduled (or started watching) for stranded job detection
     let mut last_auto_schedule: Instant = Instant::now();
+    // Track consecutive polls with no valid Slurm allocation. Orphan cleanup only
+    // runs after multiple consecutive misses to avoid racing with Slurm jobs that
+    // are just starting up (squeue may not reflect the new job immediately).
+    let mut consecutive_no_allocation: u32 = 0;
+    const ORPHAN_DETECTION_THRESHOLD: u32 = 3;
 
     loop {
         // Check if workflow is complete
         if !workflow_complete {
             match send_with_retries(config, || {
-                default_api::is_workflow_complete(config, workflow_id)
+                box_retry_error(apis::workflows_api::is_workflow_complete(
+                    config,
+                    workflow_id,
+                ))
             }) {
                 Ok(response) => {
                     if response.is_complete {
@@ -379,6 +414,7 @@ fn poll_until_complete(
         // skip the expensive per-allocation orphan detection. This reduces N squeue calls
         // to just 1-2 calls when jobs are queued or running normally.
         if has_valid_slurm_allocation(config, workflow_id) {
+            consecutive_no_allocation = 0;
             // Check if we should auto-schedule for retry jobs even though schedulers exist
             if auto_schedule.enabled {
                 let cooldown_passed = last_auto_schedule.elapsed() >= auto_schedule.cooldown;
@@ -397,8 +433,12 @@ fn poll_until_complete(
                                     "Auto-schedule: {} retry jobs waiting (threshold: {}), scheduling more nodes...",
                                     retry_ready, auto_schedule.threshold
                                 );
-                                match regenerate_and_submit(workflow_id, &auto_schedule.output_dir)
-                                {
+                                match regenerate_and_submit(
+                                    workflow_id,
+                                    &auto_schedule.output_dir,
+                                    auto_schedule.partition.as_deref(),
+                                    auto_schedule.walltime.as_deref(),
+                                ) {
                                     Ok(()) => {
                                         info!(
                                             "Auto-schedule: Successfully submitted new allocations"
@@ -416,8 +456,12 @@ fn poll_until_complete(
                                     last_auto_schedule.elapsed().as_secs(),
                                     auto_schedule.stranded_timeout.as_secs()
                                 );
-                                match regenerate_and_submit(workflow_id, &auto_schedule.output_dir)
-                                {
+                                match regenerate_and_submit(
+                                    workflow_id,
+                                    &auto_schedule.output_dir,
+                                    auto_schedule.partition.as_deref(),
+                                    auto_schedule.walltime.as_deref(),
+                                ) {
                                     Ok(()) => {
                                         info!(
                                             "Auto-schedule: Successfully submitted new allocations"
@@ -455,8 +499,23 @@ fn poll_until_complete(
             continue;
         }
 
-        // No valid Slurm allocations found - check for orphaned jobs
-        debug!("No valid Slurm allocations, checking for orphaned jobs...");
+        // No valid Slurm allocations found — increment counter and only run
+        // orphan cleanup after the condition persists across multiple polls.
+        // This prevents racing with Slurm jobs that are just starting up.
+        consecutive_no_allocation += 1;
+        if consecutive_no_allocation < ORPHAN_DETECTION_THRESHOLD {
+            debug!(
+                "No valid Slurm allocations (poll {}/{}), waiting before orphan detection...",
+                consecutive_no_allocation, ORPHAN_DETECTION_THRESHOLD
+            );
+            std::thread::sleep(Duration::from_secs(poll_interval));
+            continue;
+        }
+
+        debug!(
+            "No valid Slurm allocations for {} consecutive polls, checking for orphaned jobs...",
+            consecutive_no_allocation
+        );
 
         // Use shared orphan detection to check for:
         // 1. Orphaned Slurm jobs (active allocations that are no longer running)
@@ -491,7 +550,12 @@ fn poll_until_complete(
                                 total_ready, retry_ready
                             );
                             info!("Auto-schedule: Regenerating schedulers...");
-                            match regenerate_and_submit(workflow_id, &auto_schedule.output_dir) {
+                            match regenerate_and_submit(
+                                workflow_id,
+                                &auto_schedule.output_dir,
+                                auto_schedule.partition.as_deref(),
+                                auto_schedule.walltime.as_deref(),
+                            ) {
                                 Ok(()) => {
                                     info!("Auto-schedule: Successfully submitted new allocations");
                                     last_auto_schedule = Instant::now();
@@ -620,7 +684,10 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
         args.workflow_id,
         args.poll_interval,
         if args.recover {
-            format!(", recover enabled, max retries: {}", args.max_retries)
+            match args.max_retries {
+                Some(max) => format!(", recover enabled, max retries: {}", max),
+                None => ", recover enabled, unlimited retries".to_string(),
+            }
         } else {
             String::new()
         },
@@ -642,6 +709,8 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
         cooldown: Duration::from_secs(args.auto_schedule_cooldown),
         stranded_timeout: Duration::from_secs(args.auto_schedule_stranded_timeout),
         output_dir: args.output_dir.clone(),
+        partition: args.partition.clone(),
+        walltime: args.walltime.clone(),
     };
 
     if args.auto_schedule {
@@ -753,24 +822,28 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
             std::process::exit(1);
         }
 
-        if retry_count >= args.max_retries {
+        if let Some(max) = args.max_retries.filter(|&max| retry_count >= max) {
             warn!(
                 "\nMax retries ({}) exceeded. Manual intervention required.",
-                args.max_retries
+                max
             );
             warn!("Use the Torc MCP server with your AI assistant to investigate.");
             std::process::exit(1);
         }
 
         retry_count += 1;
-        info!(
-            "\nAttempting automatic recovery (attempt {}/{})",
-            retry_count, args.max_retries
-        );
+        if let Some(max) = args.max_retries {
+            info!(
+                "\nAttempting automatic recovery (attempt {}/{})",
+                retry_count, max
+            );
+        } else {
+            info!("\nAttempting automatic recovery (attempt {})", retry_count);
+        }
 
         // Step 1: Diagnose failures
         info!("\nDiagnosing failures...");
-        let diagnosis = match diagnose_failures(args.workflow_id, &args.output_dir) {
+        let diagnosis = match diagnose_failures(config, args.workflow_id) {
             Ok(d) => d,
             Err(e) => {
                 warn!("Warning: Could not diagnose failures: {}", e);
@@ -781,6 +854,7 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
                     total_results: 0,
                     over_utilization_count: 0,
                     violations: Vec::new(),
+                    within_limits: Vec::new(),
                     resource_violations_count: 0,
                     resource_violations: Vec::new(),
                 }
@@ -889,14 +963,19 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
         // Must happen before regenerate_and_submit because reset_workflow_status
         // rejects requests when there are pending scheduled compute nodes.
         info!("Reinitializing workflow...");
-        if let Err(e) = reinitialize_workflow(args.workflow_id) {
+        if let Err(e) = reinitialize_workflow(config, args.workflow_id) {
             warn!("Error reinitializing workflow: {}", e);
             std::process::exit(1);
         }
 
         // Step 5: Regenerate Slurm schedulers (this also marks old actions as executed)
         info!("Regenerating Slurm schedulers...");
-        if let Err(e) = regenerate_and_submit(args.workflow_id, &args.output_dir) {
+        if let Err(e) = regenerate_and_submit(
+            args.workflow_id,
+            &args.output_dir,
+            args.partition.as_deref(),
+            args.walltime.as_deref(),
+        ) {
             warn!("Error regenerating schedulers: {}", e);
             std::process::exit(1);
         }

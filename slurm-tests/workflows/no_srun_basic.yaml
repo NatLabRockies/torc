@@ -1,14 +1,14 @@
 # Test: No-srun Basic
 #
-# 1-node allocation with use_srun=false, 2 jobs (cpu_work, memory_work).
+# 1-node allocation with mode=direct, 2 jobs (cpu_work, memory_work).
 # Verifies that direct shell execution (without srun wrapping) still works,
 # and that time-series resource monitoring captures CPU and memory data.
 
 name: no_srun_basic
-description: Single node with use_srun=false — direct shell execution with resource monitoring
+description: Single node with direct mode — direct shell execution with resource monitoring
 project: slurm-tests
-slurm_config:
-  use_srun: false
+execution_config:
+  mode: direct
 
 resource_monitor:
   enabled: true

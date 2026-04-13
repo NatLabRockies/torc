@@ -24,19 +24,122 @@
 //! After calling `terminate()` or `cancel()`, call `wait_for_completion()` to wait
 //! for the process to exit and capture its exit code.
 
-use crate::client::log_paths::{get_job_stderr_path, get_job_stdout_path};
+use crate::client::log_paths::{get_job_combined_path, get_job_stderr_path, get_job_stdout_path};
 use crate::client::resource_monitor::ResourceMonitor;
 use crate::client::slurm_utils::{parse_slurm_cpu_time, parse_slurm_memory};
-use crate::memory_utils::memory_string_to_mb;
+use crate::client::workflow_spec::{ExecutionMode, StdioMode};
+use crate::memory_utils::{memory_string_to_bytes, memory_string_to_mb};
 use crate::models::{JobModel, JobStatus, ResourceRequirementsModel, ResultModel, SlurmStatsModel};
 use chrono::{DateTime, Utc};
 use log::{self, debug, error, info, warn};
 use std::fs::File;
-use std::io::BufWriter;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 
 const JOB_STDIO_DIR: &str = "job_stdio";
+
+/// Parameters for building an srun command.
+struct SrunParams<'a> {
+    slurm_job_id: &'a str,
+    step_name: String,
+    enable_cpu_bind: bool,
+    target_node: Option<&'a str>,
+    resource_requirements: Option<&'a ResourceRequirementsModel>,
+    end_time: Option<DateTime<Utc>>,
+    sigkill_headroom_seconds: i64,
+    srun_termination_signal: Option<&'a str>,
+    command_str: &'a str,
+    job_id: i64,
+}
+
+/// Build an srun command with the given parameters.
+///
+/// This wraps a job command with srun so Slurm creates a per-job cgroup step,
+/// enables sacct accounting, and gives HPC admins visibility.
+fn build_srun_command(params: &SrunParams) -> Result<Command, String> {
+    // Allow tests to substitute a fake srun binary via TORC_FAKE_SRUN.
+    let srun_binary = std::env::var("TORC_FAKE_SRUN").unwrap_or_else(|_| "srun".to_string());
+    let mut srun = Command::new(&srun_binary);
+
+    srun.arg(format!("--jobid={}", params.slurm_job_id));
+    srun.arg("--ntasks=1");
+
+    if !params.enable_cpu_bind {
+        srun.arg("--cpu-bind=none");
+    }
+
+    // --exact tells srun to use exactly the requested CPUs/memory without
+    // claiming the entire node exclusively. This allows concurrent steps
+    // to share nodes in multi-node allocations.
+    srun.arg("--exact");
+    srun.arg(format!("--job-name={}", params.step_name));
+
+    // Pin the step to a specific node when the job runner has claimed
+    // resources on that node.
+    if let Some(node) = params.target_node {
+        srun.arg(format!("--nodelist={}", node));
+    }
+
+    // Add resource requirements to srun. The limit_resources setting only
+    // applies to direct mode (OOM enforcement); in srun mode, resource args
+    // are needed for --exact to work correctly. The "default" resource
+    // requirement is a placeholder with no real limits, so --cpus-per-task
+    // and --mem are omitted for it to avoid artificially constraining jobs.
+    if let Some(rr) = params.resource_requirements {
+        srun.arg(format!("--nodes={}", rr.num_nodes.max(1)));
+        if rr.name != "default" {
+            srun.arg(format!("--cpus-per-task={}", rr.num_cpus));
+            match memory_string_to_mb(&rr.memory) {
+                Some(mem_mb) if mem_mb > 0 => {
+                    srun.arg(format!("--mem={}M", mem_mb));
+                }
+                Some(_) => {
+                    warn!(
+                        "Memory string {:?} for job {} rounds to 0 MB; omitting --mem from srun",
+                        rr.memory, params.job_id
+                    );
+                }
+                None => {
+                    warn!(
+                        "Could not parse memory string {:?} for job {}; omitting --mem from srun",
+                        rr.memory, params.job_id
+                    );
+                }
+            }
+        }
+        if rr.num_gpus > 0 {
+            srun.arg(format!("--gpus={}", rr.num_gpus));
+        }
+    }
+
+    // Set per-step walltime to sigkill_headroom_seconds before the allocation expires.
+    // Floor of 1 minute because --time=0 means unlimited in Slurm.
+    if let Some(end) = params.end_time {
+        let remaining_secs = (end - Utc::now()).num_seconds();
+        let usable_secs = remaining_secs - params.sigkill_headroom_seconds;
+        if usable_secs < 60 {
+            return Err(format!(
+                "Refusing to launch srun step for job {}: only {}s remaining \
+                 ({}s usable after {}s sigkill headroom, need at least 60s)",
+                params.job_id, remaining_secs, usable_secs, params.sigkill_headroom_seconds
+            ));
+        }
+        let remaining_minutes = usable_secs / 60;
+        srun.arg(format!("--time={}", remaining_minutes));
+    }
+
+    // Pass --signal to give jobs advance warning before timeout.
+    if let Some(signal_spec) = params.srun_termination_signal {
+        srun.arg(format!("--signal={}", signal_spec));
+    }
+
+    // Run via bash so job.command can use shell features
+    srun.args(["bash", "-c", params.command_str]);
+
+    debug!("srun command for job {}: {:?}", params.job_id, srun);
+
+    Ok(srun)
+}
 
 #[allow(dead_code)]
 pub struct AsyncCliCommand {
@@ -58,8 +161,10 @@ pub struct AsyncCliCommand {
     return_code: Option<i64>,
     pub is_complete: bool,
     status: JobStatus,
-    stdout_fp: Option<BufWriter<File>>,
-    stderr_fp: Option<BufWriter<File>>,
+    /// Path to stdout file (if captured).
+    pub stdout_path: Option<String>,
+    /// Path to stderr file (if captured); for combined mode this is None.
+    pub stderr_path: Option<String>,
 }
 
 impl AsyncCliCommand {
@@ -83,8 +188,8 @@ impl AsyncCliCommand {
             return_code: None,
             is_complete: false,
             status,
-            stdout_fp: None,
-            stderr_fp: None,
+            stdout_path: None,
+            stderr_path: None,
         }
     }
 
@@ -104,12 +209,15 @@ impl AsyncCliCommand {
         resource_monitor: Option<&ResourceMonitor>,
         api_url: &str,
         resource_requirements: Option<&ResourceRequirementsModel>,
+        gpu_visible_devices: Option<&str>,
         limit_resources: bool,
-        use_srun: bool,
+        execution_mode: ExecutionMode,
         enable_cpu_bind: bool,
         end_time: Option<DateTime<Utc>>,
         srun_termination_signal: Option<&str>,
+        sigkill_headroom_seconds: i64,
         target_node: Option<&str>,
+        stdio_mode: &StdioMode,
     ) -> Result<(), Box<dyn std::error::Error>> {
         if self.is_running {
             return Err("Job is already running".into());
@@ -119,19 +227,62 @@ impl AsyncCliCommand {
         let workflow_id_str = workflow_id.to_string();
         let attempt_id_str = attempt_id.to_string();
 
-        // Create output file paths using consistent naming from log_paths
-        let stdio_dir = output_dir.join(JOB_STDIO_DIR);
-        std::fs::create_dir_all(&stdio_dir)?;
+        // Create output directory for stdio files (unless we're not capturing anything)
+        if *stdio_mode != StdioMode::None {
+            let stdio_dir = output_dir.join(JOB_STDIO_DIR);
+            std::fs::create_dir_all(&stdio_dir)?;
+        }
 
-        let stdout_path =
-            get_job_stdout_path(output_dir, workflow_id, self.job_id, run_id, attempt_id);
-        let stderr_path =
-            get_job_stderr_path(output_dir, workflow_id, self.job_id, run_id, attempt_id);
-
-        let stdout_file = File::create(&stdout_path)?;
-        let stderr_file = File::create(&stderr_path)?;
-        self.stdout_fp = Some(BufWriter::new(stdout_file));
-        self.stderr_fp = Some(BufWriter::new(stderr_file));
+        // Configure stdio based on the requested mode
+        let (stdout_stdio, stderr_stdio, stdout_path_opt, stderr_path_opt) = match stdio_mode {
+            StdioMode::Separate => {
+                let stdout_p =
+                    get_job_stdout_path(output_dir, workflow_id, self.job_id, run_id, attempt_id);
+                let stderr_p =
+                    get_job_stderr_path(output_dir, workflow_id, self.job_id, run_id, attempt_id);
+                (
+                    Stdio::from(File::create(&stdout_p)?),
+                    Stdio::from(File::create(&stderr_p)?),
+                    Some(stdout_p),
+                    Some(stderr_p),
+                )
+            }
+            StdioMode::Combined => {
+                let combined_p =
+                    get_job_combined_path(output_dir, workflow_id, self.job_id, run_id, attempt_id);
+                let file = File::create(&combined_p)?;
+                let file_dup = file.try_clone()?;
+                (
+                    Stdio::from(file),
+                    Stdio::from(file_dup),
+                    Some(combined_p),
+                    None,
+                )
+            }
+            StdioMode::NoStdout => {
+                let stderr_p =
+                    get_job_stderr_path(output_dir, workflow_id, self.job_id, run_id, attempt_id);
+                (
+                    Stdio::null(),
+                    Stdio::from(File::create(&stderr_p)?),
+                    None,
+                    Some(stderr_p),
+                )
+            }
+            StdioMode::NoStderr => {
+                let stdout_p =
+                    get_job_stdout_path(output_dir, workflow_id, self.job_id, run_id, attempt_id);
+                (
+                    Stdio::from(File::create(&stdout_p)?),
+                    Stdio::null(),
+                    Some(stdout_p),
+                    None,
+                )
+            }
+            StdioMode::None => (Stdio::null(), Stdio::null(), None, None),
+        };
+        self.stdout_path = stdout_path_opt;
+        self.stderr_path = stderr_path_opt;
 
         let command_str = if let Some(ref invocation_script) = self.job.invocation_script {
             format!("{} {}", invocation_script, self.job.command)
@@ -139,12 +290,15 @@ impl AsyncCliCommand {
             self.job.command.clone()
         };
 
-        let slurm_job_id = if use_srun {
-            std::env::var("SLURM_JOB_ID").ok()
+        let slurm_job_id = if execution_mode == ExecutionMode::Slurm {
+            // JobRunner::new() guarantees SLURM_JOB_ID is set when mode is Slurm.
+            Some(std::env::var("SLURM_JOB_ID").expect(
+                "SLURM_JOB_ID must be set in Slurm mode (should have been caught at startup)",
+            ))
         } else {
             None
         };
-        let mut cmd = if let Some(slurm_job_id) = slurm_job_id {
+        let mut cmd = if let Some(ref slurm_job_id) = slurm_job_id {
             // Running inside a Slurm allocation — wrap with srun so Slurm creates a
             // per-job cgroup step, enables sacct accounting, and gives HPC admins visibility.
             let step_name = format!(
@@ -155,71 +309,19 @@ impl AsyncCliCommand {
                 "Wrapping job with srun: slurm_job_id={} step={}",
                 slurm_job_id, step_name
             );
-            // Allow tests to substitute a fake srun binary via TORC_FAKE_SRUN.
-            let srun_binary =
-                std::env::var("TORC_FAKE_SRUN").unwrap_or_else(|_| "srun".to_string());
-            let mut srun = Command::new(&srun_binary);
-            srun.arg(format!("--jobid={}", slurm_job_id));
-            srun.arg("--ntasks=1");
-            if !enable_cpu_bind {
-                srun.arg("--cpu-bind=none");
-            }
-            // --exact tells srun to use exactly the requested CPUs/memory without
-            // claiming the entire node exclusively. This allows concurrent steps
-            // to share nodes in multi-node allocations.
-            srun.arg("--exact");
-            srun.arg(format!("--job-name={}", step_name));
-            // Pin the step to a specific node when the job runner has claimed
-            // resources on that node. This enables accurate per-node resource
-            // tracking in multi-node allocations.
-            if let Some(node) = target_node {
-                srun.arg(format!("--nodelist={}", node));
-            }
-            if let Some(rr) = resource_requirements {
-                srun.arg(format!("--nodes={}", rr.num_nodes.max(1)));
-                if limit_resources && rr.name != "default" {
-                    srun.arg(format!("--cpus-per-task={}", rr.num_cpus));
-                    match memory_string_to_mb(&rr.memory) {
-                        Some(mem_mb) if mem_mb > 0 => {
-                            srun.arg(format!("--mem={}M", mem_mb));
-                        }
-                        Some(_) => {
-                            // Sub-MB value rounded to 0; omit --mem to avoid --mem=0 which in
-                            // Slurm means "request all available memory on the node".
-                            warn!(
-                                "Memory string {:?} for job {} rounds to 0 MB; omitting --mem from srun",
-                                rr.memory, self.job_id
-                            );
-                        }
-                        None => {
-                            warn!(
-                                "Could not parse memory string {:?} for job {}; omitting --mem from srun",
-                                rr.memory, self.job_id
-                            );
-                        }
-                    }
-                }
-            }
-            // Set per-step walltime from the remaining allocation time so Slurm
-            // kills the step with State=TIMEOUT (and return code 152) instead of
-            // letting it run until the allocation walltime expires (which produces
-            // State=CANCELLED). Integer division rounds down so the step timeout
-            // fires before the allocation expires. Floor of 1 minute because
-            // --time=0 means unlimited in Slurm. In practice, the job runner's
-            // compute_node_min_time_for_new_jobs_seconds (default 300s) prevents
-            // starting jobs with little time remaining.
-            if let Some(end) = end_time {
-                let remaining_secs = (end - Utc::now()).num_seconds();
-                let remaining_minutes = (remaining_secs / 60).max(1);
-                srun.arg(format!("--time={}", remaining_minutes));
-            }
-            // Pass --signal to give jobs advance warning before timeout.
-            // Format: "<signal>@<seconds>" e.g. "TERM@120"
-            if let Some(signal_spec) = srun_termination_signal {
-                srun.arg(format!("--signal={}", signal_spec));
-            }
-            // Run via bash so job.command can use shell features
-            srun.args(["bash", "-c", &command_str]);
+            let srun = build_srun_command(&SrunParams {
+                slurm_job_id,
+                step_name: step_name.clone(),
+                enable_cpu_bind,
+                target_node,
+                resource_requirements,
+                end_time,
+                sigkill_headroom_seconds,
+                srun_termination_signal,
+                command_str: &command_str,
+                job_id: self.job_id,
+            })
+            .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
             self.step_name = Some(step_name);
             srun
         } else {
@@ -229,6 +331,13 @@ impl AsyncCliCommand {
             shell
         };
 
+        if let Some(v) = gpu_visible_devices {
+            cmd.env("CUDA_VISIBLE_DEVICES", v)
+                .env("HIP_VISIBLE_DEVICES", v)
+                .env("ROCR_VISIBLE_DEVICES", v)
+                .env("TORC_GPU_VISIBLE_DEVICES", v);
+        }
+
         let child = cmd
             .env("TORC_WORKFLOW_ID", workflow_id_str)
             .env("TORC_JOB_ID", job_id_str)
@@ -236,8 +345,8 @@ impl AsyncCliCommand {
             .env("TORC_OUTPUT_DIR", output_dir.to_string_lossy().to_string())
             .env("TORC_ATTEMPT_ID", attempt_id_str)
             .env("TORC_API_URL", api_url)
-            .stdout(Stdio::from(File::create(&stdout_path)?))
-            .stderr(Stdio::from(File::create(&stderr_path)?))
+            .stdout(stdout_stdio)
+            .stderr(stderr_stdio)
             .spawn()?;
 
         let pid = child.id();
@@ -264,7 +373,7 @@ impl AsyncCliCommand {
         //     job completion without the overhead of periodic sstat/squeue polling.
         if let Some(monitor) = resource_monitor {
             if let Some(ref step) = self.step_name {
-                if monitor.is_timeseries()
+                if monitor.is_time_series()
                     && let Ok(slurm_job_id) = std::env::var("SLURM_JOB_ID")
                 {
                     // Discover the numeric step ID that Slurm assigned. sstat requires
@@ -285,11 +394,29 @@ impl AsyncCliCommand {
                     )?;
                 }
             } else {
-                monitor.start_monitoring(pid, self.job_id, self.job.name.clone())?;
+                // In direct mode with limit_resources, enforce memory limits via OOM detection
+                // Skip memory limit enforcement for the "default" resource
+                // requirement — it's a placeholder with no real limits, matching
+                // srun mode which omits --mem for default RRs.
+                let memory_limit_bytes =
+                    if limit_resources && execution_mode == ExecutionMode::Direct {
+                        resource_requirements
+                            .filter(|rr| rr.name != "default")
+                            .and_then(|rr| memory_string_to_bytes(&rr.memory).ok())
+                            .map(|b| b as u64)
+                            .filter(|&b| b > 0)
+                    } else {
+                        None
+                    };
+                monitor.start_monitoring(
+                    pid,
+                    self.job_id,
+                    self.job.name.clone(),
+                    memory_limit_bytes,
+                )?;
             }
         }
 
-        // TODO: CPU Affinity
         Ok(())
     }
 
@@ -492,6 +619,98 @@ impl AsyncCliCommand {
         self.send_sigterm()
     }
 
+    /// Sends a configurable termination signal to the process (Unix only).
+    ///
+    /// Signal names can be: "SIGTERM", "SIGINT", "SIGUSR1", "SIGUSR2", "SIGHUP", "SIGKILL".
+    /// Unknown signals default to SIGTERM.
+    ///
+    /// **Warning**: Using "SIGKILL" bypasses graceful shutdown entirely. Jobs will not
+    /// have a chance to checkpoint or clean up. Prefer "SIGTERM" for graceful termination.
+    ///
+    /// **Note**: This method does not wait for the process to exit. Call
+    /// [`wait_for_completion()`] afterwards to wait for the process and capture its exit code.
+    #[cfg(unix)]
+    pub fn send_signal(&mut self, signal_name: &str) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(ref child) = self.handle {
+            let pid = child.id();
+            let signal = match signal_name {
+                "SIGTERM" | "TERM" => libc::SIGTERM,
+                "SIGINT" | "INT" => libc::SIGINT,
+                "SIGUSR1" | "USR1" => libc::SIGUSR1,
+                "SIGUSR2" | "USR2" => libc::SIGUSR2,
+                "SIGHUP" | "HUP" => libc::SIGHUP,
+                "SIGKILL" | "KILL" => {
+                    warn!(
+                        "Using SIGKILL as termination signal for job {} - jobs will not have a chance to checkpoint or clean up",
+                        self.job_id
+                    );
+                    libc::SIGKILL
+                }
+                _ => {
+                    warn!(
+                        "Unknown signal '{}', defaulting to SIGTERM for job {}",
+                        signal_name, self.job_id
+                    );
+                    libc::SIGTERM
+                }
+            };
+            debug!(
+                "Sending {} to job {} (PID {})",
+                signal_name, self.job_id, pid
+            );
+            let result = unsafe { libc::kill(pid as libc::pid_t, signal) };
+            if result != 0 {
+                let err = std::io::Error::last_os_error();
+                return Err(format!(
+                    "Failed to send {} to job {} (PID {}): {}",
+                    signal_name, self.job_id, pid, err
+                )
+                .into());
+            }
+        }
+        Ok(())
+    }
+
+    /// Sends a configurable termination signal to the process (non-Unix fallback).
+    ///
+    /// On non-Unix systems, all signals result in immediate process termination.
+    #[cfg(not(unix))]
+    pub fn send_signal(&mut self, signal_name: &str) -> Result<(), Box<dyn std::error::Error>> {
+        debug!(
+            "send_signal({}) falling back to kill on non-Unix for job {}",
+            signal_name, self.job_id
+        );
+        self.cancel()
+    }
+
+    /// Sends SIGKILL to immediately terminate the process (Unix only).
+    ///
+    /// This is a forceful termination that cannot be caught or ignored by the process.
+    /// Use this as a last resort after graceful termination has failed.
+    #[cfg(unix)]
+    pub fn send_sigkill(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(ref child) = self.handle {
+            let pid = child.id();
+            debug!("Sending SIGKILL to job {} (PID {})", self.job_id, pid);
+            let result = unsafe { libc::kill(pid as libc::pid_t, libc::SIGKILL) };
+            if result != 0 {
+                let err = std::io::Error::last_os_error();
+                return Err(format!(
+                    "Failed to send SIGKILL to job {} (PID {}): {}",
+                    self.job_id, pid, err
+                )
+                .into());
+            }
+        }
+        Ok(())
+    }
+
+    /// Sends SIGKILL to immediately terminate the process (non-Unix fallback).
+    #[cfg(not(unix))]
+    pub fn send_sigkill(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.cancel()
+    }
+
     // Force the job to completion with a return code and status. Does not send anything
     // to the process.
     // pub fn force_complete(mut self, return_code: i64, status: JobStatus) -> Result<(), Box<dyn std::error::Error>>  {
@@ -518,8 +737,6 @@ impl AsyncCliCommand {
             (self.completion_time.unwrap() - self.start_time).num_milliseconds() as f64 / 1000.0;
         self.status = status;
         self.return_code = Some(return_code);
-        self.stdout_fp = None;
-        self.stderr_fp = None;
         self.handle = None;
 
         // Collect Slurm accounting stats via sacct when running inside an allocation.
@@ -631,7 +848,8 @@ impl AsyncCliCommand {
     /// capture its exit code.
     ///
     /// After this method returns, the job is marked as complete with status
-    /// `JobStatus::Terminated`.
+    /// `JobStatus::Completed` (if exit code is 0) or `JobStatus::Terminated`
+    /// (if exit code is non-zero).
     ///
     /// # Returns
     ///
@@ -663,8 +881,14 @@ impl AsyncCliCommand {
             -1
         };
 
-        // Mark as terminated with the actual exit code
-        self.handle_completion(exit_code, JobStatus::Terminated)?;
+        // Jobs that exited cleanly (rc=0) handled termination gracefully - mark as Completed.
+        // Jobs that crashed or were force-killed get Terminated status.
+        let status = if exit_code == 0 {
+            JobStatus::Completed
+        } else {
+            JobStatus::Terminated
+        };
+        self.handle_completion(exit_code, status)?;
         Ok(exit_code)
     }
 }
@@ -730,21 +954,25 @@ fn collect_sacct_stats(slurm_job_id: &str, step_name: &str) -> Option<SacctStats
             std::thread::sleep(SACCT_RETRY_DELAY);
         }
 
-        let output = std::process::Command::new(&sacct_binary)
-            .args([
-                "-j",
-                slurm_job_id,
-                // sacct -j <jobid> already returns all step records (allocation, batch, srun
-                // steps) for the specified job without any extra flag.
-                "--format",
-                // JobName is first so we can filter by step name in code — more reliable than
-                // sacct's --name flag, which on some Slurm versions matches the allocation name
-                // rather than the step name.
-                "JobName,MaxRSS,MaxVMSize,MaxDiskRead,MaxDiskWrite,AveCPU,NodeList,State",
-                "-P", // pipe-separated output
-                "-n", // no header
-            ])
-            .output();
+        let mut sacct_cmd = std::process::Command::new(&sacct_binary);
+        sacct_cmd.args([
+            "-j",
+            slurm_job_id,
+            // sacct -j <jobid> already returns all step records (allocation, batch, srun
+            // steps) for the specified job without any extra flag.
+            "--format",
+            // JobName is first so we can filter by step name in code — more reliable than
+            // sacct's --name flag, which on some Slurm versions matches the allocation name
+            // rather than the step name.
+            "JobName,MaxRSS,MaxVMSize,MaxDiskRead,MaxDiskWrite,AveCPU,NodeList,State",
+            "-P", // pipe-separated output
+            "-n", // no header
+        ]);
+        debug!(
+            "sacct command for step {} (attempt {}/{}): {:?}",
+            step_name, attempt, MAX_SACCT_ATTEMPTS, sacct_cmd
+        );
+        let output = sacct_cmd.output();
 
         let output = match output {
             Ok(o) => o,

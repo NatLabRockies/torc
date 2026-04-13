@@ -6,8 +6,8 @@ use common::{
 use rstest::rstest;
 use std::fs;
 use std::path::PathBuf;
+use torc::client::apis;
 use torc::client::commands::recover::invoke_ai_agent;
-use torc::client::default_api;
 use torc::client::workflow_manager::WorkflowManager;
 use torc::config::TorcConfig;
 use torc::models::{self, JobStatus};
@@ -44,19 +44,24 @@ fn test_pending_failed_status(start_server: &ServerProcess) {
     let compute_node_id = compute_node.id.unwrap();
 
     // Reinitialize to pick up the new job
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to reinitialize");
 
     // Claim the job using resources
     let resources = models::ComputeNodesResources::new(36, 100.0, 0, 1);
-    let result =
-        default_api::claim_jobs_based_on_resources(config, workflow_id, &resources, 10, None, None)
-            .expect("Failed to claim jobs");
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        10,
+        resources,
+        None,
+    )
+    .expect("Failed to claim jobs");
     let jobs = result.jobs.expect("Should return jobs");
     assert_eq!(jobs.len(), 1);
 
     // Set job to running
-    default_api::manage_status_change(config, job_id, JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
         .expect("Failed to set job running");
 
     // Complete the job with PendingFailed status (simulating no failure handler match)
@@ -73,14 +78,14 @@ fn test_pending_failed_status(start_server: &ServerProcess) {
     );
 
     let completed_job =
-        default_api::complete_job(config, job_id, job_result.status, run_id, job_result)
+        apis::jobs_api::complete_job(config, job_id, job_result.status, run_id, job_result)
             .expect("Failed to complete job");
 
     // Verify job is in pending_failed status
     assert_eq!(completed_job.status, Some(JobStatus::PendingFailed));
 
     // Fetch the job again to confirm status
-    let fetched_job = default_api::get_job(config, job_id).expect("Failed to get job");
+    let fetched_job = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");
     assert_eq!(fetched_job.status, Some(JobStatus::PendingFailed));
 }
 
@@ -103,20 +108,25 @@ fn test_list_pending_failed_jobs(start_server: &ServerProcess) {
     let compute_node_id = compute_node.id.unwrap();
 
     // Reinitialize to pick up the new jobs
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to reinitialize");
 
     // Claim both jobs
     let resources = models::ComputeNodesResources::new(36, 100.0, 0, 1);
-    let result =
-        default_api::claim_jobs_based_on_resources(config, workflow_id, &resources, 10, None, None)
-            .expect("Failed to claim jobs");
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        10,
+        resources,
+        None,
+    )
+    .expect("Failed to claim jobs");
     let jobs = result.jobs.expect("Should return jobs");
     assert_eq!(jobs.len(), 2);
 
     // Set both jobs to running
     for job_id in [job1_id, job2_id] {
-        default_api::manage_status_change(config, job_id, JobStatus::Running, run_id, None)
+        apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
             .expect("Failed to set job running");
     }
 
@@ -132,7 +142,7 @@ fn test_list_pending_failed_jobs(start_server: &ServerProcess) {
         chrono::Utc::now().to_rfc3339(),
         JobStatus::PendingFailed,
     );
-    default_api::complete_job(config, job1_id, job1_result.status, run_id, job1_result)
+    apis::jobs_api::complete_job(config, job1_id, job1_result.status, run_id, job1_result)
         .expect("Failed to complete job1");
 
     // Complete job2 as completed (success)
@@ -147,11 +157,11 @@ fn test_list_pending_failed_jobs(start_server: &ServerProcess) {
         chrono::Utc::now().to_rfc3339(),
         JobStatus::Completed,
     );
-    default_api::complete_job(config, job2_id, job2_result.status, run_id, job2_result)
+    apis::jobs_api::complete_job(config, job2_id, job2_result.status, run_id, job2_result)
         .expect("Failed to complete job2");
 
     // List jobs with pending_failed status
-    let pending_failed_jobs = default_api::list_jobs(
+    let pending_failed_jobs = apis::jobs_api::list_jobs(
         config,
         workflow_id,
         Some(JobStatus::PendingFailed),
@@ -167,10 +177,7 @@ fn test_list_pending_failed_jobs(start_server: &ServerProcess) {
     .expect("Failed to list pending_failed jobs");
 
     assert_eq!(pending_failed_jobs.total_count, 1);
-    assert_eq!(
-        pending_failed_jobs.items.as_ref().unwrap()[0].id,
-        Some(job1_id)
-    );
+    assert_eq!(pending_failed_jobs.items[0].id, Some(job1_id));
 }
 
 /// Test that reset_workflow_status includes pending_failed jobs
@@ -190,18 +197,23 @@ fn test_reset_includes_pending_failed(start_server: &ServerProcess) {
     let compute_node_id = compute_node.id.unwrap();
 
     // Reinitialize to pick up the new job
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to reinitialize");
 
     // Claim the job
     let resources = models::ComputeNodesResources::new(36, 100.0, 0, 1);
-    let result =
-        default_api::claim_jobs_based_on_resources(config, workflow_id, &resources, 10, None, None)
-            .expect("Failed to claim jobs");
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        10,
+        resources,
+        None,
+    )
+    .expect("Failed to claim jobs");
     assert_eq!(result.jobs.expect("Should return jobs").len(), 1);
 
     // Set job to running
-    default_api::manage_status_change(config, job_id, JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
         .expect("Failed to set job running");
 
     // Complete as pending_failed
@@ -216,19 +228,19 @@ fn test_reset_includes_pending_failed(start_server: &ServerProcess) {
         chrono::Utc::now().to_rfc3339(),
         JobStatus::PendingFailed,
     );
-    default_api::complete_job(config, job_id, job_result.status, run_id, job_result)
+    apis::jobs_api::complete_job(config, job_id, job_result.status, run_id, job_result)
         .expect("Failed to complete job");
 
     // Verify job is pending_failed
-    let job_before = default_api::get_job(config, job_id).expect("Failed to get job");
+    let job_before = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");
     assert_eq!(job_before.status, Some(JobStatus::PendingFailed));
 
     // Reset failed jobs only (should include pending_failed)
-    default_api::reset_job_status(config, workflow_id, Some(true), None)
+    apis::workflows_api::reset_job_status(config, workflow_id, Some(true))
         .expect("Failed to reset job status");
 
     // Verify job is now uninitialized
-    let job_after = default_api::get_job(config, job_id).expect("Failed to get job");
+    let job_after = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");
     assert_eq!(job_after.status, Some(JobStatus::Uninitialized));
 }
 

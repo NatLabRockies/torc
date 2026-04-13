@@ -128,13 +128,11 @@ export TORC_API_URL="http://localhost:8080/torc-service/v1"
 # Quick workflow execution (convenience commands)
 ./target/release/torc run examples/sample_workflow.yaml    # Create and run locally
 ./target/release/torc submit examples/sample_workflow.yaml # Submit (requires scheduler actions)
-./target/release/torc submit-slurm --account myproject examples/sample_workflow.yaml  # Auto-generate Slurm schedulers
 
 # Or use explicit workflow management
-./target/release/torc workflows create examples/sample_workflow.yaml
-./target/release/torc workflows create-slurm --account myproject examples/sample_workflow.yaml  # With Slurm schedulers
-./target/release/torc workflows submit <workflow_id>  # Submit to scheduler
-./target/release/torc workflows run <workflow_id>     # Run locally
+./target/release/torc create examples/sample_workflow.yaml
+./target/release/torc submit <workflow_id>  # Submit to scheduler
+./target/release/torc run <workflow_id>     # Run locally
 
 # Other commands
 ./target/release/torc tui                              # Launch interactive TUI
@@ -143,10 +141,10 @@ export TORC_API_URL="http://localhost:8080/torc-service/v1"
 ./target/release/torc jobs list <workflow_id>          # View job status
 
 # Run tests
-cargo test  -- --test-threads 1
+cargo nextest run
 
 # Run specific test
-cargo test test_get_ready_jobs -- --nocapture
+cargo nextest run -E 'test(test_get_ready_jobs)'
 ```
 
 ### Feature-Gated Binaries
@@ -221,7 +219,7 @@ enable log parsing tools.
 - Integration tests in `tests/`
 - Use `serial_test` attribute for tests that modify shared state
 - Test utilities in `tests/common/`
-- Run with: `cargo test` from rust-client directory
+- Run with: `cargo nextest run` from rust-client directory
 
 ## Important Notes
 
@@ -325,26 +323,44 @@ cascade-delete the entire database contents.
 
 ### OpenAPI Code Generation
 
-- Server and client originally used OpenAPI-generated code for base types and routing but we are now
-  manually updating the code.
+- `api/openapi.codegen.yaml` is emitted from the code-first Rust scaffold via
+  `cargo run --no-default-features --features openapi-codegen --bin torc-openapi`.
+- `api/openapi.yaml` is now a checked-in artifact that should be refreshed from Rust with
+  `cd api && bash sync_openapi.sh all --promote`.
+- `api/sync_openapi.sh` is the preferred developer entrypoint for emit/check/promote/client sync.
+- The retired wrappers `make_api_clients.sh` and `regenerate_openapi_artifacts.sh` should not be
+  reintroduced.
+- `api/check_openapi_codegen_parity.sh` validates the Rust-emitted spec against `api/openapi.yaml`.
+- Generated Rust surfaces should not be hand-edited. Keep deterministic post-processing under the
+  Rust-owned OpenAPI workflow under `api/sync_openapi.sh`.
 - Implement business logic in non-generated modules (e.g., `server/src/bin/server/api/*.rs`)
+
+### Documentation Build
+
+- User docs live under `docs/src/` and are built from `docs/` with `mdbook build`.
+- If source docs change, refresh the generated site in `docs/book/`.
 
 ## Common Tasks
 
 ### Adding a New API Endpoint
 
-1. Update OpenAPI spec (api/openapi.yaml)
-2. Regenerate API code (`cd api && bash make_api_clients.sh`)
-3. Add implementation in appropriate `src/server/api/*.rs` module
-4. Update client API in `src/client/apis/`
-5. Add CLI command handler if needed in `src/client/commands/`
+1. Add the endpoint to the live Rust-owned API surface and model layer (`src/openapi_spec.rs`,
+   `src/server/live_router.rs`, `src/models.rs`)
+2. Refresh and verify the emitted spec
+   (`cd api && bash sync_openapi.sh emit && bash sync_openapi.sh check`)
+3. Regenerate API clients from the emitted spec
+   (`cd api && bash sync_openapi.sh clients --use-rust-spec`)
+4. Promote the Rust spec when the change is ready to become the checked-in contract
+   (`cd api && bash sync_openapi.sh all --promote`)
+5. Add implementation in the appropriate live server module
+6. Add CLI command handler if needed in `src/client/commands/`
 
 **API Implementation Checklist:**
 
 - [ ] **Authorization**: Use `authorize_workflow!` or `authorize_resource!` macros in
       `http_server.rs`
 - [ ] **Error responses**: Return 404 for not found, 422 for validation errors, 403 for forbidden
-- [ ] **OpenAPI spec**: Validate with `npx @redocly/cli lint api/openapi.yaml` - fix all errors
+- [ ] **OpenAPI spec**: Validate emitted/checked-in OpenAPI as needed - fix all errors
   - Use `type: [integer, "null"]` instead of `nullable: true` (OpenAPI 3.1)
   - Use direct `$ref:` without `schema:` wrapper
   - Ensure examples match schema (use `error: {}` not `error: "{}"`)
@@ -382,7 +398,7 @@ For a new subcommand (e.g., `torc workflows correct-resources`):
 
 1. Write workflow spec file (JSON/JSON5/YAML) following `WorkflowSpec` format
 2. See `examples/sample_workflow.json` for complete example
-3. Run: `torc workflows create <spec_file>`
+3. Run: `torc create <spec_file>`
 4. The command creates all components (workflow, jobs, files, user_data, schedulers) atomically
 5. If any step fails, the entire workflow is rolled back
 
@@ -395,20 +411,15 @@ For a new subcommand (e.g., `torc workflows correct-resources`):
 
 **Explicit method:**
 
-1. Create workflow: `torc workflows create <spec_file>`
-2. Run workflow: `torc workflows run <workflow_id>`
+1. Create workflow: `torc create <spec_file>`
+2. Run workflow: `torc run <workflow_id>`
 3. Monitor progress: `torc workflows status <workflow_id>`
 4. View job results: `torc jobs list <workflow_id>`
 5. Launch interactive UI: `torc tui`
 
 ### Submitting a Workflow to Scheduler
 
-**Quick method (Slurm with auto-generated schedulers):**
-
-- `torc submit-slurm --account <account> <spec_file>` - Auto-generate Slurm schedulers, create
-  workflow, and submit
-
-**Quick method (pre-configured schedulers):**
+**Quick method:**
 
 - `torc submit <spec_file>` - Create from spec and submit (requires on_workflow_start/schedule_nodes
   action in spec)
@@ -416,9 +427,8 @@ For a new subcommand (e.g., `torc workflows correct-resources`):
 
 **Explicit method:**
 
-1. Create workflow: `torc workflows create <spec_file>` or
-   `torc workflows create-slurm --account <account> <spec_file>`
-2. Submit workflow: `torc workflows submit <workflow_id>`
+1. Create workflow: `torc create <spec_file>`
+2. Submit workflow: `torc submit <workflow_id>`
 
 ### Debugging
 
@@ -459,8 +469,7 @@ sqlite3 server/db/sqlite/dev.db
 2. **Build Unified CLI**: `cargo build --release --bin torc --features "client,tui,plot_resources"`
 3. **Quick Execution**: `torc run examples/sample_workflow.yaml` OR
    `torc submit examples/sample_workflow.yaml`
-4. **Or Explicit**: `torc workflows create examples/sample_workflow.yaml` →
-   `torc workflows run <id>`
+4. **Or Explicit**: `torc create examples/sample_workflow.yaml` → `torc run <id>`
 
 **Note**: The server is run as a separate binary (`torc-server run`), not through the unified CLI.
 
@@ -474,13 +483,10 @@ sqlite3 server/db/sqlite/dev.db
 
 **Workflow Management**:
 
-- `torc workflows create <file>` - Create workflow from specification
+- `torc create <file>` - Create workflow from specification
 - `torc workflows new` - Create empty workflow interactively
 - `torc workflows list` - List all workflows
-- `torc workflows submit <id>` - Submit workflow to scheduler (requires
-  on_workflow_start/schedule_nodes action)
-- `torc workflows run <id>` - Run workflow locally
-- `torc workflows initialize <id>` - Initialize workflow (set up dependencies without execution)
+- `torc workflows init <id>` - Initialize workflow (set up dependencies without execution)
 - `torc workflows status <id>` - Check workflow status
 
 **Job Management**:
@@ -499,7 +505,6 @@ sqlite3 server/db/sqlite/dev.db
 
 - `torc run <workflow_spec_or_id>` - Run workflow locally (top-level command)
 - `torc submit <workflow_spec_or_id>` - Submit workflow to scheduler (top-level command)
-- `torc submit-slurm --account <account> <spec_file>` - Submit with auto-generated Slurm schedulers
 - `torc tui` - Interactive terminal UI
 
 **Global Options** (available on all commands):

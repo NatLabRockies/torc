@@ -145,7 +145,7 @@ workflows with thousands of jobs.
 
 ### Resource Allocation Optimization (Phase 3)
 
-11. `idx_resource_requirements_sort_gpus_runtime_memory` - Optimize resource-based job sorting
+11. Resource-requirements sort/filter index - Optimize resource-based job filtering
 
 ### User and Workflow Filtering (Phase 4)
 

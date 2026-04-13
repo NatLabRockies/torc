@@ -87,12 +87,17 @@ impl SseConnection {
         }
 
         // Use blocking client with TLS settings from configuration
-        let client = config
-            .tls
-            .configure_blocking_builder(
-                reqwest::blocking::Client::builder().timeout(None), // No timeout for SSE
-            )
-            .build()?;
+        let mut builder = reqwest::blocking::Client::builder().timeout(None); // No timeout for SSE
+        if let Some(ref cookie) = config.cookie_header {
+            let mut headers = reqwest::header::HeaderMap::new();
+            headers.insert(
+                reqwest::header::COOKIE,
+                reqwest::header::HeaderValue::from_str(cookie)
+                    .map_err(|e| SseError::Parse(format!("Invalid cookie header value: {e}")))?,
+            );
+            builder = builder.default_headers(headers);
+        }
+        let client = config.tls.configure_blocking_builder(builder).build()?;
 
         // Build request and apply authentication from Configuration
         let mut request = client.get(&url).header("Accept", "text/event-stream");

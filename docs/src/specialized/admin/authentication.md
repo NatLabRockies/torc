@@ -247,8 +247,8 @@ export TORC_PASSWORD="${TORC_PASSWORD}"
 export TORC_API_URL=https://torc.hpc.nrel.gov:8080/torc-service/v1
 
 # Run workflow
-torc workflows create pipeline.yaml
-torc workflows start "${WORKFLOW_ID}"
+torc create pipeline.yaml
+torc submit "${WORKFLOW_ID}"
 ```
 
 ### Remote User Registration (HPC Environments)

@@ -18,9 +18,10 @@ mod unix_main {
     use std::path::PathBuf;
     use std::sync::atomic::Ordering;
     use std::thread;
+    use torc::client::apis;
     use torc::client::apis::configuration::{Configuration, TlsConfig};
-    use torc::client::apis::default_api;
     use torc::client::commands::slurm::{create_compute_node, create_node_resources};
+    use torc::client::config::TorcConfig;
     use torc::client::hpc::hpc_interface::HpcInterface;
     use torc::client::hpc::slurm_interface::SlurmInterface;
     use torc::client::job_runner::{JobRunner, PerNodeTracker};
@@ -60,8 +61,8 @@ mod unix_main {
         max_parallel_jobs: Option<i32>,
 
         /// Poll interval for job completions (seconds)
-        #[arg(short, long, default_value = "60")]
-        poll_interval: i64,
+        #[arg(short, long)]
+        poll_interval: Option<i64>,
 
         /// Set to true if this is a subtask and multiple workers are running on one Slurm allocation
         #[arg(long, default_value = "false")]
@@ -82,6 +83,16 @@ mod unix_main {
         /// Password for authentication (can also use TORC_PASSWORD env var)
         #[arg(long, env = "TORC_PASSWORD", hide_env_values = true)]
         password: Option<String>,
+
+        /// Log level: error, warn, info, debug, trace
+        #[arg(long)]
+        log_level: Option<String>,
+
+        /// Maximum startup delay in seconds for thundering herd mitigation.
+        /// Each runner sleeps a deterministic jitter in [0, N) seconds before
+        /// contacting the server, spreading load when many nodes start at once.
+        #[arg(long, default_value = "0")]
+        startup_delay_seconds: u64,
     }
 
     fn workflow_has_multi_node_jobs(
@@ -89,26 +100,33 @@ mod unix_main {
         workflow_id: i64,
         wait_for_healthy_database_minutes: u64,
     ) -> bool {
+        fn box_retry_error<T, E>(result: Result<T, E>) -> Result<T, Box<dyn std::error::Error>>
+        where
+            E: std::fmt::Display,
+        {
+            result.map_err(|err| err.to_string().into())
+        }
+
         let mut offset = 0i64;
         loop {
             let response = match utils::send_with_retries(
                 config,
                 || {
-                    default_api::list_resource_requirements(
+                    box_retry_error(apis::resource_requirements_api::list_resource_requirements(
                         config,
                         workflow_id,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
                         None,
                         Some(offset),
                         Some(100),
                         None,
                         None,
-                        None,
-                        None,
-                        None,
-                        None,
-                        None,
-                        None,
-                    )
+                    ))
                 },
                 wait_for_healthy_database_minutes,
             ) {
@@ -123,7 +141,7 @@ mod unix_main {
                 }
             };
 
-            let items = response.items.unwrap_or_default();
+            let items = response.items;
 
             if items.iter().any(|rr| rr.num_nodes > 1) {
                 return true;
@@ -172,11 +190,33 @@ mod unix_main {
             }
         };
 
+        // Resolve log level: CLI arg > config file > default ("info")
+        let file_config = TorcConfig::load().unwrap_or_default();
+        let log_level_str = args
+            .log_level
+            .clone()
+            .unwrap_or_else(|| file_config.client.log_level.clone());
+
+        let level_filter = match log_level_str.to_lowercase().as_str() {
+            "error" => LevelFilter::Error,
+            "warn" => LevelFilter::Warn,
+            "info" => LevelFilter::Info,
+            "debug" => LevelFilter::Debug,
+            "trace" => LevelFilter::Trace,
+            _ => {
+                eprintln!(
+                    "Warning: unknown log level '{}', defaulting to 'info'",
+                    log_level_str
+                );
+                LevelFilter::Info
+            }
+        };
+
         // Initialize logger now that we have the log file
         let mut builder = Builder::from_default_env();
         builder
             .target(env_logger::Target::Pipe(Box::new(log_file)))
-            .filter_level(LevelFilter::Info)
+            .filter_level(level_filter)
             .init();
 
         let hostname = hostname::get()
@@ -184,7 +224,7 @@ mod unix_main {
             .into_string()
             .expect("Hostname is not valid UTF-8");
 
-        info!("Starting Slurm job runner");
+        info!("Starting Slurm job runner (log_level={})", log_level_str);
         info!("Job ID: {}", job_id);
         info!("Node ID: {}", node_id);
         info!("Task PID: {}", task_pid);
@@ -208,19 +248,45 @@ mod unix_main {
             insecure: args.tls_insecure,
         };
         let mut config = Configuration::with_tls(tls);
-        config.base_path = args.url;
+        config.base_path = args.url.clone();
 
         // Set up authentication if password is provided
         if let Some(ref password) = args.password {
-            let username =
-                std::env::var("USER").unwrap_or_else(|_| std::env::var("USERNAME").unwrap());
+            let username = torc::get_username();
             config.basic_auth = Some((username, Some(password.clone())));
+        }
+
+        // Set cookie header for authentication (e.g., from browser-based MFA)
+        if let Err(e) = config.apply_cookie_header_from_env() {
+            eprintln!("Error: {e}");
+            std::process::exit(1);
+        }
+
+        // Stagger startup to avoid thundering herd when many compute nodes start
+        // simultaneously. The delay window is set by the caller (sbatch script)
+        // based on the number of concurrent allocations.
+        if args.startup_delay_seconds > 0 {
+            let jitter = {
+                use std::collections::hash_map::DefaultHasher;
+                use std::hash::{Hash, Hasher};
+                let mut hasher = DefaultHasher::new();
+                hostname.hash(&mut hasher);
+                job_id.hash(&mut hasher);
+                node_id.hash(&mut hasher);
+                task_pid.hash(&mut hasher);
+                hasher.finish() % args.startup_delay_seconds
+            };
+            info!(
+                "Startup jitter: sleeping {} seconds (window={})",
+                jitter, args.startup_delay_seconds
+            );
+            thread::sleep(std::time::Duration::from_secs(jitter));
         }
 
         // First, ping the server to ensure we can connect
         match utils::send_with_retries(
             &config,
-            || default_api::ping(&config),
+            || apis::system_api::ping(&config),
             args.wait_for_healthy_database_minutes,
         ) {
             Ok(_) => {
@@ -234,7 +300,7 @@ mod unix_main {
 
         let workflow = match utils::send_with_retries(
             &config,
-            || default_api::get_workflow(&config, args.workflow_id),
+            || apis::workflows_api::get_workflow(&config, args.workflow_id),
             args.wait_for_healthy_database_minutes,
         ) {
             Ok(wf) => wf,
@@ -264,12 +330,6 @@ mod unix_main {
         // All compute nodes get the scheduled compute node
         let scheduled_compute_node =
             get_scheduled_compute_node(&config, args.workflow_id, &slurm_interface);
-
-        if slurm_interface.is_head_node()
-            && let Some(ref node) = scheduled_compute_node
-        {
-            set_scheduled_compute_node_status(&config, node, "active");
-        }
 
         let scheduler_id = scheduled_compute_node.as_ref().map(|node| node.id);
         let scheduler_config_id = scheduled_compute_node
@@ -304,6 +364,12 @@ mod unix_main {
                 args.workflow_id,
                 args.wait_for_healthy_database_minutes,
             );
+
+        if slurm_interface.is_head_node()
+            && let Some(ref node) = scheduled_compute_node
+        {
+            set_scheduled_compute_node_status(&config, node, "active");
+        }
 
         let node_tracker = if num_nodes > 1 && !has_multi_node_jobs {
             match slurm_interface.list_active_nodes(&job_id) {
@@ -348,7 +414,7 @@ mod unix_main {
             create_compute_node(&config, args.workflow_id, &resources, &hostname, scheduler);
         let run_id = match utils::send_with_retries(
             &config,
-            || default_api::get_workflow_status(&config, args.workflow_id),
+            || apis::workflows_api::get_workflow_status(&config, args.workflow_id),
             args.wait_for_healthy_database_minutes,
         ) {
             Ok(status) => status.run_id,
@@ -369,7 +435,8 @@ mod unix_main {
             run_id,
             compute_node.id.expect("Compute node ID is required"),
             args.output_dir.clone(),
-            args.poll_interval as f64,
+            args.poll_interval
+                .unwrap_or(file_config.client.slurm.poll_interval as i64) as f64,
             args.max_parallel_jobs.map(|x| x as i64),
             None, // time_limit
             Some(job_end_time),
@@ -463,7 +530,7 @@ mod unix_main {
             job_id
         );
 
-        let scheduled_nodes = match default_api::list_scheduled_compute_nodes(
+        let scheduled_nodes = match apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
             config,
             workflow_id,
             None,          // offset
@@ -481,7 +548,7 @@ mod unix_main {
             }
         };
 
-        let items = scheduled_nodes.items.unwrap_or_default();
+        let items = scheduled_nodes.items;
         if items.len() != 1 {
             error!(
                 "Expected exactly 1 scheduled compute node for Slurm job ID {}, found {}",
@@ -507,7 +574,11 @@ mod unix_main {
 
         updated_node.status = status.to_string();
 
-        match default_api::update_scheduled_compute_node(config, node_id, updated_node) {
+        match apis::scheduled_compute_nodes_api::update_scheduled_compute_node(
+            config,
+            node_id,
+            updated_node,
+        ) {
             Ok(result) => {
                 info!(
                     "Successfully updated scheduled compute node {} to status: {}",

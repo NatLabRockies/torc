@@ -19,6 +19,7 @@
   - [Job State Transitions](./core/concepts/job-states.md)
   - [Dependency Resolution](./core/concepts/dependencies.md)
   - [Job Runners](./core/concepts/job-runners.md)
+  - [Execution Modes](./core/concepts/execution-modes.md)
   - [Parallelization Strategies](./core/concepts/parallelization.md)
   - [Workflow Reinitialization](./core/concepts/reinitialization.md)
   - [RO-Crate Provenance](./core/concepts/ro-crate.md)
@@ -36,7 +37,9 @@
   - [Set Up Authentication](./core/how-to/set-up-authentication.md)
   - [Check Resource Utilization](./core/how-to/check-resource-utilization.md)
   - [View Resource Plots](./core/how-to/view-resource-plots.md)
+  - [Prioritize Jobs](./core/how-to/prioritize-jobs.md)
   - [Parameterize Jobs with Files](./core/how-to/parameterize-with-files.md)
+  - [Use Invocation Scripts](./core/how-to/use-invocation-script.md)
   - [Add RO-Crate Metadata](./core/how-to/ro-crate-metadata.md)
 - [Tutorials](./core/tutorials/index.md)
   - [Many Independent Jobs](./core/tutorials/many-jobs.md)
@@ -109,6 +112,7 @@
   - [Shell Completions](./specialized/tools/shell-completions.md)
 - [Design & Architecture](./specialized/design/index.md)
   - [Client Architecture](./specialized/design/client.md)
+  - [HTTP API Design](./specialized/design/http-api.md)
   - [Workflow Actions](./specialized/design/workflow-actions.md)
   - [Web Dashboard Design](./specialized/design/dashboard.md)
   - [Server API Handler](./specialized/design/server.md)
@@ -118,6 +122,7 @@
   - [AI-Assisted Recovery Design](./specialized/design/ai-assisted-recovery.md)
   - [Workflow Graph](./specialized/design/workflow-graph.md)
   - [Interface Architecture](./specialized/design/interfaces.md)
+  - [API Generation Architecture](./specialized/design/api-generation.md)
   - [Slurm Job Step Monitoring](./specialized/design/srun-monitoring.md)
 
 ---

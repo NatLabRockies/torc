@@ -3,7 +3,7 @@ mod common;
 use common::{ServerProcess, create_test_compute_node, create_test_workflow, start_server};
 use rstest::rstest;
 use serial_test::serial;
-use torc::client::{apis::default_api, workflow_manager::WorkflowManager};
+use torc::client::{apis, workflow_manager::WorkflowManager};
 use torc::config::TorcConfig;
 use torc::models;
 use torc::models::JobStatus;
@@ -12,7 +12,7 @@ use torc::models::JobStatus;
 /// This tests the update_jobs_from_completion_reversal functionality which should be triggered
 /// when a completed job is reset to a non-complete status.
 #[rstest]
-#[serial]
+#[serial(completion)]
 fn test_completion_reversal_resets_downstream_jobs(start_server: &ServerProcess) {
     let config = &start_server.config;
 
@@ -29,7 +29,7 @@ fn test_completion_reversal_resets_downstream_jobs(start_server: &ServerProcess)
         "job1".to_string(),
         "echo 'job1 failed' && exit 1".to_string(),
     );
-    let created_job1 = default_api::create_job(config, job1).expect("Failed to create job1");
+    let created_job1 = apis::jobs_api::create_job(config, job1).expect("Failed to create job1");
     let job1_id = created_job1.id.unwrap();
 
     // Create job2 (blocked by job1)
@@ -40,7 +40,7 @@ fn test_completion_reversal_resets_downstream_jobs(start_server: &ServerProcess)
     );
     job2.depends_on_job_ids = Some(vec![job1_id]);
     job2.cancel_on_blocking_job_failure = Some(false);
-    let created_job2 = default_api::create_job(config, job2).expect("Failed to create job2");
+    let created_job2 = apis::jobs_api::create_job(config, job2).expect("Failed to create job2");
     let job2_id = created_job2.id.unwrap();
 
     // Create job3 (blocked by job2)
@@ -51,7 +51,7 @@ fn test_completion_reversal_resets_downstream_jobs(start_server: &ServerProcess)
     );
     job3.depends_on_job_ids = Some(vec![job2_id]);
     job3.cancel_on_blocking_job_failure = Some(false);
-    let created_job3 = default_api::create_job(config, job3).expect("Failed to create job3");
+    let created_job3 = apis::jobs_api::create_job(config, job3).expect("Failed to create job3");
     let job3_id = created_job3.id.unwrap();
 
     // Initialize the workflow to set up job dependencies
@@ -60,9 +60,9 @@ fn test_completion_reversal_resets_downstream_jobs(start_server: &ServerProcess)
     manager.initialize(true).expect("Failed to start workflow");
 
     // Verify initial job states - job1 should be ready, others blocked
-    let job1_initial = default_api::get_job(config, job1_id).expect("Failed to get job1");
-    let job2_initial = default_api::get_job(config, job2_id).expect("Failed to get job2");
-    let job3_initial = default_api::get_job(config, job3_id).expect("Failed to get job3");
+    let job1_initial = apis::jobs_api::get_job(config, job1_id).expect("Failed to get job1");
+    let job2_initial = apis::jobs_api::get_job(config, job2_id).expect("Failed to get job2");
+    let job3_initial = apis::jobs_api::get_job(config, job3_id).expect("Failed to get job3");
 
     assert_eq!(job1_initial.status.unwrap(), JobStatus::Ready);
     assert_eq!(job2_initial.status.unwrap(), JobStatus::Blocked);
@@ -88,7 +88,7 @@ fn test_completion_reversal_resets_downstream_jobs(start_server: &ServerProcess)
         JobStatus::Failed,
     );
 
-    default_api::complete_job(
+    apis::jobs_api::complete_job(
         config,
         job1_id,
         job1_result.status,
@@ -113,7 +113,7 @@ fn test_completion_reversal_resets_downstream_jobs(start_server: &ServerProcess)
         JobStatus::Completed,
     );
 
-    default_api::complete_job(
+    apis::jobs_api::complete_job(
         config,
         job2_id,
         job2_result.status,
@@ -135,7 +135,7 @@ fn test_completion_reversal_resets_downstream_jobs(start_server: &ServerProcess)
         JobStatus::Completed,
     );
 
-    default_api::complete_job(
+    apis::jobs_api::complete_job(
         config,
         job3_id,
         job3_result.status,
@@ -145,9 +145,9 @@ fn test_completion_reversal_resets_downstream_jobs(start_server: &ServerProcess)
     .expect("Failed to complete job3");
 
     // Verify all jobs are now in their expected final states
-    let job1_completed = default_api::get_job(config, job1_id).expect("Failed to get job1");
-    let job2_completed = default_api::get_job(config, job2_id).expect("Failed to get job2");
-    let job3_completed = default_api::get_job(config, job3_id).expect("Failed to get job3");
+    let job1_completed = apis::jobs_api::get_job(config, job1_id).expect("Failed to get job1");
+    let job2_completed = apis::jobs_api::get_job(config, job2_id).expect("Failed to get job2");
+    let job3_completed = apis::jobs_api::get_job(config, job3_id).expect("Failed to get job3");
 
     assert_eq!(job1_completed.status.unwrap(), JobStatus::Failed);
     assert_eq!(job2_completed.status.unwrap(), JobStatus::Completed);
@@ -156,20 +156,19 @@ fn test_completion_reversal_resets_downstream_jobs(start_server: &ServerProcess)
     // Now call reset_job_status with failed_only = true
     // This should reset job1 (which failed) and trigger the completion reversal
     // which should reset all downstream jobs (job2 and job3) to Uninitialized
-    default_api::reset_job_status(
+    apis::workflows_api::reset_job_status(
         config,
         workflow_id,
         Some(true), // failed_only = true
-        None,       // body
     )
     .expect("Failed to reset job status");
 
     // Verify that ALL jobs are now Uninitialized
     // The completion reversal should have reset not just the failed job (job1)
     // but also all downstream jobs (job2 and job3)
-    let job1_final = default_api::get_job(config, job1_id).expect("Failed to get job1");
-    let job2_final = default_api::get_job(config, job2_id).expect("Failed to get job2");
-    let job3_final = default_api::get_job(config, job3_id).expect("Failed to get job3");
+    let job1_final = apis::jobs_api::get_job(config, job1_id).expect("Failed to get job1");
+    let job2_final = apis::jobs_api::get_job(config, job2_id).expect("Failed to get job2");
+    let job3_final = apis::jobs_api::get_job(config, job3_id).expect("Failed to get job3");
 
     assert_eq!(
         job1_final.status.unwrap(),
@@ -191,7 +190,7 @@ fn test_completion_reversal_resets_downstream_jobs(start_server: &ServerProcess)
 /// Test that completion reversal works with more complex dependency chains
 /// This creates a diamond-shaped dependency pattern to test recursive propagation
 #[rstest]
-#[serial]
+#[serial(completion)]
 fn test_completion_reversal_complex_dependencies(start_server: &ServerProcess) {
     let config = &start_server.config;
 
@@ -212,7 +211,7 @@ fn test_completion_reversal_complex_dependencies(start_server: &ServerProcess) {
         "job1".to_string(),
         "echo 'job1 failed' && exit 1".to_string(),
     );
-    let created_job1 = default_api::create_job(config, job1).expect("Failed to create job1");
+    let created_job1 = apis::jobs_api::create_job(config, job1).expect("Failed to create job1");
     let job1_id = created_job1.id.unwrap();
 
     // Create job2 (blocked by job1)
@@ -223,7 +222,7 @@ fn test_completion_reversal_complex_dependencies(start_server: &ServerProcess) {
     );
     job2.depends_on_job_ids = Some(vec![job1_id]);
     job2.cancel_on_blocking_job_failure = Some(false);
-    let created_job2 = default_api::create_job(config, job2).expect("Failed to create job2");
+    let created_job2 = apis::jobs_api::create_job(config, job2).expect("Failed to create job2");
     let job2_id = created_job2.id.unwrap();
 
     // Create job3 (blocked by job1)
@@ -234,7 +233,7 @@ fn test_completion_reversal_complex_dependencies(start_server: &ServerProcess) {
     );
     job3.depends_on_job_ids = Some(vec![job1_id]);
     job3.cancel_on_blocking_job_failure = Some(false);
-    let created_job3 = default_api::create_job(config, job3).expect("Failed to create job3");
+    let created_job3 = apis::jobs_api::create_job(config, job3).expect("Failed to create job3");
     let job3_id = created_job3.id.unwrap();
 
     // Create job4 (blocked by both job2 and job3)
@@ -245,7 +244,7 @@ fn test_completion_reversal_complex_dependencies(start_server: &ServerProcess) {
     );
     job4.depends_on_job_ids = Some(vec![job2_id, job3_id]);
     job4.cancel_on_blocking_job_failure = Some(false);
-    let created_job4 = default_api::create_job(config, job4).expect("Failed to create job4");
+    let created_job4 = apis::jobs_api::create_job(config, job4).expect("Failed to create job4");
     let job4_id = created_job4.id.unwrap();
 
     // Initialize the workflow
@@ -279,32 +278,32 @@ fn test_completion_reversal_complex_dependencies(start_server: &ServerProcess) {
             status,
         );
 
-        default_api::complete_job(config, job_id, result.status, 1, result)
+        apis::jobs_api::complete_job(config, job_id, result.status, 1, result)
             .unwrap_or_else(|_| panic!("Failed to complete job {}", job_id));
     }
 
     // Verify all jobs are in their expected states
     assert_eq!(
-        default_api::get_job(config, job1_id)
+        apis::jobs_api::get_job(config, job1_id)
             .expect("Failed to get job1")
             .status
             .unwrap(),
         JobStatus::Failed
     );
     for job_id in [job2_id, job3_id, job4_id] {
-        let job = default_api::get_job(config, job_id).expect("Failed to get job");
+        let job = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");
         assert_eq!(job.status.unwrap(), JobStatus::Completed);
     }
 
     // Reset failed jobs only
-    default_api::reset_job_status(config, workflow_id, Some(true), None)
+    apis::workflows_api::reset_job_status(config, workflow_id, Some(true))
         .expect("Failed to reset job status");
 
     // Verify that ALL jobs are now Uninitialized
     // Since job1 failed and all other jobs depend on it (directly or indirectly),
     // they should all be reset to Uninitialized
     for job_id in [job1_id, job2_id, job3_id, job4_id] {
-        let job = default_api::get_job(config, job_id)
+        let job = apis::jobs_api::get_job(config, job_id)
             .unwrap_or_else(|_| panic!("Failed to get job {}", job_id));
         assert_eq!(
             job.status.unwrap(),
@@ -318,7 +317,7 @@ fn test_completion_reversal_complex_dependencies(start_server: &ServerProcess) {
 /// Test that completion reversal only affects jobs downstream of the reset job
 /// Jobs that are not downstream should remain in their current state
 #[rstest]
-#[serial]
+#[serial(completion)]
 fn test_completion_reversal_selective_reset(start_server: &ServerProcess) {
     let config = &start_server.config;
 
@@ -337,7 +336,7 @@ fn test_completion_reversal_selective_reset(start_server: &ServerProcess) {
         "job1".to_string(),
         "echo 'job1 failed' && exit 1".to_string(),
     );
-    let created_job1 = default_api::create_job(config, job1).expect("Failed to create job1");
+    let created_job1 = apis::jobs_api::create_job(config, job1).expect("Failed to create job1");
     let job1_id = created_job1.id.unwrap();
 
     let mut job2 = models::JobModel::new(
@@ -346,7 +345,7 @@ fn test_completion_reversal_selective_reset(start_server: &ServerProcess) {
         "echo 'job2 success'".to_string(),
     );
     job2.depends_on_job_ids = Some(vec![job1_id]);
-    let created_job2 = default_api::create_job(config, job2).expect("Failed to create job2");
+    let created_job2 = apis::jobs_api::create_job(config, job2).expect("Failed to create job2");
     let job2_id = created_job2.id.unwrap();
 
     // Chain 2: job3 -> job4 (independent)
@@ -355,7 +354,7 @@ fn test_completion_reversal_selective_reset(start_server: &ServerProcess) {
         "job3".to_string(),
         "echo 'job3 success'".to_string(),
     );
-    let created_job3 = default_api::create_job(config, job3).expect("Failed to create job3");
+    let created_job3 = apis::jobs_api::create_job(config, job3).expect("Failed to create job3");
     let job3_id = created_job3.id.unwrap();
 
     let mut job4 = models::JobModel::new(
@@ -364,7 +363,7 @@ fn test_completion_reversal_selective_reset(start_server: &ServerProcess) {
         "echo 'job4 success'".to_string(),
     );
     job4.depends_on_job_ids = Some(vec![job3_id]);
-    let created_job4 = default_api::create_job(config, job4).expect("Failed to create job4");
+    let created_job4 = apis::jobs_api::create_job(config, job4).expect("Failed to create job4");
     let job4_id = created_job4.id.unwrap();
 
     // Initialize the workflow
@@ -398,17 +397,17 @@ fn test_completion_reversal_selective_reset(start_server: &ServerProcess) {
             status,
         );
 
-        default_api::complete_job(config, job_id, result.status, 1, result)
+        apis::jobs_api::complete_job(config, job_id, result.status, 1, result)
             .unwrap_or_else(|_| panic!("Failed to complete job {}", job_id));
     }
 
     // Reset failed jobs only
-    default_api::reset_job_status(config, workflow_id, Some(true), None)
+    apis::workflows_api::reset_job_status(config, workflow_id, Some(true))
         .expect("Failed to reset job status");
 
     // Verify that only Chain 1 jobs are reset to Uninitialized
-    let job1_final = default_api::get_job(config, job1_id).expect("Failed to get job1");
-    let job2_final = default_api::get_job(config, job2_id).expect("Failed to get job2");
+    let job1_final = apis::jobs_api::get_job(config, job1_id).expect("Failed to get job1");
+    let job2_final = apis::jobs_api::get_job(config, job2_id).expect("Failed to get job2");
     assert_eq!(
         job1_final.status.unwrap(),
         JobStatus::Uninitialized,
@@ -421,8 +420,8 @@ fn test_completion_reversal_selective_reset(start_server: &ServerProcess) {
     );
 
     // Verify that Chain 2 jobs remain Completed (they were successful and independent)
-    let job3_final = default_api::get_job(config, job3_id).expect("Failed to get job3");
-    let job4_final = default_api::get_job(config, job4_id).expect("Failed to get job4");
+    let job3_final = apis::jobs_api::get_job(config, job3_id).expect("Failed to get job3");
+    let job4_final = apis::jobs_api::get_job(config, job4_id).expect("Failed to get job4");
     assert_eq!(
         job3_final.status.unwrap(),
         JobStatus::Completed,

@@ -29,7 +29,7 @@ function add_jobs(
     api::APIClient.DefaultApi,
     workflow_id::Int64,
     jobs,
-    max_transfer_size = 10_000,
+    max_transfer_size = 100_000,
 )
     added_jobs = []
     batch = []

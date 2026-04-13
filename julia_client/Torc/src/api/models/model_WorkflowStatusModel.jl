@@ -2,38 +2,37 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""workflow_status_model
-Data model for a workflow
+@doc raw"""WorkflowStatusModel
 
     WorkflowStatusModel(;
+        has_detected_need_to_run_completion_script=nothing,
         id=nothing,
+        is_archived=nothing,
         is_canceled=nothing,
-        is_archived=false,
         run_id=nothing,
-        has_detected_need_to_run_completion_script=false,
     )
 
-    - id::Int64
-    - is_canceled::Bool : Flag indicating whether the workflow has been canceled.
-    - is_archived::Bool : Flag indicating whether the workflow has been archived.
-    - run_id::Int64
     - has_detected_need_to_run_completion_script::Bool
+    - id::Int64
+    - is_archived::Bool
+    - is_canceled::Bool
+    - run_id::Int64
 """
 Base.@kwdef mutable struct WorkflowStatusModel <: OpenAPI.APIModel
+    has_detected_need_to_run_completion_script::Union{Nothing, Bool} = nothing
     id::Union{Nothing, Int64} = nothing
+    is_archived::Union{Nothing, Bool} = nothing
     is_canceled::Union{Nothing, Bool} = nothing
-    is_archived::Union{Nothing, Bool} = false
     run_id::Union{Nothing, Int64} = nothing
-    has_detected_need_to_run_completion_script::Union{Nothing, Bool} = false
 
-    function WorkflowStatusModel(id, is_canceled, is_archived, run_id, has_detected_need_to_run_completion_script, )
-        o = new(id, is_canceled, is_archived, run_id, has_detected_need_to_run_completion_script, )
+    function WorkflowStatusModel(has_detected_need_to_run_completion_script, id, is_archived, is_canceled, run_id, )
+        o = new(has_detected_need_to_run_completion_script, id, is_archived, is_canceled, run_id, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type WorkflowStatusModel
 
-const _property_types_WorkflowStatusModel = Dict{Symbol,String}(Symbol("id")=>"Int64", Symbol("is_canceled")=>"Bool", Symbol("is_archived")=>"Bool", Symbol("run_id")=>"Int64", Symbol("has_detected_need_to_run_completion_script")=>"Bool", )
+const _property_types_WorkflowStatusModel = Dict{Symbol,String}(Symbol("has_detected_need_to_run_completion_script")=>"Bool", Symbol("id")=>"Int64", Symbol("is_archived")=>"Bool", Symbol("is_canceled")=>"Bool", Symbol("run_id")=>"Int64", )
 OpenAPI.property_type(::Type{ WorkflowStatusModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_WorkflowStatusModel[name]))}
 
 function OpenAPI.check_required(o::WorkflowStatusModel)
@@ -43,17 +42,23 @@ function OpenAPI.check_required(o::WorkflowStatusModel)
 end
 
 function OpenAPI.validate_properties(o::WorkflowStatusModel)
-    OpenAPI.validate_property(WorkflowStatusModel, Symbol("id"), o.id)
-    OpenAPI.validate_property(WorkflowStatusModel, Symbol("is_canceled"), o.is_canceled)
-    OpenAPI.validate_property(WorkflowStatusModel, Symbol("is_archived"), o.is_archived)
-    OpenAPI.validate_property(WorkflowStatusModel, Symbol("run_id"), o.run_id)
     OpenAPI.validate_property(WorkflowStatusModel, Symbol("has_detected_need_to_run_completion_script"), o.has_detected_need_to_run_completion_script)
+    OpenAPI.validate_property(WorkflowStatusModel, Symbol("id"), o.id)
+    OpenAPI.validate_property(WorkflowStatusModel, Symbol("is_archived"), o.is_archived)
+    OpenAPI.validate_property(WorkflowStatusModel, Symbol("is_canceled"), o.is_canceled)
+    OpenAPI.validate_property(WorkflowStatusModel, Symbol("run_id"), o.run_id)
 end
 
 function OpenAPI.validate_property(::Type{ WorkflowStatusModel }, name::Symbol, val)
 
 
+    if name === Symbol("id")
+        OpenAPI.validate_param(name, "WorkflowStatusModel", :format, val, "int64")
+    end
 
 
 
+    if name === Symbol("run_id")
+        OpenAPI.validate_param(name, "WorkflowStatusModel", :format, val, "int64")
+    end
 end

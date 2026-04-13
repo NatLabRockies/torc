@@ -501,18 +501,37 @@
                                 <label for="chat-provider-select">Provider</label>
                                 <select id="chat-provider-select" class="chat-setup-select">
                                     <option value="anthropic">Anthropic (Direct API)</option>
+                                    <option value="openai">OpenAI</option>
                                     <option value="foundry">Azure AI Foundry</option>
+                                    <option value="ollama">Ollama (Local)</option>
+                                    <option value="github">GitHub Models</option>
                                     <option value="custom">Custom Endpoint</option>
                                 </select>
                             </div>
-                            <div class="chat-setup-field">
+                            <div class="chat-setup-field" id="chat-api-key-field">
                                 <label for="chat-api-key-input">API Key</label>
                                 <input type="password" id="chat-api-key-input" class="chat-input" placeholder="sk-ant-..." aria-label="API key">
+                            </div>
+                            <div class="chat-setup-field" id="chat-model-field" style="display:none">
+                                <label for="chat-model-input">Model</label>
+                                <input type="text" id="chat-model-input" class="chat-input" placeholder="llama3.2" aria-label="Model name">
                             </div>
                             <div class="chat-setup-field" id="chat-foundry-field" style="display:none">
                                 <label for="chat-foundry-resource">Foundry Resource Name</label>
                                 <input type="text" id="chat-foundry-resource" class="chat-input" placeholder="my-resource" aria-label="Azure AI Foundry resource name">
                                 <small>URL: https://{resource}.services.ai.azure.com/anthropic/v1</small>
+                            </div>
+                            <div class="chat-setup-field" id="chat-openai-url-field" style="display:none">
+                                <label for="chat-openai-base-url">API URL <small>(optional, for compatible services)</small></label>
+                                <input type="text" id="chat-openai-base-url" class="chat-input" placeholder="https://api.openai.com/v1" aria-label="OpenAI base URL">
+                            </div>
+                            <div class="chat-setup-field" id="chat-ollama-url-field" style="display:none">
+                                <label for="chat-ollama-base-url">Ollama URL <small>(optional)</small></label>
+                                <input type="text" id="chat-ollama-base-url" class="chat-input" placeholder="http://localhost:11434/v1" aria-label="Ollama base URL">
+                            </div>
+                            <div class="chat-setup-field" id="chat-github-url-field" style="display:none">
+                                <label for="chat-github-base-url">GitHub Models URL <small>(optional)</small></label>
+                                <input type="text" id="chat-github-base-url" class="chat-input" placeholder="https://models.inference.ai.azure.com" aria-label="GitHub Models base URL">
                             </div>
                             <div class="chat-setup-field" id="chat-custom-url-field" style="display:none">
                                 <label for="chat-custom-base-url">Base URL</label>

@@ -7,7 +7,7 @@ Run workflows across multiple machines via SSH without requiring an HPC schedule
 Torc supports three execution modes:
 
 1. **Local** (`torc run`) - Jobs run on the current machine
-2. **HPC** (`torc submit-slurm`) - Jobs run on Slurm-allocated nodes
+2. **HPC** (`torc slurm generate` + `torc submit`) - Jobs run on Slurm-allocated nodes
 3. **Remote Workers** (`torc remote run`) - Jobs run on SSH-accessible machines
 
 Remote workers are ideal for:
@@ -215,7 +215,7 @@ If `workflow-id` is omitted, you'll be prompted to select a workflow interactive
 1. **Create a workflow:**
 
    ```console
-   torc workflows create my_workflow.yaml
+   torc create my_workflow.yaml
    ```
 
 2. **Add workers:**
@@ -353,7 +353,7 @@ The worker couldn't connect to the server. Check:
 
 If workers start but don't claim jobs:
 
-1. Check the workflow is initialized: `torc workflows status <id>`
+1. Check the workflow is initialized: `torc status <id>`
 2. Check jobs are ready: `torc jobs list <id>`
 3. Check resource requirements match available resources
 

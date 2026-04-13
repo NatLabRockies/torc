@@ -80,13 +80,24 @@ Options:
       --server-port <PORT>    Server port in standalone mode (0 = auto-detect) [default: 0]
       --database <PATH>       Database path for standalone server
       --completion-check-interval-secs <SECS>  Server polling interval [default: 5]
-      --anthropic-api-key           Anthropic API key [env: ANTHROPIC_API_KEY]
+      --torc-mcp-server-bin        Path to torc-mcp-server [default: torc-mcp-server]
+
+  AI Chat options:
+      --llm-provider               LLM provider: anthropic, openai, ollama, github [env: LLM_PROVIDER]
+      --anthropic-api-key          Anthropic API key [env: ANTHROPIC_API_KEY]
       --anthropic-foundry-api-key  Foundry API key [env: ANTHROPIC_FOUNDRY_API_KEY]
       --anthropic-foundry-resource Foundry resource [env: ANTHROPIC_FOUNDRY_RESOURCE]
       --anthropic-base-url         Override API base URL [env: ANTHROPIC_BASE_URL]
       --anthropic-auth-header      Override auth header name [env: ANTHROPIC_AUTH_HEADER]
-      --torc-mcp-server-bin        Path to torc-mcp-server [default: torc-mcp-server]
       --anthropic-model            Claude model [default: claude-sonnet-4-20250514]
+      --openai-api-key             OpenAI API key [env: OPENAI_API_KEY]
+      --openai-base-url            OpenAI API URL [default: https://api.openai.com/v1]
+      --openai-model               OpenAI model [default: gpt-4o] [env: OPENAI_MODEL]
+      --ollama-base-url            Ollama API URL [default: http://localhost:11434/v1]
+      --ollama-model               Ollama model [default: llama3.2] [env: OLLAMA_MODEL]
+      --github-token               GitHub token for GitHub Models [env: GITHUB_TOKEN]
+      --github-models-base-url     GitHub Models URL [default: https://models.inference.ai.azure.com]
+      --github-models-model        GitHub Models model [default: gpt-4o] [env: GITHUB_MODELS_MODEL]
 ```
 
 ## Features
@@ -180,16 +191,22 @@ Requires workflows run with `granularity: "time_series"` in `resource_monitor` c
 
 ### AI Chat Tab
 
-The AI Chat tab provides an AI assistant powered by Claude that can interact with your workflows
-using natural language. The assistant uses the Torc MCP server to access workflow data, job logs,
-and management tools.
+The AI Chat tab provides an AI assistant that can interact with your workflows using natural
+language. The assistant uses the Torc MCP server to access workflow data, job logs, and management
+tools.
+
+**Supported Providers:**
+
+The dashboard supports multiple LLM providers:
+
+- **Anthropic Claude** (direct API or Azure AI Foundry)
+- **OpenAI** (GPT-4o, GPT-4o-mini, o1, etc.)
+- **Ollama** (local, no API key required)
+- **GitHub Models** (Azure-hosted models with GitHub token)
 
 **Setup:**
 
-The AI Chat tab requires an API key so the dashboard can call Claude directly. There are two
-supported API backends:
-
-_Option 1: Direct Anthropic API_
+_Option 1: Anthropic Claude (Direct API)_
 
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."
@@ -198,7 +215,7 @@ torc-dash
 
 _Option 2: Microsoft Azure AI Foundry_
 
-If you access Claude through Azure AI Foundry, set the Foundry-specific variables instead:
+If you access Claude through Azure AI Foundry:
 
 ```bash
 export ANTHROPIC_FOUNDRY_API_KEY="your-foundry-key"
@@ -209,20 +226,85 @@ torc-dash
 The dashboard constructs the Foundry endpoint automatically:
 `https://{resource}.services.ai.azure.com/anthropic/v1/messages`
 
-When both direct and Foundry keys are set, Foundry takes precedence.
+_Option 3: OpenAI_
 
-You also need the `torc-mcp-server` binary in your PATH (built alongside `torc-dash` when using
+Use OpenAI's GPT models:
+
+```bash
+export OPENAI_API_KEY="sk-..."
+LLM_PROVIDER=openai torc-dash
+
+# Or specify a different model
+LLM_PROVIDER=openai OPENAI_MODEL=gpt-4o-mini torc-dash
+```
+
+You can also use OpenAI-compatible services by setting a custom base URL:
+
+```bash
+LLM_PROVIDER=openai torc-dash --openai-base-url https://my-openai-proxy.example.com/v1
+```
+
+_Option 4: Ollama (Local)_
+
+Run AI completely locally with [Ollama](https://ollama.ai). No API key required:
+
+```bash
+# First, start Ollama and pull a model
+ollama pull qwen3.5:35b-a3b
+
+# Then start torc-dash with Ollama provider
+LLM_PROVIDER=ollama torc-dash
+
+# Or specify a different model
+LLM_PROVIDER=ollama OLLAMA_MODEL=qwen3.5:35b-a3b torc-dash
+```
+
+Ollama runs at `http://localhost:11434` by default. For remote Ollama servers:
+
+```bash
+LLM_PROVIDER=ollama torc-dash --ollama-base-url http://ollama-server:11434/v1
+```
+
+_Option 5: GitHub Models_
+
+Use models hosted on GitHub Models (requires a GitHub token with `models:read` scope):
+
+```bash
+export GITHUB_TOKEN="ghp_..."
+LLM_PROVIDER=github torc-dash
+
+# Or specify a different model
+LLM_PROVIDER=github GITHUB_MODELS_MODEL=Meta-Llama-3.1-70B-Instruct torc-dash
+```
+
+Available models include `gpt-4o`, `gpt-4o-mini`, `Meta-Llama-3.1-70B-Instruct`, and others. See
+[GitHub Models](https://github.com/marketplace/models) for the full list.
+
+**Runtime Configuration:**
+
+You can also configure the provider through the dashboard UI without environment variables:
+
+1. Open the AI Chat tab
+2. If not configured, a setup dialog appears
+3. Select your provider from the dropdown
+4. Enter credentials and model as needed
+5. Click "Connect"
+
+Credentials configured this way are stored in memory only for the current session.
+
+**MCP Server:**
+
+You need the `torc-mcp-server` binary in your PATH (built alongside `torc-dash` when using
 `--all-features` or `--features mcp-server`). If installed elsewhere, specify its location:
 
 ```bash
 torc-dash --torc-mcp-server-bin /path/to/torc-mcp-server
 ```
 
-**Don't have an API key?**
+**Alternative: Use Your Own AI Tool**
 
-If you use Claude through a subscription (Claude Pro/Max) or GitHub Copilot through an enterprise
-account, those credentials cannot be used with the dashboard's built-in chat. However, you can still
-get AI-assisted workflow management by connecting `torc-mcp-server` directly to your AI tool:
+If you prefer to use Claude through a subscription (Claude Pro/Max) or GitHub Copilot through an
+enterprise account, you can connect `torc-mcp-server` directly to your AI tool:
 
 - **Claude Code** (Pro/Max/Team/Enterprise): Add `torc-mcp-server` as an MCP server -- see
   [AI-Assisted Workflow Management](../../specialized/tools/ai-assistant.md#quick-setup-claude-code)
@@ -250,17 +332,26 @@ terminal or editor instead of the dashboard.
 
 **Configuration:**
 
-| Setting                      | Default                    | Description                      |
-| ---------------------------- | -------------------------- | -------------------------------- |
-| `ANTHROPIC_API_KEY`          | (none)                     | API key for direct Anthropic API |
-| `ANTHROPIC_FOUNDRY_API_KEY`  | (none)                     | API key for Azure AI Foundry     |
-| `ANTHROPIC_FOUNDRY_RESOURCE` | (none)                     | Foundry resource name            |
-| `--anthropic-model`          | `claude-sonnet-4-20250514` | Claude model to use              |
-| `--torc-mcp-server-bin`      | `torc-mcp-server`          | Path to MCP server binary        |
+| Setting                      | Default                                 | Description                                 |
+| ---------------------------- | --------------------------------------- | ------------------------------------------- |
+| `LLM_PROVIDER`               | `anthropic`                             | Provider: anthropic, openai, ollama, github |
+| `ANTHROPIC_API_KEY`          | (none)                                  | API key for direct Anthropic API            |
+| `ANTHROPIC_FOUNDRY_API_KEY`  | (none)                                  | API key for Azure AI Foundry                |
+| `ANTHROPIC_FOUNDRY_RESOURCE` | (none)                                  | Foundry resource name                       |
+| `--anthropic-model`          | `claude-sonnet-4-20250514`              | Claude model to use                         |
+| `OPENAI_API_KEY`             | (none)                                  | OpenAI API key                              |
+| `OPENAI_MODEL`               | `gpt-4o`                                | OpenAI model to use                         |
+| `--openai-base-url`          | `https://api.openai.com/v1`             | OpenAI API URL                              |
+| `OLLAMA_MODEL`               | `llama3.2`                              | Ollama model to use                         |
+| `--ollama-base-url`          | `http://localhost:11434/v1`             | Ollama API URL                              |
+| `GITHUB_TOKEN`               | (none)                                  | GitHub token for GitHub Models              |
+| `GITHUB_MODELS_MODEL`        | `gpt-4o`                                | GitHub Models model to use                  |
+| `--github-models-base-url`   | `https://models.inference.ai.azure.com` | GitHub Models API URL                       |
+| `--torc-mcp-server-bin`      | `torc-mcp-server`                       | Path to MCP server binary                   |
 
-At least one of `ANTHROPIC_API_KEY` or `ANTHROPIC_FOUNDRY_API_KEY` (with
-`ANTHROPIC_FOUNDRY_RESOURCE`) must be set. If neither is configured, the AI Chat tab appears
-disabled in the sidebar.
+For Anthropic, at least one of `ANTHROPIC_API_KEY` or `ANTHROPIC_FOUNDRY_API_KEY` (with
+`ANTHROPIC_FOUNDRY_RESOURCE`) must be set. For OpenAI, `OPENAI_API_KEY` is required. For GitHub
+Models, `GITHUB_TOKEN` is required. Ollama requires no credentials (runs locally).
 
 > **Note:** The API key is kept server-side and never sent to the browser. All AI requests are
 > proxied through the `torc-dash` backend.

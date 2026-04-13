@@ -6,7 +6,7 @@ use common::{
 };
 use rstest::rstest;
 use serde_json::json;
-use torc::client::default_api;
+use torc::client::apis;
 
 #[rstest]
 fn test_files_add_command_json(start_server: &ServerProcess) {
@@ -464,7 +464,7 @@ fn test_files_remove_command_json(start_server: &ServerProcess) {
     );
 
     // Verify the file is actually removed by trying to get it
-    let get_result = default_api::get_file(config, file_id);
+    let get_result = apis::files_api::get_file(config, file_id);
     assert!(get_result.is_err(), "File should be deleted");
 }
 
@@ -575,10 +575,10 @@ fn test_files_list_required_existing_command_json(start_server: &ServerProcess) 
     job.output_file_ids = Some(vec![output_file.id.unwrap()]);
 
     let _created_job =
-        torc::client::default_api::create_job(config, job).expect("Failed to create job");
+        torc::client::apis::jobs_api::create_job(config, job).expect("Failed to create job");
 
     // Initialize the workflow to set up job dependencies
-    torc::client::default_api::initialize_jobs(config, workflow_id, None, None, None)
+    torc::client::apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
     // Test the CLI list-required-existing command

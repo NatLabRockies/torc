@@ -161,7 +161,7 @@ Save as `graceful_termination.yaml`:
 name: graceful_termination_demo
 description: Demonstrates early SIGTERM with automatic checkpoint-and-retry
 
-slurm_config:
+execution_config:
   srun_termination_signal: "TERM@120"
 
 failure_handlers:
@@ -201,7 +201,7 @@ actions:
 
 Three pieces work together here:
 
-- **`slurm_config.srun_termination_signal: "TERM@120"`** tells Slurm to send SIGTERM 120 seconds
+- **`execution_config.srun_termination_signal: "TERM@120"`** tells Slurm to send SIGTERM 120 seconds
   before the step time limit. Torc passes this to every `srun` invocation as
   `srun --signal=TERM@120`.
 
@@ -216,13 +216,16 @@ Three pieces work together here:
 
 ## Step 3: Submit and Run
 
+Since the spec already includes `slurm_schedulers` and `actions`, submit directly:
+
 ```bash
-torc submit-slurm --account my_project graceful_termination.yaml
+torc submit graceful_termination.yaml
 ```
 
-Or, if you already have schedulers configured in the spec:
+Or, if you prefer to auto-generate schedulers from job resource requirements:
 
 ```bash
+torc slurm generate --account my_project -o graceful_termination.yaml graceful_termination.yaml
 torc submit graceful_termination.yaml
 ```
 
@@ -264,8 +267,8 @@ of checkpoint cycles.
 
 ## How It Works Under the Hood
 
-1. **`slurm_config.srun_termination_signal: "TERM@120"`** is stored on the workflow record in the
-   Torc database.
+1. **`execution_config.srun_termination_signal: "TERM@120"`** is stored on the workflow record in
+   the Torc database.
 
 2. When the job runner launches a job inside a Slurm allocation, it builds an `srun` command that
    includes `--signal=TERM@120`.

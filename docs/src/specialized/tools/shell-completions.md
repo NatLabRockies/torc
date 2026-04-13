@@ -223,7 +223,7 @@ torc --url <type-url>
 torc --format <TAB>   # table, json
 
 # Complex commands
-torc workflows create --<TAB>
+torc create --<TAB>
 # Shows all available flags for the create command
 ```
 

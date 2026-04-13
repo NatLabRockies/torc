@@ -491,20 +491,37 @@ Object.assign(TorcDashboard.prototype, {
         // Include attempt_id in the path (defaults to 1 if not present)
         const attemptId = result.attempt_id ?? 1;
         const stdioBase = `${outputDir}/job_stdio/job_wf${result.workflow_id}_j${result.job_id}_r${result.run_id}_a${attemptId}`;
-        const filePath = isStdout ? `${stdioBase}.o` : `${stdioBase}.e`;
+        // Try the separate file (.o/.e) first, then fall back to combined (.log)
+        const primaryPath = isStdout ? `${stdioBase}.o` : `${stdioBase}.e`;
+        const combinedPath = `${stdioBase}.log`;
 
-        logPathEl.textContent = filePath;
         logContentEl.classList.toggle('stderr', !isStdout);
         logContentEl.textContent = 'Loading...';
 
         try {
-            const response = await fetch('/api/cli/read-file', {
+            let response = await fetch('/api/cli/read-file', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path: filePath }),
+                body: JSON.stringify({ path: primaryPath }),
             });
 
-            const responseData = await response.json();
+            let responseData = await response.json();
+
+            // Fall back to combined .log file if separate file doesn't exist
+            let filePath = primaryPath;
+            if (!responseData.exists) {
+                response = await fetch('/api/cli/read-file', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: combinedPath }),
+                });
+                responseData = await response.json();
+                if (responseData.exists) {
+                    filePath = combinedPath;
+                }
+            }
+
+            logPathEl.textContent = filePath;
 
             if (!responseData.exists) {
                 logContentEl.textContent = '(file does not exist)';

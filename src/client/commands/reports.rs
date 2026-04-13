@@ -1,8 +1,8 @@
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::commands::output::print_json;
 use crate::client::commands::{
-    get_env_user_name, pagination, print_error, select_workflow_interactively,
+    get_env_user_name, pagination, select_workflow_interactively,
     table_format::display_table_with_count,
 };
 use crate::client::log_paths::{
@@ -56,116 +56,11 @@ struct ResourceUtilizationRow {
     specified: String,
     #[tabled(rename = "Peak Used")]
     peak_used: String,
-    #[tabled(rename = "Over-Utilization")]
+    #[tabled(rename = "Utilization")]
     over_utilization: String,
 }
 
-#[derive(clap::Subcommand)]
-#[command(after_long_help = "\
-EXAMPLES:
-    # Get workflow summary
-    torc reports summary 123
-
-    # Get comprehensive results report
-    torc -f json reports results 123 > report.json
-
-    # Check resource utilization
-    torc reports check-resource-utilization 123
-")]
-pub enum ReportCommands {
-    /// Check resource utilization and report jobs that exceeded their specified requirements
-    #[command(after_long_help = "\
-EXAMPLES:
-    torc reports check-resource-utilization 123
-    torc reports check-resource-utilization 123 --all
-    torc reports check-resource-utilization 123 --include-failed
-")]
-    CheckResourceUtilization {
-        /// Workflow ID to analyze (optional - will prompt if not provided)
-        #[arg()]
-        workflow_id: Option<i64>,
-        /// Run ID to analyze (optional - analyzes latest run if not provided)
-        #[arg(short, long)]
-        run_id: Option<i64>,
-        /// Show all jobs (default: only show jobs that exceeded requirements)
-        #[arg(short, long)]
-        all: bool,
-        /// Include failed and terminated jobs in the analysis (for recovery diagnostics)
-        #[arg(long)]
-        include_failed: bool,
-        /// Minimum over-utilization percentage to flag as violation (default: 1.0%)
-        #[arg(long, default_value = "1.0")]
-        min_over_utilization: f64,
-    },
-    /// Generate a comprehensive JSON report of job results including all log file paths
-    #[command(after_long_help = "\
-EXAMPLES:
-    torc reports results 123
-    torc -f json reports results 123 > results.json
-    torc reports results 123 --all-runs
-    torc reports results 123 --job-id 45 --job-id 46
-")]
-    Results {
-        /// Workflow ID to analyze (optional - will prompt if not provided)
-        #[arg()]
-        workflow_id: Option<i64>,
-        /// Output directory (where job logs are stored, passed in `torc run` and `torc submit`)
-        #[arg(short, long, default_value = "torc_output")]
-        output_dir: std::path::PathBuf,
-        /// Include all runs for each job (default: only latest run)
-        #[arg(long)]
-        all_runs: bool,
-        /// Filter results to only include these job IDs (can be specified multiple times)
-        #[arg(long = "job-id", short = 'j')]
-        job_ids: Vec<i64>,
-    },
-    /// Generate a summary of workflow results (requires workflow to be complete)
-    #[command(after_long_help = "\
-EXAMPLES:
-    torc reports summary 123
-    torc -f json reports summary 123
-")]
-    Summary {
-        /// Workflow ID to summarize (optional - will prompt if not provided)
-        #[arg()]
-        workflow_id: Option<i64>,
-    },
-}
-
-pub fn handle_report_commands(config: &Configuration, command: &ReportCommands, format: &str) {
-    match command {
-        ReportCommands::CheckResourceUtilization {
-            workflow_id,
-            run_id,
-            all,
-            include_failed,
-            min_over_utilization,
-        } => {
-            check_resource_utilization(
-                config,
-                *workflow_id,
-                *run_id,
-                *all,
-                *include_failed,
-                *min_over_utilization,
-                format,
-            );
-        }
-        ReportCommands::Results {
-            workflow_id,
-            output_dir,
-            all_runs,
-            job_ids,
-        } => {
-            generate_results_report(config, *workflow_id, output_dir, *all_runs, job_ids);
-        }
-        ReportCommands::Summary { workflow_id } => {
-            generate_summary(config, *workflow_id, format);
-        }
-    }
-}
-
-fn check_resource_utilization(
+pub fn check_resource_utilization(
     config: &Configuration,
     workflow_id: Option<i64>,
     run_id: Option<i64>,
@@ -174,47 +69,180 @@ fn check_resource_utilization(
     min_over_utilization: f64,
     format: &str,
 ) {
-    // Get or select workflow ID
-    let user = get_env_user_name();
-    let wf_id = match workflow_id {
-        Some(id) => id,
-        None => match select_workflow_interactively(config, &user) {
-            Ok(id) => id,
-            Err(e) => {
-                eprintln!("Error selecting workflow: {}", e);
-                std::process::exit(1);
-            }
-        },
+    let builder = if show_all {
+        build_resource_utilization_report_with_all
+    } else {
+        build_resource_utilization_report
     };
-
-    // Fetch completed results for the workflow using pagination
-    let mut params = pagination::ResultListParams::new().with_status(models::JobStatus::Completed);
-    if let Some(rid) = run_id {
-        params = params.with_run_id(rid);
-    }
-    let completed_results = match pagination::paginate_results(config, wf_id, params) {
-        Ok(results) => results,
+    let report = match builder(
+        config,
+        workflow_id,
+        run_id,
+        include_failed,
+        min_over_utilization,
+    ) {
+        Ok(report) => report,
         Err(e) => {
-            print_error("fetching completed results", &e);
+            eprintln!("{}", e);
             std::process::exit(1);
         }
     };
 
-    // Fetch failed and terminated results if requested
-    // (terminated jobs are typically killed due to walltime/OOM, so they need recovery too)
+    if report.total_results == 0 {
+        let msg = if include_failed {
+            format!(
+                "No completed, failed, or terminated job results found for workflow {}",
+                report.workflow_id
+            )
+        } else {
+            format!(
+                "No completed job results found for workflow {}",
+                report.workflow_id
+            )
+        };
+        println!("{}", msg);
+        std::process::exit(0);
+    }
+
+    let violation_rows: Vec<ResourceUtilizationRow> = report
+        .violations
+        .iter()
+        .map(|r| ResourceUtilizationRow {
+            job_id: r.job_id,
+            job_name: r.job_name.clone(),
+            resource_type: r.resource_type.clone(),
+            specified: r.specified.clone(),
+            peak_used: r.peak_used.clone(),
+            over_utilization: r.over_utilization.clone(),
+        })
+        .collect();
+
+    // When --all is set, also include jobs that stayed within their resource limits
+    let within_limits_rows: Vec<ResourceUtilizationRow> = if show_all {
+        report
+            .within_limits
+            .iter()
+            .map(|r| ResourceUtilizationRow {
+                job_id: r.job_id,
+                job_name: r.job_name.clone(),
+                resource_type: r.resource_type.clone(),
+                specified: r.specified.clone(),
+                peak_used: r.peak_used.clone(),
+                over_utilization: r.over_utilization.clone(),
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    // Output results
+    match format {
+        "json" => {
+            print_json(&report, "resource utilization");
+        }
+        _ => {
+            if violation_rows.is_empty() && within_limits_rows.is_empty() {
+                println!(
+                    "✓ All {} jobs stayed within their specified resource requirements",
+                    report.total_results
+                );
+            } else if violation_rows.is_empty() && !within_limits_rows.is_empty() {
+                println!(
+                    "✓ All {} jobs stayed within their specified resource requirements:\n",
+                    report.total_results
+                );
+                display_table_with_count(&within_limits_rows, "jobs");
+            } else {
+                println!(
+                    "\n⚠ Found {} resource over-utilization violations:\n",
+                    report.over_utilization_count
+                );
+                display_table_with_count(&violation_rows, "violations");
+
+                eprintln!(
+                    "\nTo automatically correct these violations, run:\n  torc workflows correct-resources {}",
+                    report.workflow_id
+                );
+
+                if show_all && !within_limits_rows.is_empty() {
+                    println!("\nJobs within resource limits:\n");
+                    display_table_with_count(&within_limits_rows, "jobs");
+                }
+
+                if !show_all {
+                    println!(
+                        "\nNote: Use --all to see all jobs, including those that stayed within limits"
+                    );
+                }
+            }
+        }
+    }
+}
+
+pub fn build_resource_utilization_report(
+    config: &Configuration,
+    workflow_id: Option<i64>,
+    run_id: Option<i64>,
+    include_failed: bool,
+    min_over_utilization: f64,
+) -> Result<ResourceUtilizationReport, String> {
+    build_resource_utilization_report_inner(
+        config,
+        workflow_id,
+        run_id,
+        include_failed,
+        min_over_utilization,
+        false,
+    )
+}
+
+pub fn build_resource_utilization_report_with_all(
+    config: &Configuration,
+    workflow_id: Option<i64>,
+    run_id: Option<i64>,
+    include_failed: bool,
+    min_over_utilization: f64,
+) -> Result<ResourceUtilizationReport, String> {
+    build_resource_utilization_report_inner(
+        config,
+        workflow_id,
+        run_id,
+        include_failed,
+        min_over_utilization,
+        true,
+    )
+}
+
+fn build_resource_utilization_report_inner(
+    config: &Configuration,
+    workflow_id: Option<i64>,
+    run_id: Option<i64>,
+    include_failed: bool,
+    min_over_utilization: f64,
+    collect_within_limits: bool,
+) -> Result<ResourceUtilizationReport, String> {
+    let user = get_env_user_name();
+    let wf_id = match workflow_id {
+        Some(id) => id,
+        None => select_workflow_interactively(config, &user)
+            .map_err(|e| format!("Error selecting workflow: {}", e))?,
+    };
+
+    let mut params = pagination::ResultListParams::new().with_status(models::JobStatus::Completed);
+    if let Some(rid) = run_id {
+        params = params.with_run_id(rid);
+    }
+    let completed_results = pagination::paginate_results(config, wf_id, params)
+        .map_err(|e| format!("Error fetching completed results: {}", e))?;
+
     let failed_results = if include_failed {
         let mut failed_params =
             pagination::ResultListParams::new().with_status(models::JobStatus::Failed);
         if let Some(rid) = run_id {
             failed_params = failed_params.with_run_id(rid);
         }
-        match pagination::paginate_results(config, wf_id, failed_params) {
-            Ok(results) => results,
-            Err(e) => {
-                print_error("fetching failed results", &e);
-                std::process::exit(1);
-            }
-        }
+        pagination::paginate_results(config, wf_id, failed_params)
+            .map_err(|e| format!("Error fetching failed results: {}", e))?
     } else {
         Vec::new()
     };
@@ -225,58 +253,26 @@ fn check_resource_utilization(
         if let Some(rid) = run_id {
             terminated_params = terminated_params.with_run_id(rid);
         }
-        match pagination::paginate_results(config, wf_id, terminated_params) {
-            Ok(results) => results,
-            Err(e) => {
-                print_error("fetching terminated results", &e);
-                std::process::exit(1);
-            }
-        }
+        pagination::paginate_results(config, wf_id, terminated_params)
+            .map_err(|e| format!("Error fetching terminated results: {}", e))?
     } else {
         Vec::new()
     };
 
-    // Combine results
     let mut results = completed_results;
     results.extend(failed_results);
     results.extend(terminated_results);
 
-    if results.is_empty() {
-        let msg = if include_failed {
-            format!(
-                "No completed, failed, or terminated job results found for workflow {}",
-                wf_id
-            )
-        } else {
-            format!("No completed job results found for workflow {}", wf_id)
-        };
-        println!("{}", msg);
-        std::process::exit(0);
-    }
+    let jobs = pagination::paginate_jobs(config, wf_id, pagination::JobListParams::new())
+        .map_err(|e| format!("Error fetching jobs: {}", e))?;
 
-    // Fetch all jobs to get resource requirements using pagination
-    let jobs = match pagination::paginate_jobs(config, wf_id, pagination::JobListParams::new()) {
-        Ok(jobs) => jobs,
-        Err(e) => {
-            print_error("fetching jobs", &e);
-            std::process::exit(1);
-        }
-    };
-
-    // Fetch all resource requirements using pagination
-    let resource_reqs = match pagination::paginate_resource_requirements(
+    let resource_reqs = pagination::paginate_resource_requirements(
         config,
         wf_id,
         pagination::ResourceRequirementsListParams::new(),
-    ) {
-        Ok(reqs) => reqs,
-        Err(e) => {
-            print_error("fetching resource requirements", &e);
-            std::process::exit(1);
-        }
-    };
+    )
+    .map_err(|e| format!("Error fetching resource requirements: {}", e))?;
 
-    // Build lookup maps
     let job_map: std::collections::HashMap<i64, &models::JobModel> =
         jobs.iter().filter_map(|j| j.id.map(|id| (id, j))).collect();
 
@@ -286,8 +282,8 @@ fn check_resource_utilization(
             .filter_map(|rr| rr.id.map(|id| (id, rr)))
             .collect();
 
-    // Analyze each result
-    let mut rows = Vec::new();
+    let mut violations = Vec::new();
+    let mut within_limits = Vec::new();
     let mut over_util_count = 0;
     let mut resource_violations_info: Vec<ResourceViolationInfo> = Vec::new();
 
@@ -448,7 +444,7 @@ fn check_resource_utilization(
                     ((peak_memory_bytes as f64 / specified_memory_bytes as f64) - 1.0) * 100.0;
                 if over_pct >= min_over_utilization {
                     over_util_count += 1;
-                    rows.push(ResourceUtilizationRow {
+                    violations.push(ResourceViolation {
                         job_id,
                         job_name: job_name.clone(),
                         resource_type: "Memory".to_string(),
@@ -457,16 +453,15 @@ fn check_resource_utilization(
                         over_utilization: format!("+{:.1}%", over_pct),
                     });
                 }
-            } else if show_all {
-                let under_pct =
-                    (1.0 - (peak_memory_bytes as f64 / specified_memory_bytes as f64)) * 100.0;
-                rows.push(ResourceUtilizationRow {
+            } else if collect_within_limits {
+                let usage_pct = (peak_memory_bytes as f64 / specified_memory_bytes as f64) * 100.0;
+                within_limits.push(ResourceViolation {
                     job_id,
                     job_name: job_name.clone(),
                     resource_type: "Memory".to_string(),
                     specified: format_memory_bytes(specified_memory_bytes),
                     peak_used: format_memory_bytes(peak_memory_bytes),
-                    over_utilization: format!("-{:.1}%", under_pct),
+                    over_utilization: format!("{:.1}%", usage_pct),
                 });
             }
         }
@@ -481,7 +476,7 @@ fn check_resource_utilization(
                 let over_pct = ((peak_cpu_percent / specified_cpu_percent) - 1.0) * 100.0;
                 if over_pct >= min_over_utilization {
                     over_util_count += 1;
-                    rows.push(ResourceUtilizationRow {
+                    violations.push(ResourceViolation {
                         job_id,
                         job_name: job_name.clone(),
                         resource_type: "CPU".to_string(),
@@ -490,15 +485,15 @@ fn check_resource_utilization(
                         over_utilization: format!("+{:.1}%", over_pct),
                     });
                 }
-            } else if show_all {
-                let under_pct = (1.0 - (peak_cpu_percent / specified_cpu_percent)) * 100.0;
-                rows.push(ResourceUtilizationRow {
+            } else if collect_within_limits {
+                let usage_pct = (peak_cpu_percent / specified_cpu_percent) * 100.0;
+                within_limits.push(ResourceViolation {
                     job_id,
                     job_name: job_name.clone(),
                     resource_type: "CPU".to_string(),
                     specified: format!("{:.0}% ({} cores)", specified_cpu_percent, num_cpus),
                     peak_used: format!("{:.1}%", peak_cpu_percent),
-                    over_utilization: format!("-{:.1}%", under_pct),
+                    over_utilization: format!("{:.1}%", usage_pct),
                 });
             }
         }
@@ -517,7 +512,7 @@ fn check_resource_utilization(
             let over_pct = ((exec_time_seconds / specified_runtime_seconds) - 1.0) * 100.0;
             if over_pct >= min_over_utilization {
                 over_util_count += 1;
-                rows.push(ResourceUtilizationRow {
+                violations.push(ResourceViolation {
                     job_id,
                     job_name: job_name.clone(),
                     resource_type: "Runtime".to_string(),
@@ -526,80 +521,29 @@ fn check_resource_utilization(
                     over_utilization: format!("+{:.1}%", over_pct),
                 });
             }
-        } else if show_all {
-            let under_pct = (1.0 - (exec_time_seconds / specified_runtime_seconds)) * 100.0;
-            rows.push(ResourceUtilizationRow {
+        } else if collect_within_limits {
+            let usage_pct = (exec_time_seconds / specified_runtime_seconds) * 100.0;
+            within_limits.push(ResourceViolation {
                 job_id,
                 job_name: job_name.clone(),
                 resource_type: "Runtime".to_string(),
                 specified: format_duration(specified_runtime_seconds),
                 peak_used: format_duration(exec_time_seconds),
-                over_utilization: format!("-{:.1}%", under_pct),
+                over_utilization: format!("{:.1}%", usage_pct),
             });
         }
     }
 
-    // Output results
-    match format {
-        "json" => {
-            let report = ResourceUtilizationReport {
-                workflow_id: wf_id,
-                run_id,
-                total_results: results.len(),
-                over_utilization_count: over_util_count,
-                violations: rows
-                    .iter()
-                    .map(|r| ResourceViolation {
-                        job_id: r.job_id,
-                        job_name: r.job_name.clone(),
-                        resource_type: r.resource_type.clone(),
-                        specified: r.specified.clone(),
-                        peak_used: r.peak_used.clone(),
-                        over_utilization: r.over_utilization.clone(),
-                    })
-                    .collect(),
-                resource_violations_count: resource_violations_info.len(),
-                resource_violations: resource_violations_info,
-            };
-
-            print_json(&report, "resource utilization");
-        }
-        _ => {
-            if rows.is_empty() {
-                if show_all {
-                    println!(
-                        "All {} jobs stayed within their specified resource requirements",
-                        results.len()
-                    );
-                } else {
-                    println!(
-                        "✓ All {} jobs stayed within their specified resource requirements",
-                        results.len()
-                    );
-                }
-            } else {
-                if !show_all {
-                    println!(
-                        "\n⚠ Found {} resource over-utilization violations:\n",
-                        over_util_count
-                    );
-                }
-                display_table_with_count(&rows, "violations");
-
-                // Print command to run correct-resources
-                eprintln!(
-                    "\nTo automatically correct these violations, run:\n  torc workflows correct-resources {}",
-                    wf_id
-                );
-
-                if !show_all {
-                    println!(
-                        "\nNote: Use --all to see all jobs, including those that stayed within limits"
-                    );
-                }
-            }
-        }
-    }
+    Ok(ResourceUtilizationReport {
+        workflow_id: wf_id,
+        run_id,
+        total_results: results.len(),
+        over_utilization_count: over_util_count,
+        violations,
+        within_limits,
+        resource_violations_count: resource_violations_info.len(),
+        resource_violations: resource_violations_info,
+    })
 }
 
 /// Parse memory string (e.g., "1g", "512m") into bytes
@@ -636,76 +580,77 @@ fn check_log_file_exists(path: &str, log_type: &str, job_id: i64) {
 }
 
 /// Generate comprehensive JSON report of job results including log file paths
-fn generate_results_report(
+pub fn generate_results_report(
     config: &Configuration,
     workflow_id: Option<i64>,
     output_dir: &Path,
     all_runs: bool,
     job_ids: &[i64],
 ) {
-    // Validate that output directory exists
+    let report = match build_results_report(config, workflow_id, output_dir, all_runs, job_ids) {
+        Ok(report) => report,
+        Err(e) => {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+    };
+
+    if report.total_results == 0 {
+        if job_ids.is_empty() {
+            eprintln!("No results found for workflow {}", report.workflow_id);
+        } else {
+            eprintln!(
+                "No results found for workflow {} with job IDs {:?}",
+                report.workflow_id, job_ids
+            );
+        }
+        std::process::exit(0);
+    }
+
+    print_json(&report, "results report");
+}
+
+pub fn build_results_report(
+    config: &Configuration,
+    workflow_id: Option<i64>,
+    output_dir: &Path,
+    all_runs: bool,
+    job_ids: &[i64],
+) -> Result<ResultsReport, String> {
     if !output_dir.exists() {
-        eprintln!(
+        return Err(format!(
             "Error: Output directory does not exist: {}",
             output_dir.display()
-        );
-        std::process::exit(1);
+        ));
     }
 
     if !output_dir.is_dir() {
-        eprintln!(
+        return Err(format!(
             "Error: Output path is not a directory: {}",
             output_dir.display()
-        );
-        std::process::exit(1);
+        ));
     }
 
-    // Get or select workflow ID
     let user = get_env_user_name();
     let wf_id = match workflow_id {
         Some(id) => id,
-        None => match select_workflow_interactively(config, &user) {
-            Ok(id) => id,
-            Err(e) => {
-                eprintln!("Error selecting workflow: {}", e);
-                std::process::exit(1);
-            }
-        },
+        None => select_workflow_interactively(config, &user)
+            .map_err(|e| format!("Error selecting workflow: {}", e))?,
     };
 
-    // Fetch workflow
-    let workflow = match default_api::get_workflow(config, wf_id) {
-        Ok(wf) => wf,
-        Err(e) => {
-            print_error("fetching workflow", &e);
-            std::process::exit(1);
-        }
-    };
+    let workflow = apis::workflows_api::get_workflow(config, wf_id)
+        .map_err(|e| format!("Error fetching workflow: {}", e))?;
 
-    // Fetch all jobs using pagination
-    let jobs = match pagination::paginate_jobs(config, wf_id, pagination::JobListParams::new()) {
-        Ok(jobs) => jobs,
-        Err(e) => {
-            print_error("fetching jobs", &e);
-            std::process::exit(1);
-        }
-    };
+    let jobs = pagination::paginate_jobs(config, wf_id, pagination::JobListParams::new())
+        .map_err(|e| format!("Error fetching jobs: {}", e))?;
 
-    // Build job map for quick lookup
     let job_map: std::collections::HashMap<i64, &models::JobModel> =
         jobs.iter().filter_map(|j| j.id.map(|id| (id, j))).collect();
 
-    // Fetch results (all runs or just latest) using pagination
     let params = pagination::ResultListParams::new().with_all_runs(all_runs);
-    let results = match pagination::paginate_results(config, wf_id, params) {
-        Ok(results) => results,
-        Err(e) => {
-            print_error("fetching results", &e);
-            std::process::exit(1);
-        }
-    };
+    let results = pagination::paginate_results(config, wf_id, params)
+        .map_err(|e| format!("Error fetching results: {}", e))?;
 
-    // Filter results by job IDs if specified
     let results: Vec<_> = if job_ids.is_empty() {
         results
     } else {
@@ -715,19 +660,6 @@ fn generate_results_report(
             .collect()
     };
 
-    if results.is_empty() {
-        if job_ids.is_empty() {
-            eprintln!("No results found for workflow {}", wf_id);
-        } else {
-            eprintln!(
-                "No results found for workflow {} with job IDs {:?}",
-                wf_id, job_ids
-            );
-        }
-        std::process::exit(0);
-    }
-
-    // Build result records
     let mut result_records: Vec<JobResultRecord> = Vec::new();
 
     for result in &results {
@@ -758,7 +690,7 @@ fn generate_results_report(
 
         // Get compute node and determine log file paths
         let compute_node_id = result.compute_node_id;
-        match default_api::get_compute_node(config, compute_node_id) {
+        match apis::compute_nodes_api::get_compute_node(config, compute_node_id) {
             Ok(compute_node) => {
                 compute_node_type = Some(compute_node.compute_node_type.clone());
 
@@ -776,9 +708,14 @@ fn generate_results_report(
                     }
                     "slurm" => {
                         // For slurm runner, extract slurm job ID from scheduler JSON
+                        // The value may be stored as either a string or integer
                         if let Some(scheduler_value) = &compute_node.scheduler
                             && let Some(slurm_job_id_val) = scheduler_value.get("slurm_job_id")
-                            && let Some(slurm_job_id_str) = slurm_job_id_val.as_str()
+                            && let Some(slurm_job_id_str) = slurm_job_id_val
+                                .as_str()
+                                .map(|s| s.to_string())
+                                .or_else(|| slurm_job_id_val.as_i64().map(|n| n.to_string()))
+                                .as_deref()
                         {
                             slurm_job_id = Some(slurm_job_id_str.to_string());
 
@@ -841,114 +778,190 @@ fn generate_results_report(
         });
     }
 
-    // Build final JSON report
-    let report = ResultsReport {
+    Ok(ResultsReport {
         workflow_id: wf_id,
         workflow_name: workflow.name.clone(),
         workflow_user: workflow.user.clone(),
         all_runs,
         total_results: result_records.len(),
         results: result_records,
-    };
-
-    // Output JSON
-    print_json(&report, "results report");
+    })
 }
 
 /// Generate a summary of workflow results
-fn generate_summary(config: &Configuration, workflow_id: Option<i64>, format: &str) {
-    // Get or select workflow ID
-    let user = get_env_user_name();
-    let workflow_id = match workflow_id {
-        Some(id) => id,
-        None => match select_workflow_interactively(config, &user) {
-            Ok(id) => id,
-            Err(e) => {
-                eprintln!("Error selecting workflow: {}", e);
-                std::process::exit(1);
-            }
-        },
-    };
-
-    // Fetch workflow info
-    let workflow = match default_api::get_workflow(config, workflow_id) {
-        Ok(wf) => wf,
+pub fn generate_summary(config: &Configuration, workflow_id: Option<i64>, format: &str) {
+    let report = match build_workflow_summary_report(config, workflow_id) {
+        Ok(report) => report,
         Err(e) => {
-            print_error("fetching workflow", &e);
+            eprintln!("{}", e);
             std::process::exit(1);
         }
     };
 
-    // Check if workflow is complete
-    let completion_status = match default_api::is_workflow_complete(config, workflow_id) {
-        Ok(status) => Some(status),
-        Err(e) => {
-            eprintln!("Warning: could not check workflow completion status: {}", e);
-            None
+    if format == "json" {
+        print_json(&report, "workflow summary");
+    } else {
+        let workflow_id = report["workflow_id"].as_i64().unwrap_or(-1);
+        let workflow_name = report["workflow_name"].as_str().unwrap_or("");
+        let workflow_user = report["workflow_user"].as_str().unwrap_or("");
+        let total_jobs = report["total_jobs"].as_u64().unwrap_or(0);
+        let jobs_by_status = report["jobs_by_status"].as_object();
+        let total_exec_time_formatted = report["total_exec_time_formatted"].as_str().unwrap_or("");
+        let walltime_formatted = report["walltime_formatted"].as_str();
+        let active_compute_nodes = report["active_compute_nodes"].as_i64().unwrap_or(0);
+        let pending_scheduled_nodes = report["pending_scheduled_nodes"].as_i64().unwrap_or(0);
+        let active_scheduled_nodes = report["active_scheduled_nodes"].as_i64().unwrap_or(0);
+        let is_complete = report["is_complete"].as_bool();
+        let is_canceled = report["is_canceled"].as_bool();
+        let completed_count = jobs_by_status
+            .and_then(|counts| counts.get("completed"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let failed_count = jobs_by_status
+            .and_then(|counts| counts.get("failed"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let terminated_count = jobs_by_status
+            .and_then(|counts| counts.get("terminated"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let canceled_count = jobs_by_status
+            .and_then(|counts| counts.get("canceled"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+
+        println!("Workflow Summary");
+        println!("================");
+        println!();
+        println!("Workflow ID: {}", workflow_id);
+        println!("Name: {}", workflow_name);
+        println!("User: {}", workflow_user);
+        println!();
+        println!("Job Status (total: {}):", total_jobs);
+        if let Some(counts) = jobs_by_status {
+            let print_if_nonzero = |label: &str, key: &str, suffix: &str| {
+                let count = counts.get(key).and_then(|v| v.as_u64()).unwrap_or(0);
+                if count > 0 {
+                    println!("  {label:<13} {count}{suffix}");
+                }
+            };
+            print_if_nonzero("Uninitialized:", "uninitialized", "");
+            print_if_nonzero("Blocked:", "blocked", "");
+            print_if_nonzero("Ready:", "ready", "");
+            print_if_nonzero("Pending:", "pending", "");
+            print_if_nonzero("Running:", "running", "");
+            print_if_nonzero("Completed:", "completed", " ✓");
+            print_if_nonzero("Failed:", "failed", " ✗");
+            print_if_nonzero("Canceled:", "canceled", "");
+            print_if_nonzero("Terminated:", "terminated", " ✗");
+            print_if_nonzero("Disabled:", "disabled", "");
+            print_if_nonzero("PendingFailed:", "pending_failed", " ⏳");
         }
-    };
+        println!();
+        println!("Total Execution Time: {}", total_exec_time_formatted);
+        if let Some(walltime) = walltime_formatted {
+            println!("Walltime:             {}", walltime);
+        }
 
-    // Get active compute nodes count
-    let active_compute_nodes = match default_api::list_compute_nodes(
-        config,
-        workflow_id,
-        None,       // offset
-        Some(1),    // limit - we only need the count
-        None,       // sort_by
-        None,       // reverse_sort
-        None,       // hostname
-        Some(true), // is_active = true
-        None,       // scheduled_compute_node_id
-    ) {
-        Ok(response) => response.total_count,
-        Err(_) => 0,
-    };
-
-    // Get pending scheduled compute nodes count
-    let pending_scheduled_nodes = match default_api::list_scheduled_compute_nodes(
-        config,
-        workflow_id,
-        None,            // offset
-        Some(1),         // limit - we only need the count
-        None,            // sort_by
-        None,            // reverse_sort
-        None,            // scheduler_id
-        None,            // scheduler_config_id
-        Some("pending"), // status
-    ) {
-        Ok(response) => response.total_count,
-        Err(_) => 0,
-    };
-
-    // Get active scheduled compute nodes count
-    let active_scheduled_nodes = match default_api::list_scheduled_compute_nodes(
-        config,
-        workflow_id,
-        None,           // offset
-        Some(1),        // limit - we only need the count
-        None,           // sort_by
-        None,           // reverse_sort
-        None,           // scheduler_id
-        None,           // scheduler_config_id
-        Some("active"), // status
-    ) {
-        Ok(response) => response.total_count,
-        Err(_) => 0,
-    };
-
-    // Fetch all jobs to get total count
-    let jobs =
-        match pagination::paginate_jobs(config, workflow_id, pagination::JobListParams::new()) {
-            Ok(jobs) => jobs,
-            Err(e) => {
-                print_error("fetching jobs", &e);
-                std::process::exit(1);
+        // Show compute resources if any are active
+        if active_compute_nodes > 0 || pending_scheduled_nodes > 0 || active_scheduled_nodes > 0 {
+            println!();
+            println!("Compute Resources:");
+            if active_compute_nodes > 0 {
+                println!("  Active workers:           {}", active_compute_nodes);
             }
-        };
+            if active_scheduled_nodes > 0 {
+                println!("  Active Slurm allocations: {}", active_scheduled_nodes);
+            }
+            if pending_scheduled_nodes > 0 {
+                println!("  Pending Slurm allocations: {}", pending_scheduled_nodes);
+            }
+        }
 
-    let total_jobs = jobs.len();
+        // Show workflow status
+        println!();
+        if let Some(is_complete) = is_complete {
+            if is_complete {
+                if failed_count > 0 || terminated_count > 0 || canceled_count > 0 {
+                    println!(
+                        "✗ Workflow complete with failures ({} failed, {} terminated, {} canceled)",
+                        failed_count, terminated_count, canceled_count
+                    );
+                } else {
+                    println!("✓ Workflow complete - all jobs finished successfully!");
+                }
+            } else if is_canceled.unwrap_or(false) {
+                println!("⊘ Workflow was canceled");
+            } else {
+                println!("◷ Workflow in progress...");
+            }
+        } else if completed_count == total_jobs {
+            println!("✓ All jobs completed successfully!");
+        }
+    }
+}
 
-    // Count jobs by status
+pub fn build_workflow_summary_report(
+    config: &Configuration,
+    workflow_id: Option<i64>,
+) -> Result<serde_json::Value, String> {
+    let user = get_env_user_name();
+    let workflow_id = match workflow_id {
+        Some(id) => id,
+        None => select_workflow_interactively(config, &user)
+            .map_err(|e| format!("Error selecting workflow: {}", e))?,
+    };
+
+    let workflow = apis::workflows_api::get_workflow(config, workflow_id)
+        .map_err(|e| format!("Error fetching workflow: {}", e))?;
+
+    let completion_status = apis::workflows_api::is_workflow_complete(config, workflow_id).ok();
+
+    let active_compute_nodes = apis::compute_nodes_api::list_compute_nodes(
+        config,
+        workflow_id,
+        None,
+        Some(1),
+        None,
+        None,
+        None,
+        Some(true),
+        None,
+    )
+    .map(|response| response.total_count)
+    .unwrap_or(0);
+
+    let pending_scheduled_nodes = apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
+        config,
+        workflow_id,
+        None,
+        Some(1),
+        None,
+        None,
+        None,
+        None,
+        Some("pending"),
+    )
+    .map(|response| response.total_count)
+    .unwrap_or(0);
+
+    let active_scheduled_nodes = apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
+        config,
+        workflow_id,
+        None,
+        Some(1),
+        None,
+        None,
+        None,
+        None,
+        Some("active"),
+    )
+    .map(|response| response.total_count)
+    .unwrap_or(0);
+
+    let jobs = pagination::paginate_jobs(config, workflow_id, pagination::JobListParams::new())
+        .map_err(|e| format!("Error fetching jobs: {}", e))?;
+
     let mut uninitialized_count = 0;
     let mut blocked_count = 0;
     let mut ready_count = 0;
@@ -978,30 +991,18 @@ fn generate_summary(config: &Configuration, workflow_id: Option<i64>, format: &s
         }
     }
 
-    // Fetch results to get execution time stats
-    let results = match pagination::paginate_results(
-        config,
-        workflow_id,
-        pagination::ResultListParams::new(),
-    ) {
-        Ok(results) => results,
-        Err(e) => {
-            print_error("fetching results", &e);
-            std::process::exit(1);
-        }
-    };
+    let results =
+        pagination::paginate_results(config, workflow_id, pagination::ResultListParams::new())
+            .map_err(|e| format!("Error fetching results: {}", e))?;
 
-    // Calculate total execution time
     let total_exec_time_minutes: f64 = results.iter().map(|r| r.exec_time_minutes).sum();
 
-    // Calculate walltime (elapsed time from first job start to last job completion)
     let walltime_seconds: Option<f64> = {
         let mut min_start: Option<DateTime<FixedOffset>> = None;
         let mut max_end: Option<DateTime<FixedOffset>> = None;
 
         for result in &results {
             if let Ok(completion_time) = DateTime::parse_from_rfc3339(&result.completion_time) {
-                // Calculate start time by subtracting execution time from completion time
                 let exec_duration = chrono::Duration::milliseconds(
                     (result.exec_time_minutes * 60.0 * 1000.0) as i64,
                 );
@@ -1027,129 +1028,40 @@ fn generate_summary(config: &Configuration, workflow_id: Option<i64>, format: &s
         }
     };
 
-    // Output results
-    if format == "json" {
-        let mut report = serde_json::json!({
-            "workflow_id": workflow_id,
-            "workflow_name": workflow.name,
-            "workflow_user": workflow.user,
-            "total_jobs": total_jobs,
-            "jobs_by_status": {
-                "uninitialized": uninitialized_count,
-                "blocked": blocked_count,
-                "ready": ready_count,
-                "pending": pending_count,
-                "running": running_count,
-                "completed": completed_count,
-                "failed": failed_count,
-                "canceled": canceled_count,
-                "terminated": terminated_count,
-                "disabled": disabled_count,
-                "pending_failed": pending_failed_count,
-            },
-            "total_exec_time_minutes": total_exec_time_minutes,
-            "total_exec_time_formatted": format_duration(total_exec_time_minutes * 60.0),
-            "active_compute_nodes": active_compute_nodes,
-            "pending_scheduled_nodes": pending_scheduled_nodes,
-            "active_scheduled_nodes": active_scheduled_nodes,
-        });
+    let mut report = serde_json::json!({
+        "workflow_id": workflow_id,
+        "workflow_name": workflow.name,
+        "workflow_user": workflow.user,
+        "total_jobs": jobs.len(),
+        "jobs_by_status": {
+            "uninitialized": uninitialized_count,
+            "blocked": blocked_count,
+            "ready": ready_count,
+            "pending": pending_count,
+            "running": running_count,
+            "completed": completed_count,
+            "failed": failed_count,
+            "canceled": canceled_count,
+            "terminated": terminated_count,
+            "disabled": disabled_count,
+            "pending_failed": pending_failed_count,
+        },
+        "total_exec_time_minutes": total_exec_time_minutes,
+        "total_exec_time_formatted": format_duration(total_exec_time_minutes * 60.0),
+        "active_compute_nodes": active_compute_nodes,
+        "pending_scheduled_nodes": pending_scheduled_nodes,
+        "active_scheduled_nodes": active_scheduled_nodes,
+    });
 
-        if let Some(status) = &completion_status {
-            report["is_complete"] = serde_json::json!(status.is_complete);
-            report["is_canceled"] = serde_json::json!(status.is_canceled);
-        }
-
-        if let Some(walltime) = walltime_seconds {
-            report["walltime_seconds"] = serde_json::json!(walltime);
-            report["walltime_formatted"] = serde_json::json!(format_duration(walltime));
-        }
-
-        print_json(&report, "workflow summary");
-    } else {
-        println!("Workflow Summary");
-        println!("================");
-        println!();
-        println!("Workflow ID: {}", workflow_id);
-        println!("Name: {}", workflow.name);
-        println!("User: {}", workflow.user);
-        println!();
-        println!("Job Status (total: {}):", total_jobs);
-        if uninitialized_count > 0 {
-            println!("  Uninitialized: {}", uninitialized_count);
-        }
-        if blocked_count > 0 {
-            println!("  Blocked:       {}", blocked_count);
-        }
-        if ready_count > 0 {
-            println!("  Ready:         {}", ready_count);
-        }
-        if pending_count > 0 {
-            println!("  Pending:       {}", pending_count);
-        }
-        if running_count > 0 {
-            println!("  Running:       {}", running_count);
-        }
-        if completed_count > 0 {
-            println!("  Completed:     {} ✓", completed_count);
-        }
-        if failed_count > 0 {
-            println!("  Failed:        {} ✗", failed_count);
-        }
-        if canceled_count > 0 {
-            println!("  Canceled:      {}", canceled_count);
-        }
-        if terminated_count > 0 {
-            println!("  Terminated:    {} ✗", terminated_count);
-        }
-        if disabled_count > 0 {
-            println!("  Disabled:      {}", disabled_count);
-        }
-        if pending_failed_count > 0 {
-            println!("  PendingFailed: {} ⏳", pending_failed_count);
-        }
-        println!();
-        println!(
-            "Total Execution Time: {}",
-            format_duration(total_exec_time_minutes * 60.0)
-        );
-        if let Some(walltime) = walltime_seconds {
-            println!("Walltime:             {}", format_duration(walltime));
-        }
-
-        // Show compute resources if any are active
-        if active_compute_nodes > 0 || pending_scheduled_nodes > 0 || active_scheduled_nodes > 0 {
-            println!();
-            println!("Compute Resources:");
-            if active_compute_nodes > 0 {
-                println!("  Active workers:           {}", active_compute_nodes);
-            }
-            if active_scheduled_nodes > 0 {
-                println!("  Active Slurm allocations: {}", active_scheduled_nodes);
-            }
-            if pending_scheduled_nodes > 0 {
-                println!("  Pending Slurm allocations: {}", pending_scheduled_nodes);
-            }
-        }
-
-        // Show workflow status
-        println!();
-        if let Some(status) = &completion_status {
-            if status.is_complete {
-                if failed_count > 0 || terminated_count > 0 || canceled_count > 0 {
-                    println!(
-                        "✗ Workflow complete with failures ({} failed, {} terminated, {} canceled)",
-                        failed_count, terminated_count, canceled_count
-                    );
-                } else {
-                    println!("✓ Workflow complete - all jobs finished successfully!");
-                }
-            } else if status.is_canceled {
-                println!("⊘ Workflow was canceled");
-            } else {
-                println!("◷ Workflow in progress...");
-            }
-        } else if completed_count == total_jobs {
-            println!("✓ All jobs completed successfully!");
-        }
+    if let Some(status) = completion_status {
+        report["is_complete"] = serde_json::json!(status.is_complete);
+        report["is_canceled"] = serde_json::json!(status.is_canceled);
     }
+
+    if let Some(walltime) = walltime_seconds {
+        report["walltime_seconds"] = serde_json::json!(walltime);
+        report["walltime_formatted"] = serde_json::json!(format_duration(walltime));
+    }
+
+    Ok(report)
 }

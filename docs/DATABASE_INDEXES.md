@@ -162,18 +162,12 @@ These indexes optimize the resource-based job allocation query:
 
 #### 11. `resource_requirements(num_gpus, runtime_s, memory_bytes)`
 
-**Impact**: Medium **Rationale**: Composite index for ORDER BY clause in
-`claim_jobs_based_on_resources`. Enables efficient sorting of jobs by resource priority. **Queries
+**Impact**: Medium **Rationale**: Supports filtering candidate jobs for
+`claim_jobs_based_on_resources` by resource requirements before job priority is applied. **Queries
 affected**:
 
-- `claim_jobs_based_on_resources` with sort_method = GpusRuntimeMemory
+- `claim_jobs_based_on_resources`
 - Resource-based job scheduling
-
-Note: An alternative index for `GpusMemoryRuntime` sort order could be considered:
-
-- `resource_requirements(num_gpus, memory_bytes, runtime_s)`
-
-However, having both may not be necessary if one sort method is dominant.
 
 ### Priority 4: User and Workflow Queries
 

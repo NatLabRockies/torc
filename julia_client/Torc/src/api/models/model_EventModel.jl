@@ -2,54 +2,62 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""event_model
-Data model for events.
+@doc raw"""EventModel
 
     EventModel(;
-        id=nothing,
-        workflow_id=nothing,
-        timestamp=nothing,
         data=nothing,
+        id=nothing,
+        timestamp=nothing,
+        workflow_id=nothing,
     )
 
-    - id::Int64 : Database ID of the event.
-    - workflow_id::Int64 : Database ID of the workflow this record is associated with.
-    - timestamp::Int64 : Timestamp of the event
-    - data::Any : User-defined data associated with the event
+    - data::Any
+    - id::Int64
+    - timestamp::Int64
+    - workflow_id::Int64
 """
 Base.@kwdef mutable struct EventModel <: OpenAPI.APIModel
-    id::Union{Nothing, Int64} = nothing
-    workflow_id::Union{Nothing, Int64} = nothing
-    timestamp::Union{Nothing, Int64} = nothing
     data::Union{Nothing, Any} = nothing
+    id::Union{Nothing, Int64} = nothing
+    timestamp::Union{Nothing, Int64} = nothing
+    workflow_id::Union{Nothing, Int64} = nothing
 
-    function EventModel(id, workflow_id, timestamp, data, )
-        o = new(id, workflow_id, timestamp, data, )
+    function EventModel(data, id, timestamp, workflow_id, )
+        o = new(data, id, timestamp, workflow_id, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type EventModel
 
-const _property_types_EventModel = Dict{Symbol,String}(Symbol("id")=>"Int64", Symbol("workflow_id")=>"Int64", Symbol("timestamp")=>"Int64", Symbol("data")=>"Any", )
+const _property_types_EventModel = Dict{Symbol,String}(Symbol("data")=>"Any", Symbol("id")=>"Int64", Symbol("timestamp")=>"Int64", Symbol("workflow_id")=>"Int64", )
 OpenAPI.property_type(::Type{ EventModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_EventModel[name]))}
 
 function OpenAPI.check_required(o::EventModel)
-    o.workflow_id === nothing && (return false)
-    o.timestamp === nothing && (return false)
     o.data === nothing && (return false)
+    o.timestamp === nothing && (return false)
+    o.workflow_id === nothing && (return false)
     true
 end
 
 function OpenAPI.validate_properties(o::EventModel)
-    OpenAPI.validate_property(EventModel, Symbol("id"), o.id)
-    OpenAPI.validate_property(EventModel, Symbol("workflow_id"), o.workflow_id)
-    OpenAPI.validate_property(EventModel, Symbol("timestamp"), o.timestamp)
     OpenAPI.validate_property(EventModel, Symbol("data"), o.data)
+    OpenAPI.validate_property(EventModel, Symbol("id"), o.id)
+    OpenAPI.validate_property(EventModel, Symbol("timestamp"), o.timestamp)
+    OpenAPI.validate_property(EventModel, Symbol("workflow_id"), o.workflow_id)
 end
 
 function OpenAPI.validate_property(::Type{ EventModel }, name::Symbol, val)
 
 
+    if name === Symbol("id")
+        OpenAPI.validate_param(name, "EventModel", :format, val, "int64")
+    end
 
+    if name === Symbol("timestamp")
+        OpenAPI.validate_param(name, "EventModel", :format, val, "int64")
+    end
 
+    if name === Symbol("workflow_id")
+        OpenAPI.validate_param(name, "EventModel", :format, val, "int64")
+    end
 end

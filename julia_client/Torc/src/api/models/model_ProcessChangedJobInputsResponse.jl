@@ -2,7 +2,7 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""process_changed_job_inputs_response
+@doc raw"""ProcessChangedJobInputsResponse
 
     ProcessChangedJobInputsResponse(;
         reinitialized_jobs=nothing,
@@ -24,6 +24,7 @@ const _property_types_ProcessChangedJobInputsResponse = Dict{Symbol,String}(Symb
 OpenAPI.property_type(::Type{ ProcessChangedJobInputsResponse }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_ProcessChangedJobInputsResponse[name]))}
 
 function OpenAPI.check_required(o::ProcessChangedJobInputsResponse)
+    o.reinitialized_jobs === nothing && (return false)
     true
 end
 

@@ -2,12 +2,12 @@
 
 #![allow(clippy::too_many_arguments)]
 
+use crate::server::transport_types::context_types::{ApiError, Has, XSpanIdString};
 use async_trait::async_trait;
 use log::{debug, error, info};
 use sqlx::Row;
-use swagger::{ApiError, Has, XSpanIdString};
 
-use crate::server::api_types::{
+use crate::server::api_responses::{
     CreateLocalSchedulerResponse, CreateScheduledComputeNodeResponse, CreateSlurmSchedulerResponse,
     DeleteLocalSchedulerResponse, DeleteLocalSchedulersResponse,
     DeleteScheduledComputeNodeResponse, DeleteScheduledComputeNodesResponse,
@@ -49,7 +49,6 @@ pub trait SchedulersApi<C> {
     async fn delete_local_schedulers(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteLocalSchedulersResponse, ApiError>;
 
@@ -57,7 +56,6 @@ pub trait SchedulersApi<C> {
     async fn delete_scheduled_compute_nodes(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteScheduledComputeNodesResponse, ApiError>;
 
@@ -65,7 +63,6 @@ pub trait SchedulersApi<C> {
     async fn delete_slurm_schedulers(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteSlurmSchedulersResponse, ApiError>;
 
@@ -157,7 +154,6 @@ pub trait SchedulersApi<C> {
     async fn delete_local_scheduler(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteLocalSchedulerResponse, ApiError>;
 
@@ -165,7 +161,6 @@ pub trait SchedulersApi<C> {
     async fn delete_scheduled_compute_node(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteScheduledComputeNodeResponse, ApiError>;
 
@@ -173,7 +168,6 @@ pub trait SchedulersApi<C> {
     async fn delete_slurm_scheduler(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteSlurmSchedulerResponse, ApiError>;
 }
@@ -229,8 +223,7 @@ where
         context: &C,
     ) -> Result<CreateLocalSchedulerResponse, ApiError> {
         debug!(
-            "create_local_scheduler({:?}) - X-Span-ID: {:?}",
-            body,
+            "create_local_scheduler - X-Span-ID: {:?}",
             context.get().0.clone()
         );
 
@@ -271,8 +264,7 @@ where
         context: &C,
     ) -> Result<CreateScheduledComputeNodeResponse, ApiError> {
         debug!(
-            "create_scheduled_compute_node({:?}) - X-Span-ID: {:?}",
-            body,
+            "create_scheduled_compute_node - X-Span-ID: {:?}",
             context.get().0.clone()
         );
 
@@ -317,8 +309,7 @@ where
         context: &C,
     ) -> Result<CreateSlurmSchedulerResponse, ApiError> {
         debug!(
-            "create_slurm_scheduler({:?}) - X-Span-ID: {:?}",
-            body,
+            "create_slurm_scheduler - X-Span-ID: {:?}",
             context.get().0.clone()
         );
 
@@ -372,13 +363,11 @@ where
     async fn delete_local_schedulers(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteLocalSchedulersResponse, ApiError> {
         debug!(
-            "delete_local_schedulers({}, {:?}) - X-Span-ID: {:?}",
+            "delete_local_schedulers({}) - X-Span-ID: {:?}",
             workflow_id,
-            body,
             context.get().0.clone()
         );
 
@@ -416,13 +405,11 @@ where
     async fn delete_scheduled_compute_nodes(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteScheduledComputeNodesResponse, ApiError> {
         debug!(
-            "delete_scheduled_compute_nodes({}, {:?}) - X-Span-ID: {:?}",
+            "delete_scheduled_compute_nodes({}) - X-Span-ID: {:?}",
             workflow_id,
-            body,
             context.get().0.clone()
         );
 
@@ -460,13 +447,11 @@ where
     async fn delete_slurm_schedulers(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteSlurmSchedulersResponse, ApiError> {
         debug!(
-            "delete_slurm_schedulers({}, {:?}) - X-Span-ID: {:?}",
+            "delete_slurm_schedulers({}) - X-Span-ID: {:?}",
             workflow_id,
-            body,
             context.get().0.clone()
         );
 
@@ -771,7 +756,7 @@ where
 
         Ok(ListLocalSchedulersResponse::HTTP(
             models::ListLocalSchedulersResponse {
-                items: Some(items),
+                items,
                 offset: offset_val,
                 max_limit: MAX_RECORD_TRANSFER_COUNT,
                 count: current_count,
@@ -924,7 +909,7 @@ where
 
         Ok(ListScheduledComputeNodesResponse::SuccessfulResponse(
             models::ListScheduledComputeNodesResponse {
-                items: Some(items),
+                items,
                 offset: offset_val,
                 max_limit: MAX_RECORD_TRANSFER_COUNT,
                 count: current_count,
@@ -1051,7 +1036,7 @@ where
 
         Ok(ListSlurmSchedulersResponse::SuccessfulResponse(
             models::ListSlurmSchedulersResponse {
-                items: Some(items),
+                items,
                 offset: offset_val,
                 max_limit: MAX_RECORD_TRANSFER_COUNT,
                 count: current_count,
@@ -1069,9 +1054,8 @@ where
         context: &C,
     ) -> Result<UpdateLocalSchedulerResponse, ApiError> {
         debug!(
-            "update_local_scheduler({}, {:?}) - X-Span-ID: {:?}",
+            "update_local_scheduler({}) - X-Span-ID: {:?}",
             id,
-            body,
             context.get().0.clone()
         );
 
@@ -1145,9 +1129,8 @@ where
         context: &C,
     ) -> Result<UpdateScheduledComputeNodeResponse, ApiError> {
         debug!(
-            "update_scheduled_compute_node({}, {:?}) - X-Span-ID: {:?}",
+            "update_scheduled_compute_node({}) - X-Span-ID: {:?}",
             id,
-            body,
             context.get().0.clone()
         );
 
@@ -1234,9 +1217,8 @@ where
         context: &C,
     ) -> Result<UpdateSlurmSchedulerResponse, ApiError> {
         debug!(
-            "update_slurm_scheduler({}, {:?}) - X-Span-ID: {:?}",
+            "update_slurm_scheduler({}) - X-Span-ID: {:?}",
             id,
-            body,
             context.get().0.clone()
         );
 
@@ -1327,13 +1309,11 @@ where
     async fn delete_local_scheduler(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteLocalSchedulerResponse, ApiError> {
         debug!(
-            "delete_local_scheduler({}, {:?}) - X-Span-ID: {:?}",
+            "delete_local_scheduler({}) - X-Span-ID: {:?}",
             id,
-            body,
             context.get().0.clone()
         );
 
@@ -1381,13 +1361,11 @@ where
     async fn delete_scheduled_compute_node(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteScheduledComputeNodeResponse, ApiError> {
         debug!(
-            "delete_scheduled_compute_node({}, {:?}) - X-Span-ID: {:?}",
+            "delete_scheduled_compute_node({}) - X-Span-ID: {:?}",
             id,
-            body,
             context.get().0.clone()
         );
 
@@ -1437,13 +1415,11 @@ where
     async fn delete_slurm_scheduler(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteSlurmSchedulerResponse, ApiError> {
         debug!(
-            "delete_slurm_scheduler({}, {:?}) - X-Span-ID: {:?}",
+            "delete_slurm_scheduler({}) - X-Span-ID: {:?}",
             id,
-            body,
             context.get().0.clone()
         );
 

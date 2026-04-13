@@ -94,7 +94,7 @@ impl PaginationParams for ComputeNodeListParams {
 }
 
 impl Paginatable for ComputeNodeModel {
-    type ListError = apis::default_api::ListComputeNodesError;
+    type ListError = apis::compute_nodes_api::ListComputeNodesError;
     type Params = ComputeNodeListParams;
 
     fn fetch_page(
@@ -102,7 +102,7 @@ impl Paginatable for ComputeNodeModel {
         params: &Self::Params,
         limit: i64,
     ) -> Result<PaginatedResponse<Self>, apis::Error<Self::ListError>> {
-        let response = apis::default_api::list_compute_nodes(
+        let response = apis::compute_nodes_api::list_compute_nodes(
             config,
             params.workflow_id,
             Some(params.offset),
@@ -152,10 +152,11 @@ pub fn iter_compute_nodes(
 ///
 /// # Returns
 /// `Result<Vec<ComputeNodeModel>, Error>` containing all compute nodes or an error
+#[allow(clippy::result_large_err)]
 pub fn paginate_compute_nodes(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: ComputeNodeListParams,
-) -> Result<Vec<ComputeNodeModel>, apis::Error<apis::default_api::ListComputeNodesError>> {
+) -> Result<Vec<ComputeNodeModel>, apis::Error<apis::compute_nodes_api::ListComputeNodesError>> {
     iter_compute_nodes(config, workflow_id, params).collect()
 }

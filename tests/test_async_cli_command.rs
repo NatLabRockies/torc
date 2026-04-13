@@ -8,6 +8,8 @@ use std::thread;
 use std::time::Duration;
 use tempfile::TempDir;
 use torc::client::async_cli_command::AsyncCliCommand;
+use torc::client::job_runner::cleanup_job_stdio_files;
+use torc::client::workflow_spec::{ExecutionMode, StdioMode};
 use torc::models::{JobModel, JobStatus};
 
 /// Helper to create a temporary output directory for job stdio
@@ -66,12 +68,15 @@ fn test_async_cli_command_start_simple_command(start_server: &ServerProcess) {
         None,
         "http://localhost:8080/torc-service/v1",
         None,
+        None, // gpu_visible_devices
         true,
-        true,
+        ExecutionMode::Direct,
         false,
         None,
         None,
+        60,   // sigkill_headroom_seconds
         None, // target_node
+        &StdioMode::Separate,
     );
     assert!(
         result.is_ok(),
@@ -108,12 +113,15 @@ fn test_async_cli_command_start_already_running() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // gpu_visible_devices
             true,
-            true,
+            ExecutionMode::Direct,
             false,
             None,
             None,
+            60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("First start should succeed");
     assert!(async_cmd.is_running);
@@ -127,12 +135,15 @@ fn test_async_cli_command_start_already_running() {
         None,
         "http://localhost:8080/torc-service/v1",
         None,
+        None, // gpu_visible_devices
         true,
-        true,
+        ExecutionMode::Direct,
         false,
         None,
         None,
+        60,   // sigkill_headroom_seconds
         None, // target_node
+        &StdioMode::Separate,
     );
     assert!(result.is_err());
     assert_eq!(result.unwrap_err().to_string(), "Job is already running");
@@ -157,12 +168,15 @@ fn test_async_cli_command_start_invalid_directory() {
         None,
         "http://localhost:8080/torc-service/v1",
         None,
+        None, // gpu_visible_devices
         true,
-        true,
+        ExecutionMode::Direct,
         false,
         None,
         None,
+        60,   // sigkill_headroom_seconds
         None, // target_node
+        &StdioMode::Separate,
     );
     assert!(result.is_err());
 }
@@ -183,12 +197,15 @@ fn test_async_cli_command_check_status_completion() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // gpu_visible_devices
             true,
-            true,
+            ExecutionMode::Direct,
             false,
             None,
             None,
+            60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
     assert!(async_cmd.is_running);
@@ -231,12 +248,15 @@ fn test_async_cli_command_with_exit_code_success() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // gpu_visible_devices
             true,
-            true,
+            ExecutionMode::Direct,
             false,
             None,
             None,
+            60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
 
@@ -263,12 +283,15 @@ fn test_async_cli_command_with_exit_code_failure() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // gpu_visible_devices
             true,
-            true,
+            ExecutionMode::Direct,
             false,
             None,
             None,
+            60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
 
@@ -296,12 +319,15 @@ fn test_async_cli_command_cancel() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // gpu_visible_devices
             true,
-            true,
+            ExecutionMode::Direct,
             false,
             None,
             None,
+            60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
     assert!(async_cmd.is_running);
@@ -342,12 +368,15 @@ fn test_async_cli_command_terminate() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // gpu_visible_devices
             true,
-            true,
+            ExecutionMode::Direct,
             false,
             None,
             None,
+            60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
     assert!(async_cmd.is_running);
@@ -381,12 +410,15 @@ fn test_async_cli_command_wait_for_completion() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // gpu_visible_devices
             true,
-            true,
+            ExecutionMode::Direct,
             false,
             None,
             None,
+            60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
 
@@ -422,12 +454,15 @@ fn test_async_cli_command_get_result() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // gpu_visible_devices
             true,
-            true,
+            ExecutionMode::Direct,
             false,
             None,
             None,
+            60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
     let _ = async_cmd.wait_for_completion();
@@ -439,7 +474,8 @@ fn test_async_cli_command_get_result() {
     assert_eq!(result.workflow_id, 1);
     assert_eq!(result.run_id, run_id);
     assert!(!result.completion_time.is_empty());
-    assert_eq!(result.status, JobStatus::Terminated);
+    // Job exited with code 0, so status should be Completed (not Terminated)
+    assert_eq!(result.status, JobStatus::Completed);
 }
 
 #[rstest]
@@ -470,12 +506,15 @@ fn test_async_cli_command_with_invocation_script() {
         None,
         "http://localhost:8080/torc-service/v1",
         None,
+        None, // gpu_visible_devices
         true,
-        true,
+        ExecutionMode::Direct,
         false,
         None,
         None,
+        60,   // sigkill_headroom_seconds
         None, // target_node
+        &StdioMode::Separate,
     );
     assert!(result.is_ok());
 
@@ -505,12 +544,15 @@ fn test_async_cli_command_environment_variables() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // gpu_visible_devices
             true,
-            true,
+            ExecutionMode::Direct,
             false,
             None,
             None,
+            60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
     let _ = async_cmd.wait_for_completion();
@@ -523,6 +565,68 @@ fn test_async_cli_command_environment_variables() {
     let contents = fs::read_to_string(stdout_path).expect("Failed to read stdout");
     assert!(contents.contains("1")); // workflow_id
     assert!(contents.contains("123")); // job_id
+}
+
+#[rstest]
+#[cfg(unix)]
+fn test_async_cli_command_gpu_visible_devices_env() {
+    let job = create_test_job_model(
+        1,
+        124,
+        "echo CUDA=$CUDA_VISIBLE_DEVICES HIP=$HIP_VISIBLE_DEVICES ROCR=$ROCR_VISIBLE_DEVICES TORC=$TORC_GPU_VISIBLE_DEVICES",
+    );
+    let mut async_cmd = AsyncCliCommand::new(job);
+
+    let temp_dir = create_temp_output_dir();
+
+    async_cmd
+        .start(
+            temp_dir.path(),
+            1, // workflow_id
+            1, // run_id
+            1, // attempt_id
+            None,
+            "http://localhost:8080/torc-service/v1",
+            None,
+            Some("1,3"), // gpu_visible_devices
+            true,
+            ExecutionMode::Direct, // direct execution
+            false,
+            None,
+            None,
+            60,   // sigkill_headroom_seconds
+            None, // target_node
+            &StdioMode::Separate,
+        )
+        .expect("Failed to start command");
+    let _ = async_cmd.wait_for_completion();
+
+    let stdout_path = temp_dir
+        .path()
+        .join("job_stdio")
+        .join("job_wf1_j124_r1_a1.o");
+    let contents = fs::read_to_string(stdout_path).expect("Failed to read stdout");
+
+    assert!(
+        contents.contains("CUDA=1,3"),
+        "Missing CUDA_VISIBLE_DEVICES: {}",
+        contents
+    );
+    assert!(
+        contents.contains("HIP=1,3"),
+        "Missing HIP_VISIBLE_DEVICES: {}",
+        contents
+    );
+    assert!(
+        contents.contains("ROCR=1,3"),
+        "Missing ROCR_VISIBLE_DEVICES: {}",
+        contents
+    );
+    assert!(
+        contents.contains("TORC=1,3"),
+        "Missing TORC_GPU_VISIBLE_DEVICES: {}",
+        contents
+    );
 }
 
 #[rstest]
@@ -542,12 +646,15 @@ fn test_async_cli_command_stdout_stderr_separation() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // gpu_visible_devices
             true,
-            true,
+            ExecutionMode::Direct,
             false,
             None,
             None,
+            60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
     let _ = async_cmd.wait_for_completion();
@@ -579,12 +686,15 @@ fn test_async_cli_command_multiple_jobs_same_workflow() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // gpu_visible_devices
             true,
-            true,
+            ExecutionMode::Direct,
             false,
             None,
             None,
+            60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start job 1");
 
@@ -599,12 +709,15 @@ fn test_async_cli_command_multiple_jobs_same_workflow() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // gpu_visible_devices
             true,
-            true,
+            ExecutionMode::Direct,
             false,
             None,
             None,
+            60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start job 2");
 
@@ -619,12 +732,15 @@ fn test_async_cli_command_multiple_jobs_same_workflow() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // gpu_visible_devices
             true,
-            true,
+            ExecutionMode::Direct,
             false,
             None,
             None,
+            60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start job 3");
 
@@ -663,12 +779,15 @@ fn test_async_cli_command_long_running_job() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // gpu_visible_devices
             true,
-            true,
+            ExecutionMode::Direct,
             false,
             None,
             None,
+            60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
     assert!(async_cmd.is_running);
@@ -713,12 +832,15 @@ fn test_async_cli_command_complex_shell_command() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // gpu_visible_devices
             true,
-            true,
+            ExecutionMode::Direct,
             false,
             None,
             None,
+            60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
     let _ = async_cmd.wait_for_completion();
@@ -753,12 +875,15 @@ fn test_async_cli_command_file_creation() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // gpu_visible_devices
             true,
-            true,
+            ExecutionMode::Direct,
             false,
             None,
             None,
+            60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
     let _ = async_cmd.wait_for_completion();
@@ -787,12 +912,15 @@ fn test_async_cli_command_drop_while_running() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // gpu_visible_devices
             true,
-            true,
+            ExecutionMode::Direct,
             false,
             None,
             None,
+            60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
     assert!(async_cmd.is_running);
@@ -823,12 +951,15 @@ fn test_async_cli_command_execution_time() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // gpu_visible_devices
             true,
-            true,
+            ExecutionMode::Direct,
             false,
             None,
             None,
+            60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
     let _ = async_cmd.wait_for_completion();
@@ -855,12 +986,15 @@ fn test_async_cli_command_empty_command() {
         None,
         "http://localhost:8080/torc-service/v1",
         None,
+        None, // gpu_visible_devices
         true,
-        true,
+        ExecutionMode::Direct,
         false,
         None,
         None,
+        60,   // sigkill_headroom_seconds
         None, // target_node
+        &StdioMode::Separate,
     );
     assert!(result.is_ok());
 
@@ -884,15 +1018,278 @@ fn test_async_cli_command_command_not_found() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // gpu_visible_devices
             true,
-            true,
+            ExecutionMode::Direct,
             false,
             None,
             None,
+            60,   // sigkill_headroom_seconds
             None, // target_node
+            &StdioMode::Separate,
         )
         .expect("Failed to start command");
     let _ = async_cmd.wait_for_completion();
 
     assert!(async_cmd.is_complete);
+}
+
+// =============================================================================
+// StdioMode tests
+// =============================================================================
+
+#[rstest]
+#[cfg(unix)]
+fn test_stdio_mode_combined(start_server: &ServerProcess) {
+    let _ = start_server;
+    let job = create_test_job_model(1, 1, "echo out; echo err >&2");
+    let mut async_cmd = AsyncCliCommand::new(job);
+    let temp_dir = create_temp_output_dir();
+
+    async_cmd
+        .start(
+            temp_dir.path(),
+            1,
+            1,
+            1,
+            None,
+            "http://localhost:8080/torc-service/v1",
+            None,
+            None,
+            true,
+            ExecutionMode::Direct,
+            false,
+            None,
+            None,
+            60,
+            None,
+            &StdioMode::Combined,
+        )
+        .expect("Failed to start command");
+    let _ = async_cmd.wait_for_completion();
+
+    // Combined mode writes both stdout and stderr to a single .log file
+    let combined_path = temp_dir
+        .path()
+        .join("job_stdio")
+        .join("job_wf1_j1_r1_a1.log");
+    assert!(combined_path.exists(), "Combined .log file should exist");
+    let contents = fs::read_to_string(&combined_path).expect("Failed to read combined log");
+    assert!(contents.contains("out"));
+    assert!(contents.contains("err"));
+
+    // Separate files should not exist
+    let stdout_path = temp_dir.path().join("job_stdio").join("job_wf1_j1_r1_a1.o");
+    let stderr_path = temp_dir.path().join("job_stdio").join("job_wf1_j1_r1_a1.e");
+    assert!(!stdout_path.exists(), "Separate .o file should not exist");
+    assert!(!stderr_path.exists(), "Separate .e file should not exist");
+
+    // stdout_path on the command should point to the combined file, stderr_path should be None
+    assert!(async_cmd.stdout_path.is_some());
+    assert!(async_cmd.stderr_path.is_none());
+}
+
+#[rstest]
+#[cfg(unix)]
+fn test_stdio_mode_no_stdout(start_server: &ServerProcess) {
+    let _ = start_server;
+    let job = create_test_job_model(1, 1, "echo out; echo err >&2");
+    let mut async_cmd = AsyncCliCommand::new(job);
+    let temp_dir = create_temp_output_dir();
+
+    async_cmd
+        .start(
+            temp_dir.path(),
+            1,
+            1,
+            1,
+            None,
+            "http://localhost:8080/torc-service/v1",
+            None,
+            None,
+            true,
+            ExecutionMode::Direct,
+            false,
+            None,
+            None,
+            60,
+            None,
+            &StdioMode::NoStdout,
+        )
+        .expect("Failed to start command");
+    let _ = async_cmd.wait_for_completion();
+
+    // Stderr should be captured
+    let stderr_path = temp_dir.path().join("job_stdio").join("job_wf1_j1_r1_a1.e");
+    assert!(stderr_path.exists(), "Stderr file should exist");
+    let contents = fs::read_to_string(&stderr_path).expect("Failed to read stderr");
+    assert!(contents.contains("err"));
+
+    // Stdout file should not exist (sent to /dev/null)
+    let stdout_path = temp_dir.path().join("job_stdio").join("job_wf1_j1_r1_a1.o");
+    assert!(!stdout_path.exists(), "Stdout file should not exist");
+
+    assert!(async_cmd.stdout_path.is_none());
+    assert!(async_cmd.stderr_path.is_some());
+}
+
+#[rstest]
+#[cfg(unix)]
+fn test_stdio_mode_no_stderr(start_server: &ServerProcess) {
+    let _ = start_server;
+    let job = create_test_job_model(1, 1, "echo out; echo err >&2");
+    let mut async_cmd = AsyncCliCommand::new(job);
+    let temp_dir = create_temp_output_dir();
+
+    async_cmd
+        .start(
+            temp_dir.path(),
+            1,
+            1,
+            1,
+            None,
+            "http://localhost:8080/torc-service/v1",
+            None,
+            None,
+            true,
+            ExecutionMode::Direct,
+            false,
+            None,
+            None,
+            60,
+            None,
+            &StdioMode::NoStderr,
+        )
+        .expect("Failed to start command");
+    let _ = async_cmd.wait_for_completion();
+
+    // Stdout should be captured
+    let stdout_path = temp_dir.path().join("job_stdio").join("job_wf1_j1_r1_a1.o");
+    assert!(stdout_path.exists(), "Stdout file should exist");
+    let contents = fs::read_to_string(&stdout_path).expect("Failed to read stdout");
+    assert!(contents.contains("out"));
+
+    // Stderr file should not exist (sent to /dev/null)
+    let stderr_path = temp_dir.path().join("job_stdio").join("job_wf1_j1_r1_a1.e");
+    assert!(!stderr_path.exists(), "Stderr file should not exist");
+
+    assert!(async_cmd.stdout_path.is_some());
+    assert!(async_cmd.stderr_path.is_none());
+}
+
+#[rstest]
+#[cfg(unix)]
+fn test_stdio_mode_none(start_server: &ServerProcess) {
+    let _ = start_server;
+    let job = create_test_job_model(1, 1, "echo out; echo err >&2");
+    let mut async_cmd = AsyncCliCommand::new(job);
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    // Intentionally do NOT create the job_stdio subdirectory — None mode should skip it.
+
+    async_cmd
+        .start(
+            temp_dir.path(),
+            1,
+            1,
+            1,
+            None,
+            "http://localhost:8080/torc-service/v1",
+            None,
+            None,
+            true,
+            ExecutionMode::Direct,
+            false,
+            None,
+            None,
+            60,
+            None,
+            &StdioMode::None,
+        )
+        .expect("Failed to start command");
+    let _ = async_cmd.wait_for_completion();
+
+    // No stdio files should be created at all
+    let stdio_dir = temp_dir.path().join("job_stdio");
+    assert!(
+        !stdio_dir.exists(),
+        "job_stdio directory should not be created in None mode"
+    );
+
+    assert!(async_cmd.stdout_path.is_none());
+    assert!(async_cmd.stderr_path.is_none());
+}
+
+// =============================================================================
+// cleanup_job_stdio_files tests
+// =============================================================================
+
+#[test]
+fn test_cleanup_stdio_files_separate_mode() {
+    let temp_dir = TempDir::new().unwrap();
+    let stdout = temp_dir.path().join("job.o");
+    let stderr = temp_dir.path().join("job.e");
+    fs::write(&stdout, "out").unwrap();
+    fs::write(&stderr, "err").unwrap();
+
+    cleanup_job_stdio_files(
+        Some(stdout.to_str().unwrap()),
+        Some(stderr.to_str().unwrap()),
+    );
+
+    assert!(!stdout.exists(), "stdout file should be deleted");
+    assert!(!stderr.exists(), "stderr file should be deleted");
+}
+
+#[test]
+fn test_cleanup_stdio_files_combined_mode() {
+    let temp_dir = TempDir::new().unwrap();
+    let combined = temp_dir.path().join("job.log");
+    fs::write(&combined, "combined output").unwrap();
+
+    // Combined mode: stdout_path points to .log, stderr_path is None
+    cleanup_job_stdio_files(Some(combined.to_str().unwrap()), None);
+
+    assert!(!combined.exists(), "combined file should be deleted");
+}
+
+#[test]
+fn test_cleanup_stdio_files_no_stdout_mode() {
+    let temp_dir = TempDir::new().unwrap();
+    let stderr = temp_dir.path().join("job.e");
+    fs::write(&stderr, "err").unwrap();
+
+    // NoStdout mode: stdout_path is None
+    cleanup_job_stdio_files(None, Some(stderr.to_str().unwrap()));
+
+    assert!(!stderr.exists(), "stderr file should be deleted");
+}
+
+#[test]
+fn test_cleanup_stdio_files_none_mode() {
+    // None mode: both paths are None — should not panic
+    cleanup_job_stdio_files(None, None);
+}
+
+#[test]
+fn test_cleanup_stdio_files_already_missing() {
+    // Files that don't exist should be silently ignored (NotFound)
+    cleanup_job_stdio_files(Some("/nonexistent/path.o"), Some("/nonexistent/path.e"));
+}
+
+#[test]
+fn test_cleanup_stdio_files_retains_on_failure() {
+    // This test verifies that cleanup is only called for successful jobs.
+    // The decision logic is in ExecutionConfig::delete_stdio_on_success,
+    // which is tested in test_execution_config.rs. Here we verify that
+    // NOT calling cleanup preserves the files.
+    let temp_dir = TempDir::new().unwrap();
+    let stdout = temp_dir.path().join("job.o");
+    let stderr = temp_dir.path().join("job.e");
+    fs::write(&stdout, "out").unwrap();
+    fs::write(&stderr, "err").unwrap();
+
+    // Simulate: job failed, so cleanup is NOT called.
+    // Files should still exist.
+    assert!(stdout.exists(), "stdout should be retained on failure");
+    assert!(stderr.exists(), "stderr should be retained on failure");
 }

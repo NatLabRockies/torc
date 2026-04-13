@@ -1,7 +1,7 @@
 use std::time::Instant;
 
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::commands::get_env_user_name;
 use crate::client::commands::output::{print_if_json, print_json, print_json_wrapped};
 use crate::client::commands::pagination::{EventListParams, paginate_events};
@@ -167,7 +167,7 @@ pub fn handle_event_commands(config: &Configuration, command: &EventCommands, fo
 
             let event = models::EventModel::new(wf_id, json_data);
 
-            match default_api::create_event(config, event) {
+            match apis::events_api::create_event(config, event) {
                 Ok(created_event) => {
                     let json_event = EventJsonOutput::from(&created_event);
                     if print_if_json(format, &json_event, "event") {
@@ -299,7 +299,7 @@ pub fn handle_event_commands(config: &Configuration, command: &EventCommands, fo
                 None => select_workflow_interactively(config, &user_name).unwrap(),
             };
 
-            match default_api::list_events(
+            match apis::events_api::list_events(
                 config,
                 selected_workflow_id as i64,
                 None,              // offset
@@ -310,26 +310,23 @@ pub fn handle_event_commands(config: &Configuration, command: &EventCommands, fo
                 None,              // after_timestamp
             ) {
                 Ok(response) => {
-                    if let Some(events) = response.items {
-                        if let Some(latest_event) = events.first() {
-                            let json_event = EventJsonOutput::from(latest_event);
-                            if print_if_json(format, &json_event, "event") {
-                                // JSON was printed
-                            } else {
-                                println!("Latest event for workflow {}:", selected_workflow_id);
-                                println!("  ID: {}", latest_event.id.unwrap_or(-1));
-                                println!(
-                                    "  Timestamp: {}",
-                                    format_timestamp_ms(latest_event.timestamp)
-                                );
-                                println!(
-                                    "  Data: {}",
-                                    serde_json::to_string_pretty(&latest_event.data)
-                                        .unwrap_or_else(|_| "Unable to display data".to_string())
-                                );
-                            }
+                    let events = response.items;
+                    if let Some(latest_event) = events.first() {
+                        let json_event = EventJsonOutput::from(latest_event);
+                        if print_if_json(format, &json_event, "event") {
+                            // JSON was printed
                         } else {
-                            println!("No events found for workflow {}", selected_workflow_id);
+                            println!("Latest event for workflow {}:", selected_workflow_id);
+                            println!("  ID: {}", latest_event.id.unwrap_or(-1));
+                            println!(
+                                "  Timestamp: {}",
+                                format_timestamp_ms(latest_event.timestamp)
+                            );
+                            println!(
+                                "  Data: {}",
+                                serde_json::to_string_pretty(&latest_event.data)
+                                    .unwrap_or_else(|_| "Unable to display data".to_string())
+                            );
                         }
                     } else {
                         println!("No events found for workflow {}", selected_workflow_id);
@@ -341,7 +338,7 @@ pub fn handle_event_commands(config: &Configuration, command: &EventCommands, fo
                 }
             }
         }
-        EventCommands::Delete { id } => match default_api::delete_event(config, *id, None) {
+        EventCommands::Delete { id } => match apis::events_api::delete_event(config, *id) {
             Ok(removed_event) => {
                 let json_event = EventJsonOutput::from(&removed_event);
                 if print_if_json(format, &json_event, "event") {

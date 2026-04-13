@@ -18,13 +18,21 @@ nodes are in the allocation.
 **Use when**: You have many independent jobs that each fit on one node, and you want them to run in
 parallel across multiple nodes for throughput.
 
-**How it works**: Torc requests a multi-node Slurm allocation (e.g., 4 nodes). One worker manages
-the allocation and places each single-node job onto one node via `srun --nodes=1`. Single-node jobs
-may share a node as long as CPU, memory, and GPU limits allow. With N nodes, Torc can spread work
-across the allocation for throughput.
+**How it works**: Torc requests a multi-node Slurm allocation (e.g., 4 nodes). The behavior depends
+on the execution mode:
 
-**Example**: 100 independent analysis jobs, each needing 8 CPUs and 32 GB, across a 4-node
-allocation:
+- **Slurm mode** (default): A single worker manages the allocation and places each single-node job
+  onto a node via `srun --nodes=1`. Slurm handles resource isolation and node placement.
+- **Direct mode**: Jobs are executed directly without `srun` wrapping. To distribute work across
+  nodes, set `start_one_worker_per_node: true` on the `schedule_nodes` action. This launches one
+  worker per node via `srun --ntasks-per-node=1`, and each worker executes jobs directly on its
+  node.
+
+Single-node jobs may share a node as long as CPU, memory, and GPU limits allow. With N nodes, Torc
+can spread work across the allocation for throughput.
+
+**Example (Slurm mode)**: 100 independent analysis jobs, each needing 8 CPUs and 32 GB, across a
+4-node allocation:
 
 ```yaml
 name: parallel_analysis
@@ -58,8 +66,51 @@ actions:
     num_allocations: 1
 ```
 
+**Example (Direct mode)**: The same workload using direct execution with one worker per node:
+
+```yaml
+name: parallel_analysis_direct
+description: Run 20 analysis tasks across 2 nodes via direct execution
+
+execution_config:
+  mode: direct
+
+resource_requirements:
+  - name: analysis
+    num_cpus: 5
+    num_nodes: 1
+    memory: 2g
+    runtime: PT3M
+
+jobs:
+  - name: analyze_{i}
+    command: python analyze.py --chunk {i}
+    resource_requirements: analysis
+    scheduler: multi_node
+    parameters:
+      i: "1:20"
+
+slurm_schedulers:
+  - name: multi_node
+    account: myproject
+    nodes: 2
+    walltime: "00:10:00"
+
+actions:
+  - trigger_type: on_workflow_start
+    action_type: schedule_nodes
+    scheduler: multi_node
+    scheduler_type: slurm
+    start_one_worker_per_node: true
+    num_allocations: 1
+```
+
 Each node has 8 CPUs and 32 GB available per job. If a node has 64 CPUs total, it can run up to 8
 jobs concurrently (64 / 8 = 8). Across 4 nodes, that means up to 32 jobs running at once.
+
+> **Note:** `start_one_worker_per_node` is only supported with `execution_config.mode: direct`. It
+> is not compatible with slurm execution mode, where Torc uses a single worker with `srun`-based
+> node placement.
 
 ### Pattern 2: True Multi-Node Jobs (MPI, Distributed Training)
 
@@ -73,11 +124,17 @@ step and are not shared with other jobs until the step completes. Torc passes
 allocation. The job receives the standard Slurm step environment (`SLURM_JOB_NODELIST`,
 `SLURM_NTASKS`, etc.), so MPI launchers and distributed frameworks work automatically.
 
-**Example**: An MPI training job that spans all 4 nodes in the allocation:
+**Important**: In slurm execution mode (the default), Torc wraps each job with `srun`. Do not use
+`srun` or `mpirun` in your command — this would create nested process managers that conflict over
+node and task placement. Just write the application command directly and let Torc handle the launch.
+If you need explicit control over the MPI launcher (e.g., `mpirun`), use direct execution mode
+instead (see example below).
+
+**Example (Slurm mode)**: A distributed training job that spans all 4 nodes in the allocation:
 
 ```yaml
 name: distributed_training
-description: MPI training across 4 nodes
+description: Distributed training across 4 nodes
 
 resource_requirements:
   - name: mpi_training
@@ -88,7 +145,7 @@ resource_requirements:
 
 jobs:
   - name: train
-    command: srun --mpi=pmix python -m torch.distributed.run train.py
+    command: python -m torch.distributed.run train.py
     resource_requirements: mpi_training
     scheduler: training_nodes
 
@@ -107,7 +164,45 @@ actions:
 ```
 
 Here `num_cpus: 32` and `memory: 128g` describe each of the 4 nodes. The total resources available
-to the job are 128 CPUs and 512 GB.
+to the job are 128 CPUs and 512 GB. Torc launches this as
+`srun --nodes=4 python -m torch.distributed.run train.py`.
+
+**Example (Direct mode)**: If you need to use `mpirun` or another MPI launcher explicitly, use
+direct execution mode so Torc does not wrap the command with `srun`:
+
+```yaml
+name: distributed_training_mpi
+description: MPI training across 4 nodes with explicit mpirun
+
+execution_config:
+  mode: direct
+
+resource_requirements:
+  - name: mpi_training
+    num_cpus: 32
+    memory: 128g
+    num_nodes: 4
+    runtime: PT8H
+
+jobs:
+  - name: train
+    command: mpirun python train.py
+    resource_requirements: mpi_training
+    scheduler: training_nodes
+
+slurm_schedulers:
+  - name: training_nodes
+    account: myproject
+    nodes: 4
+    walltime: "12:00:00"
+
+actions:
+  - trigger_type: on_workflow_start
+    action_type: schedule_nodes
+    scheduler: training_nodes
+    scheduler_type: slurm
+    num_allocations: 1
+```
 
 ## Choosing Between the Patterns
 
@@ -136,8 +231,9 @@ underlying Slurm allocations. There are two approaches, each with trade-offs.
 
 ### One multi-node allocation
 
-Request all nodes in a single `sbatch` job (e.g., `nodes: 4`). Torc runs one worker per node and
-distributes jobs across them.
+Request all nodes in a single `sbatch` job (e.g., `nodes: 4`). In slurm mode, a single worker
+distributes jobs across nodes via `srun`. In direct mode with `start_one_worker_per_node`, Torc runs
+one worker per node and each worker executes jobs locally.
 
 **Advantages:**
 
@@ -192,7 +288,7 @@ A workflow can combine both patterns, but the cleanest approach is to use separa
 separate allocations. Once a true multi-node step starts, Torc reserves whole nodes for it
 exclusively.
 
-For example, single-node preprocessing jobs followed by a multi-node MPI training step:
+For example, single-node preprocessing jobs followed by a multi-node training step:
 
 ```yaml
 name: preprocess_then_train
@@ -203,7 +299,7 @@ resource_requirements:
     memory: 16g
     runtime: PT30M
 
-  - name: mpi_training
+  - name: distributed_training
     num_cpus: 32
     memory: 128g
     num_nodes: 4
@@ -218,8 +314,8 @@ jobs:
       i: "1:8"
 
   - name: train
-    command: srun --mpi=pmix python train.py
-    resource_requirements: mpi_training
+    command: python -m torch.distributed.run train.py
+    resource_requirements: distributed_training
     scheduler: training_nodes
     depends_on: [prep_1, prep_2, prep_3, prep_4, prep_5, prep_6, prep_7, prep_8]
 
@@ -250,7 +346,8 @@ actions:
 ```
 
 The preprocessing jobs run across 2 nodes (Pattern 1). When they complete, a 4-node allocation is
-requested for the MPI training job (Pattern 2).
+requested for the training job (Pattern 2). Torc wraps the training command with `srun --nodes=4`
+automatically.
 
 ## `num_nodes`
 
@@ -282,6 +379,25 @@ resource_requirements:
     num_nodes: 4
 ```
 
+### Using `srun` or `mpirun` in job commands with slurm execution mode
+
+In slurm mode (the default), Torc wraps each job with `srun`. Adding `srun` or `mpirun` to your
+command creates nested process managers that conflict over node and task placement.
+
+```yaml
+# WRONG: nested srun
+command: srun --mpi=pmix python train.py
+
+# WRONG: mpirun under Torc's srun
+command: mpirun python train.py
+
+# CORRECT: let Torc handle srun wrapping
+command: python train.py
+```
+
+If you need explicit control over `mpirun`, use `execution_config.mode: direct` so Torc does not
+wrap the command with `srun`.
+
 ### Using `num_nodes > 1` for independent jobs
 
 If your jobs don't need inter-node communication, keep `num_nodes=1` (the default) and let Torc
@@ -289,6 +405,7 @@ schedule them independently across nodes for maximum throughput.
 
 ## See Also
 
-- [Slurm Overview](./slurm-workflows.md) — Auto-generated Slurm configuration with `submit-slurm`
+- [Slurm Overview](./slurm-workflows.md) — Auto-generated Slurm configuration with
+  `slurm generate` + `submit`
 - [Advanced Slurm Configuration](./slurm.md) — Manual scheduler and srun wrapping details
 - [Resource Requirements Reference](../../core/reference/resources.md) — Complete field reference

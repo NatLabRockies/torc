@@ -8,6 +8,7 @@ use crate::client::commands::pagination::base::{
     Paginatable, PaginatedIterator, PaginatedResponse, PaginationParams,
 };
 use crate::models::ResourceRequirementsModel;
+use crate::time_utils::duration_string_to_seconds;
 
 /// Parameters for listing resource requirements with default values and builder methods.
 #[derive(Debug, Clone, Default)]
@@ -122,7 +123,7 @@ impl PaginationParams for ResourceRequirementsListParams {
 }
 
 impl Paginatable for ResourceRequirementsModel {
-    type ListError = apis::default_api::ListResourceRequirementsError;
+    type ListError = apis::resource_requirements_api::ListResourceRequirementsError;
     type Params = ResourceRequirementsListParams;
 
     fn fetch_page(
@@ -130,20 +131,27 @@ impl Paginatable for ResourceRequirementsModel {
         params: &Self::Params,
         limit: i64,
     ) -> Result<PaginatedResponse<Self>, apis::Error<Self::ListError>> {
-        let response = apis::default_api::list_resource_requirements(
+        let response = apis::resource_requirements_api::list_resource_requirements(
             config,
             params.workflow_id,
             params.job_id,
-            Some(params.offset),
-            Some(limit),
-            params.sort_by.as_deref(),
-            params.reverse_sort,
             params.name.as_deref(),
             params.memory.as_deref(),
             params.num_cpus,
             params.num_gpus,
             params.num_nodes,
-            params.runtime.as_deref(),
+            match params.runtime.as_deref() {
+                Some(runtime) => Some(
+                    duration_string_to_seconds(runtime)
+                        .or_else(|_| runtime.parse::<i64>().map_err(|e| e.to_string()))
+                        .map_err(|e| apis::Error::Io(std::io::Error::other(e)))?,
+                ),
+                None => None,
+            },
+            Some(params.offset),
+            Some(limit),
+            params.sort_by.as_deref(),
+            params.reverse_sort,
         )?;
 
         Ok(PaginatedResponse {
@@ -184,13 +192,14 @@ pub fn iter_resource_requirements(
 ///
 /// # Returns
 /// `Result<Vec<ResourceRequirementsModel>, Error>` containing all resource requirements or an error
+#[allow(clippy::result_large_err)]
 pub fn paginate_resource_requirements(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: ResourceRequirementsListParams,
 ) -> Result<
     Vec<ResourceRequirementsModel>,
-    apis::Error<apis::default_api::ListResourceRequirementsError>,
+    apis::Error<apis::resource_requirements_api::ListResourceRequirementsError>,
 > {
     iter_resource_requirements(config, workflow_id, params).collect()
 }

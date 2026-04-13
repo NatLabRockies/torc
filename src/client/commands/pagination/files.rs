@@ -91,7 +91,7 @@ impl PaginationParams for FileListParams {
 }
 
 impl Paginatable for FileModel {
-    type ListError = apis::default_api::ListFilesError;
+    type ListError = apis::files_api::ListFilesError;
     type Params = FileListParams;
 
     fn fetch_page(
@@ -99,7 +99,7 @@ impl Paginatable for FileModel {
         params: &Self::Params,
         limit: i64,
     ) -> Result<PaginatedResponse<Self>, apis::Error<Self::ListError>> {
-        let response = apis::default_api::list_files(
+        let response = apis::files_api::list_files(
             config,
             params.workflow_id,
             params.produced_by_job_id,
@@ -152,10 +152,11 @@ pub fn iter_files(
 ///
 /// # Returns
 /// `Result<Vec<FileModel>, Error>` containing all files or an error
+#[allow(clippy::result_large_err)]
 pub fn paginate_files(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: FileListParams,
-) -> Result<Vec<FileModel>, apis::Error<apis::default_api::ListFilesError>> {
+) -> Result<Vec<FileModel>, apis::Error<apis::files_api::ListFilesError>> {
     iter_files(config, workflow_id, params).collect()
 }

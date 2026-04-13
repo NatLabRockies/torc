@@ -336,7 +336,7 @@
     {
       "name": "work_scheduler",
       "account": "my_account",
-      "walltime": "04:00:00",
+      "walltime": "08:00:00",
       "nodes": 1
     },
     {

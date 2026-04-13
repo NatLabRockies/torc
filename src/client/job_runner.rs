@@ -15,7 +15,8 @@
 //!
 //! 2. **Graceful Shutdown**: When the flag is set, the main loop detects it and calls
 //!    [`JobRunner::terminate_jobs()`], which sends SIGTERM to all running jobs, waits for
-//!    them to exit, and sets job status to `JobStatus::Terminated`.
+//!    them to exit, and sets job status to `JobStatus::Completed` (if exit code is 0) or
+//!    `JobStatus::Terminated` (if exit code is non-zero).
 //!
 //! # Per-Step Timeout via srun
 //!
@@ -26,7 +27,7 @@
 
 use chrono::{DateTime, Utc};
 use log::{self, debug, error, info, warn};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -34,18 +35,18 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::async_cli_command::AsyncCliCommand;
 use crate::client::resource_correction::format_duration_iso8601;
 use crate::client::resource_monitor::{ResourceMonitor, ResourceMonitorConfig};
 use crate::client::utils;
-use crate::client::workflow_spec::SlurmConfig;
+use crate::client::workflow_spec::{ExecutionConfig, ExecutionMode};
 use crate::config::TorcConfig;
 use crate::memory_utils::memory_string_to_gb;
 use crate::models::{
-    ClaimJobsSortMethod, ComputeNodesResources, JobStatus, ResourceRequirementsModel, ResultModel,
-    SlurmStatsModel, WorkflowModel,
+    ComputeNodesResources, JobStatus, ResourceRequirementsModel, ResultModel, SlurmStatsModel,
+    WorkflowModel,
 };
 
 /// Rule definition for failure handler (parsed from JSON stored in database)
@@ -203,6 +204,17 @@ pub enum RecoveryOutcome {
     Error(String),
 }
 
+#[derive(Debug)]
+struct JobRunnerApiError(String);
+
+impl std::fmt::Display for JobRunnerApiError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for JobRunnerApiError {}
+
 /// Manages parallel job execution on a compute node.
 ///
 /// The JobRunner claims jobs from the server, executes them locally, and reports results.
@@ -218,7 +230,8 @@ pub enum RecoveryOutcome {
 /// When termination is requested:
 /// - Jobs with `supports_termination = true` receive SIGTERM (graceful shutdown)
 /// - Jobs with `supports_termination = false` receive SIGKILL (immediate kill)
-/// - All jobs are set to `JobStatus::Terminated`
+/// - Jobs that exit cleanly (exit code 0) are set to `JobStatus::Completed`
+/// - Jobs that crash or are force-killed are set to `JobStatus::Terminated`
 #[allow(dead_code)]
 pub struct JobRunner {
     config: Configuration,
@@ -240,13 +253,25 @@ pub struct JobRunner {
     is_subtask: bool,
     running_jobs: HashMap<i64, AsyncCliCommand>,
     job_resources: HashMap<i64, ResourceRequirementsModel>,
+    /// Pool of GPU device identifiers available to this runner (e.g. `"0"`, `"1"` or UUIDs).
+    ///
+    /// When running in direct mode, Torc sets `CUDA_VISIBLE_DEVICES` (and friends) itself
+    /// to prevent concurrent GPU jobs from all defaulting to GPU 0.
+    available_gpu_devices: VecDeque<String>,
+    /// Snapshot of the full GPU device pool at startup, used for modulo-based fallback
+    /// when the available pool is exhausted (e.g. in user-parallelism mode).
+    all_gpu_devices: Vec<String>,
+    /// Counter for round-robin GPU assignment when the pool is exhausted.
+    gpu_fallback_counter: usize,
+    /// GPUs assigned to a running job, keyed by job_id.
+    job_gpu_devices: HashMap<i64, Vec<String>>,
     /// Per-node resource tracker for multi-node Slurm allocations.
     /// None for single-node allocations where dividing total by 1 is correct.
     node_tracker: Option<PerNodeTracker>,
     /// Maps job_id to the node name where the job is running.
     /// Used to increment the correct node's resources on job completion.
     job_nodes: HashMap<i64, String>,
-    slurm_config: SlurmConfig,
+    execution_config: ExecutionConfig,
     rules: ComputeNodeRules,
     resource_monitor: Option<ResourceMonitor>,
     /// Flag set when SIGTERM is received. Shared with signal handler.
@@ -264,6 +289,131 @@ pub struct JobRunner {
 }
 
 impl JobRunner {
+    fn parse_visible_devices_list(value: &str) -> Vec<String> {
+        value
+            .split(',')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .collect()
+    }
+
+    fn detect_gpu_devices(resources_num_gpus: i64) -> (VecDeque<String>, bool) {
+        // Prefer an explicit allocation-scoped device list if present.
+        // Slurm: CUDA_VISIBLE_DEVICES is commonly set at allocation scope.
+        // Some clusters also set SLURM_JOB_GPUS / SLURM_STEP_GPUS.
+        if let Ok(v) = std::env::var("CUDA_VISIBLE_DEVICES") {
+            let parsed = Self::parse_visible_devices_list(&v);
+            if !parsed.is_empty() {
+                return (VecDeque::from(parsed), true);
+            }
+        }
+        if let Ok(v) = std::env::var("SLURM_STEP_GPUS") {
+            let parsed = Self::parse_visible_devices_list(&v)
+                .into_iter()
+                .map(|s| {
+                    s.trim_start_matches("gpu:")
+                        .trim_start_matches("GPU:")
+                        .to_string()
+                })
+                .collect::<Vec<_>>();
+            if !parsed.is_empty() {
+                return (VecDeque::from(parsed), true);
+            }
+        }
+        if let Ok(v) = std::env::var("SLURM_JOB_GPUS") {
+            let parsed = Self::parse_visible_devices_list(&v)
+                .into_iter()
+                .map(|s| {
+                    s.trim_start_matches("gpu:")
+                        .trim_start_matches("GPU:")
+                        .to_string()
+                })
+                .collect::<Vec<_>>();
+            if !parsed.is_empty() {
+                return (VecDeque::from(parsed), true);
+            }
+        }
+
+        // Fall back to ordinal device indices.
+        let fallback = (0..resources_num_gpus.max(0))
+            .map(|i| i.to_string())
+            .collect::<Vec<_>>();
+        (VecDeque::from(fallback), false)
+    }
+
+    fn allocate_gpu_devices(&mut self, job_id: i64, num_gpus: i64) -> Option<String> {
+        if num_gpus <= 0 {
+            return None;
+        }
+
+        let requested = num_gpus as usize;
+        if self.available_gpu_devices.len() >= requested {
+            // Normal path: allocate from the available pool.
+            let mut assigned = Vec::with_capacity(requested);
+            for _ in 0..requested {
+                if let Some(dev) = self.available_gpu_devices.pop_front() {
+                    assigned.push(dev);
+                }
+            }
+
+            let visible = assigned.join(",");
+            self.job_gpu_devices.insert(job_id, assigned);
+            debug!(
+                "Assigned GPUs workflow_id={} job_id={} gpus={}",
+                self.workflow_id, job_id, visible
+            );
+            return Some(visible);
+        }
+
+        // Pool exhausted — this can happen in user-parallelism mode where jobs are
+        // claimed without resource filtering. Use round-robin over the full device
+        // pool so behaviour is deterministic and jobs don't all default to GPU 0.
+        if self.all_gpu_devices.is_empty() {
+            error!(
+                "No GPU devices configured but job requires GPUs \
+                 workflow_id={} job_id={} requested={}",
+                self.workflow_id, job_id, requested
+            );
+            return None;
+        }
+
+        let pool_size = self.all_gpu_devices.len();
+        // Clamp to pool size to avoid duplicate device IDs in CUDA_VISIBLE_DEVICES,
+        // which can cause confusing behavior with CUDA/HIP runtimes.
+        let clamped = requested.min(pool_size);
+        if clamped < requested {
+            warn!(
+                "Job requests {} GPUs but only {} devices exist, clamping \
+                 workflow_id={} job_id={}",
+                requested, pool_size, self.workflow_id, job_id
+            );
+        }
+        let mut assigned = Vec::with_capacity(clamped);
+        for _ in 0..clamped {
+            let idx = self.gpu_fallback_counter % pool_size;
+            assigned.push(self.all_gpu_devices[idx].clone());
+            self.gpu_fallback_counter += 1;
+        }
+
+        let visible = assigned.join(",");
+        warn!(
+            "GPU pool exhausted, using round-robin fallback \
+             workflow_id={} job_id={} gpus={} (oversubscribed)",
+            self.workflow_id, job_id, visible
+        );
+        // Don't track in job_gpu_devices — these are shared, not exclusively owned.
+        Some(visible)
+    }
+
+    fn release_gpu_devices(&mut self, job_id: i64) {
+        if let Some(devs) = self.job_gpu_devices.remove(&job_id) {
+            for dev in devs {
+                self.available_gpu_devices.push_back(dev);
+            }
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         config: Configuration,
@@ -291,10 +441,39 @@ impl JobRunner {
             workflow.compute_node_ignore_workflow_completion,
             workflow.compute_node_wait_for_healthy_database_minutes,
             workflow.compute_node_min_time_for_new_jobs_seconds,
-            workflow.jobs_sort_method,
         );
-        let slurm_config = SlurmConfig::from_workflow_model(&workflow);
+        let execution_config = ExecutionConfig::from_workflow_model(&workflow);
+        if execution_config.effective_mode() == ExecutionMode::Slurm
+            && std::env::var("SLURM_JOB_ID").is_err()
+        {
+            panic!(
+                "Execution mode is 'slurm' but SLURM_JOB_ID is not set. \
+                 Cannot run jobs with srun outside a Slurm allocation."
+            );
+        }
         let job_resources: HashMap<i64, ResourceRequirementsModel> = HashMap::new();
+
+        let mut resources = resources;
+        let available_gpu_devices = if execution_config.effective_mode() == ExecutionMode::Slurm {
+            // In Slurm mode, `resources.num_gpus` already represents the
+            // allocation-wide accounting pool. Process-local visible device
+            // env vars may expose only this node's GPUs, so do not use them
+            // to shrink the total pool.
+            (0..resources.num_gpus.max(0))
+                .map(|i| i.to_string())
+                .collect::<VecDeque<_>>()
+        } else {
+            // In direct mode, if the environment already constrains visible
+            // GPUs, use that list as the authoritative device pool and keep
+            // the accounting counts aligned with it.
+            let (available_gpu_devices, env_constrained) =
+                Self::detect_gpu_devices(resources.num_gpus);
+            if env_constrained {
+                resources.num_gpus = available_gpu_devices.len() as i64;
+            }
+            available_gpu_devices
+        };
+
         let orig_resources = ComputeNodesResources {
             id: resources.id,
             num_cpus: resources.num_cpus,
@@ -352,9 +531,13 @@ impl JobRunner {
             is_subtask,
             running_jobs,
             job_resources,
+            all_gpu_devices: Vec::from(available_gpu_devices.clone()),
+            gpu_fallback_counter: 0,
+            available_gpu_devices,
+            job_gpu_devices: HashMap::new(),
             node_tracker,
             job_nodes: HashMap::new(),
-            slurm_config,
+            execution_config,
             rules,
             resource_monitor,
             termination_requested: Arc::new(AtomicBool::new(false)),
@@ -369,16 +552,29 @@ impl JobRunner {
     ///
     /// This is a convenience method that wraps [`utils::send_with_retries`] with
     /// the JobRunner's configuration and retry settings.
-    fn send_with_retries<T, E, F>(&self, api_call: F) -> Result<T, E>
+    fn send_with_retries<T, E, F>(&self, mut api_call: F) -> Result<T, Box<dyn std::error::Error>>
     where
         F: FnMut() -> Result<T, E>,
         E: std::fmt::Display,
     {
         utils::send_with_retries(
             &self.config,
-            api_call,
+            || {
+                api_call().map_err(|err| {
+                    Box::new(JobRunnerApiError(err.to_string())) as Box<dyn std::error::Error>
+                })
+            },
             self.rules.compute_node_wait_for_healthy_database_minutes,
         )
+    }
+
+    fn box_retry_error<T, E>(result: Result<T, E>) -> Result<T, Box<dyn std::error::Error>>
+    where
+        E: std::fmt::Display,
+    {
+        result.map_err(|err| {
+            Box::new(JobRunnerApiError(err.to_string())) as Box<dyn std::error::Error>
+        })
     }
 
     /// Atomically claim a workflow action for execution.
@@ -446,12 +642,6 @@ impl JobRunner {
             .expect("Failed to get hostname")
             .into_string()
             .expect("Hostname is not valid UTF-8");
-        let end_time = if let Some(end_time) = self.end_time {
-            end_time.timestamp()
-        } else {
-            i64::MAX
-        };
-
         // Create output directory if it doesn't exist
         if !self.output_dir.exists() {
             std::fs::create_dir_all(&self.output_dir)?;
@@ -469,11 +659,12 @@ impl JobRunner {
             .clone()
             .unwrap_or_else(|| "unknown".to_string());
 
+        let exec_mode = self.execution_config.effective_mode();
         info!(
             "Starting torc job runner version={} client_api_version={} server_version={} server_api_version={} \
             workflow_id={} hostname={} output_dir={} resources={:?} rules={:?} \
             job_completion_poll_interval={}s max_parallel_jobs={:?} end_time={:?} strict_scheduler_match={} \
-            use_srun={} limit_resources={}",
+            execution_mode={:?} limit_resources={}",
             version,
             version_check::CLIENT_API_VERSION,
             server_version,
@@ -487,8 +678,8 @@ impl JobRunner {
             self.max_parallel_jobs,
             self.end_time,
             self.torc_config.client.slurm.strict_scheduler_match,
-            self.slurm_config.use_srun(),
-            self.slurm_config.limit_resources(),
+            exec_mode,
+            self.execution_config.limit_resources(),
         );
 
         // Warn about version mismatches
@@ -502,7 +693,10 @@ impl JobRunner {
 
         loop {
             match self.send_with_retries(|| {
-                default_api::is_workflow_complete(&self.config, self.workflow_id)
+                Self::box_retry_error(apis::workflows_api::is_workflow_complete(
+                    &self.config,
+                    self.workflow_id,
+                ))
             }) {
                 Ok(response) => {
                     if response.is_canceled {
@@ -528,13 +722,24 @@ impl JobRunner {
                         "Failed to check workflow completion after retries: {}",
                         retry_err
                     );
+                    self.kill_running_jobs();
                     return Err(
                         format!("Unable to check workflow completion: {}", retry_err).into(),
                     );
                 }
             }
 
-            self.check_job_status();
+            if let Err(e) = self.check_job_status() {
+                self.kill_running_jobs();
+                return Err(e);
+            }
+            if self.execution_config.limit_resources()
+                && exec_mode == ExecutionMode::Direct
+                && let Err(e) = self.handle_oom_violations()
+            {
+                self.kill_running_jobs();
+                return Err(e);
+            }
             self.check_and_execute_actions();
 
             debug!("Check for new jobs");
@@ -563,17 +768,38 @@ impl JobRunner {
 
             thread::sleep(Duration::from_secs_f64(self.job_completion_poll_interval));
 
-            // Check if termination was requested (e.g., via SIGTERM)
             if self.is_termination_requested() {
                 info!("Termination requested (SIGTERM received). Terminating jobs.");
                 self.terminate_jobs();
                 break;
             }
 
-            if Utc::now().timestamp() >= end_time {
-                info!("End time reached. Terminating jobs and stopping job runner.");
-                self.terminate_jobs();
-                break;
+            if let Some(end_time_dt) = self.end_time {
+                if exec_mode == ExecutionMode::Direct {
+                    let timeout_start = self.direct_mode_timeout_start_time(end_time_dt);
+                    if Utc::now() >= timeout_start {
+                        info!(
+                            "Direct-mode timeout window reached. Starting termination sequence \
+                            workflow_id={} timeout_start={} end_time={} sigterm_lead_seconds={} \
+                            sigkill_headroom_seconds={}",
+                            self.workflow_id,
+                            timeout_start,
+                            end_time_dt,
+                            self.execution_config.sigterm_lead_seconds(),
+                            self.execution_config.sigkill_headroom_seconds()
+                        );
+                        self.terminate_jobs();
+                        break;
+                    }
+                } else if Utc::now() >= end_time_dt {
+                    info!(
+                        "End time reached. Terminating jobs and stopping job runner \
+                        workflow_id={} end_time={}",
+                        self.workflow_id, end_time_dt
+                    );
+                    self.terminate_jobs();
+                    break;
+                }
             }
 
             // Check if we should exit due to no new jobs being claimed for too long
@@ -635,6 +861,31 @@ impl JobRunner {
         })
     }
 
+    /// Kill all running child processes without making any API calls.
+    ///
+    /// Used when the server is unreachable and we need to exit immediately.
+    /// Jobs are left in their current server-side status (likely "running");
+    /// the server will detect them as stale when the compute node is no longer
+    /// reporting in.
+    fn kill_running_jobs(&mut self) {
+        if self.running_jobs.is_empty() {
+            return;
+        }
+        error!(
+            "Killing {} running job(s) due to unrecoverable API failure workflow_id={}",
+            self.running_jobs.len(),
+            self.workflow_id
+        );
+        for (job_id, async_job) in self.running_jobs.iter_mut() {
+            if let Err(e) = async_job.send_sigkill() {
+                warn!(
+                    "Failed to SIGKILL job workflow_id={} job_id={}: {}",
+                    self.workflow_id, job_id, e
+                );
+            }
+        }
+    }
+
     /// Deactivate the compute node and set its duration.
     fn deactivate_compute_node(&self) {
         let duration_seconds = self.start_instant.elapsed().as_secs_f64();
@@ -645,7 +896,7 @@ impl JobRunner {
 
         // Fetch the existing compute node first to preserve all fields
         let mut update_model =
-            match default_api::get_compute_node(&self.config, self.compute_node_id) {
+            match apis::compute_nodes_api::get_compute_node(&self.config, self.compute_node_id) {
                 Ok(node) => node,
                 Err(e) => {
                     error!(
@@ -660,9 +911,11 @@ impl JobRunner {
         update_model.is_active = Some(false);
         update_model.duration_seconds = Some(duration_seconds);
 
-        if let Err(e) =
-            default_api::update_compute_node(&self.config, self.compute_node_id, update_model)
-        {
+        if let Err(e) = apis::compute_nodes_api::update_compute_node(
+            &self.config,
+            self.compute_node_id,
+            update_model,
+        ) {
             error!(
                 "Failed to deactivate compute node {}: {}",
                 self.compute_node_id, e
@@ -700,8 +953,27 @@ impl JobRunner {
             };
         }
         for (job_id, result) in results {
-            self.handle_job_completion(job_id, result);
+            if let Err(e) = self.handle_job_completion(job_id, result) {
+                error!(
+                    "Failed to record canceled job completion workflow_id={} job_id={}: {}",
+                    self.workflow_id, job_id, e
+                );
+            }
         }
+    }
+
+    /// Returns when direct-mode timeout handling should start for a given end time.
+    ///
+    /// The runner begins graceful termination at:
+    /// `end_time - sigkill_headroom_seconds - sigterm_lead_seconds`
+    ///
+    /// This allows `terminate_jobs()` to send the configured termination signal first,
+    /// then wait `sigterm_lead_seconds`, and finally send SIGKILL at the configured
+    /// `sigkill_headroom_seconds` boundary.
+    fn direct_mode_timeout_start_time(&self, end_time: DateTime<Utc>) -> DateTime<Utc> {
+        let total_lead = self.execution_config.sigkill_headroom_seconds()
+            + self.execution_config.sigterm_lead_seconds();
+        end_time - chrono::Duration::seconds(total_lead)
     }
 
     /// Terminates all running jobs and reports results to the server.
@@ -716,10 +988,19 @@ impl JobRunner {
     ///    - Exit codes are captured, including negative values for signal-terminated processes
     ///
     /// 3. **Completion Phase**: Report results to the server
-    ///    - All terminated jobs are set to `JobStatus::Terminated`
+    ///    - Jobs that exited cleanly (exit code 0) are set to `JobStatus::Completed`
+    ///    - Jobs that crashed or were force-killed are set to `JobStatus::Terminated`
     ///    - Results include execution time and resource metrics (if monitoring is enabled)
     ///
-    /// Sends SIGTERM to all running jobs and waits for them to exit.
+    /// Terminates all running jobs with a graceful shutdown timeline.
+    ///
+    /// The termination timeline (for direct mode) is:
+    /// 1. Send termination signal (configurable, default SIGTERM) to all jobs
+    /// 2. Wait `sigterm_lead_seconds` (default 30) for jobs to exit gracefully
+    /// 3. Send SIGKILL to any jobs still running
+    /// 4. Wait for all jobs to complete
+    ///
+    /// In Slurm mode, srun handles the termination timeline, so we just send SIGTERM.
     ///
     /// Called automatically by `run_worker()` when:
     /// - The termination flag is set (typically by a SIGTERM signal handler)
@@ -736,57 +1017,138 @@ impl JobRunner {
             self.running_jobs.len()
         );
 
-        // Send SIGTERM to all running jobs for graceful termination.
-        // When running under srun, Slurm's KillWait controls the grace period before
-        // SIGKILL. The deprecated supports_termination field is no longer consulted.
-        for (job_id, async_job) in self.running_jobs.iter_mut() {
-            info!(
-                "Job SIGTERM workflow_id={} job_id={}",
-                self.workflow_id, job_id
-            );
-            if let Err(e) = async_job.terminate() {
-                warn!(
-                    "Job SIGTERM failed workflow_id={} job_id={} error={}",
-                    self.workflow_id, job_id, e
-                );
-            }
-        }
+        // Track which jobs were force-killed (did not respond to the graceful signal).
+        // These get the configured timeout_exit_code; jobs that exited on their own
+        // keep their actual exit code.
+        let mut force_killed: std::collections::HashSet<i64> = std::collections::HashSet::new();
 
-        // Second pass: wait for all jobs to complete and collect results
-        let mut results = Vec::new();
-        for (job_id, async_job) in self.running_jobs.iter_mut() {
-            match async_job.wait_for_completion() {
-                Ok(exit_code) => {
-                    debug!(
-                        "Job terminated workflow_id={} job_id={} exit_code={}",
-                        self.workflow_id, job_id, exit_code
+        // In direct mode, we manage the termination timeline ourselves.
+        // In Slurm mode, we SIGTERM the srun wrapper processes so they exit
+        // promptly rather than blocking wait_for_completion() indefinitely.
+        if self.execution_config.effective_mode() == ExecutionMode::Direct {
+            let termination_signal = self.execution_config.termination_signal();
+            let sigterm_lead_seconds = self.execution_config.sigterm_lead_seconds();
+
+            // First pass: send termination signal to all running jobs
+            for (job_id, async_job) in self.running_jobs.iter_mut() {
+                info!(
+                    "Job {} workflow_id={} job_id={}",
+                    termination_signal, self.workflow_id, job_id
+                );
+                if let Err(e) = async_job.send_signal(termination_signal) {
+                    warn!(
+                        "Job {} failed workflow_id={} job_id={} error={}",
+                        termination_signal, self.workflow_id, job_id, e
                     );
-                    let attempt_id = async_job.job.attempt_id.unwrap_or(1);
-                    let result = async_job.get_result(
-                        self.run_id,
-                        attempt_id,
-                        self.compute_node_id,
-                        self.resource_monitor.as_ref(),
-                    );
-                    results.push((*job_id, result));
                 }
-                Err(e) => {
-                    error!(
-                        "Job wait failed workflow_id={} job_id={} error={}",
+            }
+
+            // Wait for graceful termination before sending SIGKILL
+            if sigterm_lead_seconds > 0 {
+                info!(
+                    "Waiting {}s for graceful termination before SIGKILL",
+                    sigterm_lead_seconds
+                );
+                thread::sleep(Duration::from_secs(sigterm_lead_seconds as u64));
+
+                // Check which jobs exited gracefully during the wait
+                for async_job in self.running_jobs.values_mut() {
+                    let _ = async_job.check_status();
+                }
+
+                // Send SIGKILL to any jobs still running
+                for (job_id, async_job) in self.running_jobs.iter_mut() {
+                    if async_job.is_running {
+                        info!(
+                            "Job SIGKILL workflow_id={} job_id={}",
+                            self.workflow_id, job_id
+                        );
+                        force_killed.insert(*job_id);
+                        if let Err(e) = async_job.send_sigkill() {
+                            warn!(
+                                "Job SIGKILL failed workflow_id={} job_id={} error={}",
+                                self.workflow_id, job_id, e
+                            );
+                        }
+                    }
+                }
+            }
+        } else {
+            // Slurm mode: send SIGTERM to srun wrapper processes so they
+            // exit and don't block wait_for_completion() indefinitely.
+            for (job_id, async_job) in self.running_jobs.iter_mut() {
+                info!(
+                    "Job SIGTERM (srun) workflow_id={} job_id={}",
+                    self.workflow_id, job_id
+                );
+                if let Err(e) = async_job.terminate() {
+                    warn!(
+                        "Job SIGTERM (srun) failed workflow_id={} job_id={} error={}",
                         self.workflow_id, job_id, e
                     );
                 }
             }
         }
 
-        // Third pass: handle completions (notify server)
+        // Wait for all jobs to complete and collect results.
+        // Jobs that responded to SIGTERM keep their own exit code (the user may
+        // want to trigger off it). Jobs that were SIGKILLed get timeout_exit_code.
+        let timeout_exit_code = self.execution_config.timeout_exit_code();
+        let mut results = Vec::new();
+        for (job_id, async_job) in self.running_jobs.iter_mut() {
+            // Jobs that already exited during check_status() above are already
+            // complete — get_result() works on them without wait_for_completion().
+            if !async_job.is_complete {
+                match async_job.wait_for_completion() {
+                    Ok(exit_code) => {
+                        debug!(
+                            "Job terminated workflow_id={} job_id={} exit_code={}",
+                            self.workflow_id, job_id, exit_code
+                        );
+                    }
+                    Err(e) => {
+                        error!(
+                            "Job wait failed workflow_id={} job_id={} error={}",
+                            self.workflow_id, job_id, e
+                        );
+                        continue;
+                    }
+                }
+            }
+
+            let attempt_id = async_job.job.attempt_id.unwrap_or(1);
+            let mut result = async_job.get_result(
+                self.run_id,
+                attempt_id,
+                self.compute_node_id,
+                self.resource_monitor.as_ref(),
+            );
+            if force_killed.contains(job_id) {
+                result.return_code = timeout_exit_code as i64;
+            }
+            // Jobs that exited cleanly (rc=0) handled termination gracefully - mark as Completed.
+            // Jobs that crashed or were force-killed get Terminated status.
+            result.status = if result.return_code == 0 {
+                JobStatus::Completed
+            } else {
+                JobStatus::Terminated
+            };
+            results.push((*job_id, result));
+        }
+
+        // Final pass: handle completions (notify server)
         for (job_id, result) in results {
-            self.handle_job_completion(job_id, result);
+            if let Err(e) = self.handle_job_completion(job_id, result) {
+                error!(
+                    "Failed to record terminated job completion workflow_id={} job_id={}: {}",
+                    self.workflow_id, job_id, e
+                );
+            }
         }
     }
 
     /// Check the status of running jobs and remove completed ones.
-    fn check_job_status(&mut self) {
+    fn check_job_status(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let mut completed_jobs = Vec::new();
         let mut job_results = Vec::new();
 
@@ -828,8 +1190,106 @@ impl JobRunner {
                 result.status = JobStatus::Failed;
             }
 
-            self.handle_job_completion(job_id, result);
+            self.handle_job_completion(job_id, result)?;
         }
+        Ok(())
+    }
+
+    /// Handle OOM violations detected by the resource monitor.
+    ///
+    /// When running in direct mode with `limit_resources: true`, the resource monitor
+    /// tracks memory usage for each job. If a job exceeds its configured memory limit,
+    /// an OOM violation is sent. This method:
+    ///
+    /// 1. Polls for OOM violations from the resource monitor
+    /// 2. Immediately SIGKILLs the violating job (no grace period for OOM)
+    /// 3. Waits for the job to exit and collects its result
+    /// 4. Reports the job as failed with the configured `oom_exit_code`
+    fn handle_oom_violations(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let violations = match &self.resource_monitor {
+            Some(monitor) => monitor.recv_oom_violations(),
+            None => return Ok(()),
+        };
+
+        if violations.is_empty() {
+            return Ok(());
+        }
+
+        let oom_exit_code = self.execution_config.oom_exit_code();
+
+        // First pass: log and send SIGKILL to all OOM jobs
+        let mut killed_job_ids = Vec::new();
+        for violation in &violations {
+            warn!(
+                "OOM violation detected: workflow_id={} job_id={} pid={} memory={:.2}GB limit={:.2}GB",
+                self.workflow_id,
+                violation.job_id,
+                violation.pid,
+                violation.memory_bytes as f64 / (1024.0 * 1024.0 * 1024.0),
+                violation.limit_bytes as f64 / (1024.0 * 1024.0 * 1024.0),
+            );
+
+            if let Some(async_job) = self.running_jobs.get_mut(&violation.job_id) {
+                // Check if still running - job may have exited between OOM detection and now
+                if !async_job.is_running {
+                    debug!(
+                        "OOM job already exited workflow_id={} job_id={}",
+                        self.workflow_id, violation.job_id
+                    );
+                    continue;
+                }
+                warn!(
+                    "Killing OOM job workflow_id={} job_id={}",
+                    self.workflow_id, violation.job_id
+                );
+                if let Err(e) = async_job.send_sigkill() {
+                    error!(
+                        "Failed to SIGKILL OOM job workflow_id={} job_id={} error={}",
+                        self.workflow_id, violation.job_id, e
+                    );
+                } else {
+                    killed_job_ids.push(violation.job_id);
+                }
+            }
+        }
+
+        // Second pass: wait for completion and handle results
+        let mut results = Vec::new();
+        for job_id in &killed_job_ids {
+            if let Some(async_job) = self.running_jobs.get_mut(job_id) {
+                match async_job.wait_for_completion() {
+                    Ok(_) => {
+                        debug!(
+                            "OOM job exited workflow_id={} job_id={}",
+                            self.workflow_id, job_id
+                        );
+                    }
+                    Err(e) => {
+                        error!(
+                            "OOM job wait failed workflow_id={} job_id={} error={}",
+                            self.workflow_id, job_id, e
+                        );
+                    }
+                }
+
+                let attempt_id = async_job.job.attempt_id.unwrap_or(1);
+                let mut result = async_job.get_result(
+                    self.run_id,
+                    attempt_id,
+                    self.compute_node_id,
+                    self.resource_monitor.as_ref(),
+                );
+                result.return_code = oom_exit_code as i64;
+                result.status = JobStatus::Failed;
+                results.push((*job_id, result));
+            }
+        }
+
+        // Third pass: handle completions (notify server)
+        for (job_id, result) in results {
+            self.handle_job_completion(job_id, result)?;
+        }
+        Ok(())
     }
 
     /// Validate that all expected output files exist and update their st_mtime
@@ -855,16 +1315,17 @@ impl JobRunner {
 
         // Fetch file models and check existence
         for file_id in output_file_ids {
-            let file_model =
-                match self.send_with_retries(|| default_api::get_file(&self.config, *file_id)) {
-                    Ok(file) => file,
-                    Err(e) => {
-                        return Err(format!(
-                            "Failed to fetch file model for file_id {}: {}",
-                            file_id, e
-                        ));
-                    }
-                };
+            let file_model = match self.send_with_retries(|| {
+                Self::box_retry_error(apis::files_api::get_file(&self.config, *file_id))
+            }) {
+                Ok(file) => file,
+                Err(e) => {
+                    return Err(format!(
+                        "Failed to fetch file model for file_id {}: {}",
+                        file_id, e
+                    ));
+                }
+            };
 
             let file_path = Path::new(&file_model.path);
 
@@ -916,21 +1377,26 @@ impl JobRunner {
         let mut updated_file_models: Vec<crate::models::FileModel> = Vec::new();
 
         for (file_id, st_mtime) in files_to_update {
-            let mut file_model =
-                match self.send_with_retries(|| default_api::get_file(&self.config, file_id)) {
-                    Ok(file) => file,
-                    Err(e) => {
-                        error!(
-                            "Failed to re-fetch file model for file_id {}: {}",
-                            file_id, e
-                        );
-                        continue;
-                    }
-                };
+            let mut file_model = match self.send_with_retries(|| {
+                Self::box_retry_error(apis::files_api::get_file(&self.config, file_id))
+            }) {
+                Ok(file) => file,
+                Err(e) => {
+                    error!(
+                        "Failed to re-fetch file model for file_id {}: {}",
+                        file_id, e
+                    );
+                    continue;
+                }
+            };
 
             file_model.st_mtime = Some(st_mtime);
             match self.send_with_retries(|| {
-                default_api::update_file(&self.config, file_id, file_model.clone())
+                Self::box_retry_error(apis::files_api::update_file(
+                    &self.config,
+                    file_id,
+                    file_model.clone(),
+                ))
             }) {
                 Ok(_) => {
                     debug!("Updated st_mtime for file_id {} to {}", file_id, st_mtime);
@@ -992,7 +1458,9 @@ impl JobRunner {
         );
 
         // Fetch the job model to get job name for CreateAction
-        let job = match self.send_with_retries(|| default_api::get_job(&self.config, job_id)) {
+        let job = match self.send_with_retries(|| {
+            Self::box_retry_error(apis::jobs_api::get_job(&self.config, job_id))
+        }) {
             Ok(job) => job,
             Err(e) => {
                 warn!(
@@ -1012,7 +1480,9 @@ impl JobRunner {
             .unwrap_or_default()
             .into_iter()
             .filter_map(|file_id| {
-                match self.send_with_retries(|| default_api::get_file(&self.config, file_id)) {
+                match self.send_with_retries(|| {
+                    Self::box_retry_error(apis::files_api::get_file(&self.config, file_id))
+                }) {
                     Ok(file) => Some(file.path),
                     Err(e) => {
                         warn!(
@@ -1057,7 +1527,11 @@ impl JobRunner {
         }
     }
 
-    fn handle_job_completion(&mut self, job_id: i64, result: ResultModel) {
+    fn handle_job_completion(
+        &mut self,
+        job_id: i64,
+        result: ResultModel,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // Take sacct stats now, before the result is sent to the server, so we can backfill
         // resource fields.  For srun-wrapped jobs the sysinfo monitor only sees the srun process
         // (negligible overhead), so sacct provides the authoritative peak memory and CPU data.
@@ -1110,7 +1584,7 @@ impl JobRunner {
                     self.last_job_claimed_time = Some(Instant::now());
                     self.running_jobs.remove(&job_id);
                     self.job_resources.remove(&job_id);
-                    return;
+                    return Ok(());
                 }
                 RecoveryOutcome::NoHandler | RecoveryOutcome::NoMatchingRule => {
                     // Check if workflow has use_pending_failed enabled
@@ -1150,13 +1624,13 @@ impl JobRunner {
 
         let status_str = format!("{:?}", final_result.status).to_lowercase();
         match self.send_with_retries(|| {
-            default_api::complete_job(
+            Self::box_retry_error(apis::jobs_api::complete_job(
                 &self.config,
                 job_id,
                 final_result.status,
                 final_result.run_id,
                 final_result.clone(),
-            )
+            ))
         }) {
             Ok(_) => {
                 info!(
@@ -1167,7 +1641,7 @@ impl JobRunner {
                 // slurm_stats was taken at the top of handle_job_completion so we could backfill
                 // resource fields into the result before reporting to the server.
                 if let Some(stats) = slurm_stats {
-                    match default_api::create_slurm_stats(&self.config, stats) {
+                    match apis::slurm_stats_api::create_slurm_stats(&self.config, stats) {
                         Ok(_) => {
                             info!(
                                 "Stored slurm_stats workflow_id={} job_id={}",
@@ -1190,16 +1664,40 @@ impl JobRunner {
                 // become ready. This gives dependent jobs time to be picked up before
                 // the runner exits due to no jobs being claimed.
                 self.last_job_claimed_time = Some(Instant::now());
+
+                // Delete stdio files on successful completion if configured
+                if final_result.return_code == 0
+                    && let Some(cmd) = self.running_jobs.get(&job_id)
+                {
+                    let job_name = &cmd.job.name;
+                    if self.execution_config.delete_stdio_on_success(job_name) {
+                        Self::cleanup_stdio_files(cmd);
+                    }
+                }
             }
             Err(e) => {
                 error!(
-                    "Job complete failed workflow_id={} job_id={} error={}",
+                    "Job complete failed after retries workflow_id={} job_id={} error={}",
                     self.workflow_id, job_id, e
+                );
+                // Clean up local state before propagating the error
+                self.running_jobs.remove(&job_id);
+                self.job_resources.remove(&job_id);
+                self.release_gpu_devices(job_id);
+                return Err(
+                    format!("Unable to record job completion for job {}: {}", job_id, e).into(),
                 );
             }
         }
         self.running_jobs.remove(&job_id);
         self.job_resources.remove(&job_id);
+        self.release_gpu_devices(job_id);
+        Ok(())
+    }
+
+    /// Delete stdio files for a completed job.
+    fn cleanup_stdio_files(cmd: &AsyncCliCommand) {
+        cleanup_job_stdio_files(cmd.stdout_path.as_deref(), cmd.stderr_path.as_deref());
     }
 
     /// Run a recovery script with environment variables set.
@@ -1269,9 +1767,12 @@ impl JobRunner {
             None => return RecoveryOutcome::NoHandler,
         };
 
-        let handler = match self
-            .send_with_retries(|| default_api::get_failure_handler(&self.config, fh_id))
-        {
+        let handler = match self.send_with_retries(|| {
+            Self::box_retry_error(apis::failure_handlers_api::get_failure_handler(
+                &self.config,
+                fh_id,
+            ))
+        }) {
             Ok(h) => h,
             Err(e) => {
                 warn!(
@@ -1328,7 +1829,12 @@ impl JobRunner {
         // This ensures we don't run recovery scripts for retries that won't happen.
         // Pass max_retries for server-side validation.
         match self.send_with_retries(|| {
-            default_api::retry_job(&self.config, job_id, self.run_id, rule.max_retries)
+            Self::box_retry_error(apis::jobs_api::retry_job(
+                &self.config,
+                job_id,
+                self.run_id,
+                rule.max_retries,
+            ))
         }) {
             Ok(_) => {
                 info!(
@@ -1403,23 +1909,15 @@ impl JobRunner {
         Self::reserved_node_count(rr) > 1
     }
 
-    fn allocation_per_node_capacity(&self) -> (i64, f64, i64) {
-        let num_nodes = self.orig_resources.num_nodes.max(1);
-        (
-            self.orig_resources.num_cpus / num_nodes,
-            self.orig_resources.memory_gb / num_nodes as f64,
-            self.orig_resources.num_gpus / num_nodes,
-        )
-    }
-
     fn decrement_resources(&mut self, rr: &ResourceRequirementsModel) {
         if Self::is_multi_node_job(rr) {
+            // Resource requirements are per-node values, so multiply by the
+            // number of nodes the job reserves to get the total consumption.
             let reserved_nodes = Self::reserved_node_count(rr);
-            let (cpus_per_node, memory_gb_per_node, gpus_per_node) =
-                self.allocation_per_node_capacity();
-            self.resources.memory_gb -= memory_gb_per_node * reserved_nodes as f64;
-            self.resources.num_cpus -= cpus_per_node * reserved_nodes;
-            self.resources.num_gpus -= gpus_per_node * reserved_nodes;
+            let job_memory_gb = memory_string_to_gb(&rr.memory);
+            self.resources.memory_gb -= job_memory_gb * reserved_nodes as f64;
+            self.resources.num_cpus -= rr.num_cpus * reserved_nodes;
+            self.resources.num_gpus -= rr.num_gpus * reserved_nodes;
             self.resources.num_nodes -= reserved_nodes;
         } else {
             let job_memory_gb = memory_string_to_gb(&rr.memory);
@@ -1436,11 +1934,10 @@ impl JobRunner {
     fn increment_resources(&mut self, rr: &ResourceRequirementsModel) {
         if Self::is_multi_node_job(rr) {
             let reserved_nodes = Self::reserved_node_count(rr);
-            let (cpus_per_node, memory_gb_per_node, gpus_per_node) =
-                self.allocation_per_node_capacity();
-            self.resources.memory_gb += memory_gb_per_node * reserved_nodes as f64;
-            self.resources.num_cpus += cpus_per_node * reserved_nodes;
-            self.resources.num_gpus += gpus_per_node * reserved_nodes;
+            let job_memory_gb = memory_string_to_gb(&rr.memory);
+            self.resources.memory_gb += job_memory_gb * reserved_nodes as f64;
+            self.resources.num_cpus += rr.num_cpus * reserved_nodes;
+            self.resources.num_gpus += rr.num_gpus * reserved_nodes;
             self.resources.num_nodes += reserved_nodes;
         } else {
             let job_memory_gb = memory_string_to_gb(&rr.memory);
@@ -1575,14 +2072,13 @@ impl JobRunner {
         let limit = per_node.num_cpus;
         let strict_scheduler_match = self.torc_config.client.slurm.strict_scheduler_match;
         match self.send_with_retries(|| {
-            default_api::claim_jobs_based_on_resources(
+            Self::box_retry_error(apis::workflows_api::claim_jobs_based_on_resources(
                 &self.config,
                 self.workflow_id,
-                &per_node,
                 limit,
-                Some(self.rules.jobs_sort_method),
+                per_node.clone(),
                 Some(strict_scheduler_match),
-            )
+            ))
         }) {
             Ok(response) => {
                 let jobs = response.jobs.unwrap_or_default();
@@ -1612,39 +2108,55 @@ impl JobRunner {
                     let mut async_job = AsyncCliCommand::new(job);
 
                     let job_rr = match self.send_with_retries(|| {
-                        default_api::get_resource_requirements(&self.config, rr_id)
+                        Self::box_retry_error(
+                            apis::resource_requirements_api::get_resource_requirements(
+                                &self.config,
+                                rr_id,
+                            ),
+                        )
                     }) {
                         Ok(rr) => rr,
                         Err(e) => {
                             error!(
-                                "Error getting resource requirements for job {}: {}",
-                                job_id, e
+                                "Failed to get resource requirements after retries \
+                                 workflow_id={} job_id={} rr_id={}: {}",
+                                self.workflow_id, job_id, rr_id, e
                             );
-                            panic!("Failed to get resource requirements");
+                            self.revert_job_to_ready(job_id);
+                            continue;
                         }
                     };
 
                     match self.send_with_retries(|| {
-                        default_api::start_job(
+                        Self::box_retry_error(apis::jobs_api::start_job(
                             &self.config,
                             job_id,
                             self.run_id,
                             self.compute_node_id,
-                            None,
-                        )
+                        ))
                     }) {
                         Ok(_) => {
                             debug!("Successfully marked job {} as started in database", job_id);
                         }
                         Err(e) => {
-                            panic!(
-                                "Failed to mark job {} as started in database after retries: {}",
-                                job_id, e
+                            error!(
+                                "Failed to mark job as started after retries \
+                                 workflow_id={} job_id={}: {}",
+                                self.workflow_id, job_id, e
                             );
+                            self.revert_job_to_ready(job_id);
+                            continue;
                         }
                     }
 
                     let attempt_id = async_job.job.attempt_id.unwrap_or(1);
+                    let effective_mode = self.execution_config.effective_mode();
+                    let gpu_visible_devices = if effective_mode == ExecutionMode::Slurm {
+                        None
+                    } else {
+                        self.allocate_gpu_devices(job_id, job_rr.num_gpus)
+                    };
+                    let stdio_config = self.execution_config.stdio_for_job(&async_job.job.name);
                     match async_job.start(
                         &self.output_dir,
                         self.workflow_id,
@@ -1653,12 +2165,15 @@ impl JobRunner {
                         self.resource_monitor.as_ref(),
                         &self.config.base_path,
                         Some(&job_rr),
-                        self.slurm_config.limit_resources(),
-                        self.slurm_config.use_srun(),
-                        self.slurm_config.enable_cpu_bind(),
+                        gpu_visible_devices.as_deref(),
+                        self.execution_config.limit_resources(),
+                        effective_mode,
+                        self.execution_config.enable_cpu_bind(),
                         self.end_time,
-                        self.slurm_config.srun_termination_signal.as_deref(),
+                        self.execution_config.srun_termination_signal.as_deref(),
+                        self.execution_config.sigkill_headroom_seconds(),
                         target_node,
+                        &stdio_config.mode,
                     ) {
                         Ok(()) => {
                             info!(
@@ -1682,6 +2197,7 @@ impl JobRunner {
                                 "Job start failed workflow_id={} job_id={} error={}",
                                 self.workflow_id, job_id, e
                             );
+                            self.revert_job_to_ready(job_id);
                             continue;
                         }
                     }
@@ -1711,7 +2227,11 @@ impl JobRunner {
             .expect("max_parallel_jobs must be set")
             - self.running_jobs.len() as i64;
         match self.send_with_retries(|| {
-            default_api::claim_next_jobs(&self.config, self.workflow_id, Some(limit), None)
+            Self::box_retry_error(apis::workflows_api::claim_next_jobs(
+                &self.config,
+                self.workflow_id,
+                Some(limit),
+            ))
         }) {
             Ok(response) => {
                 let jobs = response.jobs.unwrap_or_default();
@@ -1739,42 +2259,56 @@ impl JobRunner {
                     let mut async_job = AsyncCliCommand::new(job);
 
                     let job_rr = match self.send_with_retries(|| {
-                        default_api::get_resource_requirements(&self.config, rr_id)
+                        Self::box_retry_error(
+                            apis::resource_requirements_api::get_resource_requirements(
+                                &self.config,
+                                rr_id,
+                            ),
+                        )
                     }) {
                         Ok(rr) => rr,
                         Err(e) => {
                             error!(
-                                "Error getting resource requirements for job {}: {}",
-                                job_id, e
+                                "Failed to get resource requirements after retries \
+                                 workflow_id={} job_id={} rr_id={}: {}",
+                                self.workflow_id, job_id, rr_id, e
                             );
-                            panic!("Failed to get resource requirements");
+                            self.revert_job_to_ready(job_id);
+                            continue;
                         }
                     };
 
                     // Mark job as started in the database before actually starting it
                     match self.send_with_retries(|| {
-                        default_api::start_job(
+                        Self::box_retry_error(apis::jobs_api::start_job(
                             &self.config,
                             job_id,
                             self.run_id,
                             self.compute_node_id,
-                            None,
-                        )
+                        ))
                     }) {
                         Ok(_) => {
                             debug!("Successfully marked job {} as started in database", job_id);
                         }
                         Err(e) => {
                             error!(
-                                "Failed to mark job {} as started in database after retries: {}",
-                                job_id, e
+                                "Failed to mark job as started after retries \
+                                 workflow_id={} job_id={}: {}",
+                                self.workflow_id, job_id, e
                             );
-                            // Skip this job if we can't mark it as started
+                            self.revert_job_to_ready(job_id);
                             continue;
                         }
                     }
 
                     let attempt_id = async_job.job.attempt_id.unwrap_or(1);
+                    let effective_mode = self.execution_config.effective_mode();
+                    let gpu_visible_devices = if effective_mode == ExecutionMode::Slurm {
+                        None
+                    } else {
+                        self.allocate_gpu_devices(job_id, job_rr.num_gpus)
+                    };
+                    let stdio_config = self.execution_config.stdio_for_job(&async_job.job.name);
                     match async_job.start(
                         &self.output_dir,
                         self.workflow_id,
@@ -1783,12 +2317,15 @@ impl JobRunner {
                         self.resource_monitor.as_ref(),
                         &self.config.base_path,
                         Some(&job_rr),
-                        self.slurm_config.limit_resources(),
-                        self.slurm_config.use_srun(),
-                        self.slurm_config.enable_cpu_bind(),
+                        gpu_visible_devices.as_deref(),
+                        self.execution_config.limit_resources(),
+                        effective_mode,
+                        self.execution_config.enable_cpu_bind(),
                         self.end_time,
-                        self.slurm_config.srun_termination_signal.as_deref(),
+                        self.execution_config.srun_termination_signal.as_deref(),
+                        self.execution_config.sigkill_headroom_seconds(),
                         None, // target_node: user-parallelism mode doesn't use per-node placement
+                        &stdio_config.mode,
                     ) {
                         Ok(()) => {
                             info!(
@@ -1806,6 +2343,7 @@ impl JobRunner {
                                 "Job start failed workflow_id={} job_id={} error={}",
                                 self.workflow_id, job_id, e
                             );
+                            self.revert_job_to_ready(job_id);
                             continue;
                         }
                     }
@@ -1813,12 +2351,40 @@ impl JobRunner {
             }
             Err(err) => {
                 error!(
-                    "Job preparation failed workflow_id={} error={}",
+                    "Failed to claim jobs after retries workflow_id={}: {}",
                     self.workflow_id, err
                 );
-                panic!("Failed to prepare jobs for submission after retries");
             }
         }
+    }
+
+    /// Revert a job's status back to Ready after a failed start attempt.
+    ///
+    /// This allows the job to be picked up by another worker. Also releases any
+    /// GPU devices that were reserved for the job.
+    fn revert_job_to_ready(&mut self, job_id: i64) {
+        match self.send_with_retries(|| {
+            Self::box_retry_error(apis::jobs_api::manage_status_change(
+                &self.config,
+                job_id,
+                JobStatus::Ready,
+                self.run_id,
+            ))
+        }) {
+            Ok(_) => {
+                info!(
+                    "Reverted job to ready workflow_id={} job_id={}",
+                    self.workflow_id, job_id
+                );
+            }
+            Err(revert_err) => {
+                error!(
+                    "Failed to revert job to ready workflow_id={} job_id={} error={}",
+                    self.workflow_id, job_id, revert_err
+                );
+            }
+        }
+        self.release_gpu_devices(job_id);
     }
 
     /// Helper method to execute actions of a specific trigger type.
@@ -1836,7 +2402,7 @@ impl JobRunner {
         let trigger_type_owned = trigger_type.to_string();
         let pending_actions = match self.send_with_retries(
             || -> Result<Vec<crate::models::WorkflowActionModel>, Box<dyn std::error::Error>> {
-                let actions = default_api::get_pending_actions(
+                let actions = apis::workflow_actions_api::get_pending_actions(
                     &self.config,
                     self.workflow_id,
                     Some(vec![trigger_type_owned.clone()]),
@@ -1937,7 +2503,7 @@ impl JobRunner {
         // Get pending on_jobs_ready and on_jobs_complete actions
         let pending_actions = match self.send_with_retries(
             || -> Result<Vec<crate::models::WorkflowActionModel>, Box<dyn std::error::Error>> {
-                let actions = default_api::get_pending_actions(
+                let actions = apis::workflow_actions_api::get_pending_actions(
                     &self.config,
                     self.workflow_id,
                     Some(vec![
@@ -2026,7 +2592,10 @@ impl JobRunner {
         // Get ALL actions for this workflow (not just pending ones)
         match self.send_with_retries(
             || -> Result<Vec<crate::models::WorkflowActionModel>, Box<dyn std::error::Error>> {
-                let actions = default_api::get_workflow_actions(&self.config, self.workflow_id)?;
+                let actions = apis::workflow_actions_api::get_workflow_actions(
+                    &self.config,
+                    self.workflow_id,
+                )?;
                 Ok(actions)
             },
         ) {
@@ -2162,6 +2731,10 @@ impl JobRunner {
                     .get("num_allocations")
                     .and_then(|v| v.as_i64())
                     .unwrap_or(1) as i32;
+                let start_one_worker_per_node = action_config
+                    .get("start_one_worker_per_node")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
 
                 let max_parallel_jobs = action_config
                     .get("max_parallel_jobs")
@@ -2180,6 +2753,7 @@ impl JobRunner {
                         self.workflow_id,
                         scheduler_id,
                         num_allocations,
+                        start_one_worker_per_node,
                         "",
                         "torc_output",
                         self.torc_config.client.slurm.poll_interval,
@@ -2224,7 +2798,6 @@ struct ComputeNodeRules {
     /// If the remaining time is less than this value, the compute node will stop requesting
     /// new jobs and wait for running jobs to complete. Default is 300 seconds (5 minutes).
     pub compute_node_min_time_for_new_jobs_seconds: u64,
-    pub jobs_sort_method: ClaimJobsSortMethod,
 }
 
 impl ComputeNodeRules {
@@ -2233,7 +2806,6 @@ impl ComputeNodeRules {
         compute_node_ignore_workflow_completion: Option<bool>,
         compute_node_wait_for_healthy_database_minutes: Option<i64>,
         compute_node_min_time_for_new_jobs_seconds: Option<i64>,
-        jobs_sort_method: Option<ClaimJobsSortMethod>,
     ) -> Self {
         ComputeNodeRules {
             compute_node_wait_for_new_jobs_seconds: compute_node_wait_for_new_jobs_seconds
@@ -2244,7 +2816,23 @@ impl ComputeNodeRules {
                 compute_node_wait_for_healthy_database_minutes.unwrap_or(20) as u64,
             compute_node_min_time_for_new_jobs_seconds: compute_node_min_time_for_new_jobs_seconds
                 .unwrap_or(300) as u64,
-            jobs_sort_method: jobs_sort_method.unwrap_or(ClaimJobsSortMethod::GpusRuntimeMemory),
+        }
+    }
+}
+
+/// Delete stdio files for a completed job given optional stdout and stderr paths.
+///
+/// Silently ignores files that don't exist (e.g., when using `NoStdout` or `NoStderr` modes).
+pub fn cleanup_job_stdio_files(stdout_path: Option<&str>, stderr_path: Option<&str>) {
+    for path in [stdout_path, stderr_path].iter().copied().flatten() {
+        match std::fs::remove_file(path) {
+            Ok(()) => {
+                debug!("Deleted stdio file: {}", path);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => {
+                warn!("Failed to delete stdio file {}: {}", path, e);
+            }
         }
     }
 }
@@ -2264,8 +2852,6 @@ impl ComputeNodeRules {
 ///
 /// `avg_memory_bytes` is left as-is: sacct does not provide an average RSS; that comes
 /// from the sstat time-series if TimeSeries monitoring was configured.
-/// Backfill sacct accounting data into a job result, preferring the max of sacct vs sstat peaks.
-///
 /// This ensures that even when sstat time-series monitoring missed a spike, the sacct
 /// post-mortem data fills in accurate resource usage.
 fn backfill_sacct_into_result(result: &mut ResultModel, stats: &SlurmStatsModel) {
@@ -2344,6 +2930,7 @@ mod tests {
     use super::*;
     use crate::client::apis::configuration::Configuration;
     use crate::models::{JobStatus, ResultModel, SlurmStatsModel};
+    use serial_test::serial;
 
     fn make_result(
         peak_memory_bytes: Option<i64>,
@@ -2441,6 +3028,36 @@ mod tests {
         let stats = make_stats(None, None);
         backfill_sacct_into_result(&mut result, &stats);
         assert_eq!(result.peak_memory_bytes, None);
+    }
+
+    #[test]
+    fn test_direct_mode_timeout_start_time_subtracts_headroom_and_lead() {
+        let mut runner = make_runner(ComputeNodesResources::new(1, 1.0, 0, 1));
+        runner.execution_config = ExecutionConfig {
+            mode: ExecutionMode::Direct,
+            sigterm_lead_seconds: Some(30),
+            sigkill_headroom_seconds: Some(60),
+            ..Default::default()
+        };
+
+        let end_time = Utc::now() + chrono::Duration::hours(1);
+        let timeout_start = runner.direct_mode_timeout_start_time(end_time);
+
+        assert_eq!(timeout_start, end_time - chrono::Duration::seconds(90));
+    }
+
+    #[test]
+    fn test_direct_mode_timeout_start_time_uses_default_values() {
+        let mut runner = make_runner(ComputeNodesResources::new(1, 1.0, 0, 1));
+        runner.execution_config = ExecutionConfig {
+            mode: ExecutionMode::Direct,
+            ..Default::default()
+        };
+
+        let end_time = Utc::now() + chrono::Duration::hours(1);
+        let timeout_start = runner.direct_mode_timeout_start_time(end_time);
+
+        assert_eq!(timeout_start, end_time - chrono::Duration::seconds(90));
     }
 
     #[test]
@@ -2555,9 +3172,11 @@ mod tests {
     }
 
     #[test]
-    fn test_multi_node_job_reserves_full_nodes() {
+    fn test_multi_node_job_reserves_per_node_resources() {
+        // Allocation: 4 nodes, 64 CPUs, 256 GB, 4 GPUs total
         let resources = ComputeNodesResources::new(64, 256.0, 4, 4);
         let mut runner = make_runner(resources);
+        // Job: 2 nodes, 16 CPUs/node, 0 GPUs/node, 64g/node
         let rr = ResourceRequirementsModel {
             id: Some(1),
             workflow_id: 1,
@@ -2571,10 +3190,36 @@ mod tests {
 
         runner.decrement_resources(&rr);
 
+        // Should decrement by job requirements × num_nodes, not allocation capacity
         assert_eq!(runner.resources.num_nodes, 2);
-        assert_eq!(runner.resources.num_cpus, 32);
-        assert!((runner.resources.memory_gb - 128.0).abs() < 0.01);
-        assert_eq!(runner.resources.num_gpus, 2);
+        assert_eq!(runner.resources.num_cpus, 32); // 64 - 16*2
+        assert!((runner.resources.memory_gb - 128.0).abs() < 0.01); // 256 - 64*2
+        assert_eq!(runner.resources.num_gpus, 4); // 4 - 0*2 (job needs no GPUs)
+    }
+
+    #[test]
+    fn test_multi_node_gpu_job_reserves_correct_gpus() {
+        // Allocation: 2 nodes, 16 CPUs, 64 GB, 4 GPUs total (2 per node)
+        let resources = ComputeNodesResources::new(16, 64.0, 4, 2);
+        let mut runner = make_runner(resources);
+        // Job: 2 nodes, 8 CPUs/node, 1 GPU/node, 16g/node
+        let rr = ResourceRequirementsModel {
+            id: Some(1),
+            workflow_id: 1,
+            name: "gpu_mpi".to_string(),
+            num_cpus: 8,
+            num_gpus: 1,
+            num_nodes: 2,
+            memory: "16g".to_string(),
+            runtime: "PT1H".to_string(),
+        };
+
+        runner.decrement_resources(&rr);
+
+        assert_eq!(runner.resources.num_nodes, 0);
+        assert_eq!(runner.resources.num_cpus, 0); // 16 - 8*2
+        assert!((runner.resources.memory_gb - 32.0).abs() < 0.01); // 64 - 16*2
+        assert_eq!(runner.resources.num_gpus, 2); // 4 - 1*2
     }
 
     #[test]
@@ -2599,5 +3244,447 @@ mod tests {
         assert_eq!(runner.resources.num_cpus, resources.num_cpus);
         assert!((runner.resources.memory_gb - resources.memory_gb).abs() < 0.01);
         assert_eq!(runner.resources.num_gpus, resources.num_gpus);
+    }
+
+    /// The original bug: a single-node GPU job followed by a multi-node job
+    /// would over-decrement GPUs and panic on the assertion.
+    #[test]
+    fn test_single_node_then_multi_node_no_panic() {
+        // 2 nodes, 4 GPUs total (2 per node), 16 CPUs, 64 GB
+        let resources = ComputeNodesResources::new(16, 64.0, 4, 2);
+        let mut runner = make_runner(resources);
+
+        // Single-node job takes 1 GPU
+        let single = ResourceRequirementsModel {
+            id: Some(1),
+            workflow_id: 1,
+            name: "single_gpu".to_string(),
+            num_cpus: 4,
+            num_gpus: 1,
+            num_nodes: 1,
+            memory: "8g".to_string(),
+            runtime: "PT1H".to_string(),
+        };
+        runner.decrement_resources(&single);
+        assert_eq!(runner.resources.num_gpus, 3);
+        assert_eq!(runner.resources.num_nodes, 2);
+
+        // 2-node job takes 1 GPU/node = 2 GPUs total
+        let multi = ResourceRequirementsModel {
+            id: Some(2),
+            workflow_id: 1,
+            name: "multi_gpu".to_string(),
+            num_cpus: 4,
+            num_gpus: 1,
+            num_nodes: 2,
+            memory: "8g".to_string(),
+            runtime: "PT1H".to_string(),
+        };
+        runner.decrement_resources(&multi);
+        assert_eq!(runner.resources.num_gpus, 1); // 3 - 1*2
+        assert_eq!(runner.resources.num_nodes, 0);
+
+        // Release both
+        runner.increment_resources(&multi);
+        assert_eq!(runner.resources.num_gpus, 3);
+        assert_eq!(runner.resources.num_nodes, 2);
+
+        runner.increment_resources(&single);
+        assert_eq!(runner.resources.num_gpus, 4);
+        assert_eq!(runner.resources.num_nodes, 2);
+    }
+
+    /// Multi-node job completes, then single-node jobs use freed resources.
+    #[test]
+    fn test_multi_node_then_single_node_jobs() {
+        // 2 nodes, 4 GPUs total (2 per node)
+        let resources = ComputeNodesResources::new(16, 64.0, 4, 2);
+        let mut runner = make_runner(resources);
+
+        // 2-node job takes all nodes but only 1 GPU/node
+        let multi = ResourceRequirementsModel {
+            id: Some(1),
+            workflow_id: 1,
+            name: "multi".to_string(),
+            num_cpus: 4,
+            num_gpus: 1,
+            num_nodes: 2,
+            memory: "8g".to_string(),
+            runtime: "PT1H".to_string(),
+        };
+        runner.decrement_resources(&multi);
+        assert_eq!(runner.resources.num_gpus, 2); // 4 - 1*2
+        assert_eq!(runner.resources.num_nodes, 0);
+
+        // resources_per_node reports 0 nodes → server won't claim any jobs
+        let per_node = runner.resources_per_node();
+        assert_eq!(per_node.num_nodes, 0);
+
+        // Multi-node job finishes
+        runner.increment_resources(&multi);
+        assert_eq!(runner.resources.num_gpus, 4);
+        assert_eq!(runner.resources.num_nodes, 2);
+
+        // Now single-node jobs can run
+        let single = ResourceRequirementsModel {
+            id: Some(2),
+            workflow_id: 1,
+            name: "single".to_string(),
+            num_cpus: 8,
+            num_gpus: 2,
+            num_nodes: 1,
+            memory: "16g".to_string(),
+            runtime: "PT1H".to_string(),
+        };
+        runner.decrement_resources(&single);
+        assert_eq!(runner.resources.num_gpus, 2);
+        assert_eq!(runner.resources.num_cpus, 8);
+    }
+
+    /// Two multi-node jobs run sequentially without resource corruption.
+    #[test]
+    fn test_sequential_multi_node_jobs() {
+        // 4 nodes, 8 GPUs total (2 per node)
+        let resources = ComputeNodesResources::new(32, 128.0, 8, 4);
+        let mut runner = make_runner(resources.clone());
+
+        let job_a = ResourceRequirementsModel {
+            id: Some(1),
+            workflow_id: 1,
+            name: "job_a".to_string(),
+            num_cpus: 8,
+            num_gpus: 2,
+            num_nodes: 4,
+            memory: "32g".to_string(),
+            runtime: "PT1H".to_string(),
+        };
+        runner.decrement_resources(&job_a);
+        assert_eq!(runner.resources.num_gpus, 0); // 8 - 2*4
+        assert_eq!(runner.resources.num_nodes, 0);
+
+        runner.increment_resources(&job_a);
+
+        // Second job with different resource needs
+        let job_b = ResourceRequirementsModel {
+            id: Some(2),
+            workflow_id: 1,
+            name: "job_b".to_string(),
+            num_cpus: 4,
+            num_gpus: 1,
+            num_nodes: 2,
+            memory: "16g".to_string(),
+            runtime: "PT1H".to_string(),
+        };
+        runner.decrement_resources(&job_b);
+        assert_eq!(runner.resources.num_gpus, 6); // 8 - 1*2
+        assert_eq!(runner.resources.num_nodes, 2);
+
+        runner.increment_resources(&job_b);
+        assert_eq!(runner.resources.num_gpus, resources.num_gpus);
+        assert_eq!(runner.resources.num_nodes, resources.num_nodes);
+    }
+
+    /// Mixed single-node and multi-node jobs with GPUs interleaved.
+    #[test]
+    fn test_mixed_single_and_multi_node_interleaved() {
+        // 4 nodes, 16 GPUs total (4 per node), 64 CPUs
+        let resources = ComputeNodesResources::new(64, 256.0, 16, 4);
+        let mut runner = make_runner(resources.clone());
+
+        // Start a single-node job: 1 GPU, 4 CPUs
+        let s1 = ResourceRequirementsModel {
+            id: Some(1),
+            workflow_id: 1,
+            name: "s1".to_string(),
+            num_cpus: 4,
+            num_gpus: 1,
+            num_nodes: 1,
+            memory: "16g".to_string(),
+            runtime: "PT1H".to_string(),
+        };
+        runner.decrement_resources(&s1);
+        assert_eq!(runner.resources.num_gpus, 15);
+
+        // Start a 2-node job: 2 GPUs/node
+        let m1 = ResourceRequirementsModel {
+            id: Some(2),
+            workflow_id: 1,
+            name: "m1".to_string(),
+            num_cpus: 8,
+            num_gpus: 2,
+            num_nodes: 2,
+            memory: "32g".to_string(),
+            runtime: "PT1H".to_string(),
+        };
+        runner.decrement_resources(&m1);
+        assert_eq!(runner.resources.num_gpus, 11); // 15 - 2*2
+        assert_eq!(runner.resources.num_nodes, 2);
+
+        // Start another single-node job
+        let s2 = ResourceRequirementsModel {
+            id: Some(3),
+            workflow_id: 1,
+            name: "s2".to_string(),
+            num_cpus: 4,
+            num_gpus: 3,
+            num_nodes: 1,
+            memory: "16g".to_string(),
+            runtime: "PT1H".to_string(),
+        };
+        runner.decrement_resources(&s2);
+        assert_eq!(runner.resources.num_gpus, 8); // 11 - 3
+
+        // Complete multi-node job
+        runner.increment_resources(&m1);
+        assert_eq!(runner.resources.num_gpus, 12); // 8 + 2*2
+        assert_eq!(runner.resources.num_nodes, 4);
+
+        // Complete both single-node jobs
+        runner.increment_resources(&s1);
+        runner.increment_resources(&s2);
+        assert_eq!(runner.resources.num_gpus, resources.num_gpus);
+        assert_eq!(runner.resources.num_cpus, resources.num_cpus);
+        assert_eq!(runner.resources.num_nodes, resources.num_nodes);
+    }
+
+    /// resources_per_node divides remaining totals by remaining nodes, so the
+    /// server sees accurate per-node availability for claiming.
+    #[test]
+    fn test_resources_per_node_after_multi_node_decrement() {
+        // 4 nodes, 8 GPUs total (2 per node), 32 CPUs (8 per node)
+        let resources = ComputeNodesResources::new(32, 128.0, 8, 4);
+        let mut runner = make_runner(resources);
+
+        // 2-node job takes 1 GPU/node, 4 CPUs/node
+        let rr = ResourceRequirementsModel {
+            id: Some(1),
+            workflow_id: 1,
+            name: "multi".to_string(),
+            num_cpus: 4,
+            num_gpus: 1,
+            num_nodes: 2,
+            memory: "16g".to_string(),
+            runtime: "PT1H".to_string(),
+        };
+        runner.decrement_resources(&rr);
+
+        let per_node = runner.resources_per_node();
+        // 2 nodes remain, 6 GPUs remain → 3 GPUs/node reported
+        assert_eq!(per_node.num_nodes, 2);
+        assert_eq!(per_node.num_gpus, 3); // 6 / 2
+        assert_eq!(per_node.num_cpus, 12); // 24 / 2
+    }
+
+    /// When all nodes are consumed, resources_per_node reports 0 nodes so the
+    /// server cannot claim any more jobs.
+    #[test]
+    fn test_resources_per_node_all_nodes_consumed() {
+        // 2 nodes, 4 GPUs total
+        let resources = ComputeNodesResources::new(16, 64.0, 4, 2);
+        let mut runner = make_runner(resources);
+
+        let rr = ResourceRequirementsModel {
+            id: Some(1),
+            workflow_id: 1,
+            name: "full".to_string(),
+            num_cpus: 4,
+            num_gpus: 1,
+            num_nodes: 2,
+            memory: "16g".to_string(),
+            runtime: "PT1H".to_string(),
+        };
+        runner.decrement_resources(&rr);
+
+        let per_node = runner.resources_per_node();
+        assert_eq!(per_node.num_nodes, 0);
+        // num_nodes.max(1) in resources_per_node prevents division by zero;
+        // remaining GPUs/CPUs are still visible but 0 nodes blocks claiming.
+        assert_eq!(per_node.num_gpus, 2); // 2 GPUs left but 0 nodes
+    }
+
+    // =========================================================================
+    // GPU device allocation tests
+    // =========================================================================
+
+    /// Clear GPU-related env vars so `detect_gpu_devices()` falls back to ordinal
+    /// indices, making tests deterministic regardless of the host environment.
+    fn clear_gpu_env_vars() {
+        // SAFETY: GPU tests are marked #[serial] so no concurrent env var access.
+        unsafe {
+            std::env::remove_var("CUDA_VISIBLE_DEVICES");
+            std::env::remove_var("SLURM_STEP_GPUS");
+            std::env::remove_var("SLURM_JOB_GPUS");
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_allocate_gpu_devices_zero_gpus_returns_none() {
+        clear_gpu_env_vars();
+        let resources = ComputeNodesResources::new(4, 16.0, 2, 1);
+        let mut runner = make_runner(resources);
+        assert_eq!(runner.allocate_gpu_devices(1, 0), None);
+        assert_eq!(runner.allocate_gpu_devices(1, -1), None);
+    }
+
+    #[test]
+    #[serial]
+    fn test_slurm_mode_keeps_allocation_gpu_count_when_env_is_per_node() {
+        clear_gpu_env_vars();
+        // SAFETY: GPU tests are marked #[serial] so no concurrent env var access.
+        unsafe {
+            std::env::set_var("SLURM_JOB_ID", "12345");
+            std::env::set_var("CUDA_VISIBLE_DEVICES", "0,1,2,3");
+        }
+
+        let resources = ComputeNodesResources::new(64, 256.0, 8, 2);
+        let mut workflow = WorkflowModel::new("test".to_string(), "user".to_string());
+        workflow.id = Some(1);
+        workflow.execution_config = Some(
+            serde_json::to_string(&ExecutionConfig {
+                mode: ExecutionMode::Slurm,
+                ..Default::default()
+            })
+            .expect("execution config should serialize"),
+        );
+
+        let mut runner = JobRunner::new(
+            Configuration::default(),
+            workflow,
+            1,
+            1,
+            PathBuf::from("/tmp"),
+            1.0,
+            None,
+            None,
+            None,
+            resources,
+            None,
+            None,
+            None,
+            false,
+            "test".to_string(),
+            None,
+        );
+
+        assert_eq!(runner.resources.num_gpus, 8);
+        assert_eq!(runner.orig_resources.num_gpus, 8);
+        assert_eq!(runner.available_gpu_devices.len(), 8);
+
+        let rr = ResourceRequirementsModel {
+            id: Some(1),
+            workflow_id: 1,
+            name: "multi_gpu".to_string(),
+            num_cpus: 16,
+            num_gpus: 2,
+            num_nodes: 2,
+            memory: "64g".to_string(),
+            runtime: "PT1H".to_string(),
+        };
+        runner.decrement_resources(&rr);
+        assert_eq!(runner.resources.num_gpus, 4);
+        assert_eq!(runner.resources.num_nodes, 0);
+
+        // SAFETY: GPU tests are marked #[serial] so no concurrent env var access.
+        unsafe {
+            std::env::remove_var("SLURM_JOB_ID");
+        }
+        clear_gpu_env_vars();
+    }
+
+    #[test]
+    #[serial]
+    fn test_allocate_gpu_devices_normal_allocation() {
+        clear_gpu_env_vars();
+        let resources = ComputeNodesResources::new(4, 16.0, 4, 1);
+        let mut runner = make_runner(resources);
+
+        // Allocate 2 GPUs for job 1
+        let result = runner.allocate_gpu_devices(1, 2);
+        assert_eq!(result, Some("0,1".to_string()));
+
+        // Allocate 1 GPU for job 2
+        let result = runner.allocate_gpu_devices(2, 1);
+        assert_eq!(result, Some("2".to_string()));
+
+        // Only 1 GPU left
+        assert_eq!(runner.available_gpu_devices.len(), 1);
+    }
+
+    #[test]
+    #[serial]
+    fn test_allocate_gpu_devices_release_returns_to_pool() {
+        clear_gpu_env_vars();
+        let resources = ComputeNodesResources::new(4, 16.0, 2, 1);
+        let mut runner = make_runner(resources);
+
+        // Allocate all GPUs
+        let result = runner.allocate_gpu_devices(1, 2);
+        assert_eq!(result, Some("0,1".to_string()));
+        assert!(runner.available_gpu_devices.is_empty());
+
+        // Release them
+        runner.release_gpu_devices(1);
+        assert_eq!(runner.available_gpu_devices.len(), 2);
+
+        // Can allocate again
+        let result = runner.allocate_gpu_devices(2, 2);
+        assert_eq!(result, Some("0,1".to_string()));
+    }
+
+    #[test]
+    #[serial]
+    fn test_allocate_gpu_devices_fallback_on_exhaustion() {
+        clear_gpu_env_vars();
+        let resources = ComputeNodesResources::new(4, 16.0, 2, 1);
+        let mut runner = make_runner(resources);
+
+        // Exhaust the pool
+        let result = runner.allocate_gpu_devices(1, 2);
+        assert_eq!(result, Some("0,1".to_string()));
+
+        // Pool is empty — should get round-robin fallback
+        let result = runner.allocate_gpu_devices(2, 1);
+        assert_eq!(result, Some("0".to_string()));
+
+        // Next round-robin picks device 1
+        let result = runner.allocate_gpu_devices(3, 1);
+        assert_eq!(result, Some("1".to_string()));
+
+        // Wraps around
+        let result = runner.allocate_gpu_devices(4, 1);
+        assert_eq!(result, Some("0".to_string()));
+    }
+
+    #[test]
+    #[serial]
+    fn test_allocate_gpu_devices_fallback_multi_gpu() {
+        clear_gpu_env_vars();
+        let resources = ComputeNodesResources::new(4, 16.0, 3, 1);
+        let mut runner = make_runner(resources);
+
+        // Exhaust the pool
+        runner.allocate_gpu_devices(1, 3);
+
+        // Request 2 GPUs via fallback — should get round-robin across pool of 3
+        let result = runner.allocate_gpu_devices(2, 2);
+        assert_eq!(result, Some("0,1".to_string()));
+
+        // Next fallback continues from counter=2
+        let result = runner.allocate_gpu_devices(3, 2);
+        assert_eq!(result, Some("2,0".to_string()));
+    }
+
+    #[test]
+    #[serial]
+    fn test_allocate_gpu_devices_no_pool_returns_none() {
+        clear_gpu_env_vars();
+        // 0 GPUs configured
+        let resources = ComputeNodesResources::new(4, 16.0, 0, 1);
+        let mut runner = make_runner(resources);
+
+        // Even with fallback, no devices exist
+        let result = runner.allocate_gpu_devices(1, 1);
+        assert_eq!(result, None);
     }
 }

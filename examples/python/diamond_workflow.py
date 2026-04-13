@@ -8,8 +8,8 @@ from pathlib import Path
 from loguru import logger
 
 from torc import create_jobs, make_api, setup_logging
+from torc.api import DefaultApi
 from torc.openapi_client import (
-    DefaultApi,
     FileModel,
     JobModel,
     ResourceRequirementsModel,

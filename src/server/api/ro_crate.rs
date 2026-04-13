@@ -2,22 +2,39 @@
 
 #![allow(clippy::too_many_arguments)]
 
+use crate::server::transport_types::context_types::{ApiError, Has, XSpanIdString};
 use async_trait::async_trait;
 use log::{debug, info};
 use sqlx::Row;
-use swagger::{ApiError, Has, XSpanIdString};
 
-use crate::server::api_types::{
+use crate::server::api_responses::{
     CreateRoCrateEntityResponse, DeleteRoCrateEntitiesResponse, DeleteRoCrateEntityResponse,
     GetRoCrateEntityResponse, ListRoCrateEntitiesResponse, UpdateRoCrateEntityResponse,
 };
 
 use crate::models;
 
-use sha2::{Digest, Sha256};
-use std::io::Read as IoRead;
+use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg};
 
-use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, database_error_with_msg};
+const RO_CRATE_ENTITY_COLUMNS: &[&str] = &[
+    "id",
+    "workflow_id",
+    "file_id",
+    "entity_id",
+    "entity_type",
+    "metadata",
+];
+
+/// The current version of this binary, set at compile time.
+const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// The git commit hash of this binary, set at compile time via build.rs.
+const GIT_HASH: &str = env!("GIT_HASH");
+
+/// Returns the full version string including git hash (e.g., "0.8.0 (abc1234)")
+fn full_version() -> String {
+    format!("{} ({})", SERVER_VERSION, GIT_HASH)
+}
 
 fn id_ref(id: impl AsRef<str>) -> serde_json::Value {
     serde_json::json!({ "@id": id.as_ref() })
@@ -50,6 +67,8 @@ pub trait RoCrateApi<C> {
         workflow_id: i64,
         offset: i64,
         limit: i64,
+        sort_by: Option<String>,
+        reverse_sort: Option<bool>,
         context: &C,
     ) -> Result<ListRoCrateEntitiesResponse, ApiError>;
 
@@ -65,7 +84,6 @@ pub trait RoCrateApi<C> {
     async fn delete_ro_crate_entity(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteRoCrateEntityResponse, ApiError>;
 
@@ -73,25 +91,8 @@ pub trait RoCrateApi<C> {
     async fn delete_ro_crate_entities(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteRoCrateEntitiesResponse, ApiError>;
-}
-
-/// Compute the SHA256 hash of a file, returning the hex string or None on error.
-fn compute_file_sha256(path: &str) -> Option<String> {
-    let file = std::fs::File::open(path).ok()?;
-    let mut reader = std::io::BufReader::new(file);
-    let mut hasher = Sha256::new();
-    let mut buffer = [0u8; 8192];
-    loop {
-        match reader.read(&mut buffer) {
-            Ok(0) => break,
-            Ok(n) => hasher.update(&buffer[..n]),
-            Err(_) => return None,
-        }
-    }
-    Some(format!("{:x}", hasher.finalize()))
 }
 
 /// Implementation of RO-Crate entity API for the server
@@ -411,29 +412,20 @@ impl RoCrateApiImpl {
             return Ok(());
         }
 
-        let version = env!("CARGO_PKG_VERSION");
+        // Use compile-time constants for version identification
+        let version = full_version();
         let exe_path = std::env::current_exe()
             .map(|p| p.display().to_string())
             .unwrap_or_else(|_| "unknown".to_string());
 
-        // Compute SHA256 of the server binary
-        let sha256 = compute_file_sha256(&exe_path);
-
-        let mut metadata = serde_json::json!({
+        let metadata = serde_json::json!({
             "@id": entity_id,
             "@type": typed_entity("SoftwareApplication", "prov:SoftwareAgent"),
             "name": "torc-server",
             "version": version,
             "url": exe_path,
+            "torc:git_hash": GIT_HASH,
         });
-
-        if let Some(hash) = sha256 {
-            metadata["sha256"] = serde_json::json!(hash);
-        }
-
-        if let Ok(meta) = std::fs::metadata(&exe_path) {
-            metadata["contentSize"] = serde_json::json!(meta.len());
-        }
 
         let metadata_str = metadata.to_string();
         let entity_type = "SoftwareApplication";
@@ -483,8 +475,7 @@ where
         context: &C,
     ) -> Result<CreateRoCrateEntityResponse, ApiError> {
         debug!(
-            "create_ro_crate_entity({:?}) - X-Span-ID: {:?}",
-            body,
+            "create_ro_crate_entity - X-Span-ID: {:?}",
             context.get().0.clone()
         );
 
@@ -577,32 +568,50 @@ where
         workflow_id: i64,
         offset: i64,
         limit: i64,
+        sort_by: Option<String>,
+        reverse_sort: Option<bool>,
         context: &C,
     ) -> Result<ListRoCrateEntitiesResponse, ApiError> {
         debug!(
-            "list_ro_crate_entities({}, {}, {}) - X-Span-ID: {:?}",
+            "list_ro_crate_entities({}, {}, {}, {:?}, {:?}) - X-Span-ID: {:?}",
             workflow_id,
             offset,
             limit,
+            sort_by,
+            reverse_sort,
             context.get().0.clone()
         );
 
         let limit = std::cmp::min(limit, MAX_RECORD_TRANSFER_COUNT);
 
-        let records = match sqlx::query!(
-            r#"
-            SELECT id, workflow_id, file_id, entity_id, entity_type, metadata
-            FROM ro_crate_entity
-            WHERE workflow_id = $1
-            ORDER BY id
-            LIMIT $2 OFFSET $3
-            "#,
-            workflow_id,
-            limit,
-            offset
+        let validated_sort_by = match sort_by.as_deref() {
+            Some(col) if RO_CRATE_ENTITY_COLUMNS.contains(&col) => Some(col.to_string()),
+            Some(col) => {
+                debug!("Invalid sort column requested: {}", col);
+                None
+            }
+            None => None,
+        };
+
+        let query = SqlQueryBuilder::new(
+            "SELECT id, workflow_id, file_id, entity_id, entity_type, metadata FROM ro_crate_entity"
+                .to_string(),
         )
-        .fetch_all(self.context.pool.as_ref())
-        .await
+        .with_where("workflow_id = ?".to_string())
+        .with_pagination_and_sorting(
+            offset,
+            limit,
+            validated_sort_by,
+            reverse_sort,
+            "id",
+            RO_CRATE_ENTITY_COLUMNS,
+        )
+        .build();
+
+        let records = match sqlx::query(&query)
+            .bind(workflow_id)
+            .fetch_all(self.context.pool.as_ref())
+            .await
         {
             Ok(records) => records,
             Err(e) => {
@@ -616,12 +625,12 @@ where
         let items: Vec<models::RoCrateEntityModel> = records
             .into_iter()
             .map(|record| models::RoCrateEntityModel {
-                id: Some(record.id),
-                workflow_id: record.workflow_id,
-                file_id: record.file_id,
-                entity_id: record.entity_id,
-                entity_type: record.entity_type,
-                metadata: record.metadata,
+                id: Some(record.get("id")),
+                workflow_id: record.get("workflow_id"),
+                file_id: record.get("file_id"),
+                entity_id: record.get("entity_id"),
+                entity_type: record.get("entity_type"),
+                metadata: record.get("metadata"),
             })
             .collect();
 
@@ -648,7 +657,7 @@ where
 
         Ok(ListRoCrateEntitiesResponse::SuccessfulResponse(
             models::ListRoCrateEntitiesResponse {
-                items: Some(items),
+                items,
                 offset,
                 max_limit: MAX_RECORD_TRANSFER_COUNT,
                 count,
@@ -666,9 +675,8 @@ where
         context: &C,
     ) -> Result<UpdateRoCrateEntityResponse, ApiError> {
         debug!(
-            "update_ro_crate_entity({}, {:?}) - X-Span-ID: {:?}",
+            "update_ro_crate_entity({}) - X-Span-ID: {:?}",
             id,
-            body,
             context.get().0.clone()
         );
 
@@ -714,7 +722,6 @@ where
     async fn delete_ro_crate_entity(
         &self,
         id: i64,
-        _body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteRoCrateEntityResponse, ApiError> {
         debug!(
@@ -755,7 +762,6 @@ where
     async fn delete_ro_crate_entities(
         &self,
         workflow_id: i64,
-        _body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteRoCrateEntitiesResponse, ApiError> {
         debug!(

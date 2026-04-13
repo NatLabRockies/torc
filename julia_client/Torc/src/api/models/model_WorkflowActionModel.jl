@@ -2,74 +2,85 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""workflow_action_model
-Data model for a workflow action
+@doc raw"""WorkflowActionModel
 
     WorkflowActionModel(;
-        id=nothing,
-        workflow_id=nothing,
-        trigger_type=nothing,
-        action_type=nothing,
         action_config=nothing,
-        job_ids=nothing,
+        action_type=nothing,
         executed=false,
         executed_at=nothing,
         executed_by=nothing,
+        id=nothing,
+        is_recovery=false,
+        job_ids=nothing,
         persistent=false,
+        required_triggers=1,
+        trigger_count=0,
+        trigger_type=nothing,
+        workflow_id=nothing,
     )
 
-    - id::Int64 : Unique identifier for the action
-    - workflow_id::Int64 : ID of the workflow this action belongs to
-    - trigger_type::String : Type of trigger (e.g., on_workflow_start, on_jobs_ready, on_jobs_complete, on_worker_start, on_worker_complete)
-    - action_type::String : Type of action to execute (e.g., run_commands, schedule_nodes)
-    - action_config::Any : Configuration for the action (JSON object)
-    - job_ids::Vector{Int64} : Array of job IDs that this action applies to (for job-specific triggers)
-    - executed::Bool : Whether the action has been executed
-    - executed_at::String : Timestamp when the action was executed
-    - executed_by::Int64 : ID of the compute node that executed the action
-    - persistent::Bool : Whether the action can be claimed by multiple workers (persistent) or only once (non-persistent)
+    - action_config::Any
+    - action_type::String
+    - executed::Bool
+    - executed_at::String
+    - executed_by::Int64
+    - id::Int64
+    - is_recovery::Bool
+    - job_ids::Vector{Int64}
+    - persistent::Bool
+    - required_triggers::Int64
+    - trigger_count::Int64
+    - trigger_type::String
+    - workflow_id::Int64
 """
 Base.@kwdef mutable struct WorkflowActionModel <: OpenAPI.APIModel
-    id::Union{Nothing, Int64} = nothing
-    workflow_id::Union{Nothing, Int64} = nothing
-    trigger_type::Union{Nothing, String} = nothing
-    action_type::Union{Nothing, String} = nothing
     action_config::Union{Nothing, Any} = nothing
-    job_ids::Union{Nothing, Vector{Int64}} = nothing
+    action_type::Union{Nothing, String} = nothing
     executed::Union{Nothing, Bool} = false
     executed_at::Union{Nothing, String} = nothing
     executed_by::Union{Nothing, Int64} = nothing
+    id::Union{Nothing, Int64} = nothing
+    is_recovery::Union{Nothing, Bool} = false
+    job_ids::Union{Nothing, Vector{Int64}} = nothing
     persistent::Union{Nothing, Bool} = false
+    required_triggers::Union{Nothing, Int64} = 1
+    trigger_count::Union{Nothing, Int64} = 0
+    trigger_type::Union{Nothing, String} = nothing
+    workflow_id::Union{Nothing, Int64} = nothing
 
-    function WorkflowActionModel(id, workflow_id, trigger_type, action_type, action_config, job_ids, executed, executed_at, executed_by, persistent, )
-        o = new(id, workflow_id, trigger_type, action_type, action_config, job_ids, executed, executed_at, executed_by, persistent, )
+    function WorkflowActionModel(action_config, action_type, executed, executed_at, executed_by, id, is_recovery, job_ids, persistent, required_triggers, trigger_count, trigger_type, workflow_id, )
+        o = new(action_config, action_type, executed, executed_at, executed_by, id, is_recovery, job_ids, persistent, required_triggers, trigger_count, trigger_type, workflow_id, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type WorkflowActionModel
 
-const _property_types_WorkflowActionModel = Dict{Symbol,String}(Symbol("id")=>"Int64", Symbol("workflow_id")=>"Int64", Symbol("trigger_type")=>"String", Symbol("action_type")=>"String", Symbol("action_config")=>"Any", Symbol("job_ids")=>"Vector{Int64}", Symbol("executed")=>"Bool", Symbol("executed_at")=>"String", Symbol("executed_by")=>"Int64", Symbol("persistent")=>"Bool", )
+const _property_types_WorkflowActionModel = Dict{Symbol,String}(Symbol("action_config")=>"Any", Symbol("action_type")=>"String", Symbol("executed")=>"Bool", Symbol("executed_at")=>"String", Symbol("executed_by")=>"Int64", Symbol("id")=>"Int64", Symbol("is_recovery")=>"Bool", Symbol("job_ids")=>"Vector{Int64}", Symbol("persistent")=>"Bool", Symbol("required_triggers")=>"Int64", Symbol("trigger_count")=>"Int64", Symbol("trigger_type")=>"String", Symbol("workflow_id")=>"Int64", )
 OpenAPI.property_type(::Type{ WorkflowActionModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_WorkflowActionModel[name]))}
 
 function OpenAPI.check_required(o::WorkflowActionModel)
-    o.workflow_id === nothing && (return false)
-    o.trigger_type === nothing && (return false)
-    o.action_type === nothing && (return false)
     o.action_config === nothing && (return false)
+    o.action_type === nothing && (return false)
+    o.trigger_type === nothing && (return false)
+    o.workflow_id === nothing && (return false)
     true
 end
 
 function OpenAPI.validate_properties(o::WorkflowActionModel)
-    OpenAPI.validate_property(WorkflowActionModel, Symbol("id"), o.id)
-    OpenAPI.validate_property(WorkflowActionModel, Symbol("workflow_id"), o.workflow_id)
-    OpenAPI.validate_property(WorkflowActionModel, Symbol("trigger_type"), o.trigger_type)
-    OpenAPI.validate_property(WorkflowActionModel, Symbol("action_type"), o.action_type)
     OpenAPI.validate_property(WorkflowActionModel, Symbol("action_config"), o.action_config)
-    OpenAPI.validate_property(WorkflowActionModel, Symbol("job_ids"), o.job_ids)
+    OpenAPI.validate_property(WorkflowActionModel, Symbol("action_type"), o.action_type)
     OpenAPI.validate_property(WorkflowActionModel, Symbol("executed"), o.executed)
     OpenAPI.validate_property(WorkflowActionModel, Symbol("executed_at"), o.executed_at)
     OpenAPI.validate_property(WorkflowActionModel, Symbol("executed_by"), o.executed_by)
+    OpenAPI.validate_property(WorkflowActionModel, Symbol("id"), o.id)
+    OpenAPI.validate_property(WorkflowActionModel, Symbol("is_recovery"), o.is_recovery)
+    OpenAPI.validate_property(WorkflowActionModel, Symbol("job_ids"), o.job_ids)
     OpenAPI.validate_property(WorkflowActionModel, Symbol("persistent"), o.persistent)
+    OpenAPI.validate_property(WorkflowActionModel, Symbol("required_triggers"), o.required_triggers)
+    OpenAPI.validate_property(WorkflowActionModel, Symbol("trigger_count"), o.trigger_count)
+    OpenAPI.validate_property(WorkflowActionModel, Symbol("trigger_type"), o.trigger_type)
+    OpenAPI.validate_property(WorkflowActionModel, Symbol("workflow_id"), o.workflow_id)
 end
 
 function OpenAPI.validate_property(::Type{ WorkflowActionModel }, name::Symbol, val)
@@ -78,9 +89,27 @@ function OpenAPI.validate_property(::Type{ WorkflowActionModel }, name::Symbol, 
 
 
 
+    if name === Symbol("executed_by")
+        OpenAPI.validate_param(name, "WorkflowActionModel", :format, val, "int64")
+    end
+
+    if name === Symbol("id")
+        OpenAPI.validate_param(name, "WorkflowActionModel", :format, val, "int64")
+    end
 
 
 
 
+    if name === Symbol("required_triggers")
+        OpenAPI.validate_param(name, "WorkflowActionModel", :format, val, "int64")
+    end
 
+    if name === Symbol("trigger_count")
+        OpenAPI.validate_param(name, "WorkflowActionModel", :format, val, "int64")
+    end
+
+
+    if name === Symbol("workflow_id")
+        OpenAPI.validate_param(name, "WorkflowActionModel", :format, val, "int64")
+    end
 end

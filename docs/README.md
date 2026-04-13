@@ -21,7 +21,7 @@ cargo install mdbook
 mdbook build
 ```
 
-Output will be in `book/` directory.
+This must be run from the `docs/` directory. Output will be written to `docs/book/`.
 
 **Serve locally with live reload:**
 
@@ -108,6 +108,28 @@ src/
 2. If adding new pages, update `src/SUMMARY.md`
 3. Run `mdbook serve` to preview changes
 4. Build with `mdbook build` before committing
+
+## OpenAPI And Client Generation
+
+The OpenAPI contract is emitted from Rust, not edited by hand.
+
+From the repository root:
+
+```bash
+cd api
+
+# Emit Rust-owned spec only
+bash sync_openapi.sh emit
+
+# Verify both checked-in spec files match Rust output
+bash sync_openapi.sh check
+
+# Promote the Rust spec into api/openapi.yaml and regenerate clients
+bash sync_openapi.sh all --promote
+
+# Regenerate Rust, Python, and Julia clients from the current checked-in spec
+bash sync_openapi.sh clients
+```
 
 ### Markdown Features
 

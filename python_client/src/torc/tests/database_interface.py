@@ -3,8 +3,7 @@
 from collections import defaultdict
 from typing import Any
 
-from torc.api import iter_documents
-from torc.openapi_client.api.default_api import DefaultApi
+from torc.api import DefaultApi, iter_documents
 
 
 class DatabaseInterface:

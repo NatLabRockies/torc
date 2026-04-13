@@ -3,7 +3,7 @@
 # Test: no_srun_basic
 #
 # Verifies:
-#   - Workflow completes successfully with use_srun=false
+#   - Workflow completes successfully with mode=direct
 #   - Both jobs complete with return code 0
 #   - avg_cpu_percent > 0 for cpu_work
 #   - peak_memory_bytes > 0 for memory_work

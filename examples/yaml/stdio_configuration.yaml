@@ -1,0 +1,89 @@
+# Stdio Configuration Example
+#
+# Demonstrates stdout/stderr capture modes and per-job overrides:
+#   - Workflow-level stdio defaults in execution_config
+#   - Per-job stdio overrides
+#   - Available modes: separate, combined, no_stdout, no_stderr, none
+#   - delete_on_success: auto-cleanup of log files for successful jobs
+#
+# Workflow structure:
+#   generate_data
+#       |
+#   process_data (combined logs, deleted on success)
+#       |
+#   validate_results (separate stdout/stderr for debugging)
+#       |
+#   publish_results (no log capture)
+
+name: stdio_configuration_demo
+description: Demonstrates stdio capture modes and per-job overrides
+
+# Workflow-level default: combined stdout+stderr, delete on success
+execution_config:
+  mode: direct
+  stdio:
+    mode: combined
+    delete_on_success: true
+
+resource_requirements:
+  - name: "standard"
+    num_cpus: 2
+    num_gpus: 0
+    memory: "4g"
+    runtime: "PT30M"
+
+jobs:
+  # Uses workflow default: combined mode, deleted on success
+  - name: "generate_data"
+    command: |
+      #!/bin/bash
+      echo "Generating synthetic dataset..."
+      echo "Progress: 25%" && sleep 1
+      echo "Progress: 50%" && sleep 1
+      echo "Progress: 75%" && sleep 1
+      echo "Progress: 100%"
+      echo "Generated 10000 records"
+    resource_requirements: "standard"
+
+  # Inherits workflow default (combined, delete_on_success)
+  # Good for routine processing where logs aren't needed after success
+  - name: "process_data"
+    command: |
+      #!/bin/bash
+      echo "Processing data..."
+      echo "Step 1: Normalization" && sleep 1
+      echo "Step 2: Feature extraction" && sleep 1
+      echo "Step 3: Aggregation" && sleep 1
+      echo "Processing complete"
+    resource_requirements: "standard"
+    depends_on: ["generate_data"]
+
+  # Override: separate stdout/stderr, keep logs even on success
+  # Useful for validation jobs where you want to review stderr warnings
+  - name: "validate_results"
+    command: |
+      #!/bin/bash
+      echo "Running validation checks..."
+      echo "WARNING: 3 records have missing values" >&2
+      echo "Check 1: Schema validation - PASSED"
+      echo "Check 2: Range validation - PASSED"
+      echo "WARNING: 12 outliers detected" >&2
+      echo "Check 3: Completeness - PASSED"
+      echo "All validation checks passed"
+    resource_requirements: "standard"
+    depends_on: ["process_data"]
+    stdio:
+      mode: separate
+      delete_on_success: false
+
+  # Override: no log capture at all
+  # For jobs whose output is irrelevant or captured elsewhere
+  - name: "publish_results"
+    command: |
+      #!/bin/bash
+      echo "Publishing results to external store..."
+      echo "Done"
+    resource_requirements: "standard"
+    depends_on: ["validate_results"]
+    stdio:
+      mode: none

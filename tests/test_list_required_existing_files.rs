@@ -4,7 +4,7 @@ use common::{
     ServerProcess, create_test_compute_node, create_test_file, create_test_workflow, start_server,
 };
 use rstest::rstest;
-use torc::client::{apis::default_api, config::TorcConfig, workflow_manager::WorkflowManager};
+use torc::client::{apis, config::TorcConfig, workflow_manager::WorkflowManager};
 use torc::models;
 use torc::models::JobStatus;
 
@@ -40,14 +40,14 @@ fn test_list_required_existing_files_missing_user_files(start_server: &ServerPro
     ]);
     job.output_file_ids = Some(vec![output_file.id.unwrap()]);
 
-    let _created_job = default_api::create_job(config, job).expect("Failed to create job");
+    let _created_job = apis::jobs_api::create_job(config, job).expect("Failed to create job");
 
     // Initialize the workflow to set up job dependencies
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
     // Call list_required_existing_files - should report all user files as missing
-    let response = default_api::list_required_existing_files(config, workflow_id)
+    let response = apis::workflows_api::list_required_existing_files(config, workflow_id)
         .expect("Failed to list required existing files");
 
     // Verify that the response contains the IDs of the user files that don't exist
@@ -92,7 +92,7 @@ fn test_list_required_existing_files_missing_job_outputs(start_server: &ServerPr
     job1.input_file_ids = Some(vec![input_file.id.unwrap()]);
     job1.output_file_ids = Some(vec![output_file1.id.unwrap(), output_file2.id.unwrap()]);
 
-    let created_job1 = default_api::create_job(config, job1).expect("Failed to create job1");
+    let created_job1 = apis::jobs_api::create_job(config, job1).expect("Failed to create job1");
     let job1_id = created_job1.id.unwrap();
 
     // Create second job that produces output_file3
@@ -104,7 +104,7 @@ fn test_list_required_existing_files_missing_job_outputs(start_server: &ServerPr
     job2.input_file_ids = Some(vec![input_file.id.unwrap()]);
     job2.output_file_ids = Some(vec![output_file3.id.unwrap()]);
 
-    let created_job2 = default_api::create_job(config, job2).expect("Failed to create job2");
+    let created_job2 = apis::jobs_api::create_job(config, job2).expect("Failed to create job2");
     let job2_id = created_job2.id.unwrap();
 
     let torc_config = TorcConfig::default();
@@ -128,7 +128,7 @@ fn test_list_required_existing_files_missing_job_outputs(start_server: &ServerPr
         JobStatus::Completed,
     );
 
-    default_api::complete_job(
+    apis::jobs_api::complete_job(
         config,
         job1_id,
         job1_result.status,
@@ -150,7 +150,7 @@ fn test_list_required_existing_files_missing_job_outputs(start_server: &ServerPr
         JobStatus::Completed,
     );
 
-    default_api::complete_job(
+    apis::jobs_api::complete_job(
         config,
         job2_id,
         job2_result.status,
@@ -160,13 +160,13 @@ fn test_list_required_existing_files_missing_job_outputs(start_server: &ServerPr
     .expect("Failed to complete job2");
 
     // Verify that both jobs are marked as Done
-    let job1_status = default_api::get_job(config, job1_id).expect("Failed to get job1");
-    let job2_status = default_api::get_job(config, job2_id).expect("Failed to get job2");
+    let job1_status = apis::jobs_api::get_job(config, job1_id).expect("Failed to get job1");
+    let job2_status = apis::jobs_api::get_job(config, job2_id).expect("Failed to get job2");
     assert_eq!(job1_status.status.unwrap(), JobStatus::Completed);
     assert_eq!(job2_status.status.unwrap(), JobStatus::Completed);
 
     // Get the list of files that actually exist in the system
-    let files_response = default_api::list_files(
+    let files_response = apis::files_api::list_files(
         config,
         workflow_id,
         None, // produced_by_job_id
@@ -180,12 +180,7 @@ fn test_list_required_existing_files_missing_job_outputs(start_server: &ServerPr
     )
     .expect("Failed to list files");
 
-    let _existing_file_ids: Vec<i64> = files_response
-        .items
-        .unwrap_or_default()
-        .iter()
-        .filter_map(|f| f.id)
-        .collect();
+    let _existing_file_ids: Vec<i64> = files_response.items.iter().filter_map(|f| f.id).collect();
 
     // For this test, we simulate that the job completed successfully but the output files
     // were not actually created (perhaps due to a job implementation bug or file system issue).
@@ -193,7 +188,7 @@ fn test_list_required_existing_files_missing_job_outputs(start_server: &ServerPr
     // so they should be reported as missing.
 
     // Call list_required_existing_files
-    let response = default_api::list_required_existing_files(config, workflow_id)
+    let response = apis::workflows_api::list_required_existing_files(config, workflow_id)
         .expect("Failed to list required existing files");
 
     let missing_file_ids = response.files;
@@ -268,7 +263,7 @@ fn test_list_required_existing_files_combined_scenario(start_server: &ServerProc
     job1.input_file_ids = Some(vec![user_input1.id.unwrap(), user_input2.id.unwrap()]);
     job1.output_file_ids = Some(vec![intermediate1.id.unwrap(), intermediate2.id.unwrap()]);
 
-    let created_job1 = default_api::create_job(config, job1).expect("Failed to create job1");
+    let created_job1 = apis::jobs_api::create_job(config, job1).expect("Failed to create job1");
     let job1_id = created_job1.id.unwrap();
 
     // Create job2 that takes intermediate files and produces final output
@@ -280,7 +275,7 @@ fn test_list_required_existing_files_combined_scenario(start_server: &ServerProc
     job2.input_file_ids = Some(vec![intermediate1.id.unwrap(), intermediate2.id.unwrap()]);
     job2.output_file_ids = Some(vec![final_output.id.unwrap()]);
 
-    let created_job2 = default_api::create_job(config, job2).expect("Failed to create job2");
+    let created_job2 = apis::jobs_api::create_job(config, job2).expect("Failed to create job2");
     let job2_id = created_job2.id.unwrap();
 
     let torc_config = TorcConfig::default();
@@ -304,7 +299,7 @@ fn test_list_required_existing_files_combined_scenario(start_server: &ServerProc
         JobStatus::Completed,
     );
 
-    default_api::complete_job(config, job1_id, job1_result.status, 1, job1_result)
+    apis::jobs_api::complete_job(config, job1_id, job1_result.status, 1, job1_result)
         .expect("Failed to complete job1");
 
     // Complete job2 (it should have produced final output)
@@ -320,11 +315,11 @@ fn test_list_required_existing_files_combined_scenario(start_server: &ServerProc
         JobStatus::Completed,
     );
 
-    default_api::complete_job(config, job2_id, job2_result.status, 1, job2_result)
+    apis::jobs_api::complete_job(config, job2_id, job2_result.status, 1, job2_result)
         .expect("Failed to complete job2");
 
     // Call list_required_existing_files
-    let response = default_api::list_required_existing_files(config, workflow_id)
+    let response = apis::workflows_api::list_required_existing_files(config, workflow_id)
         .expect("Failed to list required existing files");
 
     let missing_file_ids = response.files;

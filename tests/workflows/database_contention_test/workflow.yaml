@@ -13,12 +13,12 @@ description: |
     the background unblocking thread processing completions
 
   Run with:
-    torc workflows create tests/workflows/database_contention_test/workflow.yaml
-    torc workflows run <workflow_id>
+    torc create tests/workflows/database_contention_test/workflow.yaml
+    torc run <workflow_id>
 
   Or for Slurm:
-    torc workflows create-slurm --account <account> tests/workflows/database_contention_test/workflow.yaml
-    torc workflows submit <workflow_id>
+    torc create tests/workflows/database_contention_test/workflow.yaml
+    torc submit <workflow_id>
 
 jobs:
   # ═══════════════════════════════════════════════════════════════════════════

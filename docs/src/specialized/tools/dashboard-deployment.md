@@ -241,7 +241,7 @@ Open http://localhost:8090 in your browser.
 
 ```bash
 # Create workflow with Slurm actions
-torc workflows create my_slurm_workflow.yaml
+torc create my_slurm_workflow.yaml
 
 # Submit to Slurm
 torc submit <workflow_id>
@@ -370,8 +370,8 @@ Users can also interact with the shared server via CLI:
 export TORC_API_URL="http://shared-server:8080/torc-service/v1"
 
 # Create and run workflows
-torc workflows create my_workflow.yaml
-torc workflows run <workflow_id>
+torc create my_workflow.yaml
+torc run <workflow_id>
 ```
 
 ### Authentication

@@ -1,20 +1,23 @@
 //! Tool implementations for the Torc MCP server.
 
 use rmcp::{
-    Error as McpError,
+    ErrorData as McpError,
     model::{CallToolResult, RawResource, Resource, ResourceContents},
 };
 use std::fs;
 use std::path::Path;
 use std::process::Command;
 
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::commands::pagination::jobs::{JobListParams, paginate_jobs};
 use crate::client::commands::pagination::resource_requirements::{
     ResourceRequirementsListParams, paginate_resource_requirements,
 };
 use crate::client::commands::pagination::results::{ResultListParams, paginate_results};
+use crate::client::commands::reports::{
+    build_resource_utilization_report, build_workflow_summary_report,
+};
 use crate::client::log_paths;
 use crate::client::resource_correction::format_memory_bytes_short;
 use crate::models::{JobStatus, ResourceRequirementsModel};
@@ -35,7 +38,7 @@ pub fn get_workflow_status(
     workflow_id: i64,
 ) -> Result<CallToolResult, McpError> {
     // Get workflow info
-    let workflow = default_api::get_workflow(config, workflow_id)
+    let workflow = apis::workflows_api::get_workflow(config, workflow_id)
         .map_err(|e| internal_error(format!("Failed to get workflow: {}", e)))?;
 
     // Get all jobs
@@ -67,12 +70,12 @@ pub fn get_workflow_status(
 
 /// Get detailed job information.
 pub fn get_job_details(config: &Configuration, job_id: i64) -> Result<CallToolResult, McpError> {
-    let job = default_api::get_job(config, job_id)
+    let job = apis::jobs_api::get_job(config, job_id)
         .map_err(|e| internal_error(format!("Failed to get job: {}", e)))?;
 
     // Get resource requirements if available
     let resource_reqs = if let Some(req_id) = job.resource_requirements_id {
-        default_api::get_resource_requirements(config, req_id).ok()
+        apis::resource_requirements_api::get_resource_requirements(config, req_id).ok()
     } else {
         None
     };
@@ -229,35 +232,24 @@ pub fn list_jobs_by_status(
     )]))
 }
 
-/// Check resource utilization for a workflow by running the CLI command.
+/// Check resource utilization for a workflow.
 pub fn check_resource_utilization(
+    config: &Configuration,
     workflow_id: i64,
     include_failed: bool,
 ) -> Result<CallToolResult, McpError> {
-    let mut cmd = Command::new("torc");
-    cmd.args(["-f", "json", "reports", "check-resource-utilization"]);
-    cmd.arg(workflow_id.to_string());
-
-    if include_failed {
-        cmd.arg("--include-failed");
-    }
-
-    let output = cmd
-        .output()
-        .map_err(|e| internal_error(format!("Failed to execute torc command: {}", e)))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(internal_error(format!(
-            "torc command failed: {}",
-            stderr.trim()
-        )));
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let report =
+        build_resource_utilization_report(config, Some(workflow_id), None, include_failed, 1.0)
+            .map_err(internal_error)?;
+    let stdout = serde_json::to_string_pretty(&report).map_err(|e| {
+        internal_error(format!(
+            "Failed to serialize resource utilization report: {}",
+            e
+        ))
+    })?;
 
     // Parse the JSON to check for over-utilization violations and add guidance
-    let mut response = stdout.to_string();
+    let mut response = stdout.clone();
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
         let over_count = json
             .get("over_utilization_count")
@@ -315,7 +307,7 @@ pub fn update_job_resources(
     runtime: Option<String>,
 ) -> Result<CallToolResult, McpError> {
     // Get the job to find its resource requirements ID
-    let job = default_api::get_job(config, job_id)
+    let job = apis::jobs_api::get_job(config, job_id)
         .map_err(|e| internal_error(format!("Failed to get job: {}", e)))?;
 
     let req_id = job
@@ -323,7 +315,7 @@ pub fn update_job_resources(
         .ok_or_else(|| invalid_params("Job does not have resource requirements to update"))?;
 
     // Get current requirements
-    let mut reqs = default_api::get_resource_requirements(config, req_id)
+    let mut reqs = apis::resource_requirements_api::get_resource_requirements(config, req_id)
         .map_err(|e| internal_error(format!("Failed to get resource requirements: {}", e)))?;
 
     // Update fields if provided
@@ -338,7 +330,7 @@ pub fn update_job_resources(
     }
 
     // Update the resource requirements
-    let updated = default_api::update_resource_requirements(
+    let updated = apis::resource_requirements_api::update_resource_requirements(
         config,
         req_id,
         ResourceRequirementsModel {
@@ -556,10 +548,13 @@ pub fn create_workflow(
 
     match (action, workflow_type) {
         ("create_workflow", "local") => {
-            // Create local workflow using the library function
+            // Validate and parse once, then reuse for creation
+            let spec = crate::client::workflow_spec::WorkflowSpec::validate_for_creation(temp_path)
+                .map_err(|e| internal_error(format!("Workflow validation failed: {}", e)))?;
+
             let workflow_id =
-                crate::client::workflow_spec::WorkflowSpec::create_workflow_from_spec(
-                    config, temp_path, user, false, false,
+                crate::client::workflow_spec::WorkflowSpec::create_from_validated_spec(
+                    config, spec, user, false,
                 )
                 .map_err(|e| internal_error(format!("Failed to create workflow: {}", e)))?;
 
@@ -574,17 +569,38 @@ pub fn create_workflow(
             )]))
         }
         ("create_workflow", "slurm") => {
-            // Create slurm workflow using CLI: torc workflows create-slurm
-            let mut cmd = Command::new("torc");
-            cmd.args(["-f", "json", "workflows", "create-slurm"]);
-            cmd.args(["--account", account.unwrap()]);
-            cmd.args(["--user", user]);
+            // Create slurm workflow: first generate schedulers, then create
+            // Step 1: Run torc slurm generate to create spec with schedulers
+            let slurm_spec_path = format!("{}_slurm", temp_path.display());
+            let mut gen_cmd = Command::new("torc");
+            gen_cmd.args(["slurm", "generate"]);
+            gen_cmd.args(["--account", account.unwrap()]);
+            gen_cmd.args(["-o", &slurm_spec_path]);
 
             if let Some(profile) = hpc_profile {
-                cmd.args(["--hpc-profile", profile]);
+                gen_cmd.args(["--profile", profile]);
             }
 
-            cmd.arg(temp_path);
+            gen_cmd.arg(temp_path);
+
+            let gen_output = gen_cmd
+                .output()
+                .map_err(|e| internal_error(format!("Failed to run slurm generate: {}", e)))?;
+
+            if !gen_output.status.success() {
+                let stderr = String::from_utf8_lossy(&gen_output.stderr);
+                return Err(internal_error(format!(
+                    "Failed to generate slurm schedulers: {}",
+                    stderr.trim()
+                )));
+            }
+
+            // Step 2: Create the workflow from the generated spec
+            let mut cmd = Command::new("torc");
+            cmd.args(["-f", "json", "create"]);
+            cmd.args(["--user", user]);
+
+            cmd.arg(&slurm_spec_path);
 
             let output = cmd
                 .output()
@@ -696,7 +712,7 @@ pub fn get_execution_plan(
     // Try to parse as workflow ID first
     if let Ok(workflow_id) = spec_or_id.parse::<i64>() {
         // Get execution plan for existing workflow from database
-        let workflow = default_api::get_workflow(config, workflow_id)
+        let workflow = apis::workflows_api::get_workflow(config, workflow_id)
             .map_err(|e| internal_error(format!("Failed to get workflow: {}", e)))?;
 
         let jobs = paginate_jobs(
@@ -706,7 +722,7 @@ pub fn get_execution_plan(
         )
         .map_err(|e| internal_error(format!("Failed to list jobs: {}", e)))?;
 
-        let actions = default_api::get_workflow_actions(config, workflow_id)
+        let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
             .map_err(|e| internal_error(format!("Failed to get workflow actions: {}", e)))?;
 
         let slurm_schedulers =
@@ -968,24 +984,17 @@ pub fn analyze_workflow_logs(
     )]))
 }
 
-/// Get workflow summary by running the CLI command.
-pub fn get_workflow_summary(workflow_id: i64) -> Result<CallToolResult, McpError> {
-    let output = Command::new("torc")
-        .args(["-f", "json", "reports", "summary", &workflow_id.to_string()])
-        .output()
-        .map_err(|e| internal_error(format!("Failed to execute torc command: {}", e)))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(internal_error(format!(
-            "torc command failed: {}",
-            stderr.trim()
-        )));
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
+/// Get workflow summary.
+pub fn get_workflow_summary(
+    config: &Configuration,
+    workflow_id: i64,
+) -> Result<CallToolResult, McpError> {
+    let report =
+        build_workflow_summary_report(config, Some(workflow_id)).map_err(internal_error)?;
+    let stdout = serde_json::to_string_pretty(&report)
+        .map_err(|e| internal_error(format!("Failed to serialize workflow summary: {}", e)))?;
     Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-        stdout.to_string(),
+        stdout,
     )]))
 }
 
@@ -1309,7 +1318,7 @@ pub fn classify_and_resolve_failures(
     dry_run: bool,
 ) -> Result<CallToolResult, McpError> {
     // Check if workflow has use_pending_failed enabled
-    let workflow = match default_api::get_workflow(config, workflow_id) {
+    let workflow = match apis::workflows_api::get_workflow(config, workflow_id) {
         Ok(w) => w,
         Err(e) => {
             return Err(internal_error(format!(
@@ -1343,7 +1352,7 @@ pub fn classify_and_resolve_failures(
         let action = classification.action.to_lowercase();
 
         // Validate the job exists and is in pending_failed status
-        let job = match default_api::get_job(config, job_id) {
+        let job = match apis::jobs_api::get_job(config, job_id) {
             Ok(j) => j,
             Err(e) => {
                 results.push(serde_json::json!({
@@ -1391,7 +1400,8 @@ pub fn classify_and_resolve_failures(
                 && action == "retry"
             {
                 if let Some(req_id) = job.resource_requirements_id {
-                    match default_api::get_resource_requirements(config, req_id) {
+                    match apis::resource_requirements_api::get_resource_requirements(config, req_id)
+                    {
                         Ok(mut reqs) => {
                             if let Some(ref mem) = classification.memory {
                                 reqs.memory = mem.clone();
@@ -1399,7 +1409,7 @@ pub fn classify_and_resolve_failures(
                             if let Some(ref rt) = classification.runtime {
                                 reqs.runtime = rt.clone();
                             }
-                            match default_api::update_resource_requirements(
+                            match apis::resource_requirements_api::update_resource_requirements(
                                 config,
                                 req_id,
                                 ResourceRequirementsModel {
@@ -1927,16 +1937,17 @@ pub fn regroup_job_resources(
             runtime: group.runtime.clone(),
         };
 
-        let created_rr = match default_api::create_resource_requirements(config, new_rr) {
-            Ok(rr) => rr,
-            Err(e) => {
-                apply_errors.push(format!(
-                    "Failed to create RR for group '{}': {}",
-                    group_name, e
-                ));
-                continue;
-            }
-        };
+        let created_rr =
+            match apis::resource_requirements_api::create_resource_requirements(config, new_rr) {
+                Ok(rr) => rr,
+                Err(e) => {
+                    apply_errors.push(format!(
+                        "Failed to create RR for group '{}': {}",
+                        group_name, e
+                    ));
+                    continue;
+                }
+            };
 
         let new_rr_id = match created_rr.id {
             Some(id) => id,
@@ -1956,7 +1967,7 @@ pub fn regroup_job_resources(
             let mut updated_job = job.clone();
             updated_job.resource_requirements_id = Some(new_rr_id);
 
-            match default_api::update_job(config, job_id, updated_job) {
+            match apis::jobs_api::update_job(config, job_id, updated_job) {
                 Ok(_) => {
                     jobs_updated.push(job_id);
                     total_jobs_updated += 1;
@@ -2242,6 +2253,11 @@ fn doc_topic_mapping() -> Vec<(&'static str, &'static str, &'static str)> {
             "slurm-workflows",
             "specialized/hpc/slurm-workflows.md",
             "Slurm workflow patterns",
+        ),
+        (
+            "allocation-strategies",
+            "specialized/hpc/allocation-strategies.md",
+            "Slurm allocation strategies: single-large vs many-small tradeoffs, fair-share, sbatch --test-only",
         ),
         (
             "tutorials",
@@ -2555,6 +2571,86 @@ pub fn get_docs(docs_dir: Option<&Path>, topic: &str) -> Result<CallToolResult, 
     )]))
 }
 
+/// Analyze a workflow spec and recommend Slurm allocation strategy.
+pub fn plan_allocations(
+    spec_json: &str,
+    account: &str,
+    partition: Option<&str>,
+    hpc_profile: Option<&str>,
+    skip_test_only: bool,
+) -> Result<CallToolResult, McpError> {
+    use crate::client::commands::hpc::create_registry_with_config_public;
+    use crate::client::commands::slurm::{
+        GroupByStrategy, WalltimeStrategy, analyze_plan_allocations,
+    };
+    use crate::client::workflow_spec::WorkflowSpec;
+    use crate::config::TorcConfig;
+
+    // Parse the workflow spec from JSON
+    let mut spec: WorkflowSpec = serde_json::from_str(spec_json)
+        .map_err(|e| invalid_params(&format!("Failed to parse workflow spec JSON: {}", e)))?;
+
+    // Load HPC profile
+    let torc_config = TorcConfig::load().unwrap_or_default();
+    let registry = create_registry_with_config_public(&torc_config.client.hpc);
+
+    let profile = if let Some(name) = hpc_profile {
+        registry.get(name).ok_or_else(|| {
+            invalid_params(&format!(
+                "Unknown HPC profile: '{}'. Available profiles can be listed with 'torc hpc list'.",
+                name
+            ))
+        })?
+    } else {
+        registry.detect().ok_or_else(|| {
+            invalid_params(
+                "No HPC profile detected. Specify hpc_profile parameter or run on an HPC system.",
+            )
+        })?
+    };
+
+    // Run the analysis
+    let result = analyze_plan_allocations(
+        &mut spec,
+        account,
+        partition,
+        &profile,
+        false, // not offline — we want cluster state
+        skip_test_only,
+        GroupByStrategy::ResourceRequirements,
+        WalltimeStrategy::MaxJobRuntime,
+        1.5, // default walltime multiplier
+    )
+    .map_err(|e| internal_error(format!("Analysis failed: {}", e)))?;
+
+    // Add guidance to help the AI interpret results
+    let mut response = serde_json::to_value(&result)
+        .map_err(|e| internal_error(format!("Failed to serialize result: {}", e)))?;
+
+    if let Some(obj) = response.as_object_mut() {
+        obj.insert(
+            "guidance".to_string(),
+            serde_json::json!({
+                "doc_topic": "allocation-strategies",
+                "key_points": [
+                    "The 'many-small' sbatch estimate is for the FIRST job only — later jobs are delayed by fair-share degradation",
+                    "Slurm's backfill scheduler prioritizes larger allocations, giving them reserved slots in the queue",
+                    "Check max_parallelism vs ideal_nodes — deep DAGs may not benefit from many nodes",
+                    "If dependency_depth > 1, not all jobs can run simultaneously, so fewer nodes may suffice",
+                    "Present both raw estimates AND the recommendation to the user"
+                ]
+            }),
+        );
+    }
+
+    let json_output = serde_json::to_string_pretty(&response)
+        .map_err(|e| internal_error(format!("Failed to serialize response: {}", e)))?;
+
+    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
+        json_output,
+    )]))
+}
+
 // --- MCP Resources ---
 
 /// List all available MCP resources (docs + examples).
@@ -2574,6 +2670,9 @@ pub fn list_mcp_resources(docs_dir: Option<&Path>, examples_dir: Option<&Path>) 
                 description: Some(description.to_string()),
                 mime_type: Some("text/markdown".to_string()),
                 size,
+                title: None,
+                icons: None,
+                meta: None,
             },
             None,
         ));
@@ -2598,6 +2697,9 @@ pub fn list_mcp_resources(docs_dir: Option<&Path>, examples_dir: Option<&Path>) 
                 description: Some(description.to_string()),
                 mime_type: Some("text/plain".to_string()),
                 size,
+                title: None,
+                icons: None,
+                meta: None,
             },
             None,
         ));
@@ -2635,6 +2737,7 @@ pub fn read_mcp_resource(
             uri: uri.to_string(),
             mime_type: Some("text/markdown".to_string()),
             text: content,
+            meta: None,
         })
     } else if let Some(name) = uri.strip_prefix("torc://examples/") {
         let (content, _) = read_example_content(examples_dir, name, "yaml")?;
@@ -2643,6 +2746,7 @@ pub fn read_mcp_resource(
             uri: uri.to_string(),
             mime_type: Some("text/plain".to_string()),
             text: content,
+            meta: None,
         })
     } else {
         Err(invalid_params(&format!(

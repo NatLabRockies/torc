@@ -75,7 +75,7 @@ torc-server run --url localhost --port 8080 --threads 8 --database path/to/db.sq
 
 # 2. Use the unified CLI for all client operations
 # Create a workflow from a specification file
-torc workflows create my_workflow.yaml
+torc create my_workflow.yaml
 
 # Run jobs locally
 torc run <workflow_id>

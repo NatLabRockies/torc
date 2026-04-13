@@ -9,7 +9,7 @@ mod common;
 use common::{ServerProcess, run_cli_with_json, start_server};
 use rstest::rstest;
 use std::collections::HashMap;
-use torc::client::{Configuration, default_api};
+use torc::client::{Configuration, apis};
 use torc::models;
 
 /// Create a workflow with jobs in various states for testing regenerate.
@@ -23,7 +23,7 @@ fn create_workflow_with_job_states(
     let user = "test_user".to_string();
     let workflow = models::WorkflowModel::new(name.to_string(), user);
     let created_workflow =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     // Create resource requirements (using "test_rr" since "default" is reserved)
@@ -33,7 +33,7 @@ fn create_workflow_with_job_states(
     rr.num_nodes = 1;
     rr.memory = "8g".to_string();
     rr.runtime = "PT1H".to_string();
-    let rr = default_api::create_resource_requirements(config, rr)
+    let rr = apis::resource_requirements_api::create_resource_requirements(config, rr)
         .expect("Failed to create resource requirements");
     let rr_id = rr.id.unwrap();
 
@@ -46,13 +46,13 @@ fn create_workflow_with_job_states(
             format!("echo '{}'", job_name),
         );
         job.resource_requirements_id = Some(rr_id);
-        let created_job = default_api::create_job(config, job).expect("Failed to create job");
+        let created_job = apis::jobs_api::create_job(config, job).expect("Failed to create job");
         job_ids.insert(job_name.clone(), created_job.id.unwrap());
     }
 
     // Initialize jobs - after this, jobs without dependencies will be "ready",
     // jobs with dependencies will be "blocked"
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
     (workflow_id, job_ids)
@@ -68,7 +68,7 @@ fn create_multi_stage_workflow(
     let user = "test_user".to_string();
     let workflow = models::WorkflowModel::new(name.to_string(), user);
     let created_workflow =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     // Create resource requirements (using "test_rr" since "default" is reserved)
@@ -78,12 +78,12 @@ fn create_multi_stage_workflow(
     rr.num_nodes = 1;
     rr.memory = "8g".to_string();
     rr.runtime = "PT1H".to_string();
-    let rr = default_api::create_resource_requirements(config, rr)
+    let rr = apis::resource_requirements_api::create_resource_requirements(config, rr)
         .expect("Failed to create resource requirements");
     let rr_id = rr.id.unwrap();
 
     // Create files for dependencies
-    let prep_output = default_api::create_file(
+    let prep_output = apis::files_api::create_file(
         config,
         models::FileModel::new(
             workflow_id,
@@ -95,7 +95,7 @@ fn create_multi_stage_workflow(
 
     let work_outputs: Vec<_> = (0..num_work_jobs)
         .map(|i| {
-            default_api::create_file(
+            apis::files_api::create_file(
                 config,
                 models::FileModel::new(
                     workflow_id,
@@ -116,7 +116,7 @@ fn create_multi_stage_workflow(
     preprocess.resource_requirements_id = Some(rr_id);
     preprocess.output_file_ids = Some(vec![prep_output.id.unwrap()]);
     let preprocess =
-        default_api::create_job(config, preprocess).expect("Failed to create preprocess job");
+        apis::jobs_api::create_job(config, preprocess).expect("Failed to create preprocess job");
 
     // Stage 2: work jobs (depend on preprocess via file)
     let mut work_jobs = Vec::new();
@@ -129,7 +129,7 @@ fn create_multi_stage_workflow(
         work.resource_requirements_id = Some(rr_id);
         work.input_file_ids = Some(vec![prep_output.id.unwrap()]);
         work.output_file_ids = Some(vec![work_output.id.unwrap()]);
-        let work = default_api::create_job(config, work).expect("Failed to create work job");
+        let work = apis::jobs_api::create_job(config, work).expect("Failed to create work job");
         work_jobs.push(work);
     }
 
@@ -142,10 +142,10 @@ fn create_multi_stage_workflow(
     postprocess.resource_requirements_id = Some(rr_id);
     postprocess.input_file_ids = Some(work_outputs.iter().map(|f| f.id.unwrap()).collect());
     let postprocess =
-        default_api::create_job(config, postprocess).expect("Failed to create postprocess job");
+        apis::jobs_api::create_job(config, postprocess).expect("Failed to create postprocess job");
 
     // Initialize workflow
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
     // Build job_ids map
@@ -167,7 +167,7 @@ fn create_workflow_with_varied_resources(
     let user = "test_user".to_string();
     let workflow = models::WorkflowModel::new(name.to_string(), user);
     let created_workflow =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     // Create small resource requirements (many jobs per node)
@@ -177,7 +177,7 @@ fn create_workflow_with_varied_resources(
     rr_small.num_nodes = 1;
     rr_small.memory = "8g".to_string();
     rr_small.runtime = "PT1H".to_string();
-    let rr_small = default_api::create_resource_requirements(config, rr_small)
+    let rr_small = apis::resource_requirements_api::create_resource_requirements(config, rr_small)
         .expect("Failed to create small resource requirements");
 
     // Create large resource requirements (one job per node)
@@ -187,7 +187,7 @@ fn create_workflow_with_varied_resources(
     rr_large.num_nodes = 1;
     rr_large.memory = "120g".to_string();
     rr_large.runtime = "PT4H".to_string();
-    let rr_large = default_api::create_resource_requirements(config, rr_large)
+    let rr_large = apis::resource_requirements_api::create_resource_requirements(config, rr_large)
         .expect("Failed to create large resource requirements");
 
     // Create GPU resource requirements
@@ -197,7 +197,7 @@ fn create_workflow_with_varied_resources(
     rr_gpu.num_nodes = 1;
     rr_gpu.memory = "64g".to_string();
     rr_gpu.runtime = "PT2H".to_string();
-    let rr_gpu = default_api::create_resource_requirements(config, rr_gpu)
+    let rr_gpu = apis::resource_requirements_api::create_resource_requirements(config, rr_gpu)
         .expect("Failed to create GPU resource requirements");
 
     // Create jobs with different resource requirements
@@ -211,7 +211,7 @@ fn create_workflow_with_varied_resources(
             format!("echo small_{}", i),
         );
         job.resource_requirements_id = Some(rr_small.id.unwrap());
-        let created = default_api::create_job(config, job).expect("Failed to create small job");
+        let created = apis::jobs_api::create_job(config, job).expect("Failed to create small job");
         job_ids.insert(format!("small_job_{}", i), created.id.unwrap());
     }
 
@@ -223,7 +223,7 @@ fn create_workflow_with_varied_resources(
             format!("echo large_{}", i),
         );
         job.resource_requirements_id = Some(rr_large.id.unwrap());
-        let created = default_api::create_job(config, job).expect("Failed to create large job");
+        let created = apis::jobs_api::create_job(config, job).expect("Failed to create large job");
         job_ids.insert(format!("large_job_{}", i), created.id.unwrap());
     }
 
@@ -235,12 +235,12 @@ fn create_workflow_with_varied_resources(
             format!("echo gpu_{}", i),
         );
         job.resource_requirements_id = Some(rr_gpu.id.unwrap());
-        let created = default_api::create_job(config, job).expect("Failed to create GPU job");
+        let created = apis::jobs_api::create_job(config, job).expect("Failed to create GPU job");
         job_ids.insert(format!("gpu_job_{}", i), created.id.unwrap());
     }
 
     // Initialize workflow
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
     (workflow_id, job_ids)
@@ -248,25 +248,16 @@ fn create_workflow_with_varied_resources(
 
 /// Helper to get the number of schedulers for a workflow
 fn get_scheduler_count(config: &Configuration, workflow_id: i64) -> usize {
-    let response = default_api::list_slurm_schedulers(
+    let response = apis::slurm_schedulers_api::list_slurm_schedulers(
         config,
         workflow_id,
         Some(0),
         Some(100),
         None,
         None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
     )
     .expect("Failed to list schedulers");
-    response.items.unwrap_or_default().len()
+    response.items.len()
 }
 
 // ============== Basic Regenerate Tests ==============
@@ -318,7 +309,7 @@ fn test_regenerate_no_pending_jobs(start_server: &ServerProcess) {
     let user = "test_user".to_string();
     let workflow = models::WorkflowModel::new("test_regenerate_no_pending".to_string(), user);
     let created_workflow =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     // Run regenerate command
@@ -567,7 +558,8 @@ fn test_regenerate_uses_existing_account(start_server: &ServerProcess) {
         tmp: None,
         extra: None,
     };
-    default_api::create_slurm_scheduler(config, scheduler).expect("Failed to create scheduler");
+    apis::slurm_schedulers_api::create_slurm_scheduler(config, scheduler)
+        .expect("Failed to create scheduler");
 
     // Run regenerate without specifying account (should use existing)
     let args = [
@@ -582,26 +574,17 @@ fn test_regenerate_uses_existing_account(start_server: &ServerProcess) {
     assert!(result.is_ok(), "Regenerate command failed: {:?}", result);
 
     // Verify new scheduler uses the existing account
-    let response = default_api::list_slurm_schedulers(
+    let response = apis::slurm_schedulers_api::list_slurm_schedulers(
         config,
         workflow_id,
         Some(0),
         Some(100),
         None,
         None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
     )
     .expect("Failed to list schedulers");
 
-    let schedulers = response.items.unwrap_or_default();
+    let schedulers = response.items;
     // Should have 2 schedulers now (original + regenerated)
     assert!(schedulers.len() >= 2);
 
@@ -632,7 +615,7 @@ fn test_regenerate_with_default_resource_requirements(start_server: &ServerProce
     let user = "test_user".to_string();
     let workflow = models::WorkflowModel::new("test_default_rr".to_string(), user);
     let created_workflow =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     // Create job WITHOUT explicit resource requirements
@@ -642,7 +625,7 @@ fn test_regenerate_with_default_resource_requirements(start_server: &ServerProce
         "job_with_default_rr".to_string(),
         "echo test".to_string(),
     );
-    let created_job = default_api::create_job(config, job).expect("Failed to create job");
+    let created_job = apis::jobs_api::create_job(config, job).expect("Failed to create job");
 
     // Verify that the server assigned a resource_requirements_id
     assert!(
@@ -651,7 +634,7 @@ fn test_regenerate_with_default_resource_requirements(start_server: &ServerProce
     );
 
     // Initialize
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize");
 
     // Run regenerate command

@@ -66,25 +66,53 @@ Object.assign(TorcDashboard.prototype, {
 
     updateProviderFields() {
         const provider = document.getElementById('chat-provider-select')?.value || 'anthropic';
+        const apiKeyField = document.getElementById('chat-api-key-field');
+        const apiKeyInput = document.getElementById('chat-api-key-input');
+        const modelField = document.getElementById('chat-model-field');
+        const modelInput = document.getElementById('chat-model-input');
         const foundryField = document.getElementById('chat-foundry-field');
+        const openaiUrlField = document.getElementById('chat-openai-url-field');
+        const ollamaUrlField = document.getElementById('chat-ollama-url-field');
+        const githubUrlField = document.getElementById('chat-github-url-field');
         const customUrlField = document.getElementById('chat-custom-url-field');
         const customHeaderField = document.getElementById('chat-custom-header-field');
-        const apiKeyInput = document.getElementById('chat-api-key-input');
 
         // Hide all provider-specific fields
         if (foundryField) foundryField.style.display = 'none';
+        if (openaiUrlField) openaiUrlField.style.display = 'none';
+        if (ollamaUrlField) ollamaUrlField.style.display = 'none';
+        if (githubUrlField) githubUrlField.style.display = 'none';
         if (customUrlField) customUrlField.style.display = 'none';
         if (customHeaderField) customHeaderField.style.display = 'none';
+        if (modelField) modelField.style.display = 'none';
+        if (apiKeyField) apiKeyField.style.display = '';
 
         // Show fields for selected provider and update placeholder
         if (provider === 'foundry') {
             if (foundryField) foundryField.style.display = '';
             if (apiKeyInput) apiKeyInput.placeholder = 'Foundry API key';
+        } else if (provider === 'openai') {
+            if (apiKeyInput) apiKeyInput.placeholder = 'sk-... (OpenAI API key)';
+            if (openaiUrlField) openaiUrlField.style.display = '';
+            if (modelField) modelField.style.display = '';
+            if (modelInput) modelInput.placeholder = 'gpt-4o';
+        } else if (provider === 'ollama') {
+            // Ollama doesn't need an API key
+            if (apiKeyField) apiKeyField.style.display = 'none';
+            if (ollamaUrlField) ollamaUrlField.style.display = '';
+            if (modelField) modelField.style.display = '';
+            if (modelInput) modelInput.placeholder = 'llama3.2';
+        } else if (provider === 'github') {
+            if (apiKeyInput) apiKeyInput.placeholder = 'ghp_... (GitHub token)';
+            if (githubUrlField) githubUrlField.style.display = '';
+            if (modelField) modelField.style.display = '';
+            if (modelInput) modelInput.placeholder = 'gpt-4o';
         } else if (provider === 'custom') {
             if (customUrlField) customUrlField.style.display = '';
             if (customHeaderField) customHeaderField.style.display = '';
             if (apiKeyInput) apiKeyInput.placeholder = 'API key';
         } else {
+            // anthropic
             if (apiKeyInput) apiKeyInput.placeholder = 'sk-ant-...';
         }
     },
@@ -133,19 +161,26 @@ Object.assign(TorcDashboard.prototype, {
         const input = document.getElementById('chat-api-key-input');
         const errorEl = document.getElementById('chat-setup-error');
         const submitBtn = document.getElementById('chat-api-key-submit');
-        if (!input) return;
 
-        const key = input.value.trim();
-        if (!key) {
+        const provider = document.getElementById('chat-provider-select')?.value || 'anthropic';
+        const key = input?.value?.trim() || '';
+
+        // Validate API key (not required for Ollama)
+        if (provider !== 'ollama' && !key) {
             if (errorEl) {
-                errorEl.textContent = 'Please enter an API key.';
+                const keyName = provider === 'github' ? 'GitHub token' : 'API key';
+                errorEl.textContent = `Please enter ${keyName}.`;
                 errorEl.style.display = '';
             }
             return;
         }
 
-        const provider = document.getElementById('chat-provider-select')?.value || 'anthropic';
-        const body = { api_key: key, provider };
+        const body = { api_key: provider === 'ollama' ? 'ollama' : key, provider };
+
+        // Get model if specified
+        const modelInput = document.getElementById('chat-model-input');
+        const model = modelInput?.value?.trim();
+        if (model) body.model = model;
 
         if (provider === 'foundry') {
             body.foundry_resource = document.getElementById('chat-foundry-resource')?.value?.trim() || '';
@@ -156,6 +191,15 @@ Object.assign(TorcDashboard.prototype, {
                 }
                 return;
             }
+        } else if (provider === 'openai') {
+            const baseUrl = document.getElementById('chat-openai-base-url')?.value?.trim();
+            if (baseUrl) body.base_url = baseUrl;
+        } else if (provider === 'ollama') {
+            const baseUrl = document.getElementById('chat-ollama-base-url')?.value?.trim();
+            if (baseUrl) body.base_url = baseUrl;
+        } else if (provider === 'github') {
+            const baseUrl = document.getElementById('chat-github-base-url')?.value?.trim();
+            if (baseUrl) body.base_url = baseUrl;
         } else if (provider === 'custom') {
             body.base_url = document.getElementById('chat-custom-base-url')?.value?.trim() || '';
             if (!body.base_url) {
@@ -181,11 +225,12 @@ Object.assign(TorcDashboard.prototype, {
 
             if (!response.ok) {
                 const text = await response.text();
-                throw new Error(text || 'Failed to configure API key');
+                throw new Error(text || 'Failed to configure provider');
             }
 
-            // Clear the input and show the chat
-            input.value = '';
+            // Clear the inputs and show the chat
+            if (input) input.value = '';
+            if (modelInput) modelInput.value = '';
             this.hideChatSetup();
         } catch (e) {
             if (errorEl) {

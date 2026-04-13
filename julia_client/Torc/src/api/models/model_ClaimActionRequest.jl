@@ -2,13 +2,13 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""claim_action_request
+@doc raw"""ClaimActionRequest
 
     ClaimActionRequest(;
         compute_node_id=nothing,
     )
 
-    - compute_node_id::Int64 : ID of the compute node claiming the action
+    - compute_node_id::Int64
 """
 Base.@kwdef mutable struct ClaimActionRequest <: OpenAPI.APIModel
     compute_node_id::Union{Nothing, Int64} = nothing
@@ -24,7 +24,6 @@ const _property_types_ClaimActionRequest = Dict{Symbol,String}(Symbol("compute_n
 OpenAPI.property_type(::Type{ ClaimActionRequest }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_ClaimActionRequest[name]))}
 
 function OpenAPI.check_required(o::ClaimActionRequest)
-    o.compute_node_id === nothing && (return false)
     true
 end
 
@@ -34,4 +33,7 @@ end
 
 function OpenAPI.validate_property(::Type{ ClaimActionRequest }, name::Symbol, val)
 
+    if name === Symbol("compute_node_id")
+        OpenAPI.validate_param(name, "ClaimActionRequest", :format, val, "int64")
+    end
 end

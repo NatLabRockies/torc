@@ -136,14 +136,19 @@ RUST_LOG=debug torc-server run --log-dir /var/log/torc
 
 - `TORC_LOG_DIR`: Default log directory
 - `RUST_LOG`: Default log level
+- `TORC_MAX_REQUEST_BODY_MB`: Override the bulk job upload request-body limit in MiB
 
 Example:
 
 ```bash
 export TORC_LOG_DIR=/var/log/torc
 export RUST_LOG=info
+export TORC_MAX_REQUEST_BODY_MB=500
 torc-server run
 ```
+
+`TORC_MAX_REQUEST_BODY_MB` applies to `POST /torc-service/v1/bulk_jobs`. Other JSON routes still use
+Axum's default `2 MiB` body limit.
 
 ## Daemonization (Unix/Linux Only)
 

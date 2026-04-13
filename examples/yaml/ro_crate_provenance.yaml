@@ -37,6 +37,8 @@
 
 name: ro_crate_demo
 description: Data processing workflow with RO-Crate provenance tracking
+project: data-governance
+metadata: '{"compliance": "FAIR", "data_steward": "data-team"}'
 
 # Enable automatic RO-Crate entity generation
 enable_ro_crate: true

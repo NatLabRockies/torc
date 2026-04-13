@@ -7,11 +7,27 @@ using Dates, TimeZones
 using OpenAPI
 using OpenAPI.Clients
 
-const API_VERSION = "v0.10.0"
+const API_VERSION = "0.12.0"
 
 include("modelincludes.jl")
 
-include("apis/api_AdminApi.jl")
-include("apis/api_DefaultApi.jl")
+include("apis/api_AccessControlApi.jl")
+include("apis/api_ComputeNodesApi.jl")
+include("apis/api_EventsApi.jl")
+include("apis/api_FailureHandlersApi.jl")
+include("apis/api_FilesApi.jl")
+include("apis/api_JobsApi.jl")
+include("apis/api_LocalSchedulersApi.jl")
+include("apis/api_RemoteWorkersApi.jl")
+include("apis/api_ResourceRequirementsApi.jl")
+include("apis/api_ResultsApi.jl")
+include("apis/api_RoCrateEntitiesApi.jl")
+include("apis/api_ScheduledComputeNodesApi.jl")
+include("apis/api_SlurmSchedulersApi.jl")
+include("apis/api_SlurmStatsApi.jl")
+include("apis/api_SystemApi.jl")
+include("apis/api_UserDataApi.jl")
+include("apis/api_WorkflowActionsApi.jl")
+include("apis/api_WorkflowsApi.jl")
 
 end # module APIClient

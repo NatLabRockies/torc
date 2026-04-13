@@ -56,7 +56,7 @@ enum Commands {
 
     /// Generate a password hash and output to stdout (for sending to admin)
     Hash {
-        /// Username (defaults to $USER or $USERNAME from environment)
+        /// Username (defaults to $TORC_USERNAME, $USER, or $USERNAME from environment)
         username: Option<String>,
 
         /// Password (will be prompted if not provided)
@@ -186,25 +186,18 @@ fn maybe_reload_auth(reload_auth: bool, url: &Option<String>, server_password: &
     let mut config = Configuration::with_tls(TlsConfig::default());
     config.base_path = base_path;
 
-    // Set up auth using the current USER env var and server_password
+    // Set up auth using the current username and server_password
     if let Some(password) = server_password {
-        let username = std::env::var("USER")
-            .or_else(|_| std::env::var("USERNAME"))
-            .unwrap_or_else(|_| "unknown".to_string());
+        let username = torc::get_username();
         config.basic_auth = Some((username, Some(password.clone())));
     }
 
-    match torc::client::apis::default_api::reload_auth(&config) {
+    match torc::client::apis::access_control_api::reload_auth(&config) {
         Ok(response) => {
-            let message = response
-                .get("message")
-                .and_then(|v| v.as_str())
-                .unwrap_or("Auth reloaded");
-            let user_count = response
-                .get("user_count")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0);
-            println!("Server: {} ({} users)", message, user_count);
+            println!(
+                "Server: {} ({} users)",
+                response.message, response.user_count
+            );
         }
         Err(e) => {
             eprintln!("Warning: Failed to reload auth on server: {e}");
@@ -318,14 +311,16 @@ fn main() {
             // Resolve username from argument or environment
             let username = match username {
                 Some(u) => u,
-                None => std::env::var("USER")
-                    .or_else(|_| std::env::var("USERNAME"))
-                    .unwrap_or_else(|_| {
+                None => {
+                    let u = torc::get_username();
+                    if u == "unknown" {
                         eprintln!(
-                            "Error: username not provided and could not read from $USER or $USERNAME"
+                            "Error: username not provided and could not read from $TORC_USERNAME, $USER, or $USERNAME"
                         );
                         std::process::exit(1);
-                    }),
+                    }
+                    u
+                }
             };
 
             let password = password.unwrap_or_else(|| prompt_password(&username));

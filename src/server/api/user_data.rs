@@ -2,12 +2,12 @@
 
 #![allow(clippy::too_many_arguments)]
 
+use crate::server::transport_types::context_types::{ApiError, Has, XSpanIdString};
 use async_trait::async_trait;
 use log::{debug, info};
 use sqlx::Row;
-use swagger::{ApiError, Has, XSpanIdString};
 
-use crate::server::api_types::{
+use crate::server::api_responses::{
     CreateUserDataResponse, DeleteAllUserDataResponse, DeleteUserDataResponse, GetUserDataResponse,
     ListMissingUserDataResponse, ListUserDataResponse, UpdateUserDataResponse,
 };
@@ -32,7 +32,6 @@ pub trait UserDataApi<C> {
     async fn delete_all_user_data(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteAllUserDataResponse, ApiError>;
 
@@ -73,7 +72,6 @@ pub trait UserDataApi<C> {
     async fn delete_user_data(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteUserDataResponse, ApiError>;
 }
@@ -221,13 +219,11 @@ where
     async fn delete_all_user_data(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteAllUserDataResponse, ApiError> {
         debug!(
-            "delete_all_user_data({}, {:?}) - X-Span-ID: {:?}",
+            "delete_all_user_data({}) - X-Span-ID: {:?}",
             workflow_id,
-            body,
             context.get().0.clone()
         );
 
@@ -524,7 +520,7 @@ where
 
         Ok(ListUserDataResponse::SuccessfulResponse(
             models::ListUserDataResponse {
-                items: Some(items),
+                items,
                 offset: offset_val,
                 max_limit: MAX_RECORD_TRANSFER_COUNT,
                 count: current_count,
@@ -542,9 +538,8 @@ where
         context: &C,
     ) -> Result<UpdateUserDataResponse, ApiError> {
         debug!(
-            "update_user_data({}, {:?}) - X-Span-ID: {:?}",
+            "update_user_data({}) - X-Span-ID: {:?}",
             id,
-            body,
             context.get().0.clone()
         );
 
@@ -624,13 +619,11 @@ where
     async fn delete_user_data(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteUserDataResponse, ApiError> {
         debug!(
-            "delete_user_data({}, {:?}) - X-Span-ID: {:?}",
+            "delete_user_data({}) - X-Span-ID: {:?}",
             id,
-            body,
             context.get().0.clone()
         );
 

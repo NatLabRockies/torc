@@ -276,7 +276,18 @@ pub fn list_workflows(config: &Configuration) -> Result<CallToolResult, McpError
 
 ```bash
 cd api
-bash make_api_clients.sh  # Regenerates both Python and Julia clients
+bash sync_openapi.sh emit
+bash sync_openapi.sh check
+bash sync_openapi.sh clients --use-rust-spec
+```
+
+This workflow regenerates the Rust, Python, and Julia clients from `api/openapi.codegen.yaml`. Run
+`emit` first to refresh that file from the Rust-owned scaffold, and `check` to verify the checked-in
+artifacts still match. When the emitted spec should replace the checked-in artifact, run:
+
+```bash
+cd api
+bash sync_openapi.sh all --promote
 ```
 
 ## Alternatives Considered
@@ -310,9 +321,12 @@ bash make_api_clients.sh  # Regenerates both Python and Julia clients
 
 When adding a new feature that should be exposed to users:
 
-1. **Start with the API**: Define the endpoint in `api/openapi.yaml` with proper schemas
+1. **Start with the live Rust-owned API contract**: Define the endpoint in
+   `src/server/live_router.rs` and `src/models.rs`
 2. **Implement server-side**: Add handler in `src/server/api/`
-3. **Regenerate clients**: Run `api/make_api_clients.sh`
+3. **Promote and regenerate**: Run `api/sync_openapi.sh all --promote` when the contract is ready,
+   or `api/sync_openapi.sh clients --use-rust-spec` for local client iteration against the
+   Rust-emitted spec
 4. **Add CLI command**: Create handler in `src/client/commands/`
 5. **Update TUI if applicable**: Add to relevant view in `src/tui/`
 6. **Update Dashboard if applicable**: Add route in `torc-dash/src/`

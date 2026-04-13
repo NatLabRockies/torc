@@ -234,7 +234,7 @@ resource_requirements:
     runtime: PT10M
 EOF
 
-WORKFLOW_ID=$(torc workflows create /tmp/ml_training.yaml -f json | jq -r '.id')
+WORKFLOW_ID=$(torc create /tmp/ml_training.yaml -f json | jq -r '.id')
 echo "Alice created workflow: $WORKFLOW_ID"
 ```
 
@@ -260,7 +260,7 @@ resource_requirements:
     runtime: PT10M
 EOF
 
-torc workflows create /tmp/data_pipeline.yaml
+torc create /tmp/data_pipeline.yaml
 ```
 
 ## Step 7: Observe Access Control in Action

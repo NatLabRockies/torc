@@ -25,11 +25,10 @@ The top-level container for a complete workflow definition.
 | `resource_monitor`                               | [ResourceMonitorConfig](#resourcemonitorconfig)         | none         | Resource monitoring configuration                                         |
 | `actions`                                        | [[WorkflowActionSpec](#workflowactionspec)]             | none         | Actions to execute based on workflow/job state transitions                |
 | `use_pending_failed`                             | boolean                                                 | false        | Use PendingFailed status for failed jobs (enables AI-assisted recovery)   |
-| `slurm_config`                                   | [SlurmConfig](#slurmconfig)                             | none         | Slurm job step configuration (srun options)                               |
+| `execution_config`                               | [ExecutionConfig](#executionconfig)                     | none         | Execution mode and termination settings                                   |
 | `compute_node_wait_for_new_jobs_seconds`         | integer                                                 | none         | Compute nodes wait for new jobs this long before exiting                  |
 | `compute_node_ignore_workflow_completion`        | boolean                                                 | false        | Compute nodes hold allocations even after workflow completes              |
 | `compute_node_wait_for_healthy_database_minutes` | integer                                                 | none         | Compute nodes wait this many minutes for database recovery                |
-| `jobs_sort_method`                               | [ClaimJobsSortMethod](#claimjobssortmethod)             | `none`       | Method for sorting jobs when claiming them                                |
 | `enable_ro_crate`                                | boolean                                                 | false        | Enable automatic [RO-Crate](../concepts/ro-crate.md) provenance tracking  |
 
 ### Examples with project and metadata
@@ -74,28 +73,30 @@ jobs:
 
 Defines a single computational task within a workflow.
 
-| Name                             | Type                  | Default     | Description                                                            |
-| -------------------------------- | --------------------- | ----------- | ---------------------------------------------------------------------- |
-| `name`                           | string                | _required_  | Name of the job                                                        |
-| `command`                        | string                | _required_  | Command to execute for this job                                        |
-| `invocation_script`              | string                | none        | Optional script for job invocation                                     |
-| `resource_requirements`          | string                | none        | Name of a [ResourceRequirementsSpec](#resourcerequirementsspec) to use |
-| `failure_handler`                | string                | none        | Name of a [FailureHandlerSpec](#failurehandlerspec) to use             |
-| `scheduler`                      | string                | none        | Name of the scheduler to use for this job                              |
-| `cancel_on_blocking_job_failure` | boolean               | false       | Cancel this job if a blocking job fails                                |
-| `depends_on`                     | [string]              | none        | Job names that must complete before this job runs (exact matches)      |
-| `depends_on_regexes`             | [string]              | none        | Regex patterns for job dependencies                                    |
-| `input_files`                    | [string]              | none        | File names this job reads (exact matches)                              |
-| `input_file_regexes`             | [string]              | none        | Regex patterns for input files                                         |
-| `output_files`                   | [string]              | none        | File names this job produces (exact matches)                           |
-| `output_file_regexes`            | [string]              | none        | Regex patterns for output files                                        |
-| `input_user_data`                | [string]              | none        | User data names this job reads (exact matches)                         |
-| `input_user_data_regexes`        | [string]              | none        | Regex patterns for input user data                                     |
-| `output_user_data`               | [string]              | none        | User data names this job produces (exact matches)                      |
-| `output_user_data_regexes`       | [string]              | none        | Regex patterns for output user data                                    |
-| `parameters`                     | map\<string, string\> | none        | Local parameters for generating multiple jobs                          |
-| `parameter_mode`                 | string                | `"product"` | How to combine parameters: `"product"` (Cartesian) or `"zip"`          |
-| `use_parameters`                 | [string]              | none        | Workflow parameter names to use for this job                           |
+| Name                             | Type                        | Default     | Description                                                            |
+| -------------------------------- | --------------------------- | ----------- | ---------------------------------------------------------------------- |
+| `name`                           | string                      | _required_  | Name of the job                                                        |
+| `command`                        | string                      | _required_  | Command to execute for this job                                        |
+| `priority`                       | integer                     | `0`         | Scheduling priority; higher values are claimed before lower values     |
+| `invocation_script`              | string                      | none        | Optional script for job invocation                                     |
+| `resource_requirements`          | string                      | none        | Name of a [ResourceRequirementsSpec](#resourcerequirementsspec) to use |
+| `failure_handler`                | string                      | none        | Name of a [FailureHandlerSpec](#failurehandlerspec) to use             |
+| `scheduler`                      | string                      | none        | Name of the scheduler to use for this job                              |
+| `cancel_on_blocking_job_failure` | boolean                     | false       | Cancel this job if a blocking job fails                                |
+| `depends_on`                     | [string]                    | none        | Job names that must complete before this job runs (exact matches)      |
+| `depends_on_regexes`             | [string]                    | none        | Regex patterns for job dependencies                                    |
+| `input_files`                    | [string]                    | none        | File names this job reads (exact matches)                              |
+| `input_file_regexes`             | [string]                    | none        | Regex patterns for input files                                         |
+| `output_files`                   | [string]                    | none        | File names this job produces (exact matches)                           |
+| `output_file_regexes`            | [string]                    | none        | Regex patterns for output files                                        |
+| `input_user_data`                | [string]                    | none        | User data names this job reads (exact matches)                         |
+| `input_user_data_regexes`        | [string]                    | none        | Regex patterns for input user data                                     |
+| `output_user_data`               | [string]                    | none        | User data names this job produces (exact matches)                      |
+| `output_user_data_regexes`       | [string]                    | none        | Regex patterns for output user data                                    |
+| `parameters`                     | map\<string, string\>       | none        | Local parameters for generating multiple jobs                          |
+| `parameter_mode`                 | string                      | `"product"` | How to combine parameters: `"product"` (Cartesian) or `"zip"`          |
+| `use_parameters`                 | [string]                    | none        | Workflow parameter names to use for this job                           |
+| `stdio`                          | [StdioConfig](#stdioconfig) | none        | Per-job override for stdout/stderr capture (overrides workflow-level)  |
 
 ## FileSpec
 
@@ -170,31 +171,142 @@ Defines a Slurm HPC job scheduler configuration.
 | `tmp`             | string  | none         | Temporary storage specification              |
 | `extra`           | string  | none         | Additional Slurm parameters                  |
 
-## SlurmConfig
+## ExecutionConfig
 
-Slurm job step configuration controlling how jobs are executed inside Slurm allocations. These
-settings affect srun arguments passed for each job step.
+Controls how jobs are executed and terminated. Fields are grouped by which execution mode they apply
+to. Setting a field that doesn't match the effective mode produces a validation error at workflow
+creation time.
 
-For backward compatibility, these fields can also be specified as top-level WorkflowSpec fields
-(`limit_resources`, `use_srun`, `srun_termination_signal`, `enable_cpu_bind`). When both are
-present, `slurm_config` takes precedence.
+### Shared fields (both modes)
 
-| Name                      | Type    | Default | Description                                                            |
-| ------------------------- | ------- | ------- | ---------------------------------------------------------------------- |
-| `limit_resources`         | boolean | `true`  | Pass `--mem` and `--cpus-per-task` to srun for cgroup enforcement      |
-| `use_srun`                | boolean | `true`  | Wrap jobs with srun for accounting and cgroup enforcement              |
-| `srun_termination_signal` | string  | none    | Signal spec for `srun --signal=<value>` (e.g. `"TERM@120"`)            |
-| `enable_cpu_bind`         | boolean | `false` | Allow Slurm CPU binding (default: disabled via `srun --cpu-bind=none`) |
+| Name                       | Type                        | Default    | Description                                            |
+| -------------------------- | --------------------------- | ---------- | ------------------------------------------------------ |
+| `mode`                     | string                      | `"direct"` | Execution mode: `"direct"`, `"slurm"`, or `"auto"`     |
+| `sigkill_headroom_seconds` | integer                     | `60`       | Seconds before end_time for SIGKILL or srun --time     |
+| `timeout_exit_code`        | integer                     | `152`      | Exit code for timed-out jobs (matches Slurm TIMEOUT)   |
+| `staggered_start`          | boolean                     | `true`     | Stagger job runner startup to mitigate thundering herd |
+| `stdio`                    | [StdioConfig](#stdioconfig) | see below  | Workflow-level default for stdout/stderr capture       |
 
-**Example:**
+### Direct mode fields
+
+These fields only apply when the effective mode is `direct`. Setting them with `mode: slurm`
+produces a validation error. When `mode: auto`, validation checks the effective mode based on
+whether Slurm schedulers are present in the spec.
+
+| Name                   | Type    | Default     | Description                                           |
+| ---------------------- | ------- | ----------- | ----------------------------------------------------- |
+| `limit_resources`      | boolean | `true`      | Monitor memory/CPU and kill jobs that exceed limits   |
+| `termination_signal`   | string  | `"SIGTERM"` | Signal to send before SIGKILL for graceful shutdown   |
+| `sigterm_lead_seconds` | integer | `30`        | Seconds before SIGKILL to send the termination signal |
+| `oom_exit_code`        | integer | `137`       | Exit code for OOM-killed jobs (128 + SIGKILL)         |
+
+### Slurm mode fields
+
+These fields only apply when the effective mode is `slurm`. Setting them with `mode: direct`
+produces a validation error. When `mode: auto`, validation checks the effective mode based on
+whether Slurm schedulers are present in the spec.
+
+| Name                      | Type    | Default | Description                             |
+| ------------------------- | ------- | ------- | --------------------------------------- |
+| `srun_termination_signal` | string  | none    | Signal spec for `srun --signal=<value>` |
+| `enable_cpu_bind`         | boolean | `false` | Allow Slurm CPU binding (`--cpu-bind`)  |
+
+### StdioConfig
+
+Controls how stdout and stderr are captured for job processes.
+
+| Name                | Type                    | Default      | Description                                             |
+| ------------------- | ----------------------- | ------------ | ------------------------------------------------------- |
+| `mode`              | [StdioMode](#stdiomode) | `"separate"` | How to capture stdout/stderr                            |
+| `delete_on_success` | boolean                 | `false`      | Delete captured files when a job completes successfully |
+
+### StdioMode
+
+| Value       | Description                                                      |
+| ----------- | ---------------------------------------------------------------- |
+| `separate`  | Separate stdout (`.o`) and stderr (`.e`) files per job (default) |
+| `combined`  | Combine stdout and stderr into a single `.log` file per job      |
+| `no_stdout` | Discard stdout (`/dev/null`); capture stderr only                |
+| `no_stderr` | Discard stderr (`/dev/null`); capture stdout only                |
+| `none`      | Discard both stdout and stderr                                   |
+
+Per-job overrides can be set via the `stdio` field on individual [JobSpec](#jobspec) entries, which
+takes precedence over the workflow-level setting.
+
+#### Stdio Examples
+
+Combine stdout and stderr into a single file, and delete it on success:
 
 ```yaml
-slurm_config:
+execution_config:
+  stdio:
+    mode: combined
+    delete_on_success: true
+```
+
+Suppress stdout for most jobs, but keep separate files for a specific job:
+
+```yaml
+execution_config:
+  stdio:
+    mode: no_stdout
+
+jobs:
+  - name: preprocess
+    command: python preprocess.py
+  - name: train
+    command: python train.py
+    stdio:
+      mode: separate
+```
+
+### Execution Modes
+
+| Mode     | Description                                                             |
+| -------- | ----------------------------------------------------------------------- |
+| `direct` | Torc manages job execution directly (default). Works everywhere         |
+| `slurm`  | Jobs wrapped with `srun`. Slurm manages resource limits and termination |
+| `auto`   | Selects `slurm` if `SLURM_JOB_ID` is set, otherwise `direct`            |
+
+> **Warning**: `auto` will silently select slurm mode when running inside a Slurm allocation. Prefer
+> setting the mode explicitly to avoid unexpected behavior.
+
+### Direct Mode Example
+
+```yaml
+execution_config:
+  mode: direct
   limit_resources: true
-  use_srun: true
+  termination_signal: SIGTERM
+  sigterm_lead_seconds: 30
+  sigkill_headroom_seconds: 60
+  timeout_exit_code: 152
+  oom_exit_code: 137
+```
+
+### Slurm Mode Example
+
+```yaml
+execution_config:
+  mode: slurm
   srun_termination_signal: "TERM@120"
+  sigkill_headroom_seconds: 180
   enable_cpu_bind: false
 ```
+
+### Termination Timeline (Direct Mode)
+
+With `sigkill_headroom_seconds=60` and `sigterm_lead_seconds=30`:
+
+1. `end_time - 90s`: Send SIGTERM (or configured `termination_signal`)
+2. `end_time - 60s`: Send SIGKILL to remaining jobs, set exit code to `timeout_exit_code`
+3. `end_time`: Job runner exits
+
+### Slurm Mode Headroom
+
+In Slurm mode, `sigkill_headroom_seconds` controls `srun --time`. The step time limit is set to
+`remaining_time - sigkill_headroom_seconds`, allowing the job runner to detect completion before the
+allocation expires.
 
 ## SlurmDefaultsSpec
 
@@ -220,18 +332,19 @@ slurm_defaults:
 
 Defines conditional actions triggered by workflow or job state changes.
 
-| Name                | Type     | Default    | Description                                                                                               |
-| ------------------- | -------- | ---------- | --------------------------------------------------------------------------------------------------------- |
-| `trigger_type`      | string   | _required_ | When to trigger: `"on_workflow_start"`, `"on_workflow_complete"`, `"on_jobs_ready"`, `"on_jobs_complete"` |
-| `action_type`       | string   | _required_ | What to do: `"run_commands"`, `"schedule_nodes"`                                                          |
-| `jobs`              | [string] | none       | For job triggers: exact job names to match                                                                |
-| `job_name_regexes`  | [string] | none       | For job triggers: regex patterns to match job names                                                       |
-| `commands`          | [string] | none       | For `run_commands`: commands to execute                                                                   |
-| `scheduler`         | string   | none       | For `schedule_nodes`: scheduler name                                                                      |
-| `scheduler_type`    | string   | none       | For `schedule_nodes`: scheduler type (`"slurm"`, `"local"`)                                               |
-| `num_allocations`   | integer  | none       | For `schedule_nodes`: number of node allocations                                                          |
-| `max_parallel_jobs` | integer  | none       | For `schedule_nodes`: maximum parallel jobs                                                               |
-| `persistent`        | boolean  | false      | Whether the action persists and can be claimed by multiple workers                                        |
+| Name                        | Type     | Default    | Description                                                                                               |
+| --------------------------- | -------- | ---------- | --------------------------------------------------------------------------------------------------------- |
+| `trigger_type`              | string   | _required_ | When to trigger: `"on_workflow_start"`, `"on_workflow_complete"`, `"on_jobs_ready"`, `"on_jobs_complete"` |
+| `action_type`               | string   | _required_ | What to do: `"run_commands"`, `"schedule_nodes"`                                                          |
+| `jobs`                      | [string] | none       | For job triggers: exact job names to match                                                                |
+| `job_name_regexes`          | [string] | none       | For job triggers: regex patterns to match job names                                                       |
+| `commands`                  | [string] | none       | For `run_commands`: commands to execute                                                                   |
+| `scheduler`                 | string   | none       | For `schedule_nodes`: scheduler name                                                                      |
+| `scheduler_type`            | string   | none       | For `schedule_nodes`: scheduler type (`"slurm"`, `"local"`)                                               |
+| `num_allocations`           | integer  | none       | For `schedule_nodes`: number of node allocations                                                          |
+| `start_one_worker_per_node` | boolean  | false      | For `schedule_nodes`: launch one worker per node (direct mode only)                                       |
+| `max_parallel_jobs`         | integer  | none       | For `schedule_nodes`: maximum parallel jobs                                                               |
+| `persistent`                | boolean  | false      | Whether the action persists and can be claimed by multiple workers                                        |
 
 ## ResourceMonitorConfig
 
@@ -253,15 +366,28 @@ Enum specifying the level of detail for resource monitoring.
 | `Summary`    | Collect summary statistics only   |
 | `TimeSeries` | Collect detailed time series data |
 
-## ClaimJobsSortMethod
+## Job Priority
 
-Enum specifying how jobs are sorted when being claimed by workers.
+Use `priority` when some ready jobs should be claimed before others.
 
-| Value                 | Description                             |
-| --------------------- | --------------------------------------- |
-| `none`                | No sorting (default)                    |
-| `gpus_runtime_memory` | Sort by GPUs, then runtime, then memory |
-| `gpus_memory_runtime` | Sort by GPUs, then memory, then runtime |
+- Higher values are preferred over lower values
+- The default is `0`
+- `claim_next_jobs` uses a stable tie-breaker for jobs with the same priority
+- `claim_jobs_based_on_resources` prefers GPU jobs first within the same priority
+- Priority affects both `claim_next_jobs` and `claim_jobs_based_on_resources`
+
+Example:
+
+```yaml
+jobs:
+  - name: urgent_step
+    command: ./run_urgent.sh
+    priority: 100
+
+  - name: background_step
+    command: ./run_background.sh
+    priority: 10
+```
 
 ## Parameter Formats
 

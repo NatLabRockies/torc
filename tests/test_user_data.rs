@@ -6,7 +6,7 @@ use common::{
 };
 use rstest::rstest;
 use serde_json::json;
-use torc::client::default_api;
+use torc::client::apis;
 use torc::models;
 
 #[rstest]
@@ -81,7 +81,7 @@ fn test_user_data_add_with_job_associations(start_server: &ServerProcess) {
         "echo 'producing data'".to_string(),
     );
     let producer_job =
-        default_api::create_job(config, producer_job).expect("Failed to create producer job");
+        apis::jobs_api::create_job(config, producer_job).expect("Failed to create producer job");
     let producer_job_id = producer_job.id.unwrap();
 
     let consumer_job = models::JobModel::new(
@@ -90,7 +90,7 @@ fn test_user_data_add_with_job_associations(start_server: &ServerProcess) {
         "echo 'consuming data'".to_string(),
     );
     let consumer_job =
-        default_api::create_job(config, consumer_job).expect("Failed to create consumer job");
+        apis::jobs_api::create_job(config, consumer_job).expect("Failed to create consumer job");
     let consumer_job_id = consumer_job.id.unwrap();
 
     // Test adding user data with job associations
@@ -584,7 +584,7 @@ fn test_user_data_remove_command_json(start_server: &ServerProcess) {
     assert_eq!(json_output.get("name").unwrap(), &json!("test_remove_data"));
 
     // Verify the user data is actually removed by trying to get it
-    let get_result = default_api::get_user_data(config, user_data_id);
+    let get_result = apis::user_data_api::get_user_data(config, user_data_id);
     assert!(get_result.is_err(), "User data should be deleted");
 }
 
@@ -608,9 +608,10 @@ fn test_user_data_delete_workflow_command_json(start_server: &ServerProcess) {
 
     // Should return a success message
     assert!(json_output.get("message").is_some());
+    assert_eq!(json_output.get("deleted_count").unwrap(), &json!(2));
 
     // Verify all user data is deleted by trying to list it
-    let list_result = default_api::list_user_data(
+    let response = apis::user_data_api::list_user_data(
         config,
         workflow_id,
         None,
@@ -621,12 +622,10 @@ fn test_user_data_delete_workflow_command_json(start_server: &ServerProcess) {
         None,
         None,
         None,
-    );
+    )
+    .expect("Failed to list user data after delete-all");
 
-    if let Ok(response) = list_result {
-        let items = response.items.unwrap_or_default();
-        assert!(items.is_empty(), "All user data should be deleted");
-    }
+    assert!(response.items.is_empty(), "All user data should be deleted");
 }
 
 #[rstest]
@@ -645,7 +644,7 @@ fn test_user_data_list_missing_command_json(start_server: &ServerProcess) {
         "echo 'consuming data'".to_string(),
     );
     let consumer_job =
-        default_api::create_job(config, consumer_job).expect("Failed to create consumer job");
+        apis::jobs_api::create_job(config, consumer_job).expect("Failed to create consumer job");
     let consumer_job_id = consumer_job.id.unwrap();
 
     // Create user data that this job should consume
@@ -680,7 +679,7 @@ fn test_user_data_list_missing_command_json(start_server: &ServerProcess) {
         .unwrap();
 
     // Delete the original user data to simulate missing input
-    default_api::delete_user_data(config, user_data_id_1, None)
+    apis::user_data_api::delete_user_data(config, user_data_id_1)
         .expect("Failed to delete user data to simulate missing input");
 
     // Scenario 2: Test missing job-produced data from completed jobs
@@ -691,7 +690,7 @@ fn test_user_data_list_missing_command_json(start_server: &ServerProcess) {
         "echo 'producing output'".to_string(),
     );
     let producer_job =
-        default_api::create_job(config, producer_job).expect("Failed to create producer job");
+        apis::jobs_api::create_job(config, producer_job).expect("Failed to create producer job");
     let producer_job_id = producer_job.id.unwrap();
 
     // Create user data that this job should produce
@@ -745,10 +744,10 @@ fn test_user_data_list_missing_command_json(start_server: &ServerProcess) {
     );
 
     // Create the result to indicate job completion
-    let _ = default_api::create_result(config, job_result);
+    let _ = apis::results_api::create_result(config, job_result);
 
     // Delete the produced data to simulate missing job output
-    default_api::delete_user_data(config, user_data_id_2, None)
+    apis::user_data_api::delete_user_data(config, user_data_id_2)
         .expect("Failed to delete produced data to simulate missing output");
 
     // Test the CLI list-missing command
@@ -792,8 +791,8 @@ fn test_user_data_list_missing_command_json(start_server: &ServerProcess) {
     );
 
     // Clean up remaining test data
-    let _ = default_api::delete_user_data(config, consumer_data_id, None);
-    let _ = default_api::delete_user_data(config, producer_data_id, None);
+    let _ = apis::user_data_api::delete_user_data(config, consumer_data_id);
+    let _ = apis::user_data_api::delete_user_data(config, producer_data_id);
 }
 
 #[rstest]
@@ -940,7 +939,7 @@ fn test_api_list_missing_user_data(start_server: &ServerProcess) {
 
     let mut user_data1 = models::UserDataModel::new(workflow_id, "input_data_1".to_string());
     user_data1.data = Some(json!({"type": "input"}));
-    let user_data1 = default_api::create_user_data(config, user_data1, None, None)
+    let user_data1 = apis::user_data_api::create_user_data(config, user_data1, None, None)
         .expect("Failed to create user_data1");
     let user_data1_id = user_data1.id.unwrap();
 
@@ -948,7 +947,7 @@ fn test_api_list_missing_user_data(start_server: &ServerProcess) {
     let missing_input_user_data =
         models::UserDataModel::new(workflow_id, "missing_input".to_string());
     let missing_input_user_data =
-        default_api::create_user_data(config, missing_input_user_data, None, None)
+        apis::user_data_api::create_user_data(config, missing_input_user_data, None, None)
             .expect("Failed to create missing input placeholder");
     let missing_input_id = missing_input_user_data.id.unwrap();
 
@@ -958,13 +957,13 @@ fn test_api_list_missing_user_data(start_server: &ServerProcess) {
         "echo 'consuming'".to_string(),
     );
     job1.input_user_data_ids = Some(vec![user_data1_id, missing_input_id]);
-    let job1 = default_api::create_job(config, job1).expect("Failed to create consumer job");
+    let job1 = apis::jobs_api::create_job(config, job1).expect("Failed to create consumer job");
     let _job1_id = job1.id.unwrap();
 
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
-    let response = default_api::list_missing_user_data(config, workflow_id)
+    let response = apis::workflows_api::list_missing_user_data(config, workflow_id)
         .expect("Failed to call list_missing_user_data");
 
     assert_eq!(
@@ -984,7 +983,7 @@ fn test_api_list_missing_user_data(start_server: &ServerProcess) {
     let missing_output_user_data =
         models::UserDataModel::new(workflow_id, "missing_output".to_string());
     let missing_output_user_data =
-        default_api::create_user_data(config, missing_output_user_data, None, None)
+        apis::user_data_api::create_user_data(config, missing_output_user_data, None, None)
             .expect("Failed to create missing output placeholder");
     let missing_output_id = missing_output_user_data.id.unwrap();
 
@@ -994,10 +993,10 @@ fn test_api_list_missing_user_data(start_server: &ServerProcess) {
         "echo 'producing'".to_string(),
     );
     job2.output_user_data_ids = Some(vec![missing_output_id]);
-    let job2 = default_api::create_job(config, job2).expect("Failed to create producer job");
+    let job2 = apis::jobs_api::create_job(config, job2).expect("Failed to create producer job");
     let job2_id = job2.id.unwrap();
 
-    let response = default_api::list_missing_user_data(config, workflow_id)
+    let response = apis::workflows_api::list_missing_user_data(config, workflow_id)
         .expect("Failed to call list_missing_user_data after creating producer");
 
     assert_eq!(
@@ -1014,7 +1013,7 @@ fn test_api_list_missing_user_data(start_server: &ServerProcess) {
     // Transition job2 through lifecycle: Running → Completed
     // Note: workflow_status is created with run_id=0 by default
     let run_id = 0;
-    default_api::manage_status_change(config, job2_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(config, job2_id, models::JobStatus::Running, run_id)
         .expect("Failed to set job2 to running");
     let result = models::ResultModel::new(
         job2_id,
@@ -1027,7 +1026,7 @@ fn test_api_list_missing_user_data(start_server: &ServerProcess) {
         chrono::Utc::now().to_rfc3339(),
         models::JobStatus::Completed,
     );
-    default_api::complete_job(
+    apis::jobs_api::complete_job(
         config,
         job2_id,
         models::JobStatus::Completed,
@@ -1036,7 +1035,7 @@ fn test_api_list_missing_user_data(start_server: &ServerProcess) {
     )
     .expect("Failed to complete job2");
 
-    let response = default_api::list_missing_user_data(config, workflow_id).expect(
+    let response = apis::workflows_api::list_missing_user_data(config, workflow_id).expect(
         "Failed to call list_missing_user_data after job completion without creating output",
     );
 
@@ -1061,14 +1060,14 @@ fn test_api_list_missing_user_data(start_server: &ServerProcess) {
     let missing_output_user_data_2 =
         models::UserDataModel::new(workflow_id, "missing_output_2".to_string());
     let missing_output_user_data_2 =
-        default_api::create_user_data(config, missing_output_user_data_2, None, None)
+        apis::user_data_api::create_user_data(config, missing_output_user_data_2, None, None)
             .expect("Failed to create missing output placeholder 2");
     let missing_output_id_2 = missing_output_user_data_2.id.unwrap();
 
     let missing_output_user_data_3 =
         models::UserDataModel::new(workflow_id, "missing_output_3".to_string());
     let missing_output_user_data_3 =
-        default_api::create_user_data(config, missing_output_user_data_3, None, None)
+        apis::user_data_api::create_user_data(config, missing_output_user_data_3, None, None)
             .expect("Failed to create missing output placeholder 3");
     let missing_output_id_3 = missing_output_user_data_3.id.unwrap();
 
@@ -1078,11 +1077,11 @@ fn test_api_list_missing_user_data(start_server: &ServerProcess) {
         "echo 'producing multiple outputs'".to_string(),
     );
     job3.output_user_data_ids = Some(vec![missing_output_id_2, missing_output_id_3]);
-    let job3 = default_api::create_job(config, job3).expect("Failed to create producer job 2");
+    let job3 = apis::jobs_api::create_job(config, job3).expect("Failed to create producer job 2");
     let job3_id = job3.id.unwrap();
 
     // Transition job3 through lifecycle: Running → Completed
-    default_api::manage_status_change(config, job3_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(config, job3_id, models::JobStatus::Running, run_id)
         .expect("Failed to set job3 to running");
     let result3 = models::ResultModel::new(
         job3_id,
@@ -1095,7 +1094,7 @@ fn test_api_list_missing_user_data(start_server: &ServerProcess) {
         chrono::Utc::now().to_rfc3339(),
         models::JobStatus::Completed,
     );
-    default_api::complete_job(
+    apis::jobs_api::complete_job(
         config,
         job3_id,
         models::JobStatus::Completed,
@@ -1104,7 +1103,7 @@ fn test_api_list_missing_user_data(start_server: &ServerProcess) {
     )
     .expect("Failed to complete job3");
 
-    let response = default_api::list_missing_user_data(config, workflow_id)
+    let response = apis::workflows_api::list_missing_user_data(config, workflow_id)
         .expect("Failed to call list_missing_user_data after second completed job without output");
 
     assert_eq!(
@@ -1127,7 +1126,7 @@ fn test_api_list_missing_user_data(start_server: &ServerProcess) {
     let missing_input_user_data_2 =
         models::UserDataModel::new(workflow_id, "missing_input_2".to_string());
     let missing_input_user_data_2 =
-        default_api::create_user_data(config, missing_input_user_data_2, None, None)
+        apis::user_data_api::create_user_data(config, missing_input_user_data_2, None, None)
             .expect("Failed to create missing input placeholder 2");
     let missing_input_id_2 = missing_input_user_data_2.id.unwrap();
 
@@ -1137,9 +1136,9 @@ fn test_api_list_missing_user_data(start_server: &ServerProcess) {
         "echo 'consuming multiple inputs'".to_string(),
     );
     job4.input_user_data_ids = Some(vec![user_data1_id, missing_input_id_2]);
-    let _job4 = default_api::create_job(config, job4).expect("Failed to create consumer job 2");
+    let _job4 = apis::jobs_api::create_job(config, job4).expect("Failed to create consumer job 2");
 
-    let response = default_api::list_missing_user_data(config, workflow_id)
+    let response = apis::workflows_api::list_missing_user_data(config, workflow_id)
         .expect("Failed to call list_missing_user_data after second consumer job");
 
     assert_eq!(

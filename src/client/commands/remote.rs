@@ -5,8 +5,8 @@ use log::{debug, info, warn};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::commands::{get_env_user_name, select_workflow_interactively};
 use crate::client::remote::{
     RemoteOperationResult, RemoteWorkerState, WorkerEntry, check_all_connectivity,
@@ -345,7 +345,7 @@ pub fn handle_remote_commands(config: &Configuration, command: &RemoteCommands) 
 /// race conditions where multiple workers try to initialize simultaneously.
 fn initialize_workflow_if_needed(config: &Configuration, workflow_id: i64) {
     // Get workflow info
-    let workflow = match default_api::get_workflow(config, workflow_id) {
+    let workflow = match apis::workflows_api::get_workflow(config, workflow_id) {
         Ok(w) => w,
         Err(e) => {
             eprintln!("Error getting workflow {}: {}", workflow_id, e);
@@ -354,7 +354,7 @@ fn initialize_workflow_if_needed(config: &Configuration, workflow_id: i64) {
     };
 
     // Check if workflow needs initialization
-    match default_api::is_workflow_uninitialized(config, workflow_id) {
+    match apis::workflows_api::is_workflow_uninitialized(config, workflow_id) {
         Ok(response) => {
             if let Some(is_uninitialized) =
                 response.get("is_uninitialized").and_then(|v| v.as_bool())
@@ -427,7 +427,7 @@ fn handle_run(
         // Add only valid workers to the database
         println!("Adding {} worker(s) to database...", valid_workers.len());
 
-        match default_api::create_remote_workers(config, workflow_id, valid_workers) {
+        match apis::remote_workers_api::create_remote_workers(config, workflow_id, valid_workers) {
             Ok(created) => {
                 info!(
                     "Added {} workers from {}",
@@ -1120,7 +1120,7 @@ fn delete_worker_logs(worker: &WorkerEntry, remote_output_dir: &str) -> RemoteOp
 
 /// List remote workers stored in the database for a workflow.
 fn handle_list_workers(config: &Configuration, workflow_id: i64) {
-    match default_api::list_remote_workers(config, workflow_id) {
+    match apis::remote_workers_api::list_remote_workers(config, workflow_id) {
         Ok(workers) => {
             if workers.is_empty() {
                 println!("No remote workers stored for workflow {}", workflow_id);
@@ -1250,7 +1250,7 @@ fn handle_add_workers(
         }
     };
 
-    match default_api::create_remote_workers(config, workflow_id, valid_workers) {
+    match apis::remote_workers_api::create_remote_workers(config, workflow_id, valid_workers) {
         Ok(created) => {
             if created.is_empty() {
                 println!("All workers already exist for workflow {}", workflow_id);
@@ -1308,7 +1308,7 @@ fn handle_add_workers_from_file(
         }
     };
 
-    match default_api::create_remote_workers(config, workflow_id, valid_workers) {
+    match apis::remote_workers_api::create_remote_workers(config, workflow_id, valid_workers) {
         Ok(created) => {
             println!(
                 "Added {} worker(s) from {} to workflow {}",
@@ -1329,7 +1329,7 @@ fn handle_add_workers_from_file(
 
 /// Remove a remote worker from the database.
 fn handle_remove_worker(config: &Configuration, worker: &str, workflow_id: i64) {
-    match default_api::delete_remote_worker(config, workflow_id, worker) {
+    match apis::remote_workers_api::delete_remote_worker(config, workflow_id, worker) {
         Ok(_) => {
             println!("Removed worker {} from workflow {}", worker, workflow_id);
         }
@@ -1342,7 +1342,7 @@ fn handle_remove_worker(config: &Configuration, worker: &str, workflow_id: i64) 
 
 /// Fetch workers from the database and convert to WorkerEntry.
 fn fetch_workers_from_db(config: &Configuration, workflow_id: i64) -> Vec<WorkerEntry> {
-    match default_api::list_remote_workers(config, workflow_id) {
+    match apis::remote_workers_api::list_remote_workers(config, workflow_id) {
         Ok(workers) => {
             workers
                 .iter()

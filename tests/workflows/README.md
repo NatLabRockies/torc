@@ -39,7 +39,8 @@ Tests automatic OOM recovery in `torc watch --recover`.
 ```bash
 cd tests/workflows/oom_auto_recovery_test
 # Edit workflow.yaml to set your Slurm account
-torc submit-slurm --account <account> workflow.yaml
+torc slurm generate --account <account> workflow.yaml
+torc submit workflow.yaml
 torc watch <workflow_id> --recover --max-retries 5
 ```
 
@@ -62,7 +63,8 @@ Tests automatic timeout recovery in `torc watch --recover`.
 ```bash
 cd tests/workflows/timeout_auto_recovery_test
 # Edit workflow.yaml to set your Slurm account
-torc submit-slurm --account <account> workflow.yaml
+torc slurm generate --account <account> workflow.yaml
+torc submit workflow.yaml
 torc watch <workflow_id> --recover --max-retries 3
 ```
 
@@ -109,9 +111,9 @@ resolution, job claiming, and completion processing under heavy concurrent acces
 torc run tests/workflows/scale_test/workflow.yaml --num-parallel-processes 16
 
 # Or with multiple independent runners for maximum contention
-torc workflows create tests/workflows/scale_test/workflow.yaml
+torc create tests/workflows/scale_test/workflow.yaml
 for i in $(seq 1 16); do
-  torc workflows run <workflow_id> &
+  torc run <workflow_id> &
 done
 ```
 

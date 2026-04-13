@@ -6,7 +6,7 @@ use common::{
 };
 use rstest::rstest;
 use serde_json::json;
-use torc::client::default_api;
+use torc::client::apis;
 use torc::models;
 
 #[rstest]
@@ -18,23 +18,21 @@ fn test_list_job_file_relationships_empty(start_server: &ServerProcess) {
     let workflow_id = workflow.id.unwrap();
 
     // Test list_job_file_relationships on empty workflow
-    let result = default_api::list_job_file_relationships(
+    let result = apis::workflows_api::list_job_file_relationships(
         config,
         workflow_id,
         Some(0),   // offset
         Some(100), // limit
+        None,
+        None,
     )
     .expect("Failed to list job-file relationships");
 
     // Verify response structure
     assert_eq!(result.total_count, 0, "Should have no relationships");
     assert_eq!(result.count, 0, "Count should be 0");
-    assert!(result.items.is_some(), "Items should be present");
-    assert_eq!(
-        result.items.unwrap().len(),
-        0,
-        "Items array should be empty"
-    );
+    assert!(result.items.is_empty(), "Items array should be empty");
+    assert_eq!(result.items.len(), 0, "Items array should be empty");
 }
 
 #[rstest]
@@ -56,16 +54,23 @@ fn test_list_job_file_relationships_workflow_inputs(start_server: &ServerProcess
         "cat input1.txt input2.csv".to_string(),
     );
     job.input_file_ids = Some(vec![input_file1.id.unwrap(), input_file2.id.unwrap()]);
-    let job = default_api::create_job(config, job).expect("Failed to create job");
+    let job = apis::jobs_api::create_job(config, job).expect("Failed to create job");
     let job_id = job.id.unwrap();
 
     // List the relationships
-    let result = default_api::list_job_file_relationships(config, workflow_id, Some(0), Some(100))
-        .expect("Failed to list job-file relationships");
+    let result = apis::workflows_api::list_job_file_relationships(
+        config,
+        workflow_id,
+        Some(0),
+        Some(100),
+        None,
+        None,
+    )
+    .expect("Failed to list job-file relationships");
 
     // Verify we have 2 relationships (one for each file)
     assert_eq!(result.total_count, 2, "Should have 2 relationships");
-    let items = result.items.unwrap();
+    let items = result.items;
     assert_eq!(items.len(), 2, "Should have 2 items");
 
     // Verify each relationship
@@ -128,16 +133,23 @@ fn test_list_job_file_relationships_workflow_outputs(start_server: &ServerProces
         "echo 'data' > output1.txt && echo '{}' > output2.json".to_string(),
     );
     job.output_file_ids = Some(vec![output_file1.id.unwrap(), output_file2.id.unwrap()]);
-    let job = default_api::create_job(config, job).expect("Failed to create job");
+    let job = apis::jobs_api::create_job(config, job).expect("Failed to create job");
     let job_id = job.id.unwrap();
 
     // List the relationships
-    let result = default_api::list_job_file_relationships(config, workflow_id, Some(0), Some(100))
-        .expect("Failed to list job-file relationships");
+    let result = apis::workflows_api::list_job_file_relationships(
+        config,
+        workflow_id,
+        Some(0),
+        Some(100),
+        None,
+        None,
+    )
+    .expect("Failed to list job-file relationships");
 
     // Verify we have 2 relationships
     assert_eq!(result.total_count, 2, "Should have 2 relationships");
-    let items = result.items.unwrap();
+    let items = result.items;
 
     // Verify each relationship
     for item in &items {
@@ -190,7 +202,7 @@ fn test_list_job_file_relationships_intermediate_files(start_server: &ServerProc
     );
     producer_job.output_file_ids = Some(vec![file_id]);
     let producer_job =
-        default_api::create_job(config, producer_job).expect("Failed to create producer");
+        apis::jobs_api::create_job(config, producer_job).expect("Failed to create producer");
     let producer_id = producer_job.id.unwrap();
 
     // Create consumer jobs
@@ -201,7 +213,7 @@ fn test_list_job_file_relationships_intermediate_files(start_server: &ServerProc
     );
     consumer_job1.input_file_ids = Some(vec![file_id]);
     let consumer_job1 =
-        default_api::create_job(config, consumer_job1).expect("Failed to create consumer1");
+        apis::jobs_api::create_job(config, consumer_job1).expect("Failed to create consumer1");
     let consumer1_id = consumer_job1.id.unwrap();
 
     let mut consumer_job2 = models::JobModel::new(
@@ -211,12 +223,19 @@ fn test_list_job_file_relationships_intermediate_files(start_server: &ServerProc
     );
     consumer_job2.input_file_ids = Some(vec![file_id]);
     let consumer_job2 =
-        default_api::create_job(config, consumer_job2).expect("Failed to create consumer2");
+        apis::jobs_api::create_job(config, consumer_job2).expect("Failed to create consumer2");
     let consumer2_id = consumer_job2.id.unwrap();
 
     // List the relationships
-    let result = default_api::list_job_file_relationships(config, workflow_id, Some(0), Some(100))
-        .expect("Failed to list job-file relationships");
+    let result = apis::workflows_api::list_job_file_relationships(
+        config,
+        workflow_id,
+        Some(0),
+        Some(100),
+        None,
+        None,
+    )
+    .expect("Failed to list job-file relationships");
 
     // We should have 2 relationships (one for each consumer, but each may reference the same producer)
     // The exact count depends on how the query is structured
@@ -224,7 +243,7 @@ fn test_list_job_file_relationships_intermediate_files(start_server: &ServerProc
         result.total_count >= 2,
         "Should have at least 2 relationships"
     );
-    let items = result.items.unwrap();
+    let items = result.items;
 
     // Verify we have relationships with the producer
     let producer_relationships: Vec<_> = items
@@ -276,14 +295,16 @@ fn test_list_job_file_relationships_pagination(start_server: &ServerProcess) {
         "echo 'generating files'".to_string(),
     );
     job.output_file_ids = Some(file_ids.clone());
-    let _job = default_api::create_job(config, job).expect("Failed to create job");
+    let _job = apis::jobs_api::create_job(config, job).expect("Failed to create job");
 
     // Test pagination with limit
-    let result_page1 = default_api::list_job_file_relationships(
+    let result_page1 = apis::workflows_api::list_job_file_relationships(
         config,
         workflow_id,
         Some(0),
         Some(3), // limit to 3
+        None,
+        None,
     )
     .expect("Failed to list first page");
 
@@ -292,11 +313,13 @@ fn test_list_job_file_relationships_pagination(start_server: &ServerProcess) {
     assert!(result_page1.has_more, "Should have more items");
 
     // Get second page
-    let result_page2 = default_api::list_job_file_relationships(
+    let result_page2 = apis::workflows_api::list_job_file_relationships(
         config,
         workflow_id,
         Some(3), // offset
         Some(3),
+        None,
+        None,
     )
     .expect("Failed to list second page");
 
@@ -313,19 +336,21 @@ fn test_list_job_user_data_relationships_empty(start_server: &ServerProcess) {
     let workflow_id = workflow.id.unwrap();
 
     // Test list_job_user_data_relationships on empty workflow
-    let result =
-        default_api::list_job_user_data_relationships(config, workflow_id, Some(0), Some(100))
-            .expect("Failed to list job-user_data relationships");
+    let result = apis::workflows_api::list_job_user_data_relationships(
+        config,
+        workflow_id,
+        Some(0),
+        Some(100),
+        None,
+        None,
+    )
+    .expect("Failed to list job-user_data relationships");
 
     // Verify response structure
     assert_eq!(result.total_count, 0, "Should have no relationships");
     assert_eq!(result.count, 0, "Count should be 0");
-    assert!(result.items.is_some(), "Items should be present");
-    assert_eq!(
-        result.items.unwrap().len(),
-        0,
-        "Items array should be empty"
-    );
+    assert!(result.items.is_empty(), "Items array should be empty");
+    assert_eq!(result.items.len(), 0, "Items array should be empty");
 }
 
 #[rstest]
@@ -359,17 +384,23 @@ fn test_list_job_user_data_relationships_workflow_inputs(start_server: &ServerPr
         "process config1 config2".to_string(),
     );
     job.input_user_data_ids = Some(vec![input_data1.id.unwrap(), input_data2.id.unwrap()]);
-    let job = default_api::create_job(config, job).expect("Failed to create job");
+    let job = apis::jobs_api::create_job(config, job).expect("Failed to create job");
     let job_id = job.id.unwrap();
 
     // List the relationships
-    let result =
-        default_api::list_job_user_data_relationships(config, workflow_id, Some(0), Some(100))
-            .expect("Failed to list job-user_data relationships");
+    let result = apis::workflows_api::list_job_user_data_relationships(
+        config,
+        workflow_id,
+        Some(0),
+        Some(100),
+        None,
+        None,
+    )
+    .expect("Failed to list job-user_data relationships");
 
     // Verify we have 2 relationships
     assert_eq!(result.total_count, 2, "Should have 2 relationships");
-    let items = result.items.unwrap();
+    let items = result.items;
     assert_eq!(items.len(), 2, "Should have 2 items");
 
     // Verify each relationship
@@ -433,17 +464,23 @@ fn test_list_job_user_data_relationships_workflow_outputs(start_server: &ServerP
         "echo '{\"result\": \"success\"}' > final_result".to_string(),
     );
     job.output_user_data_ids = Some(vec![output_user_data.id.unwrap()]);
-    let job = default_api::create_job(config, job).expect("Failed to create job");
+    let job = apis::jobs_api::create_job(config, job).expect("Failed to create job");
     let job_id = job.id.unwrap();
 
     // List the relationships
-    let result =
-        default_api::list_job_user_data_relationships(config, workflow_id, Some(0), Some(100))
-            .expect("Failed to list job-user_data relationships");
+    let result = apis::workflows_api::list_job_user_data_relationships(
+        config,
+        workflow_id,
+        Some(0),
+        Some(100),
+        None,
+        None,
+    )
+    .expect("Failed to list job-user_data relationships");
 
     // Verify we have 1 relationship
     assert_eq!(result.total_count, 1, "Should have 1 relationship");
-    let items = result.items.unwrap();
+    let items = result.items;
     assert_eq!(items.len(), 1, "Should have 1 item");
 
     let item = &items[0];
@@ -503,7 +540,7 @@ fn test_list_job_user_data_relationships_intermediate_data(start_server: &Server
     );
     producer_job.output_user_data_ids = Some(vec![data_id]);
     let producer_job =
-        default_api::create_job(config, producer_job).expect("Failed to create producer");
+        apis::jobs_api::create_job(config, producer_job).expect("Failed to create producer");
     let producer_id = producer_job.id.unwrap();
 
     // Create consumer job
@@ -514,20 +551,26 @@ fn test_list_job_user_data_relationships_intermediate_data(start_server: &Server
     );
     consumer_job.input_user_data_ids = Some(vec![data_id]);
     let consumer_job =
-        default_api::create_job(config, consumer_job).expect("Failed to create consumer");
+        apis::jobs_api::create_job(config, consumer_job).expect("Failed to create consumer");
     let consumer_id = consumer_job.id.unwrap();
 
     // List the relationships
-    let result =
-        default_api::list_job_user_data_relationships(config, workflow_id, Some(0), Some(100))
-            .expect("Failed to list job-user_data relationships");
+    let result = apis::workflows_api::list_job_user_data_relationships(
+        config,
+        workflow_id,
+        Some(0),
+        Some(100),
+        None,
+        None,
+    )
+    .expect("Failed to list job-user_data relationships");
 
     // We should have relationships showing both producer and consumer
     assert!(
         result.total_count >= 1,
         "Should have at least 1 relationship"
     );
-    let items = result.items.unwrap();
+    let items = result.items;
 
     // Verify we have a relationship with the producer
     let has_producer = items
@@ -564,16 +607,23 @@ fn test_list_job_dependencies_for_comparison(start_server: &ServerProcess) {
     let mut job2 =
         models::JobModel::new(workflow_id, "job2".to_string(), "echo 'job2'".to_string());
     job2.depends_on_job_ids = Some(vec![job1_id]);
-    let job2 = default_api::create_job(config, job2).expect("Failed to create job2");
+    let job2 = apis::jobs_api::create_job(config, job2).expect("Failed to create job2");
     let job2_id = job2.id.unwrap();
 
     // List job dependencies
-    let result = default_api::list_job_dependencies(config, workflow_id, Some(0), Some(100))
-        .expect("Failed to list job dependencies");
+    let result = apis::workflows_api::list_job_dependencies(
+        config,
+        workflow_id,
+        Some(0),
+        Some(100),
+        None,
+        None,
+    )
+    .expect("Failed to list job dependencies");
 
     // Verify we have 1 dependency
     assert_eq!(result.total_count, 1, "Should have 1 dependency");
-    let items = result.items.unwrap();
+    let items = result.items;
     assert_eq!(items.len(), 1, "Should have 1 item");
 
     let dep = &items[0];

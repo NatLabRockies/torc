@@ -6,7 +6,7 @@ use common::{
 };
 use rstest::rstest;
 use serde_json::json;
-use torc::client::default_api;
+use torc::client::apis;
 use torc::client::workflow_manager::WorkflowManager;
 use torc::config::TorcConfig;
 use torc::models;
@@ -154,7 +154,7 @@ fn test_results_delete_command_json(start_server: &ServerProcess) {
     assert_eq!(json_output.get("workflow_id").unwrap(), &json!(workflow_id));
 
     // Verify the result is actually removed by trying to get it
-    let get_result = default_api::get_result(config, result_id);
+    let get_result = apis::results_api::get_result(config, result_id);
     assert!(get_result.is_err(), "Result should be deleted");
 }
 
@@ -234,7 +234,8 @@ fn test_results_list_sorting(start_server: &ServerProcess) {
             "2024-01-01T12:00:00.000Z".to_string(),
             models::JobStatus::Completed,
         );
-        let _created = default_api::create_result(config, result).expect("Failed to create result");
+        let _created =
+            apis::results_api::create_result(config, result).expect("Failed to create result");
     }
 
     // Test sorting by return_code - use --all-runs since we created results directly
@@ -346,7 +347,7 @@ fn test_results_list_with_return_code_filter(start_server: &ServerProcess) {
         "2024-01-01T10:00:00.000Z".to_string(),
         models::JobStatus::Completed,
     );
-    let _result1 = default_api::create_result(config, success_result)
+    let _result1 = apis::results_api::create_result(config, success_result)
         .expect("Failed to create success result");
 
     let failed_result = models::ResultModel::new(
@@ -360,8 +361,8 @@ fn test_results_list_with_return_code_filter(start_server: &ServerProcess) {
         "2024-01-01T11:00:00.000Z".to_string(),
         models::JobStatus::Terminated,
     );
-    let _result2 =
-        default_api::create_result(config, failed_result).expect("Failed to create failed result");
+    let _result2 = apis::results_api::create_result(config, failed_result)
+        .expect("Failed to create failed result");
 
     // Test the CLI list command with return_code filter
     let args = [
@@ -413,8 +414,8 @@ fn test_results_list_with_status_filter(start_server: &ServerProcess) {
         "2024-01-01T10:00:00.000Z".to_string(),
         models::JobStatus::Completed,
     );
-    let _result1 =
-        default_api::create_result(config, done_result).expect("Failed to create done result");
+    let _result1 = apis::results_api::create_result(config, done_result)
+        .expect("Failed to create done result");
 
     let terminated_result = models::ResultModel::new(
         job2.id.unwrap(),
@@ -427,7 +428,7 @@ fn test_results_list_with_status_filter(start_server: &ServerProcess) {
         "2024-01-01T11:00:00.000Z".to_string(),
         models::JobStatus::Terminated,
     );
-    let _result2 = default_api::create_result(config, terminated_result)
+    let _result2 = apis::results_api::create_result(config, terminated_result)
         .expect("Failed to create terminated result");
 
     // Test the CLI list command with status filter
@@ -478,14 +479,14 @@ fn test_results_list_all_runs_default_behavior(start_server: &ServerProcess) {
         .expect("Failed to initialize workflow for run 1");
 
     // Get run_id for run 1
-    let status = default_api::get_workflow_status(config, workflow_id)
+    let status = apis::workflows_api::get_workflow_status(config, workflow_id)
         .expect("Failed to get workflow status");
     let run_id_1 = status.run_id;
 
     // Complete jobs for run 1 using complete_job (which updates workflow_result table)
     // Note: status must match return_code - non-zero return_code requires Failed status
     // so that reset_job_status with failed_only=true will reset these jobs
-    default_api::complete_job(
+    apis::jobs_api::complete_job(
         config,
         job1_id,
         models::JobStatus::Failed,
@@ -504,7 +505,7 @@ fn test_results_list_all_runs_default_behavior(start_server: &ServerProcess) {
     )
     .expect("Failed to complete job1 for run 1");
 
-    default_api::complete_job(
+    apis::jobs_api::complete_job(
         config,
         job2_id,
         models::JobStatus::Failed,
@@ -523,7 +524,7 @@ fn test_results_list_all_runs_default_behavior(start_server: &ServerProcess) {
     )
     .expect("Failed to complete job2 for run 1");
 
-    default_api::reset_job_status(config, workflow_id, Some(true), None)
+    apis::workflows_api::reset_job_status(config, workflow_id, Some(true))
         .expect("Failed to reset job status");
 
     // Reinitialize workflow for run 2 (should trigger workflow_result cleanup and increment run_id)
@@ -532,12 +533,12 @@ fn test_results_list_all_runs_default_behavior(start_server: &ServerProcess) {
         .expect("Failed to reinitialize workflow for run 2");
 
     // Get run_id for run 2
-    let status = default_api::get_workflow_status(config, workflow_id)
+    let status = apis::workflows_api::get_workflow_status(config, workflow_id)
         .expect("Failed to get workflow status");
     let run_id_2 = status.run_id;
 
     // Complete jobs for run 2
-    default_api::complete_job(
+    apis::jobs_api::complete_job(
         config,
         job1_id,
         models::JobStatus::Completed,
@@ -556,7 +557,7 @@ fn test_results_list_all_runs_default_behavior(start_server: &ServerProcess) {
     )
     .expect("Failed to complete job1 for run 2");
 
-    default_api::complete_job(
+    apis::jobs_api::complete_job(
         config,
         job2_id,
         models::JobStatus::Terminated,
@@ -632,7 +633,7 @@ fn test_results_list_all_runs_true(start_server: &ServerProcess) {
     let job2_id = job2.id.unwrap();
 
     // Initialize workflow for run 1
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize jobs for run 1");
 
     // Create results for run 1
@@ -647,7 +648,8 @@ fn test_results_list_all_runs_true(start_server: &ServerProcess) {
         "2024-01-01T10:00:00.000Z".to_string(),
         models::JobStatus::Completed,
     );
-    default_api::create_result(config, result1_run1).expect("Failed to create result1 for run 1");
+    apis::results_api::create_result(config, result1_run1)
+        .expect("Failed to create result1 for run 1");
 
     let result2_run1 = models::ResultModel::new(
         job2_id,
@@ -660,10 +662,11 @@ fn test_results_list_all_runs_true(start_server: &ServerProcess) {
         "2024-01-01T11:00:00.000Z".to_string(),
         models::JobStatus::Completed,
     );
-    default_api::create_result(config, result2_run1).expect("Failed to create result2 for run 1");
+    apis::results_api::create_result(config, result2_run1)
+        .expect("Failed to create result2 for run 1");
 
     // Reinitialize workflow for run 2
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to reinitialize jobs for run 2");
 
     // Create results for run 2
@@ -678,7 +681,8 @@ fn test_results_list_all_runs_true(start_server: &ServerProcess) {
         "2024-01-02T10:00:00.000Z".to_string(),
         models::JobStatus::Completed,
     );
-    default_api::create_result(config, result1_run2).expect("Failed to create result1 for run 2");
+    apis::results_api::create_result(config, result1_run2)
+        .expect("Failed to create result1 for run 2");
 
     let result2_run2 = models::ResultModel::new(
         job2_id,
@@ -691,10 +695,11 @@ fn test_results_list_all_runs_true(start_server: &ServerProcess) {
         "2024-01-02T11:00:00.000Z".to_string(),
         models::JobStatus::Terminated,
     );
-    default_api::create_result(config, result2_run2).expect("Failed to create result2 for run 2");
+    apis::results_api::create_result(config, result2_run2)
+        .expect("Failed to create result2 for run 2");
 
     // Reinitialize workflow for run 3
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to reinitialize jobs for run 3");
 
     // Create results for run 3 (only one job)
@@ -709,7 +714,8 @@ fn test_results_list_all_runs_true(start_server: &ServerProcess) {
         "2024-01-03T10:00:00.000Z".to_string(),
         models::JobStatus::Completed,
     );
-    default_api::create_result(config, result1_run3).expect("Failed to create result1 for run 3");
+    apis::results_api::create_result(config, result1_run3)
+        .expect("Failed to create result1 for run 3");
 
     // Test with --all-runs flag (should show all historical results)
     let args = ["results", "list", &workflow_id.to_string(), "--all-runs"];
@@ -769,7 +775,7 @@ fn test_results_list_all_runs_with_filters(start_server: &ServerProcess) {
     let job2_id = job2.id.unwrap();
 
     // Initialize workflow for run 1
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize jobs for run 1");
 
     // Create results for run 1 with different statuses
@@ -784,7 +790,8 @@ fn test_results_list_all_runs_with_filters(start_server: &ServerProcess) {
         "2024-01-01T10:00:00.000Z".to_string(),
         models::JobStatus::Completed,
     );
-    default_api::create_result(config, result1_run1).expect("Failed to create result1 for run 1");
+    apis::results_api::create_result(config, result1_run1)
+        .expect("Failed to create result1 for run 1");
 
     let result2_run1 = models::ResultModel::new(
         job2_id,
@@ -797,10 +804,11 @@ fn test_results_list_all_runs_with_filters(start_server: &ServerProcess) {
         "2024-01-01T11:00:00.000Z".to_string(),
         models::JobStatus::Terminated,
     );
-    default_api::create_result(config, result2_run1).expect("Failed to create result2 for run 1");
+    apis::results_api::create_result(config, result2_run1)
+        .expect("Failed to create result2 for run 1");
 
     // Reinitialize for run 2
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to reinitialize jobs for run 2");
 
     // Create results for run 2
@@ -815,7 +823,8 @@ fn test_results_list_all_runs_with_filters(start_server: &ServerProcess) {
         "2024-01-02T10:00:00.000Z".to_string(),
         models::JobStatus::Completed,
     );
-    default_api::create_result(config, result1_run2).expect("Failed to create result1 for run 2");
+    apis::results_api::create_result(config, result1_run2)
+        .expect("Failed to create result1 for run 2");
 
     let result2_run2 = models::ResultModel::new(
         job2_id,
@@ -828,7 +837,8 @@ fn test_results_list_all_runs_with_filters(start_server: &ServerProcess) {
         "2024-01-02T11:00:00.000Z".to_string(),
         models::JobStatus::Completed,
     );
-    default_api::create_result(config, result2_run2).expect("Failed to create result2 for run 2");
+    apis::results_api::create_result(config, result2_run2)
+        .expect("Failed to create result2 for run 2");
 
     // Test 1: --all-runs with job_id filter (should show all runs for that job)
     let args = [
@@ -922,12 +932,12 @@ fn test_results_workflow_result_table_cleanup_on_reinitialize(start_server: &Ser
         .expect("Failed to initialize workflow for run 1");
 
     // Get run_id for run 1
-    let status = default_api::get_workflow_status(config, workflow_id)
+    let status = apis::workflows_api::get_workflow_status(config, workflow_id)
         .expect("Failed to get workflow status");
     let run_id = status.run_id;
 
     // Complete jobs for run 1 using complete_job (which updates workflow_result table)
-    default_api::complete_job(
+    apis::jobs_api::complete_job(
         config,
         job1_id,
         models::JobStatus::Completed,
@@ -946,7 +956,7 @@ fn test_results_workflow_result_table_cleanup_on_reinitialize(start_server: &Ser
     )
     .expect("Failed to complete job1 for run 1");
 
-    default_api::complete_job(
+    apis::jobs_api::complete_job(
         config,
         job2_id,
         models::JobStatus::Completed,
@@ -981,7 +991,7 @@ fn test_results_workflow_result_table_cleanup_on_reinitialize(start_server: &Ser
     );
 
     // Reset job status before reinitializing (required to reset completed jobs)
-    default_api::reset_job_status(config, workflow_id, Some(false), None)
+    apis::workflows_api::reset_job_status(config, workflow_id, Some(false))
         .expect("Failed to reset job status");
 
     // Reinitialize workflow (should clean up workflow_result table for incomplete jobs)

@@ -162,10 +162,10 @@ ALL 18 metrics files."
 ## Step 2: Create and Initialize the Workflow
 
 ```bash
-WORKFLOW_ID=$(torc workflows create grid_search.yaml -f json | jq -r '.id')
+WORKFLOW_ID=$(torc create grid_search.yaml -f json | jq -r '.id')
 echo "Created workflow: $WORKFLOW_ID"
 
-torc workflows initialize-jobs $WORKFLOW_ID
+torc workflows init $WORKFLOW_ID
 ```
 
 ## Step 3: Verify the Expansion
@@ -239,7 +239,7 @@ Execution flow:
 
 ```bash
 # Check status summary
-torc workflows status $WORKFLOW_ID
+torc status $WORKFLOW_ID
 
 # Watch job completion in real-time
 watch -n 10 'torc jobs list-by-status $WORKFLOW_ID'

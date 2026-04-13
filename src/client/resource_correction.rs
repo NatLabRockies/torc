@@ -9,8 +9,8 @@ use std::collections::{HashMap, HashSet};
 use log::{debug, info, warn};
 use serde::Serialize;
 
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::report_models::ResourceUtilizationReport;
 use crate::memory_utils::memory_string_to_bytes;
 use crate::models;
@@ -462,7 +462,7 @@ fn aggregate_violations(
         }
 
         // Get current job to find resource requirements
-        let job = match default_api::get_job(ctx.config, job_id) {
+        let job = match apis::jobs_api::get_job(ctx.config, job_id) {
             Ok(j) => j,
             Err(e) => {
                 warn!("Warning: couldn't get job {}: {}", job_id, e);
@@ -482,7 +482,8 @@ fn aggregate_violations(
         let adjustment = rr_adjustments.entry(rr_id).or_insert_with(|| {
             // Fetch current resource requirements (only once per rr_id)
             let (current_memory, current_runtime, current_cpus) =
-                match default_api::get_resource_requirements(ctx.config, rr_id) {
+                match apis::resource_requirements_api::get_resource_requirements(ctx.config, rr_id)
+                {
                     Ok(rr) => (rr.memory, rr.runtime, rr.num_cpus),
                     Err(e) => {
                         warn!(
@@ -519,20 +520,24 @@ fn aggregate_violations(
 
         // Track memory violation data
         if memory_violation {
-            let peak_bytes = job_info
-                .peak_memory_bytes
-                .filter(|&v| v > 0)
-                .map(|v| v.max(0) as u64);
-
-            if let Some(peak) = peak_bytes {
-                // Update max if this job used more memory
-                adjustment.max_peak_memory_bytes = Some(
-                    adjustment
-                        .max_peak_memory_bytes
-                        .map_or(peak, |current_max| current_max.max(peak)),
-                );
-            } else {
+            if job_info.oom_reason.as_deref() == Some("sigkill_137") {
                 adjustment.has_memory_violation_without_peak = true;
+            } else {
+                let peak_bytes = job_info
+                    .peak_memory_bytes
+                    .filter(|&v| v > 0)
+                    .map(|v| v.max(0) as u64);
+
+                if let Some(peak) = peak_bytes {
+                    // Update max if this job used more memory
+                    adjustment.max_peak_memory_bytes = Some(
+                        adjustment
+                            .max_peak_memory_bytes
+                            .map_or(peak, |current_max| current_max.max(peak)),
+                    );
+                } else {
+                    adjustment.has_memory_violation_without_peak = true;
+                }
             }
         }
 
@@ -591,7 +596,7 @@ fn apply_upscale_for_adjustment(
     let mut new_cpus_value = None;
 
     // Fetch current resource requirements for update
-    let rr = match default_api::get_resource_requirements(config, rr_id) {
+    let rr = match apis::resource_requirements_api::get_resource_requirements(config, rr_id) {
         Ok(r) => r,
         Err(e) => {
             warn!(
@@ -605,24 +610,57 @@ fn apply_upscale_for_adjustment(
 
     // Apply memory fix using maximum peak memory across all jobs sharing this RR
     if adjustment.max_peak_memory_bytes.is_some() || adjustment.has_memory_violation_without_peak {
-        let new_bytes = if let Some(max_peak) = adjustment.max_peak_memory_bytes {
-            // Use the maximum observed peak memory * multiplier (ceil to preserve margin)
-            (max_peak as f64 * opts.memory_multiplier).ceil() as u64
-        } else if let Ok(current_bytes) = memory_string_to_bytes(&adjustment.current_memory) {
-            // Fall back to current specified * multiplier
-            (current_bytes as f64 * opts.memory_multiplier).ceil() as u64
+        let peak_based_bytes = adjustment
+            .max_peak_memory_bytes
+            .map(|max_peak| (max_peak as f64 * opts.memory_multiplier).ceil() as u64);
+        let fallback_bytes = if adjustment.has_memory_violation_without_peak {
+            match memory_string_to_bytes(&adjustment.current_memory) {
+                Ok(current_bytes) => {
+                    Some((current_bytes as f64 * opts.memory_multiplier).ceil() as u64)
+                }
+                Err(_) => None,
+            }
         } else {
+            None
+        };
+
+        let new_bytes = peak_based_bytes
+            .into_iter()
+            .chain(fallback_bytes)
+            .max()
+            .unwrap_or(0);
+
+        if new_bytes == 0 {
             warn!(
                 "RR {}: memory violation detected but couldn't determine new memory",
                 rr_id
             );
             return None;
-        };
+        }
 
         let new_memory = format_memory_bytes_short(new_bytes);
         let job_count = adjustment.job_ids.len();
 
-        if let Some(max_peak) = adjustment.max_peak_memory_bytes {
+        // Determine the log label based on which source drove the final value
+        let used_peak = peak_based_bytes.is_some() && peak_based_bytes >= fallback_bytes;
+        if !used_peak && adjustment.has_memory_violation_without_peak {
+            if job_count > 1 {
+                info!(
+                    "{} job(s) with RR {}: memory violation, increasing memory {} -> {} \
+                     ({}x fallback for OOM without reliable peak data)",
+                    job_count, rr_id, adjustment.current_memory, new_memory, opts.memory_multiplier
+                );
+                debug!("  Jobs: {:?}", adjustment.job_names);
+            } else if let (Some(job_id), Some(job_name)) =
+                (adjustment.job_ids.first(), adjustment.job_names.first())
+            {
+                info!(
+                    "Job {} ({}): memory violation, increasing memory {} -> {} \
+                     ({}x fallback for OOM without reliable peak data)",
+                    job_id, job_name, adjustment.current_memory, new_memory, opts.memory_multiplier
+                );
+            }
+        } else if let Some(max_peak) = adjustment.max_peak_memory_bytes {
             if job_count > 1 {
                 info!(
                     "{} job(s) with RR {}: memory violation, max peak usage {} -> allocating {} ({}x)",
@@ -776,7 +814,8 @@ fn apply_upscale_for_adjustment(
 
     // Update resource requirements if changed (only once per rr_id)
     if !opts.dry_run
-        && let Err(e) = default_api::update_resource_requirements(config, rr_id, new_rr)
+        && let Err(e) =
+            apis::resource_requirements_api::update_resource_requirements(config, rr_id, new_rr)
     {
         warn!(
             "Warning: failed to update resource requirements {}: {}",
@@ -822,7 +861,7 @@ fn apply_downscale_for_candidate(
     const RUNTIME_THRESHOLD_SECS: i64 = 30 * 60; // 30 minutes
 
     let rr_id = candidate.rr_id;
-    let rr = match default_api::get_resource_requirements(config, rr_id) {
+    let rr = match apis::resource_requirements_api::get_resource_requirements(config, rr_id) {
         Ok(r) => r,
         Err(e) => {
             warn!(
@@ -939,7 +978,8 @@ fn apply_downscale_for_candidate(
     }
 
     if !opts.dry_run
-        && let Err(e) = default_api::update_resource_requirements(config, rr_id, new_rr)
+        && let Err(e) =
+            apis::resource_requirements_api::update_resource_requirements(config, rr_id, new_rr)
     {
         warn!(
             "Warning: failed to update resource requirements {}: {}",

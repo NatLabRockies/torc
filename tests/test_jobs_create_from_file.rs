@@ -4,8 +4,8 @@ use common::{ServerProcess, start_server};
 use rstest::rstest;
 use std::fs;
 use tempfile::NamedTempFile;
+use torc::client::apis;
 use torc::client::commands::jobs::create_jobs_from_file;
-use torc::client::default_api;
 use torc::models;
 
 #[rstest]
@@ -18,7 +18,7 @@ fn test_create_jobs_from_file_basic(start_server: &ServerProcess) {
         "test_user".to_string(),
     );
     let created_workflow =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap() as i64;
 
     // Create a temp file with job commands
@@ -42,7 +42,7 @@ fn test_create_jobs_from_file_basic(start_server: &ServerProcess) {
     assert_eq!(jobs_created, 3);
 
     // Verify jobs were created
-    let jobs = default_api::list_jobs(
+    let jobs = apis::jobs_api::list_jobs(
         config,
         workflow_id,
         None,
@@ -58,7 +58,7 @@ fn test_create_jobs_from_file_basic(start_server: &ServerProcess) {
     .expect("Failed to list jobs");
 
     assert_eq!(jobs.total_count, 3);
-    let job_list = jobs.items.as_ref().unwrap();
+    let job_list = &jobs.items;
 
     // Check job names are sequential
     assert_eq!(job_list[0].name, "job1");
@@ -81,7 +81,7 @@ fn test_create_jobs_from_file_with_comments(start_server: &ServerProcess) {
         "test_user".to_string(),
     );
     let created_workflow =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap() as i64;
 
     // Create a temp file with comments and empty lines
@@ -112,7 +112,7 @@ echo 'job 3'
     assert_eq!(jobs_created, 3);
 
     // Verify jobs were created with correct resource requirements
-    let jobs = default_api::list_jobs(
+    let jobs = apis::jobs_api::list_jobs(
         config,
         workflow_id,
         None,
@@ -128,15 +128,16 @@ echo 'job 3'
     .expect("Failed to list jobs");
 
     assert_eq!(jobs.total_count, 3);
-    let job_list = jobs.items.as_ref().unwrap();
+    let job_list = &jobs.items;
 
     // Check that resource requirements were created and assigned
     let first_job = &job_list[0];
     assert!(first_job.resource_requirements_id.is_some());
 
     let resource_req_id = first_job.resource_requirements_id.unwrap();
-    let resource_req = default_api::get_resource_requirements(config, resource_req_id)
-        .expect("Failed to get resource requirements");
+    let resource_req =
+        apis::resource_requirements_api::get_resource_requirements(config, resource_req_id)
+            .expect("Failed to get resource requirements");
 
     assert_eq!(resource_req.num_cpus, 2);
     assert_eq!(resource_req.memory, "2g");
@@ -153,11 +154,11 @@ fn test_create_jobs_from_file_with_existing_jobs(start_server: &ServerProcess) {
         "test_user".to_string(),
     );
     let created_workflow =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap() as i64;
 
     // Create some existing jobs manually
-    let _existing_job1 = default_api::create_job(
+    let _existing_job1 = apis::jobs_api::create_job(
         config,
         models::JobModel::new(
             workflow_id,
@@ -167,7 +168,7 @@ fn test_create_jobs_from_file_with_existing_jobs(start_server: &ServerProcess) {
     )
     .expect("Failed to create existing job");
 
-    let _existing_job2 = default_api::create_job(
+    let _existing_job2 = apis::jobs_api::create_job(
         config,
         models::JobModel::new(
             workflow_id,
@@ -198,7 +199,7 @@ fn test_create_jobs_from_file_with_existing_jobs(start_server: &ServerProcess) {
     assert_eq!(jobs_created, 2);
 
     // Verify total job count is now 4 (2 existing + 2 new)
-    let jobs = default_api::list_jobs(
+    let jobs = apis::jobs_api::list_jobs(
         config,
         workflow_id,
         None,
@@ -214,7 +215,7 @@ fn test_create_jobs_from_file_with_existing_jobs(start_server: &ServerProcess) {
     .expect("Failed to list jobs");
 
     assert_eq!(jobs.total_count, 4);
-    let job_list = jobs.items.as_ref().unwrap();
+    let job_list = &jobs.items;
 
     // The new jobs should be named job3 and job4 (starting from existing count + 1)
     let new_jobs: Vec<_> = job_list
@@ -237,11 +238,11 @@ fn test_create_jobs_from_file_name_conflicts(start_server: &ServerProcess) {
         "test_user".to_string(),
     );
     let created_workflow =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap() as i64;
 
     // Create an existing job that will conflict with the expected naming
-    let _existing_job = default_api::create_job(
+    let _existing_job = apis::jobs_api::create_job(
         config,
         models::JobModel::new(
             workflow_id,
@@ -272,7 +273,7 @@ fn test_create_jobs_from_file_name_conflicts(start_server: &ServerProcess) {
     assert_eq!(jobs_created, 1);
 
     // Verify the new job got a unique name (should be job2 since job1 exists)
-    let jobs = default_api::list_jobs(
+    let jobs = apis::jobs_api::list_jobs(
         config,
         workflow_id,
         None,
@@ -288,7 +289,7 @@ fn test_create_jobs_from_file_name_conflicts(start_server: &ServerProcess) {
     .expect("Failed to list jobs");
 
     assert_eq!(jobs.total_count, 2);
-    let job_list = jobs.items.as_ref().unwrap();
+    let job_list = &jobs.items;
 
     let new_job = job_list
         .iter()
@@ -308,7 +309,7 @@ fn test_create_jobs_from_file_empty_file(start_server: &ServerProcess) {
         "test_user".to_string(),
     );
     let created_workflow =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap() as i64;
 
     // Create an empty temp file
@@ -346,7 +347,7 @@ fn test_create_jobs_from_file_only_comments(start_server: &ServerProcess) {
         "test_user".to_string(),
     );
     let created_workflow =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap() as i64;
 
     // Create a temp file with only comments
@@ -386,7 +387,7 @@ fn test_create_jobs_from_file_nonexistent_file(start_server: &ServerProcess) {
         "test_user".to_string(),
     );
     let created_workflow =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap() as i64;
 
     // Try to create jobs from a non-existent file
@@ -419,7 +420,7 @@ fn test_create_jobs_from_file_complex_commands(start_server: &ServerProcess) {
         "test_user".to_string(),
     );
     let created_workflow =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap() as i64;
 
     // Create a temp file with complex commands
@@ -447,7 +448,7 @@ ffmpeg -i input.mp4 -vcodec libx264 output.mp4"#;
     assert_eq!(jobs_created, 5);
 
     // Verify jobs were created with complex commands
-    let jobs = default_api::list_jobs(
+    let jobs = apis::jobs_api::list_jobs(
         config,
         workflow_id,
         None,
@@ -463,7 +464,7 @@ ffmpeg -i input.mp4 -vcodec libx264 output.mp4"#;
     .expect("Failed to list jobs");
 
     assert_eq!(jobs.total_count, 5);
-    let job_list = jobs.items.as_ref().unwrap();
+    let job_list = &jobs.items;
 
     // Check that complex commands were preserved
     assert_eq!(job_list[0].command, r#"python -c "print('Hello World')""#);

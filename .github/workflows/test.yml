@@ -46,7 +46,10 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-        
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
       - name: Ensure cargo in PATH (Windows)
         if: matrix.os == 'windows-latest'
         run: echo "$HOME/.cargo/bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
@@ -93,7 +96,7 @@ jobs:
 
       - name: Run tests (Windows - limited test set)
         if: matrix.os == 'windows-latest'
-        run: cargo test --all-features --test test_full_workflows test_many_jobs_parameterized -- --test-threads 1
+        run: cargo nextest run --all-features -E 'test(test_many_jobs_parameterized)'
         env:
           RUST_BACKTRACE: 1
           CARGO_INCREMENTAL: 0
@@ -105,7 +108,7 @@ jobs:
 
       - name: Run tests (Unix - full test suite)
         if: matrix.os != 'windows-latest'
-        run: cargo test --all-features -- --test-threads 1
+        run: cargo nextest run --all-features
         env:
           RUST_BACKTRACE: 1
           CARGO_INCREMENTAL: 0
@@ -143,17 +146,18 @@ jobs:
           cd python_client
           pip install -e .[dev]
 
-      - name: Setup Julia
-        if: matrix.os == 'ubuntu-latest'
-        uses: julia-actions/setup-julia@v2
-        with:
-          version: '1.12'
+      # Disable because no one is using Julia
+      #- name: Setup Julia
+      #  if: matrix.os == 'ubuntu-latest'
+      #  uses: julia-actions/setup-julia@v2
+      #  with:
+      #    version: '1.12'
 
-      - name: Install Julia dependencies
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          julia --project=julia_client/Torc -e 'using Pkg; Pkg.instantiate(); using Torc'
-          julia --project=julia_client/Torc/test -e 'using Pkg; Pkg.develop(path="julia_client/Torc"); Pkg.instantiate()'
+      #- name: Install Julia dependencies
+      #  if: matrix.os == 'ubuntu-latest'
+      #  run: |
+      #    julia --project=julia_client/Torc -e 'using Pkg; Pkg.instantiate(); using Torc'
+      #    julia --project=julia_client/Torc/test -e 'using Pkg; Pkg.develop(path="julia_client/Torc"); Pkg.instantiate()'
 
       - name: Start torc server
         if: matrix.os == 'ubuntu-latest'
@@ -186,13 +190,13 @@ jobs:
         env:
           TORC_API_URL: http://localhost:8080/torc-service/v1
 
-      - name: Run Julia client tests
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          julia --project=julia_client/Torc -e "import Pkg; Pkg.test()"
-        env:
-          TORC_API_URL: http://localhost:8080/torc-service/v1
-          PATH: ${{ github.workspace }}/target/debug:$PATH
+      #- name: Run Julia client tests
+      #  if: matrix.os == 'ubuntu-latest'
+      #  run: |
+      #    julia --project=julia_client/Torc -e "import Pkg; Pkg.test()"
+      #  env:
+      #    TORC_API_URL: http://localhost:8080/torc-service/v1
+      #    PATH: ${{ github.workspace }}/target/debug:$PATH
 
       # - name: Install cargo-llvm-cov
       #   if: matrix.os == 'ubuntu-latest'

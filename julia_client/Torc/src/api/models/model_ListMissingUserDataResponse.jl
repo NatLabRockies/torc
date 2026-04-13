@@ -2,7 +2,7 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""list_missing_user_data_response
+@doc raw"""ListMissingUserDataResponse
 
     ListMissingUserDataResponse(;
         user_data=nothing,
@@ -24,6 +24,7 @@ const _property_types_ListMissingUserDataResponse = Dict{Symbol,String}(Symbol("
 OpenAPI.property_type(::Type{ ListMissingUserDataResponse }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_ListMissingUserDataResponse[name]))}
 
 function OpenAPI.check_required(o::ListMissingUserDataResponse)
+    o.user_data === nothing && (return false)
     true
 end
 

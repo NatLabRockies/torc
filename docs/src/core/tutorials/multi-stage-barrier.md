@@ -240,7 +240,7 @@ mkdir -p output
 ### Step 3: Create the Workflow
 
 ```bash
-torc workflows create barrier_demo.yaml
+torc create barrier_demo.yaml
 ```
 
 You should see output like:
@@ -259,7 +259,7 @@ Compare this to **10,000 dependencies** without barriers!
 ### Step 4: Run the Workflow
 
 ```bash
-torc workflows run 1
+torc run 1
 ```
 
 ### Step 5: Monitor Progress

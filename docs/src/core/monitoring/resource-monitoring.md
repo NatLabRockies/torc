@@ -23,7 +23,7 @@ jobs:
 To disable monitoring when creating a workflow:
 
 ```bash
-torc workflows create my_workflow.yaml --no-resource-monitoring
+torc create my_workflow.yaml --no-resource-monitoring
 ```
 
 ## View Summary Metrics
@@ -42,13 +42,13 @@ Use `check-resource-utilization` to identify jobs that exceeded their specified 
 
 ```bash
 # Check latest run
-torc reports check-resource-utilization <workflow_id>
+torc workflows check-resources <workflow_id>
 
 # Check a specific run
-torc reports check-resource-utilization <workflow_id> --run-id <run_id>
+torc workflows check-resources <workflow_id> --run-id <run_id>
 
 # Show all jobs, not just violations
-torc reports check-resource-utilization <workflow_id> --all
+torc workflows check-resources <workflow_id> --all
 ```
 
 Example output:

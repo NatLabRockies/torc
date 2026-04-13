@@ -2,48 +2,48 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""compute_nodes_resources
+@doc raw"""ComputeNodesResources
 
     ComputeNodesResources(;
         id=nothing,
-        num_cpus=nothing,
         memory_gb=nothing,
+        num_cpus=nothing,
         num_gpus=nothing,
         num_nodes=nothing,
-        time_limit=nothing,
         scheduler_config_id=nothing,
+        time_limit=nothing,
     )
 
     - id::Int64
-    - num_cpus::Int64
     - memory_gb::Float64
+    - num_cpus::Int64
     - num_gpus::Int64
     - num_nodes::Int64
-    - time_limit::String
     - scheduler_config_id::Int64
+    - time_limit::String
 """
 Base.@kwdef mutable struct ComputeNodesResources <: OpenAPI.APIModel
     id::Union{Nothing, Int64} = nothing
-    num_cpus::Union{Nothing, Int64} = nothing
     memory_gb::Union{Nothing, Float64} = nothing
+    num_cpus::Union{Nothing, Int64} = nothing
     num_gpus::Union{Nothing, Int64} = nothing
     num_nodes::Union{Nothing, Int64} = nothing
-    time_limit::Union{Nothing, String} = nothing
     scheduler_config_id::Union{Nothing, Int64} = nothing
+    time_limit::Union{Nothing, String} = nothing
 
-    function ComputeNodesResources(id, num_cpus, memory_gb, num_gpus, num_nodes, time_limit, scheduler_config_id, )
-        o = new(id, num_cpus, memory_gb, num_gpus, num_nodes, time_limit, scheduler_config_id, )
+    function ComputeNodesResources(id, memory_gb, num_cpus, num_gpus, num_nodes, scheduler_config_id, time_limit, )
+        o = new(id, memory_gb, num_cpus, num_gpus, num_nodes, scheduler_config_id, time_limit, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type ComputeNodesResources
 
-const _property_types_ComputeNodesResources = Dict{Symbol,String}(Symbol("id")=>"Int64", Symbol("num_cpus")=>"Int64", Symbol("memory_gb")=>"Float64", Symbol("num_gpus")=>"Int64", Symbol("num_nodes")=>"Int64", Symbol("time_limit")=>"String", Symbol("scheduler_config_id")=>"Int64", )
+const _property_types_ComputeNodesResources = Dict{Symbol,String}(Symbol("id")=>"Int64", Symbol("memory_gb")=>"Float64", Symbol("num_cpus")=>"Int64", Symbol("num_gpus")=>"Int64", Symbol("num_nodes")=>"Int64", Symbol("scheduler_config_id")=>"Int64", Symbol("time_limit")=>"String", )
 OpenAPI.property_type(::Type{ ComputeNodesResources }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_ComputeNodesResources[name]))}
 
 function OpenAPI.check_required(o::ComputeNodesResources)
-    o.num_cpus === nothing && (return false)
     o.memory_gb === nothing && (return false)
+    o.num_cpus === nothing && (return false)
     o.num_gpus === nothing && (return false)
     o.num_nodes === nothing && (return false)
     true
@@ -51,20 +51,38 @@ end
 
 function OpenAPI.validate_properties(o::ComputeNodesResources)
     OpenAPI.validate_property(ComputeNodesResources, Symbol("id"), o.id)
-    OpenAPI.validate_property(ComputeNodesResources, Symbol("num_cpus"), o.num_cpus)
     OpenAPI.validate_property(ComputeNodesResources, Symbol("memory_gb"), o.memory_gb)
+    OpenAPI.validate_property(ComputeNodesResources, Symbol("num_cpus"), o.num_cpus)
     OpenAPI.validate_property(ComputeNodesResources, Symbol("num_gpus"), o.num_gpus)
     OpenAPI.validate_property(ComputeNodesResources, Symbol("num_nodes"), o.num_nodes)
-    OpenAPI.validate_property(ComputeNodesResources, Symbol("time_limit"), o.time_limit)
     OpenAPI.validate_property(ComputeNodesResources, Symbol("scheduler_config_id"), o.scheduler_config_id)
+    OpenAPI.validate_property(ComputeNodesResources, Symbol("time_limit"), o.time_limit)
 end
 
 function OpenAPI.validate_property(::Type{ ComputeNodesResources }, name::Symbol, val)
 
+    if name === Symbol("id")
+        OpenAPI.validate_param(name, "ComputeNodesResources", :format, val, "int64")
+    end
 
+    if name === Symbol("memory_gb")
+        OpenAPI.validate_param(name, "ComputeNodesResources", :format, val, "double")
+    end
 
+    if name === Symbol("num_cpus")
+        OpenAPI.validate_param(name, "ComputeNodesResources", :format, val, "int64")
+    end
 
+    if name === Symbol("num_gpus")
+        OpenAPI.validate_param(name, "ComputeNodesResources", :format, val, "int64")
+    end
 
+    if name === Symbol("num_nodes")
+        OpenAPI.validate_param(name, "ComputeNodesResources", :format, val, "int64")
+    end
 
+    if name === Symbol("scheduler_config_id")
+        OpenAPI.validate_param(name, "ComputeNodesResources", :format, val, "int64")
+    end
 
 end

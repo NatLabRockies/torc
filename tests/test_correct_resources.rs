@@ -4,7 +4,7 @@ use common::{
     ServerProcess, create_test_compute_node, create_test_job, create_test_workflow, start_server,
 };
 use rstest::rstest;
-use torc::client::default_api;
+use torc::client::apis;
 use torc::client::report_models::ResourceUtilizationReport;
 use torc::client::resource_correction::{
     ResourceCorrectionContext, ResourceCorrectionOptions, apply_resource_corrections,
@@ -48,30 +48,35 @@ fn test_correct_resources_memory_violation_dry_run(start_server: &ServerProcess)
     rr.memory = "2g".to_string();
     rr.runtime = "PT1H".to_string();
     rr.num_cpus = 1;
-    let created_rr = default_api::create_resource_requirements(config, rr)
+    let created_rr = apis::resource_requirements_api::create_resource_requirements(config, rr)
         .expect("Failed to create resource requirement");
     let rr_id = created_rr.id.unwrap();
 
     // Update job with correct RR ID
     job.resource_requirements_id = Some(rr_id);
-    default_api::update_job(config, job.id.unwrap(), job).expect("Failed to update job");
+    apis::jobs_api::update_job(config, job.id.unwrap(), job).expect("Failed to update job");
 
     // Reinitialize to pick up the job
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to reinitialize");
 
     // Claim and complete the job with OOM simulation
     let resources = models::ComputeNodesResources::new(36, 100.0, 0, 1);
-    let result =
-        default_api::claim_jobs_based_on_resources(config, workflow_id, &resources, 10, None, None)
-            .expect("Failed to claim jobs");
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        10,
+        resources,
+        None,
+    )
+    .expect("Failed to claim jobs");
     let jobs = result.jobs.expect("Should return jobs");
     assert_eq!(jobs.len(), 1);
 
     let job_id = jobs[0].id.unwrap();
 
     // Set job to running
-    default_api::manage_status_change(config, job_id, JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
         .expect("Failed to set job running");
 
     // Complete with OOM: return code 137, quick execution, high memory peak
@@ -90,11 +95,11 @@ fn test_correct_resources_memory_violation_dry_run(start_server: &ServerProcess)
     // Set peak memory to 3GB (exceeds 2GB limit)
     job_result.peak_memory_bytes = Some(3_000_000_000); // 3GB
 
-    default_api::complete_job(config, job_id, job_result.status, run_id, job_result)
+    apis::jobs_api::complete_job(config, job_id, job_result.status, run_id, job_result)
         .expect("Failed to complete job");
 
     // Verify violation is recorded
-    let violations = default_api::list_results(
+    let violations = apis::results_api::list_results(
         config,
         workflow_id,
         None,
@@ -110,7 +115,7 @@ fn test_correct_resources_memory_violation_dry_run(start_server: &ServerProcess)
     )
     .expect("Failed to list results");
 
-    let items = violations.items.expect("Should have items");
+    let items = violations.items;
     assert!(!items.is_empty(), "Should have results");
     let result = &items[0];
     assert_eq!(result.return_code, 137, "Should have OOM return code");
@@ -141,30 +146,35 @@ fn test_correct_resources_cpu_violation_dry_run(start_server: &ServerProcess) {
     rr.memory = "4g".to_string();
     rr.runtime = "PT1H".to_string();
     rr.num_cpus = 3;
-    let created_rr = default_api::create_resource_requirements(config, rr)
+    let created_rr = apis::resource_requirements_api::create_resource_requirements(config, rr)
         .expect("Failed to create resource requirement");
     let rr_id = created_rr.id.unwrap();
 
     // Update job with correct RR ID
     job.resource_requirements_id = Some(rr_id);
-    default_api::update_job(config, job.id.unwrap(), job).expect("Failed to update job");
+    apis::jobs_api::update_job(config, job.id.unwrap(), job).expect("Failed to update job");
 
     // Reinitialize
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to reinitialize");
 
     // Claim and complete the job
     let resources = models::ComputeNodesResources::new(36, 100.0, 0, 1);
-    let result =
-        default_api::claim_jobs_based_on_resources(config, workflow_id, &resources, 10, None, None)
-            .expect("Failed to claim jobs");
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        10,
+        resources,
+        None,
+    )
+    .expect("Failed to claim jobs");
     let jobs = result.jobs.expect("Should return jobs");
     assert_eq!(jobs.len(), 1);
 
     let job_id = jobs[0].id.unwrap();
 
     // Set job to running
-    default_api::manage_status_change(config, job_id, JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
         .expect("Failed to set job running");
 
     // Complete successfully but with CPU violation: peak 502% (exceeds 300%)
@@ -182,11 +192,11 @@ fn test_correct_resources_cpu_violation_dry_run(start_server: &ServerProcess) {
 
     job_result.peak_cpu_percent = Some(502.0); // 502% (exceeds 300% for 3 cores)
 
-    default_api::complete_job(config, job_id, job_result.status, run_id, job_result)
+    apis::jobs_api::complete_job(config, job_id, job_result.status, run_id, job_result)
         .expect("Failed to complete job");
 
     // Verify violation is recorded
-    let violations = default_api::list_results(
+    let violations = apis::results_api::list_results(
         config,
         workflow_id,
         None,
@@ -202,7 +212,7 @@ fn test_correct_resources_cpu_violation_dry_run(start_server: &ServerProcess) {
     )
     .expect("Failed to list results");
 
-    let items = violations.items.expect("Should have items");
+    let items = violations.items;
     assert!(!items.is_empty(), "Should have results");
     let result = &items[0];
     assert_eq!(result.return_code, 0, "Should have success return code");
@@ -233,30 +243,35 @@ fn test_correct_resources_runtime_violation_dry_run(start_server: &ServerProcess
     rr.memory = "2g".to_string();
     rr.runtime = "PT30M".to_string(); // 30 minutes
     rr.num_cpus = 2;
-    let created_rr = default_api::create_resource_requirements(config, rr)
+    let created_rr = apis::resource_requirements_api::create_resource_requirements(config, rr)
         .expect("Failed to create resource requirement");
     let rr_id = created_rr.id.unwrap();
 
     // Update job with correct RR ID
     job.resource_requirements_id = Some(rr_id);
-    default_api::update_job(config, job.id.unwrap(), job).expect("Failed to update job");
+    apis::jobs_api::update_job(config, job.id.unwrap(), job).expect("Failed to update job");
 
     // Reinitialize
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to reinitialize");
 
     // Claim and complete the job
     let resources = models::ComputeNodesResources::new(36, 100.0, 0, 1);
-    let result =
-        default_api::claim_jobs_based_on_resources(config, workflow_id, &resources, 10, None, None)
-            .expect("Failed to claim jobs");
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        10,
+        resources,
+        None,
+    )
+    .expect("Failed to claim jobs");
     let jobs = result.jobs.expect("Should return jobs");
     assert_eq!(jobs.len(), 1);
 
     let job_id = jobs[0].id.unwrap();
 
     // Set job to running
-    default_api::manage_status_change(config, job_id, JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
         .expect("Failed to set job running");
 
     // Complete successfully but with runtime violation: 45 minutes (exceeds 30 min)
@@ -272,11 +287,11 @@ fn test_correct_resources_runtime_violation_dry_run(start_server: &ServerProcess
         JobStatus::Completed,
     );
 
-    default_api::complete_job(config, job_id, job_result.status, run_id, job_result)
+    apis::jobs_api::complete_job(config, job_id, job_result.status, run_id, job_result)
         .expect("Failed to complete job");
 
     // Verify violation is recorded
-    let violations = default_api::list_results(
+    let violations = apis::results_api::list_results(
         config,
         workflow_id,
         None,
@@ -292,7 +307,7 @@ fn test_correct_resources_runtime_violation_dry_run(start_server: &ServerProcess
     )
     .expect("Failed to list results");
 
-    let items = violations.items.expect("Should have items");
+    let items = violations.items;
     assert!(!items.is_empty(), "Should have results");
     let result = &items[0];
     assert_eq!(result.return_code, 0, "Should have success return code");
@@ -334,38 +349,43 @@ fn test_correct_resources_multiple_violations(start_server: &ServerProcess) {
     rr3.runtime = "PT30M".to_string();
     rr3.num_cpus = 1;
 
-    let created_rr1 =
-        default_api::create_resource_requirements(config, rr1).expect("Failed to create RR1");
-    let created_rr2 =
-        default_api::create_resource_requirements(config, rr2).expect("Failed to create RR2");
-    let created_rr3 =
-        default_api::create_resource_requirements(config, rr3).expect("Failed to create RR3");
+    let created_rr1 = apis::resource_requirements_api::create_resource_requirements(config, rr1)
+        .expect("Failed to create RR1");
+    let created_rr2 = apis::resource_requirements_api::create_resource_requirements(config, rr2)
+        .expect("Failed to create RR2");
+    let created_rr3 = apis::resource_requirements_api::create_resource_requirements(config, rr3)
+        .expect("Failed to create RR3");
 
     // Update jobs
     let mut job1_updated = job1;
     job1_updated.resource_requirements_id = Some(created_rr1.id.unwrap());
-    default_api::update_job(config, job1_updated.id.unwrap(), job1_updated)
+    apis::jobs_api::update_job(config, job1_updated.id.unwrap(), job1_updated)
         .expect("Failed to update job1");
 
     let mut job2_updated = job2;
     job2_updated.resource_requirements_id = Some(created_rr2.id.unwrap());
-    default_api::update_job(config, job2_updated.id.unwrap(), job2_updated)
+    apis::jobs_api::update_job(config, job2_updated.id.unwrap(), job2_updated)
         .expect("Failed to update job2");
 
     let mut job3_updated = job3;
     job3_updated.resource_requirements_id = Some(created_rr3.id.unwrap());
-    default_api::update_job(config, job3_updated.id.unwrap(), job3_updated)
+    apis::jobs_api::update_job(config, job3_updated.id.unwrap(), job3_updated)
         .expect("Failed to update job3");
 
     // Reinitialize
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to reinitialize");
 
     // Claim jobs
     let resources = models::ComputeNodesResources::new(36, 100.0, 0, 1);
-    let result =
-        default_api::claim_jobs_based_on_resources(config, workflow_id, &resources, 10, None, None)
-            .expect("Failed to claim jobs");
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        10,
+        resources,
+        None,
+    )
+    .expect("Failed to claim jobs");
     let jobs = result.jobs.expect("Should return jobs");
     assert_eq!(jobs.len(), 3, "Should have 3 jobs");
 
@@ -375,7 +395,7 @@ fn test_correct_resources_multiple_violations(start_server: &ServerProcess) {
 
     // Set jobs to running
     for job_id in [job1_id, job2_id, job3_id] {
-        default_api::manage_status_change(config, job_id, JobStatus::Running, run_id, None)
+        apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
             .expect("Failed to set job running");
     }
 
@@ -392,7 +412,7 @@ fn test_correct_resources_multiple_violations(start_server: &ServerProcess) {
         JobStatus::Failed,
     );
     result1.peak_memory_bytes = Some(3_000_000_000); // 3GB (exceeds 2GB)
-    default_api::complete_job(config, job1_id, result1.status, run_id, result1)
+    apis::jobs_api::complete_job(config, job1_id, result1.status, run_id, result1)
         .expect("Failed to complete job1");
 
     // Complete job 2 with CPU violation
@@ -408,7 +428,7 @@ fn test_correct_resources_multiple_violations(start_server: &ServerProcess) {
         JobStatus::Completed,
     );
     result2.peak_cpu_percent = Some(250.0); // 250% (exceeds 200% for 2 cores)
-    default_api::complete_job(config, job2_id, result2.status, run_id, result2)
+    apis::jobs_api::complete_job(config, job2_id, result2.status, run_id, result2)
         .expect("Failed to complete job2");
 
     // Complete job 3 with runtime violation
@@ -423,11 +443,11 @@ fn test_correct_resources_multiple_violations(start_server: &ServerProcess) {
         chrono::Utc::now().to_rfc3339(),
         JobStatus::Completed,
     );
-    default_api::complete_job(config, job3_id, result3.status, run_id, result3)
+    apis::jobs_api::complete_job(config, job3_id, result3.status, run_id, result3)
         .expect("Failed to complete job3");
 
     // Verify all violations are recorded
-    let results = default_api::list_results(
+    let results = apis::results_api::list_results(
         config,
         workflow_id,
         None,
@@ -443,7 +463,7 @@ fn test_correct_resources_multiple_violations(start_server: &ServerProcess) {
     )
     .expect("Failed to list results");
 
-    let items = results.items.expect("Should have items");
+    let items = results.items;
     assert_eq!(items.len(), 3, "Should have 3 results");
 
     // Verify each violation type - find by job_id instead of assuming order
@@ -509,30 +529,35 @@ fn test_correct_resources_applies_corrections(start_server: &ServerProcess) {
     rr.memory = "2g".to_string();
     rr.runtime = "PT30M".to_string();
     rr.num_cpus = 1;
-    let created_rr = default_api::create_resource_requirements(config, rr)
+    let created_rr = apis::resource_requirements_api::create_resource_requirements(config, rr)
         .expect("Failed to create resource requirement");
     let rr_id = created_rr.id.unwrap();
 
     // Update job with correct RR ID
     job.resource_requirements_id = Some(rr_id);
-    default_api::update_job(config, job.id.unwrap(), job).expect("Failed to update job");
+    apis::jobs_api::update_job(config, job.id.unwrap(), job).expect("Failed to update job");
 
     // Reinitialize to pick up the job
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to reinitialize");
 
     // Claim and complete the job with violations
     let resources = models::ComputeNodesResources::new(36, 100.0, 0, 1);
-    let result =
-        default_api::claim_jobs_based_on_resources(config, workflow_id, &resources, 10, None, None)
-            .expect("Failed to claim jobs");
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        10,
+        resources,
+        None,
+    )
+    .expect("Failed to claim jobs");
     let jobs = result.jobs.expect("Should return jobs");
     assert_eq!(jobs.len(), 1);
 
     let job_id = jobs[0].id.unwrap();
 
     // Set job to running
-    default_api::manage_status_change(config, job_id, JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
         .expect("Failed to set job running");
 
     // Complete with all three violations
@@ -551,11 +576,11 @@ fn test_correct_resources_applies_corrections(start_server: &ServerProcess) {
     job_result.peak_memory_bytes = Some(3_500_000_000); // 3.5GB (exceeds 2GB)
     job_result.peak_cpu_percent = Some(150.0); // 150% (exceeds 100% for 1 core)
 
-    default_api::complete_job(config, job_id, job_result.status, run_id, job_result)
+    apis::jobs_api::complete_job(config, job_id, job_result.status, run_id, job_result)
         .expect("Failed to complete job");
 
     // Get the RR before corrections
-    let rr_before = default_api::get_resource_requirements(config, rr_id)
+    let rr_before = apis::resource_requirements_api::get_resource_requirements(config, rr_id)
         .expect("Failed to get resource requirement");
     assert_eq!(rr_before.memory, "2g");
     assert_eq!(rr_before.num_cpus, 1);
@@ -566,7 +591,7 @@ fn test_correct_resources_applies_corrections(start_server: &ServerProcess) {
     // Memory: 3.5GB * 1.2 = 4.2GB
     // CPU: ceil(150% / 100% * 1.2) = ceil(1.8) = 2 cores
     // Runtime: 45 min * 1.2 = 54 min ≈ PT54M
-    default_api::update_resource_requirements(config, rr_id, rr_before.clone())
+    apis::resource_requirements_api::update_resource_requirements(config, rr_id, rr_before.clone())
         .expect("Failed to update RR before applying corrections");
 
     // Now update the RR with corrected values (simulating what correct-resources command does)
@@ -575,11 +600,11 @@ fn test_correct_resources_applies_corrections(start_server: &ServerProcess) {
     rr_corrected.num_cpus = 2; // Corrected from 1 (150% / 100% * 1.2 = 1.8, rounded up)
     rr_corrected.runtime = "PT54M".to_string(); // Corrected from PT30M (45 * 1.2 = 54)
 
-    default_api::update_resource_requirements(config, rr_id, rr_corrected)
+    apis::resource_requirements_api::update_resource_requirements(config, rr_id, rr_corrected)
         .expect("Failed to update resource requirement with corrections");
 
     // Verify corrections were applied
-    let rr_after = default_api::get_resource_requirements(config, rr_id)
+    let rr_after = apis::resource_requirements_api::get_resource_requirements(config, rr_id)
         .expect("Failed to get corrected resource requirement");
 
     assert_eq!(rr_after.memory, "4g", "Memory should be corrected to 4g");
@@ -611,30 +636,35 @@ fn test_correct_resources_dry_run_mode(start_server: &ServerProcess) {
     rr.memory = "1g".to_string();
     rr.runtime = "PT10M".to_string();
     rr.num_cpus = 1;
-    let created_rr = default_api::create_resource_requirements(config, rr)
+    let created_rr = apis::resource_requirements_api::create_resource_requirements(config, rr)
         .expect("Failed to create resource requirement");
     let rr_id = created_rr.id.unwrap();
 
     // Update job with correct RR ID
     job.resource_requirements_id = Some(rr_id);
-    default_api::update_job(config, job.id.unwrap(), job).expect("Failed to update job");
+    apis::jobs_api::update_job(config, job.id.unwrap(), job).expect("Failed to update job");
 
     // Reinitialize to pick up the job
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to reinitialize");
 
     // Claim and complete the job with violations
     let resources = models::ComputeNodesResources::new(36, 100.0, 0, 1);
-    let result =
-        default_api::claim_jobs_based_on_resources(config, workflow_id, &resources, 10, None, None)
-            .expect("Failed to claim jobs");
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        10,
+        resources,
+        None,
+    )
+    .expect("Failed to claim jobs");
     let jobs = result.jobs.expect("Should return jobs");
     assert_eq!(jobs.len(), 1);
 
     let job_id = jobs[0].id.unwrap();
 
     // Set job to running
-    default_api::manage_status_change(config, job_id, JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
         .expect("Failed to set job running");
 
     // Complete with violations
@@ -653,11 +683,11 @@ fn test_correct_resources_dry_run_mode(start_server: &ServerProcess) {
     job_result.peak_memory_bytes = Some(2_000_000_000); // 2GB (exceeds 1GB)
     job_result.peak_cpu_percent = Some(120.0); // 120% (exceeds 100% for 1 core)
 
-    default_api::complete_job(config, job_id, job_result.status, run_id, job_result)
+    apis::jobs_api::complete_job(config, job_id, job_result.status, run_id, job_result)
         .expect("Failed to complete job");
 
     // Verify violations can be retrieved
-    let violations = default_api::list_results(
+    let violations = apis::results_api::list_results(
         config,
         workflow_id,
         None,
@@ -673,7 +703,7 @@ fn test_correct_resources_dry_run_mode(start_server: &ServerProcess) {
     )
     .expect("Failed to list results");
 
-    let items = violations.items.expect("Should have items");
+    let items = violations.items;
     assert_eq!(items.len(), 1, "Should have 1 result with violations");
 
     // Verify the violations are present (OOM, memory, CPU, runtime)
@@ -720,30 +750,35 @@ fn test_correct_resources_memory_violation_successful_job(start_server: &ServerP
     rr.memory = "2g".to_string();
     rr.runtime = "PT1H".to_string();
     rr.num_cpus = 2;
-    let created_rr = default_api::create_resource_requirements(config, rr)
+    let created_rr = apis::resource_requirements_api::create_resource_requirements(config, rr)
         .expect("Failed to create resource requirement");
     let rr_id = created_rr.id.unwrap();
 
     // Update job with correct RR ID
     job.resource_requirements_id = Some(rr_id);
-    default_api::update_job(config, job.id.unwrap(), job).expect("Failed to update job");
+    apis::jobs_api::update_job(config, job.id.unwrap(), job).expect("Failed to update job");
 
     // Reinitialize to pick up the job
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to reinitialize");
 
     // Claim and complete the job successfully
     let resources = models::ComputeNodesResources::new(36, 100.0, 0, 1);
-    let result =
-        default_api::claim_jobs_based_on_resources(config, workflow_id, &resources, 10, None, None)
-            .expect("Failed to claim jobs");
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        10,
+        resources,
+        None,
+    )
+    .expect("Failed to claim jobs");
     let jobs = result.jobs.expect("Should return jobs");
     assert_eq!(jobs.len(), 1);
 
     let job_id = jobs[0].id.unwrap();
 
     // Set job to running
-    default_api::manage_status_change(config, job_id, JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
         .expect("Failed to set job running");
 
     // Complete SUCCESSFULLY (return code 0) but with memory violation
@@ -762,11 +797,11 @@ fn test_correct_resources_memory_violation_successful_job(start_server: &ServerP
     // Set peak memory to 3GB (exceeds 2GB limit even though job succeeded)
     job_result.peak_memory_bytes = Some(3_200_000_000); // 3.2GB
 
-    default_api::complete_job(config, job_id, job_result.status, run_id, job_result)
+    apis::jobs_api::complete_job(config, job_id, job_result.status, run_id, job_result)
         .expect("Failed to complete job");
 
     // Verify memory violation is recorded
-    let results = default_api::list_results(
+    let results = apis::results_api::list_results(
         config,
         workflow_id,
         None,
@@ -782,7 +817,7 @@ fn test_correct_resources_memory_violation_successful_job(start_server: &ServerP
     )
     .expect("Failed to list results");
 
-    let items = results.items.expect("Should have items");
+    let items = results.items;
     assert_eq!(items.len(), 1, "Should have 1 result");
     let result = &items[0];
     assert_eq!(result.return_code, 0, "Should have success return code");
@@ -801,6 +836,7 @@ fn empty_diagnosis(workflow_id: i64, total_results: usize) -> ResourceUtilizatio
         total_results,
         over_utilization_count: 0,
         violations: Vec::new(),
+        within_limits: Vec::new(),
         resource_violations_count: 0,
         resource_violations: Vec::new(),
     }
@@ -811,7 +847,7 @@ fn fetch_results(
     config: &torc::client::Configuration,
     workflow_id: i64,
 ) -> Vec<models::ResultModel> {
-    default_api::list_results(
+    apis::results_api::list_results(
         config,
         workflow_id,
         None,
@@ -827,12 +863,11 @@ fn fetch_results(
     )
     .expect("Failed to list results")
     .items
-    .unwrap_or_default()
 }
 
 /// Helper: fetch all jobs for a workflow
 fn fetch_jobs(config: &torc::client::Configuration, workflow_id: i64) -> Vec<models::JobModel> {
-    default_api::list_jobs(
+    apis::jobs_api::list_jobs(
         config,
         workflow_id,
         None,
@@ -847,7 +882,6 @@ fn fetch_jobs(config: &torc::client::Configuration, workflow_id: i64) -> Vec<mod
     )
     .expect("Failed to list jobs")
     .items
-    .unwrap_or_default()
 }
 
 /// Helper: fetch all resource requirements for a workflow
@@ -855,7 +889,7 @@ fn fetch_resource_requirements(
     config: &torc::client::Configuration,
     workflow_id: i64,
 ) -> Vec<models::ResourceRequirementsModel> {
-    default_api::list_resource_requirements(
+    apis::resource_requirements_api::list_resource_requirements(
         config,
         workflow_id,
         None,
@@ -872,7 +906,6 @@ fn fetch_resource_requirements(
     )
     .expect("Failed to list resource requirements")
     .items
-    .unwrap_or_default()
 }
 
 /// Helper: create a job and assign it an RR. Returns the job_id.
@@ -886,7 +919,7 @@ fn create_job_with_rr(
     let mut job = create_test_job(config, workflow_id, job_name);
     job.resource_requirements_id = Some(rr_id);
     let job_id = job.id.unwrap();
-    default_api::update_job(config, job_id, job).expect("Failed to update job");
+    apis::jobs_api::update_job(config, job_id, job).expect("Failed to update job");
     job_id
 }
 
@@ -901,12 +934,11 @@ fn claim_and_complete_jobs(
     job_metrics: &[(i64, i64, f64, JobStatus, Option<i64>, Option<f64>)],
 ) {
     let resources = models::ComputeNodesResources::new(128, 1024.0, 0, 1);
-    let claim_result = default_api::claim_jobs_based_on_resources(
+    let claim_result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
-        &resources,
         100,
-        None,
+        resources,
         None,
     )
     .expect("Failed to claim jobs");
@@ -920,7 +952,7 @@ fn claim_and_complete_jobs(
             job_id
         );
 
-        default_api::manage_status_change(config, *job_id, JobStatus::Running, run_id, None)
+        apis::jobs_api::manage_status_change(config, *job_id, JobStatus::Running, run_id)
             .expect("Failed to set job running");
 
         let mut result = models::ResultModel::new(
@@ -937,7 +969,7 @@ fn claim_and_complete_jobs(
         result.peak_memory_bytes = *peak_mem;
         result.peak_cpu_percent = *peak_cpu;
 
-        default_api::complete_job(config, *job_id, result.status, run_id, result)
+        apis::jobs_api::complete_job(config, *job_id, result.status, run_id, result)
             .expect("Failed to complete job");
     }
 }
@@ -957,8 +989,8 @@ fn test_downsize_memory(start_server: &ServerProcess) {
     rr.memory = "8g".to_string();
     rr.runtime = "PT1H".to_string();
     rr.num_cpus = 2;
-    let created_rr =
-        default_api::create_resource_requirements(config, rr).expect("Failed to create RR");
+    let created_rr = apis::resource_requirements_api::create_resource_requirements(config, rr)
+        .expect("Failed to create RR");
     let rr_id = created_rr.id.unwrap();
 
     // Create 2 jobs with this RR
@@ -966,7 +998,7 @@ fn test_downsize_memory(start_server: &ServerProcess) {
     let job_b_id = create_job_with_rr(config, workflow_id, "job_b", rr_id);
 
     // Reinitialize and complete jobs through lifecycle
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to reinitialize");
 
     claim_and_complete_jobs(
@@ -1023,7 +1055,7 @@ fn test_downsize_memory(start_server: &ServerProcess) {
     assert!(result.resource_requirements_updated > 0);
 
     // Verify RR was updated: 2GB * 1.2 = 2.4GB → ceil to 3g
-    let rr_after = default_api::get_resource_requirements(config, rr_id)
+    let rr_after = apis::resource_requirements_api::get_resource_requirements(config, rr_id)
         .expect("Failed to get RR after downsize");
     assert_eq!(rr_after.memory, "3g", "Memory should be downsized to 3g");
 }
@@ -1043,13 +1075,13 @@ fn test_downsize_cpu(start_server: &ServerProcess) {
     rr.memory = "2g".to_string();
     rr.runtime = "PT1H".to_string();
     rr.num_cpus = 8;
-    let created_rr =
-        default_api::create_resource_requirements(config, rr).expect("Failed to create RR");
+    let created_rr = apis::resource_requirements_api::create_resource_requirements(config, rr)
+        .expect("Failed to create RR");
     let rr_id = created_rr.id.unwrap();
 
     let job_id = create_job_with_rr(config, workflow_id, "low_cpu_job", rr_id);
 
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to reinitialize");
 
     claim_and_complete_jobs(
@@ -1093,7 +1125,7 @@ fn test_downsize_cpu(start_server: &ServerProcess) {
 
     assert_eq!(result.downsize_cpu_corrections, 1);
 
-    let rr_after = default_api::get_resource_requirements(config, rr_id)
+    let rr_after = apis::resource_requirements_api::get_resource_requirements(config, rr_id)
         .expect("Failed to get RR after downsize");
     // ceil(150% / 100% * 1.2) = ceil(1.8) = 2
     assert_eq!(rr_after.num_cpus, 2, "CPUs should be downsized to 2");
@@ -1114,8 +1146,8 @@ fn test_downsize_runtime(start_server: &ServerProcess) {
     rr.memory = "2g".to_string();
     rr.runtime = "PT2H".to_string(); // 120 minutes
     rr.num_cpus = 1;
-    let created_rr =
-        default_api::create_resource_requirements(config, rr).expect("Failed to create RR");
+    let created_rr = apis::resource_requirements_api::create_resource_requirements(config, rr)
+        .expect("Failed to create RR");
     let rr_id = created_rr.id.unwrap();
 
     // Create 3 jobs
@@ -1123,7 +1155,7 @@ fn test_downsize_runtime(start_server: &ServerProcess) {
     let job2_id = create_job_with_rr(config, workflow_id, "fast2", rr_id);
     let job3_id = create_job_with_rr(config, workflow_id, "fast3", rr_id);
 
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to reinitialize");
 
     claim_and_complete_jobs(
@@ -1185,7 +1217,7 @@ fn test_downsize_runtime(start_server: &ServerProcess) {
 
     assert_eq!(result.downsize_runtime_corrections, 3);
 
-    let rr_after = default_api::get_resource_requirements(config, rr_id)
+    let rr_after = apis::resource_requirements_api::get_resource_requirements(config, rr_id)
         .expect("Failed to get RR after downsize");
     // 10 min * 60s * 1.2 = 720s = 12 minutes → PT12M
     assert_eq!(
@@ -1211,13 +1243,13 @@ fn test_no_downsize_below_threshold(start_server: &ServerProcess) {
     rr.memory = "3g".to_string();
     rr.runtime = "PT40M".to_string(); // 40 minutes
     rr.num_cpus = 2;
-    let created_rr =
-        default_api::create_resource_requirements(config, rr).expect("Failed to create RR");
+    let created_rr = apis::resource_requirements_api::create_resource_requirements(config, rr)
+        .expect("Failed to create RR");
     let rr_id = created_rr.id.unwrap();
 
     let job_id = create_job_with_rr(config, workflow_id, "tight_job", rr_id);
 
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to reinitialize");
 
     claim_and_complete_jobs(
@@ -1266,7 +1298,8 @@ fn test_no_downsize_below_threshold(start_server: &ServerProcess) {
     assert_eq!(result.resource_requirements_updated, 0);
 
     // Verify RR is unchanged
-    let rr_after = default_api::get_resource_requirements(config, rr_id).expect("Failed to get RR");
+    let rr_after = apis::resource_requirements_api::get_resource_requirements(config, rr_id)
+        .expect("Failed to get RR");
     assert_eq!(rr_after.memory, "3g");
     assert_eq!(rr_after.num_cpus, 2);
     assert_eq!(rr_after.runtime, "PT40M");
@@ -1285,13 +1318,13 @@ fn test_no_downsize_flag(start_server: &ServerProcess) {
     rr.memory = "32g".to_string();
     rr.runtime = "PT8H".to_string();
     rr.num_cpus = 16;
-    let created_rr =
-        default_api::create_resource_requirements(config, rr).expect("Failed to create RR");
+    let created_rr = apis::resource_requirements_api::create_resource_requirements(config, rr)
+        .expect("Failed to create RR");
     let rr_id = created_rr.id.unwrap();
 
     let job_id = create_job_with_rr(config, workflow_id, "tiny_job", rr_id);
 
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to reinitialize");
 
     claim_and_complete_jobs(
@@ -1339,7 +1372,8 @@ fn test_no_downsize_flag(start_server: &ServerProcess) {
     assert_eq!(result.resource_requirements_updated, 0);
 
     // Verify RR is unchanged
-    let rr_after = default_api::get_resource_requirements(config, rr_id).expect("Failed to get RR");
+    let rr_after = apis::resource_requirements_api::get_resource_requirements(config, rr_id)
+        .expect("Failed to get RR");
     assert_eq!(rr_after.memory, "32g");
     assert_eq!(rr_after.num_cpus, 16);
     assert_eq!(rr_after.runtime, "PT8H");
@@ -1360,8 +1394,8 @@ fn test_no_downsize_missing_peak_data(start_server: &ServerProcess) {
     rr.memory = "16g".to_string();
     rr.runtime = "PT2H".to_string();
     rr.num_cpus = 8;
-    let created_rr =
-        default_api::create_resource_requirements(config, rr).expect("Failed to create RR");
+    let created_rr = apis::resource_requirements_api::create_resource_requirements(config, rr)
+        .expect("Failed to create RR");
     let rr_id = created_rr.id.unwrap();
 
     // Job 1: has full peak data
@@ -1369,7 +1403,7 @@ fn test_no_downsize_missing_peak_data(start_server: &ServerProcess) {
     // Job 2: missing memory and CPU data (None)
     let job2_id = create_job_with_rr(config, workflow_id, "no_data", rr_id);
 
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to reinitialize");
 
     claim_and_complete_jobs(
@@ -1420,7 +1454,8 @@ fn test_no_downsize_missing_peak_data(start_server: &ServerProcess) {
     // Runtime CAN still be downsized (120 min - 6 min = 114 min > 30 min threshold)
     assert_eq!(result.downsize_runtime_corrections, 2);
 
-    let rr_after = default_api::get_resource_requirements(config, rr_id).expect("Failed to get RR");
+    let rr_after = apis::resource_requirements_api::get_resource_requirements(config, rr_id)
+        .expect("Failed to get RR");
     assert_eq!(rr_after.memory, "16g", "Memory unchanged — missing data");
     assert_eq!(rr_after.num_cpus, 8, "CPUs unchanged — missing data");
     // Runtime: 5 min * 60 * 1.2 = 360s = 6 min → PT6M
@@ -1440,13 +1475,13 @@ fn test_downsize_dry_run(start_server: &ServerProcess) {
     rr.memory = "16g".to_string();
     rr.runtime = "PT4H".to_string();
     rr.num_cpus = 8;
-    let created_rr =
-        default_api::create_resource_requirements(config, rr).expect("Failed to create RR");
+    let created_rr = apis::resource_requirements_api::create_resource_requirements(config, rr)
+        .expect("Failed to create RR");
     let rr_id = created_rr.id.unwrap();
 
     let job_id = create_job_with_rr(config, workflow_id, "small_job", rr_id);
 
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to reinitialize");
 
     claim_and_complete_jobs(
@@ -1494,7 +1529,8 @@ fn test_downsize_dry_run(start_server: &ServerProcess) {
     assert!(result.downsize_runtime_corrections > 0);
 
     // But RR should be UNCHANGED
-    let rr_after = default_api::get_resource_requirements(config, rr_id).expect("Failed to get RR");
+    let rr_after = apis::resource_requirements_api::get_resource_requirements(config, rr_id)
+        .expect("Failed to get RR");
     assert_eq!(rr_after.memory, "16g", "Memory unchanged in dry-run");
     assert_eq!(rr_after.num_cpus, 8, "CPUs unchanged in dry-run");
     assert_eq!(rr_after.runtime, "PT4H", "Runtime unchanged in dry-run");
@@ -1513,13 +1549,13 @@ fn test_downsize_adjustment_report_direction(start_server: &ServerProcess) {
     rr.memory = "16g".to_string();
     rr.runtime = "PT4H".to_string();
     rr.num_cpus = 8;
-    let created_rr =
-        default_api::create_resource_requirements(config, rr).expect("Failed to create RR");
+    let created_rr = apis::resource_requirements_api::create_resource_requirements(config, rr)
+        .expect("Failed to create RR");
     let rr_id = created_rr.id.unwrap();
 
     let job_id = create_job_with_rr(config, workflow_id, "tiny", rr_id);
 
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to reinitialize");
 
     claim_and_complete_jobs(

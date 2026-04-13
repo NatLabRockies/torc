@@ -80,7 +80,7 @@ impl PaginationParams for EventListParams {
 }
 
 impl Paginatable for EventModel {
-    type ListError = apis::default_api::ListEventsError;
+    type ListError = apis::events_api::ListEventsError;
     type Params = EventListParams;
 
     fn fetch_page(
@@ -88,7 +88,7 @@ impl Paginatable for EventModel {
         params: &Self::Params,
         limit: i64,
     ) -> Result<PaginatedResponse<Self>, apis::Error<Self::ListError>> {
-        let response = apis::default_api::list_events(
+        let response = apis::events_api::list_events(
             config,
             params.workflow_id,
             Some(params.offset),
@@ -137,10 +137,11 @@ pub fn iter_events(
 ///
 /// # Returns
 /// `Result<Vec<EventModel>, Error>` containing all events or an error
+#[allow(clippy::result_large_err)]
 pub fn paginate_events(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: EventListParams,
-) -> Result<Vec<EventModel>, apis::Error<apis::default_api::ListEventsError>> {
+) -> Result<Vec<EventModel>, apis::Error<apis::events_api::ListEventsError>> {
     iter_events(config, workflow_id, params).collect()
 }

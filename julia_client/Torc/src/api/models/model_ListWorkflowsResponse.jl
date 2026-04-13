@@ -2,66 +2,78 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""list_workflows_response
+@doc raw"""ListWorkflowsResponse
 
     ListWorkflowsResponse(;
-        items=nothing,
-        offset=nothing,
-        max_limit=nothing,
         count=nothing,
-        total_count=nothing,
         has_more=nothing,
+        items=nothing,
+        max_limit=nothing,
+        offset=nothing,
+        total_count=nothing,
     )
 
-    - items::Vector{WorkflowModel}
-    - offset::Int64
-    - max_limit::Int64
     - count::Int64
-    - total_count::Int64
     - has_more::Bool
+    - items::Vector{WorkflowModel}
+    - max_limit::Int64
+    - offset::Int64
+    - total_count::Int64
 """
 Base.@kwdef mutable struct ListWorkflowsResponse <: OpenAPI.APIModel
-    items::Union{Nothing, Vector} = nothing # spec type: Union{ Nothing, Vector{WorkflowModel} }
-    offset::Union{Nothing, Int64} = nothing
-    max_limit::Union{Nothing, Int64} = nothing
     count::Union{Nothing, Int64} = nothing
-    total_count::Union{Nothing, Int64} = nothing
     has_more::Union{Nothing, Bool} = nothing
+    items::Union{Nothing, Vector} = nothing # spec type: Union{ Nothing, Vector{WorkflowModel} }
+    max_limit::Union{Nothing, Int64} = nothing
+    offset::Union{Nothing, Int64} = nothing
+    total_count::Union{Nothing, Int64} = nothing
 
-    function ListWorkflowsResponse(items, offset, max_limit, count, total_count, has_more, )
-        o = new(items, offset, max_limit, count, total_count, has_more, )
+    function ListWorkflowsResponse(count, has_more, items, max_limit, offset, total_count, )
+        o = new(count, has_more, items, max_limit, offset, total_count, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type ListWorkflowsResponse
 
-const _property_types_ListWorkflowsResponse = Dict{Symbol,String}(Symbol("items")=>"Vector{WorkflowModel}", Symbol("offset")=>"Int64", Symbol("max_limit")=>"Int64", Symbol("count")=>"Int64", Symbol("total_count")=>"Int64", Symbol("has_more")=>"Bool", )
+const _property_types_ListWorkflowsResponse = Dict{Symbol,String}(Symbol("count")=>"Int64", Symbol("has_more")=>"Bool", Symbol("items")=>"Vector{WorkflowModel}", Symbol("max_limit")=>"Int64", Symbol("offset")=>"Int64", Symbol("total_count")=>"Int64", )
 OpenAPI.property_type(::Type{ ListWorkflowsResponse }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_ListWorkflowsResponse[name]))}
 
 function OpenAPI.check_required(o::ListWorkflowsResponse)
-    o.items === nothing && (return false)
-    o.offset === nothing && (return false)
-    o.max_limit === nothing && (return false)
     o.count === nothing && (return false)
-    o.total_count === nothing && (return false)
     o.has_more === nothing && (return false)
+    o.items === nothing && (return false)
+    o.max_limit === nothing && (return false)
+    o.offset === nothing && (return false)
+    o.total_count === nothing && (return false)
     true
 end
 
 function OpenAPI.validate_properties(o::ListWorkflowsResponse)
-    OpenAPI.validate_property(ListWorkflowsResponse, Symbol("items"), o.items)
-    OpenAPI.validate_property(ListWorkflowsResponse, Symbol("offset"), o.offset)
-    OpenAPI.validate_property(ListWorkflowsResponse, Symbol("max_limit"), o.max_limit)
     OpenAPI.validate_property(ListWorkflowsResponse, Symbol("count"), o.count)
-    OpenAPI.validate_property(ListWorkflowsResponse, Symbol("total_count"), o.total_count)
     OpenAPI.validate_property(ListWorkflowsResponse, Symbol("has_more"), o.has_more)
+    OpenAPI.validate_property(ListWorkflowsResponse, Symbol("items"), o.items)
+    OpenAPI.validate_property(ListWorkflowsResponse, Symbol("max_limit"), o.max_limit)
+    OpenAPI.validate_property(ListWorkflowsResponse, Symbol("offset"), o.offset)
+    OpenAPI.validate_property(ListWorkflowsResponse, Symbol("total_count"), o.total_count)
 end
 
 function OpenAPI.validate_property(::Type{ ListWorkflowsResponse }, name::Symbol, val)
 
+    if name === Symbol("count")
+        OpenAPI.validate_param(name, "ListWorkflowsResponse", :format, val, "int64")
+    end
 
 
 
+    if name === Symbol("max_limit")
+        OpenAPI.validate_param(name, "ListWorkflowsResponse", :format, val, "int64")
+    end
 
+    if name === Symbol("offset")
+        OpenAPI.validate_param(name, "ListWorkflowsResponse", :format, val, "int64")
+    end
 
+    if name === Symbol("total_count")
+        OpenAPI.validate_param(name, "ListWorkflowsResponse", :format, val, "int64")
+    end
 end

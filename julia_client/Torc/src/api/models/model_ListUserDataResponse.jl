@@ -2,66 +2,78 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""list_user_data_response
+@doc raw"""ListUserDataResponse
 
     ListUserDataResponse(;
-        items=nothing,
-        offset=nothing,
-        max_limit=nothing,
         count=nothing,
-        total_count=nothing,
         has_more=nothing,
+        items=nothing,
+        max_limit=nothing,
+        offset=nothing,
+        total_count=nothing,
     )
 
-    - items::Vector{UserDataModel}
-    - offset::Int64
-    - max_limit::Int64
     - count::Int64
-    - total_count::Int64
     - has_more::Bool
+    - items::Vector{UserDataModel}
+    - max_limit::Int64
+    - offset::Int64
+    - total_count::Int64
 """
 Base.@kwdef mutable struct ListUserDataResponse <: OpenAPI.APIModel
-    items::Union{Nothing, Vector} = nothing # spec type: Union{ Nothing, Vector{UserDataModel} }
-    offset::Union{Nothing, Int64} = nothing
-    max_limit::Union{Nothing, Int64} = nothing
     count::Union{Nothing, Int64} = nothing
-    total_count::Union{Nothing, Int64} = nothing
     has_more::Union{Nothing, Bool} = nothing
+    items::Union{Nothing, Vector} = nothing # spec type: Union{ Nothing, Vector{UserDataModel} }
+    max_limit::Union{Nothing, Int64} = nothing
+    offset::Union{Nothing, Int64} = nothing
+    total_count::Union{Nothing, Int64} = nothing
 
-    function ListUserDataResponse(items, offset, max_limit, count, total_count, has_more, )
-        o = new(items, offset, max_limit, count, total_count, has_more, )
+    function ListUserDataResponse(count, has_more, items, max_limit, offset, total_count, )
+        o = new(count, has_more, items, max_limit, offset, total_count, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type ListUserDataResponse
 
-const _property_types_ListUserDataResponse = Dict{Symbol,String}(Symbol("items")=>"Vector{UserDataModel}", Symbol("offset")=>"Int64", Symbol("max_limit")=>"Int64", Symbol("count")=>"Int64", Symbol("total_count")=>"Int64", Symbol("has_more")=>"Bool", )
+const _property_types_ListUserDataResponse = Dict{Symbol,String}(Symbol("count")=>"Int64", Symbol("has_more")=>"Bool", Symbol("items")=>"Vector{UserDataModel}", Symbol("max_limit")=>"Int64", Symbol("offset")=>"Int64", Symbol("total_count")=>"Int64", )
 OpenAPI.property_type(::Type{ ListUserDataResponse }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_ListUserDataResponse[name]))}
 
 function OpenAPI.check_required(o::ListUserDataResponse)
-    o.items === nothing && (return false)
-    o.offset === nothing && (return false)
-    o.max_limit === nothing && (return false)
     o.count === nothing && (return false)
-    o.total_count === nothing && (return false)
     o.has_more === nothing && (return false)
+    o.items === nothing && (return false)
+    o.max_limit === nothing && (return false)
+    o.offset === nothing && (return false)
+    o.total_count === nothing && (return false)
     true
 end
 
 function OpenAPI.validate_properties(o::ListUserDataResponse)
-    OpenAPI.validate_property(ListUserDataResponse, Symbol("items"), o.items)
-    OpenAPI.validate_property(ListUserDataResponse, Symbol("offset"), o.offset)
-    OpenAPI.validate_property(ListUserDataResponse, Symbol("max_limit"), o.max_limit)
     OpenAPI.validate_property(ListUserDataResponse, Symbol("count"), o.count)
-    OpenAPI.validate_property(ListUserDataResponse, Symbol("total_count"), o.total_count)
     OpenAPI.validate_property(ListUserDataResponse, Symbol("has_more"), o.has_more)
+    OpenAPI.validate_property(ListUserDataResponse, Symbol("items"), o.items)
+    OpenAPI.validate_property(ListUserDataResponse, Symbol("max_limit"), o.max_limit)
+    OpenAPI.validate_property(ListUserDataResponse, Symbol("offset"), o.offset)
+    OpenAPI.validate_property(ListUserDataResponse, Symbol("total_count"), o.total_count)
 end
 
 function OpenAPI.validate_property(::Type{ ListUserDataResponse }, name::Symbol, val)
 
+    if name === Symbol("count")
+        OpenAPI.validate_param(name, "ListUserDataResponse", :format, val, "int64")
+    end
 
 
 
+    if name === Symbol("max_limit")
+        OpenAPI.validate_param(name, "ListUserDataResponse", :format, val, "int64")
+    end
 
+    if name === Symbol("offset")
+        OpenAPI.validate_param(name, "ListUserDataResponse", :format, val, "int64")
+    end
 
+    if name === Symbol("total_count")
+        OpenAPI.validate_param(name, "ListUserDataResponse", :format, val, "int64")
+    end
 end

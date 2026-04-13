@@ -1,5 +1,5 @@
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::commands::output::print_if_json;
 use crate::client::commands::table_format::display_table_with_count;
 use crate::client::commands::{get_env_user_name, print_error, select_workflow_interactively};
@@ -112,11 +112,13 @@ pub fn handle_job_dependency_commands(
                 },
             };
 
-            match default_api::list_job_dependencies(
+            match apis::workflows_api::list_job_dependencies(
                 config,
                 selected_workflow_id,
                 Some(*offset),
                 *limit,
+                None,
+                None,
             ) {
                 Ok(response) => {
                     if print_if_json(format, &response, "job dependencies") {
@@ -124,7 +126,6 @@ pub fn handle_job_dependency_commands(
                     } else {
                         let rows: Vec<JobDependencyTableRow> = response
                             .items
-                            .unwrap_or_default()
                             .iter()
                             .map(|dep| JobDependencyTableRow {
                                 job_id: dep.job_id,
@@ -159,11 +160,13 @@ pub fn handle_job_dependency_commands(
                 },
             };
 
-            match default_api::list_job_file_relationships(
+            match apis::workflows_api::list_job_file_relationships(
                 config,
                 selected_workflow_id,
                 Some(*offset),
                 *limit,
+                None,
+                None,
             ) {
                 Ok(response) => {
                     if print_if_json(format, &response, "job-file relationships") {
@@ -171,7 +174,6 @@ pub fn handle_job_dependency_commands(
                     } else {
                         let rows: Vec<JobFileRelationshipTableRow> = response
                             .items
-                            .unwrap_or_default()
                             .iter()
                             .map(|rel| JobFileRelationshipTableRow {
                                 file_id: rel.file_id,
@@ -220,11 +222,13 @@ pub fn handle_job_dependency_commands(
                 },
             };
 
-            match default_api::list_job_user_data_relationships(
+            match apis::workflows_api::list_job_user_data_relationships(
                 config,
                 selected_workflow_id,
                 Some(*offset),
                 *limit,
+                None,
+                None,
             ) {
                 Ok(response) => {
                     if print_if_json(format, &response, "job-user_data relationships") {
@@ -232,7 +236,6 @@ pub fn handle_job_dependency_commands(
                     } else {
                         let rows: Vec<JobUserDataRelationshipTableRow> = response
                             .items
-                            .unwrap_or_default()
                             .iter()
                             .map(|rel| JobUserDataRelationshipTableRow {
                                 user_data_id: rel.user_data_id,

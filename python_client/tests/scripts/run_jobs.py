@@ -3,7 +3,8 @@
 import sys
 from pathlib import Path
 
-from torc.openapi_client import ApiClient, DefaultApi
+from torc.api import DefaultApi
+from torc.openapi_client import ApiClient
 from torc.openapi_client.configuration import Configuration
 
 from torc.job_runner import JobRunner

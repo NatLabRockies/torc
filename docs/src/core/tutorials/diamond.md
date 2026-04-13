@@ -158,14 +158,14 @@ echo -e "apple red\nbanana yellow\ncherry red\ndate brown" > /tmp/input.txt
 
 ```bash
 # Create the workflow and capture the ID
-WORKFLOW_ID=$(torc workflows create diamond.yaml -f json | jq -r '.id')
+WORKFLOW_ID=$(torc create diamond.yaml -f json | jq -r '.id')
 echo "Created workflow: $WORKFLOW_ID"
 
 # Ensure the input file timestamp is current
 touch /tmp/input.txt
 
 # Initialize the workflow (builds dependency graph)
-torc workflows initialize-jobs $WORKFLOW_ID
+torc workflows init $WORKFLOW_ID
 ```
 
 The `initialize-jobs` command is where Torc:

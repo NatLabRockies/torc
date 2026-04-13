@@ -3,6 +3,7 @@
 Internal design documentation for developers.
 
 - [Client Architecture](./client.md) - Torc client design
+- [HTTP API Design](./http-api.md) - REST API conventions and design principles
 - [Workflow Actions](./workflow-actions.md) - Workflow action system
 - [Web Dashboard Design](./dashboard.md) - Dashboard architecture
 - [Server API Handler](./server.md) - Server implementation

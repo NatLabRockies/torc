@@ -53,9 +53,9 @@ listed below.
 
 ```
 /scratch/dthom/torc/
-├── 0.20.7/
+├── 0.22.2/
 ├── ...
-└── latest -> 0.20.7  (symlink to current version)
+└── latest -> 0.22.2  (symlink to current version)
 ```
 
 > **Recommended**: Use the `latest` directory. Torc maintains backwards compatibility, so you'll
@@ -266,18 +266,24 @@ using Torc
 
 ## For Developers
 
+Install `cargo-nextest` before running the Rust test suite:
+
+```bash
+cargo install cargo-nextest
+```
+
 ### Running Tests
 
 # Run all tests
 
 ```bash
-cargo test -- --test-threads=1
+cargo nextest run --all-features
 
 # Run specific test
-cargo test --test test_workflow_manager test_initialize_files_with_updated_files
+cargo nextest run -E 'test(test_initialize_files_with_updated_files)'
 
 # Run with debug logging
-RUST_LOG=debug cargo test -- --nocapture
+RUST_LOG=debug cargo nextest run -E 'test(test_initialize_files_with_updated_files)'
 ```
 
 ### Setting Up the Server

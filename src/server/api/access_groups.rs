@@ -2,19 +2,106 @@
 
 #![allow(clippy::too_many_arguments)]
 
+use crate::server::transport_types::context_types::{ApiError, Has, XSpanIdString};
 use log::{debug, info};
 use serde_json::json;
 use sqlx::Row;
-use swagger::{ApiError, Has, XSpanIdString};
 
 use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg};
 use crate::models;
-use crate::server::api_types::{
+use crate::server::api_responses::{
     AddUserToGroupResponse, AddWorkflowToGroupResponse, CheckWorkflowAccessResponse,
     CreateAccessGroupResponse, DeleteAccessGroupResponse, GetAccessGroupResponse,
     ListAccessGroupsApiResponse, ListGroupMembersResponse, ListUserGroupsApiResponse,
     ListWorkflowGroupsResponse, RemoveUserFromGroupResponse, RemoveWorkflowFromGroupResponse,
 };
+
+/// Trait defining access-group-related API operations.
+pub trait AccessGroupsApi<C> {
+    fn create_access_group(
+        &self,
+        body: models::AccessGroupModel,
+        context: &C,
+    ) -> impl std::future::Future<Output = Result<CreateAccessGroupResponse, ApiError>> + Send;
+
+    fn get_access_group(
+        &self,
+        id: i64,
+        context: &C,
+    ) -> impl std::future::Future<Output = Result<GetAccessGroupResponse, ApiError>> + Send;
+
+    fn list_access_groups(
+        &self,
+        offset: i64,
+        limit: i64,
+        context: &C,
+    ) -> impl std::future::Future<Output = Result<ListAccessGroupsApiResponse, ApiError>> + Send;
+
+    fn delete_access_group(
+        &self,
+        id: i64,
+        context: &C,
+    ) -> impl std::future::Future<Output = Result<DeleteAccessGroupResponse, ApiError>> + Send;
+
+    fn add_user_to_group(
+        &self,
+        group_id: i64,
+        body: models::UserGroupMembershipModel,
+        context: &C,
+    ) -> impl std::future::Future<Output = Result<AddUserToGroupResponse, ApiError>> + Send;
+
+    fn remove_user_from_group(
+        &self,
+        group_id: i64,
+        user_name: &str,
+        context: &C,
+    ) -> impl std::future::Future<Output = Result<RemoveUserFromGroupResponse, ApiError>> + Send;
+
+    fn list_group_members(
+        &self,
+        group_id: i64,
+        offset: i64,
+        limit: i64,
+        context: &C,
+    ) -> impl std::future::Future<Output = Result<ListGroupMembersResponse, ApiError>> + Send;
+
+    fn list_user_groups(
+        &self,
+        user_name: &str,
+        offset: i64,
+        limit: i64,
+        context: &C,
+    ) -> impl std::future::Future<Output = Result<ListUserGroupsApiResponse, ApiError>> + Send;
+
+    fn add_workflow_to_group(
+        &self,
+        workflow_id: i64,
+        group_id: i64,
+        context: &C,
+    ) -> impl std::future::Future<Output = Result<AddWorkflowToGroupResponse, ApiError>> + Send;
+
+    fn remove_workflow_from_group(
+        &self,
+        workflow_id: i64,
+        group_id: i64,
+        context: &C,
+    ) -> impl std::future::Future<Output = Result<RemoveWorkflowFromGroupResponse, ApiError>> + Send;
+
+    fn list_workflow_groups(
+        &self,
+        workflow_id: i64,
+        offset: i64,
+        limit: i64,
+        context: &C,
+    ) -> impl std::future::Future<Output = Result<ListWorkflowGroupsResponse, ApiError>> + Send;
+
+    fn check_workflow_access(
+        &self,
+        workflow_id: i64,
+        user_name: &str,
+        context: &C,
+    ) -> impl std::future::Future<Output = Result<CheckWorkflowAccessResponse, ApiError>> + Send;
+}
 
 // ============================================================================
 // API Implementation
@@ -117,8 +204,7 @@ impl AccessGroupsApiImpl {
         C: Has<XSpanIdString> + Send + Sync,
     {
         debug!(
-            "create_access_group({:?}) - X-Span-ID: {:?}",
-            body,
+            "create_access_group - X-Span-ID: {:?}",
             context.get().0.clone()
         );
 
@@ -338,9 +424,8 @@ impl AccessGroupsApiImpl {
         C: Has<XSpanIdString> + Send + Sync,
     {
         debug!(
-            "add_user_to_group({}, {:?}) - X-Span-ID: {:?}",
+            "add_user_to_group({}) - X-Span-ID: {:?}",
             group_id,
-            body,
             context.get().0.clone()
         );
 
@@ -928,5 +1013,118 @@ impl AccessGroupsApiImpl {
             )),
             Err(e) => Err(e),
         }
+    }
+}
+
+impl<C> AccessGroupsApi<C> for AccessGroupsApiImpl
+where
+    C: Has<XSpanIdString> + Send + Sync,
+{
+    async fn create_access_group(
+        &self,
+        body: models::AccessGroupModel,
+        context: &C,
+    ) -> Result<CreateAccessGroupResponse, ApiError> {
+        AccessGroupsApiImpl::create_access_group(self, body, context).await
+    }
+
+    async fn get_access_group(
+        &self,
+        id: i64,
+        context: &C,
+    ) -> Result<GetAccessGroupResponse, ApiError> {
+        AccessGroupsApiImpl::get_access_group(self, id, context).await
+    }
+
+    async fn list_access_groups(
+        &self,
+        offset: i64,
+        limit: i64,
+        context: &C,
+    ) -> Result<ListAccessGroupsApiResponse, ApiError> {
+        AccessGroupsApiImpl::list_access_groups(self, offset, limit, context).await
+    }
+
+    async fn delete_access_group(
+        &self,
+        id: i64,
+        context: &C,
+    ) -> Result<DeleteAccessGroupResponse, ApiError> {
+        AccessGroupsApiImpl::delete_access_group(self, id, context).await
+    }
+
+    async fn add_user_to_group(
+        &self,
+        group_id: i64,
+        body: models::UserGroupMembershipModel,
+        context: &C,
+    ) -> Result<AddUserToGroupResponse, ApiError> {
+        AccessGroupsApiImpl::add_user_to_group(self, group_id, body, context).await
+    }
+
+    async fn remove_user_from_group(
+        &self,
+        group_id: i64,
+        user_name: &str,
+        context: &C,
+    ) -> Result<RemoveUserFromGroupResponse, ApiError> {
+        AccessGroupsApiImpl::remove_user_from_group(self, group_id, user_name, context).await
+    }
+
+    async fn list_group_members(
+        &self,
+        group_id: i64,
+        offset: i64,
+        limit: i64,
+        context: &C,
+    ) -> Result<ListGroupMembersResponse, ApiError> {
+        AccessGroupsApiImpl::list_group_members(self, group_id, offset, limit, context).await
+    }
+
+    async fn list_user_groups(
+        &self,
+        user_name: &str,
+        offset: i64,
+        limit: i64,
+        context: &C,
+    ) -> Result<ListUserGroupsApiResponse, ApiError> {
+        AccessGroupsApiImpl::list_user_groups(self, user_name, offset, limit, context).await
+    }
+
+    async fn add_workflow_to_group(
+        &self,
+        workflow_id: i64,
+        group_id: i64,
+        context: &C,
+    ) -> Result<AddWorkflowToGroupResponse, ApiError> {
+        AccessGroupsApiImpl::add_workflow_to_group(self, workflow_id, group_id, context).await
+    }
+
+    async fn remove_workflow_from_group(
+        &self,
+        workflow_id: i64,
+        group_id: i64,
+        context: &C,
+    ) -> Result<RemoveWorkflowFromGroupResponse, ApiError> {
+        AccessGroupsApiImpl::remove_workflow_from_group(self, workflow_id, group_id, context).await
+    }
+
+    async fn list_workflow_groups(
+        &self,
+        workflow_id: i64,
+        offset: i64,
+        limit: i64,
+        context: &C,
+    ) -> Result<ListWorkflowGroupsResponse, ApiError> {
+        AccessGroupsApiImpl::list_workflow_groups(self, workflow_id, offset, limit, context).await
+    }
+
+    async fn check_workflow_access(
+        &self,
+        workflow_id: i64,
+        user_name: &str,
+        context: &C,
+    ) -> Result<CheckWorkflowAccessResponse, ApiError> {
+        AccessGroupsApiImpl::check_workflow_access(self, workflow_id, user_name, context).await
     }
 }

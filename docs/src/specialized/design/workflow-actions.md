@@ -256,6 +256,9 @@ Dynamically allocate compute resources from a Slurm scheduler.
 - `scheduler` (required) - Name of Slurm scheduler configuration (must exist in `slurm_schedulers`)
 - `scheduler_type` (required) - Must be "slurm"
 - `num_allocations` (required) - Number of Slurm allocation requests to submit
+- `start_one_worker_per_node` (optional, default: false) - Launch one worker per allocated node via
+  `srun --ntasks-per-node=1`. Use this for direct-mode workflows with single-node jobs sharing a
+  multi-node allocation. Not compatible with `execution_config.mode: slurm`.
 
 **Use cases**:
 

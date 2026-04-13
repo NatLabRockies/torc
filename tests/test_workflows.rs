@@ -6,7 +6,7 @@ use common::{
 };
 use rstest::rstest;
 use serde_json::json;
-use torc::client::default_api;
+use torc::client::apis;
 use torc::models;
 
 #[rstest]
@@ -404,22 +404,17 @@ fn test_workflows_delete_command_json(start_server: &ServerProcess) {
     let workflow_id = workflow.id.unwrap();
 
     // Test the CLI delete command (run as the workflow owner)
-    let args = [
-        "workflows",
-        "delete",
-        "--no-prompts",
-        &workflow_id.to_string(),
-    ];
+    let args = ["delete", "--force", &workflow_id.to_string()];
 
     run_cli_with_json(&args, start_server, Some("delete_user"))
-        .expect("Failed to run workflows delete command");
+        .expect("Failed to run delete command");
 
     // Verify the workflow is actually deleted by trying to get it
-    let get_result = default_api::get_workflow(config, workflow_id);
+    let get_result = apis::workflows_api::get_workflow(config, workflow_id);
     assert!(get_result.is_err(), "Workflow should be deleted");
 
     // Verify the workflow status is also cleaned up (not orphaned)
-    let status_result = default_api::get_workflow_status(config, workflow_id);
+    let status_result = apis::workflows_api::get_workflow_status(config, workflow_id);
     assert!(
         status_result.is_err(),
         "Workflow status should be deleted with the workflow"
@@ -440,11 +435,11 @@ fn test_workflows_initialize_jobs_command(start_server: &ServerProcess) {
         "test_job".to_string(),
         "echo 'test'".to_string(),
     );
-    let _created_job =
-        default_api::create_job(config, job).expect("Failed to create job for initialization test");
+    let _created_job = apis::jobs_api::create_job(config, job)
+        .expect("Failed to create job for initialization test");
 
-    // Test the CLI initialize-jobs command
-    let args = ["workflows", "initialize-jobs", &workflow_id.to_string()];
+    // Test the CLI init command (under workflows subcommand)
+    let args = ["workflows", "init", &workflow_id.to_string()];
 
     // This command doesn't return JSON in the current implementation,
     // so we'll test that it doesn't fail
@@ -461,16 +456,17 @@ fn test_workflows_status_command_json(start_server: &ServerProcess) {
     let workflow = create_test_workflow(config, "status_test_workflow");
     let workflow_id = workflow.id.unwrap();
 
-    // Test the CLI status command
-    let args = ["workflows", "status", &workflow_id.to_string()];
+    // Test the CLI status command (now at top level, returns summary info)
+    let args = ["status", &workflow_id.to_string()];
 
     let json_output = run_cli_with_json(&args, start_server, Some("test_user"))
-        .expect("Failed to run workflows status command");
+        .expect("Failed to run status command");
 
-    // Verify JSON structure for workflow status
-    assert!(json_output.get("run_id").is_some());
-    assert!(json_output.get("is_canceled").is_some());
-    // Other status fields may or may not be present depending on workflow state
+    // Verify JSON structure for workflow status/summary
+    assert!(json_output.get("workflow_id").is_some());
+    assert!(json_output.get("workflow_name").is_some());
+    assert!(json_output.get("total_jobs").is_some());
+    assert!(json_output.get("jobs_by_status").is_some());
 }
 
 #[rstest]
@@ -493,14 +489,14 @@ fn test_workflows_reset_status_command_json(start_server: &ServerProcess) {
         "echo 'test job 2'".to_string(),
     );
 
-    let created_job1 = default_api::create_job(config, job1).expect("Failed to create job1");
-    let created_job2 = default_api::create_job(config, job2).expect("Failed to create job2");
+    let created_job1 = apis::jobs_api::create_job(config, job1).expect("Failed to create job1");
+    let created_job2 = apis::jobs_api::create_job(config, job2).expect("Failed to create job2");
     let job1_id = created_job1.id.unwrap();
     let job2_id = created_job2.id.unwrap();
 
     // Verify initial job statuses are Uninitialized
-    let initial_job1 = default_api::get_job(config, job1_id).expect("Failed to get job1");
-    let initial_job2 = default_api::get_job(config, job2_id).expect("Failed to get job2");
+    let initial_job1 = apis::jobs_api::get_job(config, job1_id).expect("Failed to get job1");
+    let initial_job2 = apis::jobs_api::get_job(config, job2_id).expect("Failed to get job2");
     assert_eq!(
         initial_job1.status.unwrap(),
         torc::models::JobStatus::Uninitialized
@@ -511,12 +507,14 @@ fn test_workflows_reset_status_command_json(start_server: &ServerProcess) {
     );
 
     // Initialize jobs
-    let _result = default_api::initialize_jobs(config, workflow_id, None, None, None)
+    let _result = apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
     // Verify job statuses are now Ready
-    let ready_job1 = default_api::get_job(config, job1_id).expect("Failed to get job1 after init");
-    let ready_job2 = default_api::get_job(config, job2_id).expect("Failed to get job2 after init");
+    let ready_job1 =
+        apis::jobs_api::get_job(config, job1_id).expect("Failed to get job1 after init");
+    let ready_job2 =
+        apis::jobs_api::get_job(config, job2_id).expect("Failed to get job2 after init");
     assert_eq!(ready_job1.status.unwrap(), torc::models::JobStatus::Ready);
     assert_eq!(ready_job2.status.unwrap(), torc::models::JobStatus::Ready);
 
@@ -530,8 +528,10 @@ fn test_workflows_reset_status_command_json(start_server: &ServerProcess) {
     assert!(json_output.is_object());
 
     // Verify job statuses are back to Uninitialized after reset
-    let reset_job1 = default_api::get_job(config, job1_id).expect("Failed to get job1 after reset");
-    let reset_job2 = default_api::get_job(config, job2_id).expect("Failed to get job2 after reset");
+    let reset_job1 =
+        apis::jobs_api::get_job(config, job1_id).expect("Failed to get job1 after reset");
+    let reset_job2 =
+        apis::jobs_api::get_job(config, job2_id).expect("Failed to get job2 after reset");
     assert_eq!(
         reset_job1.status.unwrap(),
         torc::models::JobStatus::Uninitialized
@@ -562,48 +562,46 @@ fn test_workflows_reset_status_depends_on_submitted_jobs(start_server: &ServerPr
         "echo 'pending job'".to_string(),
     );
 
-    let created_job1 = default_api::create_job(config, job1).expect("Failed to create job1");
-    let created_job2 = default_api::create_job(config, job2).expect("Failed to create job2");
+    let created_job1 = apis::jobs_api::create_job(config, job1).expect("Failed to create job1");
+    let created_job2 = apis::jobs_api::create_job(config, job2).expect("Failed to create job2");
     let job1_id = created_job1.id.unwrap();
     let job2_id = created_job2.id.unwrap();
 
     // Initialize jobs so they become Ready
-    let _result = default_api::initialize_jobs(config, workflow_id, None, None, None)
+    let _result = apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
     // Get workflow status to get run_id
-    let workflow_status = default_api::get_workflow_status(config, workflow_id)
+    let workflow_status = apis::workflows_api::get_workflow_status(config, workflow_id)
         .expect("Failed to get workflow status");
     let run_id = workflow_status.run_id;
 
     // Set job1 to running status
-    let _submitted_job = default_api::manage_status_change(
+    let _submitted_job = apis::jobs_api::manage_status_change(
         config,
         job1_id,
         torc::models::JobStatus::Running,
         run_id,
-        None,
     )
     .expect("Failed to set job1 to running");
 
     // Set job2 to SubmittedPending status
-    let _pending_job = default_api::manage_status_change(
+    let _pending_job = apis::jobs_api::manage_status_change(
         config,
         job2_id,
         torc::models::JobStatus::Pending,
         run_id,
-        None,
     )
     .expect("Failed to set job2 to SubmittedPending");
 
     // Verify jobs are in the expected statuses
-    let check_job1 = default_api::get_job(config, job1_id).expect("Failed to get job1");
-    let check_job2 = default_api::get_job(config, job2_id).expect("Failed to get job2");
+    let check_job1 = apis::jobs_api::get_job(config, job1_id).expect("Failed to get job1");
+    let check_job2 = apis::jobs_api::get_job(config, job2_id).expect("Failed to get job2");
     assert_eq!(check_job1.status.unwrap(), torc::models::JobStatus::Running);
     assert_eq!(check_job2.status.unwrap(), torc::models::JobStatus::Pending);
 
     // Try to reset workflow status - should fail with 422 error
-    let reset_result = default_api::reset_workflow_status(config, workflow_id, None, None);
+    let reset_result = apis::workflows_api::reset_workflow_status(config, workflow_id, None);
 
     assert!(
         reset_result.is_err(),
@@ -625,9 +623,9 @@ fn test_workflows_reset_status_depends_on_submitted_jobs(start_server: &ServerPr
 
     // Verify jobs are still in their running states (reset didn't happen)
     let final_job1 =
-        default_api::get_job(config, job1_id).expect("Failed to get job1 after failed reset");
+        apis::jobs_api::get_job(config, job1_id).expect("Failed to get job1 after failed reset");
     let final_job2 =
-        default_api::get_job(config, job2_id).expect("Failed to get job2 after failed reset");
+        apis::jobs_api::get_job(config, job2_id).expect("Failed to get job2 after failed reset");
     assert_eq!(
         final_job1.status.unwrap(),
         torc::models::JobStatus::Running,
@@ -641,7 +639,7 @@ fn test_workflows_reset_status_depends_on_submitted_jobs(start_server: &ServerPr
 
     // Now test that force flag allows reset even with active jobs
     let force_reset_result =
-        default_api::reset_workflow_status(config, workflow_id, Some(true), None);
+        apis::workflows_api::reset_workflow_status(config, workflow_id, Some(true));
 
     assert!(
         force_reset_result.is_ok(),
@@ -649,7 +647,7 @@ fn test_workflows_reset_status_depends_on_submitted_jobs(start_server: &ServerPr
     );
 
     // Verify workflow status was reset
-    let workflow_status = default_api::get_workflow_status(config, workflow_id)
+    let workflow_status = apis::workflows_api::get_workflow_status(config, workflow_id)
         .expect("Failed to get workflow status");
     assert!(
         !workflow_status.is_canceled,
@@ -983,13 +981,14 @@ fn test_workflows_is_uninitialized(start_server: &ServerProcess) {
         "echo 'test job 3'".to_string(),
     );
 
-    let _created_job1 = default_api::create_job(config, job1).expect("Failed to create job1");
-    let _created_job2 = default_api::create_job(config, job2).expect("Failed to create job2");
-    let _created_job3 = default_api::create_job(config, job3).expect("Failed to create job3");
+    let _created_job1 = apis::jobs_api::create_job(config, job1).expect("Failed to create job1");
+    let _created_job2 = apis::jobs_api::create_job(config, job2).expect("Failed to create job2");
+    let _created_job3 = apis::jobs_api::create_job(config, job3).expect("Failed to create job3");
 
     // Check that workflow is uninitialized (all jobs are Uninitialized)
-    let uninitialized_response = default_api::is_workflow_uninitialized(config, workflow_id)
-        .expect("Failed to check if workflow is uninitialized");
+    let uninitialized_response =
+        apis::workflows_api::is_workflow_uninitialized(config, workflow_id)
+            .expect("Failed to check if workflow is uninitialized");
 
     let is_uninitialized = uninitialized_response
         .get("is_uninitialized")
@@ -1002,11 +1001,11 @@ fn test_workflows_is_uninitialized(start_server: &ServerProcess) {
     );
 
     // Initialize jobs
-    let _result = default_api::initialize_jobs(config, workflow_id, None, None, None)
+    let _result = apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
     // Check that workflow is no longer uninitialized (jobs are now Ready)
-    let initialized_response = default_api::is_workflow_uninitialized(config, workflow_id)
+    let initialized_response = apis::workflows_api::is_workflow_uninitialized(config, workflow_id)
         .expect("Failed to check if workflow is uninitialized after initialization");
 
     let is_still_uninitialized = initialized_response
@@ -1043,19 +1042,20 @@ fn test_workflows_is_uninitialized_with_disabled_jobs(start_server: &ServerProce
     // Set job2 to Disabled status
     job2.status = Some(torc::models::JobStatus::Disabled);
 
-    let _created_job1 = default_api::create_job(config, job1).expect("Failed to create job1");
-    let created_job2 = default_api::create_job(config, job2).expect("Failed to create job2");
+    let _created_job1 = apis::jobs_api::create_job(config, job1).expect("Failed to create job1");
+    let created_job2 = apis::jobs_api::create_job(config, job2).expect("Failed to create job2");
     let job2_id = created_job2.id.unwrap();
 
     // Update job2 to be Disabled
     let mut update_job2 = created_job2.clone();
     update_job2.status = Some(torc::models::JobStatus::Disabled);
-    let _updated_job2 = default_api::update_job(config, job2_id, update_job2)
+    let _updated_job2 = apis::jobs_api::update_job(config, job2_id, update_job2)
         .expect("Failed to update job2 to Disabled");
 
     // Check that workflow is uninitialized (one job is Uninitialized, one is Disabled)
-    let uninitialized_response = default_api::is_workflow_uninitialized(config, workflow_id)
-        .expect("Failed to check if workflow is uninitialized");
+    let uninitialized_response =
+        apis::workflows_api::is_workflow_uninitialized(config, workflow_id)
+            .expect("Failed to check if workflow is uninitialized");
 
     let is_uninitialized = uninitialized_response
         .get("is_uninitialized")
@@ -1068,11 +1068,11 @@ fn test_workflows_is_uninitialized_with_disabled_jobs(start_server: &ServerProce
     );
 
     // Initialize jobs (only the uninitialized one will change to Ready)
-    let _result = default_api::initialize_jobs(config, workflow_id, None, None, None)
+    let _result = apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
     // Check that workflow is no longer uninitialized (job1 is now Ready, job2 is still Disabled)
-    let initialized_response = default_api::is_workflow_uninitialized(config, workflow_id)
+    let initialized_response = apis::workflows_api::is_workflow_uninitialized(config, workflow_id)
         .expect("Failed to check if workflow is uninitialized after initialization");
 
     let is_still_uninitialized = initialized_response
@@ -1095,8 +1095,9 @@ fn test_workflows_is_uninitialized_empty_workflow(start_server: &ServerProcess) 
     let workflow_id = workflow.id.unwrap();
 
     // Check that empty workflow is considered uninitialized
-    let uninitialized_response = default_api::is_workflow_uninitialized(config, workflow_id)
-        .expect("Failed to check if empty workflow is uninitialized");
+    let uninitialized_response =
+        apis::workflows_api::is_workflow_uninitialized(config, workflow_id)
+            .expect("Failed to check if empty workflow is uninitialized");
 
     let is_uninitialized = uninitialized_response
         .get("is_uninitialized")
@@ -1118,7 +1119,7 @@ fn test_workflow_archive_and_unarchive(start_server: &ServerProcess) {
     let workflow_id = workflow.id.unwrap();
 
     // Get initial workflow status - should not be archived
-    let initial_status = default_api::get_workflow_status(config, workflow_id)
+    let initial_status = apis::workflows_api::get_workflow_status(config, workflow_id)
         .expect("Failed to get initial workflow status");
     assert!(
         !initial_status.is_archived.unwrap_or(false),
@@ -1142,7 +1143,7 @@ fn test_workflow_archive_and_unarchive(start_server: &ServerProcess) {
     );
 
     // Verify workflow is archived
-    let archived_status = default_api::get_workflow_status(config, workflow_id)
+    let archived_status = apis::workflows_api::get_workflow_status(config, workflow_id)
         .expect("Failed to get archived workflow status");
     assert!(
         archived_status.is_archived.unwrap_or(false),
@@ -1168,7 +1169,7 @@ fn test_workflow_archive_and_unarchive(start_server: &ServerProcess) {
     );
 
     // Verify workflow is no longer archived
-    let unarchived_status = default_api::get_workflow_status(config, workflow_id)
+    let unarchived_status = apis::workflows_api::get_workflow_status(config, workflow_id)
         .expect("Failed to get unarchived workflow status");
     assert!(
         !unarchived_status.is_archived.unwrap_or(false),
@@ -1188,10 +1189,10 @@ fn test_workflow_list_excludes_archived_by_default(start_server: &ServerProcess)
     let archived_id = to_archive_workflow.id.unwrap();
 
     // Archive the second workflow
-    let mut status = default_api::get_workflow_status(config, archived_id)
+    let mut status = apis::workflows_api::get_workflow_status(config, archived_id)
         .expect("Failed to get workflow status");
     status.is_archived = Some(true);
-    default_api::update_workflow_status(config, archived_id, status)
+    apis::workflows_api::update_workflow_status(config, archived_id, status)
         .expect("Failed to archive workflow");
 
     // List workflows without archived filter (default behavior)
@@ -1238,10 +1239,10 @@ fn test_workflow_list_archived_only(start_server: &ServerProcess) {
     let archived_id = to_archive_workflow.id.unwrap();
 
     // Archive the second workflow
-    let mut status = default_api::get_workflow_status(config, archived_id)
+    let mut status = apis::workflows_api::get_workflow_status(config, archived_id)
         .expect("Failed to get workflow status");
     status.is_archived = Some(true);
-    default_api::update_workflow_status(config, archived_id, status)
+    apis::workflows_api::update_workflow_status(config, archived_id, status)
         .expect("Failed to archive workflow");
 
     // List only archived workflows
@@ -1285,14 +1286,14 @@ fn test_cannot_reset_archived_workflow_status(start_server: &ServerProcess) {
     let workflow_id = workflow.id.unwrap();
 
     // Archive the workflow
-    let mut status = default_api::get_workflow_status(config, workflow_id)
+    let mut status = apis::workflows_api::get_workflow_status(config, workflow_id)
         .expect("Failed to get workflow status");
     status.is_archived = Some(true);
-    default_api::update_workflow_status(config, workflow_id, status)
+    apis::workflows_api::update_workflow_status(config, workflow_id, status)
         .expect("Failed to archive workflow");
 
     // Attempt to reset workflow status - should fail
-    let reset_result = default_api::reset_workflow_status(config, workflow_id, None, None);
+    let reset_result = apis::workflows_api::reset_workflow_status(config, workflow_id, None);
 
     assert!(
         reset_result.is_err(),
@@ -1319,42 +1320,42 @@ fn test_archived_workflow_other_operations_still_work(start_server: &ServerProce
     let workflow_id = workflow.id.unwrap();
 
     // Archive the workflow
-    let mut status = default_api::get_workflow_status(config, workflow_id)
+    let mut status = apis::workflows_api::get_workflow_status(config, workflow_id)
         .expect("Failed to get workflow status");
     status.is_archived = Some(true);
-    default_api::update_workflow_status(config, workflow_id, status)
+    apis::workflows_api::update_workflow_status(config, workflow_id, status)
         .expect("Failed to archive workflow");
 
     // Verify get_workflow still works
-    let get_result = default_api::get_workflow(config, workflow_id);
+    let get_result = apis::workflows_api::get_workflow(config, workflow_id);
     assert!(
         get_result.is_ok(),
         "Should be able to get archived workflow"
     );
 
     // Verify get_workflow_status still works
-    let status_result = default_api::get_workflow_status(config, workflow_id);
+    let status_result = apis::workflows_api::get_workflow_status(config, workflow_id);
     assert!(
         status_result.is_ok(),
         "Should be able to get status of archived workflow"
     );
 
     // Verify is_workflow_complete still works
-    let complete_result = default_api::is_workflow_complete(config, workflow_id);
+    let complete_result = apis::workflows_api::is_workflow_complete(config, workflow_id);
     assert!(
         complete_result.is_ok(),
         "Should be able to check if archived workflow is complete"
     );
 
     // Verify is_workflow_uninitialized still works
-    let uninit_result = default_api::is_workflow_uninitialized(config, workflow_id);
+    let uninit_result = apis::workflows_api::is_workflow_uninitialized(config, workflow_id);
     assert!(
         uninit_result.is_ok(),
         "Should be able to check if archived workflow is uninitialized"
     );
 
     // Verify delete_workflow still works
-    let delete_result = default_api::delete_workflow(config, workflow_id, None);
+    let delete_result = apis::workflows_api::delete_workflow(config, workflow_id);
     assert!(
         delete_result.is_ok(),
         "Should be able to delete archived workflow"
@@ -1406,7 +1407,7 @@ fn test_archive_multiple_workflows(start_server: &ServerProcess) {
 
     // Verify all workflows are archived
     for workflow_id in &[id1, id2, id3] {
-        let status = default_api::get_workflow_status(config, *workflow_id)
+        let status = apis::workflows_api::get_workflow_status(config, *workflow_id)
             .expect("Failed to get workflow status");
         assert!(
             status.is_archived.unwrap_or(false),
@@ -1421,7 +1422,7 @@ fn test_workflows_list_all_users_no_auth(start_server: &ServerProcess) {
     let config = &start_server.config;
 
     // Create workflows for 3 different users
-    let wf_a = default_api::create_workflow(
+    let wf_a = apis::workflows_api::create_workflow(
         config,
         models::WorkflowModel::new(
             "all_users_test_wf_a".to_string(),
@@ -1430,7 +1431,7 @@ fn test_workflows_list_all_users_no_auth(start_server: &ServerProcess) {
     )
     .expect("Failed to create workflow for user_a");
 
-    let wf_b = default_api::create_workflow(
+    let wf_b = apis::workflows_api::create_workflow(
         config,
         models::WorkflowModel::new(
             "all_users_test_wf_b".to_string(),
@@ -1439,7 +1440,7 @@ fn test_workflows_list_all_users_no_auth(start_server: &ServerProcess) {
     )
     .expect("Failed to create workflow for user_b");
 
-    let wf_c = default_api::create_workflow(
+    let wf_c = apis::workflows_api::create_workflow(
         config,
         models::WorkflowModel::new(
             "all_users_test_wf_c".to_string(),

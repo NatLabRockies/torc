@@ -1,10 +1,12 @@
 //! Server implementation for the Torc workflow orchestration system
 //!
 //! This module contains all server-side functionality including API implementations,
-//! authentication, routing, and database operations.
+//! authentication, transport, and database operations.
 
 pub mod api;
-pub mod api_types;
+pub mod api_constants;
+pub mod api_contract;
+pub mod api_responses;
 pub mod auth;
 pub mod authorization;
 pub mod context;
@@ -13,21 +15,18 @@ pub mod dashboard;
 pub mod event_broadcast;
 pub mod header;
 pub mod htpasswd;
-pub mod routing;
-
-// These modules are only needed for the server binary, not the server library
-#[cfg(feature = "server-bin")]
+// These modules are needed by the server binary and by the Rust-owned OpenAPI emitter.
+#[cfg(any(feature = "server-bin", feature = "openapi-codegen"))]
 pub mod http_server;
+#[cfg(feature = "openapi-codegen")]
+pub mod http_transport;
+#[cfg(feature = "openapi-codegen")]
+pub mod live_router;
+#[cfg(any(feature = "server-bin", feature = "openapi-codegen"))]
+pub mod live_state;
 #[cfg(feature = "server-bin")]
 pub mod logging;
+pub mod response_types;
 #[cfg(feature = "server-bin")]
 pub mod service;
-
-// Re-exports from api_types (OpenAPI-generated)
-pub use api_types::*;
-
-// Re-exports from event_broadcast
-pub use event_broadcast::{BroadcastEvent, EventBroadcaster};
-
-// Re-exports from swagger crate
-pub use swagger::ContextWrapper;
+pub mod transport_types;

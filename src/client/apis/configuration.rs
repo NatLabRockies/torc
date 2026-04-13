@@ -67,7 +67,7 @@ impl TlsConfig {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Configuration {
     pub base_path: String,
     pub user_agent: Option<String>,
@@ -77,6 +77,37 @@ pub struct Configuration {
     pub bearer_access_token: Option<String>,
     pub api_key: Option<ApiKey>,
     pub tls: TlsConfig,
+    pub cookie_header: Option<String>,
+}
+
+impl std::fmt::Debug for Configuration {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Configuration")
+            .field("base_path", &self.base_path)
+            .field("user_agent", &self.user_agent)
+            .field(
+                "basic_auth",
+                &self
+                    .basic_auth
+                    .as_ref()
+                    .map(|(u, _)| (u, Some("[REDACTED]"))),
+            )
+            .field(
+                "oauth_access_token",
+                &self.oauth_access_token.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field(
+                "bearer_access_token",
+                &self.bearer_access_token.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field("api_key", &self.api_key.as_ref().map(|_| "[REDACTED]"))
+            .field("tls", &self.tls)
+            .field(
+                "cookie_header",
+                &self.cookie_header.as_ref().map(|_| "[REDACTED]"),
+            )
+            .finish()
+    }
 }
 
 pub type BasicAuth = (String, Option<String>);
@@ -109,7 +140,77 @@ impl Configuration {
             bearer_access_token: None,
             api_key: None,
             tls,
+            cookie_header: None,
         }
+    }
+
+    /// Rebuild the HTTP client with the cookie header set as a default header.
+    /// This must be called after setting `cookie_header` for it to take effect.
+    ///
+    /// # Errors
+    /// Returns an error if the cookie header value is invalid or if the HTTP client
+    /// cannot be rebuilt.
+    pub fn apply_cookie_header(&mut self) -> Result<(), String> {
+        if let Some(ref cookie) = self.cookie_header {
+            let mut headers = reqwest::header::HeaderMap::new();
+            headers.insert(
+                reqwest::header::COOKIE,
+                reqwest::header::HeaderValue::from_str(cookie)
+                    .map_err(|e| format!("Invalid cookie header value: {e}"))?,
+            );
+            self.client = self
+                .tls
+                .configure_blocking_builder(
+                    reqwest::blocking::Client::builder().default_headers(headers),
+                )
+                .build()
+                .map_err(|e| format!("Failed to rebuild HTTP client with cookie header: {e}"))?;
+        }
+        Ok(())
+    }
+
+    /// Check the `TORC_COOKIE_HEADER` environment variable and, if set, apply it
+    /// as the default cookie header on this configuration's HTTP client.
+    ///
+    /// This centralizes the env-var lookup + apply pattern used across multiple
+    /// call sites (TUI, MCP server, slurm job runner, etc.).
+    ///
+    /// # Errors
+    /// Returns an error if the env var is set but contains an invalid header value
+    /// or if the HTTP client cannot be rebuilt.
+    pub fn apply_cookie_header_from_env(&mut self) -> Result<(), String> {
+        if let Ok(cookie) = std::env::var("TORC_COOKIE_HEADER") {
+            self.cookie_header = Some(cookie);
+            if let Err(e) = self.apply_cookie_header() {
+                self.cookie_header = None;
+                return Err(e);
+            }
+        }
+        Ok(())
+    }
+
+    /// Apply configured authentication to a blocking request builder.
+    pub fn apply_auth(
+        &self,
+        mut req_builder: reqwest::blocking::RequestBuilder,
+    ) -> reqwest::blocking::RequestBuilder {
+        if let Some((ref username, ref password)) = self.basic_auth {
+            req_builder = req_builder.basic_auth(username, password.clone());
+        }
+        if let Some(ref token) = self.bearer_access_token {
+            req_builder = req_builder.bearer_auth(token);
+        } else if let Some(ref token) = self.oauth_access_token {
+            req_builder = req_builder.bearer_auth(token);
+        }
+        if let Some(ref api_key) = self.api_key {
+            let value = if let Some(ref prefix) = api_key.prefix {
+                format!("{prefix} {}", api_key.key)
+            } else {
+                api_key.key.clone()
+            };
+            req_builder = req_builder.header("X-API-Key", value);
+        }
+        req_builder
     }
 }
 
@@ -124,6 +225,7 @@ impl Default for Configuration {
             bearer_access_token: None,
             api_key: None,
             tls: TlsConfig::default(),
+            cookie_header: None,
         }
     }
 }
@@ -178,5 +280,53 @@ mod tests {
         };
         let client = tls.build_async_client();
         assert!(client.is_ok());
+    }
+
+    #[test]
+    fn test_apply_cookie_header_valid() {
+        let mut config = Configuration {
+            cookie_header: Some("session=abc123".to_string()),
+            ..Default::default()
+        };
+        assert!(config.apply_cookie_header().is_ok());
+    }
+
+    #[test]
+    fn test_apply_cookie_header_invalid() {
+        // Header values cannot contain non-visible ASCII characters
+        let mut config = Configuration {
+            cookie_header: Some("session=abc\x00123".to_string()),
+            ..Default::default()
+        };
+        assert!(config.apply_cookie_header().is_err());
+    }
+
+    #[test]
+    fn test_apply_cookie_header_none() {
+        let mut config = Configuration::default();
+        assert!(config.apply_cookie_header().is_ok());
+    }
+
+    #[test]
+    fn test_apply_cookie_header_from_env_unset() {
+        // When TORC_COOKIE_HEADER is not set, should be a no-op
+        // SAFETY: This test runs single-threaded via serial_test or cargo test -- --test-threads 1
+        unsafe { std::env::remove_var("TORC_COOKIE_HEADER") };
+        let mut config = Configuration::default();
+        assert!(config.apply_cookie_header_from_env().is_ok());
+        assert!(config.cookie_header.is_none());
+    }
+
+    #[test]
+    fn test_debug_redacts_sensitive_fields() {
+        let config = Configuration {
+            cookie_header: Some("session=secret".to_string()),
+            bearer_access_token: Some("my-token".to_string()),
+            ..Default::default()
+        };
+        let debug_output = format!("{:?}", config);
+        assert!(!debug_output.contains("secret"));
+        assert!(!debug_output.contains("my-token"));
+        assert!(debug_output.contains("[REDACTED]"));
     }
 }

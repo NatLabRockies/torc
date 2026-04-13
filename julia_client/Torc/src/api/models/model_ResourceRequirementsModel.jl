@@ -2,72 +2,87 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""resource_requirements_model
+@doc raw"""ResourceRequirementsModel
 
     ResourceRequirementsModel(;
         id=nothing,
-        workflow_id=nothing,
+        memory="1m",
         name=nothing,
         num_cpus=1,
         num_gpus=0,
         num_nodes=1,
-        memory="1m",
-        runtime="P0DT1M",
+        runtime="PT1M",
+        workflow_id=nothing,
     )
 
-    - id::Int64 : Database ID of this record.
-    - workflow_id::Int64 : Database ID of the workflow this record is associated with.
-    - name::String : Name of the resource requirements
-    - num_cpus::Int64 : Number of CPUs required by a job
-    - num_gpus::Int64 : Number of GPUs required by a job
-    - num_nodes::Int64 : Number of nodes required per job (used by srun --nodes for Slurm jobs)
-    - memory::String : Amount of memory required by a job, e.g., 20g
-    - runtime::String : Maximum runtime for a job
+    - id::Int64
+    - memory::String
+    - name::String
+    - num_cpus::Int64
+    - num_gpus::Int64
+    - num_nodes::Int64
+    - runtime::String
+    - workflow_id::Int64
 """
 Base.@kwdef mutable struct ResourceRequirementsModel <: OpenAPI.APIModel
     id::Union{Nothing, Int64} = nothing
-    workflow_id::Union{Nothing, Int64} = nothing
+    memory::Union{Nothing, String} = "1m"
     name::Union{Nothing, String} = nothing
     num_cpus::Union{Nothing, Int64} = 1
     num_gpus::Union{Nothing, Int64} = 0
     num_nodes::Union{Nothing, Int64} = 1
-    memory::Union{Nothing, String} = "1m"
-    runtime::Union{Nothing, String} = "P0DT1M"
+    runtime::Union{Nothing, String} = "PT1M"
+    workflow_id::Union{Nothing, Int64} = nothing
 
-    function ResourceRequirementsModel(id, workflow_id, name, num_cpus, num_gpus, num_nodes, memory, runtime, )
-        o = new(id, workflow_id, name, num_cpus, num_gpus, num_nodes, memory, runtime, )
+    function ResourceRequirementsModel(id, memory, name, num_cpus, num_gpus, num_nodes, runtime, workflow_id, )
+        o = new(id, memory, name, num_cpus, num_gpus, num_nodes, runtime, workflow_id, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type ResourceRequirementsModel
 
-const _property_types_ResourceRequirementsModel = Dict{Symbol,String}(Symbol("id")=>"Int64", Symbol("workflow_id")=>"Int64", Symbol("name")=>"String", Symbol("num_cpus")=>"Int64", Symbol("num_gpus")=>"Int64", Symbol("num_nodes")=>"Int64", Symbol("memory")=>"String", Symbol("runtime")=>"String", )
+const _property_types_ResourceRequirementsModel = Dict{Symbol,String}(Symbol("id")=>"Int64", Symbol("memory")=>"String", Symbol("name")=>"String", Symbol("num_cpus")=>"Int64", Symbol("num_gpus")=>"Int64", Symbol("num_nodes")=>"Int64", Symbol("runtime")=>"String", Symbol("workflow_id")=>"Int64", )
 OpenAPI.property_type(::Type{ ResourceRequirementsModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_ResourceRequirementsModel[name]))}
 
 function OpenAPI.check_required(o::ResourceRequirementsModel)
-    o.workflow_id === nothing && (return false)
     o.name === nothing && (return false)
+    o.workflow_id === nothing && (return false)
     true
 end
 
 function OpenAPI.validate_properties(o::ResourceRequirementsModel)
     OpenAPI.validate_property(ResourceRequirementsModel, Symbol("id"), o.id)
-    OpenAPI.validate_property(ResourceRequirementsModel, Symbol("workflow_id"), o.workflow_id)
+    OpenAPI.validate_property(ResourceRequirementsModel, Symbol("memory"), o.memory)
     OpenAPI.validate_property(ResourceRequirementsModel, Symbol("name"), o.name)
     OpenAPI.validate_property(ResourceRequirementsModel, Symbol("num_cpus"), o.num_cpus)
     OpenAPI.validate_property(ResourceRequirementsModel, Symbol("num_gpus"), o.num_gpus)
     OpenAPI.validate_property(ResourceRequirementsModel, Symbol("num_nodes"), o.num_nodes)
-    OpenAPI.validate_property(ResourceRequirementsModel, Symbol("memory"), o.memory)
     OpenAPI.validate_property(ResourceRequirementsModel, Symbol("runtime"), o.runtime)
+    OpenAPI.validate_property(ResourceRequirementsModel, Symbol("workflow_id"), o.workflow_id)
 end
 
 function OpenAPI.validate_property(::Type{ ResourceRequirementsModel }, name::Symbol, val)
 
+    if name === Symbol("id")
+        OpenAPI.validate_param(name, "ResourceRequirementsModel", :format, val, "int64")
+    end
 
 
 
+    if name === Symbol("num_cpus")
+        OpenAPI.validate_param(name, "ResourceRequirementsModel", :format, val, "int64")
+    end
+
+    if name === Symbol("num_gpus")
+        OpenAPI.validate_param(name, "ResourceRequirementsModel", :format, val, "int64")
+    end
+
+    if name === Symbol("num_nodes")
+        OpenAPI.validate_param(name, "ResourceRequirementsModel", :format, val, "int64")
+    end
 
 
-
-
+    if name === Symbol("workflow_id")
+        OpenAPI.validate_param(name, "ResourceRequirementsModel", :format, val, "int64")
+    end
 end

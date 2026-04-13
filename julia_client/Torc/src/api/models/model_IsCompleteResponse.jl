@@ -2,7 +2,7 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""is_complete_response
+@doc raw"""IsCompleteResponse
 
     IsCompleteResponse(;
         is_canceled=nothing,

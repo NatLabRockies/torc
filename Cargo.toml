@@ -5,8 +5,14 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.20.7"
-authors = ["Daniel Thom", "Joseph McKinsey"]
+version = "0.22.2"
+authors = [
+  "Daniel Thom",
+  "Joseph McKinsey",
+  "Nathan Keilbart",
+  "Andrew Lai",
+  "Kapil Duwadi"
+]
 license = "BSD-3-Clause"
 edition = "2024"
 repository = "https://github.com/NatLabRockies/torc"
@@ -14,18 +20,18 @@ description = "Workflow management system"
 
 [workspace.dependencies]
 # Self-reference for sub-crates (version only specified here)
-torc = { version = "0.20.7", path = "." }
+torc = { version = "0.22.2", path = "." }
 
 # Shared dependencies
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 # Configuration management
-config = { version = "0.14", features = ["toml"] }
+config = { version = "0.15", features = ["toml"] }
 dirs = "6"
-toml = "1.0"
+toml = "1.1"
 serde_repr = "0.1"
-serde_with = { version = "3.17", default-features = false, features = ["base64", "std", "macros"] }
+serde_with = { version = "3.18", default-features = false, features = ["base64", "std", "macros"] }
 chrono = { version = "0.4", features = ["serde"] }
 log = "0.4.28"
 env_logger = "0.11"
@@ -37,20 +43,20 @@ hdrhistogram = "7.5"
 signal-hook = "0.4"
 libc = "0.2"
 file-rotate = "0.7"
-clap = { version = "4.5", features = ["derive", "env", "color", "wrap_help"] }
-clap_complete = "4.5"
-tokio = { version = "1.50", features = ["rt-multi-thread", "macros", "net", "signal", "process", "io-util"] }
+clap = { version = "4.6", features = ["derive", "env", "color", "wrap_help"] }
+clap_complete = "4.6"
+tokio = { version = "1.51", features = ["rt-multi-thread", "macros", "net", "signal", "process", "io-util"] }
 url = "2.5"
 validator = { version = "0.20", features = ["derive"] }
 mime = "0.3"
 futures = "0.3"
-bcrypt = "0.18"
+bcrypt = "0.19"
 rpassword = "7.3"
 zxcvbn = "3.1"
 
 # TUI-specific
 ratatui = "0.30"
-crossterm = "0.28"
+crossterm = "0.29"
 petgraph = "0.8"
 
 # Plot-resources-specific
@@ -60,12 +66,13 @@ plotly = { version = "0.10", default-features = false, features = ["kaleido"] }
 rust-embed = "8.5"
 async-trait = "0.1.24"
 async-stream = "0.3"
-axum = { version = "0.7", features = ["tokio", "http1", "http2"] }
+axum = { version = "0.8", features = ["tokio", "http1", "http2"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "fs"] }
 mime_guess = "2.0"
-swagger = { version = "6.1", features = ["serdejson", "server", "client", "tls", "tcp"] }
-hyper = { version = "0.14", features = ["full"] }
+hyper = { version = "1", features = ["full"] }
+http-body = "1"
+http-body-util = "0.1"
 serde_ignored = "0.1.1"
 percent-encoding = "2.1.0"
 regex = "1.3"
@@ -77,6 +84,7 @@ dotenvy = "0.15.7"
 iso8601 = "0.6"
 jsonwebtoken = "10.3.0"
 sha2 = "0.10"
+base64 = "0.22"
 
 # Client-specific
 rayon = "1.10"
@@ -101,16 +109,17 @@ native-tls = "0.2"
 hyper-tls = "0.6"
 
 # Platform-specific (Linux/other)
-hyper-openssl = "0.9"
+hyper-openssl = "0.10.2"
 openssl = "0.10"
 
 # MCP server
-rmcp = { version = "0.1", features = ["server", "client", "macros", "transport-io", "transport-child-process"] }
+rmcp = { version = "1.4", features = ["server", "client", "macros", "transport-io", "transport-child-process"] }
 schemars = "1.0"
 
 # Dashboard-specific
-uuid = { version = "1.22", features = ["v4"] }
+uuid = { version = "1.23", features = ["v4"] }
 hyper-util = { version = "0.1", features = ["tokio", "server-auto", "service"] }
+utoipa = { version = "5.3", features = ["axum_extras", "yaml"] }
 
 # TLS
 tokio-openssl = "0.6"
@@ -155,6 +164,11 @@ name = "torc-slurm-job-runner"
 path = "src/bin/torc-slurm-job-runner.rs"
 required-features = ["slurm-runner"]
 
+[[bin]]
+name = "torc-openapi"
+path = "src/bin/torc-openapi.rs"
+required-features = ["server-bin"]
+
 [features]
 default = ["client", "tui", "plot_resources"]
 config = [
@@ -165,8 +179,11 @@ config = [
 server = [
     "dep:async-trait",
     "dep:async-stream",
-    "dep:swagger",
+    "dep:axum",
     "dep:hyper",
+    "dep:hyper-util",
+    "dep:http-body",
+    "dep:http-body-util",
     "dep:serde_ignored",
     "dep:percent-encoding",
     "dep:regex",
@@ -177,11 +194,12 @@ server = [
     "dep:dotenvy",
     "dep:jsonwebtoken",
     "dep:sha2",
+    "dep:base64",
     "dep:tracing",
     "dep:bcrypt",
-    "dep:rust-embed",
     "dep:parking_lot",
     "dep:mime_guess",
+    "dep:tower",
 ]
 client = [
     "dep:rayon",
@@ -227,6 +245,7 @@ plot_resources = [
 server-bin = [
     "server",
     "config",
+    "openapi-codegen",
     "dep:clap",
     "dep:tracing-subscriber",
     "dep:tracing-appender",
@@ -267,6 +286,12 @@ dash = [
     "dep:tracing",
     "dep:rmcp",
 ]
+openapi-codegen = [
+    "server",
+    "dep:axum",
+    "dep:utoipa",
+    "dep:serde_yaml",
+]
 slurm-runner = [
     "client",
 ]
@@ -294,8 +319,9 @@ validator.workspace = true
 # Server dependencies (optional)
 async-trait = { workspace = true, optional = true }
 async-stream = { workspace = true, optional = true }
-swagger = { workspace = true, optional = true }
 hyper = { workspace = true, optional = true }
+http-body = { workspace = true, optional = true }
+http-body-util = { workspace = true, optional = true }
 serde_ignored = { workspace = true, optional = true }
 percent-encoding = { workspace = true, optional = true }
 regex = { workspace = true, optional = true }
@@ -307,6 +333,7 @@ dotenvy = { workspace = true, optional = true }
 iso8601 = { workspace = true }
 jsonwebtoken = { workspace = true, optional = true }
 sha2 = { workspace = true, optional = true }
+base64 = { workspace = true, optional = true }
 tracing = { workspace = true, optional = true }
 bcrypt = { workspace = true, optional = true }
 zxcvbn = { workspace = true, optional = true }
@@ -367,6 +394,7 @@ tower-http = { workspace = true, optional = true }
 mime_guess = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }
 hyper-util = { workspace = true, optional = true }
+utoipa = { workspace = true, optional = true }
 
 # Configuration management
 config = { workspace = true, optional = true }

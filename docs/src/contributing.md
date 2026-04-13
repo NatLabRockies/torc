@@ -19,13 +19,19 @@ Make sure you have Rust 1.85 or later installed:
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
-3. **Install SQLx CLI:**
+3. **Install cargo-nextest:**
+
+```bash
+cargo install cargo-nextest
+```
+
+4. **Install SQLx CLI:**
 
 ```bash
 cargo install sqlx-cli --no-default-features --features sqlite
 ```
 
-4. **Set up the database:**
+5. **Set up the database:**
 
 ```bash
 # Create .env file
@@ -35,11 +41,11 @@ echo "DATABASE_URL=sqlite:torc.db" > .env
 sqlx migrate run --source torc-server/migrations
 ```
 
-5. **Build and test:**
+6. **Build and test:**
 
 ```bash
 cargo build
-cargo test
+cargo nextest run --all-features
 ```
 
 ## Making Changes
@@ -65,10 +71,10 @@ All new functionality should include tests:
 
 ```bash
 # Run specific test
-cargo test test_name -- --nocapture
+cargo nextest run -E 'test(test_name)'
 
 # Run with logging
-RUST_LOG=debug cargo test -- --nocapture
+RUST_LOG=debug cargo nextest run -E 'test(test_name)'
 ```
 
 ### Database Migrations
@@ -106,7 +112,7 @@ git commit -m "Add feature: description"
 3. **Ensure all tests pass:**
 
 ```bash
-cargo test
+cargo nextest run --all-features
 cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 ```
@@ -124,6 +130,48 @@ Go to the original repository and open a pull request with:
 - Clear description of changes
 - Reference to any related issues
 - Test results
+
+## Pre-Release: Slurm Integration Tests
+
+Before tagging a release, run the Slurm integration test suite on an HPC cluster to verify that job
+submission, multi-node execution, failure recovery, and resource monitoring work correctly under a
+real Slurm scheduler.
+
+### Prerequisites
+
+- Access to an HPC cluster with Slurm
+- `torc`, `torc-server`, and `torc-htpasswd` binaries built
+  (`cargo build --release
+  --all-features`)
+- `jq` and Slurm CLI tools (`sbatch`, etc.) available on the login node
+
+### Running the Suite
+
+From the repository root on a login node:
+
+```bash
+./slurm-tests/run_all.sh --account <SLURM_ACCOUNT> --host <LOGIN_NODE_HOSTNAME>
+```
+
+Common options:
+
+```bash
+# Use a specific partition (default: debug)
+./slurm-tests/run_all.sh --account myproject --host login1.hpc.example.com \
+  --partition gpu
+
+# Run a single test by name substring
+./slurm-tests/run_all.sh --account myproject --host login1.hpc.example.com \
+  --test oom_detection
+
+# Adjust timeout and parallelism
+./slurm-tests/run_all.sh --account myproject --host login1.hpc.example.com \
+  --timeout 60 --max-parallel-jobs 8
+```
+
+The runner starts a temporary Torc server, executes each test as a child workflow under Slurm, and
+writes results to `slurm-tests/output/run_<timestamp>/results.json`. All tests must pass before a
+release is tagged.
 
 ## Pull Request Guidelines
 

@@ -6,7 +6,7 @@ appropriate jobs for re-execution.
 
 ## When to Use Reinitialization
 
-Use `torc workflows reinitialize` when:
+Use `torc workflows reinit` when:
 
 - **Input files changed** — You modified an input file and want dependent jobs to rerun
 - **Configuration updated** — You changed user_data parameters
@@ -18,13 +18,13 @@ Use `torc workflows reinitialize` when:
 
 ```bash
 # Preview what would change (recommended first step)
-torc workflows reinitialize <workflow_id> --dry-run
+torc workflows reinit <workflow_id> --dry-run
 
 # Reinitialize the workflow
-torc workflows reinitialize <workflow_id>
+torc workflows reinit <workflow_id>
 
 # Force reinitialization even with warnings
-torc workflows reinitialize <workflow_id> --force
+torc workflows reinit <workflow_id> --force
 ```
 
 ## How Change Detection Works
@@ -42,7 +42,7 @@ for re-execution.
 echo "new data" > input.json
 
 # Reinitialize detects the change
-torc workflows reinitialize <workflow_id>
+torc workflows reinit <workflow_id>
 # Output: Reset 3 jobs due to changed inputs
 ```
 
@@ -87,7 +87,7 @@ postprocess (depends on process output) → also marked
 Always use `--dry-run` first to preview changes without modifying anything:
 
 ```bash
-torc workflows reinitialize <workflow_id> --dry-run
+torc workflows reinit <workflow_id> --dry-run
 ```
 
 Example output:

@@ -15,7 +15,7 @@ use std::path::Path;
 use std::thread;
 use std::time::Duration;
 use tempfile::TempDir;
-use torc::client::{Configuration, default_api, workflow_manager::WorkflowManager};
+use torc::client::{Configuration, apis, workflow_manager::WorkflowManager};
 use torc::config::TorcConfig;
 use torc::models;
 
@@ -29,7 +29,7 @@ fn wait_for_job_status(
 ) -> bool {
     let start = std::time::Instant::now();
     while start.elapsed().as_secs() < timeout_secs {
-        if let Ok(job) = default_api::get_job(config, job_id)
+        if let Ok(job) = apis::jobs_api::get_job(config, job_id)
             && job.status.as_ref() == Some(&expected_status)
         {
             return true;
@@ -117,13 +117,16 @@ fn execute_workflow_with_job(
 ) -> Result<(i64, i64), Box<dyn std::error::Error>> {
     // Create resource requirements
     let resource_requirements = models::ResourceRequirementsModel::new(1, "small".to_string());
-    let rr = default_api::create_resource_requirements(config, resource_requirements)?;
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        config,
+        resource_requirements,
+    )?;
 
     // Create a job
     let mut job = models::JobModel::new(workflow_id, job_name.to_string(), command.to_string());
     job.input_file_ids = input_file_ids;
     job.resource_requirements_id = rr.id;
-    let created_job = default_api::create_job(config, job)?;
+    let created_job = apis::jobs_api::create_job(config, job)?;
     let job_id = created_job.id.unwrap();
 
     manager.initialize(false)?;
@@ -131,12 +134,11 @@ fn execute_workflow_with_job(
 
     // Prepare jobs for submission
     let resources = models::ComputeNodesResources::new(36, 100.0, 0, 1);
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
-        &resources,
         10,
-        None,
+        resources,
         None,
     )?;
     let returned_jobs = result.jobs.expect("Server must return jobs array");
@@ -154,7 +156,7 @@ fn execute_workflow_with_job(
     let compute_node = create_test_compute_node(config, workflow_id);
     let compute_node_id = compute_node.id.unwrap();
 
-    default_api::manage_status_change(config, job_id, models::JobStatus::Running, run_id, None)?;
+    apis::jobs_api::manage_status_change(config, job_id, models::JobStatus::Running, run_id)?;
     let job_result = models::ResultModel::new(
         job_id,
         workflow_id,
@@ -166,7 +168,7 @@ fn execute_workflow_with_job(
         "2020-01-01T00:00:00Z".to_string(),
         models::JobStatus::Completed,
     );
-    default_api::complete_job(config, job_id, job_result.status, run_id, job_result)?;
+    apis::jobs_api::complete_job(config, job_id, job_result.status, run_id, job_result)?;
 
     Ok((job_id, run_id))
 }
@@ -221,8 +223,8 @@ fn test_initialize_files_with_valid_files(start_server: &ServerProcess) {
 
     // Check that files were updated with mtime
     for file in &files {
-        let updated_file =
-            default_api::get_file(&config, file.id.unwrap()).expect("Failed to get updated file");
+        let updated_file = apis::files_api::get_file(&config, file.id.unwrap())
+            .expect("Failed to get updated file");
         assert!(updated_file.st_mtime.is_some());
         assert!(updated_file.st_mtime.unwrap() > 0.0);
     }
@@ -267,7 +269,8 @@ fn test_initialize_files_mtime_unchanged(start_server: &ServerProcess) {
     assert!(result.is_ok());
 
     // Get the updated mtime
-    let file = default_api::get_file(&config, files[0].id.unwrap()).expect("Failed to get file");
+    let file =
+        apis::files_api::get_file(&config, files[0].id.unwrap()).expect("Failed to get file");
     let original_mtime = file.st_mtime.unwrap();
 
     // Initialize again without changing the file - should not update
@@ -275,7 +278,7 @@ fn test_initialize_files_mtime_unchanged(start_server: &ServerProcess) {
     assert!(result.is_ok());
 
     // Mtime should be unchanged
-    let file_after = default_api::get_file(&config, files[0].id.unwrap())
+    let file_after = apis::files_api::get_file(&config, files[0].id.unwrap())
         .expect("Failed to get file after second init");
     assert_eq!(file_after.st_mtime.unwrap(), original_mtime);
 }
@@ -294,7 +297,8 @@ fn test_initialize_files_with_updated_files(start_server: &ServerProcess) {
     assert!(result.is_ok());
 
     // Get the original mtime
-    let file = default_api::get_file(&config, files[0].id.unwrap()).expect("Failed to get file");
+    let file =
+        apis::files_api::get_file(&config, files[0].id.unwrap()).expect("Failed to get file");
     let original_mtime = file.st_mtime.unwrap();
 
     // Wait a bit and modify the file
@@ -307,7 +311,7 @@ fn test_initialize_files_with_updated_files(start_server: &ServerProcess) {
     assert!(result.is_ok());
 
     // Mtime should be updated
-    let file_after = default_api::get_file(&config, files[0].id.unwrap())
+    let file_after = apis::files_api::get_file(&config, files[0].id.unwrap())
         .expect("Failed to get file after update");
     assert!(file_after.st_mtime.unwrap() != original_mtime);
 }
@@ -330,12 +334,13 @@ fn test_start_workflow_basic(start_server: &ServerProcess) {
     assert!(result.is_ok());
 
     // Check that an event was created
-    let events = default_api::list_events(&config, workflow_id, None, None, None, None, None, None)
-        .expect("Failed to list events");
-    assert!(!events.items.as_ref().unwrap().is_empty());
+    let events =
+        apis::events_api::list_events(&config, workflow_id, None, None, None, None, None, None)
+            .expect("Failed to list events");
+    assert!(!events.items.is_empty());
 
     // Check that jobs were completed
-    let jobs = default_api::list_jobs(
+    let jobs = apis::jobs_api::list_jobs(
         &config,
         workflow_id,
         None,
@@ -349,7 +354,7 @@ fn test_start_workflow_basic(start_server: &ServerProcess) {
         None, // active_compute_node_id
     )
     .expect("Failed to list jobs");
-    let job_items = jobs.items.as_ref().unwrap();
+    let job_items = &jobs.items;
     assert!(!job_items.is_empty());
     assert_eq!(
         job_items[0].status.as_ref().unwrap(),
@@ -364,10 +369,10 @@ fn test_start_workflow_archived(start_server: &ServerProcess) {
     let workflow_id = workflow.id.unwrap();
 
     // Archive the workflow
-    let mut status = default_api::get_workflow_status(&config, workflow_id)
+    let mut status = apis::workflows_api::get_workflow_status(&config, workflow_id)
         .expect("Failed to get workflow status");
     status.is_archived = Some(true);
-    default_api::update_workflow_status(&config, workflow_id, status)
+    apis::workflows_api::update_workflow_status(&config, workflow_id, status)
         .expect("Failed to archive workflow");
 
     // Start should fail for archived workflow
@@ -400,7 +405,7 @@ fn test_reinitialize_workflow_dry_run(start_server: &ServerProcess) {
     assert!(result.is_ok());
 
     // Get original run_id
-    let original_status = default_api::get_workflow_status(&config, workflow_id)
+    let original_status = apis::workflows_api::get_workflow_status(&config, workflow_id)
         .expect("Failed to get workflow status");
     let original_run_id = original_status.run_id;
 
@@ -409,7 +414,7 @@ fn test_reinitialize_workflow_dry_run(start_server: &ServerProcess) {
     assert!(result.is_ok());
 
     // Run ID should be unchanged
-    let status_after = default_api::get_workflow_status(&config, workflow_id)
+    let status_after = apis::workflows_api::get_workflow_status(&config, workflow_id)
         .expect("Failed to get workflow status after dry run");
     assert_eq!(status_after.run_id, original_run_id);
 }
@@ -433,7 +438,7 @@ fn test_reinitialize_workflow_real(start_server: &ServerProcess) {
     assert!(result.is_ok());
 
     // Get original run_id
-    let original_status = default_api::get_workflow_status(&config, workflow_id)
+    let original_status = apis::workflows_api::get_workflow_status(&config, workflow_id)
         .expect("Failed to get workflow status");
     let original_run_id = original_status.run_id;
 
@@ -442,7 +447,7 @@ fn test_reinitialize_workflow_real(start_server: &ServerProcess) {
     assert!(result.is_ok());
 
     // Run ID should be incremented
-    let status_after = default_api::get_workflow_status(&config, workflow_id)
+    let status_after = apis::workflows_api::get_workflow_status(&config, workflow_id)
         .expect("Failed to get workflow status after reinitialize");
     assert_eq!(status_after.run_id, original_run_id + 1);
 }
@@ -457,7 +462,7 @@ fn test_get_run_id(start_server: &ServerProcess) {
     assert!(run_id.is_ok());
 
     // Should match the database
-    let status = default_api::get_workflow_status(&config, workflow_id)
+    let status = apis::workflows_api::get_workflow_status(&config, workflow_id)
         .expect("Failed to get workflow status");
     assert_eq!(run_id.unwrap(), status.run_id);
 }
@@ -497,10 +502,10 @@ fn test_check_workflow_archived(start_server: &ServerProcess) {
     let workflow_id = workflow.id.unwrap();
 
     // Archive the workflow
-    let mut status = default_api::get_workflow_status(&config, workflow_id)
+    let mut status = apis::workflows_api::get_workflow_status(&config, workflow_id)
         .expect("Failed to get workflow status");
     status.is_archived = Some(true);
-    default_api::update_workflow_status(&config, workflow_id, status)
+    apis::workflows_api::update_workflow_status(&config, workflow_id, status)
         .expect("Failed to archive workflow");
 
     // Check should fail for archived workflow
@@ -528,20 +533,23 @@ fn test_initialize_jobs(start_server: &ServerProcess) {
 
     // Create and execute a second job
     let resource_requirements = models::ResourceRequirementsModel::new(1, "small".to_string());
-    let rr = default_api::create_resource_requirements(&config, resource_requirements)
-        .expect("Failed to create resource requirements");
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        &config,
+        resource_requirements,
+    )
+    .expect("Failed to create resource requirements");
 
     let mut job2 =
         models::JobModel::new(workflow_id, "job2".to_string(), "echo 'job2'".to_string());
     job2.resource_requirements_id = rr.id;
-    let created_job2 = default_api::create_job(&config, job2).expect("Failed to create job2");
+    let created_job2 = apis::jobs_api::create_job(&config, job2).expect("Failed to create job2");
 
     // Initialize the second job
     let result = manager.initialize_jobs(false);
     assert!(result.is_ok());
 
     // Second job should now be ready
-    let updated_job2 = default_api::get_job(&config, created_job2.id.unwrap())
+    let updated_job2 = apis::jobs_api::get_job(&config, created_job2.id.unwrap())
         .expect("Failed to get updated job2");
     assert_eq!(updated_job2.status.unwrap(), models::JobStatus::Ready);
 }
@@ -604,7 +612,7 @@ fn test_process_changed_files_no_changes(start_server: &ServerProcess) {
     // Files should remain unchanged
     for file in &files {
         let updated_file =
-            default_api::get_file(&config, file.id.unwrap()).expect("Failed to get file");
+            apis::files_api::get_file(&config, file.id.unwrap()).expect("Failed to get file");
         assert!(updated_file.st_mtime.is_some());
     }
 }
@@ -623,7 +631,8 @@ fn test_process_changed_files_with_modified_file(start_server: &ServerProcess) {
     assert!(result.is_ok());
 
     // Get the original mtime
-    let file = default_api::get_file(&config, files[0].id.unwrap()).expect("Failed to get file");
+    let file =
+        apis::files_api::get_file(&config, files[0].id.unwrap()).expect("Failed to get file");
     let original_mtime = file.st_mtime.unwrap();
 
     // Wait a bit and modify the file
@@ -636,7 +645,7 @@ fn test_process_changed_files_with_modified_file(start_server: &ServerProcess) {
     assert!(result.is_ok());
 
     // File should have updated mtime
-    let file_after = default_api::get_file(&config, files[0].id.unwrap())
+    let file_after = apis::files_api::get_file(&config, files[0].id.unwrap())
         .expect("Failed to get file after change processing");
     assert!(file_after.st_mtime.unwrap() != original_mtime);
     assert!(file_after.st_mtime.unwrap() > original_mtime);
@@ -656,7 +665,8 @@ fn test_process_changed_files_with_deleted_file(start_server: &ServerProcess) {
     assert!(result.is_ok());
 
     // Delete one of the files
-    let file = default_api::get_file(&config, files[0].id.unwrap()).expect("Failed to get file");
+    let file =
+        apis::files_api::get_file(&config, files[0].id.unwrap()).expect("Failed to get file");
     let file_path = Path::new(&file.path);
     fs::remove_file(file_path).expect("Failed to delete file");
 
@@ -678,7 +688,7 @@ fn test_process_changed_files_with_deleted_file(start_server: &ServerProcess) {
     std::thread::sleep(std::time::Duration::from_millis(100));
 
     // File should have mtime set to None
-    let file_after = default_api::get_file(&config, files[0].id.unwrap())
+    let file_after = apis::files_api::get_file(&config, files[0].id.unwrap())
         .expect("Failed to get file after deletion processing");
     assert!(file_after.st_mtime.is_none());
 }
@@ -697,7 +707,8 @@ fn test_process_changed_files_dry_run(start_server: &ServerProcess) {
     assert!(result.is_ok());
 
     // Get the original mtime
-    let file = default_api::get_file(&config, files[0].id.unwrap()).expect("Failed to get file");
+    let file =
+        apis::files_api::get_file(&config, files[0].id.unwrap()).expect("Failed to get file");
     let original_mtime = file.st_mtime.unwrap();
 
     // Wait and modify the file
@@ -710,7 +721,7 @@ fn test_process_changed_files_dry_run(start_server: &ServerProcess) {
     assert!(result.is_ok());
 
     // File should still have original mtime (not updated due to dry run)
-    let file_after = default_api::get_file(&config, files[0].id.unwrap())
+    let file_after = apis::files_api::get_file(&config, files[0].id.unwrap())
         .expect("Failed to get file after dry run");
     assert_eq!(file_after.st_mtime.unwrap(), original_mtime);
 }
@@ -752,8 +763,11 @@ fn test_update_jobs_on_file_change_with_dependent_jobs(start_server: &ServerProc
 
     // Create resource requirements for both jobs
     let resource_requirements = models::ResourceRequirementsModel::new(1, "small".to_string());
-    let rr = default_api::create_resource_requirements(&config, resource_requirements)
-        .expect("Failed to create resource requirements");
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        &config,
+        resource_requirements,
+    )
+    .expect("Failed to create resource requirements");
 
     // Create job1 with file dependency
     let mut job1 = models::JobModel::new(
@@ -763,7 +777,7 @@ fn test_update_jobs_on_file_change_with_dependent_jobs(start_server: &ServerProc
     );
     job1.input_file_ids = Some(vec![file_id]);
     job1.resource_requirements_id = rr.id;
-    let created_job1 = default_api::create_job(&config, job1).expect("Failed to create job1");
+    let created_job1 = apis::jobs_api::create_job(&config, job1).expect("Failed to create job1");
     let job1_id = created_job1.id.unwrap();
 
     // Create job2 with file dependency
@@ -774,7 +788,7 @@ fn test_update_jobs_on_file_change_with_dependent_jobs(start_server: &ServerProc
     );
     job2.input_file_ids = Some(vec![file_id]);
     job2.resource_requirements_id = rr.id;
-    let created_job2 = default_api::create_job(&config, job2).expect("Failed to create job2");
+    let created_job2 = apis::jobs_api::create_job(&config, job2).expect("Failed to create job2");
     let job2_id = created_job2.id.unwrap();
 
     // Initialize workflow once
@@ -785,12 +799,11 @@ fn test_update_jobs_on_file_change_with_dependent_jobs(start_server: &ServerProc
 
     // Prepare jobs for submission
     let resources = models::ComputeNodesResources::new(36, 100.0, 0, 1);
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         &config,
         workflow_id,
-        &resources,
         10,
-        None,
+        resources,
         None,
     )
     .expect("Failed to prepare jobs for submission");
@@ -804,7 +817,7 @@ fn test_update_jobs_on_file_change_with_dependent_jobs(start_server: &ServerProc
     let compute_node_id = compute_node.id.unwrap();
 
     // Complete job1
-    default_api::manage_status_change(&config, job1_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(&config, job1_id, models::JobStatus::Running, run_id)
         .expect("Failed to change job1 status to running");
     let job1_result = models::ResultModel::new(
         job1_id,
@@ -817,11 +830,11 @@ fn test_update_jobs_on_file_change_with_dependent_jobs(start_server: &ServerProc
         "2020-01-01T00:00:00Z".to_string(),
         models::JobStatus::Completed,
     );
-    default_api::complete_job(&config, job1_id, job1_result.status, run_id, job1_result)
+    apis::jobs_api::complete_job(&config, job1_id, job1_result.status, run_id, job1_result)
         .expect("Failed to complete job1");
 
     // Complete job2
-    default_api::manage_status_change(&config, job2_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(&config, job2_id, models::JobStatus::Running, run_id)
         .expect("Failed to change job2 status to running");
     let job2_result = models::ResultModel::new(
         job2_id,
@@ -834,7 +847,7 @@ fn test_update_jobs_on_file_change_with_dependent_jobs(start_server: &ServerProc
         "2020-01-01T00:00:00Z".to_string(),
         models::JobStatus::Completed,
     );
-    default_api::complete_job(&config, job2_id, job2_result.status, run_id, job2_result)
+    apis::jobs_api::complete_job(&config, job2_id, job2_result.status, run_id, job2_result)
         .expect("Failed to complete job2");
 
     // Update jobs on file change - should reset both jobs
@@ -842,8 +855,10 @@ fn test_update_jobs_on_file_change_with_dependent_jobs(start_server: &ServerProc
     assert!(result.is_ok());
 
     // Jobs should now be reset to Uninitialized
-    let updated_job1 = default_api::get_job(&config, job1_id).expect("Failed to get updated job1");
-    let updated_job2 = default_api::get_job(&config, job2_id).expect("Failed to get updated job2");
+    let updated_job1 =
+        apis::jobs_api::get_job(&config, job1_id).expect("Failed to get updated job1");
+    let updated_job2 =
+        apis::jobs_api::get_job(&config, job2_id).expect("Failed to get updated job2");
 
     assert_eq!(
         updated_job1.status.unwrap(),
@@ -878,8 +893,11 @@ fn test_update_jobs_on_file_change_only_completed_jobs_reset(start_server: &Serv
 
     // Create additional jobs with different statuses using resource requirements
     let resource_requirements = models::ResourceRequirementsModel::new(1, "small".to_string());
-    let rr = default_api::create_resource_requirements(&config, resource_requirements)
-        .expect("Failed to create resource requirements");
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        &config,
+        resource_requirements,
+    )
+    .expect("Failed to create resource requirements");
 
     let mut job_running = models::JobModel::new(
         workflow_id,
@@ -898,25 +916,19 @@ fn test_update_jobs_on_file_change_only_completed_jobs_reset(start_server: &Serv
     job_ready.resource_requirements_id = rr.id;
 
     let created_running =
-        default_api::create_job(&config, job_running).expect("Failed to create running job");
+        apis::jobs_api::create_job(&config, job_running).expect("Failed to create running job");
     let created_ready =
-        default_api::create_job(&config, job_ready).expect("Failed to create ready job");
+        apis::jobs_api::create_job(&config, job_ready).expect("Failed to create ready job");
 
     let running_id = created_running.id.unwrap();
     let ready_id = created_ready.id.unwrap();
 
     // Initialize and set different statuses
-    default_api::initialize_jobs(&config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(&config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
-    default_api::manage_status_change(
-        &config,
-        running_id,
-        models::JobStatus::Running,
-        run_id,
-        None,
-    )
-    .expect("Failed to set job to running");
+    apis::jobs_api::manage_status_change(&config, running_id, models::JobStatus::Running, run_id)
+        .expect("Failed to set job to running");
 
     // Update jobs on file change
     let result = manager.update_jobs_on_file_change(files[0].clone(), false);
@@ -924,11 +936,11 @@ fn test_update_jobs_on_file_change_only_completed_jobs_reset(start_server: &Serv
 
     // Only Done job should be reset
     let updated_done =
-        default_api::get_job(&config, done_id).expect("Failed to get updated completed job");
+        apis::jobs_api::get_job(&config, done_id).expect("Failed to get updated completed job");
     let updated_running =
-        default_api::get_job(&config, running_id).expect("Failed to get updated running job");
+        apis::jobs_api::get_job(&config, running_id).expect("Failed to get updated running job");
     let updated_ready =
-        default_api::get_job(&config, ready_id).expect("Failed to get updated ready job");
+        apis::jobs_api::get_job(&config, ready_id).expect("Failed to get updated ready job");
 
     assert_eq!(
         updated_done.status.unwrap(),
@@ -964,7 +976,7 @@ fn test_update_jobs_on_file_change_dry_run(start_server: &ServerProcess) {
     assert!(result.is_ok());
 
     // Job should still be Completed (not reset due to dry run)
-    let updated_job = default_api::get_job(&config, job_id).expect("Failed to get updated job");
+    let updated_job = apis::jobs_api::get_job(&config, job_id).expect("Failed to get updated job");
     assert_eq!(updated_job.status.unwrap(), models::JobStatus::Completed);
 }
 
@@ -980,8 +992,11 @@ fn test_update_jobs_on_file_change_with_canceled_jobs(start_server: &ServerProce
 
     // Create resource requirements
     let resource_requirements = models::ResourceRequirementsModel::new(1, "small".to_string());
-    let rr = default_api::create_resource_requirements(&config, resource_requirements)
-        .expect("Failed to create resource requirements");
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        &config,
+        resource_requirements,
+    )
+    .expect("Failed to create resource requirements");
 
     // Create a job with file dependency
     let mut job = models::JobModel::new(
@@ -991,7 +1006,7 @@ fn test_update_jobs_on_file_change_with_canceled_jobs(start_server: &ServerProce
     );
     job.input_file_ids = Some(vec![file_id]);
     job.resource_requirements_id = rr.id;
-    let created_job = default_api::create_job(&config, job).expect("Failed to create job");
+    let created_job = apis::jobs_api::create_job(&config, job).expect("Failed to create job");
     let job_id = created_job.id.unwrap();
 
     // Initialize and claim the job
@@ -999,12 +1014,11 @@ fn test_update_jobs_on_file_change_with_canceled_jobs(start_server: &ServerProce
     let run_id = manager.get_run_id().expect("Failed to get run_id");
 
     let resources = models::ComputeNodesResources::new(36, 100.0, 0, 1);
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         &config,
         workflow_id,
-        &resources,
         10,
-        None,
+        resources,
         None,
     )
     .expect("Failed to claim jobs");
@@ -1012,7 +1026,7 @@ fn test_update_jobs_on_file_change_with_canceled_jobs(start_server: &ServerProce
     assert_eq!(returned_jobs.len(), 1, "Should return exactly 1 job");
 
     // Set to Running using manage_status_change (non-completion status, allowed)
-    default_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id)
         .expect("Failed to set job to Running");
 
     // Create compute node for the result
@@ -1031,7 +1045,7 @@ fn test_update_jobs_on_file_change_with_canceled_jobs(start_server: &ServerProce
         "2020-01-01T00:00:00Z".to_string(),
         models::JobStatus::Canceled,
     );
-    default_api::complete_job(&config, job_id, job_result.status, run_id, job_result)
+    apis::jobs_api::complete_job(&config, job_id, job_result.status, run_id, job_result)
         .expect("Failed to cancel job");
 
     // Update jobs on file change - should reset Canceled job too
@@ -1039,7 +1053,7 @@ fn test_update_jobs_on_file_change_with_canceled_jobs(start_server: &ServerProce
     assert!(result.is_ok());
 
     // Job should be reset to Uninitialized
-    let updated_job = default_api::get_job(&config, job_id).expect("Failed to get updated job");
+    let updated_job = apis::jobs_api::get_job(&config, job_id).expect("Failed to get updated job");
     assert_eq!(
         updated_job.status.unwrap(),
         models::JobStatus::Uninitialized
@@ -1078,8 +1092,11 @@ fn test_process_changed_files_end_to_end(start_server: &ServerProcess) {
     let file_id = files[0].id.unwrap();
 
     let resource_requirements = models::ResourceRequirementsModel::new(1, "small".to_string());
-    let rr = default_api::create_resource_requirements(&config, resource_requirements)
-        .expect("Failed to create resource requirements");
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        &config,
+        resource_requirements,
+    )
+    .expect("Failed to create resource requirements");
 
     // Create a job that depends on the first file
     let mut job = models::JobModel::new(
@@ -1089,7 +1106,7 @@ fn test_process_changed_files_end_to_end(start_server: &ServerProcess) {
     );
     job.input_file_ids = Some(vec![file_id]);
     job.resource_requirements_id = rr.id;
-    let created_job = default_api::create_job(&config, job).expect("Failed to create job");
+    let created_job = apis::jobs_api::create_job(&config, job).expect("Failed to create job");
     let job_id = created_job.id.unwrap();
 
     let result = manager.initialize(false);
@@ -1097,12 +1114,11 @@ fn test_process_changed_files_end_to_end(start_server: &ServerProcess) {
     let run_id = manager.get_run_id().expect("Failed to get run_id");
 
     let resources = models::ComputeNodesResources::new(36, 100.0, 0, 1);
-    let result = default_api::claim_jobs_based_on_resources(
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
         &config,
         workflow_id,
-        &resources,
         10,
-        None,
+        resources,
         None,
     )
     .expect("claim_jobs_based_on_resources should succeed");
@@ -1119,7 +1135,7 @@ fn test_process_changed_files_end_to_end(start_server: &ServerProcess) {
         job.status.expect("Job status should be present"),
         models::JobStatus::Pending
     );
-    default_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id)
         .expect("Failed to set job to Completed");
 
     // Create a compute node for the results
@@ -1137,7 +1153,7 @@ fn test_process_changed_files_end_to_end(start_server: &ServerProcess) {
         "2020-01-01T00:00:00Z".to_string(),
         models::JobStatus::Completed,
     );
-    default_api::complete_job(&config, job_id, job_result.status, run_id, job_result)
+    apis::jobs_api::complete_job(&config, job_id, job_result.status, run_id, job_result)
         .expect("Failed to complete job");
 
     // Modify the file
@@ -1150,11 +1166,12 @@ fn test_process_changed_files_end_to_end(start_server: &ServerProcess) {
     assert!(result.is_ok());
 
     // Verify file was updated
-    let updated_file = default_api::get_file(&config, file_id).expect("Failed to get updated file");
+    let updated_file =
+        apis::files_api::get_file(&config, file_id).expect("Failed to get updated file");
     assert!(updated_file.st_mtime.is_some());
 
     // Verify job was reset
-    let updated_job = default_api::get_job(&config, job_id).expect("Failed to get updated job");
+    let updated_job = apis::jobs_api::get_job(&config, job_id).expect("Failed to get updated job");
     assert_eq!(
         updated_job.status.unwrap(),
         models::JobStatus::Uninitialized
@@ -1183,11 +1200,12 @@ fn test_workflow_manager_end_to_end(start_server: &ServerProcess) {
     assert!(result.is_ok());
 
     // Check that everything was initialized properly
-    let events = default_api::list_events(&config, workflow_id, None, None, None, None, None, None)
-        .expect("Failed to list events");
-    assert!(!events.items.as_ref().unwrap().is_empty());
+    let events =
+        apis::events_api::list_events(&config, workflow_id, None, None, None, None, None, None)
+            .expect("Failed to list events");
+    assert!(!events.items.is_empty());
 
-    let jobs = default_api::list_jobs(
+    let jobs = apis::jobs_api::list_jobs(
         &config,
         workflow_id,
         None,
@@ -1201,14 +1219,14 @@ fn test_workflow_manager_end_to_end(start_server: &ServerProcess) {
         None, // active_compute_node_id
     )
     .expect("Failed to list jobs");
-    let job_items = jobs.items.as_ref().unwrap();
+    let job_items = &jobs.items;
     assert!(!job_items.is_empty());
     assert_eq!(
         job_items[0].status.as_ref().unwrap(),
         &models::JobStatus::Completed
     );
 
-    let files = default_api::list_files(
+    let files = apis::files_api::list_files(
         &config,
         workflow_id,
         None,
@@ -1221,7 +1239,7 @@ fn test_workflow_manager_end_to_end(start_server: &ServerProcess) {
         None, // is_output filter
     )
     .expect("Failed to list files");
-    let file_items = files.items.as_ref().unwrap();
+    let file_items = &files.items;
     assert!(!file_items.is_empty());
     for file in file_items {
         assert!(file.st_mtime.is_some());
@@ -1243,7 +1261,7 @@ fn test_update_file_with_none_st_mtime(start_server: &ServerProcess) {
     assert!(result.is_ok());
 
     // Verify file has st_mtime set
-    let file_before = default_api::get_file(&config, file_id).expect("Failed to get file");
+    let file_before = apis::files_api::get_file(&config, file_id).expect("Failed to get file");
     assert!(file_before.st_mtime.is_some());
 
     // Create a file model with st_mtime = None and try to update it
@@ -1251,12 +1269,12 @@ fn test_update_file_with_none_st_mtime(start_server: &ServerProcess) {
     file_with_none_mtime.st_mtime = None;
 
     // Attempt to update the file with st_mtime = None
-    let update_result = default_api::update_file(&config, file_id, file_with_none_mtime);
+    let update_result = apis::files_api::update_file(&config, file_id, file_with_none_mtime);
     assert!(update_result.is_ok());
 
     // Check if the file was actually updated with None
     let file_after =
-        default_api::get_file(&config, file_id).expect("Failed to get file after update");
+        apis::files_api::get_file(&config, file_id).expect("Failed to get file after update");
     assert!(
         file_after.st_mtime.is_none(),
         "Expected st_mtime to be None after update, but got {:?}",
@@ -1274,8 +1292,11 @@ fn create_job_with_output_files(
 ) -> (i64, Vec<models::FileModel>) {
     // Create resource requirements
     let resource_requirements = models::ResourceRequirementsModel::new(1, "small".to_string());
-    let rr = default_api::create_resource_requirements(config, resource_requirements)
-        .expect("Failed to create resource requirements");
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        config,
+        resource_requirements,
+    )
+    .expect("Failed to create resource requirements");
 
     // Create output file paths (don't create actual files on disk yet)
     let mut output_files = Vec::new();
@@ -1289,7 +1310,7 @@ fn create_job_with_output_files(
         output1_path.to_str().unwrap().to_string(),
     );
     let created_file1 =
-        default_api::create_file(config, file1).expect("Failed to create file 1 in database");
+        apis::files_api::create_file(config, file1).expect("Failed to create file 1 in database");
     output_files.push(created_file1.clone());
 
     let file2 = models::FileModel::new(
@@ -1298,14 +1319,14 @@ fn create_job_with_output_files(
         output2_path.to_str().unwrap().to_string(),
     );
     let created_file2 =
-        default_api::create_file(config, file2).expect("Failed to create file 2 in database");
+        apis::files_api::create_file(config, file2).expect("Failed to create file 2 in database");
     output_files.push(created_file2.clone());
 
     // Create the job with output file IDs set
     let mut job = models::JobModel::new(workflow_id, job_name.to_string(), command.to_string());
     job.resource_requirements_id = rr.id;
     job.output_file_ids = Some(vec![created_file1.id.unwrap(), created_file2.id.unwrap()]);
-    let created_job = default_api::create_job(config, job).expect("Failed to create job");
+    let created_job = apis::jobs_api::create_job(config, job).expect("Failed to create job");
     let job_id = created_job.id.unwrap();
 
     (job_id, output_files)
@@ -1335,7 +1356,7 @@ fn complete_job_and_create_files(
     );
 
     // Complete the job
-    default_api::complete_job(config, job_id, job_result.status, run_id, job_result)
+    apis::jobs_api::complete_job(config, job_id, job_result.status, run_id, job_result)
         .expect("Failed to complete job");
 
     // Now create the output files on disk (simulating job execution)
@@ -1365,7 +1386,7 @@ fn test_update_jobs_if_output_files_are_missing_no_missing_files(start_server: &
     let run_id = manager.get_run_id().expect("Failed to get run_id");
 
     // Set job to running
-    default_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id)
         .expect("Failed to set job to running");
 
     // Create a compute node for the results
@@ -1387,7 +1408,7 @@ fn test_update_jobs_if_output_files_are_missing_no_missing_files(start_server: &
     assert!(result.is_ok());
 
     // Job should still be Completed
-    let updated_job = default_api::get_job(&config, job_id).expect("Failed to get updated job");
+    let updated_job = apis::jobs_api::get_job(&config, job_id).expect("Failed to get updated job");
     assert_eq!(updated_job.status.unwrap(), models::JobStatus::Completed);
 }
 
@@ -1410,7 +1431,7 @@ fn test_update_jobs_if_output_files_are_missing_with_missing_files(start_server:
     let run_id = manager.get_run_id().expect("Failed to get run_id");
 
     // Set job to running
-    default_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id)
         .expect("Failed to set job to running");
 
     // Create a compute node for the results
@@ -1437,7 +1458,7 @@ fn test_update_jobs_if_output_files_are_missing_with_missing_files(start_server:
     assert!(result.is_ok());
 
     // Job should be reset to Uninitialized
-    let updated_job = default_api::get_job(&config, job_id).expect("Failed to get updated job");
+    let updated_job = apis::jobs_api::get_job(&config, job_id).expect("Failed to get updated job");
     assert_eq!(
         updated_job.status.unwrap(),
         models::JobStatus::Uninitialized
@@ -1463,7 +1484,7 @@ fn test_update_jobs_if_output_files_are_missing_dry_run_true(start_server: &Serv
     let run_id = manager.get_run_id().expect("Failed to get run_id");
 
     // Set job to running
-    default_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id)
         .expect("Failed to set job to running");
 
     // Create a compute node for the results
@@ -1490,7 +1511,7 @@ fn test_update_jobs_if_output_files_are_missing_dry_run_true(start_server: &Serv
     assert!(result.is_ok());
 
     // Job should still be Completed (not reset due to dry run)
-    let updated_job = default_api::get_job(&config, job_id).expect("Failed to get updated job");
+    let updated_job = apis::jobs_api::get_job(&config, job_id).expect("Failed to get updated job");
     assert_eq!(updated_job.status.unwrap(), models::JobStatus::Completed);
 }
 
@@ -1513,7 +1534,7 @@ fn test_update_jobs_if_output_files_are_missing_dry_run_false(start_server: &Ser
     let run_id = manager.get_run_id().expect("Failed to get run_id");
 
     // Set job to running
-    default_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id)
         .expect("Failed to set job to running");
 
     // Create a compute node for the results
@@ -1540,7 +1561,7 @@ fn test_update_jobs_if_output_files_are_missing_dry_run_false(start_server: &Ser
     assert!(result.is_ok());
 
     // Job should be reset to Uninitialized
-    let updated_job = default_api::get_job(&config, job_id).expect("Failed to get updated job");
+    let updated_job = apis::jobs_api::get_job(&config, job_id).expect("Failed to get updated job");
     assert_eq!(
         updated_job.status.unwrap(),
         models::JobStatus::Uninitialized
@@ -1581,14 +1602,8 @@ fn test_update_jobs_if_output_files_are_missing_multiple_jobs(start_server: &Ser
         (job2_id, &output_files2),
         (job3_id, &output_files3),
     ] {
-        default_api::manage_status_change(
-            &config,
-            job_id,
-            models::JobStatus::Running,
-            run_id,
-            None,
-        )
-        .expect("Failed to set job to running");
+        apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id)
+            .expect("Failed to set job to running");
 
         complete_job_and_create_files(
             &config,
@@ -1615,9 +1630,12 @@ fn test_update_jobs_if_output_files_are_missing_multiple_jobs(start_server: &Ser
     assert!(result.is_ok());
 
     // Check job statuses
-    let updated_job1 = default_api::get_job(&config, job1_id).expect("Failed to get updated job1");
-    let updated_job2 = default_api::get_job(&config, job2_id).expect("Failed to get updated job2");
-    let updated_job3 = default_api::get_job(&config, job3_id).expect("Failed to get updated job3");
+    let updated_job1 =
+        apis::jobs_api::get_job(&config, job1_id).expect("Failed to get updated job1");
+    let updated_job2 =
+        apis::jobs_api::get_job(&config, job2_id).expect("Failed to get updated job2");
+    let updated_job3 =
+        apis::jobs_api::get_job(&config, job3_id).expect("Failed to get updated job3");
 
     assert_eq!(
         updated_job1.status.unwrap(),
@@ -1652,7 +1670,7 @@ fn test_update_jobs_if_output_files_are_missing_no_done_jobs(start_server: &Serv
     assert!(result.is_ok());
 
     // Job should still be Ready (not affected since it wasn't Completed)
-    let updated_job = default_api::get_job(&config, job_id).expect("Failed to get updated job");
+    let updated_job = apis::jobs_api::get_job(&config, job_id).expect("Failed to get updated job");
     assert_eq!(updated_job.status.unwrap(), models::JobStatus::Ready);
 }
 
@@ -1673,8 +1691,11 @@ fn test_update_jobs_if_output_files_are_missing_with_upstream_jobs_dry_run(
 
     // Create resource requirements for upstream job
     let resource_requirements = models::ResourceRequirementsModel::new(1, "small".to_string());
-    let rr = default_api::create_resource_requirements(&config, resource_requirements)
-        .expect("Failed to create resource requirements");
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        &config,
+        resource_requirements,
+    )
+    .expect("Failed to create resource requirements");
 
     // Create an upstream job that depends on job1
     let mut upstream_job = models::JobModel::new(
@@ -1685,7 +1706,7 @@ fn test_update_jobs_if_output_files_are_missing_with_upstream_jobs_dry_run(
     upstream_job.resource_requirements_id = rr.id;
     upstream_job.depends_on_job_ids = Some(vec![job1_id]);
     let created_upstream =
-        default_api::create_job(&config, upstream_job).expect("Failed to create upstream job");
+        apis::jobs_api::create_job(&config, upstream_job).expect("Failed to create upstream job");
     let upstream_job_id = created_upstream.id.unwrap();
 
     // Initialize workflow
@@ -1698,7 +1719,7 @@ fn test_update_jobs_if_output_files_are_missing_with_upstream_jobs_dry_run(
     let compute_node_id = compute_node.id.unwrap();
 
     // Complete job1 (with output files)
-    default_api::manage_status_change(&config, job1_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(&config, job1_id, models::JobStatus::Running, run_id)
         .expect("Failed to set job1 to running");
     complete_job_and_create_files(
         &config,
@@ -1709,13 +1730,18 @@ fn test_update_jobs_if_output_files_are_missing_with_upstream_jobs_dry_run(
         &output_files1,
     );
 
+    // Wait for the background unblocking task to transition upstream_job to ready
+    assert!(
+        wait_for_job_status(&config, upstream_job_id, models::JobStatus::Ready, 10),
+        "upstream_job did not become ready after job1 completed"
+    );
+
     // Complete upstream job (no output files to create)
-    default_api::manage_status_change(
+    apis::jobs_api::manage_status_change(
         &config,
         upstream_job_id,
         models::JobStatus::Running,
         run_id,
-        None,
     )
     .expect("Failed to set upstream_job to running");
     let upstream_result = models::ResultModel::new(
@@ -1729,7 +1755,7 @@ fn test_update_jobs_if_output_files_are_missing_with_upstream_jobs_dry_run(
         chrono::Utc::now().to_rfc3339(),
         models::JobStatus::Completed,
     );
-    default_api::complete_job(
+    apis::jobs_api::complete_job(
         &config,
         upstream_job_id,
         upstream_result.status,
@@ -1748,9 +1774,10 @@ fn test_update_jobs_if_output_files_are_missing_with_upstream_jobs_dry_run(
     assert!(result.is_ok());
 
     // Both jobs should still be Completed (not reset due to dry run)
-    let updated_job1 = default_api::get_job(&config, job1_id).expect("Failed to get updated job1");
-    let updated_upstream =
-        default_api::get_job(&config, upstream_job_id).expect("Failed to get updated upstream job");
+    let updated_job1 =
+        apis::jobs_api::get_job(&config, job1_id).expect("Failed to get updated job1");
+    let updated_upstream = apis::jobs_api::get_job(&config, upstream_job_id)
+        .expect("Failed to get updated upstream job");
 
     assert_eq!(updated_job1.status.unwrap(), models::JobStatus::Completed);
     assert_eq!(
@@ -1769,8 +1796,11 @@ fn test_initialize_workflow_with_missing_files_ignore_missing_data_true(
     let workflow_id = workflow.id.unwrap();
 
     let resource_requirements = models::ResourceRequirementsModel::new(1, "small".to_string());
-    let rr = default_api::create_resource_requirements(&config, resource_requirements)
-        .expect("Failed to create resource requirements");
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        &config,
+        resource_requirements,
+    )
+    .expect("Failed to create resource requirements");
 
     // Create file records in database but don't create actual files on disk
     let missing_file1 = create_test_file(
@@ -1794,7 +1824,7 @@ fn test_initialize_workflow_with_missing_files_ignore_missing_data_true(
     );
     job.input_file_ids = Some(vec![missing_file1.id.unwrap(), missing_file2.id.unwrap()]);
     job.resource_requirements_id = rr.id;
-    let created_job = default_api::create_job(&config, job).expect("Failed to create job");
+    let created_job = apis::jobs_api::create_job(&config, job).expect("Failed to create job");
     let job_id = created_job.id.unwrap();
 
     // Verify files don't exist on disk
@@ -1815,7 +1845,7 @@ fn test_initialize_workflow_with_missing_files_ignore_missing_data_true(
     );
 
     // Verify job is in Ready status
-    let updated_job = default_api::get_job(&config, job_id).expect("Failed to get updated job");
+    let updated_job = apis::jobs_api::get_job(&config, job_id).expect("Failed to get updated job");
     assert_eq!(
         updated_job.status.unwrap(),
         models::JobStatus::Ready,
@@ -1837,8 +1867,11 @@ fn test_initialize_workflow_with_missing_files_ignore_missing_data_false(
     let workflow_id = workflow.id.unwrap();
 
     let resource_requirements = models::ResourceRequirementsModel::new(1, "small".to_string());
-    let rr = default_api::create_resource_requirements(&config, resource_requirements)
-        .expect("Failed to create resource requirements");
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        &config,
+        resource_requirements,
+    )
+    .expect("Failed to create resource requirements");
 
     // Create file records in database but don't create actual files on disk
     let missing_file = create_test_file(
@@ -1856,7 +1889,7 @@ fn test_initialize_workflow_with_missing_files_ignore_missing_data_false(
     );
     job.input_file_ids = Some(vec![missing_file.id.unwrap()]);
     job.resource_requirements_id = rr.id;
-    let _created_job = default_api::create_job(&config, job).expect("Failed to create job");
+    let _created_job = apis::jobs_api::create_job(&config, job).expect("Failed to create job");
 
     // Verify file doesn't exist on disk
     assert!(
@@ -1882,8 +1915,11 @@ fn test_reinitialize_workflow_with_missing_files_ignore_missing_data_true(
     let workflow_id = workflow.id.unwrap();
 
     let resource_requirements = models::ResourceRequirementsModel::new(1, "small".to_string());
-    let rr = default_api::create_resource_requirements(&config, resource_requirements)
-        .expect("Failed to create resource requirements");
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        &config,
+        resource_requirements,
+    )
+    .expect("Failed to create resource requirements");
 
     // Create file records in database but don't create actual files on disk
     let missing_file1 = create_test_file(
@@ -1907,7 +1943,7 @@ fn test_reinitialize_workflow_with_missing_files_ignore_missing_data_true(
     );
     job.input_file_ids = Some(vec![missing_file1.id.unwrap(), missing_file2.id.unwrap()]);
     job.resource_requirements_id = rr.id;
-    let created_job = default_api::create_job(&config, job).expect("Failed to create job");
+    let created_job = apis::jobs_api::create_job(&config, job).expect("Failed to create job");
     let job_id = created_job.id.unwrap();
 
     // First initialize the workflow normally
@@ -1916,7 +1952,7 @@ fn test_reinitialize_workflow_with_missing_files_ignore_missing_data_true(
 
     // Complete the job to have something to reinitialize from
     let run_id = manager.get_run_id().expect("Failed to get run_id");
-    default_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id)
         .expect("Failed to set job to running");
 
     // Create a compute node for the results
@@ -1934,7 +1970,7 @@ fn test_reinitialize_workflow_with_missing_files_ignore_missing_data_true(
         "2020-01-01T00:00:00Z".to_string(),
         models::JobStatus::Completed,
     );
-    default_api::complete_job(&config, job_id, job_result.status, run_id, job_result)
+    apis::jobs_api::complete_job(&config, job_id, job_result.status, run_id, job_result)
         .expect("Failed to complete job");
 
     // Get original run_id before reinitialize
@@ -1975,8 +2011,11 @@ fn test_reinitialize_workflow_with_missing_files_dry_run_true(start_server: &Ser
 
     // Create resource requirements
     let resource_requirements = models::ResourceRequirementsModel::new(1, "small".to_string());
-    let rr = default_api::create_resource_requirements(&config, resource_requirements)
-        .expect("Failed to create resource requirements");
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        &config,
+        resource_requirements,
+    )
+    .expect("Failed to create resource requirements");
 
     // Create file records in database but don't create actual files on disk
     let missing_file = create_test_file(
@@ -1994,7 +2033,7 @@ fn test_reinitialize_workflow_with_missing_files_dry_run_true(start_server: &Ser
     );
     job.input_file_ids = Some(vec![missing_file.id.unwrap()]);
     job.resource_requirements_id = rr.id;
-    let created_job = default_api::create_job(&config, job).expect("Failed to create job");
+    let created_job = apis::jobs_api::create_job(&config, job).expect("Failed to create job");
     let job_id = created_job.id.unwrap();
 
     // First initialize the workflow normally
@@ -2003,7 +2042,7 @@ fn test_reinitialize_workflow_with_missing_files_dry_run_true(start_server: &Ser
 
     // Complete the job to have something to reinitialize from
     let run_id = manager.get_run_id().expect("Failed to get run_id");
-    default_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id)
         .expect("Failed to set job to running");
 
     // Create a compute node for the results
@@ -2021,12 +2060,13 @@ fn test_reinitialize_workflow_with_missing_files_dry_run_true(start_server: &Ser
         "2020-01-01T00:00:00Z".to_string(),
         models::JobStatus::Completed,
     );
-    default_api::complete_job(&config, job_id, job_result.status, run_id, job_result)
+    apis::jobs_api::complete_job(&config, job_id, job_result.status, run_id, job_result)
         .expect("Failed to complete job");
 
     // Get original run_id and job status before dry run reinitialize
     let original_run_id = manager.get_run_id().expect("Failed to get original run_id");
-    let original_job = default_api::get_job(&config, job_id).expect("Failed to get original job");
+    let original_job =
+        apis::jobs_api::get_job(&config, job_id).expect("Failed to get original job");
 
     // Verify file doesn't exist on disk
     assert!(
@@ -2051,7 +2091,8 @@ fn test_reinitialize_workflow_with_missing_files_dry_run_true(start_server: &Ser
     );
 
     // Verify job status was NOT changed (dry run)
-    let job_after = default_api::get_job(&config, job_id).expect("Failed to get job after dry run");
+    let job_after =
+        apis::jobs_api::get_job(&config, job_id).expect("Failed to get job after dry run");
     assert_eq!(
         job_after.status.unwrap(),
         original_job.status.unwrap(),
@@ -2069,8 +2110,11 @@ fn test_reinitialize_workflow_with_missing_files_ignore_missing_data_false(
     let workflow_id = workflow.id.unwrap();
 
     let resource_requirements = models::ResourceRequirementsModel::new(1, "small".to_string());
-    let rr = default_api::create_resource_requirements(&config, resource_requirements)
-        .expect("Failed to create resource requirements");
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        &config,
+        resource_requirements,
+    )
+    .expect("Failed to create resource requirements");
 
     // Create file records in database but don't create actual files on disk
     let missing_file = create_test_file(
@@ -2088,7 +2132,7 @@ fn test_reinitialize_workflow_with_missing_files_ignore_missing_data_false(
     );
     job.input_file_ids = Some(vec![missing_file.id.unwrap()]);
     job.resource_requirements_id = rr.id;
-    let created_job = default_api::create_job(&config, job).expect("Failed to create job");
+    let created_job = apis::jobs_api::create_job(&config, job).expect("Failed to create job");
     let job_id = created_job.id.unwrap();
 
     // First initialize the workflow normally
@@ -2097,7 +2141,7 @@ fn test_reinitialize_workflow_with_missing_files_ignore_missing_data_false(
 
     // Complete the job to have something to reinitialize from
     let run_id = manager.get_run_id().expect("Failed to get run_id");
-    default_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id)
         .expect("Failed to set job to running");
 
     // Create a compute node for the results
@@ -2115,7 +2159,7 @@ fn test_reinitialize_workflow_with_missing_files_ignore_missing_data_false(
         "2020-01-01T00:00:00Z".to_string(),
         models::JobStatus::Completed,
     );
-    default_api::complete_job(&config, job_id, job_result.status, run_id, job_result)
+    apis::jobs_api::complete_job(&config, job_id, job_result.status, run_id, job_result)
         .expect("Failed to complete job");
 
     // Get original run_id before reinitialize
@@ -2188,8 +2232,11 @@ fn create_workflow_with_user_data_chain(
 
     // Create resource requirements
     let resource_requirements = models::ResourceRequirementsModel::new(1, "small".to_string());
-    let rr = default_api::create_resource_requirements(config, resource_requirements)
-        .expect("Failed to create resource requirements");
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        config,
+        resource_requirements,
+    )
+    .expect("Failed to create resource requirements");
 
     // Create job1: consumes ud1, produces ud2
     let mut job1 =
@@ -2197,7 +2244,7 @@ fn create_workflow_with_user_data_chain(
     job1.input_user_data_ids = Some(vec![ud1_id]);
     job1.output_user_data_ids = Some(vec![ud2_id]);
     job1.resource_requirements_id = rr.id;
-    let created_job1 = default_api::create_job(config, job1).expect("Failed to create job1");
+    let created_job1 = apis::jobs_api::create_job(config, job1).expect("Failed to create job1");
     let job1_id = created_job1.id.unwrap();
 
     // Create job2: consumes ud2, produces ud3
@@ -2206,7 +2253,7 @@ fn create_workflow_with_user_data_chain(
     job2.input_user_data_ids = Some(vec![ud2_id]);
     job2.output_user_data_ids = Some(vec![ud3_id]);
     job2.resource_requirements_id = rr.id;
-    let created_job2 = default_api::create_job(config, job2).expect("Failed to create job2");
+    let created_job2 = apis::jobs_api::create_job(config, job2).expect("Failed to create job2");
     let job2_id = created_job2.id.unwrap();
 
     // Create job3: consumes ud3, produces ud4
@@ -2215,7 +2262,7 @@ fn create_workflow_with_user_data_chain(
     job3.input_user_data_ids = Some(vec![ud3_id]);
     job3.output_user_data_ids = Some(vec![ud4_id]);
     job3.resource_requirements_id = rr.id;
-    let created_job3 = default_api::create_job(config, job3).expect("Failed to create job3");
+    let created_job3 = apis::jobs_api::create_job(config, job3).expect("Failed to create job3");
     let job3_id = created_job3.id.unwrap();
 
     let job_ids = vec![job1_id, job2_id, job3_id];
@@ -2247,9 +2294,9 @@ fn test_user_data_dependency_chain(start_server: &ServerProcess) {
     let run_id = manager.get_run_id().expect("Failed to get run_id");
 
     // Check job1 is Ready (has all input data), others are blocked
-    let job1 = default_api::get_job(&config, job1_id).expect("Failed to get job1");
-    let job2 = default_api::get_job(&config, job2_id).expect("Failed to get job2");
-    let job3 = default_api::get_job(&config, job3_id).expect("Failed to get job3");
+    let job1 = apis::jobs_api::get_job(&config, job1_id).expect("Failed to get job1");
+    let job2 = apis::jobs_api::get_job(&config, job2_id).expect("Failed to get job2");
+    let job3 = apis::jobs_api::get_job(&config, job3_id).expect("Failed to get job3");
 
     assert_eq!(
         job1.status.unwrap(),
@@ -2272,13 +2319,13 @@ fn test_user_data_dependency_chain(start_server: &ServerProcess) {
     let compute_node_id = compute_node.id.unwrap();
 
     // Simulate job1 execution: change status to running, populate ud2, complete job1
-    default_api::manage_status_change(&config, job1_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(&config, job1_id, models::JobStatus::Running, run_id)
         .expect("Failed to set job1 to running");
 
     // Populate ud2 with data
-    let mut ud2 = default_api::get_user_data(&config, ud2_id).expect("Failed to get ud2");
+    let mut ud2 = apis::user_data_api::get_user_data(&config, ud2_id).expect("Failed to get ud2");
     ud2.data = Some(serde_json::json!("data from job1"));
-    default_api::update_user_data(&config, ud2_id, ud2).expect("Failed to update ud2");
+    apis::user_data_api::update_user_data(&config, ud2_id, ud2).expect("Failed to update ud2");
 
     // Complete job1
     let job1_result = models::ResultModel::new(
@@ -2292,7 +2339,7 @@ fn test_user_data_dependency_chain(start_server: &ServerProcess) {
         "2020-01-01T00:00:00Z".to_string(),
         models::JobStatus::Completed,
     );
-    default_api::complete_job(&config, job1_id, job1_result.status, run_id, job1_result)
+    apis::jobs_api::complete_job(&config, job1_id, job1_result.status, run_id, job1_result)
         .expect("Failed to complete job1");
 
     // Wait for background unblocking task to process job1 completion and unblock job2
@@ -2302,7 +2349,8 @@ fn test_user_data_dependency_chain(start_server: &ServerProcess) {
     );
 
     // Check job2 is now Ready
-    let job2_after = default_api::get_job(&config, job2_id).expect("Failed to get job2 after job1");
+    let job2_after =
+        apis::jobs_api::get_job(&config, job2_id).expect("Failed to get job2 after job1");
     assert_eq!(
         job2_after.status.unwrap(),
         models::JobStatus::Ready,
@@ -2310,7 +2358,8 @@ fn test_user_data_dependency_chain(start_server: &ServerProcess) {
     );
 
     // job3 should still not be Ready
-    let job3_after = default_api::get_job(&config, job3_id).expect("Failed to get job3 after job1");
+    let job3_after =
+        apis::jobs_api::get_job(&config, job3_id).expect("Failed to get job3 after job1");
     assert_ne!(
         job3_after.status.unwrap(),
         models::JobStatus::Ready,
@@ -2318,13 +2367,13 @@ fn test_user_data_dependency_chain(start_server: &ServerProcess) {
     );
 
     // Simulate job2 execution
-    default_api::manage_status_change(&config, job2_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(&config, job2_id, models::JobStatus::Running, run_id)
         .expect("Failed to set job2 to running");
 
     // Populate ud3 with data
-    let mut ud3 = default_api::get_user_data(&config, ud3_id).expect("Failed to get ud3");
+    let mut ud3 = apis::user_data_api::get_user_data(&config, ud3_id).expect("Failed to get ud3");
     ud3.data = Some(serde_json::json!("data from job2"));
-    default_api::update_user_data(&config, ud3_id, ud3).expect("Failed to update ud3");
+    apis::user_data_api::update_user_data(&config, ud3_id, ud3).expect("Failed to update ud3");
 
     // Complete job2
     let job2_result = models::ResultModel::new(
@@ -2338,7 +2387,7 @@ fn test_user_data_dependency_chain(start_server: &ServerProcess) {
         "2020-01-01T00:00:01Z".to_string(),
         models::JobStatus::Completed,
     );
-    default_api::complete_job(&config, job2_id, job2_result.status, run_id, job2_result)
+    apis::jobs_api::complete_job(&config, job2_id, job2_result.status, run_id, job2_result)
         .expect("Failed to complete job2");
 
     // Wait for background unblocking task to process job2 completion and unblock job3
@@ -2349,7 +2398,7 @@ fn test_user_data_dependency_chain(start_server: &ServerProcess) {
 
     // Check job3 is now Ready
     let job3_after_job2 =
-        default_api::get_job(&config, job3_id).expect("Failed to get job3 after job2");
+        apis::jobs_api::get_job(&config, job3_id).expect("Failed to get job3 after job2");
     assert_eq!(
         job3_after_job2.status.unwrap(),
         models::JobStatus::Ready,
@@ -2357,13 +2406,13 @@ fn test_user_data_dependency_chain(start_server: &ServerProcess) {
     );
 
     // Simulate job3 execution
-    default_api::manage_status_change(&config, job3_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(&config, job3_id, models::JobStatus::Running, run_id)
         .expect("Failed to set job3 to running");
 
     // Populate ud4 with data
-    let mut ud4 = default_api::get_user_data(&config, ud4_id).expect("Failed to get ud4");
+    let mut ud4 = apis::user_data_api::get_user_data(&config, ud4_id).expect("Failed to get ud4");
     ud4.data = Some(serde_json::json!("data from job3"));
-    default_api::update_user_data(&config, ud4_id, ud4).expect("Failed to update ud4");
+    apis::user_data_api::update_user_data(&config, ud4_id, ud4).expect("Failed to update ud4");
 
     // Complete job3
     let job3_result = models::ResultModel::new(
@@ -2377,22 +2426,25 @@ fn test_user_data_dependency_chain(start_server: &ServerProcess) {
         "2020-01-01T00:00:02Z".to_string(),
         models::JobStatus::Completed,
     );
-    default_api::complete_job(&config, job3_id, job3_result.status, run_id, job3_result)
+    apis::jobs_api::complete_job(&config, job3_id, job3_result.status, run_id, job3_result)
         .expect("Failed to complete job3");
 
     // Verify all jobs are Completed
-    let job1_final = default_api::get_job(&config, job1_id).expect("Failed to get job1 final");
-    let job2_final = default_api::get_job(&config, job2_id).expect("Failed to get job2 final");
-    let job3_final = default_api::get_job(&config, job3_id).expect("Failed to get job3 final");
+    let job1_final = apis::jobs_api::get_job(&config, job1_id).expect("Failed to get job1 final");
+    let job2_final = apis::jobs_api::get_job(&config, job2_id).expect("Failed to get job2 final");
+    let job3_final = apis::jobs_api::get_job(&config, job3_id).expect("Failed to get job3 final");
 
     assert_eq!(job1_final.status.unwrap(), models::JobStatus::Completed);
     assert_eq!(job2_final.status.unwrap(), models::JobStatus::Completed);
     assert_eq!(job3_final.status.unwrap(), models::JobStatus::Completed);
 
     // Verify all user_data has been populated
-    let ud2_final = default_api::get_user_data(&config, ud2_id).expect("Failed to get ud2 final");
-    let ud3_final = default_api::get_user_data(&config, ud3_id).expect("Failed to get ud3 final");
-    let ud4_final = default_api::get_user_data(&config, ud4_id).expect("Failed to get ud4 final");
+    let ud2_final =
+        apis::user_data_api::get_user_data(&config, ud2_id).expect("Failed to get ud2 final");
+    let ud3_final =
+        apis::user_data_api::get_user_data(&config, ud3_id).expect("Failed to get ud3 final");
+    let ud4_final =
+        apis::user_data_api::get_user_data(&config, ud4_id).expect("Failed to get ud4 final");
 
     assert!(ud2_final.data.is_some(), "ud2 should have data");
     assert!(ud3_final.data.is_some(), "ud3 should have data");
@@ -2400,9 +2452,9 @@ fn test_user_data_dependency_chain(start_server: &ServerProcess) {
 
     // Test reinitialize after changing ud1 data
     // Change the value of ud1's data field
-    let mut ud1 = default_api::get_user_data(&config, ud1_id).expect("Failed to get ud1");
+    let mut ud1 = apis::user_data_api::get_user_data(&config, ud1_id).expect("Failed to get ud1");
     ud1.data = Some(serde_json::json!("modified data"));
-    default_api::update_user_data(&config, ud1_id, ud1).expect("Failed to update ud1");
+    apis::user_data_api::update_user_data(&config, ud1_id, ud1).expect("Failed to update ud1");
 
     // Reinitialize the workflow
     let reinit_result = manager.reinitialize(false, false);
@@ -2410,11 +2462,11 @@ fn test_user_data_dependency_chain(start_server: &ServerProcess) {
 
     // Check that job1 is Ready and all others are Blocked
     let job1_after_reinit =
-        default_api::get_job(&config, job1_id).expect("Failed to get job1 after reinit");
+        apis::jobs_api::get_job(&config, job1_id).expect("Failed to get job1 after reinit");
     let job2_after_reinit =
-        default_api::get_job(&config, job2_id).expect("Failed to get job2 after reinit");
+        apis::jobs_api::get_job(&config, job2_id).expect("Failed to get job2 after reinit");
     let job3_after_reinit =
-        default_api::get_job(&config, job3_id).expect("Failed to get job3 after reinit");
+        apis::jobs_api::get_job(&config, job3_id).expect("Failed to get job3 after reinit");
 
     assert_eq!(
         job1_after_reinit.status.unwrap(),
@@ -2465,7 +2517,8 @@ fn test_reinitialize_with_file_change_depends_on_complete_job(start_server: &Ser
     let postprocess_id = postprocess_job.id.unwrap();
 
     // Get workflow model for manager
-    let workflow = default_api::get_workflow(&config, workflow_id).expect("Failed to get workflow");
+    let workflow =
+        apis::workflows_api::get_workflow(&config, workflow_id).expect("Failed to get workflow");
 
     // Create workflow manager
     let torc_config = TorcConfig::load().unwrap_or_default();
@@ -2491,12 +2544,11 @@ fn test_reinitialize_with_file_change_depends_on_complete_job(start_server: &Ser
     let compute_node_id = compute_node.id.unwrap();
 
     // Execute preprocess job
-    default_api::manage_status_change(
+    apis::jobs_api::manage_status_change(
         &config,
         preprocess_id,
         models::JobStatus::Running,
         run_id,
-        None,
     )
     .expect("Failed to set preprocess to Running");
     fs::write(&f2_path, r#"{"preprocess": "output1"}"#).expect("Failed to write f2");
@@ -2513,7 +2565,7 @@ fn test_reinitialize_with_file_change_depends_on_complete_job(start_server: &Ser
         chrono::Utc::now().to_rfc3339(),
         models::JobStatus::Completed,
     );
-    default_api::complete_job(
+    apis::jobs_api::complete_job(
         &config,
         preprocess_id,
         models::JobStatus::Completed,
@@ -2527,7 +2579,7 @@ fn test_reinitialize_with_file_change_depends_on_complete_job(start_server: &Ser
         wait_for_job_status(&config, work1_id, models::JobStatus::Ready, 5),
         "work1 did not become ready after preprocess completed"
     );
-    default_api::manage_status_change(&config, work1_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(&config, work1_id, models::JobStatus::Running, run_id)
         .expect("Failed to set work1 to Running");
     fs::write(&f4_path, r#"{"work1": "output"}"#).expect("Failed to write f4");
 
@@ -2542,7 +2594,7 @@ fn test_reinitialize_with_file_change_depends_on_complete_job(start_server: &Ser
         chrono::Utc::now().to_rfc3339(),
         models::JobStatus::Completed,
     );
-    default_api::complete_job(
+    apis::jobs_api::complete_job(
         &config,
         work1_id,
         models::JobStatus::Completed,
@@ -2556,7 +2608,7 @@ fn test_reinitialize_with_file_change_depends_on_complete_job(start_server: &Ser
         wait_for_job_status(&config, work2_id, models::JobStatus::Ready, 5),
         "work2 did not become ready after preprocess completed"
     );
-    default_api::manage_status_change(&config, work2_id, models::JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(&config, work2_id, models::JobStatus::Running, run_id)
         .expect("Failed to set work2 to Running");
     fs::write(&f5_path, r#"{"work2": "output"}"#).expect("Failed to write f5");
 
@@ -2568,7 +2620,7 @@ fn test_reinitialize_with_file_change_depends_on_complete_job(start_server: &Ser
         .duration_since(std::time::SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_secs_f64();
-    let mut f5_model = default_api::list_files(
+    let mut f5_model = apis::files_api::list_files(
         &config,
         workflow_id,
         None,
@@ -2581,11 +2633,11 @@ fn test_reinitialize_with_file_change_depends_on_complete_job(start_server: &Ser
         None,
     )
     .expect("Failed to list f5")
-    .items
-    .unwrap()[0]
+    .items[0]
         .clone();
     f5_model.st_mtime = Some(f5_mtime);
-    default_api::update_file(&config, f5_model.id.unwrap(), f5_model).expect("Failed to update f5");
+    apis::files_api::update_file(&config, f5_model.id.unwrap(), f5_model)
+        .expect("Failed to update f5");
 
     let work2_result = models::ResultModel::new(
         work2_id,
@@ -2598,7 +2650,7 @@ fn test_reinitialize_with_file_change_depends_on_complete_job(start_server: &Ser
         chrono::Utc::now().to_rfc3339(),
         models::JobStatus::Completed,
     );
-    default_api::complete_job(
+    apis::jobs_api::complete_job(
         &config,
         work2_id,
         models::JobStatus::Completed,
@@ -2612,12 +2664,11 @@ fn test_reinitialize_with_file_change_depends_on_complete_job(start_server: &Ser
         wait_for_job_status(&config, postprocess_id, models::JobStatus::Ready, 5),
         "postprocess did not become ready after work1 and work2 completed"
     );
-    default_api::manage_status_change(
+    apis::jobs_api::manage_status_change(
         &config,
         postprocess_id,
         models::JobStatus::Running,
         run_id,
-        None,
     )
     .expect("Failed to set postprocess to Running");
     fs::write(&f6_path, r#"{"postprocess": "output"}"#).expect("Failed to write f6");
@@ -2630,7 +2681,7 @@ fn test_reinitialize_with_file_change_depends_on_complete_job(start_server: &Ser
         .duration_since(std::time::SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_secs_f64();
-    let mut f6_model = default_api::list_files(
+    let mut f6_model = apis::files_api::list_files(
         &config,
         workflow_id,
         None,
@@ -2643,11 +2694,11 @@ fn test_reinitialize_with_file_change_depends_on_complete_job(start_server: &Ser
         None,
     )
     .expect("Failed to list f6")
-    .items
-    .unwrap()[0]
+    .items[0]
         .clone();
     f6_model.st_mtime = Some(f6_mtime);
-    default_api::update_file(&config, f6_model.id.unwrap(), f6_model).expect("Failed to update f6");
+    apis::files_api::update_file(&config, f6_model.id.unwrap(), f6_model)
+        .expect("Failed to update f6");
 
     let postprocess_result = models::ResultModel::new(
         postprocess_id,
@@ -2660,7 +2711,7 @@ fn test_reinitialize_with_file_change_depends_on_complete_job(start_server: &Ser
         chrono::Utc::now().to_rfc3339(),
         models::JobStatus::Completed,
     );
-    default_api::complete_job(
+    apis::jobs_api::complete_job(
         &config,
         postprocess_id,
         models::JobStatus::Completed,
@@ -2677,11 +2728,11 @@ fn test_reinitialize_with_file_change_depends_on_complete_job(start_server: &Ser
 
     // Verify all jobs are Completed
     let preprocess_done =
-        default_api::get_job(&config, preprocess_id).expect("Failed to get preprocess");
-    let work1_done = default_api::get_job(&config, work1_id).expect("Failed to get work1");
-    let work2_done = default_api::get_job(&config, work2_id).expect("Failed to get work2");
+        apis::jobs_api::get_job(&config, preprocess_id).expect("Failed to get preprocess");
+    let work1_done = apis::jobs_api::get_job(&config, work1_id).expect("Failed to get work1");
+    let work2_done = apis::jobs_api::get_job(&config, work2_id).expect("Failed to get work2");
     let postprocess_done =
-        default_api::get_job(&config, postprocess_id).expect("Failed to get postprocess");
+        apis::jobs_api::get_job(&config, postprocess_id).expect("Failed to get postprocess");
 
     assert_eq!(
         preprocess_done.status.unwrap(),
@@ -2705,13 +2756,13 @@ fn test_reinitialize_with_file_change_depends_on_complete_job(start_server: &Ser
     assert!(reinit_result.is_ok(), "Failed to reinitialize workflow");
 
     // Check job statuses after reinitialization
-    let preprocess_after = default_api::get_job(&config, preprocess_id)
+    let preprocess_after = apis::jobs_api::get_job(&config, preprocess_id)
         .expect("Failed to get preprocess after reinit");
     let work1_after =
-        default_api::get_job(&config, work1_id).expect("Failed to get work1 after reinit");
+        apis::jobs_api::get_job(&config, work1_id).expect("Failed to get work1 after reinit");
     let work2_after =
-        default_api::get_job(&config, work2_id).expect("Failed to get work2 after reinit");
-    let postprocess_after = default_api::get_job(&config, postprocess_id)
+        apis::jobs_api::get_job(&config, work2_id).expect("Failed to get work2 after reinit");
+    let postprocess_after = apis::jobs_api::get_job(&config, postprocess_id)
         .expect("Failed to get postprocess after reinit");
 
     // Assertions to verify correct behavior:

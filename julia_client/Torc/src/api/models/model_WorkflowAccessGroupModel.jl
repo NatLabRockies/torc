@@ -2,48 +2,53 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""workflow_access_group_model
-Association between a workflow and an access group
+@doc raw"""WorkflowAccessGroupModel
 
     WorkflowAccessGroupModel(;
-        workflow_id=nothing,
-        group_id=nothing,
         created_at=nothing,
+        group_id=nothing,
+        workflow_id=nothing,
     )
 
-    - workflow_id::Int64
-    - group_id::Int64
     - created_at::String
+    - group_id::Int64
+    - workflow_id::Int64
 """
 Base.@kwdef mutable struct WorkflowAccessGroupModel <: OpenAPI.APIModel
-    workflow_id::Union{Nothing, Int64} = nothing
-    group_id::Union{Nothing, Int64} = nothing
     created_at::Union{Nothing, String} = nothing
+    group_id::Union{Nothing, Int64} = nothing
+    workflow_id::Union{Nothing, Int64} = nothing
 
-    function WorkflowAccessGroupModel(workflow_id, group_id, created_at, )
-        o = new(workflow_id, group_id, created_at, )
+    function WorkflowAccessGroupModel(created_at, group_id, workflow_id, )
+        o = new(created_at, group_id, workflow_id, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type WorkflowAccessGroupModel
 
-const _property_types_WorkflowAccessGroupModel = Dict{Symbol,String}(Symbol("workflow_id")=>"Int64", Symbol("group_id")=>"Int64", Symbol("created_at")=>"String", )
+const _property_types_WorkflowAccessGroupModel = Dict{Symbol,String}(Symbol("created_at")=>"String", Symbol("group_id")=>"Int64", Symbol("workflow_id")=>"Int64", )
 OpenAPI.property_type(::Type{ WorkflowAccessGroupModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_WorkflowAccessGroupModel[name]))}
 
 function OpenAPI.check_required(o::WorkflowAccessGroupModel)
-    o.workflow_id === nothing && (return false)
     o.group_id === nothing && (return false)
+    o.workflow_id === nothing && (return false)
     true
 end
 
 function OpenAPI.validate_properties(o::WorkflowAccessGroupModel)
-    OpenAPI.validate_property(WorkflowAccessGroupModel, Symbol("workflow_id"), o.workflow_id)
-    OpenAPI.validate_property(WorkflowAccessGroupModel, Symbol("group_id"), o.group_id)
     OpenAPI.validate_property(WorkflowAccessGroupModel, Symbol("created_at"), o.created_at)
+    OpenAPI.validate_property(WorkflowAccessGroupModel, Symbol("group_id"), o.group_id)
+    OpenAPI.validate_property(WorkflowAccessGroupModel, Symbol("workflow_id"), o.workflow_id)
 end
 
 function OpenAPI.validate_property(::Type{ WorkflowAccessGroupModel }, name::Symbol, val)
 
 
+    if name === Symbol("group_id")
+        OpenAPI.validate_param(name, "WorkflowAccessGroupModel", :format, val, "int64")
+    end
 
+    if name === Symbol("workflow_id")
+        OpenAPI.validate_param(name, "WorkflowAccessGroupModel", :format, val, "int64")
+    end
 end

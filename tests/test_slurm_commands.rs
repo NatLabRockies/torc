@@ -11,8 +11,8 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
+use torc::client::apis;
 use torc::client::config::TorcConfig;
-use torc::client::default_api;
 use torc::client::hpc::common::HpcJobStatus;
 use torc::client::hpc::hpc_interface::HpcInterface;
 use torc::client::hpc::slurm_interface::SlurmInterface;
@@ -26,7 +26,38 @@ fn test_slurm_interface_new() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
+fn test_slurm_interface_ignores_torc_username_override() {
+    let original_torc_username = env::var("TORC_USERNAME").ok();
+    let original_user = env::var("USER").ok();
+    let original_username = env::var("USERNAME").ok();
+
+    unsafe {
+        env::set_var("TORC_USERNAME", "torc-api-user");
+        env::set_var("USER", "scheduler-user");
+        env::remove_var("USERNAME");
+    }
+
+    let interface = SlurmInterface::new().expect("Failed to create SlurmInterface");
+    let scheduler_user = interface.get_user().expect("Failed to get scheduler user");
+    assert_eq!(scheduler_user, "scheduler-user");
+
+    match original_torc_username {
+        Some(value) => unsafe { env::set_var("TORC_USERNAME", value) },
+        None => unsafe { env::remove_var("TORC_USERNAME") },
+    }
+    match original_user {
+        Some(value) => unsafe { env::set_var("USER", value) },
+        None => unsafe { env::remove_var("USER") },
+    }
+    match original_username {
+        Some(value) => unsafe { env::set_var("USERNAME", value) },
+        None => unsafe { env::remove_var("USERNAME") },
+    }
+}
+
+#[rstest]
+#[serial(slurm)]
 fn test_submit_job_success() {
     cleanup_fake_slurm_state();
     setup_fake_slurm_commands();
@@ -61,7 +92,7 @@ fn test_submit_job_success() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 #[ignore] // This is a slow test and we don't need to continue running it.
 fn test_submit_job_failure() {
     cleanup_fake_slurm_state();
@@ -92,7 +123,7 @@ fn test_submit_job_failure() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_get_status_pending_job() {
     cleanup_fake_slurm_state();
     setup_fake_slurm_commands();
@@ -120,7 +151,7 @@ fn test_get_status_pending_job() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_get_status_running_job() {
     cleanup_fake_slurm_state();
     setup_fake_slurm_commands();
@@ -152,7 +183,7 @@ fn test_get_status_running_job() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_get_status_completed_job() {
     cleanup_fake_slurm_state();
     setup_fake_slurm_commands();
@@ -184,7 +215,7 @@ fn test_get_status_completed_job() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_get_status_invalid_job_id() {
     cleanup_fake_slurm_state();
     setup_fake_slurm_commands();
@@ -204,7 +235,7 @@ fn test_get_status_invalid_job_id() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_get_statuses_multiple_jobs() {
     cleanup_fake_slurm_state();
     setup_fake_slurm_commands();
@@ -250,7 +281,7 @@ fn test_get_statuses_multiple_jobs() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_cancel_job_success() {
     cleanup_fake_slurm_state();
     let (_, _, _, scancel, _) = setup_fake_slurm_commands();
@@ -281,7 +312,7 @@ fn test_cancel_job_success() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_get_job_stats() {
     cleanup_fake_slurm_state();
     let (_, _, sacct, _, _) = setup_fake_slurm_commands();
@@ -346,8 +377,10 @@ fn test_create_submission_script() {
         None,
         &script_path,
         &config,
+        false,
         None,
         false,
+        0,
     );
 
     assert!(
@@ -423,8 +456,10 @@ fn test_create_submission_script_with_extra() {
         Some(4),
         &script_path,
         &config,
+        false,
         None,
         false,
+        0,
     );
 
     assert!(
@@ -449,11 +484,11 @@ fn test_create_submission_script_with_extra() {
 }
 
 #[test]
-fn test_create_submission_script_with_srun() {
+fn test_create_submission_script_without_srun() {
     let interface = SlurmInterface::new().expect("Failed to create SlurmInterface");
 
     let temp_dir = env::temp_dir();
-    let script_path = temp_dir.join("test_submission_script_srun.sh");
+    let script_path = temp_dir.join("test_submission_script_without_srun.sh");
 
     let mut config = std::collections::HashMap::new();
     config.insert("account".to_string(), "test_account".to_string());
@@ -468,8 +503,10 @@ fn test_create_submission_script_with_srun() {
         None,
         &script_path,
         &config,
+        false,
         None,
         false,
+        0,
     );
 
     assert!(
@@ -501,8 +538,165 @@ fn test_create_submission_script_with_srun() {
     let _ = fs::remove_file(&script_path);
 }
 
+#[test]
+fn test_create_submission_script_with_srun() {
+    let interface = SlurmInterface::new().expect("Failed to create SlurmInterface");
+
+    let temp_dir = env::temp_dir();
+    let script_path = temp_dir.join("test_submission_script_with_srun.sh");
+
+    let mut config = std::collections::HashMap::new();
+    config.insert("account".to_string(), "test_account".to_string());
+    config.insert("walltime".to_string(), "01:00:00".to_string());
+
+    let result = interface.create_submission_script(
+        "test_srun_job",
+        "http://localhost:8080/torc-service/v1",
+        11111,
+        "/tmp/output",
+        5,
+        None,
+        &script_path,
+        &config,
+        true,
+        None,
+        false,
+        0,
+    );
+
+    assert!(
+        result.is_ok(),
+        "Failed to create submission script: {:?}",
+        result.err()
+    );
+
+    let script_content =
+        fs::read_to_string(&script_path).expect("Failed to read submission script");
+
+    assert!(
+        script_content.contains("srun --ntasks-per-node=1 "),
+        "Should have outer srun wrapper when start_one_worker_per_node is true"
+    );
+    assert!(
+        script_content.contains("torc-slurm-job-runner"),
+        "Should run torc-slurm-job-runner via srun"
+    );
+
+    let _ = fs::remove_file(&script_path);
+}
+
+#[test]
+fn test_compute_startup_delay() {
+    use torc::client::commands::slurm::compute_startup_delay;
+
+    // Single runner: no delay
+    assert_eq!(compute_startup_delay(0), 0);
+    assert_eq!(compute_startup_delay(1), 0);
+
+    // 2-10 runners: delay equals runner count
+    assert_eq!(compute_startup_delay(2), 2);
+    assert_eq!(compute_startup_delay(5), 5);
+    assert_eq!(compute_startup_delay(10), 10);
+
+    // 11-100 runners: linear scale from 10 to 60
+    assert_eq!(compute_startup_delay(11), 10); // 10 + (1*50/90) = 10
+    assert_eq!(compute_startup_delay(55), 35); // 10 + (45*50/90) = 35
+    assert_eq!(compute_startup_delay(100), 60); // 10 + (90*50/90) = 60
+
+    // 100+ runners: capped at 60
+    assert_eq!(compute_startup_delay(101), 60);
+    assert_eq!(compute_startup_delay(500), 60);
+    assert_eq!(compute_startup_delay(1000), 60);
+}
+
+#[test]
+fn test_create_submission_script_with_startup_delay() {
+    let interface = SlurmInterface::new().expect("Failed to create SlurmInterface");
+
+    let temp_dir = env::temp_dir();
+    let script_path = temp_dir.join("test_submission_script_startup_delay.sh");
+
+    let mut config = std::collections::HashMap::new();
+    config.insert("account".to_string(), "test_account".to_string());
+    config.insert("walltime".to_string(), "01:00:00".to_string());
+
+    let result = interface.create_submission_script(
+        "test_job",
+        "http://localhost:8080/torc-service/v1",
+        12345,
+        "/tmp/output",
+        5,
+        None,
+        &script_path,
+        &config,
+        false,
+        None,
+        false,
+        30,
+    );
+
+    assert!(
+        result.is_ok(),
+        "Failed to create submission script: {:?}",
+        result.err()
+    );
+
+    let script_content =
+        fs::read_to_string(&script_path).expect("Failed to read submission script");
+
+    assert!(
+        script_content.contains("--startup-delay-seconds 30"),
+        "Should have --startup-delay-seconds flag when delay > 0"
+    );
+
+    let _ = fs::remove_file(&script_path);
+}
+
+#[test]
+fn test_create_submission_script_without_startup_delay() {
+    let interface = SlurmInterface::new().expect("Failed to create SlurmInterface");
+
+    let temp_dir = env::temp_dir();
+    let script_path = temp_dir.join("test_submission_script_no_startup_delay.sh");
+
+    let mut config = std::collections::HashMap::new();
+    config.insert("account".to_string(), "test_account".to_string());
+    config.insert("walltime".to_string(), "01:00:00".to_string());
+
+    let result = interface.create_submission_script(
+        "test_job",
+        "http://localhost:8080/torc-service/v1",
+        12345,
+        "/tmp/output",
+        5,
+        None,
+        &script_path,
+        &config,
+        false,
+        None,
+        false,
+        0,
+    );
+
+    assert!(
+        result.is_ok(),
+        "Failed to create submission script: {:?}",
+        result.err()
+    );
+
+    let script_content =
+        fs::read_to_string(&script_path).expect("Failed to read submission script");
+
+    assert!(
+        !script_content.contains("--startup-delay-seconds"),
+        "Should NOT have --startup-delay-seconds flag when delay is 0"
+    );
+
+    let _ = fs::remove_file(&script_path);
+}
+
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_status_mapping() {
     cleanup_fake_slurm_state();
     setup_fake_slurm_commands();
@@ -561,7 +755,7 @@ fn test_status_mapping() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_squeue_output_parsing() {
     cleanup_fake_slurm_state();
     setup_fake_slurm_commands();
@@ -596,7 +790,7 @@ fn test_squeue_output_parsing() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_sbatch_regex_parsing() {
     cleanup_fake_slurm_state();
     setup_fake_slurm_commands();
@@ -622,7 +816,7 @@ fn test_sbatch_regex_parsing() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_get_statuses_empty() {
     cleanup_fake_slurm_state();
     setup_fake_slurm_commands();
@@ -641,7 +835,7 @@ fn test_get_statuses_empty() {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_incremental_job_ids() {
     cleanup_fake_slurm_state();
     setup_fake_slurm_commands();
@@ -1329,7 +1523,7 @@ fn test_slurm_delete_config(start_server: &ServerProcess) {
 }
 
 #[rstest]
-#[serial]
+#[serial(slurm)]
 fn test_slurm_run_jobs(start_server: &ServerProcess) {
     let config = &start_server.config;
     // Create a temporary directory for job output
@@ -1343,7 +1537,7 @@ fn test_slurm_run_jobs(start_server: &ServerProcess) {
     let first_job = jobs.values().next().expect("Should have at least one job");
     let workflow_id = first_job.workflow_id;
 
-    let workflow = torc::client::default_api::get_workflow(config, workflow_id)
+    let workflow = torc::client::apis::workflows_api::get_workflow(config, workflow_id)
         .expect("Failed to get workflow");
     let torc_config = TorcConfig::default();
     let workflow_manager = WorkflowManager::new(config.clone(), torc_config, workflow);
@@ -1355,7 +1549,7 @@ fn test_slurm_run_jobs(start_server: &ServerProcess) {
         .expect("Failed to run slurm job runner command");
 
     // Verify all jobs completed successfully
-    let job_list = torc::client::default_api::list_jobs(
+    let job_list = torc::client::apis::jobs_api::list_jobs(
         config,
         workflow_id,
         None, // status
@@ -1370,7 +1564,7 @@ fn test_slurm_run_jobs(start_server: &ServerProcess) {
     )
     .expect("Failed to list jobs");
 
-    let job_items = job_list.items.unwrap();
+    let job_items = job_list.items;
     assert_eq!(job_items.len(), 4, "Should have 4 jobs in the workflow");
 
     for job in job_items {
@@ -1382,7 +1576,7 @@ fn test_slurm_run_jobs(start_server: &ServerProcess) {
         );
     }
 
-    let results = torc::client::default_api::list_results(
+    let results = torc::client::apis::results_api::list_results(
         config,
         workflow_id,
         None, // job_id
@@ -1398,7 +1592,7 @@ fn test_slurm_run_jobs(start_server: &ServerProcess) {
     )
     .expect("Failed to list results");
 
-    let result_items = results.items.unwrap();
+    let result_items = results.items;
     assert_eq!(
         result_items.len(),
         4,
@@ -1450,7 +1644,7 @@ fn create_test_slurm_scheduler(
         walltime: "01:00:00".to_string(),
         extra: None,
     };
-    default_api::create_slurm_scheduler(config, scheduler)
+    apis::slurm_schedulers_api::create_slurm_scheduler(config, scheduler)
         .expect("Failed to create Slurm scheduler")
 }
 
@@ -1467,7 +1661,7 @@ fn create_test_jobs(
             format!("test_job_{}", i),
             format!("echo 'Job {}'", i),
         );
-        let created_job = default_api::create_job(config, job)
+        let created_job = apis::jobs_api::create_job(config, job)
             .unwrap_or_else(|_| panic!("Failed to create job {}", i));
         jobs.push(created_job);
     }
@@ -1547,7 +1741,7 @@ fn test_cancel_workflow_with_slurm_scheduler(start_server: &ServerProcess) {
     }
 
     // Verify scheduled compute node was created
-    let scheduled_nodes = default_api::list_scheduled_compute_nodes(
+    let scheduled_nodes = apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
         config,
         workflow_id,
         Some(0),
@@ -1560,7 +1754,7 @@ fn test_cancel_workflow_with_slurm_scheduler(start_server: &ServerProcess) {
     )
     .expect("Failed to list scheduled compute nodes");
 
-    let nodes = scheduled_nodes.items.unwrap();
+    let nodes = scheduled_nodes.items;
     assert_eq!(nodes.len(), 1, "Expected 1 scheduled compute node");
     let node = &nodes[0];
     // assert_eq!(node.scheduler_id, 12345);  // TODO: this isn't synced with the fake script
@@ -1575,7 +1769,7 @@ fn test_cancel_workflow_with_slurm_scheduler(start_server: &ServerProcess) {
             updated_job.status = Some(models::JobStatus::Completed);
 
             let job_id = job.id.unwrap();
-            default_api::update_job(config, job_id, updated_job)
+            apis::jobs_api::update_job(config, job_id, updated_job)
                 .unwrap_or_else(|_| panic!("Failed to update job {}", i));
         }
     }
@@ -1615,12 +1809,12 @@ fn test_cancel_workflow_with_slurm_scheduler(start_server: &ServerProcess) {
     }
 
     // Verify workflow was canceled
-    let workflow_status = default_api::get_workflow_status(config, workflow_id)
+    let workflow_status = apis::workflows_api::get_workflow_status(config, workflow_id)
         .expect("Failed to get workflow status");
     assert!(workflow_status.is_canceled, "Workflow should be canceled");
 
     // Get the scheduled compute node
-    let scheduled_nodes = default_api::list_scheduled_compute_nodes(
+    let scheduled_nodes = apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
         config,
         workflow_id,
         Some(0),
@@ -1633,7 +1827,7 @@ fn test_cancel_workflow_with_slurm_scheduler(start_server: &ServerProcess) {
     )
     .expect("Failed to list scheduled compute nodes after cancel");
 
-    let nodes = scheduled_nodes.items.unwrap();
+    let nodes = scheduled_nodes.items;
     assert_eq!(
         nodes.len(),
         1,
@@ -1645,11 +1839,11 @@ fn test_cancel_workflow_with_slurm_scheduler(start_server: &ServerProcess) {
     // Simulate the job runner updating the node status to 'complete' after detecting cancellation
     let mut updated_node = node.clone();
     updated_node.status = "complete".to_string();
-    default_api::update_scheduled_compute_node(config, node_id, updated_node)
+    apis::scheduled_compute_nodes_api::update_scheduled_compute_node(config, node_id, updated_node)
         .expect("Failed to update scheduled compute node to complete");
 
     // Verify the node status is now 'complete'
-    let final_node = default_api::get_scheduled_compute_node(config, node_id)
+    let final_node = apis::scheduled_compute_nodes_api::get_scheduled_compute_node(config, node_id)
         .expect("Failed to get scheduled compute node");
     assert_eq!(
         final_node.status, "complete",
@@ -1657,7 +1851,7 @@ fn test_cancel_workflow_with_slurm_scheduler(start_server: &ServerProcess) {
     );
 
     // Verify that all jobs still exist
-    let all_jobs = default_api::list_jobs(
+    let all_jobs = apis::jobs_api::list_jobs(
         config,
         workflow_id,
         None,      // status
@@ -1672,11 +1866,7 @@ fn test_cancel_workflow_with_slurm_scheduler(start_server: &ServerProcess) {
     )
     .expect("Failed to list jobs");
 
-    assert_eq!(
-        all_jobs.items.unwrap().len(),
-        5,
-        "All 5 jobs should still exist"
-    );
+    assert_eq!(all_jobs.items.len(), 5, "All 5 jobs should still exist");
 }
 
 fn setup_fake_slurm_commands() -> (PathBuf, PathBuf, PathBuf, PathBuf, PathBuf) {

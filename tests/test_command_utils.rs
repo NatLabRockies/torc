@@ -7,7 +7,7 @@ use serial_test::serial;
 use torc::client::commands::select_workflow_interactively;
 
 #[rstest]
-#[serial]
+#[serial(workflow_delete)]
 fn test_select_workflow_interactively_single_workflow(start_server: &ServerProcess) {
     let config = &start_server.config;
 
@@ -26,7 +26,7 @@ fn test_select_workflow_interactively_single_workflow(start_server: &ServerProce
 }
 
 #[rstest]
-#[serial]
+#[serial(workflow_delete)]
 fn test_select_workflow_interactively_user_isolation(start_server: &ServerProcess) {
     let config = &start_server.config;
 
@@ -38,11 +38,11 @@ fn test_select_workflow_interactively_user_isolation(start_server: &ServerProces
     let user2 = "test_user_2".to_string();
 
     let workflow1 = torc::models::WorkflowModel::new("user1_workflow".to_string(), user1.clone());
-    let created_workflow1 = torc::client::default_api::create_workflow(config, workflow1)
+    let created_workflow1 = torc::client::apis::workflows_api::create_workflow(config, workflow1)
         .expect("Failed to create workflow for user1");
 
     let workflow2 = torc::models::WorkflowModel::new("user2_workflow".to_string(), user2.clone());
-    let created_workflow2 = torc::client::default_api::create_workflow(config, workflow2)
+    let created_workflow2 = torc::client::apis::workflows_api::create_workflow(config, workflow2)
         .expect("Failed to create workflow for user2");
 
     // Test that user1 only sees their own workflow (and gets auto-selected)
@@ -52,12 +52,12 @@ fn test_select_workflow_interactively_user_isolation(start_server: &ServerProces
     assert_eq!(selected_id1, created_workflow1.id.unwrap());
 
     // Verify that listing workflows for user1 only returns user1's workflows
-    let list_response = torc::client::default_api::list_workflows(
+    let list_response = torc::client::apis::workflows_api::list_workflows(
         config,
         None,     // offset
+        Some(50), // limit
         None,     // sort_by
         None,     // reverse_sort
-        Some(50), // limit
         None,     // name filter
         Some(&user1),
         None, // description filter
@@ -65,7 +65,7 @@ fn test_select_workflow_interactively_user_isolation(start_server: &ServerProces
     )
     .expect("Should list workflows for user1");
 
-    let user1_workflows = list_response.items.unwrap_or_default();
+    let user1_workflows = list_response.items;
 
     // User1 should see at least their workflow
     assert!(
@@ -88,12 +88,12 @@ fn test_select_workflow_interactively_user_isolation(start_server: &ServerProces
     assert_eq!(selected_id2, created_workflow2.id.unwrap());
 
     // Verify that listing workflows for user2 only returns user2's workflows
-    let list_response2 = torc::client::default_api::list_workflows(
+    let list_response2 = torc::client::apis::workflows_api::list_workflows(
         config,
         None,     // offset
+        Some(50), // limit
         None,     // sort_by
         None,     // reverse_sort
-        Some(50), // limit
         None,     // name filter
         Some(&user2),
         None, // description filter
@@ -101,7 +101,7 @@ fn test_select_workflow_interactively_user_isolation(start_server: &ServerProces
     )
     .expect("Should list workflows for user2");
 
-    let user2_workflows = list_response2.items.unwrap_or_default();
+    let user2_workflows = list_response2.items;
 
     // User2 should see at least their workflow
     assert!(
@@ -119,7 +119,7 @@ fn test_select_workflow_interactively_user_isolation(start_server: &ServerProces
 }
 
 #[rstest]
-#[serial]
+#[serial(workflow_delete)]
 fn test_delete_all_workflows(start_server: &ServerProcess) {
     let config = &start_server.config;
 
@@ -133,26 +133,26 @@ fn test_delete_all_workflows(start_server: &ServerProcess) {
 
     let workflow1 =
         torc::models::WorkflowModel::new("delete_test_workflow_1".to_string(), user1.clone());
-    let _created_workflow1 = torc::client::default_api::create_workflow(config, workflow1)
+    let _created_workflow1 = torc::client::apis::workflows_api::create_workflow(config, workflow1)
         .expect("Failed to create workflow1");
 
     let workflow2 =
         torc::models::WorkflowModel::new("delete_test_workflow_2".to_string(), user2.clone());
-    let _created_workflow2 = torc::client::default_api::create_workflow(config, workflow2)
+    let _created_workflow2 = torc::client::apis::workflows_api::create_workflow(config, workflow2)
         .expect("Failed to create workflow2");
 
     let workflow3 =
         torc::models::WorkflowModel::new("delete_test_workflow_3".to_string(), user3.clone());
-    let _created_workflow3 = torc::client::default_api::create_workflow(config, workflow3)
+    let _created_workflow3 = torc::client::apis::workflows_api::create_workflow(config, workflow3)
         .expect("Failed to create workflow3");
 
     // Verify workflows were created - should have at least our 3 workflows
-    let list_response_before = torc::client::default_api::list_workflows(
+    let list_response_before = torc::client::apis::workflows_api::list_workflows(
         config, None, None, None, None, None, None, None, None,
     )
     .expect("Should list workflows before deletion");
 
-    let workflows_before = list_response_before.items.unwrap_or_default();
+    let workflows_before = list_response_before.items;
     assert!(
         workflows_before.len() >= 3,
         "Should have at least 3 workflows before deletion"
@@ -174,12 +174,12 @@ fn test_delete_all_workflows(start_server: &ServerProcess) {
     delete_all_workflows(config).expect("Should successfully delete all workflows");
 
     // Verify all workflows were deleted
-    let list_response_after = torc::client::default_api::list_workflows(
+    let list_response_after = torc::client::apis::workflows_api::list_workflows(
         config, None, None, None, None, None, None, None, None,
     )
     .expect("Should list workflows after deletion");
 
-    let workflows_after = list_response_after.items.unwrap_or_default();
+    let workflows_after = list_response_after.items;
     assert!(
         workflows_after.is_empty(),
         "Should have no workflows after deletion"
@@ -187,7 +187,7 @@ fn test_delete_all_workflows(start_server: &ServerProcess) {
 
     // Verify that each user has no workflows
     for user in [&user1, &user2, &user3] {
-        let user_workflows = torc::client::default_api::list_workflows(
+        let user_workflows = torc::client::apis::workflows_api::list_workflows(
             config,
             None,
             None,
@@ -200,7 +200,7 @@ fn test_delete_all_workflows(start_server: &ServerProcess) {
         )
         .expect("Should list user workflows after deletion");
 
-        let user_workflow_list = user_workflows.items.unwrap_or_default();
+        let user_workflow_list = user_workflows.items;
         assert!(
             user_workflow_list.is_empty(),
             "User {} should have no workflows after deletion",
@@ -210,7 +210,7 @@ fn test_delete_all_workflows(start_server: &ServerProcess) {
 }
 
 #[rstest]
-#[serial]
+#[serial(workflow_delete)]
 fn test_delete_all_workflows_strict_success_criteria(start_server: &ServerProcess) {
     let config = &start_server.config;
 
@@ -221,7 +221,7 @@ fn test_delete_all_workflows_strict_success_criteria(start_server: &ServerProces
     let user1 = "strict_test_user_1".to_string();
     let workflow1 =
         torc::models::WorkflowModel::new("strict_deletable_workflow".to_string(), user1.clone());
-    let _created_workflow1 = torc::client::default_api::create_workflow(config, workflow1)
+    let _created_workflow1 = torc::client::apis::workflows_api::create_workflow(config, workflow1)
         .expect("Failed to create workflow1");
 
     // Create another workflow
@@ -230,16 +230,16 @@ fn test_delete_all_workflows_strict_success_criteria(start_server: &ServerProces
         "strict_another_deletable_workflow".to_string(),
         user2.clone(),
     );
-    let _created_workflow2 = torc::client::default_api::create_workflow(config, workflow2)
+    let _created_workflow2 = torc::client::apis::workflows_api::create_workflow(config, workflow2)
         .expect("Failed to create workflow2");
 
     // Verify workflows were created
-    let list_response_before = torc::client::default_api::list_workflows(
+    let list_response_before = torc::client::apis::workflows_api::list_workflows(
         config, None, None, None, None, None, None, None, None,
     )
     .expect("Should list workflows before deletion test");
 
-    let workflows_before = list_response_before.items.unwrap_or_default();
+    let workflows_before = list_response_before.items;
     assert!(
         workflows_before.len() >= 2,
         "Should have at least 2 workflows before test"
@@ -254,12 +254,12 @@ fn test_delete_all_workflows_strict_success_criteria(start_server: &ServerProces
     );
 
     // Verify all workflows were actually deleted
-    let list_response_after = torc::client::default_api::list_workflows(
+    let list_response_after = torc::client::apis::workflows_api::list_workflows(
         config, None, None, None, None, None, None, None, None,
     )
     .expect("Should list workflows after successful deletion");
 
-    let workflows_after = list_response_after.items.unwrap_or_default();
+    let workflows_after = list_response_after.items;
     assert!(
         workflows_after.is_empty(),
         "Should have no workflows after successful deletion"

@@ -2,59 +2,67 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""file_model
-Data model for files needed or produced by jobs. Can be data or code.
+@doc raw"""FileModel
 
     FileModel(;
         id=nothing,
-        workflow_id=nothing,
         name=nothing,
         path=nothing,
         st_mtime=nothing,
+        workflow_id=nothing,
     )
 
     - id::Int64
-    - workflow_id::Int64 : Database ID of the workflow this record is associated with.
-    - name::String : User-defined name of the file (not necessarily the filename)
-    - path::String : Path to the file; can be relative to the execution directory.
-    - st_mtime::Float64 : Timestamp of when the file was last modified
+    - name::String
+    - path::String
+    - st_mtime::Float64
+    - workflow_id::Int64
 """
 Base.@kwdef mutable struct FileModel <: OpenAPI.APIModel
     id::Union{Nothing, Int64} = nothing
-    workflow_id::Union{Nothing, Int64} = nothing
     name::Union{Nothing, String} = nothing
     path::Union{Nothing, String} = nothing
     st_mtime::Union{Nothing, Float64} = nothing
+    workflow_id::Union{Nothing, Int64} = nothing
 
-    function FileModel(id, workflow_id, name, path, st_mtime, )
-        o = new(id, workflow_id, name, path, st_mtime, )
+    function FileModel(id, name, path, st_mtime, workflow_id, )
+        o = new(id, name, path, st_mtime, workflow_id, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type FileModel
 
-const _property_types_FileModel = Dict{Symbol,String}(Symbol("id")=>"Int64", Symbol("workflow_id")=>"Int64", Symbol("name")=>"String", Symbol("path")=>"String", Symbol("st_mtime")=>"Float64", )
+const _property_types_FileModel = Dict{Symbol,String}(Symbol("id")=>"Int64", Symbol("name")=>"String", Symbol("path")=>"String", Symbol("st_mtime")=>"Float64", Symbol("workflow_id")=>"Int64", )
 OpenAPI.property_type(::Type{ FileModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_FileModel[name]))}
 
 function OpenAPI.check_required(o::FileModel)
-    o.workflow_id === nothing && (return false)
     o.name === nothing && (return false)
     o.path === nothing && (return false)
+    o.workflow_id === nothing && (return false)
     true
 end
 
 function OpenAPI.validate_properties(o::FileModel)
     OpenAPI.validate_property(FileModel, Symbol("id"), o.id)
-    OpenAPI.validate_property(FileModel, Symbol("workflow_id"), o.workflow_id)
     OpenAPI.validate_property(FileModel, Symbol("name"), o.name)
     OpenAPI.validate_property(FileModel, Symbol("path"), o.path)
     OpenAPI.validate_property(FileModel, Symbol("st_mtime"), o.st_mtime)
+    OpenAPI.validate_property(FileModel, Symbol("workflow_id"), o.workflow_id)
 end
 
 function OpenAPI.validate_property(::Type{ FileModel }, name::Symbol, val)
 
+    if name === Symbol("id")
+        OpenAPI.validate_param(name, "FileModel", :format, val, "int64")
+    end
 
 
 
+    if name === Symbol("st_mtime")
+        OpenAPI.validate_param(name, "FileModel", :format, val, "double")
+    end
 
+    if name === Symbol("workflow_id")
+        OpenAPI.validate_param(name, "FileModel", :format, val, "int64")
+    end
 end

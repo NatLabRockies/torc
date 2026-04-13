@@ -236,6 +236,147 @@ action {
    }
    ```
 
+## Execution Configuration
+
+The `execution_config` section controls how jobs are executed and terminated. It supports three
+modes:
+
+- **direct**: Torc manages job execution and termination directly via signals
+- **slurm**: Jobs are wrapped with `srun` and Slurm manages resource limits/termination
+- **auto** (default): Uses `slurm` mode if `SLURM_JOB_ID` is set, otherwise `direct`
+
+### YAML Example
+
+```yaml
+execution_config:
+  mode: direct # Options: direct, slurm, auto
+  limit_resources: true # Enforce memory limits in direct mode (default: true)
+
+  # Direct mode settings
+  termination_signal: SIGTERM # Signal before SIGKILL (default: SIGTERM)
+  sigterm_lead_seconds: 30 # Seconds before SIGKILL to send signal (default: 30)
+  sigkill_headroom_seconds: 60 # Seconds before end_time for SIGKILL (default: 60)
+  timeout_exit_code: 152 # Exit code for timeout (default: 152, matches Slurm)
+  oom_exit_code: 137 # Exit code for OOM kill (default: 137)
+
+  # Slurm mode settings
+  srun_termination_signal: "TERM@120" # srun --signal spec
+  enable_cpu_bind: false # Allow Slurm CPU binding (default: false)
+```
+
+### KDL Example
+
+```kdl
+execution_config {
+    mode "slurm"
+    srun_termination_signal "TERM@120"
+    sigkill_headroom_seconds 180
+    enable_cpu_bind #true
+}
+```
+
+### JSON5 Example
+
+```json5
+{
+  execution_config: {
+    mode: "direct",
+    termination_signal: "SIGTERM",
+    sigterm_lead_seconds: 30,
+    sigkill_headroom_seconds: 60,
+  },
+}
+```
+
+### Configuration Fields
+
+| Field                      | Type   | Default   | Description                                       |
+| -------------------------- | ------ | --------- | ------------------------------------------------- |
+| `mode`                     | string | `auto`    | Execution mode: `direct`, `slurm`, or `auto`      |
+| `limit_resources`          | bool   | `true`    | Enforce memory limits in direct mode only         |
+| `termination_signal`       | string | `SIGTERM` | Signal to send before SIGKILL (direct mode)       |
+| `sigterm_lead_seconds`     | int    | `30`      | Seconds before SIGKILL to send termination signal |
+| `sigkill_headroom_seconds` | int    | `60`      | Seconds before end_time to send SIGKILL           |
+| `timeout_exit_code`        | int    | `152`     | Exit code for timed-out jobs                      |
+| `oom_exit_code`            | int    | `137`     | Exit code for OOM-killed jobs                     |
+| `srun_termination_signal`  | string | (none)    | Slurm signal spec (e.g., `TERM@120`)              |
+| `enable_cpu_bind`          | bool   | `false`   | Allow Slurm CPU binding                           |
+
+### When to Use Each Mode
+
+- **direct mode**: Use when running outside Slurm, or when `srun`/`sacct` are unreliable. Torc
+  manages termination via SIGTERM/SIGKILL signals.
+
+- **slurm mode**: Use inside Slurm allocations when srun works correctly. Jobs are wrapped with
+  `srun` and Slurm manages resource enforcement and termination.
+
+- **auto mode** (default): Automatically selects `slurm` mode if running inside a Slurm allocation
+  (detected via `SLURM_JOB_ID` environment variable), otherwise uses `direct` mode.
+
+### Termination Timeline (Direct Mode)
+
+When `sigkill_headroom_seconds=60` and `sigterm_lead_seconds=30`:
+
+```
+end_time - 90s: Send SIGTERM (or configured termination_signal)
+end_time - 60s: Send SIGKILL to any still-running jobs
+end_time:       Job runner exits
+```
+
+### Slurm Mode Headroom
+
+In Slurm mode, `sigkill_headroom_seconds` controls the `srun --time` parameter. The job's srun step
+time limit is set to `remaining_time - sigkill_headroom_seconds`, giving the job runner time to
+detect completion and report results before the allocation expires.
+
+If using `srun_termination_signal` (e.g., `TERM@120`), ensure its time value is less than
+`sigkill_headroom_seconds` so the signal is sent before Slurm kills the step.
+
+### Migration from slurm_config (Deprecated)
+
+The `slurm_config` field and top-level `use_srun`, `limit_resources`, `srun_termination_signal`, and
+`enable_cpu_bind` fields are **deprecated** and will be removed in a future release. Please migrate
+to `execution_config`:
+
+**Before (deprecated):**
+
+```yaml
+# Old style - deprecated
+slurm_config:
+  use_srun: true
+  limit_resources: true
+  srun_termination_signal: "TERM@120"
+
+# Or flat fields - also deprecated
+use_srun: true
+limit_resources: true
+```
+
+**After (recommended):**
+
+```yaml
+# New style - use execution_config
+execution_config:
+  mode: slurm # Replaces use_srun: true
+  srun_termination_signal: "TERM@120"
+  sigkill_headroom_seconds: 180 # New: controls srun --time headroom
+```
+
+**Migration mapping:**
+
+| Old Field                 | New Field in execution_config                |
+| ------------------------- | -------------------------------------------- |
+| `use_srun: true`          | `mode: slurm`                                |
+| `use_srun: false`         | `mode: direct`                               |
+| (not set)                 | `mode: auto` (default)                       |
+| `limit_resources: false`  | `mode: direct` with `limit_resources: false` |
+| `srun_termination_signal` | `srun_termination_signal`                    |
+| `enable_cpu_bind`         | `enable_cpu_bind`                            |
+
+> **Note**: `limit_resources: false` is only supported with `mode: direct`. If you previously used
+> `limit_resources: false` with srun, switch to `mode: direct` to get the same behavior (jobs run
+> without resource enforcement).
+
 ## Common Features Across All Formats
 
 ### Variable Substitution
@@ -285,9 +426,9 @@ complete collection.
 All formats use the same command:
 
 ```bash
-torc workflows create examples/yaml/sample_workflow.yaml
-torc workflows create examples/json/sample_workflow.json5
-torc workflows create examples/kdl/sample_workflow.kdl
+torc create examples/yaml/sample_workflow.yaml
+torc create examples/json/sample_workflow.json5
+torc create examples/kdl/sample_workflow.kdl
 ```
 
 Or use the quick execution commands:

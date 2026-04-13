@@ -1,13 +1,15 @@
 use super::credential_cache::CredentialCache;
 use super::htpasswd::HtpasswdFile;
+use crate::server::transport_types::auth_types::{
+    AllowAllAuthenticator, Authorization, Basic, Bearer, RcBound, Scopes, from_headers,
+};
+use crate::server::transport_types::context_types::ApiError;
+use axum::body::Body;
+use axum::http::{Request, Response, StatusCode};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::sync::Arc;
-use swagger::{
-    ApiError,
-    auth::{Authorization, Basic, Bearer},
-};
 
 /// Shared htpasswd state that can be reloaded at runtime.
 pub type SharedHtpasswd = Arc<RwLock<Option<HtpasswdFile>>>;
@@ -57,7 +59,7 @@ impl HtpasswdAuthenticator {
     fn create_authorization(username: String) -> Authorization {
         Authorization {
             subject: username,
-            scopes: swagger::auth::Scopes::Some(BTreeSet::new()),
+            scopes: Scopes::Some(BTreeSet::new()),
             issuer: None,
         }
     }
@@ -129,13 +131,11 @@ impl AuthenticationApi for HtpasswdAuthenticator {
     }
 }
 
-// Implement make service for HtpasswdAuthenticator to work with swagger middleware
+// Implement make service for HtpasswdAuthenticator to work with the local auth/context middleware
 use futures::future::FutureExt;
-use hyper::Request;
-use hyper::service::Service;
 use std::marker::PhantomData;
 use std::task::{Context as TaskContext, Poll};
-use swagger::auth::{RcBound, Scopes, from_headers};
+use tower::Service;
 
 /// MakeService wrapper for HtpasswdAuthenticator - creates HtpasswdAuthenticatorService
 #[derive(Debug)]
@@ -272,10 +272,10 @@ where
     RC: RcBound,
     RC::Result: Send + 'static,
 {
-    fn bearer_authorization(&self, _token: &Bearer) -> Result<Authorization, swagger::ApiError> {
+    fn bearer_authorization(&self, _token: &Bearer) -> Result<Authorization, ApiError> {
         // Bearer tokens not supported in basic auth mode
         if self.require_auth {
-            Err(swagger::ApiError(
+            Err(ApiError(
                 "Unauthorized: Authentication required".to_string(),
             ))
         } else {
@@ -287,10 +287,10 @@ where
         }
     }
 
-    fn apikey_authorization(&self, _apikey: &str) -> Result<Authorization, swagger::ApiError> {
+    fn apikey_authorization(&self, _apikey: &str) -> Result<Authorization, ApiError> {
         // API keys not supported in basic auth mode
         if self.require_auth {
-            Err(swagger::ApiError(
+            Err(ApiError(
                 "Unauthorized: Authentication required".to_string(),
             ))
         } else {
@@ -302,7 +302,7 @@ where
         }
     }
 
-    fn basic_authorization(&self, basic: &Basic) -> Result<Authorization, swagger::ApiError> {
+    fn basic_authorization(&self, basic: &Basic) -> Result<Authorization, ApiError> {
         let htpasswd_guard = self.htpasswd.read();
         match &*htpasswd_guard {
             Some(htpasswd) => {
@@ -314,7 +314,7 @@ where
                             "Authentication failed for user '{}': no password provided",
                             basic.username
                         );
-                        return Err(swagger::ApiError(
+                        return Err(ApiError(
                             "Unauthorized: Invalid username or password".to_string(),
                         ));
                     }
@@ -330,7 +330,7 @@ where
                     })
                 } else {
                     log::warn!("Authentication failed for user '{}'", basic.username);
-                    Err(swagger::ApiError(
+                    Err(ApiError(
                         "Unauthorized: Invalid username or password".to_string(),
                     ))
                 }
@@ -339,7 +339,7 @@ where
                 // No htpasswd file configured
                 if self.require_auth {
                     log::warn!("Authentication required but no htpasswd file configured");
-                    Err(swagger::ApiError(
+                    Err(ApiError(
                         "Unauthorized: Authentication required".to_string(),
                     ))
                 } else {
@@ -361,7 +361,7 @@ where
     RC: RcBound,
     RC::Result: Send + 'static,
     T: Service<(Request<B>, RC::Result)>,
-    T::Response: From<hyper::Response<hyper::Body>>,
+    T::Response: From<Response<Body>>,
 {
     type Response = T::Response;
     type Error = T::Error;
@@ -389,7 +389,7 @@ where
 
                         if self.verify_with_cache(htpasswd, &basic.username, password) {
                             log::debug!("User '{}' authenticated successfully", basic.username);
-                            Some(swagger::auth::Authorization {
+                            Some(Authorization {
                                 subject: basic.username.clone(),
                                 scopes: Scopes::All,
                                 issuer: None,
@@ -407,7 +407,7 @@ where
                         } else {
                             // Allow anonymous access (backward compatible)
                             log::debug!("No credentials provided, allowing anonymous access");
-                            Some(swagger::auth::Authorization {
+                            Some(Authorization {
                                 subject: "anonymous".to_string(),
                                 scopes: Scopes::All,
                                 issuer: None,
@@ -424,7 +424,7 @@ where
                 } else {
                     // Allow all (backward compatible mode)
                     log::debug!("No authentication configured, allowing request");
-                    Some(swagger::auth::Authorization {
+                    Some(Authorization {
                         subject: "anonymous".to_string(),
                         scopes: Scopes::All,
                         issuer: None,
@@ -436,10 +436,10 @@ where
 
         // If require_auth is true and authorization failed, return 401 immediately
         if self.require_auth && authorization.is_none() {
-            let response = hyper::Response::builder()
-                .status(hyper::StatusCode::UNAUTHORIZED)
+            let response = Response::builder()
+                .status(StatusCode::UNAUTHORIZED)
                 .header("WWW-Authenticate", "Basic realm=\"Torc\"")
-                .body(hyper::Body::from("Unauthorized"))
+                .body(Body::from("Unauthorized"))
                 .unwrap();
             return futures::future::Either::Left(futures::future::ready(Ok(response.into())));
         }
@@ -452,7 +452,6 @@ where
 }
 
 // Implement it for AllowAllAuthenticator (dummy is needed, but should not used as we have Bearer authorization)
-use swagger::auth::AllowAllAuthenticator;
 
 fn dummy_authorization() -> Authorization {
     // Is called when MakeAllowAllAuthenticator is added to the stack. This is not needed as we have Bearer-authorization in the example-code.

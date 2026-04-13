@@ -6,7 +6,7 @@ use common::{
 };
 use rstest::rstest;
 use serde_json::json;
-use torc::client::default_api;
+use torc::client::apis;
 
 #[rstest]
 fn test_resource_requirements_add_command_json(start_server: &ServerProcess) {
@@ -521,7 +521,7 @@ fn test_resource_requirements_remove_command_json(start_server: &ServerProcess) 
     assert_eq!(json_output.get("name").unwrap(), &json!("test_remove_req"));
 
     // Verify the requirement is actually removed by trying to get it
-    let get_result = default_api::get_resource_requirements(config, req_id);
+    let get_result = apis::resource_requirements_api::get_resource_requirements(config, req_id);
     assert!(
         get_result.is_err(),
         "Resource requirement should be deleted"

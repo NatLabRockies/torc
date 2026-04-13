@@ -18,12 +18,11 @@ use crate::client::commands::job_dependencies::JobDependencyCommands;
 use crate::client::commands::jobs::JobCommands;
 use crate::client::commands::logs::LogCommands;
 use crate::client::commands::remote::RemoteCommands;
-use crate::client::commands::reports::ReportCommands;
 use crate::client::commands::resource_requirements::ResourceRequirementsCommands;
 use crate::client::commands::results::ResultCommands;
 use crate::client::commands::ro_crate::RoCrateCommands;
 use crate::client::commands::scheduled_compute_nodes::ScheduledComputeNodeCommands;
-use crate::client::commands::slurm::{GroupByStrategy, SlurmCommands};
+use crate::client::commands::slurm::SlurmCommands;
 use crate::client::commands::user_data::UserDataCommands;
 use crate::client::commands::workflows::WorkflowCommands;
 use crate::plot_resources_cmd;
@@ -42,12 +41,15 @@ const HELP_TEMPLATE: &str = "\
 
 {all-args}
 
-\x1b[1;32mWorkflow Execution:\x1b[0m
+\x1b[1;32mWorkflow Lifecycle:\x1b[0m
+  \x1b[1;36mcreate\x1b[0m                   Create a workflow from spec file
   \x1b[1;36mrun\x1b[0m                      Run a workflow locally
   \x1b[1;36msubmit\x1b[0m                   Submit a workflow to scheduler
-  \x1b[1;36msubmit-slurm\x1b[0m             Submit to Slurm with auto-generated schedulers
+  \x1b[1;36mstatus\x1b[0m                   Show workflow status and job summary
   \x1b[1;36mwatch\x1b[0m                    Watch workflow and recover from failures
   \x1b[1;36mrecover\x1b[0m                  Recover a Slurm workflow from failures
+  \x1b[1;36mcancel\x1b[0m                   Cancel a workflow and Slurm jobs
+  \x1b[1;36mdelete\x1b[0m                   Delete a workflow
 
 \x1b[1;32mWorkflow Management:\x1b[0m
   \x1b[1;36mworkflows\x1b[0m                Workflow management commands
@@ -68,12 +70,13 @@ const HELP_TEMPLATE: &str = "\
   \x1b[1;36mremote\x1b[0m                   Remote worker execution (SSH)
 
 \x1b[1;32mAnalysis & Debugging:\x1b[0m
-  \x1b[1;36mreports\x1b[0m                  Generate reports and analytics
   \x1b[1;36mlogs\x1b[0m                     Bundle and analyze workflow logs
   \x1b[1;36mjob-dependencies\x1b[0m         Job dependency queries
+  \x1b[1;36mro-crate\x1b[0m                 RO-Crate metadata management
 
 \x1b[1;32mServer Administration:\x1b[0m
   \x1b[1;36madmin\x1b[0m                    Server administration commands
+  \x1b[1;36mping\x1b[0m                     Check server connectivity
 
 \x1b[1;32mConfiguration & Utilities:\x1b[0m
   \x1b[1;36mconfig\x1b[0m                   Manage configuration settings
@@ -111,6 +114,9 @@ pub struct Cli {
     /// Skip TLS certificate verification (for testing only)
     #[arg(long, env = "TORC_TLS_INSECURE")]
     pub tls_insecure: bool,
+    /// Cookie header value for authentication (e.g., from browser-based MFA)
+    #[arg(long, env = "TORC_COOKIE_HEADER", hide_env_values = true)]
+    pub cookie_header: Option<String>,
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -120,6 +126,44 @@ pub enum Commands {
     // =========================================================================
     // Workflow Execution - Primary commands for running workflows
     // =========================================================================
+    /// Create a workflow from a specification file (supports JSON, JSON5, YAML, and KDL formats)
+    #[command(
+        hide = true,
+        after_long_help = "\
+EXAMPLES:
+    # Create workflow from YAML
+    torc create my_workflow.yaml
+
+    # Validate spec before creating
+    torc create --dry-run my_workflow.yaml
+
+    # Get JSON output with workflow ID
+    torc -f json create my_workflow.yaml
+"
+    )]
+    Create {
+        /// Path to specification file containing WorkflowSpec
+        ///
+        /// Supported formats:
+        /// - JSON (.json): Standard JSON format
+        /// - JSON5 (.json5): JSON with comments and trailing commas
+        /// - YAML (.yaml, .yml): Human-readable YAML format
+        /// - KDL (.kdl): KDL document format
+        ///
+        /// Format is auto-detected from file extension, with fallback parsing attempted
+        #[arg()]
+        file: String,
+        /// Disable resource monitoring (default: enabled with summary granularity and 5s sample rate)
+        #[arg(long, default_value = "false")]
+        no_resource_monitoring: bool,
+        /// Skip validation checks (e.g., scheduler node requirements). Use with caution.
+        #[arg(long, default_value = "false")]
+        skip_checks: bool,
+        /// Validate the workflow specification without creating it (dry-run mode)
+        /// Returns a summary of what would be created including job count after parameter expansion
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// Run a workflow locally (create from spec file or run existing workflow by ID)
     #[command(
         hide = true,
@@ -163,6 +207,12 @@ EXAMPLES:
         /// Output directory for jobs
         #[arg(short, long)]
         output_dir: Option<PathBuf>,
+        /// Time limit for execution (ISO8601 duration, e.g., "PT1H" for 1 hour)
+        #[arg(long)]
+        time_limit: Option<String>,
+        /// End time for execution (ISO8601 timestamp, e.g., "2024-03-14T15:00:00Z")
+        #[arg(long)]
+        end_time: Option<String>,
         /// Skip validation checks (e.g., scheduler node requirements). Use with caution.
         #[arg(long, default_value = "false")]
         skip_checks: bool,
@@ -170,7 +220,8 @@ EXAMPLES:
     /// Submit a workflow to scheduler (create from spec file or submit existing workflow by ID)
     ///
     /// Requires workflow to have an on_workflow_start action with schedule_nodes.
-    /// For Slurm workflows without pre-configured schedulers, use `submit-slurm` instead.
+    /// For Slurm workflows without pre-configured schedulers, use
+    /// `torc slurm generate` to auto-generate schedulers first.
     #[command(
         hide = true,
         after_long_help = "\
@@ -209,97 +260,6 @@ EXAMPLES:
         output_dir: String,
         /// Job completion poll interval in seconds
         #[arg(short, long)]
-        poll_interval: Option<i32>,
-    },
-    /// Submit a workflow to Slurm with auto-generated schedulers
-    ///
-    /// Automatically generates Slurm schedulers based on job resource requirements
-    /// and HPC profile.
-    ///
-    /// WARNING: This command uses heuristics to generate schedulers and workflow
-    /// actions. For complex workflows with unusual dependency patterns, the
-    /// generated configuration may not be optimal and could waste allocation time.
-    ///
-    /// RECOMMENDED: Preview the generated configuration first with:
-    ///
-    ///   torc slurm generate --account <account> workflow.yaml
-    ///
-    /// Review the schedulers and actions to ensure they are appropriate for your
-    /// workflow before submitting. You can save the output and submit manually:
-    ///
-    ///   torc slurm generate --account <account> -o workflow_with_schedulers.yaml workflow.yaml
-    ///   torc submit workflow_with_schedulers.yaml
-    #[command(
-        name = "submit-slurm",
-        hide = true,
-        after_long_help = "\
-EXAMPLES:
-    # Submit with auto-generated Slurm schedulers
-    torc submit-slurm --account myproject workflow.yaml
-
-    # Specify HPC profile
-    torc submit-slurm --account myproject --hpc-profile kestrel workflow.yaml
-
-    # Single allocation mode
-    torc submit-slurm --account myproject --single-allocation workflow.yaml
-
-    # Group by partition
-    torc submit-slurm --account myproject --group-by partition workflow.yaml
-
-    # Custom output directory and poll interval
-    torc submit-slurm --account myproject -o /scratch/output -p 60 workflow.yaml
-
-    # Limit parallel jobs per worker
-    torc submit-slurm --account myproject --max-parallel-jobs 4 workflow.yaml
-"
-    )]
-    SubmitSlurm {
-        /// Path to workflow spec file (JSON/JSON5/YAML/KDL)
-        #[arg()]
-        workflow_spec: String,
-        /// Slurm account to use for allocations (can also be specified in workflow's slurm_defaults)
-        #[arg(short, long)]
-        account: Option<String>,
-        /// HPC profile to use (auto-detected if not specified)
-        #[arg(long)]
-        hpc_profile: Option<String>,
-        /// Bundle all nodes into a single Slurm allocation per scheduler
-        ///
-        /// By default, creates one Slurm allocation per node (N×1 mode), which allows
-        /// jobs to start as nodes become available and provides better fault tolerance.
-        ///
-        /// With this flag, creates one large allocation with all nodes (1×N mode),
-        /// which requires all nodes to be available simultaneously but uses a single sbatch.
-        #[arg(long)]
-        single_allocation: bool,
-        /// Strategy for grouping jobs into schedulers
-        ///
-        /// - resource-requirements: Each unique resource_requirements creates a
-        ///   separate scheduler. This preserves user intent and provides
-        ///   fine-grained control.
-        ///
-        /// - partition: Jobs whose resource requirements map to the same partition
-        ///   are grouped together, reducing the number of schedulers.
-        #[arg(long, value_enum, default_value_t = GroupByStrategy::ResourceRequirements)]
-        group_by: GroupByStrategy,
-        /// Ignore missing data (defaults to false)
-        #[arg(short, long, default_value = "false")]
-        ignore_missing_data: bool,
-        /// Skip validation checks (e.g., scheduler node requirements). Use with caution.
-        #[arg(long, default_value = "false")]
-        skip_checks: bool,
-        /// Overwrite existing slurm_schedulers and actions in the spec file.
-        /// Without this flag, an error is returned if the spec already has schedulers.
-        #[arg(long, default_value = "false")]
-        overwrite: bool,
-        /// Maximum number of parallel jobs per worker
-        #[arg(long)]
-        max_parallel_jobs: Option<i32>,
-        /// Output directory for job logs and results
-        #[arg(short, long, default_value = "torc_output")]
-        output_dir: String,
-        /// Job completion poll interval in seconds
-        #[arg(long)]
         poll_interval: Option<i32>,
     },
     /// Watch a workflow and automatically recover from failures
@@ -394,9 +354,9 @@ SEE ALSO:
         #[arg(short, long)]
         recover: bool,
 
-        /// Maximum number of recovery attempts
-        #[arg(short, long, default_value = "3")]
-        max_retries: u32,
+        /// Maximum number of recovery attempts (unlimited if not set)
+        #[arg(short, long)]
+        max_retries: Option<u32>,
 
         /// Memory multiplier for OOM failures (default: 1.5 = 50% increase)
         #[arg(long, default_value = "1.5")]
@@ -505,25 +465,40 @@ SEE ALSO:
         ///   claude - Claude Code CLI (default)
         #[arg(long, default_value = "claude", verbatim_doc_comment)]
         ai_agent: String,
+
+        /// Fixed Slurm partition for regenerated schedulers
+        ///
+        /// When set, all regenerated schedulers (from --auto-schedule or --recover)
+        /// use this partition instead of auto-detecting the best partition from job
+        /// resource requirements. The number of compute nodes is still calculated
+        /// dynamically based on pending jobs.
+        #[arg(long)]
+        partition: Option<String>,
+
+        /// Fixed Slurm walltime for regenerated schedulers (format: HH:MM:SS or D-HH:MM:SS)
+        ///
+        /// When set, all regenerated schedulers (from --auto-schedule or --recover)
+        /// use this walltime instead of calculating it from job runtimes. The number
+        /// of compute nodes is still calculated dynamically.
+        #[arg(long)]
+        walltime: Option<String>,
     },
     /// Recover a Slurm workflow from failures
     ///
     /// Diagnoses job failures (OOM, timeout), adjusts resource requirements,
     /// and resubmits jobs. Use after a workflow has completed with failures.
     ///
-    /// This command:
+    /// By default, runs an interactive wizard that walks you through:
     ///
-    /// 1. Checks preconditions (workflow complete, no active workers)
+    /// 1. Displaying failed jobs grouped by failure type (OOM, timeout, unknown)
     ///
-    /// 2. Diagnoses failures using resource utilization data
+    /// 2. Choosing per-category actions: retry with adjusted resources or skip
     ///
-    /// 3. Applies recovery heuristics (increase memory/runtime)
+    /// 3. Selecting Slurm scheduler (auto-generate or reuse existing)
     ///
-    /// 4. Runs optional recovery hook for custom logic
+    /// 4. Confirming and executing recovery
     ///
-    /// 5. Resets failed jobs and regenerates Slurm schedulers
-    ///
-    /// 6. Submits new allocations
+    /// Use --no-prompts to skip the wizard and apply heuristics automatically.
     ///
     /// For continuous monitoring with automatic recovery, use `torc watch --recover`.
     #[command(
@@ -531,13 +506,16 @@ SEE ALSO:
         after_long_help = "\
 EXAMPLES:
 
-    # Basic recovery
+    # Interactive recovery (default)
     torc recover 123
 
     # Dry run to preview changes without modifying anything
     torc recover 123 --dry-run
 
-    # Custom resource multipliers
+    # Skip interactive prompts (for scripting)
+    torc recover 123 --no-prompts
+
+    # Custom resource multipliers (with or without prompts)
     torc recover 123 --memory-multiplier 2.0 --runtime-multiplier 1.5
 
     # Also retry unknown failures (not just OOM/timeout)
@@ -604,6 +582,15 @@ SEE ALSO:
         #[arg(long)]
         dry_run: bool,
 
+        /// Skip interactive prompts and apply recovery automatically
+        ///
+        /// By default, `torc recover` runs an interactive wizard that lets you
+        /// review failures, choose which jobs to retry, adjust resource multipliers,
+        /// and select Slurm schedulers. Use --no-prompts to skip the wizard and
+        /// apply recovery heuristics automatically (useful for scripting).
+        #[arg(long)]
+        no_prompts: bool,
+
         /// [EXPERIMENTAL] Enable AI-assisted recovery for pending_failed jobs
         ///
         /// When jobs fail without a matching failure handler rule, they enter
@@ -626,6 +613,70 @@ SEE ALSO:
         ///   claude - Claude Code CLI (default)
         #[arg(long, default_value = "claude", verbatim_doc_comment)]
         ai_agent: String,
+    },
+    /// Cancel a workflow and all associated Slurm jobs
+    ///
+    /// All state will be preserved and the workflow can be resumed after
+    /// it is reinitialized.
+    #[command(
+        hide = true,
+        after_long_help = "\
+EXAMPLES:
+    # Cancel a workflow and its Slurm jobs
+    torc cancel 123
+
+    # Get JSON status of cancellation
+    torc -f json cancel 123
+"
+    )]
+    Cancel {
+        /// ID of the workflow to cancel (optional - will prompt if not provided)
+        #[arg()]
+        workflow_id: Option<i64>,
+    },
+    /// Show workflow status and job summary
+    ///
+    /// Displays job counts by status, execution time, compute node info, and completion state.
+    #[command(
+        hide = true,
+        after_long_help = "\
+EXAMPLES:
+    # Show status for a workflow
+    torc status 123
+
+    # Get JSON output for scripting
+    torc -f json status 123
+"
+    )]
+    Status {
+        /// ID of the workflow (optional - will prompt if not provided)
+        #[arg()]
+        workflow_id: Option<i64>,
+    },
+    /// Delete a workflow and all its associated data
+    ///
+    /// Permanently removes a workflow and all associated jobs, files, results, etc.
+    #[command(
+        hide = true,
+        after_long_help = "\
+EXAMPLES:
+    # Delete a single workflow
+    torc delete 123
+
+    # Delete multiple workflows
+    torc delete 123 456 789
+
+    # Delete without confirmation (use with caution)
+    torc delete --force 123
+"
+    )]
+    Delete {
+        /// IDs of workflows to delete
+        #[arg(required = true)]
+        workflow_ids: Vec<i64>,
+        /// Skip confirmation prompt
+        #[arg(long)]
+        force: bool,
     },
     /// Interactive terminal UI for managing workflows
     #[command(
@@ -720,12 +771,6 @@ EXAMPLES:
     // =========================================================================
     // Analysis & Debugging - Troubleshooting and insights
     // =========================================================================
-    /// Generate reports and analytics
-    #[command(hide = true)]
-    Reports {
-        #[command(subcommand)]
-        command: ReportCommands,
-    },
     /// Bundle and analyze workflow logs
     #[command(hide = true)]
     Logs {
@@ -752,7 +797,7 @@ EXAMPLES:
     },
 
     /// RO-Crate metadata management commands
-    #[command(name = "ro-crate")]
+    #[command(name = "ro-crate", hide = true)]
     RoCrate {
         #[command(subcommand)]
         command: RoCrateCommands,
@@ -791,6 +836,7 @@ EXAMPLES:
     )]
     PlotResources(plot_resources_cmd::Args),
     /// Check if the server is running and accessible
+    #[command(hide = true)]
     Ping,
     /// Generate shell completions
     #[command(

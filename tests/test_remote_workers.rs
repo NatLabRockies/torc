@@ -4,7 +4,7 @@ use common::{ServerProcess, create_test_workflow, run_cli_command, start_server}
 use rstest::rstest;
 use std::io::Write;
 use tempfile::NamedTempFile;
-use torc::client::default_api;
+use torc::client::apis;
 
 // ============================================================================
 // API Tests
@@ -25,8 +25,9 @@ fn test_create_remote_workers_api(start_server: &ServerProcess) {
         "admin@192.168.1.10:2222".to_string(),
     ];
 
-    let created = default_api::create_remote_workers(config, workflow_id, workers.clone())
-        .expect("Failed to create remote workers");
+    let created =
+        apis::remote_workers_api::create_remote_workers(config, workflow_id, workers.clone())
+            .expect("Failed to create remote workers");
 
     assert_eq!(created.len(), 3, "Should have created 3 workers");
 
@@ -51,8 +52,8 @@ fn test_list_remote_workers_api(start_server: &ServerProcess) {
     let workflow_id = workflow.id.unwrap();
 
     // Initially should have no workers
-    let initial_workers =
-        default_api::list_remote_workers(config, workflow_id).expect("Failed to list workers");
+    let initial_workers = apis::remote_workers_api::list_remote_workers(config, workflow_id)
+        .expect("Failed to list workers");
     assert!(
         initial_workers.is_empty(),
         "Should have no workers initially"
@@ -63,12 +64,12 @@ fn test_list_remote_workers_api(start_server: &ServerProcess) {
         "host1.example.com".to_string(),
         "host2.example.com".to_string(),
     ];
-    default_api::create_remote_workers(config, workflow_id, workers)
+    apis::remote_workers_api::create_remote_workers(config, workflow_id, workers)
         .expect("Failed to create workers");
 
     // List again
-    let listed_workers =
-        default_api::list_remote_workers(config, workflow_id).expect("Failed to list workers");
+    let listed_workers = apis::remote_workers_api::list_remote_workers(config, workflow_id)
+        .expect("Failed to list workers");
     assert_eq!(listed_workers.len(), 2, "Should have 2 workers");
 }
 
@@ -85,19 +86,22 @@ fn test_delete_remote_worker_api(start_server: &ServerProcess) {
         "worker-to-delete.example.com".to_string(),
         "worker-to-keep.example.com".to_string(),
     ];
-    default_api::create_remote_workers(config, workflow_id, workers)
+    apis::remote_workers_api::create_remote_workers(config, workflow_id, workers)
         .expect("Failed to create workers");
 
     // Delete one worker
-    let deleted =
-        default_api::delete_remote_worker(config, workflow_id, "worker-to-delete.example.com")
-            .expect("Failed to delete worker");
+    let deleted = apis::remote_workers_api::delete_remote_worker(
+        config,
+        workflow_id,
+        "worker-to-delete.example.com",
+    )
+    .expect("Failed to delete worker");
 
     assert_eq!(deleted.worker, "worker-to-delete.example.com");
 
     // Verify only one worker remains
-    let remaining_workers =
-        default_api::list_remote_workers(config, workflow_id).expect("Failed to list workers");
+    let remaining_workers = apis::remote_workers_api::list_remote_workers(config, workflow_id)
+        .expect("Failed to list workers");
     assert_eq!(remaining_workers.len(), 1);
     assert_eq!(remaining_workers[0].worker, "worker-to-keep.example.com");
 }
@@ -112,18 +116,20 @@ fn test_create_duplicate_workers_api(start_server: &ServerProcess) {
 
     // Add workers
     let workers = vec!["unique-worker.example.com".to_string()];
-    let first_create = default_api::create_remote_workers(config, workflow_id, workers.clone())
-        .expect("Failed to create workers first time");
+    let first_create =
+        apis::remote_workers_api::create_remote_workers(config, workflow_id, workers.clone())
+            .expect("Failed to create workers first time");
     assert_eq!(first_create.len(), 1);
 
     // Try to add the same worker again - the server silently skips duplicates
     // (uses INSERT OR IGNORE), so it may return empty or the existing worker
-    let _second_create = default_api::create_remote_workers(config, workflow_id, workers)
-        .expect("Failed to create workers second time");
+    let _second_create =
+        apis::remote_workers_api::create_remote_workers(config, workflow_id, workers)
+            .expect("Failed to create workers second time");
 
     // The important thing is that we still only have one worker in the database
-    let workers =
-        default_api::list_remote_workers(config, workflow_id).expect("Failed to list workers");
+    let workers = apis::remote_workers_api::list_remote_workers(config, workflow_id)
+        .expect("Failed to list workers");
     assert_eq!(
         workers.len(),
         1,
@@ -144,21 +150,21 @@ fn test_workers_are_workflow_specific(start_server: &ServerProcess) {
 
     // Add workers to workflow1
     let workers1 = vec!["workflow1-worker.example.com".to_string()];
-    default_api::create_remote_workers(config, workflow1_id, workers1)
+    apis::remote_workers_api::create_remote_workers(config, workflow1_id, workers1)
         .expect("Failed to create workers for workflow1");
 
     // Add different workers to workflow2
     let workers2 = vec!["workflow2-worker.example.com".to_string()];
-    default_api::create_remote_workers(config, workflow2_id, workers2)
+    apis::remote_workers_api::create_remote_workers(config, workflow2_id, workers2)
         .expect("Failed to create workers for workflow2");
 
     // Verify each workflow has its own workers
-    let listed1 = default_api::list_remote_workers(config, workflow1_id)
+    let listed1 = apis::remote_workers_api::list_remote_workers(config, workflow1_id)
         .expect("Failed to list workers for workflow1");
     assert_eq!(listed1.len(), 1);
     assert_eq!(listed1[0].worker, "workflow1-worker.example.com");
 
-    let listed2 = default_api::list_remote_workers(config, workflow2_id)
+    let listed2 = apis::remote_workers_api::list_remote_workers(config, workflow2_id)
         .expect("Failed to list workers for workflow2");
     assert_eq!(listed2.len(), 1);
     assert_eq!(listed2[0].worker, "workflow2-worker.example.com");
@@ -173,7 +179,11 @@ fn test_delete_nonexistent_worker_api(start_server: &ServerProcess) {
     let workflow_id = workflow.id.unwrap();
 
     // Try to delete a worker that doesn't exist
-    let result = default_api::delete_remote_worker(config, workflow_id, "nonexistent.example.com");
+    let result = apis::remote_workers_api::delete_remote_worker(
+        config,
+        workflow_id,
+        "nonexistent.example.com",
+    );
 
     assert!(result.is_err(), "Deleting nonexistent worker should fail");
 }
@@ -208,8 +218,9 @@ fn test_various_worker_formats_api(start_server: &ServerProcess) {
         "[2001:db8::1]:2222".to_string(),
     ];
 
-    let created = default_api::create_remote_workers(config, workflow_id, workers.clone())
-        .expect("Failed to create workers with various formats");
+    let created =
+        apis::remote_workers_api::create_remote_workers(config, workflow_id, workers.clone())
+            .expect("Failed to create workers with various formats");
 
     assert_eq!(
         created.len(),
@@ -252,8 +263,8 @@ fn test_cli_add_workers(start_server: &ServerProcess) {
     );
 
     // Verify via API
-    let workers =
-        default_api::list_remote_workers(config, workflow_id).expect("Failed to list workers");
+    let workers = apis::remote_workers_api::list_remote_workers(config, workflow_id)
+        .expect("Failed to list workers");
     assert_eq!(workers.len(), 3);
 }
 
@@ -296,8 +307,8 @@ fn test_cli_add_workers_from_file(start_server: &ServerProcess) {
     );
 
     // Verify via API - should have 3 workers (comments and empty lines ignored)
-    let workers =
-        default_api::list_remote_workers(config, workflow_id).expect("Failed to list workers");
+    let workers = apis::remote_workers_api::list_remote_workers(config, workflow_id)
+        .expect("Failed to list workers");
     assert_eq!(workers.len(), 3);
 }
 
@@ -314,7 +325,7 @@ fn test_cli_list_workers(start_server: &ServerProcess) {
         "list-worker1.example.com".to_string(),
         "list-worker2.example.com".to_string(),
     ];
-    default_api::create_remote_workers(config, workflow_id, workers)
+    apis::remote_workers_api::create_remote_workers(config, workflow_id, workers)
         .expect("Failed to create workers");
 
     // List workers via CLI
@@ -371,7 +382,7 @@ fn test_cli_remove_worker(start_server: &ServerProcess) {
         "remove-worker1.example.com".to_string(),
         "remove-worker2.example.com".to_string(),
     ];
-    default_api::create_remote_workers(config, workflow_id, workers)
+    apis::remote_workers_api::create_remote_workers(config, workflow_id, workers)
         .expect("Failed to create workers");
 
     // Remove one worker via CLI (note: worker comes before workflow_id)
@@ -393,8 +404,8 @@ fn test_cli_remove_worker(start_server: &ServerProcess) {
     );
 
     // Verify via API
-    let remaining =
-        default_api::list_remote_workers(config, workflow_id).expect("Failed to list workers");
+    let remaining = apis::remote_workers_api::list_remote_workers(config, workflow_id)
+        .expect("Failed to list workers");
     assert_eq!(remaining.len(), 1);
     assert_eq!(remaining[0].worker, "remove-worker2.example.com");
 }
@@ -428,8 +439,8 @@ fn test_cli_add_workers_with_special_characters(start_server: &ServerProcess) {
     );
 
     // Verify via API
-    let workers =
-        default_api::list_remote_workers(config, workflow_id).expect("Failed to list workers");
+    let workers = apis::remote_workers_api::list_remote_workers(config, workflow_id)
+        .expect("Failed to list workers");
     assert_eq!(workers.len(), 2);
 }
 
@@ -447,20 +458,20 @@ fn test_workers_deleted_with_workflow(start_server: &ServerProcess) {
 
     // Add workers
     let workers = vec!["cascade-worker.example.com".to_string()];
-    default_api::create_remote_workers(config, workflow_id, workers)
+    apis::remote_workers_api::create_remote_workers(config, workflow_id, workers)
         .expect("Failed to create workers");
 
     // Verify workers exist
-    let before_delete =
-        default_api::list_remote_workers(config, workflow_id).expect("Failed to list workers");
+    let before_delete = apis::remote_workers_api::list_remote_workers(config, workflow_id)
+        .expect("Failed to list workers");
     assert_eq!(before_delete.len(), 1);
 
     // Delete the workflow
-    default_api::delete_workflow(config, workflow_id, None).expect("Failed to delete workflow");
+    apis::workflows_api::delete_workflow(config, workflow_id).expect("Failed to delete workflow");
 
     // Workers should be gone with the workflow (foreign key cascade)
     // Trying to list workers for deleted workflow should fail
-    let result = default_api::list_remote_workers(config, workflow_id);
+    let result = apis::remote_workers_api::list_remote_workers(config, workflow_id);
     assert!(
         result.is_err(),
         "Listing workers for deleted workflow should fail"
@@ -480,14 +491,15 @@ fn test_add_many_workers(start_server: &ServerProcess) {
         .map(|i| format!("worker{}.example.com", i))
         .collect();
 
-    let created = default_api::create_remote_workers(config, workflow_id, workers.clone())
-        .expect("Failed to create many workers");
+    let created =
+        apis::remote_workers_api::create_remote_workers(config, workflow_id, workers.clone())
+            .expect("Failed to create many workers");
 
     assert_eq!(created.len(), 50, "Should create 50 workers");
 
     // Verify all are listed
-    let listed =
-        default_api::list_remote_workers(config, workflow_id).expect("Failed to list workers");
+    let listed = apis::remote_workers_api::list_remote_workers(config, workflow_id)
+        .expect("Failed to list workers");
     assert_eq!(listed.len(), 50);
 }
 
@@ -507,14 +519,15 @@ fn test_worker_with_ipv6_addresses(start_server: &ServerProcess) {
         "user@[2001:db8::2]:2222".to_string(),
     ];
 
-    let created = default_api::create_remote_workers(config, workflow_id, workers.clone())
-        .expect("Failed to create IPv6 workers");
+    let created =
+        apis::remote_workers_api::create_remote_workers(config, workflow_id, workers.clone())
+            .expect("Failed to create IPv6 workers");
 
     assert_eq!(created.len(), 4, "Should create 4 IPv6 workers");
 
     // Verify they can be listed
-    let listed =
-        default_api::list_remote_workers(config, workflow_id).expect("Failed to list workers");
+    let listed = apis::remote_workers_api::list_remote_workers(config, workflow_id)
+        .expect("Failed to list workers");
     assert_eq!(listed.len(), 4);
 }
 

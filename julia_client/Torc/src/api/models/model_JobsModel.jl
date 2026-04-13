@@ -2,14 +2,13 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""jobs_model
-Data model for a batch of jobs
+@doc raw"""JobsModel
 
     JobsModel(;
         jobs=nothing,
     )
 
-    - jobs::Vector{JobModel} : Jobs in the batch
+    - jobs::Vector{JobModel}
 """
 Base.@kwdef mutable struct JobsModel <: OpenAPI.APIModel
     jobs::Union{Nothing, Vector} = nothing # spec type: Union{ Nothing, Vector{JobModel} }

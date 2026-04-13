@@ -298,8 +298,8 @@ torc jobs list $WORKFLOW_ID --status pending_failed
 # (via MCP tools list_pending_failed_jobs and classify_and_resolve_failures)
 
 # After AI classification, reinitialize and continue
-torc workflows reinitialize $WORKFLOW_ID
-torc workflows run $WORKFLOW_ID
+torc workflows reinit $WORKFLOW_ID
+torc run $WORKFLOW_ID
 ```
 
 ## Custom MCP Servers

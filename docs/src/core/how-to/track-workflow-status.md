@@ -5,7 +5,7 @@ Monitor a running workflow's progress using the CLI, TUI, or dashboard.
 ## Quick Status Check
 
 ```bash
-torc reports summary <workflow_id>
+torc status <workflow_id>
 ```
 
 Example output:
@@ -25,7 +25,7 @@ Jobs by Status:
 Watch status update every 10 seconds:
 
 ```bash
-watch -n 10 torc reports summary <workflow_id>
+watch -n 10 torc status <workflow_id>
 ```
 
 ## Interactive TUI

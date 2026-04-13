@@ -1,0 +1,59 @@
+# Priority Workflow Example
+# Demonstrates per-job scheduling priority.
+# Higher priority values are claimed by workers first.
+# Jobs with the same dependencies but different priorities will run
+# in priority order when worker capacity is limited.
+
+name: priority_demo_workflow
+description: Shows how job priority controls execution order under resource contention
+
+jobs:
+  # Preprocessing runs first (no dependencies, highest priority)
+  - name: preprocess
+    command: python preprocess.py --input raw.csv --output clean.csv
+    priority: 10  # Highest priority — run this before anything else
+    resource_requirements: small
+
+  # These three jobs all depend on preprocess and are ready at the same time.
+  # Workers will claim them in priority order: critical → normal → background.
+  - name: critical_analysis
+    command: python analyze.py --mode critical --input clean.csv
+    priority: 5   # Claimed before normal_analysis and background_report
+    depends_on:
+      - preprocess
+    resource_requirements: medium
+
+  - name: normal_analysis
+    command: python analyze.py --mode normal --input clean.csv
+    priority: 3   # Claimed after critical_analysis
+    depends_on:
+      - preprocess
+    resource_requirements: medium
+
+  - name: background_report
+    command: python report.py --input clean.csv
+    priority: 1   # Claimed last among the three
+    depends_on:
+      - preprocess
+    resource_requirements: small
+
+  # Summary runs after all analyses complete (priority 0 = default)
+  - name: summary
+    command: python summarize.py
+    # priority omitted — defaults to 0
+    depends_on:
+      - critical_analysis
+      - normal_analysis
+      - background_report
+    resource_requirements: small
+
+resource_requirements:
+  - name: small
+    num_cpus: 1
+    memory: 2g
+    runtime: PT30M
+
+  - name: medium
+    num_cpus: 4
+    memory: 8g
+    runtime: PT1H

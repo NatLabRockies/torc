@@ -2,32 +2,34 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""access_check_response
-Response for access check
+@doc raw"""AccessCheckResponse
 
     AccessCheckResponse(;
         has_access=nothing,
+        reason=nothing,
         user_name=nothing,
         workflow_id=nothing,
     )
 
     - has_access::Bool
+    - reason::String
     - user_name::String
     - workflow_id::Int64
 """
 Base.@kwdef mutable struct AccessCheckResponse <: OpenAPI.APIModel
     has_access::Union{Nothing, Bool} = nothing
+    reason::Union{Nothing, String} = nothing
     user_name::Union{Nothing, String} = nothing
     workflow_id::Union{Nothing, Int64} = nothing
 
-    function AccessCheckResponse(has_access, user_name, workflow_id, )
-        o = new(has_access, user_name, workflow_id, )
+    function AccessCheckResponse(has_access, reason, user_name, workflow_id, )
+        o = new(has_access, reason, user_name, workflow_id, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type AccessCheckResponse
 
-const _property_types_AccessCheckResponse = Dict{Symbol,String}(Symbol("has_access")=>"Bool", Symbol("user_name")=>"String", Symbol("workflow_id")=>"Int64", )
+const _property_types_AccessCheckResponse = Dict{Symbol,String}(Symbol("has_access")=>"Bool", Symbol("reason")=>"String", Symbol("user_name")=>"String", Symbol("workflow_id")=>"Int64", )
 OpenAPI.property_type(::Type{ AccessCheckResponse }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_AccessCheckResponse[name]))}
 
 function OpenAPI.check_required(o::AccessCheckResponse)
@@ -39,6 +41,7 @@ end
 
 function OpenAPI.validate_properties(o::AccessCheckResponse)
     OpenAPI.validate_property(AccessCheckResponse, Symbol("has_access"), o.has_access)
+    OpenAPI.validate_property(AccessCheckResponse, Symbol("reason"), o.reason)
     OpenAPI.validate_property(AccessCheckResponse, Symbol("user_name"), o.user_name)
     OpenAPI.validate_property(AccessCheckResponse, Symbol("workflow_id"), o.workflow_id)
 end
@@ -47,4 +50,8 @@ function OpenAPI.validate_property(::Type{ AccessCheckResponse }, name::Symbol, 
 
 
 
+
+    if name === Symbol("workflow_id")
+        OpenAPI.validate_param(name, "AccessCheckResponse", :format, val, "int64")
+    end
 end

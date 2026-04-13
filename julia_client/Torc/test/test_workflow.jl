@@ -114,7 +114,7 @@ end
     output_dir = mktempdir()
     try
         build_workflow(api, workflow)
-        result = run(`torc --url $url workflows run $(workflow.id) --output-dir $output_dir`)
+        result = run(`torc --url $url run $(workflow.id) --output-dir $output_dir`)
         @test result.exitcode == 0
         results, response = APIClient.list_results(api, workflow.id)
         @test response.status == 200
@@ -150,7 +150,7 @@ else
                 has_postprocess = true,
             )
             @test !isempty(jobs)
-            result = run(`torc --url $url workflows run $(workflow.id) --output-dir $output_dir`)
+            result = run(`torc --url $url run $(workflow.id) --output-dir $output_dir`)
             @test result.exitcode == 0
             results, response = APIClient.list_results(api, workflow.id)
             @test response.status == 200

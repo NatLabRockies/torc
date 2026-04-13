@@ -101,7 +101,7 @@ impl PaginationParams for UserDataListParams {
 }
 
 impl Paginatable for UserDataModel {
-    type ListError = apis::default_api::ListUserDataError;
+    type ListError = apis::user_data_api::ListUserDataError;
     type Params = UserDataListParams;
 
     fn fetch_page(
@@ -109,7 +109,7 @@ impl Paginatable for UserDataModel {
         params: &Self::Params,
         limit: i64,
     ) -> Result<PaginatedResponse<Self>, apis::Error<Self::ListError>> {
-        let response = apis::default_api::list_user_data(
+        let response = apis::user_data_api::list_user_data(
             config,
             params.workflow_id,
             params.consumer_job_id,
@@ -160,10 +160,11 @@ pub fn iter_user_data(
 ///
 /// # Returns
 /// `Result<Vec<UserDataModel>, Error>` containing all user data or an error
+#[allow(clippy::result_large_err)]
 pub fn paginate_user_data(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: UserDataListParams,
-) -> Result<Vec<UserDataModel>, apis::Error<apis::default_api::ListUserDataError>> {
+) -> Result<Vec<UserDataModel>, apis::Error<apis::user_data_api::ListUserDataError>> {
     iter_user_data(config, workflow_id, params).collect()
 }

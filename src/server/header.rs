@@ -1,5 +1,5 @@
+use axum::http::HeaderValue;
 use chrono::{DateTime, Utc};
-use hyper::header::HeaderValue;
 use std::convert::TryFrom;
 use std::ops::Deref;
 

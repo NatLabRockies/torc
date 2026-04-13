@@ -115,7 +115,7 @@ impl PaginationParams for ResultListParams {
 }
 
 impl Paginatable for ResultModel {
-    type ListError = apis::default_api::ListResultsError;
+    type ListError = apis::results_api::ListResultsError;
     type Params = ResultListParams;
 
     fn fetch_page(
@@ -123,19 +123,19 @@ impl Paginatable for ResultModel {
         params: &Self::Params,
         limit: i64,
     ) -> Result<PaginatedResponse<Self>, apis::Error<Self::ListError>> {
-        let response = apis::default_api::list_results(
+        let response = apis::results_api::list_results(
             config,
             params.workflow_id,
             params.job_id,
             params.run_id,
+            params.return_code,
+            params.status,
+            params.compute_node_id,
             Some(params.offset),
             Some(limit),
             params.sort_by.as_deref(),
             params.reverse_sort,
-            params.return_code,
-            params.status,
             params.all_runs,
-            params.compute_node_id,
         )?;
 
         Ok(PaginatedResponse {
@@ -176,10 +176,11 @@ pub fn iter_results(
 ///
 /// # Returns
 /// `Result<Vec<ResultModel>, Error>` containing all results or an error
+#[allow(clippy::result_large_err)]
 pub fn paginate_results(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: ResultListParams,
-) -> Result<Vec<ResultModel>, apis::Error<apis::default_api::ListResultsError>> {
+) -> Result<Vec<ResultModel>, apis::Error<apis::results_api::ListResultsError>> {
     iter_results(config, workflow_id, params).collect()
 }

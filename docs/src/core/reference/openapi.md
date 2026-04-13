@@ -1,7 +1,35 @@
 # OpenAPI Specification
 
-The Torc server implements a HTTP API defined in `api/openapi.yaml`. All endpoints are prefixed with
-`/torc-service/v1`.
+The Torc server implements a HTTP API under `/torc-service/v1`.
+
+The checked-in OpenAPI artifact is `api/openapi.yaml`, but the contract is now emitted from
+`src/openapi_spec.rs`, live handlers in `src/server/live_router.rs`, and `src/models.rs`. Refresh
+the emitted artifact with:
+
+```bash
+cd api
+bash sync_openapi.sh all --promote
+```
+
+For day-to-day development:
+
+```bash
+cd api
+
+# Emit Rust-owned spec only
+bash sync_openapi.sh emit
+
+# Verify checked-in specs match the emitted contract
+bash sync_openapi.sh check
+
+# Regenerate Rust, Python, and Julia clients from the checked-in contract
+bash sync_openapi.sh clients
+
+# Or regenerate all three client surfaces from the emitted Rust spec before promotion
+bash sync_openapi.sh emit
+bash sync_openapi.sh check
+bash sync_openapi.sh clients --use-rust-spec
+```
 
 ## Core Endpoints
 

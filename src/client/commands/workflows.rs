@@ -10,19 +10,11 @@ const WORKFLOWS_HELP_TEMPLATE: &str = "\
 {all-args}
 
 \x1b[1;32mWorkflow Creation:\x1b[0m
-  \x1b[1;36mcreate\x1b[0m           Create a workflow from a specification file
-  \x1b[1;36mcreate-slurm\x1b[0m     Create with auto-generated Slurm schedulers
   \x1b[1;36mnew\x1b[0m              Create a new empty workflow
 
-\x1b[1;32mWorkflow Lifecycle:\x1b[0m
-  \x1b[1;36msubmit\x1b[0m           Submit a workflow to scheduler
-  \x1b[1;36mrun\x1b[0m              Run a workflow locally
-  \x1b[1;36minitialize\x1b[0m       Initialize workflow dependencies
-  \x1b[1;36mreinitialize\x1b[0m     Reinitialize jobs with changed inputs
-  \x1b[1;36mcancel\x1b[0m           Cancel a workflow and Slurm jobs
-
 \x1b[1;32mWorkflow State:\x1b[0m
-  \x1b[1;36mstatus\x1b[0m           Get workflow status
+  \x1b[1;36minit\x1b[0m             Initialize workflow dependencies
+  \x1b[1;36mreinit\x1b[0m           Reinitialize jobs with changed inputs
   \x1b[1;36mreset-status\x1b[0m     Reset workflow and job statuses
   \x1b[1;36mis-complete\x1b[0m      Check if workflow is complete
   \x1b[1;36msync-status\x1b[0m      Detect orphaned jobs from ended Slurm allocations
@@ -35,18 +27,20 @@ const WORKFLOWS_HELP_TEMPLATE: &str = "\
 
 \x1b[1;32mWorkflow Maintenance:\x1b[0m
   \x1b[1;36mupdate\x1b[0m              Update workflow properties
-  \x1b[1;36mdelete\x1b[0m              Delete one or more workflows
   \x1b[1;36marchive\x1b[0m             Archive or unarchive workflows
   \x1b[1;36mcorrect-resources\x1b[0m   Correct resource requirements based on usage
+  \x1b[1;36mcheck-resources\x1b[0m     Check for resource utilization violations
 
 \x1b[1;32mImport & Export:\x1b[0m
   \x1b[1;36mexport\x1b[0m           Export a workflow to JSON
   \x1b[1;36mimport\x1b[0m           Import a workflow from JSON
+
+\x1b[1;33mNote:\x1b[0m Lifecycle commands (create, status, cancel, delete) are at the top level.
+      Run 'torc --help' to see all commands.
 {after-help}";
 
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
-use crate::client::commands::hpc::create_registry_with_config_public;
 use crate::client::commands::pagination::{
     ComputeNodeListParams, EventListParams, FileListParams, JobListParams,
     ResourceRequirementsListParams, ResultListParams, ScheduledComputeNodeListParams,
@@ -55,9 +49,7 @@ use crate::client::commands::pagination::{
     paginate_results, paginate_scheduled_compute_nodes, paginate_slurm_schedulers,
     paginate_user_data, paginate_workflows,
 };
-use crate::client::commands::slurm::{
-    GroupByStrategy, WalltimeStrategy, generate_schedulers_for_workflow,
-};
+use crate::client::commands::reports::check_resource_utilization;
 use crate::client::commands::workflow_export::{
     EXPORT_VERSION, ExportImportStats, IdMappings, WorkflowExport,
 };
@@ -138,114 +130,19 @@ struct WorkflowActionTableRow {
     subcommand_help_heading = None,
     after_long_help = "\
 EXAMPLES:
-    # Create a workflow from a YAML spec file
-    torc workflows create workflow.yaml
+    # List all workflows
+    torc workflows list
 
-    # Create from JSON5 with comments
-    torc workflows create config.json5
+    # Get workflow details
+    torc workflows get 123
 
-    # Get JSON output for automation
-    torc -f json workflows create workflow.yaml
+    # Archive a workflow
+    torc workflows archive true 123
 
-    # Validate without creating (dry-run)
-    torc workflows create --dry-run workflow.yaml
+    # Export workflow for backup/migration
+    torc workflows export 123 -o backup.json
 ")]
 pub enum WorkflowCommands {
-    /// Create a workflow from a specification file (supports JSON, JSON5, YAML, and KDL formats)
-    #[command(
-        hide = true,
-        after_long_help = "\
-EXAMPLES:
-    # Create workflow from YAML
-    torc workflows create my_workflow.yaml
-
-    # Validate spec before creating
-    torc workflows create --dry-run my_workflow.yaml
-
-    # Get JSON output with workflow ID
-    torc -f json workflows create my_workflow.yaml
-"
-    )]
-    Create {
-        /// Path to specification file containing WorkflowSpec
-        ///
-        /// Supported formats:
-        /// - JSON (.json): Standard JSON format
-        /// - JSON5 (.json5): JSON with comments and trailing commas
-        /// - YAML (.yaml, .yml): Human-readable YAML format
-        /// - KDL (.kdl): KDL document format
-        ///
-        /// Format is auto-detected from file extension, with fallback parsing attempted
-        #[arg()]
-        file: String,
-        /// Disable resource monitoring (default: enabled with summary granularity and 5s sample rate)
-        #[arg(long, default_value = "false")]
-        no_resource_monitoring: bool,
-        /// Skip validation checks (e.g., scheduler node requirements). Use with caution.
-        #[arg(long, default_value = "false")]
-        skip_checks: bool,
-        /// Validate the workflow specification without creating it (dry-run mode)
-        /// Returns a summary of what would be created including job count after parameter expansion
-        #[arg(long)]
-        dry_run: bool,
-    },
-    /// Create a workflow with auto-generated Slurm schedulers
-    ///
-    /// Automatically generates Slurm schedulers based on job resource requirements
-    /// and HPC profile. For Slurm workflows without pre-configured schedulers.
-    #[command(
-        hide = true,
-        name = "create-slurm",
-        after_long_help = "\
-EXAMPLES:
-    # Create with auto-generated Slurm schedulers
-    torc workflows create-slurm --account myproject workflow.yaml
-
-    # Specify HPC profile explicitly
-    torc workflows create-slurm --account myproject --hpc-profile kestrel workflow.yaml
-
-    # Use single allocation mode (1xN instead of Nx1)
-    torc workflows create-slurm --account myproject --single-allocation workflow.yaml
-"
-    )]
-    CreateSlurm {
-        /// Path to specification file containing WorkflowSpec
-        #[arg()]
-        file: String,
-        /// Slurm account to use for allocations (can also be specified in workflow's slurm_defaults)
-        #[arg(short, long)]
-        account: Option<String>,
-        /// HPC profile to use (auto-detected if not specified)
-        #[arg(long)]
-        hpc_profile: Option<String>,
-        /// Bundle all nodes into a single Slurm allocation per scheduler
-        ///
-        /// By default, creates one Slurm allocation per node (N×1 mode), which allows
-        /// jobs to start as nodes become available and provides better fault tolerance.
-        ///
-        /// With this flag, creates one large allocation with all nodes (1×N mode),
-        /// which requires all nodes to be available simultaneously but uses a single sbatch.
-        #[arg(long)]
-        single_allocation: bool,
-        /// Strategy for grouping jobs into schedulers
-        ///
-        /// - resource-requirements: Each unique resource_requirements creates a separate
-        ///   scheduler. This preserves user intent and provides fine-grained control.
-        ///
-        /// - partition: Jobs whose resource requirements map to the same partition are
-        ///   grouped together, reducing the number of schedulers.
-        #[arg(long, value_enum, default_value_t = GroupByStrategy::ResourceRequirements)]
-        group_by: GroupByStrategy,
-        /// Disable resource monitoring (default: enabled with summary granularity and 5s sample rate)
-        #[arg(long, default_value = "false")]
-        no_resource_monitoring: bool,
-        /// Skip validation checks (e.g., scheduler node requirements). Use with caution.
-        #[arg(long, default_value = "false")]
-        skip_checks: bool,
-        /// Validate the workflow specification without creating it (dry-run mode)
-        #[arg(long)]
-        dry_run: bool,
-    },
     /// Create a new empty workflow
     #[command(
         hide = true,
@@ -371,47 +268,6 @@ EXAMPLES:
         #[arg(long)]
         metadata: Option<String>,
     },
-    /// Cancel a workflow and all associated Slurm jobs. All state will be preserved and the
-    /// workflow can be resumed after it is reinitialized.
-    #[command(
-        hide = true,
-        after_long_help = "\
-EXAMPLES:
-    # Cancel a workflow and its Slurm jobs
-    torc workflows cancel 123
-
-    # Get JSON status of cancellation
-    torc -f json workflows cancel 123
-"
-    )]
-    Cancel {
-        /// ID of the workflow to cancel (optional - will prompt if not provided)
-        #[arg()]
-        workflow_id: Option<i64>,
-    },
-    /// Delete one or more workflows
-    #[command(
-        hide = true,
-        after_long_help = "\
-EXAMPLES:
-    # Delete a single workflow (with confirmation)
-    torc workflows delete 123
-
-    # Delete multiple workflows
-    torc workflows delete 123 456 789
-
-    # Delete without confirmation prompt
-    torc workflows delete 123 --no-prompts
-"
-    )]
-    Delete {
-        /// IDs of workflows to remove (optional - will prompt if not provided)
-        #[arg()]
-        ids: Vec<i64>,
-        /// Skip confirmation prompt
-        #[arg(long)]
-        no_prompts: bool,
-    },
     /// Archive or unarchive one or more workflows
     #[command(
         hide = true,
@@ -431,143 +287,6 @@ EXAMPLES:
         /// IDs of workflows to archive/unarchive (if empty, will prompt for selection)
         #[arg()]
         workflow_ids: Vec<i64>,
-    },
-    /// Submit a workflow: initialize if needed and schedule nodes for on_workflow_start actions
-    /// This command requires the workflow to have an on_workflow_start action with schedule_nodes
-    #[command(
-        hide = true,
-        after_long_help = "\
-EXAMPLES:
-    # Submit workflow to scheduler
-    torc workflows submit 123
-
-    # Submit even with missing user data
-    torc workflows submit 123 --force
-
-    # Custom output directory and poll interval
-    torc workflows submit 123 -o /scratch/output -p 60
-
-    # Limit parallel jobs per worker
-    torc workflows submit 123 --max-parallel-jobs 4
-"
-    )]
-    Submit {
-        /// ID of the workflow to submit (optional - will prompt if not provided)
-        #[arg()]
-        workflow_id: Option<i64>,
-        /// If false, fail the operation if missing data is present (defaults to false)
-        #[arg(long, default_value = "false")]
-        force: bool,
-        /// Maximum number of parallel jobs per worker
-        #[arg(long)]
-        max_parallel_jobs: Option<i32>,
-        /// Output directory for job logs and results
-        #[arg(short, long, default_value = "torc_output")]
-        output_dir: String,
-        /// Job completion poll interval in seconds
-        #[arg(short, long)]
-        poll_interval: Option<i32>,
-    },
-    /// Run a workflow locally on the current node
-    #[command(
-        hide = true,
-        after_long_help = "\
-EXAMPLES:
-    # Run workflow locally
-    torc workflows run 123
-
-    # Run with custom settings
-    torc workflows run 123 --poll-interval 10 --max-parallel-jobs 4
-
-    # Specify output directory
-    torc workflows run 123 --output-dir /path/to/torc_output
-"
-    )]
-    Run {
-        /// ID of the workflow to run (optional - will prompt if not provided)
-        #[arg()]
-        workflow_id: Option<i64>,
-        /// Poll interval in seconds for checking job completion
-        #[arg(short, long, default_value = "5.0")]
-        poll_interval: f64,
-        /// Maximum number of parallel jobs to run (defaults to available CPUs)
-        #[arg(long)]
-        max_parallel_jobs: Option<i64>,
-        /// Output directory for job logs and results
-        #[arg(long, default_value = "torc_output")]
-        output_dir: std::path::PathBuf,
-    },
-    /// Initialize a workflow, including all job statuses.
-    #[command(
-        hide = true,
-        after_long_help = "\
-EXAMPLES:
-    # Initialize workflow (set up dependencies)
-    torc workflows initialize 123
-
-    # Dry-run to check for missing files
-    torc workflows initialize 123 --dry-run
-
-    # Force initialization with missing data
-    torc workflows initialize 123 --force
-"
-    )]
-    Initialize {
-        /// ID of the workflow to start (optional - will prompt if not provided)
-        #[arg()]
-        workflow_id: Option<i64>,
-        /// If false, fail the operation if missing data is present (defaults to false)
-        #[arg(long, default_value = "false")]
-        force: bool,
-        /// Skip confirmation prompt
-        #[arg(long)]
-        no_prompts: bool,
-        /// Perform a dry run without making changes
-        #[arg(long)]
-        dry_run: bool,
-    },
-    /// Reinitialize a workflow. This will reinitialize all jobs with a status of
-    /// canceled, submitting, pending, or terminated. Jobs with a status of
-    /// done will also be reinitialized if an input_file or user_data record has
-    /// changed.
-    #[command(
-        hide = true,
-        after_long_help = "\
-EXAMPLES:
-    # Reinitialize workflow after input changes
-    torc workflows reinitialize 123
-
-    # Dry-run to preview changes
-    torc workflows reinitialize 123 --dry-run
-"
-    )]
-    Reinitialize {
-        /// ID of the workflow to reinitialize (optional - will prompt if not provided)
-        #[arg()]
-        workflow_id: Option<i64>,
-        /// If false, fail the operation if missing data is present (defaults to false)
-        #[arg(long, default_value = "false")]
-        force: bool,
-        /// Perform a dry run without making changes
-        #[arg(long)]
-        dry_run: bool,
-    },
-    /// Get workflow status
-    #[command(
-        hide = true,
-        after_long_help = "\
-EXAMPLES:
-    # Get workflow status
-    torc workflows status 123
-
-    # Get JSON status for scripting
-    torc -f json workflows status 123
-"
-    )]
-    Status {
-        /// ID of the workflow to get status for (optional - will prompt if not provided)
-        #[arg()]
-        workflow_id: Option<i64>,
     },
     /// Reset workflow and job status
     #[command(
@@ -603,6 +322,66 @@ EXAMPLES:
         /// Skip confirmation prompt
         #[arg(long)]
         no_prompts: bool,
+    },
+    /// Initialize a workflow, including all job statuses.
+    ///
+    /// Sets up job status based on dependencies and input data availability.
+    /// Jobs with all dependencies satisfied are marked as ready.
+    #[command(
+        name = "init",
+        hide = true,
+        after_long_help = "\
+EXAMPLES:
+    # Initialize workflow (set up dependencies)
+    torc workflows init 123
+
+    # Dry-run to check for missing files
+    torc workflows init 123 --dry-run
+
+    # Force initialization with missing data
+    torc workflows init 123 --force
+"
+    )]
+    Initialize {
+        /// ID of the workflow to initialize (optional - will prompt if not provided)
+        #[arg()]
+        workflow_id: Option<i64>,
+        /// If false, fail the operation if missing data is present (defaults to false)
+        #[arg(long, default_value = "false")]
+        force: bool,
+        /// Skip confirmation prompt
+        #[arg(long)]
+        no_prompts: bool,
+        /// Perform a dry run without making changes
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Reinitialize a workflow after changes
+    ///
+    /// Reinitializes jobs that are canceled, submitting, pending, or terminated.
+    /// Jobs that completed will also be reinitialized if their input data changed.
+    #[command(
+        name = "reinit",
+        hide = true,
+        after_long_help = "\
+EXAMPLES:
+    # Reinitialize workflow after input changes
+    torc workflows reinit 123
+
+    # Dry-run to preview changes
+    torc workflows reinit 123 --dry-run
+"
+    )]
+    Reinitialize {
+        /// ID of the workflow to reinitialize (optional - will prompt if not provided)
+        #[arg()]
+        workflow_id: Option<i64>,
+        /// If false, fail the operation if missing data is present (defaults to false)
+        #[arg(long, default_value = "false")]
+        force: bool,
+        /// Perform a dry run without making changes
+        #[arg(long)]
+        dry_run: bool,
     },
     /// Correct resource requirements based on actual job usage (proactive optimization)
     ///
@@ -652,6 +431,39 @@ EXAMPLES:
         /// Disable downsizing of over-allocated resources (downsizing is on by default)
         #[arg(long)]
         no_downsize: bool,
+    },
+    /// Check resource utilization and report jobs that exceeded their specified requirements
+    #[command(
+        name = "check-resources",
+        hide = true,
+        after_long_help = "\
+EXAMPLES:
+    # Check resource utilization for a workflow
+    torc workflows check-resources 123
+
+    # Show all jobs (not just violations)
+    torc workflows check-resources 123 --all
+
+    # Include failed and terminated jobs in analysis
+    torc workflows check-resources 123 --include-failed
+"
+    )]
+    CheckResources {
+        /// Workflow ID to analyze (optional - will prompt if not provided)
+        #[arg()]
+        workflow_id: Option<i64>,
+        /// Run ID to analyze (optional - analyzes latest run if not provided)
+        #[arg(short, long)]
+        run_id: Option<i64>,
+        /// Show all jobs (default: only show jobs that exceeded requirements)
+        #[arg(short, long)]
+        all: bool,
+        /// Include failed and terminated jobs in the analysis (for recovery diagnostics)
+        #[arg(long)]
+        include_failed: bool,
+        /// Minimum over-utilization percentage to flag as violation (default: 1.0%)
+        #[arg(long, default_value = "1.0")]
+        min_over_utilization: f64,
     },
     /// Show the execution plan for a workflow specification or existing workflow
     #[command(
@@ -810,6 +622,7 @@ EXAMPLES:
     /// - You want to clean up stale workflow state before running `torc recover`
     #[command(
         name = "sync-status",
+        hide = true,
         after_long_help = "\
 EXAMPLES:
     # Preview what would be cleaned up (safe, read-only)
@@ -962,7 +775,7 @@ fn show_execution_plan_from_spec(file_path: &str, format: &str) {
 
 fn show_execution_plan_from_database(config: &Configuration, workflow_id: i64, format: &str) {
     // Fetch workflow from database
-    let workflow = match default_api::get_workflow(config, workflow_id) {
+    let workflow = match apis::workflows_api::get_workflow(config, workflow_id) {
         Ok(wf) => wf,
         Err(e) => {
             eprintln!("Error fetching workflow {}: {}", workflow_id, e);
@@ -984,7 +797,7 @@ fn show_execution_plan_from_database(config: &Configuration, workflow_id: i64, f
     };
 
     // Fetch workflow actions
-    let actions = match default_api::get_workflow_actions(config, workflow_id) {
+    let actions = match apis::workflow_actions_api::get_workflow_actions(config, workflow_id) {
         Ok(actions) => actions,
         Err(e) => {
             eprintln!("Error fetching actions for workflow {}: {}", workflow_id, e);
@@ -1109,7 +922,7 @@ fn handle_list_actions(
         None => select_workflow_interactively(config, user).unwrap(),
     };
 
-    match default_api::get_workflow_actions(config, selected_workflow_id) {
+    match apis::workflow_actions_api::get_workflow_actions(config, selected_workflow_id) {
         Ok(actions) => {
             if format == "json" {
                 let output = serde_json::json!({
@@ -1398,6 +1211,7 @@ fn handle_correct_resources(
         total_results: all_results.len(),
         over_utilization_count: resource_violations.len(),
         violations: Vec::new(),
+        within_limits: Vec::new(),
         resource_violations_count: resource_violations.len(),
         resource_violations: resource_violations.clone(),
     };
@@ -1535,7 +1349,7 @@ fn handle_correct_resources(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn handle_cancel(config: &Configuration, workflow_id: &Option<i64>, format: &str) {
+pub fn handle_cancel(config: &Configuration, workflow_id: &Option<i64>, format: &str) {
     let user_name = get_env_user_name();
 
     let selected_workflow_id = match workflow_id {
@@ -1543,7 +1357,7 @@ fn handle_cancel(config: &Configuration, workflow_id: &Option<i64>, format: &str
         None => select_workflow_interactively(config, &user_name).unwrap(),
     };
 
-    match default_api::cancel_workflow(config, selected_workflow_id, None) {
+    match apis::workflows_api::cancel_workflow(config, selected_workflow_id) {
         Ok(_) => {
             if format != "json" {
                 eprintln!("Successfully canceled workflow {}", selected_workflow_id);
@@ -1609,11 +1423,13 @@ fn handle_cancel(config: &Configuration, workflow_id: &Option<i64>, format: &str
                                     node.scheduler_type.clone(),
                                     "canceled".to_string(),
                                 );
-                                if let Err(e) = default_api::update_scheduled_compute_node(
-                                    config,
-                                    node_id,
-                                    updated_node,
-                                ) {
+                                if let Err(e) =
+                                    apis::scheduled_compute_nodes_api::update_scheduled_compute_node(
+                                        config,
+                                        node_id,
+                                        updated_node,
+                                    )
+                                {
                                     let error_msg =
                                         format!("Failed to update node {} status: {}", node_id, e);
                                     errors.push(error_msg.clone());
@@ -1729,7 +1545,7 @@ fn handle_reset_status(
     let force_param = if force { Some(true) } else { None };
 
     // Reset workflow status
-    match default_api::reset_workflow_status(config, selected_workflow_id, force_param, None) {
+    match apis::workflows_api::reset_workflow_status(config, selected_workflow_id, force_param) {
         Ok(_) => {
             workflow_reset_success = true;
             if format != "json" {
@@ -1748,7 +1564,7 @@ fn handle_reset_status(
     }
 
     // Reset job status
-    match default_api::reset_job_status(config, selected_workflow_id, Some(failed_only), None) {
+    match apis::workflows_api::reset_job_status(config, selected_workflow_id, Some(failed_only)) {
         Ok(_) => {
             job_reset_success = true;
             if format != "json" {
@@ -1775,7 +1591,7 @@ fn handle_reset_status(
 
     // If reinitialize is true, reinitialize the workflow
     if reinitialize {
-        match default_api::get_workflow(config, selected_workflow_id) {
+        match apis::workflows_api::get_workflow(config, selected_workflow_id) {
             Ok(workflow) => {
                 let torc_config = TorcConfig::load().unwrap_or_default();
                 let workflow_manager = WorkflowManager::new(config.clone(), torc_config, workflow);
@@ -1877,42 +1693,7 @@ fn handle_reset_status(
     }
 }
 
-fn handle_status(config: &Configuration, workflow_id: &Option<i64>, user: &str, format: &str) {
-    let selected_workflow_id = match workflow_id {
-        Some(id) => *id,
-        None => select_workflow_interactively(config, user).unwrap(),
-    };
-
-    match default_api::get_workflow_status(config, selected_workflow_id) {
-        Ok(status) => {
-            if format == "json" {
-                match serde_json::to_string_pretty(&status) {
-                    Ok(json) => println!("{}", json),
-                    Err(e) => {
-                        eprintln!("Error serializing workflow status to JSON: {}", e);
-                        std::process::exit(1);
-                    }
-                }
-            } else {
-                println!("Workflow Status for ID {}:", selected_workflow_id);
-                if let Some(id) = status.id {
-                    println!("  Status ID: {}", id);
-                }
-                println!("  Run ID: {}", status.run_id);
-                println!("  Is Canceled: {}", status.is_canceled);
-                if let Some(is_archived) = status.is_archived {
-                    println!("  Is Archived: {}", is_archived);
-                }
-            }
-        }
-        Err(e) => {
-            print_error("getting workflow status", &e);
-            std::process::exit(1);
-        }
-    }
-}
-
-fn handle_reinitialize(
+pub fn handle_reinitialize(
     config: &Configuration,
     workflow_id: &Option<i64>,
     force: bool,
@@ -1926,7 +1707,7 @@ fn handle_reinitialize(
         None => select_workflow_interactively(config, &user_name).unwrap(),
     };
     // First get the workflow
-    match default_api::get_workflow(config, selected_workflow_id) {
+    match apis::workflows_api::get_workflow(config, selected_workflow_id) {
         Ok(workflow) => {
             let torc_config = TorcConfig::load().unwrap_or_default();
             let workflow_manager = WorkflowManager::new(config.clone(), torc_config, workflow);
@@ -2042,7 +1823,7 @@ fn handle_reinitialize(
     }
 }
 
-fn handle_initialize(
+pub fn handle_initialize(
     config: &Configuration,
     workflow_id: &Option<i64>,
     force: bool,
@@ -2058,7 +1839,7 @@ fn handle_initialize(
     };
 
     // First get the workflow
-    match default_api::get_workflow(config, selected_workflow_id) {
+    match apis::workflows_api::get_workflow(config, selected_workflow_id) {
         Ok(workflow) => {
             let torc_config = TorcConfig::load().unwrap_or_default();
             let workflow_manager = WorkflowManager::new(config.clone(), torc_config, workflow);
@@ -2131,12 +1912,9 @@ fn handle_initialize(
                 }
             } else {
                 // Normal initialization (not dry-run)
-                match default_api::is_workflow_uninitialized(config, selected_workflow_id) {
-                    Ok(is_initialized) => {
-                        if is_initialized.as_bool().unwrap_or(false)
-                            && !no_prompts
-                            && format != "json"
-                        {
+                match apis::workflows_api::is_workflow_uninitialized(config, selected_workflow_id) {
+                    Ok(response) => {
+                        if !response.as_bool().unwrap_or(true) && !no_prompts && format != "json" {
                             println!("\nWarning: This workflow has already been initialized.");
                             println!("Some jobs already have initialized status.");
                             print!("\nDo you want to continue? (y/N): ");
@@ -2203,152 +1981,6 @@ fn handle_initialize(
     }
 }
 
-fn handle_run(
-    config: &Configuration,
-    workflow_id: &Option<i64>,
-    poll_interval: f64,
-    max_parallel_jobs: Option<i64>,
-    output_dir: &std::path::Path,
-) {
-    let user_name = get_env_user_name();
-
-    let selected_workflow_id = match workflow_id {
-        Some(id) => *id,
-        None => select_workflow_interactively(config, &user_name).unwrap(),
-    };
-
-    // Build args for run_jobs_cmd with sensible defaults
-    // Pass through authentication from config
-    let password = config.basic_auth.as_ref().and_then(|(_, p)| p.clone());
-    let args = crate::run_jobs_cmd::Args {
-        workflow_id: Some(selected_workflow_id),
-        url: config.base_path.clone(),
-        output_dir: output_dir.to_path_buf(),
-        poll_interval,
-        max_parallel_jobs,
-        time_limit: None,
-        end_time: None,
-        num_cpus: None,
-        memory_gb: None,
-        num_gpus: None,
-        num_nodes: None,
-        scheduler_config_id: None,
-        log_prefix: None,
-        cpu_affinity_cpus_per_job: None,
-        log_level: "info".to_string(),
-        password,
-        tls_ca_cert: config
-            .tls
-            .ca_cert_path
-            .as_ref()
-            .map(|p| p.to_string_lossy().to_string()),
-        tls_insecure: config.tls.insecure,
-    };
-
-    crate::run_jobs_cmd::run(&args);
-}
-
-fn handle_submit(
-    config: &Configuration,
-    workflow_id: &Option<i64>,
-    force: bool,
-    max_parallel_jobs: Option<i32>,
-    output_dir: &str,
-    poll_interval: Option<i32>,
-    format: &str,
-) {
-    let user_name = get_env_user_name();
-
-    let selected_workflow_id = match workflow_id {
-        Some(id) => *id,
-        None => select_workflow_interactively(config, &user_name).unwrap(),
-    };
-
-    // Check if workflow has schedule_nodes actions
-    match default_api::get_workflow_actions(config, selected_workflow_id) {
-        Ok(actions) => {
-            let has_schedule_nodes = actions.iter().any(|action| {
-                action.trigger_type == "on_workflow_start" && action.action_type == "schedule_nodes"
-            });
-
-            if !has_schedule_nodes {
-                if format == "json" {
-                    let error_response = serde_json::json!({
-                        "status": "error",
-                        "message": "Cannot submit workflow: no on_workflow_start action with schedule_nodes found",
-                        "workflow_id": selected_workflow_id
-                    });
-                    println!("{}", serde_json::to_string_pretty(&error_response).unwrap());
-                } else {
-                    eprintln!("Error: Cannot submit workflow {}", selected_workflow_id);
-                    eprintln!();
-                    eprintln!(
-                        "The workflow does not define an on_workflow_start action with schedule_nodes."
-                    );
-                    eprintln!("To submit to a scheduler, add a workflow action like:");
-                    eprintln!();
-                    eprintln!("  actions:");
-                    eprintln!("    - trigger_type: on_workflow_start");
-                    eprintln!("      action_type: schedule_nodes");
-                    eprintln!("      scheduler_type: slurm");
-                    eprintln!("      scheduler: \"my-cluster\"");
-                    eprintln!();
-                    eprintln!("Or run locally instead:");
-                    eprintln!("  torc workflows run {}", selected_workflow_id);
-                }
-                std::process::exit(1);
-            }
-        }
-        Err(e) => {
-            print_error("getting workflow actions", &e);
-            std::process::exit(1);
-        }
-    }
-
-    // Get the workflow and submit it
-    match default_api::get_workflow(config, selected_workflow_id) {
-        Ok(workflow) => {
-            let torc_config = TorcConfig::load().unwrap_or_default();
-            let workflow_manager = WorkflowManager::new(config.clone(), torc_config, workflow);
-            match workflow_manager.start(force, max_parallel_jobs, output_dir, poll_interval) {
-                Ok(()) => {
-                    if format == "json" {
-                        let success_response = serde_json::json!({
-                            "status": "success",
-                            "message": format!("Successfully submitted workflow {}", selected_workflow_id),
-                            "workflow_id": selected_workflow_id
-                        });
-                        println!(
-                            "{}",
-                            serde_json::to_string_pretty(&success_response).unwrap()
-                        );
-                    } else {
-                        println!("Successfully submitted workflow:");
-                        println!("  Workflow ID: {}", selected_workflow_id);
-                    }
-                }
-                Err(e) => {
-                    if format == "json" {
-                        let error_response = serde_json::json!({
-                            "status": "error",
-                            "message": format!("Failed to submit workflow: {}", e),
-                            "workflow_id": selected_workflow_id
-                        });
-                        println!("{}", serde_json::to_string_pretty(&error_response).unwrap());
-                    } else {
-                        eprintln!("Error submitting workflow {}: {}", selected_workflow_id, e);
-                    }
-                    std::process::exit(1);
-                }
-            }
-        }
-        Err(e) => {
-            print_error("getting workflow for submit", &e);
-            std::process::exit(1);
-        }
-    }
-}
-
 fn handle_archive(config: &Configuration, is_archived: &str, workflow_ids: &[i64], format: &str) {
     // Parse is_archived string to bool
     let is_archived_bool = match is_archived.to_lowercase().as_str() {
@@ -2384,13 +2016,13 @@ fn handle_archive(config: &Configuration, is_archived: &str, workflow_ids: &[i64
 
     for workflow_id in ids_to_update {
         // First, get the current workflow status
-        match default_api::get_workflow_status(config, workflow_id) {
+        match apis::workflows_api::get_workflow_status(config, workflow_id) {
             Ok(mut status) => {
                 // Set is_archived to the specified value
                 status.is_archived = Some(is_archived_bool);
 
                 // Update the workflow status
-                match default_api::update_workflow_status(config, workflow_id, status) {
+                match apis::workflows_api::update_workflow_status(config, workflow_id, status) {
                     Ok(_) => {
                         updated_workflows.push(workflow_id);
                         if format != "json" {
@@ -2442,7 +2074,7 @@ fn handle_archive(config: &Configuration, is_archived: &str, workflow_ids: &[i64
     }
 }
 
-fn handle_delete(config: &Configuration, ids: &[i64], no_prompts: bool, format: &str) {
+pub fn handle_delete(config: &Configuration, ids: &[i64], no_prompts: bool, format: &str) {
     let user_name = get_env_user_name();
 
     // Get list of workflow IDs to delete
@@ -2458,7 +2090,7 @@ fn handle_delete(config: &Configuration, ids: &[i64], no_prompts: bool, format: 
 
     for selected_id in workflow_ids {
         // Fetch workflow details to show what will be deleted
-        let workflow = match default_api::get_workflow(config, selected_id) {
+        let workflow = match apis::workflows_api::get_workflow(config, selected_id) {
             Ok(wf) => wf,
             Err(e) => {
                 failed_deletions.push((selected_id, format!("Failed to get workflow: {}", e)));
@@ -2477,7 +2109,7 @@ fn handle_delete(config: &Configuration, ids: &[i64], no_prompts: bool, format: 
         }
 
         // Count jobs in this workflow
-        let job_count = match default_api::list_jobs(
+        let job_count = match apis::jobs_api::list_jobs(
             config,
             selected_id,
             None,    // status
@@ -2531,7 +2163,7 @@ fn handle_delete(config: &Configuration, ids: &[i64], no_prompts: bool, format: 
         }
 
         // Proceed with deletion
-        match default_api::delete_workflow(config, selected_id, None) {
+        match apis::workflows_api::delete_workflow(config, selected_id) {
             Ok(removed_workflow) => {
                 deleted_workflows.push(removed_workflow);
             }
@@ -2611,7 +2243,7 @@ fn handle_update(
         None => select_workflow_interactively(config, &user_name).unwrap(),
     };
     // First get the existing workflow
-    match default_api::get_workflow(config, selected_id) {
+    match apis::workflows_api::get_workflow(config, selected_id) {
         Ok(mut workflow) => {
             // Update fields that were provided
             if let Some(new_name) = &updates.name {
@@ -2630,7 +2262,7 @@ fn handle_update(
                 workflow.metadata = updates.metadata.clone();
             }
 
-            match default_api::update_workflow(config, selected_id, workflow) {
+            match apis::workflows_api::update_workflow(config, selected_id, workflow) {
                 Ok(updated_workflow) => {
                     if format == "json" {
                         // Convert workflow to JSON value, parsing JSON string fields to objects
@@ -2673,7 +2305,7 @@ fn handle_get(config: &Configuration, id: &Option<i64>, user: &str, format: &str
         None => select_workflow_interactively(config, user).unwrap(),
     };
 
-    match default_api::get_workflow(config, selected_id) {
+    match apis::workflows_api::get_workflow(config, selected_id) {
         Ok(workflow) => {
             if format == "json" {
                 // Convert workflow to JSON value, parsing JSON string fields to objects
@@ -2840,7 +2472,7 @@ fn handle_new(
     let mut workflow = models::WorkflowModel::new(name.to_string(), user.to_string());
     workflow.description = description.clone();
 
-    match default_api::create_workflow(config, workflow) {
+    match apis::workflows_api::create_workflow(config, workflow) {
         Ok(created_workflow) => {
             if format == "json" {
                 // Convert workflow to JSON value, parsing JSON string fields to objects
@@ -2871,7 +2503,7 @@ fn handle_new(
     }
 }
 
-fn handle_create(
+pub fn handle_create(
     config: &Configuration,
     file: &str,
     user: &str,
@@ -2983,191 +2615,12 @@ fn handle_create(
         return;
     }
 
+    if !skip_checks {
+        WorkflowSpec::prevalidate_or_exit(file);
+    }
+
     // Normal create mode
-    match WorkflowSpec::create_workflow_from_spec(
-        config,
-        file,
-        user,
-        !no_resource_monitoring,
-        skip_checks,
-    ) {
-        Ok(workflow_id) => {
-            if format == "json" {
-                let json_output = serde_json::json!({
-                    "workflow_id": workflow_id,
-                    "status": "success",
-                    "message": format!("Workflow created successfully with ID: {}", workflow_id)
-                });
-                match serde_json::to_string_pretty(&json_output) {
-                    Ok(json) => println!("{}", json),
-                    Err(e) => {
-                        eprintln!("Error serializing JSON: {}", e);
-                        std::process::exit(1);
-                    }
-                }
-            } else {
-                println!("Created workflow {}", workflow_id);
-            }
-        }
-        Err(e) => {
-            eprintln!("Error creating workflow from spec: {}", e);
-            std::process::exit(1);
-        }
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn handle_create_slurm(
-    config: &Configuration,
-    file: &str,
-    account: Option<&str>,
-    hpc_profile: Option<&str>,
-    single_allocation: bool,
-    group_by: GroupByStrategy,
-    no_resource_monitoring: bool,
-    skip_checks: bool,
-    dry_run: bool,
-    format: &str,
-) {
-    let user = std::env::var("USER").unwrap_or_else(|_| "unknown".to_string());
-    // Handle dry-run mode first
-    if dry_run {
-        let result = WorkflowSpec::validate_spec(file);
-        if format == "json" {
-            match serde_json::to_string_pretty(&result) {
-                Ok(json) => println!("{}", json),
-                Err(e) => {
-                    eprintln!("Error serializing validation result: {}", e);
-                    std::process::exit(1);
-                }
-            }
-        } else {
-            println!("Workflow Validation Results (with Slurm scheduler generation)");
-            println!("==============================================================");
-            println!();
-            println!("Note: Dry-run validates the spec before scheduler generation.");
-            println!("Use 'torc slurm generate' to preview generated schedulers.");
-            println!();
-
-            let summary = &result.summary;
-            println!("Workflow: {}", summary.workflow_name);
-            println!("Jobs: {}", summary.job_count);
-            println!(
-                "Resource requirements: {}",
-                summary.resource_requirements_count
-            );
-            println!();
-
-            if !result.errors.is_empty() {
-                eprintln!("Errors ({}):", result.errors.len());
-                for error in &result.errors {
-                    eprintln!("  - {}", error);
-                }
-            }
-
-            if result.valid {
-                println!("Validation: PASSED");
-            } else {
-                eprintln!("Validation: FAILED");
-            }
-        }
-
-        if !result.valid {
-            std::process::exit(1);
-        }
-        return;
-    }
-
-    // Load HPC config and registry
-    let torc_config = TorcConfig::load().unwrap_or_default();
-    let registry = create_registry_with_config_public(&torc_config.client.hpc);
-
-    // Get the HPC profile (with dynamic Slurm fallback)
-    let profile = match super::hpc::resolve_hpc_profile(&registry, hpc_profile) {
-        Ok(p) => p,
-        Err(msg) => {
-            eprintln!("{}", msg);
-            std::process::exit(1);
-        }
-    };
-
-    // Parse the workflow spec
-    let mut spec = match WorkflowSpec::from_spec_file(file) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("Failed to parse workflow file: {}", e);
-            std::process::exit(1);
-        }
-    };
-
-    // Resolve account: CLI option takes precedence, then slurm_defaults
-    let resolved_account = if let Some(acct) = account {
-        acct.to_string()
-    } else if let Some(ref defaults) = spec.slurm_defaults {
-        defaults
-            .0
-            .get("account")
-            .and_then(|v| v.as_str().map(String::from))
-            .unwrap_or_else(|| {
-                eprintln!(
-                    "Error: No account specified. Use --account or set 'account' in slurm_defaults."
-                );
-                std::process::exit(1);
-            })
-    } else {
-        eprintln!("Error: No account specified. Use --account or set 'account' in slurm_defaults.");
-        std::process::exit(1);
-    };
-
-    // Generate schedulers
-    // Don't allow force=true - if schedulers already exist, user should use the _no_slurm variant
-    match generate_schedulers_for_workflow(
-        &mut spec,
-        &profile,
-        &resolved_account,
-        single_allocation,
-        group_by,
-        WalltimeStrategy::MaxJobRuntime,
-        1.5, // Default walltime multiplier
-        true,
-        false,
-    ) {
-        Ok(result) => {
-            if format != "json" {
-                eprintln!(
-                    "Auto-generated {} scheduler(s) and {} action(s) using {} profile",
-                    result.scheduler_count, result.action_count, profile.name
-                );
-                for warning in &result.warnings {
-                    eprintln!("  Warning: {}", warning);
-                }
-            }
-        }
-        Err(e) => {
-            eprintln!("Error generating schedulers: {}", e);
-            std::process::exit(1);
-        }
-    }
-
-    // Write modified spec to temp file
-    let temp_dir = std::env::temp_dir();
-    let temp_file = temp_dir.join(format!("torc_workflow_{}.yaml", std::process::id()));
-    match std::fs::write(&temp_file, serde_yaml::to_string(&spec).unwrap()) {
-        Ok(_) => {}
-        Err(e) => {
-            eprintln!("Failed to write temporary workflow file: {}", e);
-            std::process::exit(1);
-        }
-    }
-
-    // Create workflow from modified spec
-    match WorkflowSpec::create_workflow_from_spec(
-        config,
-        &temp_file,
-        &user,
-        !no_resource_monitoring,
-        skip_checks,
-    ) {
+    match WorkflowSpec::create_workflow_from_spec(config, file, user, !no_resource_monitoring) {
         Ok(workflow_id) => {
             if format == "json" {
                 let json_output = serde_json::json!({
@@ -3207,7 +2660,7 @@ fn handle_is_complete(config: &Configuration, id: Option<i64>, format: &str) {
         },
     };
 
-    match default_api::is_workflow_complete(config, id) {
+    match apis::workflows_api::is_workflow_complete(config, id) {
         Ok(response) => {
             if format == "json" {
                 match serde_json::to_string_pretty(&response) {
@@ -3335,50 +2788,9 @@ fn handle_sync_status(
 
 pub fn handle_workflow_commands(config: &Configuration, command: &WorkflowCommands, format: &str) {
     // Get the current user from environment
-    let current_user = std::env::var("USER")
-        .or_else(|_| std::env::var("USERNAME"))
-        .unwrap_or_else(|_| "unknown".to_string());
+    let current_user = crate::get_username();
 
     match command {
-        WorkflowCommands::Create {
-            file,
-            no_resource_monitoring,
-            skip_checks,
-            dry_run,
-        } => {
-            handle_create(
-                config,
-                file,
-                &current_user,
-                *no_resource_monitoring,
-                *skip_checks,
-                *dry_run,
-                format,
-            );
-        }
-        WorkflowCommands::CreateSlurm {
-            file,
-            account,
-            hpc_profile,
-            single_allocation,
-            group_by,
-            no_resource_monitoring,
-            skip_checks,
-            dry_run,
-        } => {
-            handle_create_slurm(
-                config,
-                file,
-                account.as_deref(),
-                hpc_profile.as_deref(),
-                *single_allocation,
-                *group_by,
-                *no_resource_monitoring,
-                *skip_checks,
-                *dry_run,
-                format,
-            );
-        }
         WorkflowCommands::New { name, description } => {
             handle_new(config, name, description, &current_user, format);
         }
@@ -3424,63 +2836,11 @@ pub fn handle_workflow_commands(config: &Configuration, command: &WorkflowComman
             };
             handle_update(config, id, &updates, format);
         }
-        WorkflowCommands::Delete { ids, no_prompts } => {
-            handle_delete(config, ids, *no_prompts, format);
-        }
         WorkflowCommands::Archive {
             is_archived,
             workflow_ids,
         } => {
             handle_archive(config, is_archived, workflow_ids, format);
-        }
-        WorkflowCommands::Submit {
-            workflow_id,
-            force,
-            max_parallel_jobs,
-            output_dir,
-            poll_interval,
-        } => {
-            handle_submit(
-                config,
-                workflow_id,
-                *force,
-                *max_parallel_jobs,
-                output_dir,
-                *poll_interval,
-                format,
-            );
-        }
-        WorkflowCommands::Run {
-            workflow_id,
-            poll_interval,
-            max_parallel_jobs,
-            output_dir,
-        } => {
-            handle_run(
-                config,
-                workflow_id,
-                *poll_interval,
-                *max_parallel_jobs,
-                output_dir,
-            );
-        }
-        WorkflowCommands::Initialize {
-            workflow_id,
-            force,
-            no_prompts,
-            dry_run,
-        } => {
-            handle_initialize(config, workflow_id, *force, *no_prompts, *dry_run, format);
-        }
-        WorkflowCommands::Reinitialize {
-            workflow_id,
-            force,
-            dry_run,
-        } => {
-            handle_reinitialize(config, workflow_id, *force, *dry_run, format);
-        }
-        WorkflowCommands::Status { workflow_id } => {
-            handle_status(config, workflow_id, &current_user, format);
         }
         WorkflowCommands::ResetStatus {
             workflow_id,
@@ -3498,6 +2858,21 @@ pub fn handle_workflow_commands(config: &Configuration, command: &WorkflowComman
                 *no_prompts,
                 format,
             );
+        }
+        WorkflowCommands::Initialize {
+            workflow_id,
+            force,
+            no_prompts,
+            dry_run,
+        } => {
+            handle_initialize(config, workflow_id, *force, *no_prompts, *dry_run, format);
+        }
+        WorkflowCommands::Reinitialize {
+            workflow_id,
+            force,
+            dry_run,
+        } => {
+            handle_reinitialize(config, workflow_id, *force, *dry_run, format);
         }
         WorkflowCommands::CorrectResources {
             workflow_id,
@@ -3520,8 +2895,22 @@ pub fn handle_workflow_commands(config: &Configuration, command: &WorkflowComman
                 format,
             );
         }
-        WorkflowCommands::Cancel { workflow_id } => {
-            handle_cancel(config, workflow_id, format);
+        WorkflowCommands::CheckResources {
+            workflow_id,
+            run_id,
+            all,
+            include_failed,
+            min_over_utilization,
+        } => {
+            check_resource_utilization(
+                config,
+                *workflow_id,
+                *run_id,
+                *all,
+                *include_failed,
+                *min_over_utilization,
+                format,
+            );
         }
         WorkflowCommands::ExecutionPlan { spec_or_id } => {
             handle_execution_plan(config, spec_or_id, format);
@@ -3599,7 +2988,7 @@ fn handle_export(
     };
 
     // Get workflow
-    let workflow = match default_api::get_workflow(config, workflow_id) {
+    let workflow = match apis::workflows_api::get_workflow(config, workflow_id) {
         Ok(w) => w,
         Err(e) => {
             print_error("getting workflow", &e);
@@ -3666,7 +3055,7 @@ fn handle_export(
     };
 
     // Get all local schedulers
-    export.local_schedulers = match default_api::list_local_schedulers(
+    export.local_schedulers = match apis::local_schedulers_api::list_local_schedulers(
         config,
         workflow_id,
         None,
@@ -3676,7 +3065,7 @@ fn handle_export(
         None,
         None,
     ) {
-        Ok(response) => response.items.unwrap_or_default(),
+        Ok(response) => response.items,
         Err(e) => {
             print_error("listing local schedulers", &e);
             std::process::exit(1);
@@ -3685,8 +3074,8 @@ fn handle_export(
 
     // Get all failure handlers
     export.failure_handlers =
-        match default_api::list_failure_handlers(config, workflow_id, None, None) {
-            Ok(response) => response.items.unwrap_or_default(),
+        match apis::failure_handlers_api::list_failure_handlers(config, workflow_id, None, None) {
+            Ok(response) => response.items,
             Err(e) => {
                 print_error("listing failure handlers", &e);
                 std::process::exit(1);
@@ -3694,14 +3083,20 @@ fn handle_export(
         };
 
     // Get all RO-Crate entities
-    export.ro_crate_entities =
-        match default_api::list_ro_crate_entities(config, workflow_id, None, None) {
-            Ok(response) => response.items.unwrap_or_default(),
-            Err(e) => {
-                print_error("listing RO-Crate entities", &e);
-                std::process::exit(1);
-            }
-        };
+    export.ro_crate_entities = match apis::ro_crate_entities_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+    ) {
+        Ok(response) => response.items,
+        Err(e) => {
+            print_error("listing RO-Crate entities", &e);
+            std::process::exit(1);
+        }
+    };
 
     // Get all jobs (with relationships)
     let job_params = JobListParams {
@@ -3718,13 +3113,14 @@ fn handle_export(
     };
 
     // Get workflow actions
-    export.workflow_actions = match default_api::get_workflow_actions(config, workflow_id) {
-        Ok(actions) => actions,
-        Err(e) => {
-            print_error("getting workflow actions", &e);
-            std::process::exit(1);
-        }
-    };
+    export.workflow_actions =
+        match apis::workflow_actions_api::get_workflow_actions(config, workflow_id) {
+            Ok(actions) => actions,
+            Err(e) => {
+                print_error("getting workflow actions", &e);
+                std::process::exit(1);
+            }
+        };
 
     // Optionally get results (and compute nodes, which results reference)
     if include_results {
@@ -3869,7 +3265,7 @@ fn handle_import(
     }
     new_workflow.user = current_user.to_string(); // Set current user as owner
 
-    let created_workflow = match default_api::create_workflow(config, new_workflow) {
+    let created_workflow = match apis::workflows_api::create_workflow(config, new_workflow) {
         Ok(w) => w,
         Err(e) => {
             print_error("creating workflow", &e);
@@ -3886,14 +3282,14 @@ fn handle_import(
         new_file.id = None;
         new_file.workflow_id = new_workflow_id;
 
-        match default_api::create_file(config, new_file) {
+        match apis::files_api::create_file(config, new_file) {
             Ok(created) => {
                 mappings.files.insert(old_id, created.id.unwrap());
             }
             Err(e) => {
                 print_error("creating file", &e);
                 // Clean up: delete the workflow we just created
-                let _ = default_api::delete_workflow(config, new_workflow_id, None);
+                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id);
                 std::process::exit(1);
             }
         }
@@ -3908,13 +3304,13 @@ fn handle_import(
         new_ud.id = None;
         new_ud.workflow_id = new_workflow_id;
 
-        match default_api::create_user_data(config, new_ud, None, None) {
+        match apis::user_data_api::create_user_data(config, new_ud, None, None) {
             Ok(created) => {
                 mappings.user_data.insert(old_id, created.id.unwrap());
             }
             Err(e) => {
                 print_error("creating user_data", &e);
-                let _ = default_api::delete_workflow(config, new_workflow_id, None);
+                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id);
                 std::process::exit(1);
             }
         }
@@ -3923,23 +3319,23 @@ fn handle_import(
     // Create resource requirements and build mapping
     // First, get the 'default' resource requirement that was auto-created with the workflow
     // so we can map old 'default' IDs to it
-    let default_rr = default_api::list_resource_requirements(
+    let default_rr = apis::resource_requirements_api::list_resource_requirements(
         config,
         new_workflow_id,
         None,            // job_id
-        None,            // offset
-        None,            // limit
-        None,            // sort_by
-        None,            // reverse_sort
         Some("default"), // name
         None,            // memory
         None,            // num_cpus
         None,            // num_gpus
         None,            // num_nodes
         None,            // runtime
+        None,            // offset
+        None,            // limit
+        None,            // sort_by
+        None,            // reverse_sort
     )
     .ok()
-    .and_then(|response| response.items)
+    .map(|response| response.items)
     .and_then(|items| items.into_iter().next());
 
     for rr_model in &export.resource_requirements {
@@ -3966,7 +3362,7 @@ fn handle_import(
         new_rr.id = None;
         new_rr.workflow_id = new_workflow_id;
 
-        match default_api::create_resource_requirements(config, new_rr) {
+        match apis::resource_requirements_api::create_resource_requirements(config, new_rr) {
             Ok(created) => {
                 mappings
                     .resource_requirements
@@ -3974,7 +3370,7 @@ fn handle_import(
             }
             Err(e) => {
                 print_error("creating resource requirements", &e);
-                let _ = default_api::delete_workflow(config, new_workflow_id, None);
+                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id);
                 std::process::exit(1);
             }
         }
@@ -3987,7 +3383,7 @@ fn handle_import(
         new_scheduler.id = None;
         new_scheduler.workflow_id = new_workflow_id;
 
-        match default_api::create_slurm_scheduler(config, new_scheduler) {
+        match apis::slurm_schedulers_api::create_slurm_scheduler(config, new_scheduler) {
             Ok(created) => {
                 mappings
                     .slurm_schedulers
@@ -3995,7 +3391,7 @@ fn handle_import(
             }
             Err(e) => {
                 print_error("creating slurm scheduler", &e);
-                let _ = default_api::delete_workflow(config, new_workflow_id, None);
+                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id);
                 std::process::exit(1);
             }
         }
@@ -4008,7 +3404,7 @@ fn handle_import(
         new_scheduler.id = None;
         new_scheduler.workflow_id = new_workflow_id;
 
-        match default_api::create_local_scheduler(config, new_scheduler) {
+        match apis::local_schedulers_api::create_local_scheduler(config, new_scheduler) {
             Ok(created) => {
                 mappings
                     .local_schedulers
@@ -4016,7 +3412,7 @@ fn handle_import(
             }
             Err(e) => {
                 print_error("creating local scheduler", &e);
-                let _ = default_api::delete_workflow(config, new_workflow_id, None);
+                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id);
                 std::process::exit(1);
             }
         }
@@ -4029,7 +3425,7 @@ fn handle_import(
         new_handler.id = None;
         new_handler.workflow_id = new_workflow_id;
 
-        match default_api::create_failure_handler(config, new_handler) {
+        match apis::failure_handlers_api::create_failure_handler(config, new_handler) {
             Ok(created) => {
                 mappings
                     .failure_handlers
@@ -4037,7 +3433,7 @@ fn handle_import(
             }
             Err(e) => {
                 print_error("creating failure handler", &e);
-                let _ = default_api::delete_workflow(config, new_workflow_id, None);
+                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id);
                 std::process::exit(1);
             }
         }
@@ -4088,13 +3484,13 @@ fn handle_import(
         // based on dependencies and cannot be preserved through update_job API
         new_job.status = Some(JobStatus::Uninitialized);
 
-        match default_api::create_job(config, new_job) {
+        match apis::jobs_api::create_job(config, new_job) {
             Ok(created) => {
                 mappings.jobs.insert(old_id, created.id.unwrap());
             }
             Err(e) => {
                 print_error("creating job", &e);
-                let _ = default_api::delete_workflow(config, new_workflow_id, None);
+                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id);
                 std::process::exit(1);
             }
         }
@@ -4121,9 +3517,9 @@ fn handle_import(
             // Keep Uninitialized so we can modify depends_on_job_ids
             update_job.status = Some(JobStatus::Uninitialized);
 
-            if let Err(e) = default_api::update_job(config, *new_job_id, update_job) {
+            if let Err(e) = apis::jobs_api::update_job(config, *new_job_id, update_job) {
                 print_error("updating job dependencies", &e);
-                let _ = default_api::delete_workflow(config, new_workflow_id, None);
+                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id);
                 std::process::exit(1);
             }
         }
@@ -4147,11 +3543,11 @@ fn handle_import(
         new_entity.entity_id = new_entity_id;
         new_entity.metadata = new_metadata;
 
-        match default_api::create_ro_crate_entity(config, new_entity) {
+        match apis::ro_crate_entities_api::create_ro_crate_entity(config, new_entity) {
             Ok(_) => {}
             Err(e) => {
                 print_error("creating RO-Crate entity", &e);
-                let _ = default_api::delete_workflow(config, new_workflow_id, None);
+                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id);
                 std::process::exit(1);
             }
         }
@@ -4181,12 +3577,11 @@ fn handle_import(
             new_action.job_ids = Some(mappings.remap_job_ids(job_ids));
         }
 
-        // Serialize to JSON Value for the API
-        let action_json = serde_json::to_value(&new_action).unwrap_or_default();
-
-        if let Err(e) = default_api::create_workflow_action(config, new_workflow_id, action_json) {
+        if let Err(e) =
+            apis::workflow_actions_api::create_workflow_action(config, new_workflow_id, new_action)
+        {
             print_error("creating workflow action", &e);
-            let _ = default_api::delete_workflow(config, new_workflow_id, None);
+            let _ = apis::workflows_api::delete_workflow(config, new_workflow_id);
             std::process::exit(1);
         }
     }
@@ -4207,7 +3602,7 @@ fn handle_import(
             // Mark as inactive since this is historical data
             new_cn.is_active = Some(false);
 
-            match default_api::create_compute_node(config, new_cn) {
+            match apis::compute_nodes_api::create_compute_node(config, new_cn) {
                 Ok(created) => {
                     mappings.compute_nodes.insert(old_id, created.id.unwrap());
                     imported_compute_nodes += 1;
@@ -4238,7 +3633,7 @@ fn handle_import(
             "imported".to_string(), // compute_node_type
             None,                   // scheduler
         );
-        match default_api::create_compute_node(config, placeholder) {
+        match apis::compute_nodes_api::create_compute_node(config, placeholder) {
             Ok(created) => {
                 imported_compute_nodes += 1;
                 Some(created.id.unwrap())
@@ -4275,7 +3670,7 @@ fn handle_import(
                 continue;
             }
 
-            match default_api::create_result(config, new_result) {
+            match apis::results_api::create_result(config, new_result) {
                 Ok(_) => {
                     imported_results += 1;
                 }

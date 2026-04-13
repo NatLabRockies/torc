@@ -1,4 +1,4 @@
-use crate::client::apis::{configuration::Configuration, default_api};
+use crate::client::apis::{self, configuration::Configuration};
 use crate::client::parameter_expansion::{
     ParameterValue, cartesian_product, parse_parameter_value, substitute_parameters, zip_parameters,
 };
@@ -458,6 +458,13 @@ pub struct JobSpec {
     /// If set, only these parameters from the workflow will be used
     #[serde(skip_serializing_if = "Option::is_none")]
     pub use_parameters: Option<Vec<String>>,
+    /// Per-job override for stdout/stderr capture configuration.
+    /// If set, overrides the workflow-level `execution_config.stdio` for this job.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stdio: Option<StdioConfig>,
+    /// Scheduling priority; higher values are submitted to workers first. Minimum 0, default 0.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub priority: Option<i64>,
 }
 
 impl JobSpec {
@@ -486,6 +493,8 @@ impl JobSpec {
             parameters: None,
             parameter_mode: None,
             use_parameters: None,
+            stdio: None,
+            priority: None,
         }
     }
 
@@ -633,71 +642,287 @@ impl JobSpec {
     }
 }
 
-/// Slurm-specific configuration that is opaque to the server.
-///
-/// New Slurm settings should be added here instead of as top-level workflow fields.
-/// The server stores this as a JSON blob without interpretation; only the client
-/// deserializes it. This avoids requiring server code changes and database migrations
-/// for each new Slurm setting.
-#[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
-pub struct SlurmConfig {
-    /// When true (default), srun passes --mem and --cpus-per-task to enforce cgroup limits
-    /// for each job step when running inside a Slurm allocation.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub limit_resources: Option<bool>,
-    /// When true (default), jobs are wrapped with srun inside Slurm allocations.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub use_srun: Option<bool>,
-    /// Signal specification for srun steps, passed as `srun --signal=<value>`.
-    /// Format: `<signal>@<seconds>` (e.g., `TERM@120` sends SIGTERM 120 seconds before
-    /// the step time limit).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub srun_termination_signal: Option<String>,
-    /// When true, allow Slurm to bind tasks to specific CPU cores. By default (false),
-    /// srun passes `--cpu-bind=none` to disable binding.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub enable_cpu_bind: Option<bool>,
+/// How to capture stdout and stderr for job processes.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum StdioMode {
+    /// Separate stdout and stderr files (.o and .e) — the default.
+    #[default]
+    Separate,
+    /// Combine stdout and stderr into a single file (.log) per job.
+    Combined,
+    /// Don't capture stdout (send to /dev/null); capture stderr only.
+    NoStdout,
+    /// Don't capture stderr (send to /dev/null); capture stdout only.
+    NoStderr,
+    /// Don't capture either stdout or stderr.
+    None,
+    // Future: CombinedPerNode — all jobs on a node share one chronological file,
+    // each line tagged with the job ID.
 }
 
-impl SlurmConfig {
-    /// Merge with individual flat fields, where `self` (from slurm_config) takes precedence.
-    pub fn merge_with_flat_fields(
-        &self,
-        limit_resources: Option<bool>,
-        use_srun: Option<bool>,
-        srun_termination_signal: Option<String>,
-        enable_cpu_bind: Option<bool>,
-    ) -> SlurmConfig {
-        SlurmConfig {
-            limit_resources: self.limit_resources.or(limit_resources),
-            use_srun: self.use_srun.or(use_srun),
-            srun_termination_signal: self
-                .srun_termination_signal
-                .clone()
-                .or(srun_termination_signal),
-            enable_cpu_bind: self.enable_cpu_bind.or(enable_cpu_bind),
+/// Configuration for job stdout/stderr capture.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct StdioConfig {
+    /// How to capture stdout/stderr. Default: separate files.
+    #[serde(default)]
+    pub mode: StdioMode,
+    /// Delete stdout/stderr files if the job completes successfully.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delete_on_success: Option<bool>,
+}
+
+/// Execution mode for job processes.
+///
+/// Controls how torc manages job processes during execution, particularly
+/// around termination and resource enforcement.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ExecutionMode {
+    /// Direct shell execution - torc manages termination via SIGTERM/SIGKILL.
+    /// This is the default mode. Works everywhere: local machines, cloud VMs,
+    /// containers, and inside Slurm allocations.
+    #[default]
+    Direct,
+    /// Slurm srun execution - Slurm manages resource limits and termination.
+    /// Jobs are wrapped with `srun` inside Slurm allocations.
+    Slurm,
+    /// Auto-detect based on environment - uses `slurm` if SLURM_JOB_ID is set,
+    /// otherwise `direct`.
+    Auto,
+}
+
+/// Unified execution configuration that controls how jobs are run.
+///
+/// This replaces the old `SlurmConfig` with a mode-based approach that clearly
+/// distinguishes between direct execution (torc manages everything) and Slurm
+/// execution (srun manages resources and termination).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct ExecutionConfig {
+    /// Execution mode: direct (default), slurm, or auto.
+    #[serde(default)]
+    pub mode: ExecutionMode,
+
+    // ========== Shared settings (both modes) ==========
+    /// Seconds before end_time to send SIGKILL (direct mode) or set srun --time (slurm mode).
+    /// Default: 60.
+    /// - Direct mode: After this time, any remaining jobs are force-killed with SIGKILL.
+    /// - Slurm mode: srun --time is set to (remaining_time - sigkill_headroom_seconds) so
+    ///   Slurm kills the step before the allocation expires, giving the job runner time
+    ///   to detect the timeout and report results.
+    ///
+    /// If `srun_termination_signal` is set (e.g., "TERM@120"), ensure its time value
+    /// (120 seconds) is less than `sigkill_headroom_seconds` so the signal is sent
+    /// before Slurm kills the step.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sigkill_headroom_seconds: Option<i64>,
+
+    /// Exit code to use when a job times out.
+    /// Default: 152 (matches Slurm's TIMEOUT exit code).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout_exit_code: Option<i32>,
+
+    /// Enable staggered startup for job runners to mitigate thundering herd.
+    /// When true (default), each runner sleeps a deterministic jitter before
+    /// contacting the server, spreading load when many nodes start at once.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub staggered_start: Option<bool>,
+
+    // ========== Direct mode only ==========
+    /// When true (default), monitor memory/CPU usage and kill jobs that exceed
+    /// their resource requirements (OOM enforcement). Only applies in direct mode.
+    /// Setting this to false with slurm mode is an error — use direct mode instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit_resources: Option<bool>,
+
+    /// Signal to send before SIGKILL for graceful termination (direct mode only).
+    /// Default: "SIGTERM". Other common values: "SIGINT", "SIGUSR1".
+    /// In slurm mode, use `srun_termination_signal` instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub termination_signal: Option<String>,
+
+    /// Seconds before SIGKILL to send the termination signal (direct mode only).
+    /// Default: 30. This gives jobs time to handle the signal gracefully.
+    /// In slurm mode, termination timing is controlled by `srun_termination_signal`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sigterm_lead_seconds: Option<i64>,
+
+    /// Exit code to use when a job is OOM-killed (direct mode only).
+    /// Default: 137 (128 + SIGKILL = 128 + 9).
+    /// In slurm mode, Slurm manages OOM detection.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub oom_exit_code: Option<i32>,
+
+    // ========== Slurm mode only ==========
+    /// Signal specification for srun steps, passed as `srun --signal=<value>` (slurm mode only).
+    /// Format: `<signal>@<seconds>` (e.g., `TERM@120` sends SIGTERM 120 seconds
+    /// before the step time limit).
+    /// In direct mode, use `termination_signal` instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub srun_termination_signal: Option<String>,
+
+    /// When true, allow Slurm to bind tasks to specific CPU cores (slurm mode only).
+    /// By default (false), srun passes `--cpu-bind=none` to disable binding.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enable_cpu_bind: Option<bool>,
+
+    // ========== Stdio settings ==========
+    /// Workflow-level default for stdout/stderr capture.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stdio: Option<StdioConfig>,
+
+    /// Per-job stdio overrides keyed by job name.
+    /// Populated during workflow creation from per-job `stdio` fields in the spec.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub job_stdio_overrides: Option<HashMap<String, StdioConfig>>,
+}
+
+impl ExecutionConfig {
+    /// Default value for sigterm_lead_seconds (30 seconds)
+    pub const DEFAULT_SIGTERM_LEAD_SECONDS: i64 = 30;
+    /// Default value for sigkill_headroom_seconds (60 seconds)
+    pub const DEFAULT_SIGKILL_HEADROOM_SECONDS: i64 = 60;
+    /// Default exit code for timeout (matches Slurm's TIMEOUT)
+    pub const DEFAULT_TIMEOUT_EXIT_CODE: i32 = 152;
+    /// Default exit code for OOM kill (128 + SIGKILL)
+    pub const DEFAULT_OOM_EXIT_CODE: i32 = 137;
+
+    /// Resolve the effective execution mode based on the configured mode and environment.
+    /// - Direct -> Direct
+    /// - Slurm -> Slurm
+    /// - Auto -> Slurm if SLURM_JOB_ID is set, else Direct
+    pub fn effective_mode(&self) -> ExecutionMode {
+        match self.mode {
+            ExecutionMode::Direct => ExecutionMode::Direct,
+            ExecutionMode::Slurm => ExecutionMode::Slurm,
+            ExecutionMode::Auto => {
+                if std::env::var("SLURM_JOB_ID").is_ok() {
+                    ExecutionMode::Slurm
+                } else {
+                    ExecutionMode::Direct
+                }
+            }
         }
     }
 
-    /// Build a SlurmConfig from a WorkflowModel's slurm_config JSON blob.
-    pub fn from_workflow_model(workflow: &models::WorkflowModel) -> SlurmConfig {
-        if let Some(ref json_str) = workflow.slurm_config {
-            serde_json::from_str(json_str).unwrap_or_default()
-        } else {
-            SlurmConfig::default()
-        }
+    /// Whether to use srun wrapping (true for effective Slurm mode).
+    pub fn use_srun(&self) -> bool {
+        matches!(self.effective_mode(), ExecutionMode::Slurm)
     }
 
+    /// Whether to enforce resource limits.
     pub fn limit_resources(&self) -> bool {
         self.limit_resources.unwrap_or(true)
     }
 
-    pub fn use_srun(&self) -> bool {
-        self.use_srun.unwrap_or(true)
-    }
-
+    /// Whether to enable CPU binding in Slurm mode.
     pub fn enable_cpu_bind(&self) -> bool {
         self.enable_cpu_bind.unwrap_or(false)
+    }
+
+    /// Get the termination signal name for direct mode.
+    pub fn termination_signal(&self) -> &str {
+        self.termination_signal.as_deref().unwrap_or("SIGTERM")
+    }
+
+    /// Get the sigterm lead time in seconds.
+    pub fn sigterm_lead_seconds(&self) -> i64 {
+        self.sigterm_lead_seconds
+            .unwrap_or(Self::DEFAULT_SIGTERM_LEAD_SECONDS)
+    }
+
+    /// Get the sigkill headroom time in seconds.
+    pub fn sigkill_headroom_seconds(&self) -> i64 {
+        self.sigkill_headroom_seconds
+            .unwrap_or(Self::DEFAULT_SIGKILL_HEADROOM_SECONDS)
+    }
+
+    /// Get the timeout exit code.
+    pub fn timeout_exit_code(&self) -> i32 {
+        self.timeout_exit_code
+            .unwrap_or(Self::DEFAULT_TIMEOUT_EXIT_CODE)
+    }
+
+    /// Get the OOM exit code.
+    pub fn oom_exit_code(&self) -> i32 {
+        self.oom_exit_code.unwrap_or(Self::DEFAULT_OOM_EXIT_CODE)
+    }
+
+    /// Whether staggered startup is enabled for Slurm job runners.
+    pub fn staggered_start(&self) -> bool {
+        self.staggered_start.unwrap_or(true)
+    }
+
+    /// Resolve the effective `StdioConfig` for a job, checking per-job overrides first.
+    pub fn stdio_for_job(&self, job_name: &str) -> StdioConfig {
+        if let Some(ref overrides) = self.job_stdio_overrides
+            && let Some(cfg) = overrides.get(job_name)
+        {
+            return cfg.clone();
+        }
+        self.stdio.clone().unwrap_or_default()
+    }
+
+    /// Whether to delete stdio files on successful completion for a job.
+    pub fn delete_stdio_on_success(&self, job_name: &str) -> bool {
+        self.stdio_for_job(job_name)
+            .delete_on_success
+            .unwrap_or(false)
+    }
+
+    /// Validate the configuration, returning any warnings.
+    /// Build from a WorkflowModel's execution_config or legacy slurm_config JSON blob.
+    ///
+    /// Checks execution_config first; falls back to slurm_config for old workflows.
+    pub fn from_workflow_model(workflow: &models::WorkflowModel) -> ExecutionConfig {
+        if let Some(ref json_str) = workflow.execution_config {
+            serde_json::from_str(json_str).unwrap_or_default()
+        } else if let Some(ref json_str) = workflow.slurm_config {
+            // Fall back to legacy slurm_config for old workflows
+            Self::from_legacy_slurm_config_json(json_str)
+        } else {
+            ExecutionConfig::default()
+        }
+    }
+
+    /// Convert a legacy slurm_config JSON blob to ExecutionConfig for backward compatibility.
+    ///
+    /// This handles workflows created before ExecutionConfig was introduced.
+    fn from_legacy_slurm_config_json(json_str: &str) -> ExecutionConfig {
+        // Legacy slurm_config format:
+        // { "limit_resources": bool, "use_srun": bool, "srun_termination_signal": str, "enable_cpu_bind": bool }
+        #[derive(Deserialize, Default)]
+        struct LegacySlurmConfig {
+            limit_resources: Option<bool>,
+            use_srun: Option<bool>,
+            srun_termination_signal: Option<String>,
+            enable_cpu_bind: Option<bool>,
+        }
+
+        let legacy: LegacySlurmConfig = serde_json::from_str(json_str).unwrap_or_default();
+        ExecutionConfig {
+            // use_srun=true means Slurm mode, use_srun=false means Direct mode
+            // If not set, default to Auto for backward compatibility
+            mode: match legacy.use_srun {
+                Some(true) => ExecutionMode::Slurm,
+                Some(false) => ExecutionMode::Direct,
+                None => ExecutionMode::Auto,
+            },
+            limit_resources: legacy.limit_resources,
+            srun_termination_signal: legacy.srun_termination_signal,
+            enable_cpu_bind: legacy.enable_cpu_bind,
+            // Direct mode settings use defaults when converting from legacy
+            termination_signal: None,
+            sigterm_lead_seconds: None,
+            sigkill_headroom_seconds: None,
+            timeout_exit_code: None,
+            oom_exit_code: None,
+            staggered_start: None,
+            stdio: None,
+            job_stdio_overrides: None,
+        }
     }
 }
 
@@ -730,9 +955,6 @@ pub struct WorkflowSpec {
     /// Inform all compute nodes to wait this number of minutes if the database becomes unresponsive
     #[serde(skip_serializing_if = "Option::is_none")]
     pub compute_node_wait_for_healthy_database_minutes: Option<i64>,
-    /// Method for sorting jobs when claiming them from the server
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub jobs_sort_method: Option<models::ClaimJobsSortMethod>,
     /// Jobs that make up this workflow
     pub jobs: Vec<JobSpec>,
     /// Files associated with this workflow
@@ -762,15 +984,6 @@ pub struct WorkflowSpec {
     /// Use PendingFailed status for failed jobs (enables AI-assisted recovery)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub use_pending_failed: Option<bool>,
-    /// When true (default), srun passes --mem and --cpus-per-task to enforce cgroup limits
-    /// for each job step when running inside a Slurm allocation. Set to false to allow jobs
-    /// to exceed their stated resource requirements.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub limit_resources: Option<bool>,
-    /// When true (default), jobs are wrapped with srun inside Slurm allocations.
-    /// Set to false to use direct shell execution.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub use_srun: Option<bool>,
     /// When true, automatically create RO-Crate entities for workflow files.
     /// Input files get entities during initialization; output files get entities on job completion.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -781,19 +994,11 @@ pub struct WorkflowSpec {
     /// Arbitrary metadata as JSON string
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<String>,
-    /// Signal specification for srun steps, passed as `srun --signal=<value>`.
-    /// Format: `<signal>@<seconds>` (e.g., `TERM@120` sends SIGTERM 120 seconds before
-    /// the step time limit). This allows jobs to checkpoint before being killed.
+    /// Unified execution configuration controlling how jobs are run.
+    /// Controls execution mode (direct, slurm, or auto) and related settings like
+    /// resource limits, termination signals, and timeouts.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub srun_termination_signal: Option<String>,
-    /// When true, allow Slurm to bind tasks to specific CPU cores. By default (false),
-    /// srun passes `--cpu-bind=none` to disable binding.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub enable_cpu_bind: Option<bool>,
-    /// Grouped Slurm configuration (preferred over individual flat fields above).
-    /// New Slurm settings should be added to SlurmConfig instead of as top-level fields.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub slurm_config: Option<SlurmConfig>,
+    pub execution_config: Option<ExecutionConfig>,
 }
 
 impl WorkflowSpec {
@@ -814,7 +1019,6 @@ impl WorkflowSpec {
             compute_node_wait_for_new_jobs_seconds: None,
             compute_node_ignore_workflow_completion: None,
             compute_node_wait_for_healthy_database_minutes: None,
-            jobs_sort_method: None,
             jobs,
             files: None,
             user_data: None,
@@ -825,20 +1029,29 @@ impl WorkflowSpec {
             resource_monitor: None,
             actions: None,
             use_pending_failed: None,
-            limit_resources: None,
-            use_srun: None,
             enable_ro_crate: None,
             project: None,
             metadata: None,
-            srun_termination_signal: None,
-            enable_cpu_bind: None,
-            slurm_config: None,
+            execution_config: None,
         }
     }
 
     /// Deserialize a WorkflowSpec from a serde_json::Value
     /// This is the common conversion point for all file formats
     pub fn from_json_value(value: serde_json::Value) -> Result<Self, Box<dyn std::error::Error>> {
+        // Check for removed fields and provide helpful migration guidance
+        // before serde's deny_unknown_fields produces a generic error.
+        if let serde_json::Value::Object(ref map) = value
+            && map.contains_key("slurm_config")
+        {
+            return Err(
+                "The 'slurm_config' field has been removed from the workflow spec. \
+                 Use 'execution_config' instead.\n\
+                 See docs: docs/src/core/reference/workflow-spec.md \
+                 and docs/src/core/concepts/execution-modes.md"
+                    .into(),
+            );
+        }
         Ok(serde_json::from_value(value)?)
     }
 
@@ -1107,6 +1320,331 @@ impl WorkflowSpec {
         }
     }
 
+    /// Validate that job resource requirements (runtime, memory, GPUs) are compatible
+    /// with the slurm schedulers in the workflow. Returns a list of warning messages.
+    ///
+    /// For jobs with an explicit scheduler, each resource dimension is checked against
+    /// that scheduler. For jobs without a scheduler, at least one scheduler must be
+    /// suitable across all dimensions (since any scheduler can pick up unassigned jobs).
+    ///
+    /// Scheduler fields that are not set (e.g., `mem: None`, `gres: None`) are skipped
+    /// for that dimension.
+    pub fn validate_scheduler_resources(&self) -> Vec<String> {
+        let resource_req_map: HashMap<&str, &ResourceRequirementsSpec> = self
+            .resource_requirements
+            .as_ref()
+            .map(|reqs| reqs.iter().map(|r| (r.name.as_str(), r)).collect())
+            .unwrap_or_default();
+
+        let schedulers: Vec<&SlurmSchedulerSpec> = self
+            .slurm_schedulers
+            .as_ref()
+            .map(|s| s.iter().collect())
+            .unwrap_or_default();
+
+        if resource_req_map.is_empty() || schedulers.is_empty() {
+            return Vec::new();
+        }
+
+        // Pre-parse scheduler resources into a structured form
+        struct ParsedScheduler<'a> {
+            name: &'a str,
+            sched: &'a SlurmSchedulerSpec,
+            walltime_secs: Option<u64>,
+            memory_bytes: Option<i64>,
+            gpu_count: Option<u32>,
+        }
+
+        let mut warnings: Vec<String> = Vec::new();
+
+        let mut parsed_schedulers: Vec<ParsedScheduler> = Vec::new();
+        for sched in &schedulers {
+            let Some(name) = sched.name.as_deref() else {
+                continue;
+            };
+            let walltime_secs =
+                match crate::client::commands::slurm::parse_walltime_secs(&sched.walltime) {
+                    Ok(v) => Some(v),
+                    Err(e) => {
+                        warnings.push(format!(
+                            "Scheduler '{}': invalid walltime '{}': {}",
+                            name, sched.walltime, e,
+                        ));
+                        None
+                    }
+                };
+            let memory_bytes = match sched.mem.as_ref() {
+                Some(m) => match crate::memory_utils::memory_string_to_bytes(m) {
+                    Ok(v) => Some(v),
+                    Err(e) => {
+                        warnings.push(format!(
+                            "Scheduler '{}': invalid memory '{}': {}",
+                            name, m, e,
+                        ));
+                        None
+                    }
+                },
+                None => None,
+            };
+            let gpu_count = if sched.gres.as_ref().is_some_and(|g| !g.trim().is_empty()) {
+                let (parsed, _) = crate::client::hpc::slurm::parse_gres(&sched.gres);
+                // Non-empty but unparseable gres → treat as 0 GPUs so validation
+                // isn't silently bypassed
+                Some(parsed.unwrap_or(0))
+            } else {
+                None
+            };
+            parsed_schedulers.push(ParsedScheduler {
+                name,
+                sched,
+                walltime_secs,
+                memory_bytes,
+                gpu_count,
+            });
+        }
+
+        if parsed_schedulers.is_empty() {
+            return warnings;
+        }
+
+        for job in &self.jobs {
+            let rr_name = match &job.resource_requirements {
+                Some(name) => name,
+                None => continue,
+            };
+            let rr = match resource_req_map.get(rr_name.as_str()) {
+                Some(r) => r,
+                None => continue,
+            };
+
+            // Parse job resource values
+            let job_runtime_secs = match crate::time_utils::duration_string_to_seconds(&rr.runtime)
+            {
+                Ok(secs) => Some(secs as u64),
+                Err(e) => {
+                    warnings.push(format!(
+                        "Job '{}': invalid runtime '{}': {}",
+                        job.name, rr.runtime, e,
+                    ));
+                    None
+                }
+            };
+            let job_memory_bytes = match crate::memory_utils::memory_string_to_bytes(&rr.memory) {
+                Ok(bytes) => Some(bytes),
+                Err(e) => {
+                    warnings.push(format!(
+                        "Job '{}': invalid memory '{}': {}",
+                        job.name, rr.memory, e,
+                    ));
+                    None
+                }
+            };
+            let job_gpus = rr.num_gpus;
+
+            if job_gpus < 0 {
+                warnings.push(format!(
+                    "Job '{}': invalid negative num_gpus {}",
+                    job.name, job_gpus,
+                ));
+                continue;
+            }
+
+            if let Some(ref scheduler_name) = job.scheduler {
+                // Job has an explicit scheduler — check each dimension against it
+                let Some(ps) = parsed_schedulers
+                    .iter()
+                    .find(|ps| ps.name == scheduler_name.as_str())
+                else {
+                    continue; // Missing scheduler validated elsewhere
+                };
+
+                if let (Some(rt), Some(wt)) = (job_runtime_secs, ps.walltime_secs)
+                    && rt > wt
+                {
+                    warnings.push(format!(
+                        "Job '{}': runtime '{}' ({} s) exceeds scheduler '{}' \
+                         walltime '{}' ({} s)",
+                        job.name, rr.runtime, rt, scheduler_name, ps.sched.walltime, wt,
+                    ));
+                }
+                if let (Some(jm), Some(sm)) = (job_memory_bytes, ps.memory_bytes)
+                    && jm > sm
+                {
+                    warnings.push(format!(
+                        "Job '{}': memory '{}' exceeds scheduler '{}' mem '{}'",
+                        job.name,
+                        rr.memory,
+                        scheduler_name,
+                        ps.sched.mem.as_deref().unwrap_or("?"),
+                    ));
+                }
+                if let Some(sg) = ps.gpu_count
+                    && job_gpus > sg as i64
+                {
+                    warnings.push(format!(
+                        "Job '{}': num_gpus {} exceeds scheduler '{}' gres '{}'",
+                        job.name,
+                        job_gpus,
+                        scheduler_name,
+                        ps.sched.gres.as_deref().unwrap_or("?"),
+                    ));
+                }
+            } else {
+                // Job has no explicit scheduler — at least one must be suitable
+                // across ALL dimensions simultaneously
+                let suitable = parsed_schedulers.iter().any(|ps| {
+                    let runtime_ok = match (job_runtime_secs, ps.walltime_secs) {
+                        (Some(rt), Some(wt)) => rt <= wt,
+                        _ => true, // Can't check, assume ok
+                    };
+                    let memory_ok = match (job_memory_bytes, ps.memory_bytes) {
+                        (Some(jm), Some(sm)) => jm <= sm,
+                        _ => true,
+                    };
+                    let gpu_ok = match ps.gpu_count {
+                        Some(sg) => job_gpus <= sg as i64,
+                        None => true,
+                    };
+                    runtime_ok && memory_ok && gpu_ok
+                });
+
+                if !suitable {
+                    let mut reasons: Vec<String> = Vec::new();
+                    for ps in &parsed_schedulers {
+                        let mut mismatches: Vec<String> = Vec::new();
+                        if let (Some(rt), Some(wt)) = (job_runtime_secs, ps.walltime_secs)
+                            && rt > wt
+                        {
+                            mismatches.push(format!("runtime {} s > walltime {} s", rt, wt));
+                        }
+                        if let (Some(jm), Some(sm)) = (job_memory_bytes, ps.memory_bytes)
+                            && jm > sm
+                        {
+                            mismatches.push(format!(
+                                "memory '{}' > mem '{}'",
+                                rr.memory,
+                                ps.sched.mem.as_deref().unwrap_or("?"),
+                            ));
+                        }
+                        if let Some(sg) = ps.gpu_count
+                            && job_gpus > sg as i64
+                        {
+                            mismatches.push(format!(
+                                "num_gpus {} > gres '{}'",
+                                job_gpus,
+                                ps.sched.gres.as_deref().unwrap_or("?"),
+                            ));
+                        }
+                        if !mismatches.is_empty() {
+                            reasons.push(format!("'{}': {}", ps.name, mismatches.join(", ")));
+                        }
+                    }
+                    warnings.push(format!(
+                        "Job '{}' has no explicit scheduler and no scheduler can \
+                         accommodate its resource requirements. Mismatches: [{}]",
+                        job.name,
+                        reasons.join("; "),
+                    ));
+                }
+            }
+        }
+
+        warnings
+    }
+
+    /// Validate a spec file for creation by non-interactive callers (MCP server, TUI).
+    ///
+    /// Runs parameter expansion, scheduler node requirement checks, and scheduler
+    /// resource checks (memory, runtime, GPUs). Returns the parsed spec on success
+    /// so callers can pass it to [`create_from_validated_spec`] without re-reading
+    /// the file.
+    ///
+    /// **Note:** This is a partial validation step. Action validation and variable
+    /// substitution are performed later by [`create_from_validated_spec`]. A spec
+    /// that passes this function can still fail during creation if it has invalid
+    /// actions or unresolvable variable references.
+    pub fn validate_for_creation<P: AsRef<Path>>(
+        path: P,
+    ) -> Result<WorkflowSpec, Box<dyn std::error::Error>> {
+        let mut spec = Self::from_spec_file(path)?;
+        spec.expand_parameters()?;
+
+        spec.validate_scheduler_node_requirements()?;
+
+        let resource_warnings = spec.validate_scheduler_resources();
+        if !resource_warnings.is_empty() {
+            return Err(format!(
+                "Resource validation failed:\n  - {}",
+                resource_warnings.join("\n  - ")
+            )
+            .into());
+        }
+        Ok(spec)
+    }
+
+    /// Pre-validate a spec file for interactive CLI callers.
+    /// Node requirement failures are hard errors. Resource mismatches prompt the user.
+    /// Exits the process if validation fails or the user declines.
+    /// Note: CLI-only. Calls `process::exit` on failure — use `validate_for_creation`
+    /// for non-interactive/library contexts.
+    pub fn prevalidate_or_exit<P: AsRef<Path>>(path: P) {
+        let mut spec = match Self::from_spec_file(&path) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Error reading spec: {}", e);
+                std::process::exit(1);
+            }
+        };
+        if let Err(e) = spec.expand_parameters() {
+            eprintln!("Error expanding parameters: {}", e);
+            std::process::exit(1);
+        }
+
+        // Node requirements are hard errors (no prompt)
+        if let Err(e) = spec.validate_scheduler_node_requirements() {
+            eprintln!("Validation error: {}", e);
+            std::process::exit(1);
+        }
+
+        // Resource checks are interactive warnings
+        let warnings = spec.validate_scheduler_resources();
+        if !warnings.is_empty() && !Self::prompt_scheduler_warnings(&warnings) {
+            std::process::exit(1);
+        }
+    }
+
+    /// Display scheduler resource warnings and prompt the user for confirmation.
+    /// Returns true if the user confirms (or if there are no warnings).
+    /// In non-interactive contexts (stdin is not a TTY), prints a message and returns false.
+    fn prompt_scheduler_warnings(warnings: &[String]) -> bool {
+        use std::io::{IsTerminal, Write};
+
+        if warnings.is_empty() {
+            return true;
+        }
+
+        eprintln!("Resource validation warnings:");
+        for w in warnings {
+            eprintln!("  - {}", w);
+        }
+        eprintln!();
+
+        if std::io::stdin().is_terminal() {
+            eprint!("Proceed anyway? [y/N] ");
+            if std::io::stderr().flush().is_err() {
+                return false;
+            }
+            let mut input = String::new();
+            if std::io::stdin().read_line(&mut input).is_ok() {
+                return input.trim().eq_ignore_ascii_case("y");
+            }
+            false
+        } else {
+            eprintln!("Use --skip-checks to bypass resource validation.");
+            false
+        }
+    }
+
     /// Check if the workflow spec has an on_workflow_start action with schedule_nodes
     /// Returns true if such an action exists, false otherwise
     pub fn has_schedule_nodes_action(&self) -> bool {
@@ -1135,7 +1673,7 @@ impl WorkflowSpec {
     /// A `ValidationResult` containing validation status and summary
     pub fn validate_spec<P: AsRef<Path>>(path: P) -> ValidationResult {
         let mut errors = Vec::new();
-        let mut warnings = Vec::new();
+        let warnings = Vec::new();
 
         // Step 1: Try to parse the spec file
         let mut spec = match Self::from_spec_file(&path) {
@@ -1179,10 +1717,13 @@ impl WorkflowSpec {
         }
 
         // Step 4: Validate scheduler node requirements
-        // This is an error by default (same as create_workflow_from_spec with skip_checks=false)
         if let Err(e) = spec.validate_scheduler_node_requirements() {
             errors.push(format!("{}", e));
         }
+
+        // Step 4.5: Validate scheduler resources (runtime, memory, GPUs)
+        let resource_warnings = spec.validate_scheduler_resources();
+        errors.extend(resource_warnings);
 
         // Step 5: Validate variable substitution
         if let Err(e) = spec.substitute_variables() {
@@ -1517,75 +2058,6 @@ impl WorkflowSpec {
             }
         }
 
-        // Step 11: Warn about heterogeneous schedulers without jobs_sort_method
-        // This helps users avoid suboptimal job-to-node matching
-        if let Some(ref schedulers) = spec.slurm_schedulers
-            && schedulers.len() > 1
-            && spec.jobs_sort_method.is_none()
-        {
-            // Check if schedulers have different resource profiles
-            let has_different_gres = schedulers
-                .iter()
-                .map(|s| &s.gres)
-                .collect::<HashSet<_>>()
-                .len()
-                > 1;
-            let has_different_mem = schedulers
-                .iter()
-                .map(|s| &s.mem)
-                .collect::<HashSet<_>>()
-                .len()
-                > 1;
-            let has_different_walltime = schedulers
-                .iter()
-                .map(|s| &s.walltime)
-                .collect::<HashSet<_>>()
-                .len()
-                > 1;
-            let has_different_partition = schedulers
-                .iter()
-                .map(|s| &s.partition)
-                .collect::<HashSet<_>>()
-                .len()
-                > 1;
-
-            let has_heterogeneous_schedulers = has_different_gres
-                || has_different_mem
-                || has_different_walltime
-                || has_different_partition;
-
-            // Check if any jobs don't have explicit scheduler assignments
-            let jobs_without_scheduler = spec.jobs.iter().filter(|j| j.scheduler.is_none()).count();
-
-            if has_heterogeneous_schedulers && jobs_without_scheduler > 0 {
-                let mut differences = Vec::new();
-                if has_different_gres {
-                    differences.push("GPUs (gres)");
-                }
-                if has_different_mem {
-                    differences.push("memory (mem)");
-                }
-                if has_different_walltime {
-                    differences.push("walltime");
-                }
-                if has_different_partition {
-                    differences.push("partition");
-                }
-
-                warnings.push(format!(
-                        "Workflow has {} schedulers with different {} but {} job(s) have no explicit \
-                        scheduler assignment and jobs_sort_method is not set. The default sort method \
-                        'gpus_runtime_memory' will be used (jobs sorted by GPUs, then runtime, then \
-                        memory). If this doesn't match your workload, consider setting jobs_sort_method \
-                        explicitly to 'gpus_memory_runtime' (prioritize memory over runtime) or 'none' \
-                        (no sorting).",
-                        schedulers.len(),
-                        differences.join(", "),
-                        jobs_without_scheduler
-                    ));
-            }
-        }
-
         // Collect scheduler names for summary
         let scheduler_names: Vec<String> = spec
             .slurm_schedulers
@@ -1628,24 +2100,38 @@ impl WorkflowSpec {
     /// This function will create the workflow and all associated models (files, user data, etc.)
     /// If any errors occur, the workflow will be deleted (which cascades to all other objects)
     ///
+    /// **Note:** This function does not run scheduler resource validation
+    /// (node requirements, memory/runtime limits). The CLI performs those checks
+    /// interactively before calling this. Non-interactive callers (MCP, TUI)
+    /// should use [`validate_for_creation`] followed by [`create_from_validated_spec`].
+    ///
     /// # Arguments
     /// * `config` - Server configuration
     /// * `path` - Path to the workflow specification file
     /// * `user` - User that owns the workflow
     /// * `enable_resource_monitoring` - Whether to enable resource monitoring by default
-    /// * `skip_checks` - Skip validation checks (use with caution)
     pub fn create_workflow_from_spec<P: AsRef<Path>>(
         config: &Configuration,
         path: P,
         user: &str,
         enable_resource_monitoring: bool,
-        skip_checks: bool,
     ) -> Result<i64, Box<dyn std::error::Error>> {
-        // Step 1: Deserialize the WorkflowSpecification from spec file
         let mut spec = Self::from_spec_file(path)?;
-        spec.user = Some(user.to_string());
+        Self::prepare_spec_for_creation(&mut spec, user, enable_resource_monitoring)?;
+        Self::create_from_prepared_spec(config, spec)
+    }
 
-        // Apply default resource monitoring if enabled and not already configured
+    /// Create a workflow from a pre-parsed and validated spec.
+    /// Use this after `validate_for_creation` to avoid re-reading the file.
+    pub fn create_from_validated_spec(
+        config: &Configuration,
+        mut spec: WorkflowSpec,
+        user: &str,
+        enable_resource_monitoring: bool,
+    ) -> Result<i64, Box<dyn std::error::Error>> {
+        // validate_for_creation already expanded parameters, but we still need
+        // the remaining preparation steps (user, monitoring, actions, variables).
+        spec.user = Some(user.to_string());
         if enable_resource_monitoring && spec.resource_monitor.is_none() {
             spec.resource_monitor = Some(crate::client::resource_monitor::ResourceMonitorConfig {
                 enabled: true,
@@ -1654,27 +2140,63 @@ impl WorkflowSpec {
                 generate_plots: false,
             });
         }
-
-        // Step 1.25: Expand parameterized jobs and files
-        spec.expand_parameters()?;
-
-        // Step 1.4: Validate workflow actions
         spec.validate_actions()?;
-
-        // Step 1.45: Validate scheduler node requirements
-        if !skip_checks {
-            spec.validate_scheduler_node_requirements()?;
-        }
-
-        // Step 1.5: Perform variable substitution in commands
         spec.substitute_variables()?;
+        Self::create_from_prepared_spec(config, spec)
+    }
+
+    /// Prepare a spec for creation: set user, expand parameters, validate, substitute.
+    fn prepare_spec_for_creation(
+        spec: &mut WorkflowSpec,
+        user: &str,
+        enable_resource_monitoring: bool,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        spec.user = Some(user.to_string());
+        if enable_resource_monitoring && spec.resource_monitor.is_none() {
+            spec.resource_monitor = Some(crate::client::resource_monitor::ResourceMonitorConfig {
+                enabled: true,
+                granularity: crate::client::resource_monitor::MonitorGranularity::Summary,
+                sample_interval_seconds: 10,
+                generate_plots: false,
+            });
+        }
+        spec.expand_parameters()?;
+        spec.validate_actions()?;
+        spec.substitute_variables()?;
+        Ok(())
+    }
+
+    /// Create a workflow from a spec that has already been prepared (user set,
+    /// parameters expanded, actions validated, variables substituted).
+    fn create_from_prepared_spec(
+        config: &Configuration,
+        mut spec: WorkflowSpec,
+    ) -> Result<i64, Box<dyn std::error::Error>> {
+        // Step 1.6: Collect per-job stdio overrides into execution_config
+        {
+            let overrides: HashMap<String, StdioConfig> = spec
+                .jobs
+                .iter()
+                .filter_map(|job| {
+                    job.stdio
+                        .as_ref()
+                        .map(|stdio| (job.name.clone(), stdio.clone()))
+                })
+                .collect();
+            if !overrides.is_empty() {
+                let ec = spec
+                    .execution_config
+                    .get_or_insert_with(ExecutionConfig::default);
+                ec.job_stdio_overrides = Some(overrides);
+            }
+        }
 
         // Step 2: Create WorkflowModel
         let workflow_id = Self::create_workflow(config, &spec)?;
 
         // If any step fails, delete the workflow (which cascades to all other objects)
         let rollback = |workflow_id: i64| {
-            let _ = default_api::delete_workflow(config, workflow_id, None);
+            let _ = apis::workflows_api::delete_workflow(config, workflow_id);
         };
 
         // Step 3: Create supporting models and build name-to-id mappings
@@ -1786,10 +2308,6 @@ impl WorkflowSpec {
         if let Some(value) = spec.compute_node_wait_for_healthy_database_minutes {
             workflow_model.compute_node_wait_for_healthy_database_minutes = Some(value);
         }
-        if let Some(ref value) = spec.jobs_sort_method {
-            workflow_model.jobs_sort_method = Some(*value);
-        }
-
         // Serialize resource_monitor config if present
         if let Some(ref resource_monitor) = spec.resource_monitor {
             let config_json = serde_json::to_string(resource_monitor)
@@ -1811,26 +2329,105 @@ impl WorkflowSpec {
             workflow_model.use_pending_failed = Some(value);
         }
 
-        // Build merged SlurmConfig from flat fields and nested slurm_config.
-        // The nested slurm_config takes precedence over flat fields.
-        let merged_slurm = spec
-            .slurm_config
-            .clone()
-            .unwrap_or_default()
-            .merge_with_flat_fields(
-                spec.limit_resources,
-                spec.use_srun,
-                spec.srun_termination_signal.clone(),
-                spec.enable_cpu_bind,
-            );
+        // Store execution_config as JSON if any non-default settings are configured
+        if let Some(ref execution_config) = spec.execution_config
+            && *execution_config != ExecutionConfig::default()
+        {
+            let execution_config_json = serde_json::to_string(execution_config)
+                .map_err(|e| format!("Failed to serialize execution_config: {}", e))?;
+            workflow_model.execution_config = Some(execution_config_json);
+        }
 
-        // Store the merged config as a JSON blob (server treats it opaquely).
-        // Only set it when at least one field is configured, so that workflows
-        // without Slurm settings keep slurm_config = NULL in the database.
-        if merged_slurm != SlurmConfig::default() {
-            let slurm_config_json = serde_json::to_string(&merged_slurm)
-                .map_err(|e| format!("Failed to serialize slurm_config: {}", e))?;
-            workflow_model.slurm_config = Some(slurm_config_json);
+        // Validate that execution_config fields match the effective mode.
+        // For mode=auto, infer from slurm_schedulers presence.
+        if let Some(ref ec) = spec.execution_config {
+            let will_use_slurm = match ec.mode {
+                ExecutionMode::Slurm => true,
+                ExecutionMode::Auto => spec
+                    .slurm_schedulers
+                    .as_ref()
+                    .is_some_and(|s| !s.is_empty()),
+                ExecutionMode::Direct => false,
+            };
+            let will_use_direct = match ec.mode {
+                ExecutionMode::Direct => true,
+                ExecutionMode::Auto => !will_use_slurm,
+                ExecutionMode::Slurm => false,
+            };
+
+            let mut errors = Vec::new();
+
+            if will_use_slurm {
+                if ec.limit_resources == Some(false) {
+                    errors.push(
+                        "limit_resources: false is only supported in direct mode. \
+                        Slurm mode requires resource limits for correct srun behavior."
+                            .to_string(),
+                    );
+                }
+                if ec.termination_signal.is_some() {
+                    errors.push(
+                        "termination_signal is only supported in direct mode. \
+                        In slurm mode, use srun_termination_signal instead."
+                            .to_string(),
+                    );
+                }
+                if ec.sigterm_lead_seconds.is_some() {
+                    errors.push(
+                        "sigterm_lead_seconds is only supported in direct mode. \
+                        In slurm mode, termination timing is controlled by \
+                        srun_termination_signal."
+                            .to_string(),
+                    );
+                }
+                if ec.oom_exit_code.is_some() {
+                    errors.push(
+                        "oom_exit_code is only supported in direct mode. \
+                        In slurm mode, Slurm manages OOM detection."
+                            .to_string(),
+                    );
+                }
+            }
+
+            if will_use_direct {
+                if ec.srun_termination_signal.is_some() {
+                    errors.push(
+                        "srun_termination_signal is only supported in slurm mode. \
+                        In direct mode, use termination_signal instead."
+                            .to_string(),
+                    );
+                }
+                if ec.enable_cpu_bind == Some(true) {
+                    errors.push(
+                        "enable_cpu_bind is only supported in slurm mode. \
+                        It has no effect in direct mode."
+                            .to_string(),
+                    );
+                }
+            }
+
+            if !errors.is_empty() {
+                return Err(errors.join(" ").into());
+            }
+        }
+
+        if spec.actions.as_ref().is_some_and(|actions| {
+            actions.iter().any(|action| {
+                action.action_type == "schedule_nodes"
+                    && action.start_one_worker_per_node == Some(true)
+            })
+        }) {
+            let mode = spec
+                .execution_config
+                .as_ref()
+                .map(|config| &config.mode)
+                .unwrap_or(&ExecutionMode::Direct);
+            if *mode != ExecutionMode::Direct {
+                return Err(
+                    "start_one_worker_per_node requires execution_config.mode to be 'direct'"
+                        .into(),
+                );
+            }
         }
 
         // Set enable_ro_crate if present
@@ -1848,7 +2445,7 @@ impl WorkflowSpec {
             workflow_model.metadata = Some(value.clone());
         }
 
-        let created_workflow = default_api::create_workflow(config, workflow_model)
+        let created_workflow = apis::workflows_api::create_workflow(config, workflow_model)
             .map_err(|e| format!("Failed to create workflow: {:?}", e))?;
 
         created_workflow
@@ -1892,7 +2489,7 @@ impl WorkflowSpec {
                     st_mtime,
                 };
 
-                let created_file = default_api::create_file(config, file_model)
+                let created_file = apis::files_api::create_file(config, file_model)
                     .map_err(|e| format!("Failed to create file {}: {:?}", file_spec.name, e))?;
 
                 let file_id = created_file.id.ok_or("Created file missing ID")?;
@@ -1928,7 +2525,7 @@ impl WorkflowSpec {
                     };
 
                     let created_user_data =
-                        default_api::create_user_data(config, user_data_model, None, None)
+                        apis::user_data_api::create_user_data(config, user_data_model, None, None)
                             .map_err(|e| format!("Failed to create user data {}: {:?}", name, e))?;
 
                     let user_data_id =
@@ -1972,14 +2569,16 @@ impl WorkflowSpec {
                 };
 
                 let created_resource_req =
-                    default_api::create_resource_requirements(config, resource_req_model).map_err(
-                        |e| {
-                            format!(
-                                "Failed to create resource requirements {}: {:?}",
-                                resource_req_spec.name, e
-                            )
-                        },
-                    )?;
+                    apis::resource_requirements_api::create_resource_requirements(
+                        config,
+                        resource_req_model,
+                    )
+                    .map_err(|e| {
+                        format!(
+                            "Failed to create resource requirements {}: {:?}",
+                            resource_req_spec.name, e
+                        )
+                    })?;
 
                 let resource_req_id = created_resource_req
                     .id
@@ -2024,9 +2623,10 @@ impl WorkflowSpec {
                     };
 
                     let created_scheduler =
-                        default_api::create_slurm_scheduler(config, scheduler_model).map_err(
-                            |e| format!("Failed to create slurm scheduler {}: {:?}", name, e),
-                        )?;
+                        apis::slurm_schedulers_api::create_slurm_scheduler(config, scheduler_model)
+                            .map_err(|e| {
+                                format!("Failed to create slurm scheduler {}: {:?}", name, e)
+                            })?;
 
                     let scheduler_id = created_scheduler
                         .id
@@ -2066,13 +2666,14 @@ impl WorkflowSpec {
                     rules_json,
                 );
 
-                let created_handler = default_api::create_failure_handler(config, handler_model)
-                    .map_err(|e| {
-                        format!(
-                            "Failed to create failure handler {}: {:?}",
-                            handler_spec.name, e
-                        )
-                    })?;
+                let created_handler =
+                    apis::failure_handlers_api::create_failure_handler(config, handler_model)
+                        .map_err(|e| {
+                            format!(
+                                "Failed to create failure handler {}: {:?}",
+                                handler_spec.name, e
+                            )
+                        })?;
 
                 let handler_id = created_handler
                     .id
@@ -2170,14 +2771,6 @@ impl WorkflowSpec {
                             &0
                         };
 
-                        if action_spec.start_one_worker_per_node == Some(true) {
-                            log::warn!(
-                                "start_one_worker_per_node is deprecated and ignored. \
-                                 Multi-node allocations now use a single worker with \
-                                 per-node resource tracking via srun --nodelist."
-                            );
-                        }
-
                         let mut config = serde_json::json!({
                             "scheduler_type": scheduler_type,
                             "scheduler_id": scheduler_id,
@@ -2198,17 +2791,28 @@ impl WorkflowSpec {
                 };
 
                 // Create the action via API
-                let action_body = serde_json::json!({
-                    "workflow_id": workflow_id,
-                    "trigger_type": action_spec.trigger_type,
-                    "action_type": action_spec.action_type,
-                    "action_config": action_config,
-                    "job_ids": job_ids,
-                    "persistent": action_spec.persistent.unwrap_or(false),
-                });
+                let action_body = models::WorkflowActionModel {
+                    id: None,
+                    workflow_id,
+                    trigger_type: action_spec.trigger_type.clone(),
+                    action_type: action_spec.action_type.clone(),
+                    action_config,
+                    job_ids,
+                    trigger_count: 0,
+                    required_triggers: 1,
+                    executed: false,
+                    executed_at: None,
+                    executed_by: None,
+                    persistent: action_spec.persistent.unwrap_or(false),
+                    is_recovery: false,
+                };
 
-                default_api::create_workflow_action(config, workflow_id, action_body)
-                    .map_err(|e| format!("Failed to create workflow action: {:?}", e))?;
+                apis::workflow_actions_api::create_workflow_action(
+                    config,
+                    workflow_id,
+                    action_body,
+                )
+                .map_err(|e| format!("Failed to create workflow action: {:?}", e))?;
             }
         }
 
@@ -2316,7 +2920,7 @@ impl WorkflowSpec {
         Ok(levels)
     }
 
-    /// Create JobModels with proper ID mapping using bulk API in batches of 10000
+    /// Create JobModels with proper ID mapping using bulk API in batches
     /// Jobs are created in dependency order with depends_on_job_ids set during initial creation
     #[allow(clippy::type_complexity, clippy::too_many_arguments)]
     fn create_jobs(
@@ -2392,7 +2996,7 @@ impl WorkflowSpec {
         let levels = Self::topological_sort_jobs(&spec.jobs, &dependencies)?;
 
         // Step 4: Create jobs level by level
-        const BATCH_SIZE: usize = 10000;
+        let batch_size = crate::MAX_RECORD_TRANSFER_COUNT as usize;
 
         for level in levels {
             // Create job models for this level with depends_on_job_ids resolved
@@ -2524,15 +3128,26 @@ impl WorkflowSpec {
                     job_model.depends_on_job_ids = Some(depends_on_ids);
                 }
 
+                if let Some(p) = job_spec.priority {
+                    if p < 0 {
+                        return Err(format!(
+                            "priority must be >= 0, got {} for job '{}'",
+                            p, job_spec.name
+                        )
+                        .into());
+                    }
+                    job_model.priority = Some(p);
+                }
+
                 job_models.push(job_model);
                 job_spec_mapping.push(job_spec);
             }
 
-            // Create this level's jobs in batches of 10000
-            for (batch_index, batch) in job_models.chunks(BATCH_SIZE).enumerate() {
+            // Create this level's jobs in batches
+            for (batch_index, batch) in job_models.chunks(batch_size).enumerate() {
                 let jobs_model = models::JobsModel::new(batch.to_vec());
 
-                let response = default_api::create_jobs(config, jobs_model).map_err(|e| {
+                let response = apis::jobs_api::create_jobs(config, jobs_model).map_err(|e| {
                     format!(
                         "Failed to create batch {} of jobs: {:?}",
                         batch_index + 1,
@@ -2553,7 +3168,7 @@ impl WorkflowSpec {
                 }
 
                 // Update mappings
-                let batch_start = batch_index * BATCH_SIZE;
+                let batch_start = batch_index * batch_size;
                 for (i, created_job) in created_batch.iter().enumerate() {
                     let job_spec = job_spec_mapping[batch_start + i];
                     let job_id = created_job.id.ok_or("Created job missing ID")?;
@@ -2764,6 +3379,10 @@ impl WorkflowSpec {
                                 serde_json::Value::Array(param_names),
                             );
                         }
+                    }
+                    "stdio" => {
+                        let stdio_obj = Self::kdl_stdio_config_to_json(child)?;
+                        obj.insert("stdio".to_string(), stdio_obj);
                     }
                     _ => {}
                 }
@@ -3291,6 +3910,122 @@ impl WorkflowSpec {
         Ok(serde_json::Value::Object(obj))
     }
 
+    /// Convert a KDL execution_config node to a JSON object
+    ///
+    /// Parses execution_config block with mode and various settings for job execution.
+    #[cfg(feature = "client")]
+    fn kdl_execution_config_to_json(
+        node: &KdlNode,
+    ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+        let mut obj = serde_json::Map::new();
+
+        if let Some(children) = node.children() {
+            for child in children.nodes() {
+                let key = child.name().value();
+                // Handle child blocks (no entry value, only children)
+                if key == "stdio" {
+                    let stdio_obj = Self::kdl_stdio_config_to_json(child)?;
+                    obj.insert("stdio".to_string(), stdio_obj);
+                    continue;
+                }
+                if let Some(entry) = child.entries().first() {
+                    let value = entry.value();
+                    match key {
+                        "mode" => {
+                            if let Some(s) = value.as_string() {
+                                obj.insert(
+                                    "mode".to_string(),
+                                    serde_json::Value::String(s.to_string()),
+                                );
+                            }
+                        }
+                        "limit_resources" | "enable_cpu_bind" => {
+                            if let Some(b) = value.as_bool() {
+                                obj.insert(key.to_string(), serde_json::Value::Bool(b));
+                            }
+                        }
+                        "termination_signal" | "srun_termination_signal" => {
+                            if let Some(s) = value.as_string() {
+                                obj.insert(
+                                    key.to_string(),
+                                    serde_json::Value::String(s.to_string()),
+                                );
+                            }
+                        }
+                        "sigterm_lead_seconds" | "sigkill_headroom_seconds" => {
+                            if let Some(i) = value.as_integer() {
+                                obj.insert(
+                                    key.to_string(),
+                                    serde_json::Value::Number(serde_json::Number::from(i as i64)),
+                                );
+                            }
+                        }
+                        "timeout_exit_code" | "oom_exit_code" => {
+                            if let Some(i) = value.as_integer() {
+                                obj.insert(
+                                    key.to_string(),
+                                    serde_json::Value::Number(serde_json::Number::from(i as i64)),
+                                );
+                            }
+                        }
+                        _ => {
+                            log::warn!("Unknown execution_config field '{}' will be ignored", key);
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(serde_json::Value::Object(obj))
+    }
+
+    /// Convert a KDL stdio config node to a JSON object.
+    ///
+    /// Handles blocks like:
+    /// ```kdl
+    /// stdio {
+    ///     mode "combined"
+    ///     delete_on_success #true
+    /// }
+    /// ```
+    #[cfg(feature = "client")]
+    fn kdl_stdio_config_to_json(
+        node: &KdlNode,
+    ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+        let mut obj = serde_json::Map::new();
+
+        if let Some(children) = node.children() {
+            for child in children.nodes() {
+                let key = child.name().value();
+                if let Some(entry) = child.entries().first() {
+                    match key {
+                        "mode" => {
+                            if let Some(s) = entry.value().as_string() {
+                                obj.insert(
+                                    "mode".to_string(),
+                                    serde_json::Value::String(s.to_string()),
+                                );
+                            }
+                        }
+                        "delete_on_success" => {
+                            if let Some(b) = entry.value().as_bool() {
+                                obj.insert(
+                                    "delete_on_success".to_string(),
+                                    serde_json::Value::Bool(b),
+                                );
+                            }
+                        }
+                        _ => {
+                            log::warn!("Unknown stdio field '{}' will be ignored", key);
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(serde_json::Value::Object(obj))
+    }
+
     /// Convert a KDL slurm_defaults node to a JSON object
     ///
     /// Parses slurm_defaults block containing arbitrary key-value pairs for Slurm parameters.
@@ -3516,14 +4251,6 @@ impl WorkflowSpec {
                         );
                     }
                 }
-                "jobs_sort_method" => {
-                    if let Some(v) = node.entries().first().and_then(|e| e.value().as_string()) {
-                        obj.insert(
-                            "jobs_sort_method".to_string(),
-                            serde_json::Value::String(v.to_string()),
-                        );
-                    }
-                }
                 "parameters" => {
                     if let Some(params) = Self::kdl_parameters_to_json(node)? {
                         obj.insert("parameters".to_string(), params);
@@ -3562,32 +4289,15 @@ impl WorkflowSpec {
                         Self::kdl_slurm_defaults_to_json(node)?,
                     );
                 }
+                "execution_config" => {
+                    obj.insert(
+                        "execution_config".to_string(),
+                        Self::kdl_execution_config_to_json(node)?,
+                    );
+                }
                 "use_pending_failed" => {
                     if let Some(v) = node.entries().first().and_then(|e| e.value().as_bool()) {
                         obj.insert("use_pending_failed".to_string(), serde_json::Value::Bool(v));
-                    }
-                }
-                "limit_resources" => {
-                    if let Some(v) = node.entries().first().and_then(|e| e.value().as_bool()) {
-                        obj.insert("limit_resources".to_string(), serde_json::Value::Bool(v));
-                    }
-                }
-                "use_srun" => {
-                    if let Some(v) = node.entries().first().and_then(|e| e.value().as_bool()) {
-                        obj.insert("use_srun".to_string(), serde_json::Value::Bool(v));
-                    }
-                }
-                "srun_termination_signal" => {
-                    if let Some(v) = node.entries().first().and_then(|e| e.value().as_string()) {
-                        obj.insert(
-                            "srun_termination_signal".to_string(),
-                            serde_json::Value::String(v.to_string()),
-                        );
-                    }
-                }
-                "enable_cpu_bind" => {
-                    if let Some(v) = node.entries().first().and_then(|e| e.value().as_bool()) {
-                        obj.insert("enable_cpu_bind".to_string(), serde_json::Value::Bool(v));
                     }
                 }
                 _ => {
@@ -3681,15 +4391,6 @@ impl WorkflowSpec {
                 val
             ));
         }
-        if let Some(ref method) = self.jobs_sort_method {
-            let method_str = match method {
-                models::ClaimJobsSortMethod::GpusRuntimeMemory => "gpus_runtime_memory",
-                models::ClaimJobsSortMethod::GpusMemoryRuntime => "gpus_memory_runtime",
-                models::ClaimJobsSortMethod::None => "none",
-            };
-            lines.push(format!("jobs_sort_method \"{}\"", method_str));
-        }
-
         // Parameters
         if let Some(ref params) = self.parameters
             && !params.is_empty()
@@ -3761,6 +4462,54 @@ impl WorkflowSpec {
             lines.push(String::new());
         }
 
+        // Execution config
+        if let Some(ref exec_config) = self.execution_config {
+            lines.push("execution_config {".to_string());
+            match exec_config.mode {
+                ExecutionMode::Direct => lines.push("    mode \"direct\"".to_string()),
+                ExecutionMode::Slurm => lines.push("    mode \"slurm\"".to_string()),
+                ExecutionMode::Auto => lines.push("    mode \"auto\"".to_string()),
+            }
+            if let Some(limit) = exec_config.limit_resources {
+                lines.push(format!(
+                    "    limit_resources {}",
+                    if limit { "#true" } else { "#false" }
+                ));
+            }
+            if let Some(ref signal) = exec_config.termination_signal {
+                lines.push(format!("    termination_signal {}", kdl_escape(signal)));
+            }
+            if let Some(secs) = exec_config.sigterm_lead_seconds {
+                lines.push(format!("    sigterm_lead_seconds {}", secs));
+            }
+            if let Some(secs) = exec_config.sigkill_headroom_seconds {
+                lines.push(format!("    sigkill_headroom_seconds {}", secs));
+            }
+            if let Some(code) = exec_config.timeout_exit_code {
+                lines.push(format!("    timeout_exit_code {}", code));
+            }
+            if let Some(code) = exec_config.oom_exit_code {
+                lines.push(format!("    oom_exit_code {}", code));
+            }
+            if let Some(ref signal) = exec_config.srun_termination_signal {
+                lines.push(format!(
+                    "    srun_termination_signal {}",
+                    kdl_escape(signal)
+                ));
+            }
+            if let Some(bind) = exec_config.enable_cpu_bind {
+                lines.push(format!(
+                    "    enable_cpu_bind {}",
+                    if bind { "#true" } else { "#false" }
+                ));
+            }
+            if let Some(ref stdio) = exec_config.stdio {
+                Self::stdio_config_to_kdl(&mut lines, stdio, "    ");
+            }
+            lines.push("}".to_string());
+            lines.push(String::new());
+        }
+
         // Jobs
         for job in &self.jobs {
             Self::job_spec_to_kdl(&mut lines, job, &kdl_escape);
@@ -3787,6 +4536,28 @@ impl WorkflowSpec {
         }
 
         lines.join("\n")
+    }
+
+    /// Serialize a `StdioConfig` to KDL lines with a given indent prefix.
+    #[cfg(feature = "client")]
+    fn stdio_config_to_kdl(lines: &mut Vec<String>, stdio: &StdioConfig, indent: &str) {
+        lines.push(format!("{}stdio {{", indent));
+        let mode_str = match stdio.mode {
+            StdioMode::Separate => "separate",
+            StdioMode::Combined => "combined",
+            StdioMode::NoStdout => "no_stdout",
+            StdioMode::NoStderr => "no_stderr",
+            StdioMode::None => "none",
+        };
+        lines.push(format!("{}    mode \"{}\"", indent, mode_str));
+        if let Some(delete) = stdio.delete_on_success {
+            lines.push(format!(
+                "{}    delete_on_success {}",
+                indent,
+                if delete { "#true" } else { "#false" }
+            ));
+        }
+        lines.push(format!("{}}}", indent));
     }
 
     #[cfg(feature = "client")]
@@ -4016,6 +4787,9 @@ impl WorkflowSpec {
                 lines.push(format!("        {} {}", key, escape(value)));
             }
             lines.push("    }".to_string());
+        }
+        if let Some(ref stdio) = job.stdio {
+            Self::stdio_config_to_kdl(lines, stdio, "    ");
         }
         lines.push("}".to_string());
     }
@@ -4685,7 +5459,6 @@ job "train_lr{lr:.4f}_bs{batch_size}" {
             compute_node_wait_for_healthy_database_minutes: None,
             compute_node_ignore_workflow_completion: None,
             compute_node_wait_for_new_jobs_seconds: None,
-            jobs_sort_method: None,
             parameters: None,
             jobs: vec![JobSpec {
                 name: "job_{i}".to_string(),
@@ -4713,6 +5486,8 @@ job "train_lr{lr:.4f}_bs{batch_size}" {
                 parameter_mode: None,
                 use_parameters: None,
                 failure_handler: None,
+                stdio: None,
+                priority: None,
             }],
             files: Some(vec![{
                 let mut file =
@@ -4732,14 +5507,10 @@ job "train_lr{lr:.4f}_bs{batch_size}" {
             actions: None,
             failure_handlers: None,
             use_pending_failed: None,
-            limit_resources: None,
-            use_srun: None,
             enable_ro_crate: None,
             project: None,
             metadata: None,
-            srun_termination_signal: None,
-            enable_cpu_bind: None,
-            slurm_config: None,
+            execution_config: None,
         };
 
         spec.expand_parameters()
@@ -5366,5 +6137,460 @@ jobs:
 
         // Default should be product mode: 2 * 2 = 4 combinations
         assert_eq!(spec.jobs.len(), 4);
+    }
+
+    // ========== ExecutionConfig Tests ==========
+
+    #[test]
+    fn test_execution_config_defaults() {
+        let config = ExecutionConfig::default();
+        assert_eq!(config.mode, ExecutionMode::Direct);
+        assert!(config.limit_resources.is_none());
+        assert!(config.termination_signal.is_none());
+        assert!(config.sigterm_lead_seconds.is_none());
+        assert!(config.sigkill_headroom_seconds.is_none());
+        assert!(config.timeout_exit_code.is_none());
+        assert!(config.oom_exit_code.is_none());
+    }
+
+    #[test]
+    fn test_execution_config_default_getters() {
+        let config = ExecutionConfig::default();
+        assert!(config.limit_resources());
+        assert_eq!(config.termination_signal(), "SIGTERM");
+        assert_eq!(config.sigterm_lead_seconds(), 30);
+        assert_eq!(config.sigkill_headroom_seconds(), 60);
+        assert_eq!(config.timeout_exit_code(), 152);
+        assert_eq!(config.oom_exit_code(), 137);
+    }
+
+    #[test]
+    fn test_execution_config_custom_values() {
+        let config = ExecutionConfig {
+            mode: ExecutionMode::Direct,
+            limit_resources: Some(false),
+            termination_signal: Some("SIGUSR1".to_string()),
+            sigterm_lead_seconds: Some(60),
+            sigkill_headroom_seconds: Some(120),
+            timeout_exit_code: Some(200),
+            oom_exit_code: Some(201),
+            srun_termination_signal: None,
+            enable_cpu_bind: None,
+            staggered_start: None,
+            stdio: None,
+            job_stdio_overrides: None,
+        };
+        assert!(!config.limit_resources());
+        assert_eq!(config.termination_signal(), "SIGUSR1");
+        assert_eq!(config.sigterm_lead_seconds(), 60);
+        assert_eq!(config.sigkill_headroom_seconds(), 120);
+        assert_eq!(config.timeout_exit_code(), 200);
+        assert_eq!(config.oom_exit_code(), 201);
+    }
+
+    #[test]
+    fn test_execution_mode_serialization() {
+        let config = ExecutionConfig {
+            mode: ExecutionMode::Direct,
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&config).expect("Failed to serialize");
+        assert!(json.contains("\"mode\":\"direct\""));
+
+        let config = ExecutionConfig {
+            mode: ExecutionMode::Slurm,
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&config).expect("Failed to serialize");
+        assert!(json.contains("\"mode\":\"slurm\""));
+
+        let config = ExecutionConfig {
+            mode: ExecutionMode::Auto,
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&config).expect("Failed to serialize");
+        assert!(json.contains("\"mode\":\"auto\""));
+    }
+
+    #[test]
+    fn test_execution_mode_deserialization() {
+        let json = r#"{"mode":"direct"}"#;
+        let config: ExecutionConfig = serde_json::from_str(json).expect("Failed to deserialize");
+        assert_eq!(config.mode, ExecutionMode::Direct);
+
+        let json = r#"{"mode":"slurm"}"#;
+        let config: ExecutionConfig = serde_json::from_str(json).expect("Failed to deserialize");
+        assert_eq!(config.mode, ExecutionMode::Slurm);
+
+        let json = r#"{"mode":"auto"}"#;
+        let config: ExecutionConfig = serde_json::from_str(json).expect("Failed to deserialize");
+        assert_eq!(config.mode, ExecutionMode::Auto);
+    }
+
+    #[test]
+    fn test_execution_config_use_srun_by_mode() {
+        // Direct mode: use_srun = false
+        let config = ExecutionConfig {
+            mode: ExecutionMode::Direct,
+            ..Default::default()
+        };
+        assert!(!config.use_srun());
+
+        // Slurm mode: use_srun = true
+        let config = ExecutionConfig {
+            mode: ExecutionMode::Slurm,
+            ..Default::default()
+        };
+        assert!(config.use_srun());
+    }
+
+    #[test]
+    fn test_execution_config_yaml_parsing() {
+        let yaml = r#"
+name: test_workflow
+jobs:
+  - name: test_job
+    command: echo hello
+execution_config:
+  mode: direct
+  limit_resources: false
+  termination_signal: SIGUSR2
+  sigterm_lead_seconds: 45
+  sigkill_headroom_seconds: 90
+  timeout_exit_code: 200
+  oom_exit_code: 201
+"#;
+        let spec: WorkflowSpec = serde_yaml::from_str(yaml).expect("Failed to parse YAML");
+        let config = spec
+            .execution_config
+            .expect("execution_config should be present");
+        assert_eq!(config.mode, ExecutionMode::Direct);
+        assert_eq!(config.limit_resources, Some(false));
+        assert_eq!(config.termination_signal, Some("SIGUSR2".to_string()));
+        assert_eq!(config.sigterm_lead_seconds, Some(45));
+        assert_eq!(config.sigkill_headroom_seconds, Some(90));
+        assert_eq!(config.timeout_exit_code, Some(200));
+        assert_eq!(config.oom_exit_code, Some(201));
+    }
+
+    #[test]
+    fn test_execution_config_with_slurm_settings() {
+        let yaml = r#"
+name: test_workflow
+jobs:
+  - name: test_job
+    command: echo hello
+execution_config:
+  mode: slurm
+  srun_termination_signal: "TERM@120"
+  enable_cpu_bind: true
+"#;
+        let spec: WorkflowSpec = serde_yaml::from_str(yaml).expect("Failed to parse YAML");
+        let config = spec
+            .execution_config
+            .expect("execution_config should be present");
+        assert_eq!(config.mode, ExecutionMode::Slurm);
+        assert_eq!(config.srun_termination_signal, Some("TERM@120".to_string()));
+        assert_eq!(config.enable_cpu_bind, Some(true));
+    }
+
+    // --- validate_scheduler_resources tests ---
+
+    #[test]
+    fn test_validate_scheduler_resources_runtime_within_walltime() {
+        let yaml = r#"
+name: test_workflow
+jobs:
+  - name: test_job
+    command: echo hello
+    resource_requirements: small
+    scheduler: my_scheduler
+resource_requirements:
+  - name: small
+    num_cpus: 1
+    memory: "1g"
+    runtime: "PT30M"
+slurm_schedulers:
+  - name: my_scheduler
+    account: test
+    walltime: "01:00:00"
+"#;
+        let spec: WorkflowSpec = serde_yaml::from_str(yaml).expect("Failed to parse YAML");
+        assert!(spec.validate_scheduler_resources().is_empty());
+    }
+
+    #[test]
+    fn test_validate_scheduler_resources_runtime_equals_walltime() {
+        let yaml = r#"
+name: test_workflow
+jobs:
+  - name: test_job
+    command: echo hello
+    resource_requirements: small
+    scheduler: my_scheduler
+resource_requirements:
+  - name: small
+    num_cpus: 1
+    memory: "1g"
+    runtime: "PT1H"
+slurm_schedulers:
+  - name: my_scheduler
+    account: test
+    walltime: "01:00:00"
+"#;
+        let spec: WorkflowSpec = serde_yaml::from_str(yaml).expect("Failed to parse YAML");
+        assert!(spec.validate_scheduler_resources().is_empty());
+    }
+
+    #[test]
+    fn test_validate_scheduler_resources_runtime_exceeds_walltime() {
+        let yaml = r#"
+name: test_workflow
+jobs:
+  - name: test_job
+    command: echo hello
+    resource_requirements: big
+    scheduler: my_scheduler
+resource_requirements:
+  - name: big
+    num_cpus: 1
+    memory: "1g"
+    runtime: "PT2H"
+slurm_schedulers:
+  - name: my_scheduler
+    account: test
+    walltime: "01:00:00"
+"#;
+        let spec: WorkflowSpec = serde_yaml::from_str(yaml).expect("Failed to parse YAML");
+        let warnings = spec.validate_scheduler_resources();
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("test_job"));
+        assert!(warnings[0].contains("runtime"));
+    }
+
+    #[test]
+    fn test_validate_scheduler_resources_memory_exceeds_scheduler_mem() {
+        let yaml = r#"
+name: test_workflow
+jobs:
+  - name: test_job
+    command: echo hello
+    resource_requirements: big
+    scheduler: my_scheduler
+resource_requirements:
+  - name: big
+    num_cpus: 1
+    memory: "16g"
+    runtime: "PT30M"
+slurm_schedulers:
+  - name: my_scheduler
+    account: test
+    walltime: "01:00:00"
+    mem: "8g"
+"#;
+        let spec: WorkflowSpec = serde_yaml::from_str(yaml).expect("Failed to parse YAML");
+        let warnings = spec.validate_scheduler_resources();
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("test_job"));
+        assert!(warnings[0].contains("memory"));
+    }
+
+    #[test]
+    fn test_validate_scheduler_resources_gpus_exceed_scheduler_gres() {
+        let yaml = r#"
+name: test_workflow
+jobs:
+  - name: test_job
+    command: echo hello
+    resource_requirements: gpu_heavy
+    scheduler: my_scheduler
+resource_requirements:
+  - name: gpu_heavy
+    num_cpus: 1
+    num_gpus: 4
+    memory: "1g"
+    runtime: "PT30M"
+slurm_schedulers:
+  - name: my_scheduler
+    account: test
+    walltime: "01:00:00"
+    gres: "gpu:2"
+"#;
+        let spec: WorkflowSpec = serde_yaml::from_str(yaml).expect("Failed to parse YAML");
+        let warnings = spec.validate_scheduler_resources();
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("test_job"));
+        assert!(warnings[0].contains("num_gpus"));
+    }
+
+    #[test]
+    fn test_validate_scheduler_resources_skips_when_scheduler_mem_not_set() {
+        let yaml = r#"
+name: test_workflow
+jobs:
+  - name: test_job
+    command: echo hello
+    resource_requirements: big
+    scheduler: my_scheduler
+resource_requirements:
+  - name: big
+    num_cpus: 1
+    memory: "999g"
+    runtime: "PT30M"
+slurm_schedulers:
+  - name: my_scheduler
+    account: test
+    walltime: "01:00:00"
+"#;
+        let spec: WorkflowSpec = serde_yaml::from_str(yaml).expect("Failed to parse YAML");
+        // No mem set on scheduler, so memory check is skipped
+        assert!(spec.validate_scheduler_resources().is_empty());
+    }
+
+    #[test]
+    fn test_validate_scheduler_resources_skips_when_scheduler_gres_not_set() {
+        let yaml = r#"
+name: test_workflow
+jobs:
+  - name: test_job
+    command: echo hello
+    resource_requirements: gpu_heavy
+    scheduler: my_scheduler
+resource_requirements:
+  - name: gpu_heavy
+    num_cpus: 1
+    num_gpus: 100
+    memory: "1g"
+    runtime: "PT30M"
+slurm_schedulers:
+  - name: my_scheduler
+    account: test
+    walltime: "01:00:00"
+"#;
+        let spec: WorkflowSpec = serde_yaml::from_str(yaml).expect("Failed to parse YAML");
+        // No gres set on scheduler, so GPU check is skipped
+        assert!(spec.validate_scheduler_resources().is_empty());
+    }
+
+    #[test]
+    fn test_validate_scheduler_resources_multiple_warnings() {
+        let yaml = r#"
+name: test_workflow
+jobs:
+  - name: test_job
+    command: echo hello
+    resource_requirements: big
+    scheduler: my_scheduler
+resource_requirements:
+  - name: big
+    num_cpus: 1
+    num_gpus: 4
+    memory: "16g"
+    runtime: "PT2H"
+slurm_schedulers:
+  - name: my_scheduler
+    account: test
+    walltime: "01:00:00"
+    mem: "8g"
+    gres: "gpu:2"
+"#;
+        let spec: WorkflowSpec = serde_yaml::from_str(yaml).expect("Failed to parse YAML");
+        let warnings = spec.validate_scheduler_resources();
+        assert_eq!(warnings.len(), 3); // runtime + memory + GPUs
+    }
+
+    #[test]
+    fn test_validate_scheduler_resources_skips_jobs_without_resource_requirements() {
+        let yaml = r#"
+name: test_workflow
+jobs:
+  - name: test_job
+    command: echo hello
+slurm_schedulers:
+  - name: my_scheduler
+    account: test
+    walltime: "00:30:00"
+"#;
+        let spec: WorkflowSpec = serde_yaml::from_str(yaml).expect("Failed to parse YAML");
+        assert!(spec.validate_scheduler_resources().is_empty());
+    }
+
+    #[test]
+    fn test_validate_scheduler_resources_unassigned_job_passes_if_any_scheduler_fits() {
+        // Job has no explicit scheduler, one scheduler can handle it
+        let yaml = r#"
+name: test_workflow
+jobs:
+  - name: test_job
+    command: echo hello
+    resource_requirements: big
+resource_requirements:
+  - name: big
+    num_cpus: 1
+    memory: "4g"
+    runtime: "PT2H"
+slurm_schedulers:
+  - name: short_scheduler
+    account: test
+    walltime: "01:00:00"
+    mem: "8g"
+  - name: long_scheduler
+    account: test
+    walltime: "04:00:00"
+    mem: "8g"
+"#;
+        let spec: WorkflowSpec = serde_yaml::from_str(yaml).expect("Failed to parse YAML");
+        assert!(spec.validate_scheduler_resources().is_empty());
+    }
+
+    #[test]
+    fn test_validate_scheduler_resources_unassigned_job_fails_if_no_scheduler_fits_all_dims() {
+        // Scheduler A has enough walltime but not enough memory
+        // Scheduler B has enough memory but not enough walltime
+        // No single scheduler satisfies all dimensions
+        let yaml = r#"
+name: test_workflow
+jobs:
+  - name: test_job
+    command: echo hello
+    resource_requirements: tricky
+resource_requirements:
+  - name: tricky
+    num_cpus: 1
+    memory: "16g"
+    runtime: "PT2H"
+slurm_schedulers:
+  - name: long_but_small
+    account: test
+    walltime: "04:00:00"
+    mem: "8g"
+  - name: short_but_big
+    account: test
+    walltime: "01:00:00"
+    mem: "32g"
+"#;
+        let spec: WorkflowSpec = serde_yaml::from_str(yaml).expect("Failed to parse YAML");
+        let warnings = spec.validate_scheduler_resources();
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("test_job"));
+        assert!(warnings[0].contains("no explicit scheduler"));
+    }
+
+    #[test]
+    fn test_validate_scheduler_resources_no_schedulers_returns_empty() {
+        let yaml = r#"
+name: test_workflow
+jobs:
+  - name: test_job
+    command: echo hello
+    resource_requirements: big
+resource_requirements:
+  - name: big
+    num_cpus: 1
+    memory: "1g"
+    runtime: "PT2H"
+"#;
+        let spec: WorkflowSpec = serde_yaml::from_str(yaml).expect("Failed to parse YAML");
+        assert!(spec.validate_scheduler_resources().is_empty());
     }
 }

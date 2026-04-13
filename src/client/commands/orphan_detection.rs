@@ -12,8 +12,8 @@ use chrono::Utc;
 use log::{debug, info, warn};
 use serde::Serialize;
 
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::commands::pagination::{
     ComputeNodeListParams, JobListParams, ScheduledComputeNodeListParams, paginate_compute_nodes,
     paginate_jobs, paginate_scheduled_compute_nodes,
@@ -122,7 +122,7 @@ fn fail_orphaned_slurm_jobs(
     dry_run: bool,
 ) -> Result<(usize, Vec<OrphanedJobDetail>), String> {
     // Get workflow status to retrieve run_id
-    let workflow_status = default_api::get_workflow_status(config, workflow_id)
+    let workflow_status = apis::workflows_api::get_workflow_status(config, workflow_id)
         .map_err(|e| format!("Failed to get workflow status: {}", e))?;
     let run_id = workflow_status.run_id;
 
@@ -260,7 +260,7 @@ fn fail_orphaned_slurm_jobs(
                 );
 
                 // Mark the job as failed
-                match default_api::complete_job(
+                match apis::jobs_api::complete_job(
                     config,
                     job_id,
                     models::JobStatus::Failed,
@@ -284,7 +284,11 @@ fn fail_orphaned_slurm_jobs(
                 // Mark this compute node as inactive since its Slurm job is gone
                 let mut updated_node = compute_node.clone();
                 updated_node.is_active = Some(false);
-                match default_api::update_compute_node(config, compute_node_id, updated_node) {
+                match apis::compute_nodes_api::update_compute_node(
+                    config,
+                    compute_node_id,
+                    updated_node,
+                ) {
                     Ok(_) => {
                         debug!(
                             "Marked compute node {} as inactive (Slurm job {} no longer running)",
@@ -303,7 +307,7 @@ fn fail_orphaned_slurm_jobs(
 
         if !dry_run {
             // Update the scheduled compute node status to "complete" since the Slurm job is done
-            match default_api::update_scheduled_compute_node(
+            match apis::scheduled_compute_nodes_api::update_scheduled_compute_node(
                 config,
                 scheduled_compute_node_id,
                 models::ScheduledComputeNodesModel::new(
@@ -437,7 +441,7 @@ fn cleanup_dead_pending_slurm_jobs(
         }
 
         // Update the scheduled compute node status to "complete"
-        match default_api::update_scheduled_compute_node(
+        match apis::scheduled_compute_nodes_api::update_scheduled_compute_node(
             config,
             scheduled_compute_node_id,
             models::ScheduledComputeNodesModel::new(
@@ -494,12 +498,12 @@ fn fail_orphaned_running_jobs(
     dry_run: bool,
 ) -> Result<(usize, Vec<OrphanedJobDetail>), String> {
     // Get workflow status to retrieve run_id
-    let workflow_status = default_api::get_workflow_status(config, workflow_id)
+    let workflow_status = apis::workflows_api::get_workflow_status(config, workflow_id)
         .map_err(|e| format!("Failed to get workflow status: {}", e))?;
     let run_id = workflow_status.run_id;
 
     // Check for active compute nodes
-    let active_nodes_response = default_api::list_compute_nodes(
+    let active_nodes_response = apis::compute_nodes_api::list_compute_nodes(
         config,
         workflow_id,
         None,       // offset
@@ -560,7 +564,7 @@ fn fail_orphaned_running_jobs(
 
     // Get or create a compute node for recording the failure
     // First, try to find any existing compute node for this workflow
-    let compute_node_id = match default_api::list_compute_nodes(
+    let compute_node_id = match apis::compute_nodes_api::list_compute_nodes(
         config,
         workflow_id,
         None,    // offset
@@ -571,23 +575,13 @@ fn fail_orphaned_running_jobs(
         None,    // is_active - any status
         None,    // scheduled_compute_node_id
     ) {
-        Ok(response) => {
-            if let Some(nodes) = response.items {
-                if let Some(node) = nodes.first() {
-                    node.id.unwrap_or(0)
-                } else {
-                    0
-                }
-            } else {
-                0
-            }
-        }
+        Ok(response) => response.items.first().and_then(|node| node.id).unwrap_or(0),
         Err(_) => 0,
     };
 
     // If no compute node exists, create a recovery node
     let compute_node_id = if compute_node_id == 0 {
-        match default_api::create_compute_node(
+        match apis::compute_nodes_api::create_compute_node(
             config,
             models::ComputeNodeModel::new(
                 workflow_id,
@@ -643,7 +637,13 @@ fn fail_orphaned_running_jobs(
         );
 
         // Mark the job as failed
-        match default_api::complete_job(config, job_id, models::JobStatus::Failed, run_id, result) {
+        match apis::jobs_api::complete_job(
+            config,
+            job_id,
+            models::JobStatus::Failed,
+            run_id,
+            result,
+        ) {
             Ok(_) => {
                 info!(
                     "  Marked orphaned job {} ({}) as failed with return code {}",

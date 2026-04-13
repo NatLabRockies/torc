@@ -18,10 +18,9 @@ use axum::{
     routing::{get, post},
 };
 use clap::Parser;
-use rmcp::{ServiceExt, model::CallToolRequestParam, transport::child_process::TokioChildProcess};
+use rmcp::{ServiceExt, model::CallToolRequestParams, transport::child_process::TokioChildProcess};
 use rust_embed::Embed;
 use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
 use std::path::Path as FsPath;
 use std::process::Command as StdCommand;
 use std::sync::Arc;
@@ -30,13 +29,27 @@ use tokio::process::Command;
 use tokio::sync::{Mutex, RwLock};
 use torc::config::TorcConfig;
 use torc::network_utils::find_available_port;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 /// Embedded static assets for the dashboard
 #[derive(Embed)]
 #[folder = "torc-dash/static/"]
 struct Assets;
+
+/// LLM provider type for AI chat
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+enum LlmProvider {
+    /// Anthropic Claude API (direct or via Foundry)
+    #[default]
+    Anthropic,
+    /// OpenAI API (GPT models)
+    OpenAI,
+    /// Ollama (local, OpenAI-compatible)
+    Ollama,
+    /// GitHub Models (Azure inference, OpenAI-compatible)
+    GitHub,
+}
 
 /// Managed server process state
 #[derive(Default)]
@@ -71,19 +84,18 @@ struct AppState {
     torc_mcp_server_bin: String,
     /// Managed server process (if started by torc-dash)
     managed_server: Mutex<ManagedServer>,
-    /// Anthropic API key for AI chat (resolved from direct or Foundry config).
-    /// Wrapped in RwLock so it can be set at runtime via the dashboard UI.
-    anthropic_api_key: RwLock<Option<String>>,
-    /// Base URL for Claude API (e.g. "https://api.anthropic.com/v1" or Foundry URL).
-    /// Wrapped in RwLock so it can be changed at runtime via the dashboard UI.
-    anthropic_base_url: RwLock<String>,
-    /// Auth header name ("x-api-key" for both direct and Foundry).
-    /// Wrapped in RwLock so it can be changed at runtime via the dashboard UI.
-    anthropic_auth_header: RwLock<String>,
+    /// LLM provider type (Anthropic, Ollama, GitHub)
+    llm_provider: RwLock<LlmProvider>,
+    /// API key for AI chat (Anthropic key, GitHub token, or "ollama" for local)
+    llm_api_key: RwLock<Option<String>>,
+    /// Base URL for LLM API
+    llm_base_url: RwLock<String>,
+    /// Auth header name (e.g., "x-api-key", "Authorization")
+    llm_auth_header: RwLock<String>,
+    /// Model to use for AI chat (can be changed at runtime)
+    llm_model: RwLock<String>,
     /// MCP client connection (lazily initialized)
     mcp_client: Mutex<Option<McpClient>>,
-    /// Model to use for AI chat
-    anthropic_model: String,
 }
 
 /// CLI arguments
@@ -172,10 +184,6 @@ struct Cli {
     #[arg(long, env = "ANTHROPIC_AUTH_HEADER")]
     anthropic_auth_header: Option<String>,
 
-    /// Path to torc-mcp-server binary
-    #[arg(long, default_value = "torc-mcp-server", env = "TORC_MCP_SERVER_BIN")]
-    torc_mcp_server_bin: String,
-
     /// Model to use for AI chat (default: claude-sonnet-4-20250514)
     #[arg(
         long,
@@ -183,6 +191,58 @@ struct Cli {
         env = "ANTHROPIC_MODEL"
     )]
     anthropic_model: String,
+
+    /// Ollama base URL for local AI chat (OpenAI-compatible API)
+    #[arg(
+        long,
+        default_value = "http://localhost:11434/v1",
+        env = "OLLAMA_BASE_URL"
+    )]
+    ollama_base_url: String,
+
+    /// Ollama model name (e.g. "llama3.2", "qwen3.5:35b-a3b")
+    #[arg(long, default_value = "llama3.2", env = "OLLAMA_MODEL")]
+    ollama_model: String,
+
+    /// GitHub token for GitHub Models (requires "models:read" scope)
+    #[arg(long, env = "GITHUB_TOKEN")]
+    github_token: Option<String>,
+
+    /// GitHub Models base URL (Azure ML inference endpoint)
+    #[arg(
+        long,
+        default_value = "https://models.inference.ai.azure.com",
+        env = "GITHUB_MODELS_BASE_URL"
+    )]
+    github_models_base_url: String,
+
+    /// GitHub Models model name (e.g. "gpt-4o", "Meta-Llama-3.1-70B-Instruct")
+    #[arg(long, default_value = "gpt-4o", env = "GITHUB_MODELS_MODEL")]
+    github_models_model: String,
+
+    /// OpenAI API key
+    #[arg(long, env = "OPENAI_API_KEY")]
+    openai_api_key: Option<String>,
+
+    /// OpenAI API base URL (for API-compatible services)
+    #[arg(
+        long,
+        default_value = "https://api.openai.com/v1",
+        env = "OPENAI_BASE_URL"
+    )]
+    openai_base_url: String,
+
+    /// OpenAI model name (e.g. "gpt-4o", "gpt-4o-mini", "o1")
+    #[arg(long, default_value = "gpt-4o", env = "OPENAI_MODEL")]
+    openai_model: String,
+
+    /// LLM provider to use: "anthropic", "openai", "ollama", or "github"
+    #[arg(long, default_value = "anthropic", env = "LLM_PROVIDER")]
+    llm_provider: String,
+
+    /// Path to torc-mcp-server binary
+    #[arg(long, default_value = "torc-mcp-server", env = "TORC_MCP_SERVER_BIN")]
+    torc_mcp_server_bin: String,
 }
 
 #[tokio::main]
@@ -258,20 +318,18 @@ async fn main() -> Result<()> {
     #[cfg(unix)]
     if let Some(ref socket_path) = socket_path {
         info!(
-            "Starting torc-dash v{} ({}{}) on unix:{} torc_bin={} server_bin={}",
+            "Starting torc-dash v{} ({}) on unix:{} torc_bin={} server_bin={}",
             env!("CARGO_PKG_VERSION"),
             env!("GIT_HASH"),
-            env!("GIT_DIRTY"),
             socket_path.display(),
             torc_bin,
             torc_server_bin
         );
     } else {
         info!(
-            "Starting torc-dash v{} ({}{}) on {}:{} torc_bin={} server_bin={}",
+            "Starting torc-dash v{} ({}) on {}:{} torc_bin={} server_bin={}",
             env!("CARGO_PKG_VERSION"),
             env!("GIT_HASH"),
-            env!("GIT_DIRTY"),
             host,
             port,
             torc_bin,
@@ -280,10 +338,9 @@ async fn main() -> Result<()> {
     }
     #[cfg(not(unix))]
     info!(
-        "Starting torc-dash v{} ({}{}) on {}:{} torc_bin={} server_bin={}",
+        "Starting torc-dash v{} ({}) on {}:{} torc_bin={} server_bin={}",
         env!("CARGO_PKG_VERSION"),
         env!("GIT_HASH"),
-        env!("GIT_DIRTY"),
         host,
         port,
         torc_bin,
@@ -457,49 +514,118 @@ async fn main() -> Result<()> {
         .build_async_client()
         .expect("Failed to build HTTP client with TLS config");
 
-    // Resolve Anthropic API configuration: Foundry takes precedence over direct API
-    let (resolved_api_key, mut anthropic_base_url, mut anthropic_auth_header) =
-        if let (Some(foundry_key), Some(foundry_resource)) = (
-            cli.anthropic_foundry_api_key.as_ref(),
-            cli.anthropic_foundry_resource.as_ref(),
-        ) {
-            info!(
-                "AI Chat: using Azure AI Foundry (resource={})",
-                foundry_resource
-            );
-            (
-                Some(foundry_key.clone()),
-                format!(
-                    "https://{}.services.ai.azure.com/anthropic/v1",
-                    foundry_resource
-                ),
-                "x-api-key".to_string(),
-            )
-        } else if let Some(ref api_key) = cli.anthropic_api_key {
-            info!("AI Chat: using direct Anthropic API");
-            (
-                Some(api_key.clone()),
-                "https://api.anthropic.com/v1".to_string(),
-                "x-api-key".to_string(),
-            )
-        } else {
-            info!("AI Chat: disabled (no API key configured)");
-            (
-                None,
-                "https://api.anthropic.com/v1".to_string(),
-                "x-api-key".to_string(),
-            )
+    // Resolve LLM provider configuration based on --llm-provider or available credentials
+    let (llm_provider, llm_api_key, llm_base_url, llm_auth_header, llm_model) =
+        match cli.llm_provider.to_lowercase().as_str() {
+            "ollama" => {
+                info!("AI Chat: using Ollama ({})", cli.ollama_base_url);
+                (
+                    LlmProvider::Ollama,
+                    Some("ollama".to_string()), // Ollama doesn't need auth
+                    cli.ollama_base_url.clone(),
+                    "Authorization".to_string(),
+                    cli.ollama_model.clone(),
+                )
+            }
+            "github" => {
+                if let Some(ref token) = cli.github_token {
+                    info!("AI Chat: using GitHub Models");
+                    (
+                        LlmProvider::GitHub,
+                        Some(token.clone()),
+                        cli.github_models_base_url.clone(),
+                        "Authorization".to_string(),
+                        cli.github_models_model.clone(),
+                    )
+                } else {
+                    info!("AI Chat: GitHub Models selected but no GITHUB_TOKEN configured");
+                    (
+                        LlmProvider::GitHub,
+                        None,
+                        cli.github_models_base_url.clone(),
+                        "Authorization".to_string(),
+                        cli.github_models_model.clone(),
+                    )
+                }
+            }
+            "openai" => {
+                if let Some(ref api_key) = cli.openai_api_key {
+                    info!("AI Chat: using OpenAI API");
+                    (
+                        LlmProvider::OpenAI,
+                        Some(api_key.clone()),
+                        cli.openai_base_url.clone(),
+                        "Authorization".to_string(),
+                        cli.openai_model.clone(),
+                    )
+                } else {
+                    info!("AI Chat: OpenAI selected but no OPENAI_API_KEY configured");
+                    (
+                        LlmProvider::OpenAI,
+                        None,
+                        cli.openai_base_url.clone(),
+                        "Authorization".to_string(),
+                        cli.openai_model.clone(),
+                    )
+                }
+            }
+            _ => {
+                // Default to Anthropic: Foundry takes precedence over direct API
+                if let (Some(foundry_key), Some(foundry_resource)) = (
+                    cli.anthropic_foundry_api_key.as_ref(),
+                    cli.anthropic_foundry_resource.as_ref(),
+                ) {
+                    info!(
+                        "AI Chat: using Azure AI Foundry (resource={})",
+                        foundry_resource
+                    );
+                    let mut base_url = format!(
+                        "https://{}.services.ai.azure.com/anthropic/v1",
+                        foundry_resource
+                    );
+                    if let Some(ref url_override) = cli.anthropic_base_url {
+                        base_url = url_override.clone();
+                    }
+                    let auth_header = cli
+                        .anthropic_auth_header
+                        .clone()
+                        .unwrap_or_else(|| "x-api-key".to_string());
+                    (
+                        LlmProvider::Anthropic,
+                        Some(foundry_key.clone()),
+                        base_url,
+                        auth_header,
+                        cli.anthropic_model.clone(),
+                    )
+                } else if let Some(ref api_key) = cli.anthropic_api_key {
+                    info!("AI Chat: using direct Anthropic API");
+                    let base_url = cli
+                        .anthropic_base_url
+                        .clone()
+                        .unwrap_or_else(|| "https://api.anthropic.com/v1".to_string());
+                    let auth_header = cli
+                        .anthropic_auth_header
+                        .clone()
+                        .unwrap_or_else(|| "x-api-key".to_string());
+                    (
+                        LlmProvider::Anthropic,
+                        Some(api_key.clone()),
+                        base_url,
+                        auth_header,
+                        cli.anthropic_model.clone(),
+                    )
+                } else {
+                    info!("AI Chat: disabled (no API key configured)");
+                    (
+                        LlmProvider::Anthropic,
+                        None,
+                        "https://api.anthropic.com/v1".to_string(),
+                        "x-api-key".to_string(),
+                        cli.anthropic_model.clone(),
+                    )
+                }
+            }
         };
-
-    // Allow explicit overrides for base URL and auth header
-    if let Some(ref url_override) = cli.anthropic_base_url {
-        info!("AI Chat: base URL overridden to {}", url_override);
-        anthropic_base_url = url_override.clone();
-    }
-    if let Some(ref header_override) = cli.anthropic_auth_header {
-        info!("AI Chat: auth header overridden to {}", header_override);
-        anthropic_auth_header = header_override.clone();
-    }
 
     let state = Arc::new(AppState {
         api_url: final_api_url,
@@ -508,18 +634,19 @@ async fn main() -> Result<()> {
         torc_server_bin: torc_server_bin.clone(),
         torc_mcp_server_bin: cli.torc_mcp_server_bin.clone(),
         managed_server: Mutex::new(managed_server),
-        anthropic_api_key: RwLock::new(resolved_api_key),
-        anthropic_base_url: RwLock::new(anthropic_base_url),
-        anthropic_auth_header: RwLock::new(anthropic_auth_header),
+        llm_provider: RwLock::new(llm_provider),
+        llm_api_key: RwLock::new(llm_api_key),
+        llm_base_url: RwLock::new(llm_base_url),
+        llm_auth_header: RwLock::new(llm_auth_header),
+        llm_model: RwLock::new(llm_model),
         mcp_client: Mutex::new(None),
-        anthropic_model: cli.anthropic_model.clone(),
     });
 
     // Build router
     let app = Router::new()
         // Static files and dashboard
         .route("/", get(index_handler))
-        .route("/static/*path", get(static_handler))
+        .route("/static/{*path}", get(static_handler))
         // CLI command endpoints
         .route("/api/cli/create", post(cli_create_handler))
         .route("/api/cli/create-slurm", post(cli_create_slurm_handler))
@@ -569,7 +696,7 @@ async fn main() -> Result<()> {
         .route("/api/user", get(user_handler))
         // API proxy - catch all /torc-service/* requests
         .route(
-            "/torc-service/*path",
+            "/torc-service/{*path}",
             get(proxy_handler)
                 .post(proxy_handler)
                 .put(proxy_handler)
@@ -598,36 +725,8 @@ async fn main() -> Result<()> {
             socket_path.display()
         );
 
-        // TODO: axum 0.7's serve() only accepts TcpListener, so we use a manual
-        // accept loop with hyper-util for Unix socket connections. In axum 0.8+,
-        // serve() accepts a generic Listener trait that UnixListener implements,
-        // which would replace this entire block with just:
-        //
-        //   axum::serve(uds, app).await?;
-        //
-        // We're stuck on axum 0.7 because the swagger crate (used by
-        // torc-server) depends on hyper 0.14, while axum 0.8 requires hyper 1.4+.
-        // Removing the swagger dependency would unblock the upgrade.
-        let mut make_service = app.into_make_service();
-        loop {
-            let (stream, _addr) = uds.accept().await?;
-            let tower_service = tower::Service::call(&mut make_service, &stream)
-                .await
-                .unwrap_or_else(|e| match e {});
-            let hyper_service = hyper_util::service::TowerToHyperService::new(tower_service);
-
-            tokio::spawn(async move {
-                let io = hyper_util::rt::TokioIo::new(stream);
-                if let Err(err) = hyper_util::server::conn::auto::Builder::new(
-                    hyper_util::rt::TokioExecutor::new(),
-                )
-                .serve_connection(io, hyper_service)
-                .await
-                {
-                    error!("Error serving Unix socket connection: {err}");
-                }
-            });
-        }
+        axum::serve(uds, app).await?;
+        return Ok(());
     }
 
     // TCP path (default)
@@ -944,7 +1043,7 @@ async fn cli_create_handler(
         // Spec is a file path
         run_torc_command(
             &state.torc_bin,
-            &["-f", "json", "workflows", "create", &req.spec],
+            &["-f", "json", "create", &req.spec],
             &state.api_url,
         )
         .await
@@ -963,7 +1062,7 @@ async fn cli_create_handler(
 
         let result = run_torc_command(
             &state.torc_bin,
-            &["-f", "json", "workflows", "create", &temp_path],
+            &["-f", "json", "create", &temp_path],
             &state.api_url,
         )
         .await;
@@ -1055,21 +1154,34 @@ async fn cli_create_slurm_handler(
     };
 
     let result = if req.is_file {
-        // Spec is a file path
-        let mut args = vec![
-            "-f",
-            "json",
-            "workflows",
-            "create-slurm",
-            "--account",
-            &req.account,
-        ];
+        // Spec is a file path - two-step process: generate schedulers then create
+        // Step 1: Generate Slurm schedulers
+        let slurm_spec_path = format!(
+            "{}_slurm.yaml",
+            req.spec
+                .trim_end_matches(".yaml")
+                .trim_end_matches(".yml")
+                .trim_end_matches(".json")
+                .trim_end_matches(".json5")
+                .trim_end_matches(".kdl")
+        );
+        let mut gen_args = vec!["slurm", "generate", "--account", &req.account];
         if let Some(ref profile) = req.profile {
-            args.push("--hpc-profile");
-            args.push(profile);
+            gen_args.push("--profile");
+            gen_args.push(profile);
         }
-        args.push(&req.spec);
-        run_torc_command(&state.torc_bin, &args, &state.api_url).await
+        gen_args.push("-o");
+        gen_args.push(&slurm_spec_path);
+        gen_args.push(&req.spec);
+
+        let gen_result = run_torc_command(&state.torc_bin, &gen_args, &state.api_url).await;
+        if !gen_result.success {
+            return Json(gen_result);
+        }
+
+        // Step 2: Create the workflow from generated spec
+        let create_args = vec!["-f", "json", "create", &slurm_spec_path];
+        run_torc_command(&state.torc_bin, &create_args, &state.api_url).await
     } else {
         // Spec is inline content - write to current directory with random name
         let unique_id = uuid::Uuid::new_v4();
@@ -1083,21 +1195,27 @@ async fn cli_create_slurm_handler(
             });
         }
 
-        let mut args = vec![
-            "-f",
-            "json",
-            "workflows",
-            "create-slurm",
-            "--account",
-            &req.account,
-        ];
+        // Step 1: Generate Slurm schedulers
+        let slurm_spec_path = format!("{}_slurm", temp_path);
+        let mut gen_args = vec!["slurm", "generate", "--account", &req.account];
         if let Some(ref profile) = req.profile {
-            args.push("--hpc-profile");
-            args.push(profile);
+            gen_args.push("--profile");
+            gen_args.push(profile);
         }
-        args.push(&temp_path);
+        gen_args.push("-o");
+        gen_args.push(&slurm_spec_path);
+        gen_args.push(&temp_path);
 
-        let result = run_torc_command(&state.torc_bin, &args, &state.api_url).await;
+        let gen_result = run_torc_command(&state.torc_bin, &gen_args, &state.api_url).await;
+        if !gen_result.success {
+            // Clean up temp file
+            let _ = tokio::fs::remove_file(&temp_path).await;
+            return Json(gen_result);
+        }
+
+        // Step 2: Create the workflow from generated spec
+        let create_args = vec!["-f", "json", "create", &slurm_spec_path];
+        let result = run_torc_command(&state.torc_bin, &create_args, &state.api_url).await;
 
         // Handle file after creation attempt
         if result.success {
@@ -1170,7 +1288,7 @@ async fn cli_validate_handler(
         // Spec is a file path
         run_torc_command(
             &state.torc_bin,
-            &["-f", "json", "workflows", "create", &req.spec, "--dry-run"],
+            &["-f", "json", "create", &req.spec, "--dry-run"],
             &state.api_url,
         )
         .await
@@ -1190,7 +1308,7 @@ async fn cli_validate_handler(
         }
         let result = run_torc_command(
             &state.torc_bin,
-            &["-f", "json", "workflows", "create", &temp_path, "--dry-run"],
+            &["-f", "json", "create", &temp_path, "--dry-run"],
             &state.api_url,
         )
         .await;
@@ -1231,7 +1349,7 @@ async fn cli_initialize_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<InitializeRequest>,
 ) -> impl IntoResponse {
-    let mut args = vec!["workflows", "initialize", &req.workflow_id];
+    let mut args = vec!["workflows", "init", &req.workflow_id];
     if req.force {
         args.push("--force");
     }
@@ -1251,7 +1369,7 @@ async fn cli_check_initialize_handler(
             "-f",
             "json",
             "workflows",
-            "initialize",
+            "init",
             &req.workflow_id,
             "--dry-run",
         ],
@@ -1293,7 +1411,7 @@ async fn cli_reinitialize_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<InitializeRequest>,
 ) -> impl IntoResponse {
-    let mut args = vec!["workflows", "reinitialize", &req.workflow_id];
+    let mut args = vec!["workflows", "reinit", &req.workflow_id];
     if req.force {
         args.push("--force");
     }
@@ -1414,7 +1532,7 @@ async fn cli_run_stream_handler(
 
         // Spawn the command with piped stdout/stderr
         let mut child = match Command::new(&torc_bin)
-            .args(["workflows", "run", &workflow_id])
+            .args(["run", &workflow_id])
             .env("TORC_API_URL", &api_url)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -1478,7 +1596,7 @@ async fn cli_run_stream_handler(
                 interval.tick().await;
 
                 // Fetch jobs from API and count statuses
-                let url = format!("{}/jobs?workflow_id={}&limit=10000", api_url_status, workflow_id_status);
+                let url = format!("{}/jobs?workflow_id={}&limit={}", api_url_status, workflow_id_status, torc::MAX_RECORD_TRANSFER_COUNT);
                 match http_client_status.get(&url).send().await {
                     Ok(resp) if resp.status().is_success() => {
                         if let Ok(json) = resp.json::<serde_json::Value>().await {
@@ -2835,9 +2953,7 @@ struct UserResponse {
 
 /// Return the current user from the environment
 async fn user_handler() -> impl IntoResponse {
-    let user = std::env::var("USER")
-        .or_else(|_| std::env::var("USERNAME"))
-        .unwrap_or_else(|_| "unknown".to_string());
+    let user = torc::get_username();
 
     Json(UserResponse { user })
 }
@@ -2873,13 +2989,25 @@ struct ChatStatusResponse {
 }
 
 async fn chat_status_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let available = state.anthropic_api_key.read().await.is_some();
+    let provider = *state.llm_provider.read().await;
+    let has_key = state.llm_api_key.read().await.is_some();
+
+    // Ollama doesn't require an API key (local), but others do
+    let available = match provider {
+        LlmProvider::Ollama => true, // Always available (assumes local Ollama is running)
+        _ => has_key,
+    };
+
     let reason = if !available {
-        Some(
-            "No API key configured. Set ANTHROPIC_API_KEY or \
-             ANTHROPIC_FOUNDRY_API_KEY + ANTHROPIC_FOUNDRY_RESOURCE"
-                .to_string(),
-        )
+        let msg = match provider {
+            LlmProvider::Anthropic => {
+                "No API key configured. Set ANTHROPIC_API_KEY or use Azure AI Foundry."
+            }
+            LlmProvider::OpenAI => "No API key configured. Set OPENAI_API_KEY.",
+            LlmProvider::GitHub => "No GitHub token configured. Set GITHUB_TOKEN.",
+            LlmProvider::Ollama => "Ollama should be available locally.",
+        };
+        Some(msg.to_string())
     } else {
         None
     };
@@ -2889,19 +3017,23 @@ async fn chat_status_handler(State(state): State<Arc<AppState>>) -> impl IntoRes
 
 #[derive(Deserialize)]
 struct ConfigureChatRequest {
+    /// API key (or "ollama" for local Ollama, or GitHub token for GitHub Models)
     api_key: String,
-    /// Provider type: "anthropic", "foundry", or "custom"
+    /// Provider type: "anthropic", "foundry", "custom", "ollama", or "github"
     #[serde(default = "default_provider")]
     provider: String,
     /// Azure AI Foundry resource name (required when provider = "foundry")
     #[serde(default)]
     foundry_resource: Option<String>,
-    /// Custom base URL (required when provider = "custom")
+    /// Custom base URL (required when provider = "custom", optional for others)
     #[serde(default)]
     base_url: Option<String>,
-    /// Custom auth header name (optional, defaults to "x-api-key")
+    /// Custom auth header name (optional, defaults to provider-appropriate value)
     #[serde(default)]
     auth_header: Option<String>,
+    /// Model name (optional, defaults to provider-appropriate model)
+    #[serde(default)]
+    model: Option<String>,
 }
 
 fn default_provider() -> String {
@@ -2918,28 +3050,104 @@ async fn configure_chat_handler(
         .map_err(|status| (status, "Cross-origin requests are not allowed"))?;
 
     let key = req.api_key.trim().to_string();
-    if key.is_empty() {
-        return Err((StatusCode::BAD_REQUEST, "API key must not be empty"));
-    }
 
-    let (base_url, auth_header) = match req.provider.as_str() {
+    let (provider, base_url, auth_header, model) = match req.provider.as_str() {
+        "ollama" => {
+            // Ollama doesn't require a real API key
+            let url = req
+                .base_url
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .unwrap_or("http://localhost:11434/v1")
+                .to_string();
+            let model = req
+                .model
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .unwrap_or("llama3.2")
+                .to_string();
+            info!(
+                "AI Chat: configured via dashboard UI as Ollama (url={})",
+                url
+            );
+            (LlmProvider::Ollama, url, "Authorization".to_string(), model)
+        }
+        "github" => {
+            if key.is_empty() {
+                return Err((StatusCode::BAD_REQUEST, "GitHub token is required"));
+            }
+            let url = req
+                .base_url
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .unwrap_or("https://models.inference.ai.azure.com")
+                .to_string();
+            let model = req
+                .model
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .unwrap_or("gpt-4o")
+                .to_string();
+            info!("AI Chat: configured via dashboard UI as GitHub Models");
+            (LlmProvider::GitHub, url, "Authorization".to_string(), model)
+        }
+        "openai" => {
+            if key.is_empty() {
+                return Err((StatusCode::BAD_REQUEST, "OpenAI API key is required"));
+            }
+            let url = req
+                .base_url
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .unwrap_or("https://api.openai.com/v1")
+                .to_string();
+            let model = req
+                .model
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .unwrap_or("gpt-4o")
+                .to_string();
+            info!("AI Chat: configured via dashboard UI as OpenAI");
+            (LlmProvider::OpenAI, url, "Authorization".to_string(), model)
+        }
         "foundry" => {
+            if key.is_empty() {
+                return Err((StatusCode::BAD_REQUEST, "API key must not be empty"));
+            }
             let resource = req
                 .foundry_resource
                 .as_deref()
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
                 .ok_or((StatusCode::BAD_REQUEST, "Foundry resource name is required"))?;
+            let model = req
+                .model
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .unwrap_or("claude-sonnet-4-20250514")
+                .to_string();
             info!(
                 "AI Chat: configured via dashboard UI as Azure AI Foundry (resource={})",
                 resource
             );
             (
+                LlmProvider::Anthropic,
                 format!("https://{}.services.ai.azure.com/anthropic/v1", resource),
                 "x-api-key".to_string(),
+                model,
             )
         }
         "custom" => {
+            if key.is_empty() {
+                return Err((StatusCode::BAD_REQUEST, "API key must not be empty"));
+            }
             let url = req
                 .base_url
                 .as_deref()
@@ -2954,25 +3162,53 @@ async fn configure_chat_handler(
                 .filter(|s| !s.is_empty())
                 .unwrap_or("x-api-key")
                 .to_string();
+            let model = req
+                .model
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .unwrap_or("claude-sonnet-4-20250514")
+                .to_string();
             info!(
                 "AI Chat: configured via dashboard UI as custom endpoint (url={})",
                 url
             );
-            (url, header)
+            (LlmProvider::Anthropic, url, header, model)
         }
         _ => {
             // "anthropic" (direct)
+            if key.is_empty() {
+                return Err((StatusCode::BAD_REQUEST, "API key must not be empty"));
+            }
+            let model = req
+                .model
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .unwrap_or("claude-sonnet-4-20250514")
+                .to_string();
             info!("AI Chat: configured via dashboard UI as direct Anthropic API");
             (
+                LlmProvider::Anthropic,
                 "https://api.anthropic.com/v1".to_string(),
                 "x-api-key".to_string(),
+                model,
             )
         }
     };
 
-    *state.anthropic_api_key.write().await = Some(key);
-    *state.anthropic_base_url.write().await = base_url;
-    *state.anthropic_auth_header.write().await = auth_header;
+    // For Ollama, we use a dummy key
+    let final_key = if provider == LlmProvider::Ollama {
+        Some("ollama".to_string())
+    } else {
+        Some(key)
+    };
+
+    *state.llm_provider.write().await = provider;
+    *state.llm_api_key.write().await = final_key;
+    *state.llm_base_url.write().await = base_url;
+    *state.llm_auth_header.write().await = auth_header;
+    *state.llm_model.write().await = model;
 
     Ok(Json(ChatStatusResponse {
         available: true,
@@ -2999,13 +3235,13 @@ async fn ensure_mcp_client(
         state.torc_mcp_server_bin, state.api_url
     );
 
-    let child_process = TokioChildProcess::new(
-        tokio::process::Command::new(&state.torc_mcp_server_bin)
-            .arg("--api-url")
-            .arg(&state.api_url)
-            .stderr(std::process::Stdio::inherit()),
-    )
-    .map_err(|e| anyhow::anyhow!("Failed to spawn torc-mcp-server: {}", e))?;
+    let mut command = tokio::process::Command::new(&state.torc_mcp_server_bin);
+    command
+        .arg("--api-url")
+        .arg(&state.api_url)
+        .stderr(std::process::Stdio::inherit());
+    let child_process = TokioChildProcess::new(command)
+        .map_err(|e| anyhow::anyhow!("Failed to spawn torc-mcp-server: {}", e))?;
 
     // Connect as MCP client
     let running_service: rmcp::service::RunningService<rmcp::service::RoleClient, _> = ()
@@ -3021,7 +3257,35 @@ async fn ensure_mcp_client(
         .await
         .map_err(|e| anyhow::anyhow!("Failed to list MCP tools: {}", e))?;
 
-    info!("MCP client connected, discovered {} tools", tools.len());
+    // Estimate token usage for tools (helps debug GitHub Models limits)
+    let openai_tools: Vec<serde_json::Value> = tools
+        .iter()
+        .map(|tool| {
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": tool.name.as_ref(),
+                    "description": tool.description.as_ref(),
+                    "parameters": tool.schema_as_json_value(),
+                }
+            })
+        })
+        .collect();
+    let tools_json = serde_json::json!(openai_tools);
+    let tools_tokens = estimate_tokens(&tools_json);
+
+    info!(
+        "MCP client connected, discovered {} tools (~{} tokens, {} chars)",
+        tools.len(),
+        tools_tokens,
+        serde_json::to_string(&tools_json)
+            .map(|s| s.len())
+            .unwrap_or(0)
+    );
+
+    if tools_tokens > 6000 {
+        warn!("Tools exceed 6000 tokens - GitHub Models will not be able to use them");
+    }
 
     *guard = Some(McpClient {
         peer: peer.clone(),
@@ -3031,7 +3295,7 @@ async fn ensure_mcp_client(
     Ok((peer, tools))
 }
 
-/// Convert MCP tools to Claude API tool format.
+/// Convert MCP tools to Claude API tool format (Anthropic).
 fn mcp_tools_to_claude_tools(tools: &[rmcp::model::Tool]) -> Vec<serde_json::Value> {
     tools
         .iter()
@@ -3043,6 +3307,244 @@ fn mcp_tools_to_claude_tools(tools: &[rmcp::model::Tool]) -> Vec<serde_json::Val
             })
         })
         .collect()
+}
+
+/// Convert MCP tools to OpenAI function calling format.
+fn mcp_tools_to_openai_tools(tools: &[rmcp::model::Tool]) -> Vec<serde_json::Value> {
+    tools
+        .iter()
+        .map(|tool| {
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": tool.name.as_ref(),
+                    "description": tool.description.as_ref(),
+                    "parameters": tool.schema_as_json_value(),
+                }
+            })
+        })
+        .collect()
+}
+
+/// Essential tools for providers with limited context (e.g., GitHub Models with 8k limit).
+/// These are the most useful tools for basic workflow management.
+const ESSENTIAL_TOOLS: &[&str] = &[
+    "get_workflow_status",
+    "get_workflow_summary",
+    "list_jobs_by_status",
+    "list_failed_jobs",
+    "get_job_logs",
+    "get_job_details",
+    "recover_workflow",
+    "get_docs",
+    "list_examples",
+    "get_example",
+    "create_workflow",
+];
+
+/// Filter tools to only essential ones for limited-context providers.
+fn filter_essential_tools(tools: &[rmcp::model::Tool]) -> Vec<&rmcp::model::Tool> {
+    tools
+        .iter()
+        .filter(|tool| ESSENTIAL_TOOLS.contains(&tool.name.as_ref()))
+        .collect()
+}
+
+/// Convert MCP tools to OpenAI format, filtered to essential tools only.
+fn mcp_tools_to_openai_tools_filtered(tools: &[rmcp::model::Tool]) -> Vec<serde_json::Value> {
+    filter_essential_tools(tools)
+        .iter()
+        .map(|tool| {
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": tool.name.as_ref(),
+                    "description": tool.description.as_ref(),
+                    "parameters": tool.schema_as_json_value(),
+                }
+            })
+        })
+        .collect()
+}
+
+/// Convert chat messages to OpenAI format.
+fn messages_to_openai_format(
+    messages: &[serde_json::Value],
+    system_prompt: &str,
+) -> Vec<serde_json::Value> {
+    let mut openai_messages = vec![serde_json::json!({
+        "role": "system",
+        "content": system_prompt,
+    })];
+
+    for msg in messages {
+        let role = msg["role"].as_str().unwrap_or("user");
+
+        // Handle tool results (from previous round)
+        if let Some(content_array) = msg["content"].as_array() {
+            // Check if this is an array of tool_result blocks
+            if content_array
+                .first()
+                .map(|c| c["type"].as_str() == Some("tool_result"))
+                .unwrap_or(false)
+            {
+                // Convert each tool_result to an OpenAI tool message
+                for result in content_array {
+                    if let Some(tool_use_id) = result["tool_use_id"].as_str() {
+                        let content = result["content"].as_str().unwrap_or("");
+                        openai_messages.push(serde_json::json!({
+                            "role": "tool",
+                            "tool_call_id": tool_use_id,
+                            "content": content,
+                        }));
+                    }
+                }
+                continue;
+            }
+
+            // Check if this is an assistant message with tool_use blocks
+            if role == "assistant" {
+                let mut text_content = String::new();
+                let mut tool_calls = Vec::new();
+
+                for block in content_array {
+                    match block["type"].as_str() {
+                        Some("text") => {
+                            if let Some(text) = block["text"].as_str() {
+                                text_content.push_str(text);
+                            }
+                        }
+                        Some("tool_use") => {
+                            tool_calls.push(serde_json::json!({
+                                "id": block["id"],
+                                "type": "function",
+                                "function": {
+                                    "name": block["name"],
+                                    "arguments": serde_json::to_string(&block["input"]).unwrap_or_default(),
+                                }
+                            }));
+                        }
+                        _ => {}
+                    }
+                }
+
+                let mut assistant_msg = serde_json::json!({
+                    "role": "assistant",
+                });
+                if !text_content.is_empty() {
+                    assistant_msg["content"] = serde_json::json!(text_content);
+                }
+                if !tool_calls.is_empty() {
+                    assistant_msg["tool_calls"] = serde_json::json!(tool_calls);
+                }
+                openai_messages.push(assistant_msg);
+                continue;
+            }
+        }
+
+        // Simple text message
+        let content = match &msg["content"] {
+            serde_json::Value::String(s) => s.clone(),
+            serde_json::Value::Array(arr) => {
+                // Extract text from content blocks
+                arr.iter()
+                    .filter_map(|block| block["text"].as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            }
+            _ => String::new(),
+        };
+
+        openai_messages.push(serde_json::json!({
+            "role": role,
+            "content": content,
+        }));
+    }
+
+    openai_messages
+}
+
+/// Estimate token count for a JSON value.
+/// Uses conservative estimate of ~3 chars per token (JSON has overhead from quotes, braces, etc.)
+fn estimate_tokens(value: &serde_json::Value) -> usize {
+    let json_str = serde_json::to_string(value).unwrap_or_default();
+    // Conservative estimate: ~3 characters per token for JSON content
+    // This accounts for JSON overhead (quotes, braces, colons) and mixed content
+    json_str.len().div_ceil(3)
+}
+
+/// Truncate messages to fit within a token limit, preserving system prompt and recent messages.
+/// Returns truncated messages and whether truncation occurred.
+fn truncate_messages_to_token_limit(
+    messages: Vec<serde_json::Value>,
+    tools: &serde_json::Value,
+    max_tokens: usize,
+) -> (Vec<serde_json::Value>, bool) {
+    // Reserve tokens for tools, model overhead, and response
+    let tools_tokens = estimate_tokens(tools);
+    let overhead = 1000; // Buffer for model name, max_tokens field, request structure, etc.
+    let available_tokens = max_tokens.saturating_sub(tools_tokens + overhead);
+
+    info!(
+        "Token budget: max={}, tools={}, overhead={}, available for messages={}",
+        max_tokens, tools_tokens, overhead, available_tokens
+    );
+
+    // Always keep the system message (first message)
+    if messages.is_empty() {
+        return (messages, false);
+    }
+
+    let system_msg = &messages[0];
+    let system_tokens = estimate_tokens(system_msg);
+
+    info!(
+        "System message tokens: {}, remaining after system: {}",
+        system_tokens,
+        available_tokens.saturating_sub(system_tokens)
+    );
+
+    // If system message alone exceeds limit, truncate it
+    if system_tokens >= available_tokens {
+        warn!(
+            "System message ({} tokens) exceeds available budget ({} tokens), truncating",
+            system_tokens, available_tokens
+        );
+        return (vec![system_msg.clone()], true);
+    }
+
+    let mut remaining_tokens = available_tokens - system_tokens;
+    let mut kept_messages = vec![system_msg.clone()];
+    let mut truncated = false;
+
+    // Process messages from most recent to oldest (skip system message at index 0)
+    let other_messages: Vec<_> = messages[1..].iter().collect();
+    let mut selected_indices = Vec::new();
+
+    for (i, msg) in other_messages.iter().enumerate().rev() {
+        let msg_tokens = estimate_tokens(msg);
+        if msg_tokens <= remaining_tokens {
+            remaining_tokens -= msg_tokens;
+            selected_indices.push(i);
+        } else {
+            truncated = true;
+        }
+    }
+
+    // Reverse to maintain chronological order
+    selected_indices.reverse();
+    for i in selected_indices {
+        kept_messages.push(other_messages[i].clone());
+    }
+
+    info!(
+        "Kept {} of {} messages (truncated={})",
+        kept_messages.len(),
+        messages.len(),
+        truncated
+    );
+
+    (kept_messages, truncated)
 }
 
 /// The system prompt for the AI chat assistant.
@@ -3100,6 +3602,7 @@ fn validate_same_origin(headers: &HeaderMap) -> Result<(), StatusCode> {
 }
 
 /// Chat endpoint: streams SSE events as the AI processes the conversation.
+/// Supports both Anthropic API and OpenAI-compatible APIs (Ollama, GitHub Models).
 async fn chat_handler(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -3108,16 +3611,18 @@ async fn chat_handler(
     validate_same_origin(&headers)
         .map_err(|status| (status, "Cross-origin requests are not allowed"))?;
 
-    let api_key = match state.anthropic_api_key.read().await.clone() {
+    let provider = *state.llm_provider.read().await;
+    let api_key = match state.llm_api_key.read().await.clone() {
         Some(key) => key,
+        None if provider == LlmProvider::Ollama => "ollama".to_string(),
         None => {
             return Err((StatusCode::SERVICE_UNAVAILABLE, "No API key configured"));
         }
     };
 
-    let model = state.anthropic_model.clone();
-    let messages_url = format!("{}/messages", state.anthropic_base_url.read().await);
-    let auth_header = state.anthropic_auth_header.read().await.clone();
+    let model = state.llm_model.read().await.clone();
+    let base_url = state.llm_base_url.read().await.clone();
+    let auth_header_name = state.llm_auth_header.read().await.clone();
     let workflow_id = req.workflow_id;
     let initial_messages = req.messages;
 
@@ -3135,12 +3640,17 @@ async fn chat_handler(
         }
     };
 
-    let claude_tools = mcp_tools_to_claude_tools(&tools);
     let system_prompt = chat_system_prompt(workflow_id);
     let http_client = state.client.clone();
 
+    // Choose API format based on provider
+    let is_openai_compatible = matches!(
+        provider,
+        LlmProvider::OpenAI | LlmProvider::Ollama | LlmProvider::GitHub
+    );
+
     let stream = async_stream::stream! {
-        // Build the messages for the API
+        // Build the messages for the API (Anthropic format initially)
         let mut messages: Vec<serde_json::Value> = initial_messages
             .iter()
             .map(|m| {
@@ -3163,25 +3673,76 @@ async fn chat_handler(
             }
             round += 1;
 
-            // Build Claude API request
-            let api_body = serde_json::json!({
-                "model": model,
-                "max_tokens": 8192,
-                "system": system_prompt,
-                "messages": messages,
-                "tools": claude_tools,
-            });
+            // Build API request based on provider
+            let (api_url, api_body, auth_header_value) = if is_openai_compatible {
+                // OpenAI-compatible API (Ollama, GitHub Models)
+                let url = format!("{}/chat/completions", base_url);
+                let openai_tools = mcp_tools_to_openai_tools(&tools);
+                let openai_messages = messages_to_openai_format(&messages, &system_prompt);
 
-            // Non-streaming request to Claude API (simpler and more reliable)
-            let response = match http_client
-                .post(&messages_url)
-                .header(&auth_header, &api_key)
-                .header("anthropic-version", "2023-06-01")
-                .header("content-type", "application/json")
-                .json(&api_body)
-                .send()
-                .await
-            {
+                // GitHub Models has a strict 8000 token input limit for gpt-4o
+                // Use filtered essential tools only for GitHub to fit within limit
+                let (final_messages, final_tools, was_truncated) = if provider == LlmProvider::GitHub {
+                    // Use only essential tools for GitHub Models
+                    let filtered_tools = mcp_tools_to_openai_tools_filtered(&tools);
+                    let tools_json = serde_json::json!(&filtered_tools);
+                    let tools_tokens = estimate_tokens(&tools_json);
+
+                    info!(
+                        "GitHub Models: using {} essential tools (~{} tokens)",
+                        filtered_tools.len(),
+                        tools_tokens
+                    );
+
+                    let (msgs, truncated) = truncate_messages_to_token_limit(openai_messages, &tools_json, 6000);
+                    (msgs, filtered_tools, truncated)
+                } else {
+                    (openai_messages, openai_tools.clone(), false)
+                };
+
+                if was_truncated {
+                    info!("Truncated conversation history to fit GitHub Models token limit");
+                }
+
+                let body = serde_json::json!({
+                    "model": model,
+                    "max_tokens": 8192,
+                    "messages": final_messages,
+                    "tools": final_tools,
+                });
+
+                // Both GitHub Models and Ollama use Bearer token format
+                let auth_value = format!("Bearer {}", api_key);
+
+                (url, body, auth_value)
+            } else {
+                // Anthropic API
+                let url = format!("{}/messages", base_url);
+                let claude_tools = mcp_tools_to_claude_tools(&tools);
+
+                let body = serde_json::json!({
+                    "model": model,
+                    "max_tokens": 8192,
+                    "system": system_prompt,
+                    "messages": messages,
+                    "tools": claude_tools,
+                });
+
+                (url, body, api_key.clone())
+            };
+
+            // Make API request
+            let mut request_builder = http_client
+                .post(&api_url)
+                .header(&auth_header_name, &auth_header_value)
+                .header("content-type", "application/json");
+
+            // Add Anthropic-specific header
+            if !is_openai_compatible {
+                request_builder = request_builder.header("anthropic-version", "2023-06-01");
+            }
+
+            let response = match request_builder.json(&api_body).send().await {
                 Ok(resp) => resp,
                 Err(e) => {
                     yield Ok(Event::default()
@@ -3194,9 +3755,15 @@ async fn chat_handler(
             if !response.status().is_success() {
                 let status = response.status();
                 let body = response.text().await.unwrap_or_default();
+                let provider_name = match provider {
+                    LlmProvider::Anthropic => "Claude",
+                    LlmProvider::OpenAI => "OpenAI",
+                    LlmProvider::Ollama => "Ollama",
+                    LlmProvider::GitHub => "GitHub Models",
+                };
                 yield Ok(Event::default()
                     .event("error")
-                    .data(format!("Claude API error ({}): {}", status, body)));
+                    .data(format!("{} API error ({}): {}", provider_name, status, body)));
                 break;
             }
 
@@ -3210,43 +3777,94 @@ async fn chat_handler(
                 }
             };
 
-            let stop_reason = resp_json["stop_reason"].as_str().unwrap_or("end_turn");
-            let content_blocks = resp_json["content"].as_array().cloned().unwrap_or_default();
+            // Parse response based on API format
+            let (text_content, tool_calls, should_continue) = if is_openai_compatible {
+                // OpenAI format response
+                let choice = &resp_json["choices"][0];
+                let message = &choice["message"];
+                let finish_reason = choice["finish_reason"].as_str().unwrap_or("stop");
 
-            // Process content blocks: send text to frontend, collect tool calls
-            let mut text_parts = Vec::new();
-            let mut tool_uses = Vec::new();
+                let text = message["content"].as_str().unwrap_or("").to_string();
+                let tool_calls_arr = message["tool_calls"].as_array().cloned().unwrap_or_default();
 
-            for block in &content_blocks {
-                match block["type"].as_str() {
-                    Some("text") => {
-                        if let Some(text) = block["text"].as_str() {
-                            let text_owned = text.to_string();
-                            // JSON-encode so newlines stay on one SSE data: line
-                            let json_text = serde_json::to_string(&text_owned)
-                                .unwrap_or_else(|_| format!("\"{}\"", text_owned));
-                            yield Ok(Event::default()
-                                .event("text")
-                                .data(json_text));
-                            text_parts.push(text_owned);
+                debug!(
+                    "OpenAI response: finish_reason={}, tool_calls={}, content_len={}",
+                    finish_reason,
+                    tool_calls_arr.len(),
+                    text.len()
+                );
+
+                // Convert OpenAI tool calls to our internal format
+                let tools: Vec<serde_json::Value> = tool_calls_arr
+                    .iter()
+                    .map(|tc| {
+                        let func = &tc["function"];
+                        let args_str = func["arguments"].as_str().unwrap_or("{}");
+                        let input: serde_json::Value = serde_json::from_str(args_str)
+                            .unwrap_or(serde_json::json!({}));
+                        debug!("Tool call: {} with args: {}", func["name"], args_str);
+                        serde_json::json!({
+                            "id": tc["id"],
+                            "name": func["name"],
+                            "input": input,
+                        })
+                    })
+                    .collect();
+
+                // Continue if there are tool calls, regardless of finish_reason
+                // (some models/providers use different finish_reason values)
+                let has_tool_calls = !tools.is_empty();
+                (text, tools, has_tool_calls)
+            } else {
+                // Anthropic format response
+                let stop_reason = resp_json["stop_reason"].as_str().unwrap_or("end_turn");
+                let content_blocks = resp_json["content"].as_array().cloned().unwrap_or_default();
+
+                let mut text_parts = Vec::new();
+                let mut tool_uses = Vec::new();
+
+                for block in &content_blocks {
+                    match block["type"].as_str() {
+                        Some("text") => {
+                            if let Some(text) = block["text"].as_str() {
+                                text_parts.push(text.to_string());
+                            }
                         }
-                    }
-                    Some("tool_use") => {
-                        tool_uses.push(block.clone());
-                        // Notify frontend about tool call
-                        yield Ok(Event::default()
-                            .event("tool_use")
-                            .data(serde_json::json!({
+                        Some("tool_use") => {
+                            tool_uses.push(serde_json::json!({
                                 "id": block["id"],
                                 "name": block["name"],
                                 "input": block["input"],
-                            }).to_string()));
+                            }));
+                        }
+                        _ => {}
                     }
-                    _ => {}
                 }
+
+                (text_parts.join(""), tool_uses, stop_reason == "tool_use")
+            };
+
+            // Send text content to frontend
+            if !text_content.is_empty() {
+                let json_text = serde_json::to_string(&text_content)
+                    .unwrap_or_else(|_| format!("\"{}\"", text_content));
+                yield Ok(Event::default()
+                    .event("text")
+                    .data(json_text));
             }
 
-            if stop_reason != "tool_use" || tool_uses.is_empty() {
+            // Send tool calls to frontend
+            for tool_call in &tool_calls {
+                yield Ok(Event::default()
+                    .event("tool_use")
+                    .data(serde_json::json!({
+                        "id": tool_call["id"],
+                        "name": tool_call["name"],
+                        "input": tool_call["input"],
+                    }).to_string()));
+            }
+
+            if !should_continue || tool_calls.is_empty() {
                 // Done - no more tool calls
                 yield Ok(Event::default()
                     .event("done")
@@ -3256,21 +3874,39 @@ async fn chat_handler(
 
             // Execute tool calls via MCP and build tool results
             let mut tool_results = Vec::new();
+            let mut anthropic_content_blocks: Vec<serde_json::Value> = Vec::new();
 
-            for tool_use in &tool_uses {
-                let tool_name = tool_use["name"].as_str().unwrap_or("");
-                let tool_id = tool_use["id"].as_str().unwrap_or("");
-                let tool_input = tool_use["input"].as_object();
+            // Add text block if present (for Anthropic format)
+            if !text_content.is_empty() {
+                anthropic_content_blocks.push(serde_json::json!({
+                    "type": "text",
+                    "text": text_content,
+                }));
+            }
+
+            for tool_call in &tool_calls {
+                let tool_name = tool_call["name"].as_str().unwrap_or("");
+                let tool_id = tool_call["id"].as_str().unwrap_or("");
+                let tool_input = tool_call["input"].as_object();
+
+                // Add tool_use block for Anthropic format
+                anthropic_content_blocks.push(serde_json::json!({
+                    "type": "tool_use",
+                    "id": tool_id,
+                    "name": tool_name,
+                    "input": tool_call["input"],
+                }));
 
                 let arguments = tool_input.cloned();
 
-                match peer
-                    .call_tool(CallToolRequestParam {
-                        name: Cow::Owned(tool_name.to_string()),
-                        arguments,
-                    })
-                    .await
-                {
+                let request = arguments.map_or_else(
+                    || CallToolRequestParams::new(tool_name.to_string()),
+                    |arguments| {
+                        CallToolRequestParams::new(tool_name.to_string()).with_arguments(arguments)
+                    },
+                );
+
+                match peer.call_tool(request).await {
                     Ok(result) => {
                         let result_text = extract_tool_result_text(&result);
                         let is_error = result.is_error.unwrap_or(false);
@@ -3315,9 +3951,10 @@ async fn chat_handler(
             }
 
             // Append assistant message and tool results to conversation
+            // We store in Anthropic format internally, convert to OpenAI when needed
             messages.push(serde_json::json!({
                 "role": "assistant",
-                "content": content_blocks,
+                "content": anthropic_content_blocks,
             }));
             messages.push(serde_json::json!({
                 "role": "user",

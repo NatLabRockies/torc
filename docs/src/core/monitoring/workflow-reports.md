@@ -36,13 +36,13 @@ torc -f json workflows is-complete <workflow_id>
 Once a workflow is complete, generate a summary report:
 
 ```bash
-torc reports summary <workflow_id>
+torc status <workflow_id>
 ```
 
 If you omit the workflow ID, you'll be prompted to select from your workflows:
 
 ```bash
-torc reports summary
+torc status
 ```
 
 Example output:
@@ -89,7 +89,7 @@ This command can be very convenient, but be mindful of your workflow size (numbe
 network load if you are using a shared server.
 
 ```bash
-watch -n 10 torc reports summary <workflow_id>
+watch -n 10 torc status <workflow_id>
 ```
 
 ### JSON Output
@@ -148,7 +148,7 @@ fi
 After a workflow completes, check if any jobs exceeded their resource limits:
 
 ```bash
-torc reports check-resource-utilization <workflow_id>
+torc workflows check-resources <workflow_id>
 ```
 
 Example output when jobs stayed within limits:
@@ -181,10 +181,10 @@ risk of failure in future runs.
 
 ## Related Commands
 
-- `torc workflows status <id>` - View current job status counts
+- `torc status <id>` - View current job status counts
 - `torc results list <id>` - List individual job results
-- `torc reports check-resource-utilization <id>` - Check for resource violations
-- `torc reports results <id>` - Generate detailed results with log file paths
+- `torc workflows check-resources <id>` - Check for resource violations
+- `torc results list --include-logs <id>` - Generate detailed results with log file paths
 
 ## Next Steps
 

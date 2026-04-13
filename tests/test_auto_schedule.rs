@@ -11,7 +11,7 @@ mod common;
 
 use common::{ServerProcess, start_server};
 use rstest::rstest;
-use torc::client::{Configuration, default_api};
+use torc::client::{Configuration, apis};
 use torc::models;
 
 /// Create a simple workflow with ready jobs for testing scenarios.
@@ -24,7 +24,7 @@ fn create_workflow_with_ready_jobs(
     let user = "test_user".to_string();
     let workflow = models::WorkflowModel::new(name.to_string(), user);
     let created_workflow =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     // Create resource requirements
@@ -34,7 +34,7 @@ fn create_workflow_with_ready_jobs(
     rr.num_nodes = 1;
     rr.memory = "8g".to_string();
     rr.runtime = "PT1H".to_string();
-    let rr = default_api::create_resource_requirements(config, rr)
+    let rr = apis::resource_requirements_api::create_resource_requirements(config, rr)
         .expect("Failed to create resource requirements");
     let rr_id = rr.id.unwrap();
 
@@ -44,12 +44,12 @@ fn create_workflow_with_ready_jobs(
         let mut job =
             models::JobModel::new(workflow_id, format!("job_{}", i), format!("echo job_{}", i));
         job.resource_requirements_id = Some(rr_id);
-        let created = default_api::create_job(config, job).expect("Failed to create job");
+        let created = apis::jobs_api::create_job(config, job).expect("Failed to create job");
         job_ids.push(created.id.unwrap());
     }
 
     // Initialize jobs (sets them to Ready state)
-    default_api::initialize_jobs(config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
     (workflow_id, job_ids)
@@ -106,7 +106,7 @@ fn test_no_schedulers_with_ready_jobs_scenario(start_server: &ServerProcess) {
         create_workflow_with_ready_jobs(config, "test_no_schedulers_scenario", 5);
 
     // Verify no scheduled compute nodes exist
-    let scn_response = default_api::list_scheduled_compute_nodes(
+    let scn_response = apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
         config,
         workflow_id,
         None,
@@ -119,14 +119,14 @@ fn test_no_schedulers_with_ready_jobs_scenario(start_server: &ServerProcess) {
     )
     .expect("Failed to list scheduled compute nodes");
 
-    let scheduled_nodes = scn_response.items.unwrap_or_default();
+    let scheduled_nodes = scn_response.items;
     assert!(
         scheduled_nodes.is_empty(),
         "Should have no scheduled compute nodes"
     );
 
     // Verify we have ready jobs
-    let jobs = default_api::list_jobs(
+    let jobs = apis::jobs_api::list_jobs(
         config,
         workflow_id,
         Some(models::JobStatus::Ready),
@@ -141,7 +141,7 @@ fn test_no_schedulers_with_ready_jobs_scenario(start_server: &ServerProcess) {
     )
     .expect("Failed to list jobs");
 
-    let ready_jobs = jobs.items.unwrap_or_default();
+    let ready_jobs = jobs.items;
     assert_eq!(
         ready_jobs.len(),
         job_ids.len(),
@@ -162,7 +162,7 @@ fn test_jobs_have_default_attempt_id(start_server: &ServerProcess) {
 
     // Verify all jobs have attempt_id = 1
     for job_id in job_ids {
-        let job = default_api::get_job(config, job_id).expect("Failed to get job");
+        let job = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");
         assert_eq!(
             job.attempt_id,
             Some(1),
@@ -180,7 +180,7 @@ fn test_count_jobs_by_attempt_id(start_server: &ServerProcess) {
         create_workflow_with_ready_jobs(config, "test_count_by_attempt", 10);
 
     // Get all ready jobs
-    let jobs = default_api::list_jobs(
+    let jobs = apis::jobs_api::list_jobs(
         config,
         workflow_id,
         Some(models::JobStatus::Ready),
@@ -195,7 +195,7 @@ fn test_count_jobs_by_attempt_id(start_server: &ServerProcess) {
     )
     .expect("Failed to list jobs");
 
-    let ready_jobs = jobs.items.unwrap_or_default();
+    let ready_jobs = jobs.items;
     let total_ready = ready_jobs.len();
     let retry_count = ready_jobs
         .iter()
@@ -234,33 +234,24 @@ fn test_create_slurm_scheduler(start_server: &ServerProcess) {
         extra: None,
     };
 
-    let created =
-        default_api::create_slurm_scheduler(config, scheduler).expect("Failed to create scheduler");
+    let created = apis::slurm_schedulers_api::create_slurm_scheduler(config, scheduler)
+        .expect("Failed to create scheduler");
 
     assert!(created.id.is_some(), "Scheduler should have an ID");
     assert_eq!(created.account, "test_account");
 
     // Verify we can list the scheduler
-    let response = default_api::list_slurm_schedulers(
+    let response = apis::slurm_schedulers_api::list_slurm_schedulers(
         config,
         workflow_id,
         Some(0),
         Some(100),
         None,
         None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
     )
     .expect("Failed to list schedulers");
 
-    let schedulers = response.items.unwrap_or_default();
+    let schedulers = response.items;
     assert_eq!(schedulers.len(), 1, "Should have 1 scheduler");
 }
 
@@ -288,8 +279,8 @@ fn test_create_scheduled_compute_node(start_server: &ServerProcess) {
         extra: None,
     };
 
-    let created_scheduler =
-        default_api::create_slurm_scheduler(config, scheduler).expect("Failed to create scheduler");
+    let created_scheduler = apis::slurm_schedulers_api::create_slurm_scheduler(config, scheduler)
+        .expect("Failed to create scheduler");
     let scheduler_config_id = created_scheduler.id.unwrap();
 
     // Create a scheduled compute node (simulating what happens when sbatch submits)
@@ -302,14 +293,14 @@ fn test_create_scheduled_compute_node(start_server: &ServerProcess) {
         status: "pending".to_string(),
     };
 
-    let created_scn = default_api::create_scheduled_compute_node(config, scn)
+    let created_scn = apis::scheduled_compute_nodes_api::create_scheduled_compute_node(config, scn)
         .expect("Failed to create scheduled compute node");
 
     assert!(created_scn.id.is_some(), "SCN should have an ID");
     assert_eq!(created_scn.status, "pending");
 
     // Verify it shows up in list
-    let response = default_api::list_scheduled_compute_nodes(
+    let response = apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
         config,
         workflow_id,
         None,
@@ -322,7 +313,7 @@ fn test_create_scheduled_compute_node(start_server: &ServerProcess) {
     )
     .expect("Failed to list SCNs");
 
-    let scns = response.items.unwrap_or_default();
+    let scns = response.items;
     assert_eq!(scns.len(), 1, "Should have 1 pending SCN");
 }
 

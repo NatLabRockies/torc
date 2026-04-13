@@ -2,13 +2,13 @@
 
 #![allow(clippy::too_many_arguments)]
 
+use crate::server::transport_types::context_types::{ApiError, Has, XSpanIdString};
 use async_trait::async_trait;
 use chrono::Utc;
 use log::{debug, info};
 use sqlx::Row;
-use swagger::{ApiError, Has, XSpanIdString};
 
-use crate::server::api_types::{
+use crate::server::api_responses::{
     CreateEventResponse, DeleteEventResponse, DeleteEventsResponse, GetEventResponse,
     ListEventsResponse, UpdateEventResponse,
 };
@@ -55,18 +55,12 @@ pub trait EventsApi<C> {
     ) -> Result<UpdateEventResponse, ApiError>;
 
     /// Delete an event.
-    async fn delete_event(
-        &self,
-        id: i64,
-        body: Option<serde_json::Value>,
-        context: &C,
-    ) -> Result<DeleteEventResponse, ApiError>;
+    async fn delete_event(&self, id: i64, context: &C) -> Result<DeleteEventResponse, ApiError>;
 
     /// Delete all events for one workflow.
     async fn delete_events(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteEventsResponse, ApiError>;
 }
@@ -96,11 +90,7 @@ where
         mut body: models::EventModel,
         context: &C,
     ) -> Result<CreateEventResponse, ApiError> {
-        debug!(
-            "create_event({:?}) - X-Span-ID: {:?}",
-            body,
-            context.get().0.clone()
-        );
+        debug!("create_event - X-Span-ID: {:?}", context.get().0.clone());
 
         // Store timestamp as milliseconds since epoch (UTC)
         let timestamp = Utc::now().timestamp_millis();
@@ -322,7 +312,7 @@ where
 
         Ok(ListEventsResponse::SuccessfulResponse(
             models::ListEventsResponse {
-                items: Some(items),
+                items,
                 offset: offset_val,
                 max_limit: MAX_RECORD_TRANSFER_COUNT,
                 count: current_count,
@@ -340,9 +330,8 @@ where
         context: &C,
     ) -> Result<UpdateEventResponse, ApiError> {
         debug!(
-            "update_event({}, {:?}) - X-Span-ID: {:?}",
+            "update_event({}) - X-Span-ID: {:?}",
             id,
-            body,
             context.get().0.clone()
         );
 
@@ -399,16 +388,10 @@ where
     }
 
     /// Delete an event.
-    async fn delete_event(
-        &self,
-        id: i64,
-        body: Option<serde_json::Value>,
-        context: &C,
-    ) -> Result<DeleteEventResponse, ApiError> {
+    async fn delete_event(&self, id: i64, context: &C) -> Result<DeleteEventResponse, ApiError> {
         debug!(
-            "delete_event({}, {:?}) - X-Span-ID: {:?}",
+            "delete_event({}) - X-Span-ID: {:?}",
             id,
-            body,
             context.get().0.clone()
         );
 
@@ -451,13 +434,11 @@ where
     async fn delete_events(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteEventsResponse, ApiError> {
         debug!(
-            "delete_events(\"{}\", {:?}) - X-Span-ID: {:?}",
+            "delete_events(\"{}\") - X-Span-ID: {:?}",
             workflow_id,
-            body,
             context.get().0.clone()
         );
         Err(ApiError("Api-Error: Operation is NOT implemented".into()))

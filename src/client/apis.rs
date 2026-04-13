@@ -22,7 +22,20 @@ impl<T> fmt::Display for Error<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (module, e) = match self {
             Error::Reqwest(e) => ("reqwest", e.to_string()),
-            Error::Serde(e) => ("serde", e.to_string()),
+            Error::Serde(e) => {
+                let msg = e.to_string();
+                // An HTML response instead of JSON typically means an auth gateway
+                // (reverse proxy, SSO, etc.) intercepted the request.
+                if msg.contains("text/html") {
+                    return write!(
+                        f,
+                        "server returned an HTML response instead of JSON \
+                         (possible authentication/proxy issue — check your credentials, \
+                         cookie header, and server URL)"
+                    );
+                }
+                ("serde", msg)
+            }
             Error::Io(e) => ("IO", e.to_string()),
             Error::ResponseError(e) => {
                 // Include response content to show the actual error message from the server
@@ -123,6 +136,23 @@ impl From<&str> for ContentType {
     }
 }
 
-pub mod default_api;
-
+pub mod access_control_api;
+pub mod compute_nodes_api;
 pub mod configuration;
+pub mod events_api;
+pub mod failure_handlers_api;
+pub mod files_api;
+pub mod jobs_api;
+pub mod local_schedulers_api;
+pub mod remote_workers_api;
+pub mod resource_requirements_api;
+pub mod results_api;
+pub mod ro_crate_api;
+pub mod ro_crate_entities_api;
+pub mod scheduled_compute_nodes_api;
+pub mod slurm_schedulers_api;
+pub mod slurm_stats_api;
+pub mod system_api;
+pub mod user_data_api;
+pub mod workflow_actions_api;
+pub mod workflows_api;

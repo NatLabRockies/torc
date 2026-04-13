@@ -2,7 +2,7 @@ mod common;
 
 use common::{ServerProcess, create_test_workflow, start_server};
 use rstest::rstest;
-use torc::client::default_api;
+use torc::client::apis;
 use torc::models;
 
 /// Helper function to create a test Slurm scheduler
@@ -26,7 +26,7 @@ fn create_test_slurm_scheduler(
         walltime: "04:00:00".to_string(),
         extra: None,
     };
-    default_api::create_slurm_scheduler(config, scheduler)
+    apis::slurm_schedulers_api::create_slurm_scheduler(config, scheduler)
         .expect("Failed to create test Slurm scheduler")
 }
 
@@ -50,7 +50,7 @@ fn test_create_scheduled_compute_node(start_server: &ServerProcess) {
         "pending".to_string(),
     );
 
-    let created = default_api::create_scheduled_compute_node(config, node)
+    let created = apis::scheduled_compute_nodes_api::create_scheduled_compute_node(config, node)
         .expect("Failed to create scheduled compute node");
 
     assert!(created.id.is_some());
@@ -80,12 +80,12 @@ fn test_get_scheduled_compute_node(start_server: &ServerProcess) {
         "pending".to_string(),
     );
 
-    let created = default_api::create_scheduled_compute_node(config, node)
+    let created = apis::scheduled_compute_nodes_api::create_scheduled_compute_node(config, node)
         .expect("Failed to create scheduled compute node");
     let node_id = created.id.unwrap();
 
     // Get the scheduled compute node
-    let retrieved = default_api::get_scheduled_compute_node(config, node_id)
+    let retrieved = apis::scheduled_compute_nodes_api::get_scheduled_compute_node(config, node_id)
         .expect("Failed to get scheduled compute node");
 
     assert_eq!(retrieved.id, Some(node_id));
@@ -115,7 +115,7 @@ fn test_update_scheduled_compute_node(start_server: &ServerProcess) {
         "pending".to_string(),
     );
 
-    let created = default_api::create_scheduled_compute_node(config, node)
+    let created = apis::scheduled_compute_nodes_api::create_scheduled_compute_node(config, node)
         .expect("Failed to create scheduled compute node");
     let node_id = created.id.unwrap();
 
@@ -123,14 +123,18 @@ fn test_update_scheduled_compute_node(start_server: &ServerProcess) {
     let mut updated_node = created.clone();
     updated_node.status = "active".to_string();
 
-    let updated = default_api::update_scheduled_compute_node(config, node_id, updated_node)
-        .expect("Failed to update scheduled compute node");
+    let updated = apis::scheduled_compute_nodes_api::update_scheduled_compute_node(
+        config,
+        node_id,
+        updated_node,
+    )
+    .expect("Failed to update scheduled compute node");
 
     assert_eq!(updated.id, Some(node_id));
     assert_eq!(updated.status, "active");
 
     // Verify the update by fetching again
-    let retrieved = default_api::get_scheduled_compute_node(config, node_id)
+    let retrieved = apis::scheduled_compute_nodes_api::get_scheduled_compute_node(config, node_id)
         .expect("Failed to get updated scheduled compute node");
 
     assert_eq!(retrieved.status, "active");
@@ -139,8 +143,10 @@ fn test_update_scheduled_compute_node(start_server: &ServerProcess) {
     let mut final_node = updated.clone();
     final_node.status = "complete".to_string();
 
-    let final_updated = default_api::update_scheduled_compute_node(config, node_id, final_node)
-        .expect("Failed to update scheduled compute node to complete");
+    let final_updated = apis::scheduled_compute_nodes_api::update_scheduled_compute_node(
+        config, node_id, final_node,
+    )
+    .expect("Failed to update scheduled compute node to complete");
 
     assert_eq!(final_updated.status, "complete");
 }
@@ -179,12 +185,15 @@ fn test_list_scheduled_compute_nodes(start_server: &ServerProcess) {
         "complete".to_string(),
     );
 
-    default_api::create_scheduled_compute_node(config, node1).expect("Failed to create node1");
-    default_api::create_scheduled_compute_node(config, node2).expect("Failed to create node2");
-    default_api::create_scheduled_compute_node(config, node3).expect("Failed to create node3");
+    apis::scheduled_compute_nodes_api::create_scheduled_compute_node(config, node1)
+        .expect("Failed to create node1");
+    apis::scheduled_compute_nodes_api::create_scheduled_compute_node(config, node2)
+        .expect("Failed to create node2");
+    apis::scheduled_compute_nodes_api::create_scheduled_compute_node(config, node3)
+        .expect("Failed to create node3");
 
     // List all scheduled compute nodes for this workflow
-    let response = default_api::list_scheduled_compute_nodes(
+    let response = apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
         config,
         workflow_id,
         None, // offset
@@ -197,7 +206,7 @@ fn test_list_scheduled_compute_nodes(start_server: &ServerProcess) {
     )
     .expect("Failed to list scheduled compute nodes");
 
-    let items = response.items.unwrap();
+    let items = response.items;
     assert_eq!(items.len(), 3);
 
     // Verify all nodes are present
@@ -234,11 +243,13 @@ fn test_list_scheduled_compute_nodes_filter_by_scheduler_id(start_server: &Serve
         "active".to_string(),
     );
 
-    default_api::create_scheduled_compute_node(config, node1).expect("Failed to create node1");
-    default_api::create_scheduled_compute_node(config, node2).expect("Failed to create node2");
+    apis::scheduled_compute_nodes_api::create_scheduled_compute_node(config, node1)
+        .expect("Failed to create node1");
+    apis::scheduled_compute_nodes_api::create_scheduled_compute_node(config, node2)
+        .expect("Failed to create node2");
 
     // Filter by scheduler_id
-    let response = default_api::list_scheduled_compute_nodes(
+    let response = apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
         config,
         workflow_id,
         None,
@@ -251,7 +262,7 @@ fn test_list_scheduled_compute_nodes_filter_by_scheduler_id(start_server: &Serve
     )
     .expect("Failed to list scheduled compute nodes with filter");
 
-    let items = response.items.unwrap();
+    let items = response.items;
     assert_eq!(items.len(), 1);
     assert_eq!(items[0].scheduler_id, 99999);
 }
@@ -290,12 +301,15 @@ fn test_list_scheduled_compute_nodes_filter_by_status(start_server: &ServerProce
         "active".to_string(),
     );
 
-    default_api::create_scheduled_compute_node(config, node1).expect("Failed to create node1");
-    default_api::create_scheduled_compute_node(config, node2).expect("Failed to create node2");
-    default_api::create_scheduled_compute_node(config, node3).expect("Failed to create node3");
+    apis::scheduled_compute_nodes_api::create_scheduled_compute_node(config, node1)
+        .expect("Failed to create node1");
+    apis::scheduled_compute_nodes_api::create_scheduled_compute_node(config, node2)
+        .expect("Failed to create node2");
+    apis::scheduled_compute_nodes_api::create_scheduled_compute_node(config, node3)
+        .expect("Failed to create node3");
 
     // Filter by status "active"
-    let response = default_api::list_scheduled_compute_nodes(
+    let response = apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
         config,
         workflow_id,
         None,
@@ -308,7 +322,7 @@ fn test_list_scheduled_compute_nodes_filter_by_status(start_server: &ServerProce
     )
     .expect("Failed to list scheduled compute nodes with status filter");
 
-    let items = response.items.unwrap();
+    let items = response.items;
     assert_eq!(items.len(), 2);
     assert!(items.iter().all(|n| n.status == "active"));
 }
@@ -333,18 +347,18 @@ fn test_delete_scheduled_compute_node(start_server: &ServerProcess) {
         "pending".to_string(),
     );
 
-    let created = default_api::create_scheduled_compute_node(config, node)
+    let created = apis::scheduled_compute_nodes_api::create_scheduled_compute_node(config, node)
         .expect("Failed to create scheduled compute node");
     let node_id = created.id.unwrap();
 
     // Delete the scheduled compute node
-    let deleted = default_api::delete_scheduled_compute_node(config, node_id, None)
+    let deleted = apis::scheduled_compute_nodes_api::delete_scheduled_compute_node(config, node_id)
         .expect("Failed to delete scheduled compute node");
 
     assert_eq!(deleted.id, Some(node_id));
 
     // Verify it's deleted by trying to get it (should fail or return not found)
-    let get_result = default_api::get_scheduled_compute_node(config, node_id);
+    let get_result = apis::scheduled_compute_nodes_api::get_scheduled_compute_node(config, node_id);
     assert!(
         get_result.is_err(),
         "Expected error when getting deleted node"
@@ -371,21 +385,27 @@ fn test_scheduled_compute_node_status_transitions(start_server: &ServerProcess) 
         "pending".to_string(),
     );
 
-    let created = default_api::create_scheduled_compute_node(config, node)
+    let created = apis::scheduled_compute_nodes_api::create_scheduled_compute_node(config, node)
         .expect("Failed to create scheduled compute node");
     let node_id = created.id.unwrap();
 
     // Transition: pending -> active
     let mut updated_node = created.clone();
     updated_node.status = "active".to_string();
-    let active_node = default_api::update_scheduled_compute_node(config, node_id, updated_node)
-        .expect("Failed to update to active");
+    let active_node = apis::scheduled_compute_nodes_api::update_scheduled_compute_node(
+        config,
+        node_id,
+        updated_node,
+    )
+    .expect("Failed to update to active");
     assert_eq!(active_node.status, "active");
 
     // Transition: active -> complete
     let mut final_node = active_node.clone();
     final_node.status = "complete".to_string();
-    let complete_node = default_api::update_scheduled_compute_node(config, node_id, final_node)
-        .expect("Failed to update to complete");
+    let complete_node = apis::scheduled_compute_nodes_api::update_scheduled_compute_node(
+        config, node_id, final_node,
+    )
+    .expect("Failed to update to complete");
     assert_eq!(complete_node.status, "complete");
 }

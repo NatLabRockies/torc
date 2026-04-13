@@ -32,8 +32,8 @@ $ torc slurm sacct $WORKFLOW_ID
 ╰──────────────────────┴───────────────┴──────────╯
 ```
 
-**Fix:** Increase `memory` in resource requirements, or use
-`torc reports check-resource-utilization --correct` to auto-adjust based on peak usage.
+**Fix:** Increase `memory` in resource requirements, or use `torc workflows correct-resources` to
+auto-adjust based on peak usage.
 
 ### Timeout with Graceful Shutdown (exit code 0)
 
@@ -54,8 +54,8 @@ correctly but did not finish all its work. Reinitialize and re-submit to continu
 checkpoint:
 
 ```bash
-torc workflows reinitialize $WORKFLOW_ID
-torc workflows submit $WORKFLOW_ID
+torc workflows reinit $WORKFLOW_ID
+torc submit $WORKFLOW_ID
 ```
 
 See the [Graceful Job Termination](../fault-tolerance/checkpointing.md) tutorial for a complete

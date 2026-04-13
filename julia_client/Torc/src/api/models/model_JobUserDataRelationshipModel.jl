@@ -2,44 +2,43 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""job_user_data_relationship_model
-Represents a job-user_data relationship showing producer and consumer jobs for user_data.
+@doc raw"""JobUserDataRelationshipModel
 
     JobUserDataRelationshipModel(;
-        user_data_id=nothing,
-        user_data_name=nothing,
-        producer_job_id=nothing,
-        producer_job_name=nothing,
         consumer_job_id=nothing,
         consumer_job_name=nothing,
+        producer_job_id=nothing,
+        producer_job_name=nothing,
+        user_data_id=nothing,
+        user_data_name=nothing,
         workflow_id=nothing,
     )
 
-    - user_data_id::Int64 : The user_data ID
-    - user_data_name::String : The name of the user_data
-    - producer_job_id::Int64 : The job that produces this user_data (null for workflow inputs)
-    - producer_job_name::String : The name of the job that produces this user_data
-    - consumer_job_id::Int64 : The job that consumes this user_data (null for workflow outputs)
-    - consumer_job_name::String : The name of the job that consumes this user_data
-    - workflow_id::Int64 : The workflow containing the user_data and jobs
+    - consumer_job_id::Int64
+    - consumer_job_name::String
+    - producer_job_id::Int64
+    - producer_job_name::String
+    - user_data_id::Int64
+    - user_data_name::String
+    - workflow_id::Int64
 """
 Base.@kwdef mutable struct JobUserDataRelationshipModel <: OpenAPI.APIModel
-    user_data_id::Union{Nothing, Int64} = nothing
-    user_data_name::Union{Nothing, String} = nothing
-    producer_job_id::Union{Nothing, Int64} = nothing
-    producer_job_name::Union{Nothing, String} = nothing
     consumer_job_id::Union{Nothing, Int64} = nothing
     consumer_job_name::Union{Nothing, String} = nothing
+    producer_job_id::Union{Nothing, Int64} = nothing
+    producer_job_name::Union{Nothing, String} = nothing
+    user_data_id::Union{Nothing, Int64} = nothing
+    user_data_name::Union{Nothing, String} = nothing
     workflow_id::Union{Nothing, Int64} = nothing
 
-    function JobUserDataRelationshipModel(user_data_id, user_data_name, producer_job_id, producer_job_name, consumer_job_id, consumer_job_name, workflow_id, )
-        o = new(user_data_id, user_data_name, producer_job_id, producer_job_name, consumer_job_id, consumer_job_name, workflow_id, )
+    function JobUserDataRelationshipModel(consumer_job_id, consumer_job_name, producer_job_id, producer_job_name, user_data_id, user_data_name, workflow_id, )
+        o = new(consumer_job_id, consumer_job_name, producer_job_id, producer_job_name, user_data_id, user_data_name, workflow_id, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type JobUserDataRelationshipModel
 
-const _property_types_JobUserDataRelationshipModel = Dict{Symbol,String}(Symbol("user_data_id")=>"Int64", Symbol("user_data_name")=>"String", Symbol("producer_job_id")=>"Int64", Symbol("producer_job_name")=>"String", Symbol("consumer_job_id")=>"Int64", Symbol("consumer_job_name")=>"String", Symbol("workflow_id")=>"Int64", )
+const _property_types_JobUserDataRelationshipModel = Dict{Symbol,String}(Symbol("consumer_job_id")=>"Int64", Symbol("consumer_job_name")=>"String", Symbol("producer_job_id")=>"Int64", Symbol("producer_job_name")=>"String", Symbol("user_data_id")=>"Int64", Symbol("user_data_name")=>"String", Symbol("workflow_id")=>"Int64", )
 OpenAPI.property_type(::Type{ JobUserDataRelationshipModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_JobUserDataRelationshipModel[name]))}
 
 function OpenAPI.check_required(o::JobUserDataRelationshipModel)
@@ -50,21 +49,33 @@ function OpenAPI.check_required(o::JobUserDataRelationshipModel)
 end
 
 function OpenAPI.validate_properties(o::JobUserDataRelationshipModel)
-    OpenAPI.validate_property(JobUserDataRelationshipModel, Symbol("user_data_id"), o.user_data_id)
-    OpenAPI.validate_property(JobUserDataRelationshipModel, Symbol("user_data_name"), o.user_data_name)
-    OpenAPI.validate_property(JobUserDataRelationshipModel, Symbol("producer_job_id"), o.producer_job_id)
-    OpenAPI.validate_property(JobUserDataRelationshipModel, Symbol("producer_job_name"), o.producer_job_name)
     OpenAPI.validate_property(JobUserDataRelationshipModel, Symbol("consumer_job_id"), o.consumer_job_id)
     OpenAPI.validate_property(JobUserDataRelationshipModel, Symbol("consumer_job_name"), o.consumer_job_name)
+    OpenAPI.validate_property(JobUserDataRelationshipModel, Symbol("producer_job_id"), o.producer_job_id)
+    OpenAPI.validate_property(JobUserDataRelationshipModel, Symbol("producer_job_name"), o.producer_job_name)
+    OpenAPI.validate_property(JobUserDataRelationshipModel, Symbol("user_data_id"), o.user_data_id)
+    OpenAPI.validate_property(JobUserDataRelationshipModel, Symbol("user_data_name"), o.user_data_name)
     OpenAPI.validate_property(JobUserDataRelationshipModel, Symbol("workflow_id"), o.workflow_id)
 end
 
 function OpenAPI.validate_property(::Type{ JobUserDataRelationshipModel }, name::Symbol, val)
 
+    if name === Symbol("consumer_job_id")
+        OpenAPI.validate_param(name, "JobUserDataRelationshipModel", :format, val, "int64")
+    end
 
 
+    if name === Symbol("producer_job_id")
+        OpenAPI.validate_param(name, "JobUserDataRelationshipModel", :format, val, "int64")
+    end
 
 
+    if name === Symbol("user_data_id")
+        OpenAPI.validate_param(name, "JobUserDataRelationshipModel", :format, val, "int64")
+    end
 
 
+    if name === Symbol("workflow_id")
+        OpenAPI.validate_param(name, "JobUserDataRelationshipModel", :format, val, "int64")
+    end
 end

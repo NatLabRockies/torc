@@ -102,6 +102,11 @@
         "name": "slurm_config",
         "ordinal": 19,
         "type_info": "Text"
+      },
+      {
+        "name": "execution_config",
+        "ordinal": 20,
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -121,6 +126,7 @@
       false,
       false,
       false,
+      true,
       true,
       true,
       true,

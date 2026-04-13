@@ -2,12 +2,12 @@
 
 #![allow(clippy::too_many_arguments)]
 
+use crate::server::transport_types::context_types::{ApiError, Has, XSpanIdString};
 use async_trait::async_trait;
 use log::{debug, error, info};
 use sqlx::Row;
-use swagger::{ApiError, Has, XSpanIdString};
 
-use crate::server::api_types::{
+use crate::server::api_responses::{
     CreateResultResponse, DeleteResultResponse, DeleteResultsResponse, GetResultResponse,
     ListResultsResponse, UpdateResultResponse,
 };
@@ -30,7 +30,6 @@ pub trait ResultsApi<C> {
     async fn delete_results(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteResultsResponse, ApiError>;
 
@@ -63,12 +62,7 @@ pub trait ResultsApi<C> {
     ) -> Result<UpdateResultResponse, ApiError>;
 
     /// Delete a result.
-    async fn delete_result(
-        &self,
-        id: i64,
-        body: Option<serde_json::Value>,
-        context: &C,
-    ) -> Result<DeleteResultResponse, ApiError>;
+    async fn delete_result(&self, id: i64, context: &C) -> Result<DeleteResultResponse, ApiError>;
 }
 
 /// Implementation of results API for the server
@@ -111,11 +105,7 @@ where
         mut body: models::ResultModel,
         context: &C,
     ) -> Result<CreateResultResponse, ApiError> {
-        debug!(
-            "create_result({:?}) - X-Span-ID: {:?}",
-            body,
-            context.get().0.clone()
-        );
+        debug!("create_result - X-Span-ID: {:?}", context.get().0.clone());
         let status = body.status.to_int();
         let attempt_id = body.attempt_id.unwrap_or(1);
 
@@ -210,13 +200,11 @@ where
     async fn delete_results(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteResultsResponse, ApiError> {
         debug!(
-            "delete_results({}, {:?}) - X-Span-ID: {:?}",
+            "delete_results({}) - X-Span-ID: {:?}",
             workflow_id,
-            body,
             context.get().0.clone()
         );
 
@@ -524,7 +512,7 @@ where
 
         Ok(ListResultsResponse::SuccessfulResponse(
             models::ListResultsResponse {
-                items: Some(items),
+                items,
                 offset: offset_val,
                 max_limit: MAX_RECORD_TRANSFER_COUNT,
                 count: current_count,
@@ -542,9 +530,8 @@ where
         context: &C,
     ) -> Result<UpdateResultResponse, ApiError> {
         debug!(
-            "update_result({}, {:?}) - X-Span-ID: {:?}",
+            "update_result({}) - X-Span-ID: {:?}",
             id,
-            body,
             context.get().0.clone()
         );
 
@@ -613,16 +600,10 @@ where
     }
 
     /// Delete a result.
-    async fn delete_result(
-        &self,
-        id: i64,
-        body: Option<serde_json::Value>,
-        context: &C,
-    ) -> Result<DeleteResultResponse, ApiError> {
+    async fn delete_result(&self, id: i64, context: &C) -> Result<DeleteResultResponse, ApiError> {
         debug!(
-            "delete_result({}, {:?}) - X-Span-ID: {:?}",
+            "delete_result({}) - X-Span-ID: {:?}",
             id,
-            body,
             context.get().0.clone()
         );
 

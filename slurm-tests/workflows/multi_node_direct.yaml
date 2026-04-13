@@ -1,0 +1,48 @@
+# Test: Multi-Node Direct Execution
+#
+# 2-node allocation with direct execution mode (no srun wrapping for jobs).
+# The head worker spawns one torc-slurm-job-runner per node via
+# srun --ntasks-per-node=1, and each per-node worker executes jobs directly.
+# Tests that single-node jobs are distributed across nodes in direct mode.
+
+name: multi_node_direct
+description: 2-node allocation — 20 jobs x 5 CPUs via direct execution
+project: slurm-tests
+
+execution_config:
+  mode: direct
+
+resource_monitor:
+  enabled: true
+  granularity: time_series
+  sample_interval_seconds: 2
+
+resource_requirements:
+  - name: work_resources
+    num_cpus: 5
+    num_nodes: 1
+    memory: 2g
+    runtime: PT3M
+
+jobs:
+  - name: work_{i}
+    command: bash -c 'echo "Running on $(hostname)"; stress-ng --cpu 5 --timeout 30 --metrics-brief'
+    resource_requirements: work_resources
+    scheduler: two_node_scheduler
+    parameters:
+      i: 1:20
+
+slurm_schedulers:
+  - name: two_node_scheduler
+    account: PLACEHOLDER_ACCOUNT
+    partition: PLACEHOLDER_PARTITION
+    nodes: 2
+    walltime: "00:10:00"
+
+actions:
+  - trigger_type: "on_workflow_start"
+    action_type: "schedule_nodes"
+    scheduler: "two_node_scheduler"
+    scheduler_type: "slurm"
+    num_allocations: 1
+    start_one_worker_per_node: true

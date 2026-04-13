@@ -4,7 +4,7 @@
 #
 # To run this workflow:
 # 1. Start the torc server
-# 2. Create the workflow: torc workflows create examples/resource_monitoring_demo.yaml
+# 2. Create the workflow: torc create examples/resource_monitoring_demo.yaml
 # 3. Initialize and start: torc workflows start <workflow_id>
 # 4. Run the job runner: torc-job-runner <workflow_id>
 # 5. Check results with resource metrics: torc results list <workflow_id>

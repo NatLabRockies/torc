@@ -277,7 +277,7 @@ When a Slurm job fails, follow this debugging workflow:
 
 4. **Check the job's own stderr for application errors:**
    ```bash
-   torc reports results <workflow_id> > report.json
+   torc results list --include-logs <workflow_id> > report.json
    jq -r '.results[] | select(.return_code != 0) | .job_stderr' report.json | xargs cat
    ```
 
@@ -411,7 +411,7 @@ when:
 - **`torc slurm parse-logs`**: Parse Slurm logs for known error patterns
 - **`torc slurm sacct`**: Collect Slurm accounting data for workflow jobs
 - **`torc workflows sync-status`**: Detect and fix orphaned jobs from terminated Slurm allocations
-- **`torc reports results`**: Generate debug report with all log file paths
+- **`torc results list --include-logs`**: Generate debug report with all log file paths
 - **`torc results list`**: View summary of job results in table format
 - **`torc-dash`**: Launch web interface with Slurm log viewing
 - **`torc tui`**: Launch terminal UI with Slurm log viewing

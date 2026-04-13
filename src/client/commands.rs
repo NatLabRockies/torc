@@ -26,30 +26,29 @@ pub mod watch;
 pub mod workflow_export;
 pub mod workflows;
 
-use std::env;
 use std::io::{self, Write};
 
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 
 /// Helper function to prompt user to select a workflow when workflow_id is not provided
 pub fn select_workflow_interactively(
     config: &Configuration,
     user: &str,
 ) -> Result<i64, Box<dyn std::error::Error>> {
-    match default_api::list_workflows(
+    match apis::workflows_api::list_workflows(
         config,
         None,     // offset
+        Some(50), // limit
         None,     // sort_by
         None,     // reverse_sort
-        Some(50), // limit
         None,     // name filter
         Some(user),
         None,        // description filter
         Some(false), // is_archived - exclude archived workflows
     ) {
         Ok(response) => {
-            let workflows = response.items.unwrap_or_default();
+            let workflows = response.items;
             if workflows.is_empty() {
                 eprintln!("No workflows found for user: {}", user);
                 std::process::exit(1);
@@ -118,9 +117,7 @@ pub fn get_user_name(user: &Option<String>) -> String {
 }
 
 pub fn get_env_user_name() -> String {
-    env::var("USER")
-        .or_else(|_| env::var("USERNAME"))
-        .unwrap_or_else(|_| "unknown".to_string())
+    crate::get_username()
 }
 
 /// Truncate string to specified length

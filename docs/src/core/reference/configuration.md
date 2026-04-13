@@ -287,18 +287,19 @@ Environment variables use double underscore (`__`) to separate nested keys.
 
 These environment variables are still supported directly by clap:
 
-| Variable                              | Component | Description                             |
-| ------------------------------------- | --------- | --------------------------------------- |
-| `TORC_API_URL`                        | Client    | Server API URL (CLI only)               |
-| `TORC_PASSWORD`                       | Client    | Authentication password (CLI only)      |
-| `TORC_TLS_CA_CERT`                    | Client    | PEM-encoded CA certificate path         |
-| `TORC_TLS_INSECURE`                   | Client    | Skip certificate verification           |
-| `TORC_AUTH_FILE`                      | Server    | htpasswd file path                      |
-| `TORC_LOG_DIR`                        | Server    | Log directory                           |
-| `TORC_COMPLETION_CHECK_INTERVAL_SECS` | Server    | Completion check interval               |
-| `TORC_ADMIN_USERS`                    | Server    | Comma-separated list of admin usernames |
-| `DATABASE_URL`                        | Server    | SQLite database URL                     |
-| `RUST_LOG`                            | All       | Log level filter                        |
+| Variable                              | Component | Description                              |
+| ------------------------------------- | --------- | ---------------------------------------- |
+| `TORC_API_URL`                        | Client    | Server API URL (CLI only)                |
+| `TORC_PASSWORD`                       | Client    | Authentication password (CLI only)       |
+| `TORC_TLS_CA_CERT`                    | Client    | PEM-encoded CA certificate path          |
+| `TORC_TLS_INSECURE`                   | Client    | Skip certificate verification            |
+| `TORC_AUTH_FILE`                      | Server    | htpasswd file path                       |
+| `TORC_LOG_DIR`                        | Server    | Log directory                            |
+| `TORC_COMPLETION_CHECK_INTERVAL_SECS` | Server    | Completion check interval                |
+| `TORC_ADMIN_USERS`                    | Server    | Comma-separated list of admin usernames  |
+| `TORC_MAX_REQUEST_BODY_MB`            | Server    | Bulk job upload request-body limit (MiB) |
+| `DATABASE_URL`                        | Server    | SQLite database URL                      |
+| `RUST_LOG`                            | All       | Log level filter                         |
 
 ## Complete Example
 

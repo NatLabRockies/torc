@@ -8,8 +8,8 @@ use crossterm::{
 };
 use ratatui::{Terminal, backend::CrosstermBackend};
 
+use crate::client::apis;
 use crate::client::apis::configuration::BasicAuth;
-use crate::client::apis::default_api;
 
 mod api;
 mod app;
@@ -29,8 +29,12 @@ fn check_server_connection(
     let mut config = crate::client::apis::configuration::Configuration::with_tls(tls.clone());
     config.base_path = base_url.to_string();
     config.basic_auth = basic_auth.clone();
+    if let Err(e) = config.apply_cookie_header_from_env() {
+        log::error!("Failed to apply TORC_COOKIE_HEADER: {e}");
+        return false;
+    }
 
-    default_api::ping(&config).is_ok()
+    apis::system_api::ping(&config).is_ok()
 }
 
 pub fn run(

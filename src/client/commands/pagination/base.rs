@@ -40,7 +40,7 @@ pub trait PaginationParams {
 /// This wraps the API response with the essential pagination metadata.
 pub struct PaginatedResponse<T> {
     /// The items in this page (None if empty)
-    pub items: Option<Vec<T>>,
+    pub items: Vec<T>,
     /// Whether there are more pages available
     pub has_more: bool,
 }
@@ -91,7 +91,7 @@ impl<T: Paginatable> PaginatedIterator<T> {
     /// # Arguments
     /// * `config` - API configuration
     /// * `params` - Resource-specific parameters
-    /// * `initial_limit` - Page size for each API call (default: 10,000)
+    /// * `initial_limit` - Page size for each API call (default: MAX_RECORD_TRANSFER_COUNT)
     pub fn new(
         config: apis::configuration::Configuration,
         params: T::Params,
@@ -102,7 +102,7 @@ impl<T: Paginatable> PaginatedIterator<T> {
             config,
             params,
             remaining_limit,
-            initial_limit: initial_limit.unwrap_or(10_000),
+            initial_limit: initial_limit.unwrap_or(crate::MAX_RECORD_TRANSFER_COUNT),
             current_page: Vec::new().into_iter(),
             finished: false,
         }
@@ -116,31 +116,26 @@ impl<T: Paginatable> PaginatedIterator<T> {
         let page_limit = std::cmp::min(self.remaining_limit, self.initial_limit);
         let response = T::fetch_page(&self.config, &self.params, page_limit)?;
 
-        if let Some(items) = response.items {
-            let items_to_take = if self.remaining_limit == i64::MAX {
-                items.len()
-            } else {
-                std::cmp::min(items.len() as i64, self.remaining_limit) as usize
-            };
-            let taken_items: Vec<T> = items.into_iter().take(items_to_take).collect();
-
-            if self.remaining_limit != i64::MAX {
-                self.remaining_limit -= taken_items.len() as i64;
-            }
-
-            let new_offset = self.params.offset() + taken_items.len() as i64;
-            self.params.set_offset(new_offset);
-            self.current_page = taken_items.into_iter();
-
-            if !response.has_more || (self.remaining_limit != i64::MAX && self.remaining_limit <= 0)
-            {
-                self.finished = true;
-            }
-            Ok(true)
+        let items = response.items;
+        let items_to_take = if self.remaining_limit == i64::MAX {
+            items.len()
         } else {
-            self.finished = true;
-            Ok(false)
+            std::cmp::min(items.len() as i64, self.remaining_limit) as usize
+        };
+        let taken_items: Vec<T> = items.into_iter().take(items_to_take).collect();
+
+        if self.remaining_limit != i64::MAX {
+            self.remaining_limit -= taken_items.len() as i64;
         }
+
+        let new_offset = self.params.offset() + taken_items.len() as i64;
+        self.params.set_offset(new_offset);
+        self.current_page = taken_items.into_iter();
+
+        if !response.has_more || (self.remaining_limit != i64::MAX && self.remaining_limit <= 0) {
+            self.finished = true;
+        }
+        Ok(!self.current_page.as_slice().is_empty())
     }
 }
 
@@ -173,7 +168,7 @@ pub fn paginate<T: Paginatable>(
     config: &apis::configuration::Configuration,
     params: T::Params,
 ) -> Result<Vec<T>, apis::Error<T::ListError>> {
-    let initial_limit = params.limit().unwrap_or(10_000);
+    let initial_limit = params.limit().unwrap_or(crate::MAX_RECORD_TRANSFER_COUNT);
     let iter = PaginatedIterator::<T>::new(config.clone(), params, Some(initial_limit));
     iter.collect()
 }

@@ -2,65 +2,77 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""scheduled_compute_nodes_model
+@doc raw"""ScheduledComputeNodesModel
 
     ScheduledComputeNodesModel(;
         id=nothing,
-        workflow_id=nothing,
-        scheduler_id=nothing,
         scheduler_config_id=nothing,
+        scheduler_id=nothing,
         scheduler_type=nothing,
         status=nothing,
+        workflow_id=nothing,
     )
 
     - id::Int64
-    - workflow_id::Int64
-    - scheduler_id::Int64
     - scheduler_config_id::Int64
+    - scheduler_id::Int64
     - scheduler_type::String
     - status::String
+    - workflow_id::Int64
 """
 Base.@kwdef mutable struct ScheduledComputeNodesModel <: OpenAPI.APIModel
     id::Union{Nothing, Int64} = nothing
-    workflow_id::Union{Nothing, Int64} = nothing
-    scheduler_id::Union{Nothing, Int64} = nothing
     scheduler_config_id::Union{Nothing, Int64} = nothing
+    scheduler_id::Union{Nothing, Int64} = nothing
     scheduler_type::Union{Nothing, String} = nothing
     status::Union{Nothing, String} = nothing
+    workflow_id::Union{Nothing, Int64} = nothing
 
-    function ScheduledComputeNodesModel(id, workflow_id, scheduler_id, scheduler_config_id, scheduler_type, status, )
-        o = new(id, workflow_id, scheduler_id, scheduler_config_id, scheduler_type, status, )
+    function ScheduledComputeNodesModel(id, scheduler_config_id, scheduler_id, scheduler_type, status, workflow_id, )
+        o = new(id, scheduler_config_id, scheduler_id, scheduler_type, status, workflow_id, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type ScheduledComputeNodesModel
 
-const _property_types_ScheduledComputeNodesModel = Dict{Symbol,String}(Symbol("id")=>"Int64", Symbol("workflow_id")=>"Int64", Symbol("scheduler_id")=>"Int64", Symbol("scheduler_config_id")=>"Int64", Symbol("scheduler_type")=>"String", Symbol("status")=>"String", )
+const _property_types_ScheduledComputeNodesModel = Dict{Symbol,String}(Symbol("id")=>"Int64", Symbol("scheduler_config_id")=>"Int64", Symbol("scheduler_id")=>"Int64", Symbol("scheduler_type")=>"String", Symbol("status")=>"String", Symbol("workflow_id")=>"Int64", )
 OpenAPI.property_type(::Type{ ScheduledComputeNodesModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_ScheduledComputeNodesModel[name]))}
 
 function OpenAPI.check_required(o::ScheduledComputeNodesModel)
-    o.workflow_id === nothing && (return false)
-    o.scheduler_id === nothing && (return false)
     o.scheduler_config_id === nothing && (return false)
+    o.scheduler_id === nothing && (return false)
     o.scheduler_type === nothing && (return false)
     o.status === nothing && (return false)
+    o.workflow_id === nothing && (return false)
     true
 end
 
 function OpenAPI.validate_properties(o::ScheduledComputeNodesModel)
     OpenAPI.validate_property(ScheduledComputeNodesModel, Symbol("id"), o.id)
-    OpenAPI.validate_property(ScheduledComputeNodesModel, Symbol("workflow_id"), o.workflow_id)
-    OpenAPI.validate_property(ScheduledComputeNodesModel, Symbol("scheduler_id"), o.scheduler_id)
     OpenAPI.validate_property(ScheduledComputeNodesModel, Symbol("scheduler_config_id"), o.scheduler_config_id)
+    OpenAPI.validate_property(ScheduledComputeNodesModel, Symbol("scheduler_id"), o.scheduler_id)
     OpenAPI.validate_property(ScheduledComputeNodesModel, Symbol("scheduler_type"), o.scheduler_type)
     OpenAPI.validate_property(ScheduledComputeNodesModel, Symbol("status"), o.status)
+    OpenAPI.validate_property(ScheduledComputeNodesModel, Symbol("workflow_id"), o.workflow_id)
 end
 
 function OpenAPI.validate_property(::Type{ ScheduledComputeNodesModel }, name::Symbol, val)
 
+    if name === Symbol("id")
+        OpenAPI.validate_param(name, "ScheduledComputeNodesModel", :format, val, "int64")
+    end
+
+    if name === Symbol("scheduler_config_id")
+        OpenAPI.validate_param(name, "ScheduledComputeNodesModel", :format, val, "int64")
+    end
+
+    if name === Symbol("scheduler_id")
+        OpenAPI.validate_param(name, "ScheduledComputeNodesModel", :format, val, "int64")
+    end
 
 
 
-
-
+    if name === Symbol("workflow_id")
+        OpenAPI.validate_param(name, "ScheduledComputeNodesModel", :format, val, "int64")
+    end
 end

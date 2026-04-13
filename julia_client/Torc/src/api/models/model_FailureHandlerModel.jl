@@ -2,54 +2,59 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""failure_handler_model
-Data model for configurable failure handlers that define rules for automatic job retry.
+@doc raw"""FailureHandlerModel
 
     FailureHandlerModel(;
         id=nothing,
-        workflow_id=nothing,
         name=nothing,
         rules=nothing,
+        workflow_id=nothing,
     )
 
-    - id::Int64 : Database ID of this failure handler.
-    - workflow_id::Int64 : Database ID of the workflow this handler is associated with.
-    - name::String : Name of the failure handler
-    - rules::String : JSON array of rule objects. Each rule can have: exit_codes (array of integers), match_all_exit_codes (boolean, matches any non-zero exit code), recovery_script (optional path to script), and max_retries (integer, defaults to 3).
+    - id::Int64
+    - name::String
+    - rules::String
+    - workflow_id::Int64
 """
 Base.@kwdef mutable struct FailureHandlerModel <: OpenAPI.APIModel
     id::Union{Nothing, Int64} = nothing
-    workflow_id::Union{Nothing, Int64} = nothing
     name::Union{Nothing, String} = nothing
     rules::Union{Nothing, String} = nothing
+    workflow_id::Union{Nothing, Int64} = nothing
 
-    function FailureHandlerModel(id, workflow_id, name, rules, )
-        o = new(id, workflow_id, name, rules, )
+    function FailureHandlerModel(id, name, rules, workflow_id, )
+        o = new(id, name, rules, workflow_id, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type FailureHandlerModel
 
-const _property_types_FailureHandlerModel = Dict{Symbol,String}(Symbol("id")=>"Int64", Symbol("workflow_id")=>"Int64", Symbol("name")=>"String", Symbol("rules")=>"String", )
+const _property_types_FailureHandlerModel = Dict{Symbol,String}(Symbol("id")=>"Int64", Symbol("name")=>"String", Symbol("rules")=>"String", Symbol("workflow_id")=>"Int64", )
 OpenAPI.property_type(::Type{ FailureHandlerModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_FailureHandlerModel[name]))}
 
 function OpenAPI.check_required(o::FailureHandlerModel)
-    o.workflow_id === nothing && (return false)
     o.name === nothing && (return false)
     o.rules === nothing && (return false)
+    o.workflow_id === nothing && (return false)
     true
 end
 
 function OpenAPI.validate_properties(o::FailureHandlerModel)
     OpenAPI.validate_property(FailureHandlerModel, Symbol("id"), o.id)
-    OpenAPI.validate_property(FailureHandlerModel, Symbol("workflow_id"), o.workflow_id)
     OpenAPI.validate_property(FailureHandlerModel, Symbol("name"), o.name)
     OpenAPI.validate_property(FailureHandlerModel, Symbol("rules"), o.rules)
+    OpenAPI.validate_property(FailureHandlerModel, Symbol("workflow_id"), o.workflow_id)
 end
 
 function OpenAPI.validate_property(::Type{ FailureHandlerModel }, name::Symbol, val)
 
+    if name === Symbol("id")
+        OpenAPI.validate_param(name, "FailureHandlerModel", :format, val, "int64")
+    end
 
 
 
+    if name === Symbol("workflow_id")
+        OpenAPI.validate_param(name, "FailureHandlerModel", :format, val, "int64")
+    end
 end

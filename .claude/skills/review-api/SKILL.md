@@ -56,6 +56,18 @@ Review new or modified API features for completeness and consistency.
 4. **Logging**: Check that log messages that include database record IDs use a format like
    `info!("Created workflow workflow_id={}", workflow_id);` so that parsing scripts pick them up.
 
+### Performance
+
+1. Review all changes for performance.
+2. Look for excessive invocations of CLI commands as subprocesses.
+3. Look for problematic API calls from client to the server. Batching is preferred where possible.
+4. Check SQL queries on the server for unnecessary joins.
+
+### Code Quality
+
+1. Check the changes for duplication and flag instances.
+2. Check functions for being too long and complicated.
+
 ## How to Review
 
 1. Identify all files changed in the feature

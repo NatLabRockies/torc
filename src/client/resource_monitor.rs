@@ -3,7 +3,7 @@ use log::{debug, error, info, warn};
 use rusqlite::{Connection, Result as SqliteResult};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 use sysinfo::{
@@ -11,6 +11,21 @@ use sysinfo::{
 };
 
 const DB_FILENAME_PREFIX: &str = "resource_metrics";
+
+/// Notification sent when a job exceeds its memory limit.
+///
+/// The job runner should kill the job and mark it as OOM-killed.
+#[derive(Debug, Clone)]
+pub struct OomViolation {
+    /// PID of the job process (used to identify the job in running_jobs map).
+    pub pid: u32,
+    /// Torc job ID.
+    pub job_id: i64,
+    /// Current memory usage in bytes.
+    pub memory_bytes: u64,
+    /// Configured memory limit in bytes.
+    pub limit_bytes: u64,
+}
 
 /// Configuration for resource monitoring
 #[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
@@ -127,6 +142,8 @@ enum MonitorCommand {
         pid: u32,
         job_id: i64,
         job_name: String,
+        /// Memory limit in bytes. If set and exceeded, an OOM violation is sent.
+        memory_limit_bytes: Option<u64>,
     },
     /// Register a Slurm step for sstat-based monitoring (TimeSeries mode).
     /// `pid` is the srun PID, used as the map key so that `stop_monitoring(pid)` works
@@ -157,6 +174,10 @@ struct MonitoredJob {
     pid: u32,
     source: MonitorJobSource,
     metrics: JobMetrics,
+    /// Memory limit in bytes. If set, the job will be flagged for OOM kill when exceeded.
+    memory_limit_bytes: Option<u64>,
+    /// Whether an OOM violation has already been sent for this job (to avoid duplicates).
+    oom_violation_sent: bool,
 }
 
 /// Resource monitor manages a single background thread that monitors all running jobs
@@ -164,6 +185,8 @@ pub struct ResourceMonitor {
     tx: Sender<MonitorCommand>,
     handle: Option<JoinHandle<()>>,
     config: ResourceMonitorConfig,
+    /// Receiver for OOM violation notifications from the monitoring thread.
+    oom_rx: Receiver<OomViolation>,
 }
 
 impl ResourceMonitor {
@@ -174,10 +197,12 @@ impl ResourceMonitor {
         unique_label: String,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let (tx, rx) = channel();
+        let (oom_tx, oom_rx) = channel();
         let config_clone = config.clone();
 
         let handle = thread::spawn(move || {
-            if let Err(e) = run_monitoring_loop(config_clone, output_dir, unique_label, rx) {
+            if let Err(e) = run_monitoring_loop(config_clone, output_dir, unique_label, rx, oom_tx)
+            {
                 error!("Resource monitoring thread failed: {}", e);
             }
         });
@@ -186,28 +211,56 @@ impl ResourceMonitor {
             tx,
             handle: Some(handle),
             config,
+            oom_rx,
         })
     }
 
     /// Returns `true` when the monitor is configured for `TimeSeries` granularity.
-    pub fn is_timeseries(&self) -> bool {
+    pub fn is_time_series(&self) -> bool {
         matches!(self.config.granularity, MonitorGranularity::TimeSeries)
     }
 
     /// Start monitoring a local process (sysinfo process-tree walk).
+    ///
+    /// If `memory_limit_bytes` is set and the job exceeds this limit, an OOM violation
+    /// will be sent via [`recv_oom_violations()`].
     pub fn start_monitoring(
         &self,
         pid: u32,
         job_id: i64,
         job_name: String,
+        memory_limit_bytes: Option<u64>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         self.tx.send(MonitorCommand::StartMonitoring {
             pid,
             job_id,
             job_name,
+            memory_limit_bytes,
         })?;
-        debug!("Started monitoring job {} with PID {}", job_id, pid);
+        debug!(
+            "Started monitoring job {} with PID {} (memory_limit={:?})",
+            job_id, pid, memory_limit_bytes
+        );
         Ok(())
+    }
+
+    /// Receive all pending OOM violations (non-blocking).
+    ///
+    /// Returns a vector of jobs that have exceeded their memory limits.
+    /// The job runner should kill these jobs and mark them as OOM-killed.
+    pub fn recv_oom_violations(&self) -> Vec<OomViolation> {
+        let mut violations = Vec::new();
+        loop {
+            match self.oom_rx.try_recv() {
+                Ok(v) => violations.push(v),
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => {
+                    warn!("OOM violation channel disconnected");
+                    break;
+                }
+            }
+        }
+        violations
     }
 
     /// Register a Slurm step for sstat-based monitoring (`TimeSeries` mode only).
@@ -301,6 +354,7 @@ fn run_monitoring_loop(
     output_dir: PathBuf,
     unique_label: String,
     rx: Receiver<MonitorCommand>,
+    oom_tx: Sender<OomViolation>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Use new_with_specifics to only refresh processes, CPU, and memory, avoiding user enumeration
     // which can crash on HPC systems with large LDAP user databases
@@ -336,6 +390,7 @@ fn run_monitoring_loop(
                     pid,
                     job_id,
                     job_name,
+                    memory_limit_bytes,
                 } => {
                     // Store job metadata in database
                     if let Some(ref mut conn) = db_conn
@@ -351,9 +406,15 @@ fn run_monitoring_loop(
                             pid,
                             source: MonitorJobSource::Local { pid },
                             metrics: JobMetrics::new(),
+                            memory_limit_bytes,
+                            oom_violation_sent: false,
                         },
                     );
-                    debug!("Now monitoring {} jobs", monitored_jobs.len());
+                    debug!(
+                        "Now monitoring {} jobs (memory_limit={:?})",
+                        monitored_jobs.len(),
+                        memory_limit_bytes
+                    );
                 }
                 MonitorCommand::StartMonitoringSlurm {
                     pid,
@@ -369,6 +430,7 @@ fn run_monitoring_loop(
                         error!("Failed to store job metadata for job {}: {}", job_id, e);
                     }
 
+                    // Slurm mode: OOM is handled by Slurm's cgroups, not by us.
                     monitored_jobs.insert(
                         pid,
                         MonitoredJob {
@@ -382,6 +444,8 @@ fn run_monitoring_loop(
                                 prev_sample_at: Instant::now(),
                             },
                             metrics: JobMetrics::new(),
+                            memory_limit_bytes: None, // Slurm handles OOM
+                            oom_violation_sent: false,
                         },
                     );
                     debug!(
@@ -541,6 +605,29 @@ fn run_monitoring_loop(
                 };
 
                 job.metrics.add_sample(cpu_percent, memory_bytes);
+
+                // Check for OOM violation (only for local jobs with memory limits)
+                if let Some(limit) = job.memory_limit_bytes
+                    && !job.oom_violation_sent
+                    && memory_bytes > limit
+                {
+                    warn!(
+                        "Job {} (PID {}) exceeded memory limit: {}MB > {}MB",
+                        job.job_id,
+                        pid,
+                        memory_bytes / (1024 * 1024),
+                        limit / (1024 * 1024)
+                    );
+                    job.oom_violation_sent = true;
+                    if let Err(e) = oom_tx.send(OomViolation {
+                        pid: *pid,
+                        job_id: job.job_id,
+                        memory_bytes,
+                        limit_bytes: limit,
+                    }) {
+                        error!("Failed to send OOM violation for job {}: {}", job.job_id, e);
+                    }
+                }
 
                 // Store in database if using TimeSeries
                 if let Some(ref mut conn) = db_conn

@@ -9,15 +9,15 @@ workflows on HPC systems—Torc handles this automatically.
 Running a workflow on Slurm requires just two things:
 
 1. **Define your jobs with resource requirements**
-2. **Submit with `submit-slurm`**
+2. **Submit with `slurm generate` + `submit`**
 
 That's it. Torc will analyze your workflow, generate appropriate Slurm configurations, and submit
 everything for execution.
 
-> **⚠️ Important:** The `submit-slurm` command uses heuristics to auto-generate Slurm schedulers and
-> workflow actions. For complex workflows with unusual dependency patterns, the generated
-> configuration may not be optimal and could result in suboptimal allocation timing. **Always
-> preview the configuration first** using `torc slurm generate` (see
+> **⚠️ Important:** The `slurm generate` + `submit` command uses heuristics to auto-generate Slurm
+> schedulers and workflow actions. For complex workflows with unusual dependency patterns, the
+> generated configuration may not be optimal and could result in suboptimal allocation timing.
+> **Always preview the configuration first** using `torc slurm generate` (see
 > [Previewing Generated Configuration](#previewing-generated-configuration)) before submitting
 > production workflows.
 
@@ -70,7 +70,8 @@ jobs:
 ### Submitting the Workflow
 
 ```bash
-torc submit-slurm --account myproject workflow.yaml
+torc slurm generate --account myproject workflow.yaml
+torc submit workflow.yaml
 ```
 
 Torc will:
@@ -83,7 +84,7 @@ Torc will:
 
 ## How It Works
 
-When you use `submit-slurm`, Torc performs intelligent analysis of your workflow:
+When you use `slurm generate` + `submit`, Torc performs intelligent analysis of your workflow:
 
 ### 1. Per-Job Scheduler Generation
 
@@ -460,13 +461,14 @@ Validate your workflow logic locally before submitting to HPC:
 torc run workflow.yaml
 
 # Then submit to HPC
-torc submit-slurm --account myproject workflow.yaml
+torc slurm generate --account myproject workflow.yaml
+torc submit workflow.yaml
 ```
 
 ## Limitations and Caveats
 
-The auto-generation in `submit-slurm` uses heuristics that work well for common workflow patterns
-but may not be optimal for all cases:
+The auto-generation in `torc slurm generate` uses heuristics that work well for common workflow
+patterns but may not be optimal for all cases:
 
 ### When Auto-Generation Works Well
 

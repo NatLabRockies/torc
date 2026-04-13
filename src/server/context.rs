@@ -1,11 +1,12 @@
 use crate::server::auth::AuthenticationApi;
+use crate::server::transport_types::auth_types::{AuthData, Authorization};
+use crate::server::transport_types::context_types::{Push, XSpanIdString};
+use axum::http::Request;
 use futures::future::BoxFuture;
-use hyper::{Request, service::Service};
 use std::default::Default;
 use std::marker::PhantomData;
 use std::task::{Context, Poll};
-use swagger::auth::{AuthData, Authorization};
-use swagger::{Push, XSpanIdString};
+use tower::Service;
 
 pub struct MakeAddContext<T, A> {
     inner: T,
@@ -53,6 +54,7 @@ where
 }
 
 /// Middleware to add context data from the request
+#[derive(Clone)]
 pub struct AddContext<T, A, B, C, D>
 where
     A: Default + Push<XSpanIdString, Result = B>,

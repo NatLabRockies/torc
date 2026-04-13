@@ -32,7 +32,8 @@ sed -i 's/PLACEHOLDER_ACCOUNT/your_account/g' workflow.yaml
 ### 2. Submit the workflow
 
 ```bash
-torc submit-slurm --account <your_account> workflow.yaml
+torc slurm generate --account <your_account> workflow.yaml
+torc submit workflow.yaml
 ```
 
 Note the workflow ID from the output.
@@ -93,7 +94,7 @@ torc jobs list <workflow_id>
 torc jobs list-resource-requirements <workflow_id>
 
 # Check resource utilization report
-torc reports check-resource-utilization <workflow_id>
+torc workflows check-resources <workflow_id>
 ```
 
 ## Adjusting the Test

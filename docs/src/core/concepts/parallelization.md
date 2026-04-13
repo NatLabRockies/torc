@@ -62,27 +62,46 @@ The server's `GET /workflows/{id}/claim_jobs_based_on_resources` endpoint:
 3. Returns a set of jobs that can run concurrently without over-subscription
 4. Updates job status from `ready` to `pending` atomically
 
+### Priority-Based Job Selection
+
+When more than one ready job fits the runner's available resources, Torc orders the candidates by
+job `priority` before claiming work.
+
+- Higher priority values are claimed first
+- The default priority is `0`
+- Resource fit still applies first: a high-priority job that does not fit is skipped
+- Priority works with both resource-aware allocation and queue-depth parallelism
+
+Example:
+
+```yaml
+jobs:
+  - name: preprocess
+    command: ./preprocess.sh
+    resource_requirements: small
+    priority: 10
+
+  - name: train_model
+    command: python train.py
+    resource_requirements: large
+    priority: 100
+```
+
+In that workflow, `train_model` is preferred whenever it is ready and fits the requesting runner's
+resources. If it does not fit, Torc continues scanning lower-priority ready jobs that do fit.
+
 ### Job Allocation Ambiguity: Two Approaches
 
 When you have multiple compute nodes or schedulers with different capabilities, there are two ways
 to handle job allocation:
 
-#### Approach 1: Sort Method (Flexible but Potentially Ambiguous)
+#### Approach 1: Priority Only (Flexible but Potentially Ambiguous)
 
 **How it works:**
 
 - Jobs do NOT specify a particular scheduler/compute node
-- The server uses a `job_sort_method` parameter to prioritize jobs when allocating
+- The server uses job `priority` to decide which ready jobs to consider first
 - Any runner with sufficient resources can claim any ready job
-
-**Available sort methods:** Define the field job_sort_method in the workflow specification file
-(YAML/JSON/KDL)
-
-- `gpus_runtime_memory` - Prioritize jobs by GPU count (desc), then runtime (desc), then memory
-  (desc)
-- `gpus_memory_runtime` - Prioritize jobs by GPU count (desc), then memory (desc), then runtime
-  (desc)
-- `none` - No sorting, jobs selected in queue order
 
 **Tradeoffs:**
 
@@ -97,7 +116,6 @@ to handle job allocation:
 
 - Ambiguity - no guarantee GPU jobs go to GPU runners
 - Potential inefficiency - high-memory jobs might land on low-memory nodes if timing is unlucky
-- Requires careful sort method selection
 - Less predictable job placement
 
 **When to use:**
@@ -185,12 +203,12 @@ torc-slurm-job-runner $WORKFLOW_ID \
 
 | Scenario                                        | Recommended Approach | Rationale                          |
 | ----------------------------------------------- | -------------------- | ---------------------------------- |
-| All jobs can run anywhere                       | Sort method          | Maximum flexibility, simplest spec |
+| All jobs can run anywhere                       | Priority only        | Maximum flexibility, simplest spec |
 | Some jobs need GPUs, some don't                 | Scheduler ID         | Prevent GPU waste on CPU jobs      |
 | Multi-cluster Slurm environment                 | Scheduler ID         | Jobs must target correct clusters  |
-| Development/testing                             | Sort method          | Easier to experiment               |
+| Development/testing                             | Priority only        | Easier to experiment               |
 | Production with SLAs                            | Scheduler ID         | Predictable resource usage         |
-| Homogeneous compute nodes                       | Sort method          | No benefit to restricting          |
+| Homogeneous compute nodes                       | Priority only        | No benefit to restricting          |
 | Specialized hardware (GPUs, high-memory, FPGAs) | Scheduler ID         | Match jobs to capabilities         |
 
 You can also **mix approaches**: Use `scheduler_id` for jobs with strict requirements, leave it NULL
@@ -397,9 +415,9 @@ For workflows with thousands of ready jobs, queue-depth allocation has lower ove
    - Predictable resource usage
    - Better for heterogeneous resources
 
-3. **Use sort_method for flexible single-cluster workflows**
+3. **Use priority for flexible single-cluster workflows**
    - Simpler specifications
-   - Better resource utilization
+   - Lets you prefer urgent or expensive work
    - Good for homogeneous resources
 
 4. **Use queue-depth parallelism for homogeneous task queues**
@@ -421,7 +439,7 @@ For workflows with thousands of ready jobs, queue-depth allocation has lower ove
 
 | Strategy                      | Use When                                | Allocation Method                         | Resource Tracking |
 | ----------------------------- | --------------------------------------- | ----------------------------------------- | ----------------- |
-| Resource-aware + sort_method  | Heterogeneous jobs, flexible allocation | Server filters by resources               | Yes               |
+| Resource-aware + priority     | Heterogeneous jobs, flexible allocation | Server filters by resources               | Yes               |
 | Resource-aware + scheduler_id | Heterogeneous jobs, strict allocation   | Server filters by resources AND scheduler | Yes               |
 | Queue-depth                   | Homogeneous jobs, simple parallelism    | Server returns next N jobs                | No                |
 

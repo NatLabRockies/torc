@@ -54,8 +54,10 @@ pub trait HpcInterface: Send + Sync {
     /// * `max_parallel_jobs` - Optional maximum number of parallel jobs
     /// * `filename` - Path where the submission script should be written
     /// * `config` - Configuration parameters for the HPC scheduler
+    /// * `start_one_worker_per_node` - Whether to launch one worker per node via srun
     /// * `tls_ca_cert` - Optional path to a PEM-encoded CA certificate
     /// * `tls_insecure` - Whether to skip certificate verification
+    /// * `startup_delay_seconds` - Maximum startup jitter in seconds (0 to disable)
     #[allow(clippy::too_many_arguments)]
     fn create_submission_script(
         &self,
@@ -67,8 +69,10 @@ pub trait HpcInterface: Send + Sync {
         max_parallel_jobs: Option<i32>,
         filename: &Path,
         config: &HashMap<String, String>,
+        start_one_worker_per_node: bool,
         tls_ca_cert: Option<&str>,
         tls_insecure: bool,
+        startup_delay_seconds: u64,
     ) -> Result<()>;
 
     /// Get the current HPC job ID from environment variables
@@ -172,7 +176,10 @@ pub trait HpcInterface: Send + Sync {
     /// Get the username for HPC operations
     ///
     /// # Returns
-    /// The current user's username
+    /// The current scheduler account username.
+    ///
+    /// This intentionally does not consult `TORC_USERNAME`, which is a Torc API
+    /// identity override and may differ from the Unix account running Slurm jobs.
     fn get_user(&self) -> Result<String> {
         Ok(std::env::var("USER").or_else(|_| std::env::var("USERNAME"))?)
     }

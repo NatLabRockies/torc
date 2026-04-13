@@ -2,8 +2,8 @@
 //!
 //! Provides tools for bundling workflow logs and analyzing them for errors.
 
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::commands::{get_env_user_name, print_error, select_workflow_interactively};
 use flate2::Compression;
 use flate2::read::GzDecoder;
@@ -107,7 +107,7 @@ fn collect_bundle(
     let bundle_path = bundle_dir.join(&bundle_filename);
 
     // Get workflow info for metadata
-    let workflow = match default_api::get_workflow(config, wf_id) {
+    let workflow = match apis::workflows_api::get_workflow(config, wf_id) {
         Ok(w) => w,
         Err(e) => {
             print_error("getting workflow", &e);

@@ -5,8 +5,8 @@ Find and read the stdout/stderr output from job execution.
 ## Find Log File Paths
 
 ```bash
-torc reports results <workflow_id>
-torc reports results <workflow_id> --job-id 15
+torc results list --include-logs <workflow_id>
+torc results list --include-logs <workflow_id> --job-id 15
 ```
 
 Output includes:
@@ -49,11 +49,18 @@ By default, logs are stored in the output directory:
 ```
 output/
 └── job_stdio/
-    ├── job_wf<workflow_id>_j<job_id>_r<run_id>_a<attempt_id>.o
-    ├── job_wf<workflow_id>_j<job_id>_r<run_id>_a<attempt_id>.3
+    ├── job_wf<id>_j<job>_r<run>_a<attempt>.o    # stdout (separate mode)
+    ├── job_wf<id>_j<job>_r<run>_a<attempt>.e    # stderr (separate mode)
+    ├── job_wf<id>_j<job>_r<run>_a<attempt>.log  # combined mode
 ```
 
 The output directory can be configured via the run/submit CLI options.
+
+> **Note:** The files present depend on the
+> [`stdio` configuration](../reference/workflow-spec.md#stdioconfig). In `combined` mode, stdout and
+> stderr are merged into a single `.log` file. Modes like `no_stdout`, `no_stderr`, or `none`
+> suppress some or all files. If `delete_on_success` is enabled, files are removed after successful
+> job completion.
 
 ## View Logs for Failed Jobs
 
@@ -64,7 +71,7 @@ Quickly find logs for failed jobs:
 torc jobs list <workflow_id> --status failed
 
 # Then view each job's logs
-torc reports results <workflow_id> --job-id <failed_job_id>
+torc results list --include-logs <workflow_id> --job-id <failed_job_id>
 ```
 
 ## View Logs in TUI or Dashboard

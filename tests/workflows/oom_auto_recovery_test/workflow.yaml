@@ -8,7 +8,7 @@
 # - This will cause OOM failures since the jobs only request 10GB
 #
 # Test procedure:
-# 1. Submit the workflow: torc submit-slurm --account <account> workflow.yaml
+# 1. Submit the workflow: torc submit workflow.yaml
 # 2. Watch with auto-recover: torc watch <workflow_id> --recover
 # 3. Jobs will fail with OOM, watcher increases memory (10GB -> 15GB -> 22GB -> 33GB)
 # 4. Eventually jobs get enough memory and succeed

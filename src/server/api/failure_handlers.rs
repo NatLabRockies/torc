@@ -2,11 +2,11 @@
 
 #![allow(clippy::too_many_arguments)]
 
+use crate::server::transport_types::context_types::{ApiError, Has, XSpanIdString};
 use async_trait::async_trait;
 use log::{debug, info};
-use swagger::{ApiError, Has, XSpanIdString};
 
-use crate::server::api_types::{
+use crate::server::api_responses::{
     CreateFailureHandlerResponse, DeleteFailureHandlerResponse, GetFailureHandlerResponse,
     ListFailureHandlersResponse,
 };
@@ -45,7 +45,6 @@ pub trait FailureHandlersApi<C> {
     async fn delete_failure_handler(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteFailureHandlerResponse, ApiError>;
 }
@@ -74,8 +73,7 @@ where
         context: &C,
     ) -> Result<CreateFailureHandlerResponse, ApiError> {
         debug!(
-            "create_failure_handler({:?}) - X-Span-ID: {:?}",
-            body,
+            "create_failure_handler - X-Span-ID: {:?}",
             context.get().0.clone()
         );
 
@@ -235,7 +233,7 @@ where
 
         Ok(ListFailureHandlersResponse::SuccessfulResponse(
             models::ListFailureHandlersResponse {
-                items: Some(items),
+                items,
                 offset,
                 max_limit: MAX_RECORD_TRANSFER_COUNT,
                 count,
@@ -249,7 +247,6 @@ where
     async fn delete_failure_handler(
         &self,
         id: i64,
-        _body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteFailureHandlerResponse, ApiError> {
         debug!(

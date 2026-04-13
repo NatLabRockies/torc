@@ -1,20 +1,28 @@
 # Machine Learning Hyperparameter Sweep Workflow
 # Demonstrates multi-dimensional parameter sweeps using Cartesian product
 # This creates 3 * 3 * 2 = 18 training jobs with different hyperparameter combinations
+#
+# This example also demonstrates the use of invocation_script to set up the
+# conda environment before running each job. See scripts/conda_setup.sh for
+# the setup script that loads modules and activates the conda environment.
 
 name: hyperparameter_sweep
 description: Grid search over learning rate, batch size, and optimizer
+project: ml-research
+metadata: '{"team": "applied-ml", "experiment": "resnet50-tuning"}'
 
 # Prepare datasets (one-time setup jobs)
 jobs:
   - name: prepare_train_data
     command: python scripts/prepare_data.py --split=train --output=/data/train.pkl
+    invocation_script: bash scripts/conda_setup.sh
     resource_requirements: data_prep
     output_files:
       - train_data
 
   - name: prepare_val_data
     command: python scripts/prepare_data.py --split=validation --output=/data/validation.pkl
+    invocation_script: bash scripts/conda_setup.sh
     resource_requirements: data_prep
     output_files:
       - val_data
@@ -31,6 +39,7 @@ jobs:
         --val-data=/data/validation.pkl \
         --model-output=/models/model_lr{lr:.4f}_bs{batch_size}_opt{optimizer}.pt \
         --metrics-output=/results/metrics_lr{lr:.4f}_bs{batch_size}_opt{optimizer}.json
+    invocation_script: bash scripts/conda_setup.sh
     resource_requirements: gpu_training
     depends_on:
       - prepare_train_data
@@ -49,6 +58,7 @@ jobs:
   # Aggregate results from all training runs
   - name: aggregate_results
     command: python scripts/aggregate_metrics.py --input-dir=/results --output=/results/summary.csv
+    invocation_script: bash scripts/conda_setup.sh
     resource_requirements: minimal
     depends_on:
       # This will be expanded to wait for all 18 training jobs

@@ -2,56 +2,69 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""list_user_group_memberships_response
-Response for listing user group memberships
+@doc raw"""ListUserGroupMembershipsResponse
 
     ListUserGroupMembershipsResponse(;
-        items=nothing,
-        offset=nothing,
-        limit=nothing,
-        total_count=nothing,
         has_more=nothing,
+        items=nothing,
+        limit=nothing,
+        offset=nothing,
+        total_count=nothing,
     )
 
-    - items::Vector{UserGroupMembershipModel}
-    - offset::Int64
-    - limit::Int64
-    - total_count::Int64
     - has_more::Bool
+    - items::Vector{UserGroupMembershipModel}
+    - limit::Int64
+    - offset::Int64
+    - total_count::Int64
 """
 Base.@kwdef mutable struct ListUserGroupMembershipsResponse <: OpenAPI.APIModel
-    items::Union{Nothing, Vector} = nothing # spec type: Union{ Nothing, Vector{UserGroupMembershipModel} }
-    offset::Union{Nothing, Int64} = nothing
-    limit::Union{Nothing, Int64} = nothing
-    total_count::Union{Nothing, Int64} = nothing
     has_more::Union{Nothing, Bool} = nothing
+    items::Union{Nothing, Vector} = nothing # spec type: Union{ Nothing, Vector{UserGroupMembershipModel} }
+    limit::Union{Nothing, Int64} = nothing
+    offset::Union{Nothing, Int64} = nothing
+    total_count::Union{Nothing, Int64} = nothing
 
-    function ListUserGroupMembershipsResponse(items, offset, limit, total_count, has_more, )
-        o = new(items, offset, limit, total_count, has_more, )
+    function ListUserGroupMembershipsResponse(has_more, items, limit, offset, total_count, )
+        o = new(has_more, items, limit, offset, total_count, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type ListUserGroupMembershipsResponse
 
-const _property_types_ListUserGroupMembershipsResponse = Dict{Symbol,String}(Symbol("items")=>"Vector{UserGroupMembershipModel}", Symbol("offset")=>"Int64", Symbol("limit")=>"Int64", Symbol("total_count")=>"Int64", Symbol("has_more")=>"Bool", )
+const _property_types_ListUserGroupMembershipsResponse = Dict{Symbol,String}(Symbol("has_more")=>"Bool", Symbol("items")=>"Vector{UserGroupMembershipModel}", Symbol("limit")=>"Int64", Symbol("offset")=>"Int64", Symbol("total_count")=>"Int64", )
 OpenAPI.property_type(::Type{ ListUserGroupMembershipsResponse }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_ListUserGroupMembershipsResponse[name]))}
 
 function OpenAPI.check_required(o::ListUserGroupMembershipsResponse)
+    o.has_more === nothing && (return false)
+    o.items === nothing && (return false)
+    o.limit === nothing && (return false)
+    o.offset === nothing && (return false)
+    o.total_count === nothing && (return false)
     true
 end
 
 function OpenAPI.validate_properties(o::ListUserGroupMembershipsResponse)
-    OpenAPI.validate_property(ListUserGroupMembershipsResponse, Symbol("items"), o.items)
-    OpenAPI.validate_property(ListUserGroupMembershipsResponse, Symbol("offset"), o.offset)
-    OpenAPI.validate_property(ListUserGroupMembershipsResponse, Symbol("limit"), o.limit)
-    OpenAPI.validate_property(ListUserGroupMembershipsResponse, Symbol("total_count"), o.total_count)
     OpenAPI.validate_property(ListUserGroupMembershipsResponse, Symbol("has_more"), o.has_more)
+    OpenAPI.validate_property(ListUserGroupMembershipsResponse, Symbol("items"), o.items)
+    OpenAPI.validate_property(ListUserGroupMembershipsResponse, Symbol("limit"), o.limit)
+    OpenAPI.validate_property(ListUserGroupMembershipsResponse, Symbol("offset"), o.offset)
+    OpenAPI.validate_property(ListUserGroupMembershipsResponse, Symbol("total_count"), o.total_count)
 end
 
 function OpenAPI.validate_property(::Type{ ListUserGroupMembershipsResponse }, name::Symbol, val)
 
 
 
+    if name === Symbol("limit")
+        OpenAPI.validate_param(name, "ListUserGroupMembershipsResponse", :format, val, "int64")
+    end
 
+    if name === Symbol("offset")
+        OpenAPI.validate_param(name, "ListUserGroupMembershipsResponse", :format, val, "int64")
+    end
 
+    if name === Symbol("total_count")
+        OpenAPI.validate_param(name, "ListUserGroupMembershipsResponse", :format, val, "int64")
+    end
 end

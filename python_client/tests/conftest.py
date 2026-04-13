@@ -6,12 +6,8 @@ from pathlib import Path
 import pytest
 
 from torc import map_function_to_jobs
-from torc.openapi_client import (
-    ApiClient,
-    Configuration,
-    DefaultApi,
-    WorkflowModel,
-)
+from torc.api import DefaultApi
+from torc.openapi_client import ApiClient, Configuration, WorkflowModel
 from torc.loggers import setup_logging
 from torc.tests.database_interface import DatabaseInterface
 

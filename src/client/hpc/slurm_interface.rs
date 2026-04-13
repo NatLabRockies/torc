@@ -28,6 +28,8 @@ pub struct SlurmInterface {
 impl SlurmInterface {
     /// Create a new Slurm interface
     pub fn new() -> Result<Self> {
+        // Use the real scheduler account, not TORC_USERNAME, which only overrides
+        // Torc API/workflow ownership.
         let user = env::var("USER").or_else(|_| env::var("USERNAME"))?;
         let sbatch_regex = Regex::new(r"Submitted batch job (\d+)")?;
 
@@ -212,8 +214,10 @@ impl HpcInterface for SlurmInterface {
         max_parallel_jobs: Option<i32>,
         filename: &Path,
         config: &HashMap<String, String>,
+        start_one_worker_per_node: bool,
         tls_ca_cert: Option<&str>,
         tls_insecure: bool,
+        startup_delay_seconds: u64,
     ) -> Result<()> {
         let mut script = format!(
             "#!/bin/bash\n\
@@ -272,12 +276,23 @@ impl HpcInterface for SlurmInterface {
             command.push_str(" --tls-insecure");
         }
 
+        if startup_delay_seconds > 0 {
+            command.push_str(&format!(
+                " --startup-delay-seconds {}",
+                startup_delay_seconds
+            ));
+        }
+
         // Unset conflicting Slurm memory variables.
         // These can be inherited from a parent allocation and conflict with --mem.
         // We only unset SLURM_MEM_PER_CPU and SLURM_MEM_PER_GPU since those conflict
         // with the --mem directive (which sets SLURM_MEM_PER_NODE).
         // SLURM_MEM_PER_NODE is needed by torc-slurm-job-runner to report resources.
         script.push_str("unset SLURM_MEM_PER_CPU SLURM_MEM_PER_GPU\n");
+        if start_one_worker_per_node {
+            command.push_str(" --is-subtask");
+            script.push_str("srun --ntasks-per-node=1 ");
+        }
         script.push_str(&command);
         script.push('\n');
 
@@ -338,13 +353,14 @@ impl HpcInterface for SlurmInterface {
     }
 
     fn get_job_stats(&self, job_id: &str) -> Result<HpcJobStats> {
-        let output = Command::new("sacct")
-            .args([
-                "-j",
-                job_id,
-                "--format=JobID,JobName%20,state,start,end,Account,Partition%15,QOS",
-            ])
-            .output()?;
+        let mut sacct_cmd = Command::new("sacct");
+        sacct_cmd.args([
+            "-j",
+            job_id,
+            "--format=JobID,JobName%20,state,start,end,Account,Partition%15,QOS",
+        ]);
+        debug!("sacct command for job {}: {:?}", job_id, sacct_cmd);
+        let output = sacct_cmd.output()?;
 
         if !output.status.success() {
             return Err(anyhow::anyhow!("Failed to run sacct command"));
@@ -445,10 +461,10 @@ impl HpcInterface for SlurmInterface {
     }
 
     fn get_num_cpus_per_task(&self) -> usize {
-        let cpus_per_task = env::var("SLURM_CPUS_PER_TASK").expect("SLURM_CPUS_PER_TASK not set");
-        cpus_per_task
-            .parse()
-            .expect("Failed to parse SLURM_CPUS_PER_TASK")
+        match env::var("SLURM_CPUS_PER_TASK") {
+            Ok(val) => val.parse().expect("Failed to parse SLURM_CPUS_PER_TASK"),
+            Err(_) => self.get_num_cpus(),
+        }
     }
 
     fn get_num_gpus(&self) -> usize {

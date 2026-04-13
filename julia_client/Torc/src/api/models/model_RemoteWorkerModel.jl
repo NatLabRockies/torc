@@ -2,16 +2,15 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""remote_worker_model
-A remote worker associated with a workflow
+@doc raw"""RemoteWorkerModel
 
     RemoteWorkerModel(;
         worker=nothing,
         workflow_id=nothing,
     )
 
-    - worker::String : Worker address in format [user@]hostname[:port]
-    - workflow_id::Int64 : ID of the workflow this worker is associated with
+    - worker::String
+    - workflow_id::Int64
 """
 Base.@kwdef mutable struct RemoteWorkerModel <: OpenAPI.APIModel
     worker::Union{Nothing, String} = nothing
@@ -41,4 +40,7 @@ end
 function OpenAPI.validate_property(::Type{ RemoteWorkerModel }, name::Symbol, val)
 
 
+    if name === Symbol("workflow_id")
+        OpenAPI.validate_param(name, "RemoteWorkerModel", :format, val, "int64")
+    end
 end

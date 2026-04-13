@@ -2,12 +2,12 @@
 
 #![allow(clippy::too_many_arguments)]
 
+use crate::server::transport_types::context_types::{ApiError, Has, XSpanIdString};
 use async_trait::async_trait;
 use log::{debug, info};
 use sqlx::Row;
-use swagger::{ApiError, Has, XSpanIdString};
 
-use crate::server::api_types::{
+use crate::server::api_responses::{
     CreateComputeNodeResponse, DeleteComputeNodeResponse, DeleteComputeNodesResponse,
     GetComputeNodeResponse, ListComputeNodesResponse, UpdateComputeNodeResponse,
 };
@@ -30,7 +30,6 @@ pub trait ComputeNodesApi<C> {
     async fn delete_compute_nodes(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteComputeNodesResponse, ApiError>;
 
@@ -67,7 +66,6 @@ pub trait ComputeNodesApi<C> {
     async fn delete_compute_node(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteComputeNodeResponse, ApiError>;
 }
@@ -113,8 +111,7 @@ where
         context: &C,
     ) -> Result<CreateComputeNodeResponse, ApiError> {
         debug!(
-            "create_compute_node({:?}) - X-Span-ID: {:?}",
-            body,
+            "create_compute_node - X-Span-ID: {:?}",
             context.get().0.clone()
         );
 
@@ -176,13 +173,11 @@ where
     async fn delete_compute_nodes(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteComputeNodesResponse, ApiError> {
         debug!(
-            "delete_compute_nodes({}, {:?}) - X-Span-ID: {:?}",
+            "delete_compute_nodes({}) - X-Span-ID: {:?}",
             workflow_id,
-            body,
             context.get().0.clone()
         );
 
@@ -458,7 +453,7 @@ where
 
         Ok(ListComputeNodesResponse::SuccessfulResponse(
             models::ListComputeNodesResponse {
-                items: Some(items),
+                items,
                 offset: offset_val,
                 max_limit: MAX_RECORD_TRANSFER_COUNT,
                 count: current_count,
@@ -476,9 +471,8 @@ where
         context: &C,
     ) -> Result<UpdateComputeNodeResponse, ApiError> {
         debug!(
-            "update_compute_node({}, {:?}) - X-Span-ID: {:?}",
+            "update_compute_node({}) - X-Span-ID: {:?}",
             id,
-            body,
             context.get().0.clone()
         );
 
@@ -575,13 +569,11 @@ where
     async fn delete_compute_node(
         &self,
         id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteComputeNodeResponse, ApiError> {
         debug!(
-            "delete_compute_node({}, {:?}) - X-Span-ID: {:?}",
+            "delete_compute_node({}) - X-Span-ID: {:?}",
             id,
-            body,
             context.get().0.clone()
         );
 

@@ -7,7 +7,7 @@ This document contains the help content for the `torc` command-line program.
 - [`torc`](#torc)
 - [`torc run`](#torc-run)
 - [`torc submit`](#torc-submit)
-- [`torc submit-slurm`](#torc-submit-slurm)
+- [`torc slurm generate` + `torc submit`](#torc-submit-slurm)
 - [`torc watch`](#torc-watch)
 - [`torc recover`](#torc-recover)
 - [`torc workflows`](#torc-workflows)
@@ -40,7 +40,7 @@ Torc workflow orchestration system
 - `run` — Run a workflow locally (create from spec file or run existing workflow by ID)
 - `submit` — Submit a workflow to scheduler (create from spec file or submit existing workflow by
   ID)
-- `submit-slurm` — Submit a workflow to Slurm with auto-generated schedulers
+- `slurm generate` + `submit` — Submit a workflow to Slurm with auto-generated schedulers
 - `watch` — Watch a workflow and automatically recover from failures
 - `recover` — Recover a Slurm workflow from failures (one-shot)
 - `workflows` — Workflow management commands
@@ -97,7 +97,7 @@ Run a workflow locally (create from spec file or run existing workflow by ID)
 Submit a workflow to scheduler (create from spec file or submit existing workflow by ID)
 
 Requires workflow to have an on_workflow_start action with schedule_nodes. For Slurm workflows
-without pre-configured schedulers, use `submit-slurm` instead.
+without pre-configured schedulers, use `slurm generate` + `submit` instead.
 
 **Usage:** `torc submit [OPTIONS] <WORKFLOW_SPEC_OR_ID>`
 
@@ -111,7 +111,7 @@ without pre-configured schedulers, use `submit-slurm` instead.
 - `--skip-checks` — Skip validation checks (e.g., scheduler node requirements). Use with caution.
   Default: `false`
 
-## `torc submit-slurm`
+## `torc slurm generate` + `torc submit`
 
 Submit a workflow to Slurm with auto-generated schedulers
 
@@ -135,24 +135,14 @@ torc slurm generate --account <account> -o workflow_with_schedulers.yaml workflo
 torc submit workflow_with_schedulers.yaml
 ```
 
-**Usage:** `torc submit-slurm [OPTIONS] --account <ACCOUNT> <WORKFLOW_SPEC>`
+**Usage:**
 
-###### **Arguments:**
+```bash
+torc slurm generate [OPTIONS] --account <ACCOUNT> <WORKFLOW_FILE>
+torc submit <OUTPUT_FILE>
+```
 
-- `<WORKFLOW_SPEC>` — Path to workflow spec file (JSON/JSON5/YAML/KDL)
-
-###### **Options:**
-
-- `--account <ACCOUNT>` — Slurm account to use for allocations
-- `--hpc-profile <HPC_PROFILE>` — HPC profile to use (auto-detected if not specified)
-- `--single-allocation` — Bundle all nodes into a single Slurm allocation per scheduler. By default,
-  creates one Slurm allocation per node (N×1 mode), which allows jobs to start as nodes become
-  available and provides better fault tolerance. With this flag, creates one large allocation with
-  all nodes (1×N mode), which requires all nodes to be available simultaneously but uses a single
-  sbatch.
-- `-i`, `--ignore-missing-data` — Ignore missing data. Default: `false`
-- `--skip-checks` — Skip validation checks (e.g., scheduler node requirements). Use with caution.
-  Default: `false`
+See [`torc slurm generate`](#torc-slurm-generate) for full options.
 
 ## `torc watch`
 
@@ -180,7 +170,7 @@ resource requirements, and resubmits jobs.
    ```
 
    Automatically diagnoses OOM/timeout failures, adjusts resources, and retries. Runs until all jobs
-   complete or max retries exceeded.
+   complete. Use `--max-retries` to limit recovery attempts.
 
 3. **With auto-scheduling** (`--auto-schedule`):
 
@@ -207,7 +197,7 @@ resource requirements, and resubmits jobs.
 **Recovery:**
 
 - `-r`, `--recover` — Enable automatic failure recovery
-- `-m`, `--max-retries <MAX_RETRIES>` — Maximum number of recovery attempts. Default: `3`
+- `-m`, `--max-retries <MAX_RETRIES>` — Maximum number of recovery attempts. Default: unlimited
 - `--memory-multiplier <MEMORY_MULTIPLIER>` — Memory multiplier for OOM failures. Default: `1.5`
 - `--runtime-multiplier <RUNTIME_MULTIPLIER>` — Runtime multiplier for timeout failures. Default:
   `1.5`
@@ -224,6 +214,14 @@ resource requirements, and resubmits jobs.
   (30 min)
 - `--auto-schedule-stranded-timeout <SECONDS>` — Schedule stranded jobs after this timeout even if
   below threshold. Default: `7200` (2 hrs). Set to `0` to disable.
+
+**Scheduler overrides:**
+
+- `--partition <PARTITION>` — Fixed Slurm partition for regenerated schedulers. Bypasses automatic
+  partition selection. Node count is still calculated dynamically.
+- `--walltime <WALLTIME>` — Fixed Slurm walltime for regenerated schedulers (format: `HH:MM:SS` or
+  `D-HH:MM:SS`). Bypasses automatic walltime calculation. Node count is still calculated
+  dynamically.
 
 ### Auto-Scheduling Behavior
 
@@ -261,6 +259,10 @@ torc watch 123 --auto-schedule \
     --auto-schedule-threshold 10 \
     --auto-schedule-cooldown 3600 \
     --auto-schedule-stranded-timeout 14400
+
+# Fixed partition and walltime (dynamic node count only)
+# Useful for long-running checkpointable jobs
+torc watch 123 --auto-schedule --partition standard --walltime 04:00:00
 ```
 
 ### See Also
@@ -277,6 +279,11 @@ Diagnoses job failures (OOM, timeout), adjusts resource requirements, and resubm
 a workflow has completed with failures. For continuous monitoring, use `torc watch --recover`
 instead.
 
+By default, runs an interactive wizard that displays failed jobs, lets you choose per-category
+actions (retry with adjusted resources or skip), select a Slurm scheduler, and confirm before
+executing. Use `--no-prompts` to skip the wizard and apply heuristics automatically. When stdin is
+not a terminal (e.g., piped or scripted), non-interactive mode is used automatically.
+
 **Usage:** `torc recover [OPTIONS] <WORKFLOW_ID>`
 
 ### Arguments
@@ -292,6 +299,7 @@ instead.
 - `--retry-unknown` — Also retry jobs with unknown failure causes
 - `--recovery-hook <RECOVERY_HOOK>` — Custom recovery script for unknown failures
 - `--dry-run` — Show what would be done without making any changes
+- `--no-prompts` — Skip interactive wizard and apply heuristics automatically
 
 ### When to Use
 
@@ -310,11 +318,14 @@ Use `torc watch --recover` instead for:
 ### Examples
 
 ```bash
-# Basic recovery
+# Interactive recovery (default)
 torc recover 123
 
 # Dry run to preview changes without modifying anything
 torc recover 123 --dry-run
+
+# Skip interactive prompts (for scripting)
+torc recover 123 --no-prompts
 
 # Custom resource multipliers
 torc recover 123 --memory-multiplier 2.0 --runtime-multiplier 1.5
@@ -340,39 +351,31 @@ Workflow management commands
 
 ###### **Subcommands:**
 
-- `create` — Create a workflow from a specification file (supports JSON, JSON5, YAML, and KDL
-  formats)
-- `create-slurm` — Create a workflow with auto-generated Slurm schedulers
 - `new` — Create a new empty workflow
+- `init` — Initialize workflow dependencies
+- `reinit` — Reinitialize jobs with changed inputs
+- `reset-status` — Reset workflow and job statuses
+- `is-complete` — Check if workflow is complete
+- `sync-status` — Detect orphaned jobs from ended Slurm allocations
 - `list` — List workflows
 - `get` — Get a specific workflow by ID
-- `update` — Update an existing workflow
-- `cancel` — Cancel a workflow and all associated Slurm jobs
-- `delete` — Delete one or more workflows
-- `archive` — Archive or unarchive one or more workflows
-- `submit` — Submit a workflow: initialize if needed and schedule nodes for on_workflow_start
-  actions. This command requires the workflow to have an on_workflow_start action with
-  schedule_nodes
-- `run` — Run a workflow locally on the current node
-- `initialize` — Initialize a workflow, including all job statuses
-- `reinitialize` — Reinitialize a workflow. This will reinitialize all jobs with a status of
-  canceled, submitting, pending, or terminated. Jobs with a status of done will also be
-  reinitialized if an input_file or user_data record has changed
-- `status` — Get workflow status
-- `reset-status` — Reset workflow and job status
 - `execution-plan` — Show the execution plan for a workflow specification or existing workflow
-- `list-actions` — List workflow actions and their statuses (useful for debugging action triggers)
-- `is-complete` — Check if a workflow is complete
-- `export` — Export a workflow to a portable JSON file
-- `import` — Import a workflow from an exported JSON file
-- `sync-status` — Synchronize job statuses with Slurm (detect and fail orphaned jobs)
+- `list-actions` — List workflow actions and their statuses
+- `update` — Update workflow properties
+- `archive` — Archive or unarchive workflows
 - `correct-resources` — Correct resource requirements based on actual job usage
+- `check-resources` — Check for resource utilization violations
+- `export` — Export a workflow to JSON
+- `import` — Import a workflow from JSON
 
-## `torc workflows create`
+Note: Lifecycle commands (`create`, `run`, `submit`, `status`, `cancel`, `delete`) are at the top
+level. Run `torc --help` to see all commands.
+
+## `torc create`
 
 Create a workflow from a specification file (supports JSON, JSON5, YAML, and KDL formats)
 
-**Usage:** `torc workflows create [OPTIONS] --user <USER> <FILE>`
+**Usage:** `torc create [OPTIONS] --user <USER> <FILE>`
 
 ###### **Arguments:**
 
@@ -388,33 +391,6 @@ Create a workflow from a specification file (supports JSON, JSON5, YAML, and KDL
   Default: `false`
 - `--dry-run` — Validate the workflow specification without creating it (dry-run mode). Returns a
   summary of what would be created including job count after parameter expansion.
-
-## `torc workflows create-slurm`
-
-Create a workflow with auto-generated Slurm schedulers
-
-Automatically generates Slurm schedulers based on job resource requirements and HPC profile. For
-Slurm workflows without pre-configured schedulers.
-
-**Usage:** `torc workflows create-slurm [OPTIONS] --account <ACCOUNT> --user <USER> <FILE>`
-
-###### **Arguments:**
-
-- `<FILE>` — Path to specification file containing WorkflowSpec
-
-###### **Options:**
-
-- `--account <ACCOUNT>` — Slurm account to use for allocations
-- `--hpc-profile <HPC_PROFILE>` — HPC profile to use (auto-detected if not specified)
-- `--single-allocation` — Bundle all nodes into a single Slurm allocation per scheduler. By default,
-  creates one Slurm allocation per node (N×1 mode). With this flag, creates one large allocation
-  with all nodes (1×N mode).
-- `-u`, `--user <USER>` — User that owns the workflow (defaults to USER environment variable)
-- `--no-resource-monitoring` — Disable resource monitoring (default: enabled with summary
-  granularity and 5s sample rate). Default: `false`
-- `--skip-checks` — Skip validation checks (e.g., scheduler node requirements). Use with caution.
-  Default: `false`
-- `--dry-run` — Validate the workflow specification without creating it (dry-run mode)
 
 ## `torc workflows new`
 
@@ -438,7 +414,7 @@ List workflows
 
 - `-u`, `--user <USER>` — User to filter by (defaults to USER environment variable)
 - `--all-users` — List workflows for all users (overrides --user)
-- `-l`, `--limit <LIMIT>` — Maximum number of workflows to return. Default: `10000`
+- `-l`, `--limit <LIMIT>` — Maximum number of workflows to return. Default: `100000`
 - `--offset <OFFSET>` — Offset for pagination (0-based). Default: `0`
 - `--sort-by <SORT_BY>` — Field to sort by
 - `--reverse-sort` — Reverse sort order
@@ -475,21 +451,21 @@ Update an existing workflow
 - `-d`, `--description <DESCRIPTION>` — Description of the workflow
 - `--owner-user <OWNER_USER>` — User that owns the workflow
 
-## `torc workflows cancel`
+## `torc cancel`
 
 Cancel a workflow and all associated Slurm jobs
 
-**Usage:** `torc workflows cancel [WORKFLOW_ID]`
+**Usage:** `torc cancel [WORKFLOW_ID]`
 
 ###### **Arguments:**
 
 - `<WORKFLOW_ID>` — ID of the workflow to cancel (optional - will prompt if not provided)
 
-## `torc workflows delete`
+## `torc delete`
 
 Delete one or more workflows
 
-**Usage:** `torc workflows delete [OPTIONS] [IDS]...`
+**Usage:** `torc delete [OPTIONS] [IDS]...`
 
 ###### **Arguments:**
 
@@ -511,44 +487,11 @@ Archive or unarchive one or more workflows
 - `<IS_ARCHIVED>` — Set to true to archive, false to unarchive
 - `<WORKFLOW_IDS>` — IDs of workflows to archive/unarchive (if empty, will prompt for selection)
 
-## `torc workflows submit`
-
-Submit a workflow: initialize if needed and schedule nodes for on_workflow_start actions. This
-command requires the workflow to have an on_workflow_start action with schedule_nodes.
-
-**Usage:** `torc workflows submit [OPTIONS] [WORKFLOW_ID]`
-
-###### **Arguments:**
-
-- `<WORKFLOW_ID>` — ID of the workflow to submit (optional - will prompt if not provided)
-
-###### **Options:**
-
-- `--force` — If false, fail the operation if missing data is present. Default: `false`
-
-## `torc workflows run`
-
-Run a workflow locally on the current node
-
-**Usage:** `torc workflows run [OPTIONS] [WORKFLOW_ID]`
-
-###### **Arguments:**
-
-- `<WORKFLOW_ID>` — ID of the workflow to run (optional - will prompt if not provided)
-
-###### **Options:**
-
-- `-p`, `--poll-interval <POLL_INTERVAL>` — Poll interval in seconds for checking job completion.
-  Default: `5.0`
-- `--max-parallel-jobs <MAX_PARALLEL_JOBS>` — Maximum number of parallel jobs to run (defaults to
-  available CPUs)
-- `--output-dir <OUTPUT_DIR>` — Output directory for job logs and results. Default: `output`
-
-## `torc workflows initialize`
+## `torc workflows init`
 
 Initialize a workflow, including all job statuses
 
-**Usage:** `torc workflows initialize [OPTIONS] [WORKFLOW_ID]`
+**Usage:** `torc workflows init [OPTIONS] [WORKFLOW_ID]`
 
 ###### **Arguments:**
 
@@ -560,13 +503,13 @@ Initialize a workflow, including all job statuses
 - `--no-prompts` — Skip confirmation prompt
 - `--dry-run` — Perform a dry run without making changes
 
-## `torc workflows reinitialize`
+## `torc workflows reinit`
 
 Reinitialize a workflow. This will reinitialize all jobs with a status of canceled, submitting,
 pending, or terminated. Jobs with a status of done will also be reinitialized if an input_file or
 user_data record has changed.
 
-**Usage:** `torc workflows reinitialize [OPTIONS] [WORKFLOW_ID]`
+**Usage:** `torc workflows reinit [OPTIONS] [WORKFLOW_ID]`
 
 ###### **Arguments:**
 
@@ -577,11 +520,11 @@ user_data record has changed.
 - `--force` — If false, fail the operation if missing data is present. Default: `false`
 - `--dry-run` — Perform a dry run without making changes
 
-## `torc workflows status`
+## `torc status`
 
 Get workflow status
 
-**Usage:** `torc workflows status [OPTIONS] [WORKFLOW_ID]`
+**Usage:** `torc status [OPTIONS] [WORKFLOW_ID]`
 
 ###### **Arguments:**
 
@@ -837,7 +780,7 @@ List compute nodes for a workflow
 
 ###### **Options:**
 
-- `-l`, `--limit <LIMIT>` — Maximum number of compute nodes to return. Default: `10000`
+- `-l`, `--limit <LIMIT>` — Maximum number of compute nodes to return. Default: `100000`
 - `-o`, `--offset <OFFSET>` — Offset for pagination (0-based). Default: `0`
 - `-s`, `--sort-by <SORT_BY>` — Field to sort by
 - `-r`, `--reverse-sort` — Reverse sort order. Default: `false`
@@ -886,7 +829,7 @@ List files
 ###### **Options:**
 
 - `--produced-by-job-id <PRODUCED_BY_JOB_ID>` — Filter by job ID that produced the files
-- `-l`, `--limit <LIMIT>` — Maximum number of files to return. Default: `10000`
+- `-l`, `--limit <LIMIT>` — Maximum number of files to return. Default: `100000`
 - `--offset <OFFSET>` — Offset for pagination (0-based). Default: `0`
 - `--sort-by <SORT_BY>` — Field to sort by
 - `--reverse-sort` — Reverse sort order
@@ -1018,7 +961,7 @@ List jobs
 
 - `-s`, `--status <STATUS>` — Filter by job status
 - `--upstream-job-id <UPSTREAM_JOB_ID>` — Filter by upstream job ID (jobs that depend on this job)
-- `-l`, `--limit <LIMIT>` — Maximum number of jobs to return. Default: `10000`
+- `-l`, `--limit <LIMIT>` — Maximum number of jobs to return. Default: `100000`
 - `--offset <OFFSET>` — Offset for pagination (0-based). Default: `0`
 - `--sort-by <SORT_BY>` — Field to sort by
 - `--reverse-sort` — Reverse sort order
@@ -1108,7 +1051,7 @@ List job-to-job dependencies for a workflow
 
 ###### **Options:**
 
-- `-l`, `--limit <LIMIT>` — Maximum number of dependencies to return. Default: `10000`
+- `-l`, `--limit <LIMIT>` — Maximum number of dependencies to return. Default: `100000`
 - `--offset <OFFSET>` — Offset for pagination (0-based). Default: `0`
 
 ## `torc job-dependencies job-file`
@@ -1123,7 +1066,7 @@ List job-file relationships for a workflow
 
 ###### **Options:**
 
-- `-l`, `--limit <LIMIT>` — Maximum number of relationships to return. Default: `10000`
+- `-l`, `--limit <LIMIT>` — Maximum number of relationships to return. Default: `100000`
 - `--offset <OFFSET>` — Offset for pagination (0-based). Default: `0`
 
 ## `torc job-dependencies job-user-data`
@@ -1138,7 +1081,7 @@ List job-user_data relationships for a workflow
 
 ###### **Options:**
 
-- `-l`, `--limit <LIMIT>` — Maximum number of relationships to return. Default: `10000`
+- `-l`, `--limit <LIMIT>` — Maximum number of relationships to return. Default: `100000`
 - `--offset <OFFSET>` — Offset for pagination (0-based). Default: `0`
 
 ## `torc resource-requirements`
@@ -1188,7 +1131,7 @@ List resource requirements
 
 ###### **Options:**
 
-- `-l`, `--limit <LIMIT>` — Maximum number of resource requirements to return. Default: `10000`
+- `-l`, `--limit <LIMIT>` — Maximum number of resource requirements to return. Default: `100000`
 - `--offset <OFFSET>` — Offset for pagination (0-based). Default: `0`
 - `--sort-by <SORT_BY>` — Field to sort by
 - `--reverse-sort` — Reverse sort order
@@ -1273,7 +1216,7 @@ List events for a workflow
 ###### **Options:**
 
 - `-c`, `--category <CATEGORY>` — Filter events by category
-- `-l`, `--limit <LIMIT>` — Maximum number of events to return. Default: `10000`
+- `-l`, `--limit <LIMIT>` — Maximum number of events to return. Default: `100000`
 - `-o`, `--offset <OFFSET>` — Offset for pagination (0-based). Default: `0`
 - `-s`, `--sort-by <SORT_BY>` — Field to sort by
 - `-r`, `--reverse-sort` — Reverse sort order. Default: `false`
@@ -1345,7 +1288,7 @@ List results
 - `--failed` — Show only failed jobs (non-zero return code)
 - `-s`, `--status <STATUS>` — Filter by job status (uninitialized, blocked, canceled, terminated,
   done, ready, scheduled, running, pending, disabled)
-- `-l`, `--limit <LIMIT>` — Maximum number of results to return. Default: `10000`
+- `-l`, `--limit <LIMIT>` — Maximum number of results to return. Default: `100000`
 - `--offset <OFFSET>` — Offset for pagination (0-based). Default: `0`
 - `--sort-by <SORT_BY>` — Field to sort by
 - `--reverse-sort` — Reverse sort order
@@ -1562,7 +1505,7 @@ Show the current Slurm configs in the database
 
 ###### **Options:**
 
-- `-l`, `--limit <LIMIT>` — Maximum number of configs to return. Default: `10000`
+- `-l`, `--limit <LIMIT>` — Maximum number of configs to return. Default: `100000`
 - `--offset <OFFSET>` — Offset for pagination (0-based). Default: `0`
 
 ## `torc slurm get`
@@ -1701,6 +1644,10 @@ regenerate schedulers to submit new allocations.
 
 - `--account <ACCOUNT>` — Slurm account to use (defaults to account from existing schedulers)
 - `--profile <PROFILE>` — HPC profile to use (if not specified, tries to detect current system)
+- `--partition <PARTITION>` — Fixed Slurm partition (bypasses automatic partition selection). Node
+  count is still calculated dynamically.
+- `--walltime <WALLTIME>` — Fixed Slurm walltime (format: `HH:MM:SS` or `D-HH:MM:SS`). Bypasses
+  automatic walltime calculation. Node count is still calculated dynamically.
 - `--single-allocation` — Bundle all nodes into a single Slurm allocation per scheduler
 - `--submit` — Submit the generated allocations immediately
 - `-o`, `--output-dir <OUTPUT_DIR>` — Output directory for job output files (used when submitting).
@@ -1710,9 +1657,9 @@ regenerate schedulers to submit new allocations.
 - `--group-by <GROUP_BY>` — Strategy for grouping jobs into schedulers. Possible values:
   `resource-requirements` (default), `partition`
 - `--walltime-strategy <STRATEGY>` — Strategy for determining Slurm job walltime. Possible values:
-  `max-job-runtime` (default), `max-partition-time`
+  `max-job-runtime` (default), `max-partition-time`. Ignored when `--walltime` is set.
 - `--walltime-multiplier <MULTIPLIER>` — Multiplier for job runtime when using
-  `--walltime-strategy=max-job-runtime`. Default: `1.5`
+  `--walltime-strategy=max-job-runtime`. Default: `1.5`. Ignored when `--walltime` is set.
 - `--dry-run` — Show what would be created without making changes
 - `--include-job-ids <JOB_IDS>` — Include specific job IDs in planning regardless of their status
   (useful for recovery dry-run to include failed jobs)
@@ -1914,7 +1861,7 @@ List scheduled compute nodes for a workflow
 
 ###### **Options:**
 
-- `-l`, `--limit <LIMIT>` — Maximum number of scheduled compute nodes to return. Default: `10000`
+- `-l`, `--limit <LIMIT>` — Maximum number of scheduled compute nodes to return. Default: `100000`
 - `-o`, `--offset <OFFSET>` — Offset for pagination (0-based). Default: `0`
 - `-s`, `--sort-by <SORT_BY>` — Field to sort by
 - `-r`, `--reverse-sort` — Reverse sort order. Default: `false`
@@ -2029,11 +1976,11 @@ Generate reports and analytics
 - `results` — Generate a comprehensive JSON report of job results including all log file paths
 - `summary` — Generate a summary of workflow results (requires workflow to be complete)
 
-## `torc reports check-resource-utilization`
+## `torc workflows check-resources`
 
 Check resource utilization and report jobs that exceeded their specified requirements
 
-**Usage:** `torc reports check-resource-utilization [OPTIONS] [WORKFLOW_ID]`
+**Usage:** `torc workflows check-resources [OPTIONS] [WORKFLOW_ID]`
 
 ###### **Arguments:**
 
@@ -2047,11 +1994,11 @@ Check resource utilization and report jobs that exceeded their specified require
 - `--min-over-utilization <MIN_OVER_UTILIZATION>` — Minimum over-utilization percentage to flag as
   violation (default: 1.0%)
 
-## `torc reports results`
+## `torc results list --include-logs`
 
 Generate a comprehensive JSON report of job results including all log file paths
 
-**Usage:** `torc reports results [OPTIONS] [WORKFLOW_ID]`
+**Usage:** `torc results list --include-logs [OPTIONS] [WORKFLOW_ID]`
 
 ###### **Arguments:**
 
@@ -2063,11 +2010,11 @@ Generate a comprehensive JSON report of job results including all log file paths
   `torc run` and `torc submit`). Default: `output`
 - `--all-runs` — Include all runs for each job (default: only latest run)
 
-## `torc reports summary`
+## `torc status`
 
 Generate a summary of workflow results (requires workflow to be complete)
 
-**Usage:** `torc reports summary [WORKFLOW_ID]`
+**Usage:** `torc status [WORKFLOW_ID]`
 
 ###### **Arguments:**
 

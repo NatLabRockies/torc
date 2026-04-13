@@ -2,12 +2,12 @@
 
 #![allow(clippy::too_many_arguments)]
 
+use crate::server::transport_types::context_types::{ApiError, Has, XSpanIdString};
 use async_trait::async_trait;
 use log::{debug, info};
 use sqlx::Row;
-use swagger::{ApiError, Has, XSpanIdString};
 
-use crate::server::api_types::{
+use crate::server::api_responses::{
     CreateFileResponse, DeleteFileResponse, DeleteFilesResponse, GetFileResponse,
     ListFilesResponse, ListRequiredExistingFilesResponse, UpdateFileResponse,
 };
@@ -30,7 +30,6 @@ pub trait FilesApi<C> {
     async fn delete_files(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteFilesResponse, ApiError>;
 
@@ -68,12 +67,7 @@ pub trait FilesApi<C> {
     ) -> Result<UpdateFileResponse, ApiError>;
 
     /// Delete a file.
-    async fn delete_file(
-        &self,
-        id: i64,
-        body: Option<serde_json::Value>,
-        context: &C,
-    ) -> Result<DeleteFileResponse, ApiError>;
+    async fn delete_file(&self, id: i64, context: &C) -> Result<DeleteFileResponse, ApiError>;
 }
 
 /// Implementation of files API for the server
@@ -141,13 +135,11 @@ where
     async fn delete_files(
         &self,
         workflow_id: i64,
-        body: Option<serde_json::Value>,
         context: &C,
     ) -> Result<DeleteFilesResponse, ApiError> {
         debug!(
-            "delete_files(\"{}\", {:?}) - X-Span-ID: {:?}",
+            "delete_files(\"{}\") - X-Span-ID: {:?}",
             workflow_id,
-            body,
             context.get().0.clone()
         );
 
@@ -405,7 +397,7 @@ where
 
         Ok(ListFilesResponse::SuccessfulResponse(
             models::ListFilesResponse {
-                items: Some(items),
+                items,
                 offset: offset_val,
                 max_limit: MAX_RECORD_TRANSFER_COUNT,
                 count: current_count,
@@ -462,9 +454,8 @@ where
         context: &C,
     ) -> Result<UpdateFileResponse, ApiError> {
         debug!(
-            "update_file({}, {:?}) - X-Span-ID: {:?}",
+            "update_file({}) - X-Span-ID: {:?}",
             id,
-            body,
             context.get().0.clone()
         );
 
@@ -527,16 +518,10 @@ where
     }
 
     /// Delete a file.
-    async fn delete_file(
-        &self,
-        id: i64,
-        body: Option<serde_json::Value>,
-        context: &C,
-    ) -> Result<DeleteFileResponse, ApiError> {
+    async fn delete_file(&self, id: i64, context: &C) -> Result<DeleteFileResponse, ApiError> {
         debug!(
-            "delete_file({}, {:?}) - X-Span-ID: {:?}",
+            "delete_file({}) - X-Span-ID: {:?}",
             id,
-            body,
             context.get().0.clone()
         );
 

@@ -25,6 +25,7 @@ With Torc's AI integration, you can manage workflows using natural language:
 | Fix problems       | _"Restart the failed jobs with doubled memory"_         |
 | Investigate        | _"Check if any jobs exceeded their memory limits"_      |
 | Optimize resources | _"Analyze usage and suggest better resource groupings"_ |
+| Plan allocations   | _"Should I use one big allocation or many small ones?"_ |
 
 ---
 
@@ -259,6 +260,49 @@ In this example, 6 data-processing jobs are split across 2 resource groups (`sta
 
   On the next run, each job will request only the memory it actually needs.
 ```
+
+---
+
+## Example: Planning Slurm allocation strategy
+
+When submitting a workflow to Slurm, the AI can analyze the cluster state and recommend whether to
+use a single large allocation or many small ones.
+
+```
+> I'm about to submit this workflow to Slurm. Should I use one big
+> allocation or many small ones? My account is "climate_sim".
+
+⏺ torc - plan_allocations (MCP)(spec_json: {...}, account: "climate_sim")
+  ⎿  { "recommendations": [...], "cluster_state": [...], ... }
+
+⏺ Allocation Strategy Analysis
+
+  Workflow: 167 parallel work jobs, 1 preprocess, 1 postprocess
+  Cluster: short partition — 42 idle, 180 allocated, 12 pending jobs
+
+  Recommendation: Single large allocation (1 x 167 nodes)
+
+  | Strategy     | Est. Start | Est. Completion |
+  |--------------|------------|-----------------|
+  | Single large | ~30 min    | ~4h 30min       |
+  | Many small   | ~5 min     | ~6h 30min       |
+
+  Reason: Slurm's backfill scheduler gives the large allocation a
+  reserved slot. Many small allocations would start faster initially,
+  but fair-share degradation delays the last jobs by ~2 hours.
+
+  Your DAG has max_parallelism=167, so all work jobs can run
+  simultaneously — a single allocation fully utilizes all nodes.
+
+> Go ahead and generate it with the single allocation.
+
+⏺ Running: torc slurm generate --account climate_sim --single-allocation workflow.yaml
+  ⎿  Generated scheduler plan with 1 allocation x 167 nodes.
+
+⏺ Done. Submit with: torc submit workflow.yaml
+```
+
+For background on the tradeoffs, see [Allocation Strategies](../hpc/allocation-strategies.md).
 
 ---
 

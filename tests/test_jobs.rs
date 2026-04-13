@@ -6,7 +6,7 @@ use common::{
 };
 use rstest::rstest;
 use serde_json::json;
-use torc::client::default_api;
+use torc::client::apis;
 use torc::client::workflow_manager::WorkflowManager;
 use torc::config::TorcConfig;
 use torc::models;
@@ -95,7 +95,7 @@ fn test_jobs_add_with_file_dependencies(start_server: &ServerProcess) {
         "input.txt".to_string(),
     );
     let input_file =
-        default_api::create_file(config, input_file).expect("Failed to create input file");
+        apis::files_api::create_file(config, input_file).expect("Failed to create input file");
     let input_file_id = input_file.id.unwrap();
 
     let output_file = models::FileModel::new(
@@ -104,7 +104,7 @@ fn test_jobs_add_with_file_dependencies(start_server: &ServerProcess) {
         "output.txt".to_string(),
     );
     let output_file =
-        default_api::create_file(config, output_file).expect("Failed to create output file");
+        apis::files_api::create_file(config, output_file).expect("Failed to create output file");
     let output_file_id = output_file.id.unwrap();
 
     // Test adding a job with file dependencies
@@ -426,7 +426,7 @@ fn test_jobs_delete_command_json(start_server: &ServerProcess) {
     assert_eq!(deleted_job.get("name").unwrap(), &json!("test_remove_job"));
 
     // Verify the job is actually removed by trying to get it
-    let get_result = default_api::get_job(config, job_id);
+    let get_result = apis::jobs_api::get_job(config, job_id);
     assert!(get_result.is_err(), "Job should be deleted");
 }
 
@@ -466,7 +466,7 @@ fn test_jobs_complete_command_json(start_server: &ServerProcess) {
     );
 
     // Test the API complete_job function
-    let completed_job = default_api::complete_job(
+    let completed_job = apis::jobs_api::complete_job(
         config,
         job_id,
         JobStatus::Completed,
@@ -523,7 +523,7 @@ fn test_jobs_complete_with_different_statuses(start_server: &ServerProcess) {
         );
 
         // Test the API complete_job function
-        let completed_job = default_api::complete_job(
+        let completed_job = apis::jobs_api::complete_job(
             config,
             job_id,
             *status,
@@ -579,7 +579,7 @@ fn test_jobs_complete_return_codes(start_server: &ServerProcess) {
         );
 
         // Test the API complete_job function
-        let completed_job = default_api::complete_job(
+        let completed_job = apis::jobs_api::complete_job(
             config,
             job_id,
             expected_status,
@@ -734,8 +734,8 @@ fn test_jobs_list_with_upstream_job_id_filter(start_server: &ServerProcess) {
 
     // Note: The actual dependency relationship would be set through blocking_job_ids
     // or other API calls depending on the backend implementation
-    let _downstream =
-        default_api::create_job(config, downstream_job).expect("Failed to create downstream job");
+    let _downstream = apis::jobs_api::create_job(config, downstream_job)
+        .expect("Failed to create downstream job");
 
     // Create an unrelated job
     let _unrelated_job = create_test_job(config, workflow_id, "unrelated_job");
@@ -785,7 +785,7 @@ fn test_jobs_update_restriction_status_must_be_uninitialized(start_server: &Serv
         .expect("Failed to start workflow");
 
     // Get the job to verify it's no longer Uninitialized
-    let updated_job = default_api::get_job(config, job_id).expect("Failed to get job");
+    let updated_job = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");
     let current_status = updated_job.status.unwrap();
 
     // Verify job is no longer in Uninitialized state
@@ -830,7 +830,7 @@ fn test_jobs_update_restriction_cannot_change_status(start_server: &ServerProces
     let job_id = job.id.unwrap();
 
     // Job should be in Uninitialized status
-    let current_job = default_api::get_job(config, job_id).expect("Failed to get job");
+    let current_job = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");
     assert_eq!(
         current_job.status.unwrap(),
         JobStatus::Uninitialized,
@@ -841,7 +841,7 @@ fn test_jobs_update_restriction_cannot_change_status(start_server: &ServerProces
     let mut job_to_update = current_job.clone();
     job_to_update.status = Some(JobStatus::Ready);
 
-    let result = default_api::update_job(config, job_id, job_to_update);
+    let result = apis::jobs_api::update_job(config, job_id, job_to_update);
     assert!(
         result.is_err(),
         "Should not be able to change job status via update_job API"
@@ -856,7 +856,8 @@ fn test_jobs_update_restriction_cannot_change_status(start_server: &ServerProces
     );
 
     // Verify the job status hasn't changed
-    let job_after = default_api::get_job(config, job_id).expect("Failed to get job after update");
+    let job_after =
+        apis::jobs_api::get_job(config, job_id).expect("Failed to get job after update");
     assert_eq!(
         job_after.status.unwrap(),
         JobStatus::Uninitialized,
@@ -875,7 +876,7 @@ fn test_jobs_update_works_when_status_is_uninitialized(start_server: &ServerProc
     let job_id = job.id.unwrap();
 
     // Verify job is in Uninitialized status
-    let current_job = default_api::get_job(config, job_id).expect("Failed to get job");
+    let current_job = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");
     assert_eq!(
         current_job.status.unwrap(),
         JobStatus::Uninitialized,
@@ -946,7 +947,7 @@ fn test_jobs_delete_multiple(start_server: &ServerProcess) {
 
     // Verify all jobs are actually removed
     for job_id in [job1_id, job2_id, job3_id] {
-        let get_result = default_api::get_job(config, job_id);
+        let get_result = apis::jobs_api::get_job(config, job_id);
         assert!(get_result.is_err(), "Job {} should be deleted", job_id);
     }
 }
@@ -981,7 +982,7 @@ fn test_jobs_delete_multiple_with_failures(start_server: &ServerProcess) {
     );
 
     // Verify the valid job was NOT deleted (all-or-nothing behavior)
-    let get_result = default_api::get_job(config, job1_id);
+    let get_result = apis::jobs_api::get_job(config, job1_id);
     assert!(
         get_result.is_ok(),
         "Valid job should NOT be deleted when any ID is invalid"
@@ -1002,7 +1003,7 @@ fn test_jobs_delete_all(start_server: &ServerProcess) {
     }
 
     // Verify jobs were created
-    let jobs_before = default_api::list_jobs(
+    let jobs_before = apis::jobs_api::list_jobs(
         config,
         workflow_id,
         None,
@@ -1023,17 +1024,17 @@ fn test_jobs_delete_all(start_server: &ServerProcess) {
 
     // Call delete_jobs API directly (simulating what delete-all does)
     let result =
-        default_api::delete_jobs(config, workflow_id, None).expect("Failed to delete all jobs");
+        apis::jobs_api::delete_jobs(config, workflow_id).expect("Failed to delete all jobs");
 
     // Verify the count
     assert_eq!(
         result.get("count").unwrap(),
-        &json!(5),
+        json!(5),
         "Should delete 5 jobs"
     );
 
     // Verify all jobs are removed
-    let jobs_after = default_api::list_jobs(
+    let jobs_after = apis::jobs_api::list_jobs(
         config,
         workflow_id,
         None,
@@ -1062,13 +1063,13 @@ fn test_jobs_delete_all_empty_workflow(start_server: &ServerProcess) {
     let workflow_id = workflow.id.unwrap();
 
     // Call delete_jobs on empty workflow
-    let result = default_api::delete_jobs(config, workflow_id, None)
+    let result = apis::jobs_api::delete_jobs(config, workflow_id)
         .expect("Failed to delete jobs from empty workflow");
 
     // Verify count is 0
     assert_eq!(
         result.get("count").unwrap(),
-        &json!(0),
+        json!(0),
         "Should delete 0 jobs"
     );
 }
@@ -1087,20 +1088,20 @@ fn test_retry_job_from_running_status(start_server: &ServerProcess) {
     let job_id = job.id.unwrap();
 
     // Initialize workflow to get run_id and make job Ready
-    default_api::initialize_jobs(config, workflow_id, Some(false), Some(false), None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false))
         .expect("Failed to initialize jobs");
 
     // Get run_id
-    let workflow_status = default_api::get_workflow_status(config, workflow_id)
+    let workflow_status = apis::workflows_api::get_workflow_status(config, workflow_id)
         .expect("Failed to get workflow status");
     let run_id = workflow_status.run_id;
 
     // Set job to Running (simulating job runner claiming it)
-    default_api::manage_status_change(config, job_id, JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
         .expect("Failed to set job to Running");
 
     // Verify job is Running
-    let job_before = default_api::get_job(config, job_id).expect("Failed to get job");
+    let job_before = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");
     assert_eq!(job_before.status.unwrap(), JobStatus::Running);
     assert_eq!(job_before.attempt_id.unwrap(), 1);
 
@@ -1108,7 +1109,7 @@ fn test_retry_job_from_running_status(start_server: &ServerProcess) {
     // This simulates the job runner detecting a failure and wanting to retry
     // before it has called complete_job
     let retried_job =
-        default_api::retry_job(config, job_id, run_id, 3).expect("retry_job should succeed");
+        apis::jobs_api::retry_job(config, job_id, run_id, 3).expect("retry_job should succeed");
 
     // Verify job is now Ready with incremented attempt_id
     assert_eq!(retried_job.status.unwrap(), JobStatus::Ready);
@@ -1127,11 +1128,11 @@ fn test_retry_job_from_failed_status(start_server: &ServerProcess) {
     let job_id = job.id.unwrap();
 
     // Initialize workflow
-    default_api::initialize_jobs(config, workflow_id, Some(false), Some(false), None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false))
         .expect("Failed to initialize jobs");
 
     // Get run_id
-    let workflow_status = default_api::get_workflow_status(config, workflow_id)
+    let workflow_status = apis::workflows_api::get_workflow_status(config, workflow_id)
         .expect("Failed to get workflow status");
     let run_id = workflow_status.run_id;
 
@@ -1140,7 +1141,7 @@ fn test_retry_job_from_failed_status(start_server: &ServerProcess) {
     let compute_node_id = compute_node.id.unwrap();
 
     // Set job to Running then complete as Failed
-    default_api::manage_status_change(config, job_id, JobStatus::Running, run_id, None)
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
         .expect("Failed to set job to Running");
 
     let result = models::ResultModel::new(
@@ -1154,16 +1155,16 @@ fn test_retry_job_from_failed_status(start_server: &ServerProcess) {
         "2020-01-01T00:00:00Z".to_string(),
         models::JobStatus::Failed,
     );
-    default_api::complete_job(config, job_id, JobStatus::Failed, run_id, result)
+    apis::jobs_api::complete_job(config, job_id, JobStatus::Failed, run_id, result)
         .expect("Failed to complete job as Failed");
 
     // Verify job is Failed
-    let job_before = default_api::get_job(config, job_id).expect("Failed to get job");
+    let job_before = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");
     assert_eq!(job_before.status.unwrap(), JobStatus::Failed);
 
     // Call retry_job
     let retried_job =
-        default_api::retry_job(config, job_id, run_id, 3).expect("retry_job should succeed");
+        apis::jobs_api::retry_job(config, job_id, run_id, 3).expect("retry_job should succeed");
 
     // Verify job is now Ready with incremented attempt_id
     assert_eq!(retried_job.status.unwrap(), JobStatus::Ready);
@@ -1182,20 +1183,20 @@ fn test_retry_job_invalid_status(start_server: &ServerProcess) {
     let job_id = job.id.unwrap();
 
     // Initialize workflow
-    default_api::initialize_jobs(config, workflow_id, Some(false), Some(false), None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false))
         .expect("Failed to initialize jobs");
 
     // Get run_id
-    let workflow_status = default_api::get_workflow_status(config, workflow_id)
+    let workflow_status = apis::workflows_api::get_workflow_status(config, workflow_id)
         .expect("Failed to get workflow status");
     let run_id = workflow_status.run_id;
 
     // Job should be Ready after initialization
-    let job_before = default_api::get_job(config, job_id).expect("Failed to get job");
+    let job_before = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");
     assert_eq!(job_before.status.unwrap(), JobStatus::Ready);
 
     // Try to retry a Ready job - should fail
-    let result = default_api::retry_job(config, job_id, run_id, 3);
+    let result = apis::jobs_api::retry_job(config, job_id, run_id, 3);
     assert!(
         result.is_err(),
         "retry_job should fail for job in Ready status"
@@ -1216,7 +1217,7 @@ fn test_jobs_update_resource_requirements_id(start_server: &ServerProcess) {
         "test_update_rr_job".to_string(),
         "echo 'test'".to_string(),
     );
-    let created_job = default_api::create_job(config, job).expect("Failed to create job");
+    let created_job = apis::jobs_api::create_job(config, job).expect("Failed to create job");
     let job_id = created_job.id.unwrap();
 
     // Create resource requirements
@@ -1252,7 +1253,7 @@ fn test_jobs_update_resource_requirements_id(start_server: &ServerProcess) {
     );
 
     // Verify via API
-    let job_after = default_api::get_job(config, job_id).expect("Failed to get job");
+    let job_after = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");
     assert_eq!(job_after.resource_requirements_id, Some(rr_id));
 }
 
@@ -1284,12 +1285,12 @@ fn test_jobs_update_runtime(start_server: &ServerProcess) {
         "echo 'test'".to_string(),
     );
     job.resource_requirements_id = Some(rr_id);
-    let created_job = default_api::create_job(config, job).expect("Failed to create job");
+    let created_job = apis::jobs_api::create_job(config, job).expect("Failed to create job");
     let job_id = created_job.id.unwrap();
 
     // Verify initial runtime
-    let rr_before =
-        default_api::get_resource_requirements(config, rr_id).expect("Failed to get RR");
+    let rr_before = apis::resource_requirements_api::get_resource_requirements(config, rr_id)
+        .expect("Failed to get RR");
     assert_eq!(rr_before.runtime, "PT1H");
 
     // Update job runtime
@@ -1302,8 +1303,8 @@ fn test_jobs_update_runtime(start_server: &ServerProcess) {
     assert_eq!(json_output.get("id").unwrap(), &json!(job_id));
 
     // Verify the resource requirements runtime was updated
-    let rr_after =
-        default_api::get_resource_requirements(config, rr_id).expect("Failed to get RR after");
+    let rr_after = apis::resource_requirements_api::get_resource_requirements(config, rr_id)
+        .expect("Failed to get RR after");
     assert_eq!(rr_after.runtime, "PT4H");
 }
 
@@ -1334,7 +1335,7 @@ fn test_jobs_update_runtime_and_resource_requirements_id_together(start_server: 
         "test_both_job".to_string(),
         "echo 'test'".to_string(),
     );
-    let created_job = default_api::create_job(config, job).expect("Failed to create job");
+    let created_job = apis::jobs_api::create_job(config, job).expect("Failed to create job");
     let job_id = created_job.id.unwrap();
 
     // Update both resource_requirements_id and runtime in one command
@@ -1358,7 +1359,7 @@ fn test_jobs_update_runtime_and_resource_requirements_id_together(start_server: 
     );
 
     // Verify the resource requirements runtime was updated
-    let rr_after =
-        default_api::get_resource_requirements(config, rr_id).expect("Failed to get RR after");
+    let rr_after = apis::resource_requirements_api::get_resource_requirements(config, rr_id)
+        .expect("Failed to get RR after");
     assert_eq!(rr_after.runtime, "PT8H");
 }

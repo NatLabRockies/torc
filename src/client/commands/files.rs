@@ -1,8 +1,8 @@
 use chrono::DateTime;
 use clap::Subcommand;
 
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::commands::get_env_user_name;
 use crate::client::commands::{
     output::{print_if_json, print_json_wrapped},
@@ -166,7 +166,7 @@ pub fn handle_file_commands(config: &Configuration, command: &FileCommands, form
 
             let file = models::FileModel::new(wf_id, name.clone(), path.clone());
 
-            match default_api::create_file(config, file) {
+            match apis::files_api::create_file(config, file) {
                 Ok(created_file) => {
                     if print_if_json(format, &created_file, "file") {
                         // JSON was printed
@@ -237,7 +237,7 @@ pub fn handle_file_commands(config: &Configuration, command: &FileCommands, form
                 }
             }
         }
-        FileCommands::Get { id } => match default_api::get_file(config, *id) {
+        FileCommands::Get { id } => match apis::files_api::get_file(config, *id) {
             Ok(file) => {
                 if print_if_json(format, &file, "file") {
                     // JSON was printed
@@ -255,7 +255,7 @@ pub fn handle_file_commands(config: &Configuration, command: &FileCommands, form
         },
         FileCommands::Update { id, name, path } => {
             // First get the existing file
-            match default_api::get_file(config, *id) {
+            match apis::files_api::get_file(config, *id) {
                 Ok(mut file) => {
                     // Update fields that were provided
                     if let Some(new_name) = name {
@@ -265,7 +265,7 @@ pub fn handle_file_commands(config: &Configuration, command: &FileCommands, form
                         file.path = new_path.clone();
                     }
 
-                    match default_api::update_file(config, *id, file) {
+                    match apis::files_api::update_file(config, *id, file) {
                         Ok(updated_file) => {
                             if print_if_json(format, &updated_file, "file") {
                                 // JSON was printed
@@ -289,7 +289,7 @@ pub fn handle_file_commands(config: &Configuration, command: &FileCommands, form
                 }
             }
         }
-        FileCommands::Delete { id } => match default_api::delete_file(config, *id, None) {
+        FileCommands::Delete { id } => match apis::files_api::delete_file(config, *id) {
             Ok(removed_file) => {
                 if print_if_json(format, &removed_file, "file") {
                     // JSON was printed
@@ -312,7 +312,7 @@ pub fn handle_file_commands(config: &Configuration, command: &FileCommands, form
                 None => select_workflow_interactively(config, &user_name).unwrap(),
             };
 
-            match default_api::list_required_existing_files(config, selected_workflow_id) {
+            match apis::workflows_api::list_required_existing_files(config, selected_workflow_id) {
                 Ok(response) => {
                     if print_if_json(format, &response, "required existing files") {
                         // JSON was printed

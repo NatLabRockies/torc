@@ -204,6 +204,59 @@ curl -s "$TORC_API_URL/workflows" | head
 exit
 ```
 
+## Large-Scale Deployments
+
+### Startup Jitter (Thundering Herd Mitigation)
+
+When many Slurm allocations start simultaneously — for example, 1000 single-node jobs scheduled at
+once — all `torc-slurm-job-runner` processes may contact the server at the same instant. This
+"thundering herd" can overwhelm the server with concurrent requests, causing connection timeouts and
+SQLite lock contention.
+
+Torc mitigates this automatically. When `torc slurm schedule-nodes` generates sbatch scripts, it
+calculates a startup delay window based on the total number of runners that will start:
+
+| Total runners | Max startup delay |
+| ------------- | ----------------- |
+| 1             | 0 s (disabled)    |
+| 2–10          | 2–10 s            |
+| 11–100        | 10–60 s           |
+| 100+          | 60 s              |
+
+Each runner picks a deterministic delay within this window (hashed from its hostname, Slurm job ID,
+node ID, and task PID), then sleeps before making its first API call. This spreads the initial burst
+of requests across the delay window.
+
+The delay is passed to `torc-slurm-job-runner` via the `--startup-delay-seconds` flag in the
+generated sbatch script. You can override it manually if needed:
+
+```bash
+# In a custom sbatch script: set a 120-second jitter window
+torc-slurm-job-runner $URL $WORKFLOW_ID $OUTPUT --startup-delay-seconds 120
+```
+
+When `start_one_worker_per_node` is enabled, the total runner count includes all nodes across all
+allocations (e.g., 10 allocations × 4 nodes = 40 runners), so the delay window scales appropriately.
+
+To disable staggered startup, set `staggered_start: false` in `execution_config`:
+
+```yaml
+execution_config:
+  staggered_start: false
+```
+
+### Server Tuning for Large Workflows
+
+For workflows with many concurrent compute nodes, consider increasing the server thread count to
+expand the database connection pool:
+
+```bash
+# Default is 1 thread (3 connections). For 100+ nodes, increase:
+torc-server run --threads 8 --database /scratch/$USER/torc.db --host $HOST --port $PORT
+```
+
+The connection pool size is `max(threads, 2) + 2`, so `--threads 8` gives 10 connections.
+
 ## Troubleshooting
 
 ### "Connection refused" from compute nodes

@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                INSERT INTO job\n                (\n                    workflow_id,\n                    name,\n                    command,\n                    cancel_on_blocking_job_failure,\n                    supports_termination,\n                    resource_requirements_id,\n                    invocation_script,\n                    status,\n                    scheduler_id,\n                    failure_handler_id,\n                    priority\n                )\n                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)\n                RETURNING rowid\n                ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 11
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c6b6f8ef5fc57206be8deadd985269c69469d399f9a7d8b5e344ad76c587fbb3"
+}

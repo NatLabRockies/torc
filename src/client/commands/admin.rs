@@ -1,7 +1,7 @@
 use clap::Subcommand;
 
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::commands::print_error;
 
 #[derive(Subcommand)]
@@ -23,20 +23,12 @@ EXAMPLES:
 
 pub fn handle_admin_commands(config: &Configuration, command: &AdminCommands, format: &str) {
     match command {
-        AdminCommands::ReloadAuth => match default_api::reload_auth(config) {
+        AdminCommands::ReloadAuth => match apis::access_control_api::reload_auth(config) {
             Ok(response) => {
                 if format == "json" {
                     println!("{}", serde_json::to_string_pretty(&response).unwrap());
                 } else {
-                    let message = response
-                        .get("message")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("Auth reloaded");
-                    let user_count = response
-                        .get("user_count")
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or(0);
-                    println!("{} ({} users)", message, user_count);
+                    println!("{} ({} users)", response.message, response.user_count);
                 }
             }
             Err(e) => {

@@ -11,7 +11,7 @@ use common::{ServerProcess, run_cli_command, run_jobs_cli_command, start_server}
 use rstest::rstest;
 use std::fs;
 use std::path::Path;
-use torc::client::default_api;
+use torc::client::apis;
 use torc::models;
 
 /// Create a simple workflow with enable_ro_crate enabled.
@@ -28,7 +28,7 @@ fn create_ro_crate_enabled_workflow(
     workflow.enable_ro_crate = Some(true);
 
     let created_workflow =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     // Verify enable_ro_crate is set
@@ -47,7 +47,8 @@ fn create_ro_crate_enabled_workflow(
         "local".to_string(), // compute_node_type
         None,
     );
-    default_api::create_compute_node(config, compute_node).expect("Failed to create compute node");
+    apis::compute_nodes_api::create_compute_node(config, compute_node)
+        .expect("Failed to create compute node");
 
     // Create file paths
     let input_path = work_dir.join("input.json").to_string_lossy().to_string();
@@ -59,14 +60,14 @@ fn create_ro_crate_enabled_workflow(
     input_file.st_mtime = Some(1704067200.0); // 2024-01-01T00:00:00Z - indicates file exists
 
     let created_input =
-        default_api::create_file(config, input_file).expect("Failed to create input file");
+        apis::files_api::create_file(config, input_file).expect("Failed to create input file");
     let input_file_id = created_input.id.unwrap();
 
     // Create output file record (st_mtime is None - will be created by job)
     let output_file =
         models::FileModel::new(workflow_id, "output".to_string(), output_path.clone());
     let created_output =
-        default_api::create_file(config, output_file).expect("Failed to create output file");
+        apis::files_api::create_file(config, output_file).expect("Failed to create output file");
     let output_file_id = created_output.id.unwrap();
 
     // Create a job that reads input and writes output
@@ -82,7 +83,7 @@ fn create_ro_crate_enabled_workflow(
     job.input_file_ids = Some(vec![input_file_id]);
     job.output_file_ids = Some(vec![output_file_id]);
 
-    let created_job = default_api::create_job(config, job).expect("Failed to create job");
+    let created_job = apis::jobs_api::create_job(config, job).expect("Failed to create job");
     let job_id = created_job.id.unwrap();
 
     (workflow_id, input_file_id, output_file_id, job_id)
@@ -102,7 +103,7 @@ fn create_diamond_ro_crate_workflow(
     workflow.enable_ro_crate = Some(true);
 
     let created_workflow =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     // Create a compute node
@@ -118,7 +119,8 @@ fn create_diamond_ro_crate_workflow(
         "local".to_string(),
         None,
     );
-    default_api::create_compute_node(config, compute_node).expect("Failed to create compute node");
+    apis::compute_nodes_api::create_compute_node(config, compute_node)
+        .expect("Failed to create compute node");
 
     // File paths
     let f1_path = work_dir.join("f1.json").to_string_lossy().to_string();
@@ -129,21 +131,21 @@ fn create_diamond_ro_crate_workflow(
     // Create files: f1 is input, f2/f3 are intermediate, f4 is final output
     let mut f1_model = models::FileModel::new(workflow_id, "f1".to_string(), f1_path.clone());
     f1_model.st_mtime = Some(1704067200.0); // Input file exists before workflow runs
-    let f1 = default_api::create_file(config, f1_model).expect("Failed to create f1");
+    let f1 = apis::files_api::create_file(config, f1_model).expect("Failed to create f1");
 
-    let f2 = default_api::create_file(
+    let f2 = apis::files_api::create_file(
         config,
         models::FileModel::new(workflow_id, "f2".to_string(), f2_path.clone()),
     )
     .expect("Failed to create f2");
 
-    let f3 = default_api::create_file(
+    let f3 = apis::files_api::create_file(
         config,
         models::FileModel::new(workflow_id, "f3".to_string(), f3_path.clone()),
     )
     .expect("Failed to create f3");
 
-    let f4 = default_api::create_file(
+    let f4 = apis::files_api::create_file(
         config,
         models::FileModel::new(workflow_id, "f4".to_string(), f4_path.clone()),
     )
@@ -164,7 +166,7 @@ fn create_diamond_ro_crate_workflow(
     job1.input_file_ids = Some(vec![f1.id.unwrap()]);
     job1.output_file_ids = Some(vec![f2.id.unwrap(), f3.id.unwrap()]);
 
-    let created_job1 = default_api::create_job(config, job1).expect("Failed to create job1");
+    let created_job1 = apis::jobs_api::create_job(config, job1).expect("Failed to create job1");
     let _job1_id = created_job1.id.unwrap();
 
     // Job 2: f2, f3 -> f4
@@ -176,7 +178,7 @@ fn create_diamond_ro_crate_workflow(
     job2.input_file_ids = Some(vec![f2.id.unwrap(), f3.id.unwrap()]);
     job2.output_file_ids = Some(vec![f4.id.unwrap()]);
 
-    default_api::create_job(config, job2).expect("Failed to create job2");
+    apis::jobs_api::create_job(config, job2).expect("Failed to create job2");
 
     (workflow_id, input_file_ids, output_file_ids)
 }
@@ -196,21 +198,23 @@ fn test_auto_ro_crate_input_files_on_initialize(start_server: &ServerProcess) {
 
     // Verify no RO-Crate entities exist yet
     let entities_before =
-        default_api::list_ro_crate_entities(config, workflow_id, None, None).unwrap();
+        apis::ro_crate_api::list_ro_crate_entities(config, workflow_id, None, None, None, None)
+            .unwrap();
     assert_eq!(
-        entities_before.items.unwrap_or_default().len(),
+        entities_before.items.len(),
         0,
         "No RO-Crate entities should exist before initialization"
     );
 
     // Initialize the workflow - this should create RO-Crate entities for input files
-    default_api::initialize_jobs(config, workflow_id, Some(false), Some(false), None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false))
         .expect("Failed to initialize jobs");
 
     // Verify RO-Crate entity was created for the input file
     let entities_after =
-        default_api::list_ro_crate_entities(config, workflow_id, None, None).unwrap();
-    let items = entities_after.items.unwrap();
+        apis::ro_crate_api::list_ro_crate_entities(config, workflow_id, None, None, None, None)
+            .unwrap();
+    let items = entities_after.items;
 
     // Should have at least one entity (for the input file)
     assert!(
@@ -257,7 +261,7 @@ fn test_auto_ro_crate_output_files_on_job_completion(start_server: &ServerProces
     fs::write(work_dir.join("input.json"), input_data).expect("Failed to write input.json");
 
     // Initialize the workflow
-    default_api::initialize_jobs(config, workflow_id, Some(false), Some(false), None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false))
         .expect("Failed to initialize jobs");
 
     // Run the workflow
@@ -276,7 +280,7 @@ fn test_auto_ro_crate_output_files_on_job_completion(start_server: &ServerProces
     run_jobs_cli_command(&cli_args, start_server).expect("Failed to run jobs");
 
     // Verify job completed
-    let job = default_api::get_job(config, job_id).expect("Failed to get job");
+    let job = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");
     assert_eq!(
         job.status,
         Some(models::JobStatus::Completed),
@@ -290,9 +294,10 @@ fn test_auto_ro_crate_output_files_on_job_completion(start_server: &ServerProces
     );
 
     // Verify RO-Crate entities were created
-    let entities = default_api::list_ro_crate_entities(config, workflow_id, None, None)
-        .expect("Failed to list RO-Crate entities");
-    let items = entities.items.unwrap();
+    let entities =
+        apis::ro_crate_api::list_ro_crate_entities(config, workflow_id, None, None, None, None)
+            .expect("Failed to list RO-Crate entities");
+    let items = entities.items;
 
     // Should have entities for both input and output files, plus a CreateAction
     assert!(
@@ -356,7 +361,7 @@ fn test_auto_ro_crate_disabled_by_default(start_server: &ServerProcess) {
         "test_user".to_string(),
     );
     let created_workflow =
-        default_api::create_workflow(config, workflow).expect("Failed to create workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     // Verify enable_ro_crate is not set
@@ -379,22 +384,24 @@ fn test_auto_ro_crate_disabled_by_default(start_server: &ServerProcess) {
         "local".to_string(),
         None,
     );
-    default_api::create_compute_node(config, compute_node).unwrap();
+    apis::compute_nodes_api::create_compute_node(config, compute_node).unwrap();
 
     // Create a file
     let input_path = work_dir.join("input.txt").to_string_lossy().to_string();
     let file = models::FileModel::new(workflow_id, "input".to_string(), input_path.clone());
-    default_api::create_file(config, file).unwrap();
+    apis::files_api::create_file(config, file).unwrap();
 
     // Create the actual file
     fs::write(work_dir.join("input.txt"), "test data").unwrap();
 
     // Initialize the workflow
-    default_api::initialize_jobs(config, workflow_id, Some(false), Some(false), None).unwrap();
+    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false)).unwrap();
 
     // Verify no file-based RO-Crate entities were created (only the SoftwareApplication for torc-server)
-    let entities = default_api::list_ro_crate_entities(config, workflow_id, None, None).unwrap();
-    let items = entities.items.unwrap_or_default();
+    let entities =
+        apis::ro_crate_api::list_ro_crate_entities(config, workflow_id, None, None, None, None)
+            .unwrap();
+    let items = entities.items;
     let file_entities: Vec<_> = items
         .iter()
         .filter(|e| e.entity_type != "SoftwareApplication")
@@ -420,13 +427,14 @@ fn test_auto_ro_crate_diamond_workflow(start_server: &ServerProcess) {
     fs::write(work_dir.join("f1.json"), input_data).expect("Failed to write f1.json");
 
     // Initialize the workflow
-    default_api::initialize_jobs(config, workflow_id, Some(false), Some(false), None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false))
         .expect("Failed to initialize jobs");
 
     // Verify input file entity was created
     let entities_after_init =
-        default_api::list_ro_crate_entities(config, workflow_id, None, None).unwrap();
-    let items = entities_after_init.items.unwrap();
+        apis::ro_crate_api::list_ro_crate_entities(config, workflow_id, None, None, None, None)
+            .unwrap();
+    let items = entities_after_init.items;
 
     let input_entity = items.iter().find(|e| e.file_id == Some(input_file_ids[0]));
     assert!(
@@ -450,7 +458,7 @@ fn test_auto_ro_crate_diamond_workflow(start_server: &ServerProcess) {
     run_jobs_cli_command(&cli_args, start_server).expect("Failed to run jobs");
 
     // Verify all jobs completed
-    let jobs = default_api::list_jobs(
+    let jobs = apis::jobs_api::list_jobs(
         config,
         workflow_id,
         None,
@@ -465,7 +473,7 @@ fn test_auto_ro_crate_diamond_workflow(start_server: &ServerProcess) {
     )
     .expect("Failed to list jobs");
 
-    for job in jobs.items.unwrap() {
+    for job in jobs.items {
         assert_eq!(
             job.status,
             Some(models::JobStatus::Completed),
@@ -481,8 +489,9 @@ fn test_auto_ro_crate_diamond_workflow(start_server: &ServerProcess) {
 
     // Verify RO-Crate entities were created for output files
     let final_entities =
-        default_api::list_ro_crate_entities(config, workflow_id, None, None).unwrap();
-    let final_items = final_entities.items.unwrap();
+        apis::ro_crate_api::list_ro_crate_entities(config, workflow_id, None, None, None, None)
+            .unwrap();
+    let final_items = final_entities.items;
 
     // Should have entities for:
     // - 1 input file (f1)
@@ -555,7 +564,7 @@ fn test_auto_ro_crate_second_run_replaces_entities(start_server: &ServerProcess)
     fs::write(work_dir.join("input.json"), input_data_v1).expect("Failed to write input.json");
 
     // Initialize and run
-    default_api::initialize_jobs(config, workflow_id, Some(false), Some(false), None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false))
         .expect("Failed to initialize jobs");
 
     let workflow_id_str = workflow_id.to_string();
@@ -572,7 +581,7 @@ fn test_auto_ro_crate_second_run_replaces_entities(start_server: &ServerProcess)
     run_jobs_cli_command(&run_args, start_server).expect("Failed to run jobs (first run)");
 
     // Verify job completed and output file exists
-    let job = default_api::get_job(config, job_id).expect("Failed to get job");
+    let job = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");
     assert_eq!(job.status, Some(models::JobStatus::Completed));
     assert!(
         work_dir.join("output.json").exists(),
@@ -581,8 +590,9 @@ fn test_auto_ro_crate_second_run_replaces_entities(start_server: &ServerProcess)
 
     // Capture first run RO-Crate entities
     let entities_run1 =
-        default_api::list_ro_crate_entities(config, workflow_id, None, None).unwrap();
-    let items_run1 = entities_run1.items.unwrap();
+        apis::ro_crate_api::list_ro_crate_entities(config, workflow_id, None, None, None, None)
+            .unwrap();
+    let items_run1 = entities_run1.items;
 
     let file_entities_run1: Vec<_> = items_run1
         .iter()
@@ -619,14 +629,14 @@ fn test_auto_ro_crate_second_run_replaces_entities(start_server: &ServerProcess)
 
     // Reinitialize the workflow via CLI (bumps run_id, detects changed file, resets job)
     run_cli_command(
-        &["workflows", "reinitialize", &workflow_id_str],
+        &["workflows", "reinit", &workflow_id_str],
         start_server,
         None,
     )
     .expect("Failed to reinitialize workflow");
 
     // Verify the job was reset to ready (reinitialize detected changed input file)
-    let job_after_reinit = default_api::get_job(config, job_id).expect("Failed to get job");
+    let job_after_reinit = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");
     assert_eq!(
         job_after_reinit.status,
         Some(models::JobStatus::Ready),
@@ -637,14 +647,15 @@ fn test_auto_ro_crate_second_run_replaces_entities(start_server: &ServerProcess)
     run_jobs_cli_command(&run_args, start_server).expect("Failed to run jobs (second run)");
 
     // Verify job completed again
-    let job = default_api::get_job(config, job_id).expect("Failed to get job");
+    let job = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");
     assert_eq!(job.status, Some(models::JobStatus::Completed));
 
     // --- Verify file entities were replaced, not duplicated ---
 
     let entities_run2 =
-        default_api::list_ro_crate_entities(config, workflow_id, None, None).unwrap();
-    let items_run2 = entities_run2.items.unwrap();
+        apis::ro_crate_api::list_ro_crate_entities(config, workflow_id, None, None, None, None)
+            .unwrap();
+    let items_run2 = entities_run2.items;
 
     let file_entities_run2: Vec<_> = items_run2
         .iter()

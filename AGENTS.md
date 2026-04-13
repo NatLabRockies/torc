@@ -87,10 +87,10 @@ torc/
 cargo build --workspace --release
 
 # Run tests
-cargo test -- --test-threads 1
+cargo nextest run --all-features
 
 # Run a specific test
-cargo test test_get_ready_jobs -- --nocapture
+cargo nextest run -E 'test(test_get_ready_jobs)'
 ```
 
 ## Architecture Notes
@@ -100,7 +100,38 @@ cargo test test_get_ready_jobs -- --nocapture
 - Async Tokio runtime
 - SQLite with write locks for safe job claiming
 - Foreign key cascades for workflow deletion
-- OpenAPI-generated base types and routing
+- Rust-owned OpenAPI contract emitted from `src/openapi_spec.rs` and live handlers in
+  `src/server/live_router.rs`
+- Live HTTP transport in `src/server/http_transport.rs`
+
+### OpenAPI Workflow
+
+- Do not hand-edit `api/openapi.yaml` or generated client outputs.
+- Emit and verify the spec from Rust with:
+
+```bash
+cd api
+bash sync_openapi.sh check
+```
+
+- Promote the Rust-emitted spec and regenerate Rust, Python, and Julia clients with:
+
+```bash
+cd api
+bash sync_openapi.sh all --promote
+```
+
+- Regenerate Rust, Python, and Julia clients from the current checked-in spec with:
+
+```bash
+cd api
+bash sync_openapi.sh clients
+```
+
+### Documentation
+
+- Build user docs from `docs/` with `mdbook build`
+- The generated HTML under `docs/book/` should be refreshed when doc sources change
 
 ### Client
 

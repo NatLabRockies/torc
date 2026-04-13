@@ -1,0 +1,110 @@
+# Direct Mode with Checkpointing and Resource Enforcement
+#
+# Demonstrates direct execution mode features:
+#   - execution_config.mode: direct (torc manages processes directly)
+#   - limit_resources: true (kill jobs exceeding memory/CPU limits)
+#   - termination_signal / sigterm_lead_seconds (graceful shutdown for checkpointing)
+#   - oom_exit_code / timeout_exit_code (custom exit codes)
+#   - failure_handler with recovery_script for checkpoint-based restart
+#
+# The training jobs write periodic checkpoints. When torc sends SIGTERM
+# (e.g., approaching a time limit), the Python script catches it, saves
+# an emergency checkpoint, and exits cleanly. On retry, the job resumes
+# from the latest checkpoint automatically.
+#
+# See examples/scripts/checkpointing_train.py for the SIGTERM-aware training loop.
+#
+# Workflow structure:
+#   prepare_data
+#       |
+#   train_model_{i} (3 independent training runs, checkpoint-enabled)
+#       |
+#   evaluate_best
+
+name: direct_mode_checkpointing
+description: Training pipeline with checkpointing and direct-mode resource enforcement
+project: ml-training
+
+execution_config:
+  mode: direct
+  limit_resources: true               # Enforce memory/CPU limits, kill violators
+  termination_signal: "SIGTERM"        # Signal sent before hard kill
+  sigterm_lead_seconds: 45             # 45s grace period for checkpoint save
+  oom_exit_code: 137                   # Exit code when OOM-killed
+  timeout_exit_code: 152               # Exit code when timed out
+
+failure_handlers:
+  # Retry on timeout: the job checkpointed, so restart will resume
+  - name: "checkpoint_retry"
+    rules:
+      - exit_codes: [152]
+        max_retries: 5
+        recovery_script: |
+          #!/bin/bash
+          echo "Job timed out (exit 152) - checkpoint should exist"
+          CKPT_DIR="/workspace/checkpoints/${TORC_JOB_NAME}"
+          if [ -d "$CKPT_DIR" ] && ls "$CKPT_DIR"/checkpoint_*.npy 1>/dev/null 2>&1; then
+            LATEST=$(ls -t "$CKPT_DIR"/checkpoint_*.npy | head -1)
+            echo "Found checkpoint: $LATEST - job will resume on retry"
+          else
+            echo "WARNING: No checkpoint found - job will restart from scratch"
+          fi
+      # Retry on OOM with a warning; resource correction can fix this
+      - exit_codes: [137]
+        max_retries: 2
+        recovery_script: |
+          #!/bin/bash
+          echo "Job OOM-killed (exit 137) - consider increasing memory allocation"
+      # Retry transient failures up to 3 times
+      - match_all_exit_codes: true
+        max_retries: 3
+
+resource_requirements:
+  - name: "small"
+    num_cpus: 2
+    num_gpus: 0
+    memory: "4g"
+    runtime: "PT15M"
+
+  - name: "training"
+    num_cpus: 8
+    num_gpus: 0
+    memory: "32g"
+    runtime: "PT2H"
+
+files:
+  - name: "dataset"
+    path: "/workspace/data/dataset.pkl"
+
+  - name: "model_{i}"
+    path: "/workspace/models/model_{i}.pt"
+    parameters:
+      i: "[0,1,2]"
+
+  - name: "eval_report"
+    path: "/workspace/results/evaluation.json"
+
+jobs:
+  - name: "prepare_data"
+    command: bash examples/scripts/checkpointing_prepare_data.sh
+    resource_requirements: "small"
+    output_files: ["dataset"]
+
+  # Training jobs with checkpointing support.
+  # The Python script handles SIGTERM by saving an emergency checkpoint and exiting.
+  # On restart (after timeout), training resumes from the latest checkpoint.
+  - name: "train_model_{i}"
+    command: "MODEL_INDEX={i} python3 examples/scripts/checkpointing_train.py"
+    resource_requirements: "training"
+    failure_handler: "checkpoint_retry"
+    depends_on: ["prepare_data"]
+    input_files: ["dataset"]
+    output_files: ["model_{i}"]
+    parameters:
+      i: "[0,1,2]"
+
+  - name: "evaluate_best"
+    command: bash examples/scripts/checkpointing_evaluate.sh
+    resource_requirements: "small"
+    input_file_regexes: ["^model_\\d+$"]
+    output_files: ["eval_report"]

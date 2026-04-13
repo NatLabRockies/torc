@@ -3,6 +3,8 @@
 # Runs simulations across temperature and pressure ranges
 
 name: simulation_sweep
+project: climate-modeling
+metadata: '{"grant": "NSF-2024-1234", "pi": "Dr. Smith"}'
 description: Molecular dynamics simulations across temperature and pressure ranges
 
 jobs:

@@ -1,0 +1,168 @@
+# Multi-Node Slurm Workflow with start_one_worker_per_node
+#
+# Demonstrates multi-node Slurm allocations in direct execution mode, where
+# torc manages job processes directly while Slurm provides the node allocations.
+#
+# Key features shown:
+#   - num_nodes > 1 in resource_requirements (multi-node jobs)
+#   - execution_config.mode: direct with limit_resources (torc enforces CPU/memory)
+#   - start_one_worker_per_node in workflow actions (one torc worker per Slurm node)
+#   - Mixed single-node and multi-node jobs in one workflow
+#
+# In this pattern, Slurm allocates multi-node blocks and torc starts a separate
+# worker process on each node. Each worker independently claims and runs jobs,
+# enabling parallel execution across nodes without MPI.
+#
+# Workflow structure:
+#   prepare_inputs (1 node)
+#        |
+#   parallel_matrix_multiply_{i} (2 nodes each, CPU-bound, 4 jobs)
+#        |
+#   distributed_eigensolve (4 nodes, CPU-bound)
+#        |
+#   collect_results (1 node)
+
+name: multi_node_slurm_demo
+description: Multi-node CPU-intensive linear algebra pipeline with per-node workers
+project: hpc-benchmarks
+
+execution_config:
+  mode: direct                        # Torc manages processes; required for start_one_worker_per_node
+  limit_resources: true               # Enforce CPU/memory limits on each node
+  termination_signal: "SIGTERM"
+  sigterm_lead_seconds: 30
+
+slurm_schedulers:
+  - name: "single_node_scheduler"
+    account: "hpc_project"
+    walltime: "01:00:00"
+    nodes: 1
+    partition: "compute"
+
+  - name: "dual_node_scheduler"
+    account: "hpc_project"
+    walltime: "04:00:00"
+    nodes: 2
+    partition: "compute"
+
+  - name: "quad_node_scheduler"
+    account: "hpc_project"
+    walltime: "08:00:00"
+    nodes: 4
+    partition: "compute"
+
+resource_requirements:
+  - name: "light"
+    num_cpus: 4
+    num_gpus: 0
+    memory: "8g"
+    runtime: "PT30M"
+
+  - name: "cpu_intensive_2node"
+    num_cpus: 64
+    num_gpus: 0
+    num_nodes: 2
+    memory: "128g"
+    runtime: "PT4H"
+
+  - name: "cpu_intensive_4node"
+    num_cpus: 64
+    num_gpus: 0
+    num_nodes: 4
+    memory: "256g"
+    runtime: "PT8H"
+
+resource_monitor:
+  enabled: true
+  granularity: "time_series"
+  sample_interval_seconds: 5
+
+files:
+  - name: "input_matrix_{i:02d}"
+    path: "/scratch/linalg/input_matrix_{i:02d}.bin"
+    parameters:
+      i: "0:3"
+
+  - name: "product_{i:02d}"
+    path: "/scratch/linalg/product_{i:02d}.bin"
+    parameters:
+      i: "0:3"
+
+  - name: "eigenvalues"
+    path: "/scratch/linalg/eigenvalues.bin"
+
+  - name: "final_report"
+    path: "/scratch/linalg/report.json"
+
+jobs:
+  # Stage 1: Single-node preparation — generate random input matrices
+  - name: "prepare_inputs"
+    command: "python3 examples/scripts/multi_node_prepare_inputs.py /scratch/linalg 4 10000"
+    scheduler: "single_node_scheduler"
+    resource_requirements: "light"
+    output_files:
+      - "input_matrix_00"
+      - "input_matrix_01"
+      - "input_matrix_02"
+      - "input_matrix_03"
+
+  # Stage 2: Multi-node CPU-bound matrix multiplications (2 nodes each)
+  - name: "parallel_matrix_multiply_{i:02d}"
+    command: >-
+      OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-64} OMP_PLACES=cores OMP_PROC_BIND=close
+      python3 examples/scripts/multi_node_matrix_multiply.py
+      /scratch/linalg/input_matrix_{i:02d}.bin
+      /scratch/linalg/product_{i:02d}.bin
+      10000
+    scheduler: "dual_node_scheduler"
+    resource_requirements: "cpu_intensive_2node"
+    depends_on: ["prepare_inputs"]
+    input_files: ["input_matrix_{i:02d}"]
+    output_files: ["product_{i:02d}"]
+    parameters:
+      i: "0:3"
+
+  # Stage 3: Large multi-node eigenvalue decomposition (4 nodes)
+  - name: "distributed_eigensolve"
+    command: >-
+      OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-64} OMP_PLACES=cores OMP_PROC_BIND=close
+      python3 examples/scripts/multi_node_eigensolve.py
+      /scratch/linalg 4 10000
+    scheduler: "quad_node_scheduler"
+    resource_requirements: "cpu_intensive_4node"
+    input_file_regexes: ["^product_\\d+$"]
+    output_files: ["eigenvalues"]
+
+  # Stage 4: Collect and summarize results (single node)
+  - name: "collect_results"
+    command: "python3 examples/scripts/multi_node_collect_results.py /scratch/linalg"
+    scheduler: "single_node_scheduler"
+    resource_requirements: "light"
+    input_files: ["eigenvalues"]
+    output_files: ["final_report"]
+
+# Workflow actions demonstrate start_one_worker_per_node
+actions:
+  # Start workflow: allocate single-node scheduler for prep and cleanup
+  - trigger_type: "on_workflow_start"
+    action_type: "schedule_nodes"
+    scheduler: "single_node_scheduler"
+    scheduler_type: "slurm"
+    num_allocations: 1
+
+  # When matrix multiply jobs are ready, allocate 2-node blocks with one worker per node
+  - trigger_type: "on_jobs_ready"
+    action_type: "schedule_nodes"
+    job_name_regexes: ["parallel_matrix_multiply_.*"]
+    scheduler: "dual_node_scheduler"
+    scheduler_type: "slurm"
+    num_allocations: 2
+    start_one_worker_per_node: true
+
+  # When eigensolve is ready, allocate 4-node block
+  - trigger_type: "on_jobs_ready"
+    action_type: "schedule_nodes"
+    jobs: ["distributed_eigensolve"]
+    scheduler: "quad_node_scheduler"
+    scheduler_type: "slurm"
+    num_allocations: 1

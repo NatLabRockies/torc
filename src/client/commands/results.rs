@@ -1,5 +1,5 @@
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
 use crate::client::commands::get_env_user_name;
 use crate::client::commands::output::{print_if_json, print_wrapped_if_json};
 use crate::client::commands::{
@@ -40,25 +40,11 @@ fn get_job_name_map(
 ) -> std::collections::HashMap<i64, String> {
     let mut job_names = std::collections::HashMap::new();
 
-    match default_api::list_jobs(
-        config,
-        workflow_id,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None, // include_relationships
-        None, // active_compute_node_id
-    ) {
-        Ok(response) => {
-            if let Some(jobs) = response.items {
-                for job in jobs {
-                    if let Some(id) = job.id {
-                        job_names.insert(id, job.name);
-                    }
+    match pagination::paginate_jobs(config, workflow_id, pagination::JobListParams::new()) {
+        Ok(jobs) => {
+            for job in jobs {
+                if let Some(id) = job.id {
+                    job_names.insert(id, job.name);
                 }
             }
         }
@@ -139,6 +125,12 @@ pub enum ResultCommands {
         /// Filter by compute node ID
         #[arg(long)]
         compute_node: Option<i64>,
+        /// Include log file paths in the output (generates comprehensive JSON report)
+        #[arg(long)]
+        include_logs: bool,
+        /// Output directory where job logs are stored (only used with --include-logs)
+        #[arg(short, long, default_value = "torc_output")]
+        output_dir: std::path::PathBuf,
     },
     /// Get a specific result by ID
     Get {
@@ -169,12 +161,27 @@ pub fn handle_result_commands(config: &Configuration, command: &ResultCommands, 
             reverse_sort,
             all_runs,
             compute_node,
+            include_logs,
+            output_dir,
         } => {
             let user_name = get_env_user_name();
             let selected_workflow_id = match workflow_id {
                 Some(id) => *id,
                 None => select_workflow_interactively(config, &user_name).unwrap(),
             };
+
+            // If --include-logs is specified, generate comprehensive report with log paths
+            if *include_logs {
+                let job_ids: Vec<i64> = job_id.iter().copied().collect();
+                super::reports::generate_results_report(
+                    config,
+                    Some(selected_workflow_id),
+                    output_dir,
+                    *all_runs,
+                    &job_ids,
+                );
+                return;
+            }
 
             // Use pagination utility to get all results
             let mut params = pagination::ResultListParams::new().with_offset(*offset);
@@ -290,7 +297,7 @@ pub fn handle_result_commands(config: &Configuration, command: &ResultCommands, 
                 }
             }
         }
-        ResultCommands::Get { id } => match default_api::get_result(config, *id) {
+        ResultCommands::Get { id } => match apis::results_api::get_result(config, *id) {
             Ok(result) => {
                 if print_if_json(format, &result, "result") {
                     // JSON was printed
@@ -331,21 +338,23 @@ pub fn handle_result_commands(config: &Configuration, command: &ResultCommands, 
                 std::process::exit(1);
             }
         },
-        ResultCommands::Delete { id } => match default_api::delete_result(config, *id, None) {
-            Ok(removed_result) => {
-                if print_if_json(format, &removed_result, "result") {
-                    // JSON was printed
-                } else {
-                    println!("Successfully removed result:");
-                    println!("  ID: {}", removed_result.id.unwrap_or(-1));
-                    println!("  Job ID: {}", removed_result.job_id);
-                    println!("  Workflow ID: {}", removed_result.workflow_id);
+        ResultCommands::Delete { id } => {
+            match apis::results_api::delete_result(config, *id) {
+                Ok(removed_result) => {
+                    if print_if_json(format, &removed_result, "result") {
+                        // JSON was printed
+                    } else {
+                        println!("Successfully removed result:");
+                        println!("  ID: {}", removed_result.id.unwrap_or(-1));
+                        println!("  Job ID: {}", removed_result.job_id);
+                        println!("  Workflow ID: {}", removed_result.workflow_id);
+                    }
+                }
+                Err(e) => {
+                    print_error("removing result", &e);
+                    std::process::exit(1);
                 }
             }
-            Err(e) => {
-                print_error("removing result", &e);
-                std::process::exit(1);
-            }
-        },
+        }
     }
 }

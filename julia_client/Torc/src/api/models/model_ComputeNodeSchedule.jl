@@ -2,13 +2,13 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""compute_node_schedule
+@doc raw"""ComputeNodeSchedule
 
     ComputeNodeSchedule(;
         max_parallel_jobs=nothing,
         num_jobs=nothing,
         scheduler_id=nothing,
-        start_one_worker_per_node=false,
+        start_one_worker_per_node=nothing,
     )
 
     - max_parallel_jobs::Int64
@@ -20,7 +20,7 @@ Base.@kwdef mutable struct ComputeNodeSchedule <: OpenAPI.APIModel
     max_parallel_jobs::Union{Nothing, Int64} = nothing
     num_jobs::Union{Nothing, Int64} = nothing
     scheduler_id::Union{Nothing, Int64} = nothing
-    start_one_worker_per_node::Union{Nothing, Bool} = false
+    start_one_worker_per_node::Union{Nothing, Bool} = nothing
 
     function ComputeNodeSchedule(max_parallel_jobs, num_jobs, scheduler_id, start_one_worker_per_node, )
         o = new(max_parallel_jobs, num_jobs, scheduler_id, start_one_worker_per_node, )
@@ -47,7 +47,16 @@ end
 
 function OpenAPI.validate_property(::Type{ ComputeNodeSchedule }, name::Symbol, val)
 
+    if name === Symbol("max_parallel_jobs")
+        OpenAPI.validate_param(name, "ComputeNodeSchedule", :format, val, "int64")
+    end
 
+    if name === Symbol("num_jobs")
+        OpenAPI.validate_param(name, "ComputeNodeSchedule", :format, val, "int64")
+    end
 
+    if name === Symbol("scheduler_id")
+        OpenAPI.validate_param(name, "ComputeNodeSchedule", :format, val, "int64")
+    end
 
 end

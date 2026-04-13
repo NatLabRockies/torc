@@ -8,7 +8,7 @@ use std::fs;
 use common::{ServerProcess, start_server};
 use rstest::rstest;
 use tempfile::NamedTempFile;
-use torc::client::default_api;
+use torc::client::apis;
 use torc::client::workflow_spec::WorkflowSpec;
 use torc::models::JobStatus;
 
@@ -72,7 +72,6 @@ fn test_two_node_allocation_single_worker_multi_node_step(start_server: &ServerP
         temp_file.path(),
         "test_user",
         false,
-        false, // skip_checks = false — validation must pass
     );
 
     assert!(
@@ -84,7 +83,7 @@ fn test_two_node_allocation_single_worker_multi_node_step(start_server: &ServerP
     let workflow_id = result.unwrap();
 
     // --- Verify resource requirements were persisted correctly ---
-    let rr_list = default_api::list_resource_requirements(
+    let rr_list = apis::resource_requirements_api::list_resource_requirements(
         &start_server.config,
         workflow_id,
         None, // job_id
@@ -100,8 +99,7 @@ fn test_two_node_allocation_single_worker_multi_node_step(start_server: &ServerP
         None, // runtime
     )
     .expect("Failed to list resource requirements")
-    .items
-    .unwrap_or_default();
+    .items;
 
     // Filter out the "default" RR that is auto-created for every workflow
     let rr_list: Vec<_> = rr_list
@@ -119,33 +117,24 @@ fn test_two_node_allocation_single_worker_multi_node_step(start_server: &ServerP
     assert_eq!(rr.num_cpus, 32, "num_cpus should be 32");
 
     // --- Verify scheduler has 2 nodes ---
-    let schedulers = default_api::list_slurm_schedulers(
+    let schedulers = apis::slurm_schedulers_api::list_slurm_schedulers(
         &start_server.config,
         workflow_id,
         None,
         None,
         None,
         None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
     )
     .expect("Failed to list slurm schedulers")
-    .items
-    .unwrap_or_default();
+    .items;
 
     assert_eq!(schedulers.len(), 1, "Expected 1 scheduler");
     assert_eq!(schedulers[0].nodes, 2, "Scheduler should have 2 nodes");
 
     // --- Verify schedule_nodes action was created ---
-    let actions = default_api::get_workflow_actions(&start_server.config, workflow_id)
-        .expect("Failed to get workflow actions");
+    let actions =
+        apis::workflow_actions_api::get_workflow_actions(&start_server.config, workflow_id)
+            .expect("Failed to get workflow actions");
 
     let schedule_actions: Vec<_> = actions
         .into_iter()
@@ -158,7 +147,7 @@ fn test_two_node_allocation_single_worker_multi_node_step(start_server: &ServerP
         "Expected 1 schedule_nodes action"
     );
 
-    let _ = default_api::delete_workflow(&start_server.config, workflow_id, None);
+    let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id);
 }
 
 // =============================================================================
@@ -239,7 +228,6 @@ fn test_two_node_allocation_one_worker_per_node_parallel_jobs(start_server: &Ser
         temp_file.path(),
         "test_user",
         false,
-        false, // skip_checks = false — validation must pass
     );
 
     assert!(
@@ -251,8 +239,9 @@ fn test_two_node_allocation_one_worker_per_node_parallel_jobs(start_server: &Ser
     let workflow_id = result.unwrap();
 
     // --- Verify schedule_nodes action was created ---
-    let actions = default_api::get_workflow_actions(&start_server.config, workflow_id)
-        .expect("Failed to get workflow actions");
+    let actions =
+        apis::workflow_actions_api::get_workflow_actions(&start_server.config, workflow_id)
+            .expect("Failed to get workflow actions");
 
     let schedule_actions: Vec<_> = actions
         .into_iter()
@@ -266,7 +255,7 @@ fn test_two_node_allocation_one_worker_per_node_parallel_jobs(start_server: &Ser
     );
 
     // --- Verify resource requirements use num_nodes=1 ---
-    let rr_list = default_api::list_resource_requirements(
+    let rr_list = apis::resource_requirements_api::list_resource_requirements(
         &start_server.config,
         workflow_id,
         None,
@@ -282,8 +271,7 @@ fn test_two_node_allocation_one_worker_per_node_parallel_jobs(start_server: &Ser
         None,
     )
     .expect("Failed to list resource requirements")
-    .items
-    .unwrap_or_default();
+    .items;
 
     // Filter out the "default" RR that is auto-created for every workflow
     let rr_list: Vec<_> = rr_list
@@ -302,11 +290,11 @@ fn test_two_node_allocation_one_worker_per_node_parallel_jobs(start_server: &Ser
     );
 
     // --- Initialize the workflow so jobs transition to 'ready' ---
-    default_api::initialize_jobs(&start_server.config, workflow_id, None, None, None)
+    apis::workflows_api::initialize_jobs(&start_server.config, workflow_id, None, None)
         .expect("Failed to initialize jobs");
 
     // --- Verify all 4 jobs are now ready ---
-    let jobs = default_api::list_jobs(
+    let jobs = apis::jobs_api::list_jobs(
         &start_server.config,
         workflow_id,
         None, // status
@@ -320,8 +308,7 @@ fn test_two_node_allocation_one_worker_per_node_parallel_jobs(start_server: &Ser
         None, // active_compute_node_id
     )
     .expect("Failed to list jobs")
-    .items
-    .unwrap_or_default();
+    .items;
 
     assert_eq!(jobs.len(), 4, "Expected 4 jobs");
 
@@ -336,5 +323,5 @@ fn test_two_node_allocation_one_worker_per_node_parallel_jobs(start_server: &Ser
         ready_count
     );
 
-    let _ = default_api::delete_workflow(&start_server.config, workflow_id, None);
+    let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id);
 }

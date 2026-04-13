@@ -1,8 +1,10 @@
+use std::io::IsTerminal;
+
 use clap::{CommandFactory, Parser};
 
 use torc::cli::{Cli, Commands};
+use torc::client::apis;
 use torc::client::apis::configuration::{Configuration, TlsConfig};
-use torc::client::apis::default_api;
 use torc::client::commands::access_groups::handle_access_group_commands;
 use torc::client::commands::admin::handle_admin_commands;
 use torc::client::commands::compute_nodes::handle_compute_node_commands;
@@ -18,7 +20,6 @@ use torc::client::commands::recover::{
     RecoverArgs, RecoveryReport, diagnose_failures, recover_workflow,
 };
 use torc::client::commands::remote::handle_remote_commands;
-use torc::client::commands::reports::handle_report_commands;
 use torc::client::commands::resource_requirements::handle_resource_requirements_commands;
 use torc::client::commands::results::handle_result_commands;
 use torc::client::commands::ro_crate::handle_ro_crate_commands;
@@ -26,7 +27,7 @@ use torc::client::commands::scheduled_compute_nodes::handle_scheduled_compute_no
 use torc::client::commands::slurm::handle_slurm_commands;
 use torc::client::commands::user_data::handle_user_data_commands;
 use torc::client::commands::watch::{WatchArgs, run_watch};
-use torc::client::commands::workflows::handle_workflow_commands;
+use torc::client::commands::workflows::{handle_cancel, handle_workflow_commands};
 use torc::client::config::TorcConfig;
 use torc::client::version_check;
 use torc::client::workflow_manager::WorkflowManager;
@@ -138,10 +139,20 @@ fn main() {
     };
 
     if let Some(password) = password {
-        let username = std::env::var("USER")
-            .or_else(|_| std::env::var("USERNAME"))
-            .unwrap_or_else(|_| "unknown".to_string());
+        let username = torc::get_username();
         config.basic_auth = Some((username, Some(password)));
+    }
+
+    // Set cookie header for authentication (e.g., from browser-based MFA)
+    if let Some(ref cookie_header) = cli.cookie_header {
+        config.cookie_header = Some(cookie_header.clone());
+        if let Err(e) = config.apply_cookie_header() {
+            eprintln!("Error: {e}");
+            std::process::exit(1);
+        }
+        // Also expose via env var so TUI and other subprocesses can pick it up
+        // SAFETY: This runs during single-threaded CLI initialization before any threads are spawned.
+        unsafe { std::env::set_var("TORC_COOKIE_HEADER", cookie_header) };
     }
 
     // Check server version for commands that communicate with the server
@@ -168,6 +179,23 @@ fn main() {
     }
 
     match &cli.command {
+        Commands::Create {
+            file,
+            no_resource_monitoring,
+            skip_checks,
+            dry_run,
+        } => {
+            let user = torc::get_username();
+            torc::client::commands::workflows::handle_create(
+                &config,
+                file,
+                &user,
+                *no_resource_monitoring,
+                *skip_checks,
+                *dry_run,
+                &format,
+            );
+        }
         Commands::Run {
             workflow_spec_or_id,
             max_parallel_jobs,
@@ -176,19 +204,22 @@ fn main() {
             num_gpus,
             poll_interval,
             output_dir,
+            time_limit,
+            end_time,
             skip_checks,
         } => {
             let workflow_id = if is_spec_file(workflow_spec_or_id) {
+                if !*skip_checks {
+                    WorkflowSpec::prevalidate_or_exit(workflow_spec_or_id);
+                }
+
                 // Create workflow from spec file
-                let user = std::env::var("USER")
-                    .or_else(|_| std::env::var("USERNAME"))
-                    .unwrap_or_else(|_| "unknown".to_string());
+                let user = torc::get_username();
                 match WorkflowSpec::create_workflow_from_spec(
                     &config,
                     workflow_spec_or_id,
                     &user,
                     true,
-                    *skip_checks,
                 ) {
                     Ok(id) => {
                         print_workflow_message(&format, id, &format!("Created workflow {}", id));
@@ -225,8 +256,8 @@ fn main() {
                     .unwrap_or_else(|| run_config.output_dir.clone()),
                 poll_interval: poll_interval.unwrap_or(run_config.poll_interval),
                 max_parallel_jobs: max_parallel_jobs.or(run_config.max_parallel_jobs),
-                time_limit: None,
-                end_time: None,
+                time_limit: time_limit.clone(),
+                end_time: end_time.clone(),
                 num_cpus: num_cpus.or(run_config.num_cpus),
                 memory_gb: memory_gb.or(run_config.memory_gb),
                 num_gpus: num_gpus.or(run_config.num_gpus),
@@ -238,6 +269,7 @@ fn main() {
                 password,
                 tls_ca_cert: tls_ca_cert.clone(),
                 tls_insecure,
+                cookie_header: config.cookie_header.clone(),
             };
 
             run_jobs_cmd::run(&args);
@@ -269,11 +301,12 @@ fn main() {
                     );
                     eprintln!("To submit to Slurm, either:");
                     eprintln!();
-                    eprintln!("  1. Use 'torc submit-slurm' to auto-generate schedulers:");
+                    eprintln!("  1. Use 'torc slurm generate' to auto-generate schedulers:");
                     eprintln!(
-                        "     torc submit-slurm --account <account> {}",
-                        workflow_spec_or_id
+                        "     torc slurm generate --account <account> -o {} {}",
+                        workflow_spec_or_id, workflow_spec_or_id
                     );
+                    eprintln!("     torc submit {}", workflow_spec_or_id);
                     eprintln!();
                     eprintln!("  2. Add a workflow action manually:");
                     eprintln!("     actions:");
@@ -287,17 +320,18 @@ fn main() {
                     std::process::exit(1);
                 }
 
+                if !*skip_checks {
+                    WorkflowSpec::prevalidate_or_exit(workflow_spec_or_id);
+                }
+
                 // Create workflow from spec
-                let user = std::env::var("USER")
-                    .or_else(|_| std::env::var("USERNAME"))
-                    .unwrap_or_else(|_| "unknown".to_string());
+                let user = torc::get_username();
 
                 match WorkflowSpec::create_workflow_from_spec(
                     &config,
                     workflow_spec_or_id,
                     &user,
                     true,
-                    *skip_checks,
                 ) {
                     Ok(id) => {
                         print_workflow_message(&format, id, &format!("Created workflow {}", id));
@@ -324,7 +358,7 @@ fn main() {
 
             // Check if workflow has schedule_nodes actions (for existing workflows)
             if !is_spec_file(workflow_spec_or_id) {
-                match default_api::get_workflow_actions(&config, workflow_id) {
+                match apis::workflow_actions_api::get_workflow_actions(&config, workflow_id) {
                     Ok(actions) => {
                         let has_schedule_nodes = actions.iter().any(|action| {
                             action.trigger_type == "on_workflow_start"
@@ -354,171 +388,9 @@ fn main() {
             }
 
             // Submit the workflow
-            match default_api::get_workflow(&config, workflow_id) {
+            match apis::workflows_api::get_workflow(&config, workflow_id) {
                 Ok(workflow) => {
                     let torc_config = TorcConfig::load().unwrap_or_default();
-                    let workflow_manager =
-                        WorkflowManager::new(config.clone(), torc_config, workflow);
-                    match workflow_manager.start(
-                        *ignore_missing_data,
-                        *max_parallel_jobs,
-                        output_dir,
-                        *poll_interval,
-                    ) {
-                        Ok(()) => {
-                            print_workflow_message(
-                                &format,
-                                workflow_id,
-                                &format!("Successfully submitted workflow {}", workflow_id),
-                            );
-                        }
-                        Err(e) => {
-                            eprintln!("Error submitting workflow {}: {}", workflow_id, e);
-                            std::process::exit(1);
-                        }
-                    }
-                }
-                Err(e) => {
-                    eprintln!("Error getting workflow {}: {}", workflow_id, e);
-                    std::process::exit(1);
-                }
-            }
-        }
-        Commands::SubmitSlurm {
-            workflow_spec,
-            account,
-            hpc_profile,
-            single_allocation,
-            group_by,
-            ignore_missing_data,
-            skip_checks,
-            overwrite,
-            max_parallel_jobs,
-            output_dir,
-            poll_interval,
-        } => {
-            use torc::client::commands::slurm::{
-                WalltimeStrategy, generate_schedulers_for_workflow,
-            };
-
-            // Load the workflow spec
-            let mut spec = match WorkflowSpec::from_spec_file(workflow_spec) {
-                Ok(spec) => spec,
-                Err(e) => {
-                    eprintln!("Error loading workflow spec: {}", e);
-                    std::process::exit(1);
-                }
-            };
-
-            // Resolve account: CLI option takes precedence, then slurm_defaults
-            let resolved_account = if let Some(acct) = account {
-                acct.clone()
-            } else if let Some(ref defaults) = spec.slurm_defaults {
-                defaults
-                    .0
-                    .get("account")
-                    .and_then(|v| v.as_str().map(String::from))
-                    .unwrap_or_else(|| {
-                        eprintln!(
-                            "Error: No account specified. Use --account or set 'account' in slurm_defaults."
-                        );
-                        std::process::exit(1);
-                    })
-            } else {
-                eprintln!(
-                    "Error: No account specified. Use --account or set 'account' in slurm_defaults."
-                );
-                std::process::exit(1);
-            };
-
-            // Get HPC profile
-            let torc_config = TorcConfig::load().unwrap_or_default();
-            let registry = torc::client::commands::hpc::create_registry_with_config_public(
-                &torc_config.client.hpc,
-            );
-
-            let profile = match torc::client::commands::hpc::resolve_hpc_profile(
-                &registry,
-                hpc_profile.as_deref(),
-            ) {
-                Ok(p) => p,
-                Err(msg) => {
-                    eprintln!("{}", msg);
-                    std::process::exit(1);
-                }
-            };
-
-            // Generate schedulers
-            match generate_schedulers_for_workflow(
-                &mut spec,
-                &profile,
-                &resolved_account,
-                *single_allocation,
-                *group_by,
-                WalltimeStrategy::MaxJobRuntime,
-                1.5, // Default walltime multiplier
-                true,
-                *overwrite,
-            ) {
-                Ok(result) => {
-                    eprintln!(
-                        "Auto-generated {} scheduler(s) and {} action(s) using {} profile",
-                        result.scheduler_count, result.action_count, profile.name
-                    );
-                    for warning in &result.warnings {
-                        eprintln!("  Warning: {}", warning);
-                    }
-                }
-                Err(e) => {
-                    eprintln!("Error: {}", e);
-                    std::process::exit(1);
-                }
-            }
-
-            // Print warning about auto-generated configuration
-            eprintln!();
-            eprintln!("WARNING: Schedulers and actions were auto-generated using heuristics.");
-            eprintln!("         For complex workflows, this may not be optimal.");
-            eprintln!();
-            eprintln!("TIP: To preview and validate the configuration before submitting, use:");
-            eprintln!(
-                "     torc slurm generate --account {} {}",
-                resolved_account, workflow_spec
-            );
-            eprintln!();
-
-            // Write modified spec to temp file
-            let temp_dir = std::env::temp_dir();
-            let temp_file =
-                temp_dir.join(format!("torc_submit_workflow_{}.yaml", std::process::id()));
-            std::fs::write(&temp_file, serde_yaml::to_string(&spec).unwrap())
-                .expect("Failed to write temporary workflow file");
-
-            // Create workflow from spec
-            let user = std::env::var("USER")
-                .or_else(|_| std::env::var("USERNAME"))
-                .unwrap_or_else(|_| "unknown".to_string());
-
-            let workflow_id = match WorkflowSpec::create_workflow_from_spec(
-                &config,
-                &temp_file,
-                &user,
-                true,
-                *skip_checks,
-            ) {
-                Ok(id) => {
-                    print_workflow_message(&format, id, &format!("Created workflow {}", id));
-                    id
-                }
-                Err(e) => {
-                    eprintln!("Error creating workflow from spec: {}", e);
-                    std::process::exit(1);
-                }
-            };
-
-            // Submit the workflow
-            match default_api::get_workflow(&config, workflow_id) {
-                Ok(workflow) => {
                     let workflow_manager =
                         WorkflowManager::new(config.clone(), torc_config, workflow);
                     match workflow_manager.start(
@@ -563,6 +435,8 @@ fn main() {
             auto_schedule_stranded_timeout,
             ai_recovery,
             ai_agent,
+            partition,
+            walltime,
         } => {
             let args = WatchArgs {
                 workflow_id: *workflow_id,
@@ -582,6 +456,8 @@ fn main() {
                 auto_schedule_stranded_timeout: *auto_schedule_stranded_timeout,
                 ai_recovery: *ai_recovery,
                 ai_agent: ai_agent.clone(),
+                partition: partition.clone(),
+                walltime: walltime.clone(),
             };
             run_watch(&config, &args);
         }
@@ -593,9 +469,11 @@ fn main() {
             retry_unknown,
             recovery_hook,
             dry_run,
+            no_prompts,
             ai_recovery,
             ai_agent,
         } => {
+            let interactive = !no_prompts && std::io::stdin().is_terminal();
             let args = RecoverArgs {
                 workflow_id: *workflow_id,
                 output_dir: output_dir.clone(),
@@ -604,13 +482,14 @@ fn main() {
                 retry_unknown: *retry_unknown,
                 recovery_hook: recovery_hook.clone(),
                 dry_run: *dry_run,
+                interactive,
                 ai_recovery: *ai_recovery,
                 ai_agent: ai_agent.clone(),
             };
 
             // For JSON output, get diagnosis data to include in the report
             let diagnosis = if format == "json" {
-                diagnose_failures(*workflow_id, output_dir).ok()
+                diagnose_failures(&config, *workflow_id).ok()
             } else {
                 None
             };
@@ -704,6 +583,23 @@ fn main() {
                 }
             }
         }
+        Commands::Cancel { workflow_id } => {
+            handle_cancel(&config, workflow_id, &format);
+        }
+        Commands::Status { workflow_id } => {
+            torc::client::commands::reports::generate_summary(&config, *workflow_id, &format);
+        }
+        Commands::Delete {
+            workflow_ids,
+            force,
+        } => {
+            torc::client::commands::workflows::handle_delete(
+                &config,
+                workflow_ids,
+                *force,
+                &format,
+            );
+        }
         Commands::Workflows { command } => {
             handle_workflow_commands(&config, command, &format);
         }
@@ -749,9 +645,6 @@ fn main() {
         Commands::Hpc { command } => {
             handle_hpc_commands(command, &format);
         }
-        Commands::Reports { command } => {
-            handle_report_commands(&config, command, &format);
-        }
         Commands::Logs { command } => {
             handle_log_commands(&config, command);
         }
@@ -777,7 +670,7 @@ fn main() {
                 std::process::exit(1);
             }
         }
-        Commands::Ping => match default_api::ping(&config) {
+        Commands::Ping => match apis::system_api::ping(&config) {
             Ok(_) => {
                 if cli.format == "json" {
                     println!(r#"{{"status": "Server is running"}}"#);

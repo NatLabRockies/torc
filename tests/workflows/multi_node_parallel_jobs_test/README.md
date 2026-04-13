@@ -85,7 +85,7 @@ If all 6 rows are missing or show null values, sacct collection is not working. 
 If time-series resource monitoring was enabled, check that `peak_cpu_percent` is non-zero:
 
 ```bash
-torc reports results 42
+torc results list 42 --include-logs
 ```
 
 A `peak_cpu_percent` value near or above 100% (for 2-CPU jobs) confirms that sstat was polled
@@ -105,14 +105,14 @@ srun step naming is working and administrators can track individual jobs.
 
 ## Key Validations
 
-| Check                        | Command                        | Expected                              |
-| ---------------------------- | ------------------------------ | ------------------------------------- |
-| Jobs ran on 2 distinct nodes | `torc jobs logs <id>` (all 6)  | Mix of `node001` and `node002`        |
-| Concurrent start times       | Job logs                       | 2+ jobs start within 1s of each other |
-| sacct has 6 rows             | `torc slurm stats <wf_id>`     | 6 step records                        |
-| sacct node_list set          | `torc slurm stats <wf_id>`     | Non-null `node_list` per row          |
-| peak_cpu_percent > 0         | `torc reports results <wf_id>` | Non-zero CPU for each job             |
-| All jobs completed           | `torc jobs list <wf_id>`       | 6 jobs with status `completed`        |
+| Check                        | Command                                    | Expected                              |
+| ---------------------------- | ------------------------------------------ | ------------------------------------- |
+| Jobs ran on 2 distinct nodes | `torc jobs logs <id>` (all 6)              | Mix of `node001` and `node002`        |
+| Concurrent start times       | Job logs                                   | 2+ jobs start within 1s of each other |
+| sacct has 6 rows             | `torc slurm stats <wf_id>`                 | 6 step records                        |
+| sacct node_list set          | `torc slurm stats <wf_id>`                 | Non-null `node_list` per row          |
+| peak_cpu_percent > 0         | `torc results list <wf_id> --include-logs` | Non-zero CPU for each job             |
+| All jobs completed           | `torc jobs list <wf_id>`                   | 6 jobs with status `completed`        |
 
 ## Troubleshooting
 

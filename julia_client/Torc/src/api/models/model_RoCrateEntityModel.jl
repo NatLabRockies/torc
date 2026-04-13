@@ -2,65 +2,73 @@
 # Do not modify this file directly. Modify the OpenAPI specification instead.
 
 
-@doc raw"""ro_crate_entity_model
-A single RO-Crate JSON-LD entity description for provenance tracking.
+@doc raw"""RoCrateEntityModel
 
     RoCrateEntityModel(;
-        id=nothing,
-        workflow_id=nothing,
-        file_id=nothing,
         entity_id=nothing,
         entity_type=nothing,
+        file_id=nothing,
+        id=nothing,
         metadata=nothing,
+        workflow_id=nothing,
     )
 
-    - id::Int64 : Database ID of this record
-    - workflow_id::Int64 : Database ID of the workflow this entity belongs to
-    - file_id::Int64 : Optional link to a file record
-    - entity_id::String : The JSON-LD @id for this entity (e.g., \&quot;data/output.parquet\&quot;, \&quot;#job-42-attempt-1\&quot;)
-    - entity_type::String : The Schema.org @type (e.g., \&quot;File\&quot;, \&quot;Dataset\&quot;, \&quot;SoftwareApplication\&quot;, \&quot;CreateAction\&quot;)
-    - metadata::String : Full JSON-LD metadata object as a JSON string
+    - entity_id::String
+    - entity_type::String
+    - file_id::Int64
+    - id::Int64
+    - metadata::String
+    - workflow_id::Int64
 """
 Base.@kwdef mutable struct RoCrateEntityModel <: OpenAPI.APIModel
-    id::Union{Nothing, Int64} = nothing
-    workflow_id::Union{Nothing, Int64} = nothing
-    file_id::Union{Nothing, Int64} = nothing
     entity_id::Union{Nothing, String} = nothing
     entity_type::Union{Nothing, String} = nothing
+    file_id::Union{Nothing, Int64} = nothing
+    id::Union{Nothing, Int64} = nothing
     metadata::Union{Nothing, String} = nothing
+    workflow_id::Union{Nothing, Int64} = nothing
 
-    function RoCrateEntityModel(id, workflow_id, file_id, entity_id, entity_type, metadata, )
-        o = new(id, workflow_id, file_id, entity_id, entity_type, metadata, )
+    function RoCrateEntityModel(entity_id, entity_type, file_id, id, metadata, workflow_id, )
+        o = new(entity_id, entity_type, file_id, id, metadata, workflow_id, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type RoCrateEntityModel
 
-const _property_types_RoCrateEntityModel = Dict{Symbol,String}(Symbol("id")=>"Int64", Symbol("workflow_id")=>"Int64", Symbol("file_id")=>"Int64", Symbol("entity_id")=>"String", Symbol("entity_type")=>"String", Symbol("metadata")=>"String", )
+const _property_types_RoCrateEntityModel = Dict{Symbol,String}(Symbol("entity_id")=>"String", Symbol("entity_type")=>"String", Symbol("file_id")=>"Int64", Symbol("id")=>"Int64", Symbol("metadata")=>"String", Symbol("workflow_id")=>"Int64", )
 OpenAPI.property_type(::Type{ RoCrateEntityModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_RoCrateEntityModel[name]))}
 
 function OpenAPI.check_required(o::RoCrateEntityModel)
-    o.workflow_id === nothing && (return false)
     o.entity_id === nothing && (return false)
     o.entity_type === nothing && (return false)
     o.metadata === nothing && (return false)
+    o.workflow_id === nothing && (return false)
     true
 end
 
 function OpenAPI.validate_properties(o::RoCrateEntityModel)
-    OpenAPI.validate_property(RoCrateEntityModel, Symbol("id"), o.id)
-    OpenAPI.validate_property(RoCrateEntityModel, Symbol("workflow_id"), o.workflow_id)
-    OpenAPI.validate_property(RoCrateEntityModel, Symbol("file_id"), o.file_id)
     OpenAPI.validate_property(RoCrateEntityModel, Symbol("entity_id"), o.entity_id)
     OpenAPI.validate_property(RoCrateEntityModel, Symbol("entity_type"), o.entity_type)
+    OpenAPI.validate_property(RoCrateEntityModel, Symbol("file_id"), o.file_id)
+    OpenAPI.validate_property(RoCrateEntityModel, Symbol("id"), o.id)
     OpenAPI.validate_property(RoCrateEntityModel, Symbol("metadata"), o.metadata)
+    OpenAPI.validate_property(RoCrateEntityModel, Symbol("workflow_id"), o.workflow_id)
 end
 
 function OpenAPI.validate_property(::Type{ RoCrateEntityModel }, name::Symbol, val)
 
 
 
+    if name === Symbol("file_id")
+        OpenAPI.validate_param(name, "RoCrateEntityModel", :format, val, "int64")
+    end
+
+    if name === Symbol("id")
+        OpenAPI.validate_param(name, "RoCrateEntityModel", :format, val, "int64")
+    end
 
 
-
+    if name === Symbol("workflow_id")
+        OpenAPI.validate_param(name, "RoCrateEntityModel", :format, val, "int64")
+    end
 end

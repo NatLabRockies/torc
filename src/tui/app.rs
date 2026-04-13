@@ -8,7 +8,8 @@ use petgraph::graph::NodeIndex;
 use ratatui::widgets::TableState;
 
 use crate::client::log_paths::{
-    get_job_stderr_path, get_job_stdout_path, get_slurm_stderr_path, get_slurm_stdout_path,
+    get_job_combined_path, get_job_stderr_path, get_job_stdout_path, get_slurm_stderr_path,
+    get_slurm_stdout_path,
 };
 use crate::client::sse_client::SseEvent;
 use crate::models::{
@@ -323,9 +324,7 @@ impl App {
         let output_dir = TorcConfig::load().unwrap_or_default().client.run.output_dir;
 
         // Get current user from environment
-        let current_user = std::env::var("USER")
-            .or_else(|_| std::env::var("USERNAME"))
-            .unwrap_or_else(|_| "unknown".to_string());
+        let current_user = crate::get_username();
 
         let mut app = Self {
             client,
@@ -1064,6 +1063,9 @@ impl App {
             crate::client::apis::configuration::Configuration::with_tls(self.tls.clone());
         config.base_path = self.server_url.clone();
         config.basic_auth = self.basic_auth.clone();
+        if let Err(e) = config.apply_cookie_header_from_env() {
+            log::error!("Failed to apply cookie header: {e}");
+        }
 
         let result = version_check::check_version(&config);
 
@@ -1263,7 +1265,7 @@ impl App {
                 "-f",
                 "json",
                 "workflows",
-                "initialize",
+                "init",
                 &workflow_id_str,
                 "--dry-run",
             ])
@@ -1378,7 +1380,7 @@ impl App {
             "--url",
             &url,
             "workflows",
-            "initialize",
+            "init",
             "--no-prompts",
             &workflow_id_str,
         ];
@@ -1440,7 +1442,7 @@ impl App {
         let url = self.client.get_base_url();
         let workflow_id_str = workflow_id.to_string();
 
-        let mut args = vec!["--url", &url, "workflows", "reinitialize", &workflow_id_str];
+        let mut args = vec!["--url", &url, "workflows", "reinit", &workflow_id_str];
         if force {
             args.push("--force");
         }
@@ -1772,26 +1774,40 @@ impl App {
                     result.run_id,
                     attempt_id,
                 );
+                let combined_path = get_job_combined_path(
+                    output_dir,
+                    workflow_id,
+                    viewer.job_id,
+                    result.run_id,
+                    attempt_id,
+                );
 
-                viewer.stdout_path = Some(stdout_path.clone());
-                viewer.stderr_path = Some(stderr_path.clone());
-
-                // Try to read stdout
+                // Try separate .o file first, then fall back to combined .log
                 if let Ok(content) = std::fs::read_to_string(&stdout_path) {
+                    viewer.stdout_path = Some(stdout_path);
+                    viewer.stdout_content = content;
+                } else if let Ok(content) = std::fs::read_to_string(&combined_path) {
+                    viewer.stdout_path = Some(combined_path.clone());
                     viewer.stdout_content = content;
                 } else {
+                    viewer.stdout_path = Some(stdout_path.clone());
                     viewer.stdout_content = format!(
-                        "Could not read file: {}\n\nThe file may not exist if:\n- The job has not run yet\n- The output directory is different\n- You are on a different system",
+                        "Could not read file: {}\n\nThe file may not exist if:\n- The job has not run yet\n- The output directory is different\n- You are on a different system\n- The job used a stdio mode that doesn't capture stdout",
                         stdout_path
                     );
                 }
 
-                // Try to read stderr
+                // Try separate .e file first, then fall back to combined .log
                 if let Ok(content) = std::fs::read_to_string(&stderr_path) {
+                    viewer.stderr_path = Some(stderr_path);
+                    viewer.stderr_content = content;
+                } else if let Ok(content) = std::fs::read_to_string(&combined_path) {
+                    viewer.stderr_path = Some(combined_path);
                     viewer.stderr_content = content;
                 } else {
+                    viewer.stderr_path = Some(stderr_path.clone());
                     viewer.stderr_content = format!(
-                        "Could not read file: {}\n\nThe file may not exist if:\n- The job has not run yet\n- The output directory is different\n- You are on a different system",
+                        "Could not read file: {}\n\nThe file may not exist if:\n- The job has not run yet\n- The output directory is different\n- You are on a different system\n- The job used a stdio mode that doesn't capture stderr",
                         stderr_path
                     );
                 }
@@ -2219,6 +2235,9 @@ impl App {
             let mut config = crate::client::apis::configuration::Configuration::with_tls(tls);
             config.base_path = base_url;
             config.basic_auth = basic_auth;
+            if let Err(e) = config.apply_cookie_header_from_env() {
+                log::error!("Failed to apply cookie header: {e}");
+            }
 
             match crate::client::sse_client::SseConnection::connect(&config, workflow_id, None) {
                 Ok(mut connection) => {

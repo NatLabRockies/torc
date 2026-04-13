@@ -108,7 +108,7 @@ impl PaginationParams for JobListParams {
 }
 
 impl Paginatable for JobModel {
-    type ListError = apis::default_api::ListJobsError;
+    type ListError = apis::jobs_api::ListJobsError;
     type Params = JobListParams;
 
     fn fetch_page(
@@ -116,7 +116,7 @@ impl Paginatable for JobModel {
         params: &Self::Params,
         limit: i64,
     ) -> Result<PaginatedResponse<Self>, apis::Error<Self::ListError>> {
-        let response = apis::default_api::list_jobs(
+        let response = apis::jobs_api::list_jobs(
             config,
             params.workflow_id,
             params.status,
@@ -170,10 +170,11 @@ pub fn iter_jobs(
 ///
 /// # Returns
 /// `Result<Vec<JobModel>, Error>` containing all jobs or an error
+#[allow(clippy::result_large_err)]
 pub fn paginate_jobs(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: JobListParams,
-) -> Result<Vec<JobModel>, apis::Error<apis::default_api::ListJobsError>> {
+) -> Result<Vec<JobModel>, apis::Error<apis::jobs_api::ListJobsError>> {
     iter_jobs(config, workflow_id, params).collect()
 }

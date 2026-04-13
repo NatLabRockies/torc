@@ -1,0 +1,97 @@
+# Fan-In with File Regexes Example
+#
+# Demonstrates the input_file_regexes feature for aggregating outputs from
+# many jobs into a single downstream job without listing each file explicitly.
+#
+# This is the recommended pattern when a fan-in job needs to consume outputs
+# from a parameterized set of producers. Instead of duplicating the parameter
+# space on the consumer, use a regex to match all matching file names.
+#
+# Key features shown:
+#   - input_file_regexes for fan-in aggregation
+#   - Parameterized producers with file dependencies
+#   - Mixed explicit input_files and input_file_regexes
+#
+# Workflow structure:
+#   fetch_config (produces config file)
+#       |
+#   simulate_region_{region}_{seed:03d} (24 jobs: 4 regions x 6 seeds)
+#       |                    |
+#       v                    v
+#   regional_summary_{region} (4 jobs, each aggregates 6 seeds via regex)
+#       |
+#   global_report (aggregates all 4 regional summaries via regex)
+
+name: fan_in_with_regexes
+description: Demonstrates input_file_regexes for fan-in aggregation patterns
+
+resource_requirements:
+  - name: "minimal"
+    num_cpus: 1
+    num_gpus: 0
+    memory: "2g"
+    runtime: "PT10M"
+
+  - name: "compute"
+    num_cpus: 4
+    num_gpus: 0
+    memory: "16g"
+    runtime: "PT1H"
+
+files:
+  - name: "config"
+    path: "output/config.json"
+
+  # Simulation output files: one per (region, seed) pair
+  - name: "sim_{region}_{seed:03d}"
+    path: "output/sim_{region}_{seed:03d}.csv"
+    parameters:
+      region: "['north','south','east','west']"
+      seed: "0:5"
+
+  # Regional summary files: one per region
+  - name: "summary_{region}"
+    path: "output/summary_{region}.json"
+    parameters:
+      region: "['north','south','east','west']"
+
+  - name: "global_report"
+    path: "output/global_report.json"
+
+jobs:
+  - name: "fetch_config"
+    command: |
+      #!/bin/bash
+      mkdir -p output
+      echo '{"timesteps": 1000, "dt": 0.01, "model": "stochastic_v2"}' > output/config.json
+      echo "Config written"
+    resource_requirements: "minimal"
+    output_files: ["config"]
+
+  # Parameterized simulation: 4 regions x 6 seeds = 24 jobs
+  - name: "simulate_{region}_{seed:03d}"
+    command: "python3 examples/scripts/fan_in_simulate.py {region} {seed}"
+    resource_requirements: "compute"
+    input_files: ["config"]
+    output_files: ["sim_{region}_{seed:03d}"]
+    parameters:
+      region: "['north','south','east','west']"
+      seed: "0:5"
+
+  # Fan-in: each regional summary aggregates all seeds for its region.
+  # Uses input_file_regexes to match sim_{region}_000 through sim_{region}_005
+  # without listing them explicitly.
+  - name: "regional_summary_{region}"
+    command: "python3 examples/scripts/fan_in_regional_summary.py {region}"
+    resource_requirements: "minimal"
+    input_file_regexes: ["^sim_{region}_\\d+$"]
+    output_files: ["summary_{region}"]
+    parameters:
+      region: "['north','south','east','west']"
+
+  # Global fan-in: aggregates all 4 regional summaries via regex
+  - name: "global_report"
+    command: "python3 examples/scripts/fan_in_global_report.py"
+    resource_requirements: "minimal"
+    input_file_regexes: ["^summary_\\w+$"]
+    output_files: ["global_report"]

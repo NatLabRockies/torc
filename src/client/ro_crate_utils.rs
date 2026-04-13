@@ -3,8 +3,9 @@
 //! This module provides helper functions for creating RO-Crate entities for workflow files
 //! when `enable_ro_crate` is set on a workflow.
 
+use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::apis::default_api;
+use crate::client::version_check;
 use crate::models::{FileModel, JobModel, RoCrateEntityModel};
 use chrono::{DateTime, Utc};
 use log::{debug, warn};
@@ -307,14 +308,18 @@ pub fn find_entity_for_file(
     workflow_id: i64,
     file_id: i64,
 ) -> Option<RoCrateEntityModel> {
-    match default_api::list_ro_crate_entities(config, workflow_id, None, None) {
-        Ok(response) => {
-            if let Some(entities) = response.items {
-                entities.into_iter().find(|e| e.file_id == Some(file_id))
-            } else {
-                None
-            }
-        }
+    match apis::ro_crate_entities_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+    ) {
+        Ok(response) => response
+            .items
+            .into_iter()
+            .find(|e| e.file_id == Some(file_id)),
         Err(e) => {
             warn!("Failed to check for existing RO-Crate entities: {}", e);
             None
@@ -327,10 +332,16 @@ pub fn find_entity_by_entity_id(
     workflow_id: i64,
     entity_id: &str,
 ) -> Option<RoCrateEntityModel> {
-    match default_api::list_ro_crate_entities(config, workflow_id, None, None) {
+    match apis::ro_crate_entities_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+    ) {
         Ok(response) => response
             .items
-            .unwrap_or_default()
             .into_iter()
             .find(|e| e.entity_id == entity_id),
         Err(e) => {
@@ -366,7 +377,9 @@ fn create_or_update_entity_by_entity_id(
             ..entity
         };
 
-        if let Err(e) = default_api::update_ro_crate_entity(config, entity_db_id, updated_entity) {
+        if let Err(e) =
+            apis::ro_crate_entities_api::update_ro_crate_entity(config, entity_db_id, updated_entity)
+        {
             warn!(
                 "Failed to update RO-Crate entity '{}' (entity_id={}): {}",
                 existing.entity_type, existing.entity_id, e
@@ -375,7 +388,7 @@ fn create_or_update_entity_by_entity_id(
         return;
     }
 
-    if let Err(e) = default_api::create_ro_crate_entity(config, entity) {
+    if let Err(e) = apis::ro_crate_entities_api::create_ro_crate_entity(config, entity) {
         warn!("Failed to create RO-Crate entity: {}", e);
     }
 }
@@ -437,7 +450,8 @@ pub fn create_ro_crate_entity_for_file(
             ..entity
         };
 
-        match default_api::update_ro_crate_entity(config, entity_id, updated_entity) {
+        match apis::ro_crate_entities_api::update_ro_crate_entity(config, entity_id, updated_entity)
+        {
             Ok(_) => {
                 debug!(
                     "Updated RO-Crate entity for file '{}' (entity_id={})",
@@ -454,7 +468,7 @@ pub fn create_ro_crate_entity_for_file(
         return;
     }
 
-    match default_api::create_ro_crate_entity(config, entity) {
+    match apis::ro_crate_entities_api::create_ro_crate_entity(config, entity) {
         Ok(created) => {
             debug!(
                 "Created RO-Crate entity for file '{}' (entity_id={})",
@@ -527,7 +541,8 @@ pub fn create_ro_crate_entity_for_output_file(
             ..entity
         };
 
-        match default_api::update_ro_crate_entity(config, entity_id, updated_entity) {
+        match apis::ro_crate_entities_api::update_ro_crate_entity(config, entity_id, updated_entity)
+        {
             Ok(_) => {
                 debug!(
                     "Updated RO-Crate entity for output file '{}' with provenance (entity_id={})",
@@ -546,7 +561,7 @@ pub fn create_ro_crate_entity_for_output_file(
 
     // No existing entity - create a new one
 
-    match default_api::create_ro_crate_entity(config, entity) {
+    match apis::ro_crate_entities_api::create_ro_crate_entity(config, entity) {
         Ok(created) => {
             debug!(
                 "Created RO-Crate entity for output file '{}' (entity_id={})",
@@ -585,7 +600,7 @@ pub fn create_create_action_entity(
         output_file_paths,
     );
 
-    match default_api::create_ro_crate_entity(config, entity) {
+    match apis::ro_crate_entities_api::create_ro_crate_entity(config, entity) {
         Ok(created) => {
             debug!(
                 "Created RO-Crate CreateAction entity for job '{}' (entity_id={})",
@@ -623,21 +638,11 @@ pub fn create_entities_for_input_files(
     }
 }
 
-/// Binary info for creating SoftwareApplication RO-Crate entities.
-struct BinaryInfo {
-    name: &'static str,
-    path: String,
-    version: String,
-    sha256: Option<String>,
-    file_size: Option<u64>,
-}
-
-/// Detect a binary: resolve its path, version, hash, and size.
-/// Returns None if the binary is not found.
+/// Find the path to a binary by name.
 ///
 /// Looks for the binary in the same directory as the current executable first,
-/// then falls back to searching PATH.
-fn detect_binary(name: &'static str) -> Option<BinaryInfo> {
+/// then falls back to searching PATH. Returns None if the binary is not found.
+fn find_binary_path(name: &str) -> Option<String> {
     // First, look in the same directory as the current executable
     let path = std::env::current_exe()
         .ok()
@@ -652,60 +657,34 @@ fn detect_binary(name: &'static str) -> Option<BinaryInfo> {
             })
         });
 
-    let path = match path {
-        Some(p) => p,
-        None => {
-            debug!("Binary '{}' not found", name);
-            return None;
-        }
-    };
-
-    let path_str = path.display().to_string();
-
-    // Get version by running --version
-    let version = match std::process::Command::new(&path).arg("--version").output() {
-        Ok(output) => {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            // Parse version: typically "name X.Y.Z" or just "X.Y.Z"
-            stdout.lines().next().unwrap_or("").trim().to_string()
-        }
-        Err(e) => {
-            debug!("Could not get version for '{}': {}", name, e);
-            "unknown".to_string()
-        }
-    };
-
-    let sha256 = compute_file_sha256(&path_str);
-    let file_size = std::fs::metadata(&path).ok().map(|m| m.len());
-
-    Some(BinaryInfo {
-        name,
-        path: path_str,
-        version,
-        sha256,
-        file_size,
-    })
+    path.map(|p| p.display().to_string())
 }
 
-/// Build a SoftwareApplication RO-Crate entity for a binary.
-fn build_software_entity(workflow_id: i64, run_id: i64, info: &BinaryInfo) -> RoCrateEntityModel {
-    let entity_id = format!("#software-{}-run-{}", info.name, run_id);
+/// Build a SoftwareApplication RO-Crate entity for a torc binary.
+///
+/// Uses compile-time version and git hash instead of runtime SHA256 computation.
+/// The git hash uniquely identifies the build without the overhead of hashing
+/// large binaries at runtime.
+fn build_software_entity(
+    workflow_id: i64,
+    run_id: i64,
+    name: &str,
+    binary_path: &str,
+) -> RoCrateEntityModel {
+    let entity_id = format!("#software-{}-run-{}", name, run_id);
 
-    let mut metadata = serde_json::json!({
+    // Use compile-time constants for version identification
+    let version = version_check::full_version();
+    let git_hash = version_check::GIT_HASH;
+
+    let metadata = serde_json::json!({
         "@id": entity_id,
         "@type": typed_entity("SoftwareApplication", "prov:SoftwareAgent"),
-        "name": info.name,
-        "version": info.version,
-        "url": info.path,
+        "name": name,
+        "version": version,
+        "url": binary_path,
+        "torc:git_hash": git_hash,
     });
-
-    if let Some(size) = info.file_size {
-        metadata["contentSize"] = serde_json::json!(size);
-    }
-
-    if let Some(ref hash) = info.sha256 {
-        metadata["sha256"] = serde_json::json!(hash);
-    }
 
     RoCrateEntityModel {
         id: None,
@@ -735,13 +714,15 @@ pub fn create_software_entities(config: &Configuration, workflow_id: i64, run_id
 
     // Check existing entities to avoid duplicates
     let existing_ids: std::collections::HashSet<String> =
-        match default_api::list_ro_crate_entities(config, workflow_id, None, None) {
-            Ok(response) => response
-                .items
-                .unwrap_or_default()
-                .into_iter()
-                .map(|e| e.entity_id)
-                .collect(),
+        match apis::ro_crate_entities_api::list_ro_crate_entities(
+            config,
+            workflow_id,
+            None,
+            None,
+            None,
+            None,
+        ) {
+            Ok(response) => response.items.into_iter().map(|e| e.entity_id).collect(),
             Err(e) => {
                 warn!(
                     "Failed to list existing RO-Crate entities for workflow {}: {}",
@@ -761,23 +742,30 @@ pub fn create_software_entities(config: &Configuration, workflow_id: i64, run_id
             continue;
         }
 
-        if let Some(info) = detect_binary(name) {
-            let entity = build_software_entity(workflow_id, run_id, &info);
-            match default_api::create_ro_crate_entity(config, entity) {
-                Ok(created) => {
-                    debug!(
-                        "Created SoftwareApplication entity for '{}' version='{}' (entity_id={})",
-                        name,
-                        info.version,
-                        created.id.unwrap_or(0)
-                    );
-                }
-                Err(e) => {
-                    warn!(
-                        "Failed to create SoftwareApplication entity for '{}': {}",
-                        name, e
-                    );
-                }
+        // Only create entity if binary is found
+        let binary_path = match find_binary_path(name) {
+            Some(path) => path,
+            None => {
+                debug!("Binary '{}' not found, skipping RO-Crate entity", name);
+                continue;
+            }
+        };
+
+        let entity = build_software_entity(workflow_id, run_id, name, &binary_path);
+        match apis::ro_crate_entities_api::create_ro_crate_entity(config, entity) {
+            Ok(created) => {
+                debug!(
+                    "Created SoftwareApplication entity for '{}' version='{}' (entity_id={})",
+                    name,
+                    version_check::full_version(),
+                    created.id.unwrap_or(0)
+                );
+            }
+            Err(e) => {
+                warn!(
+                    "Failed to create SoftwareApplication entity for '{}': {}",
+                    name, e
+                );
             }
         }
     }
@@ -1016,15 +1004,7 @@ mod tests {
 
     #[test]
     fn test_build_software_entity() {
-        let info = BinaryInfo {
-            name: "torc",
-            path: "/usr/local/bin/torc".to_string(),
-            version: "torc 0.19.2".to_string(),
-            sha256: Some("abc123".to_string()),
-            file_size: Some(50_000_000),
-        };
-
-        let entity = build_software_entity(100, 3, &info);
+        let entity = build_software_entity(100, 3, "torc", "/usr/local/bin/torc");
 
         assert_eq!(entity.workflow_id, 100);
         assert_eq!(entity.file_id, None);
@@ -1036,44 +1016,25 @@ mod tests {
         assert_eq!(metadata["@type"][0], "SoftwareApplication");
         assert_eq!(metadata["@type"][1], "prov:SoftwareAgent");
         assert_eq!(metadata["name"], "torc");
-        assert_eq!(metadata["version"], "torc 0.19.2");
         assert_eq!(metadata["url"], "/usr/local/bin/torc");
-        assert_eq!(metadata["contentSize"], 50_000_000);
-        assert_eq!(metadata["sha256"], "abc123");
+        // Version and git_hash are compile-time constants
+        assert!(metadata.get("version").is_some());
+        assert!(metadata.get("torc:git_hash").is_some());
     }
 
     #[test]
-    fn test_build_software_entity_without_optional_fields() {
-        let info = BinaryInfo {
-            name: "torc-server",
-            path: "/usr/local/bin/torc-server".to_string(),
-            version: "unknown".to_string(),
-            sha256: None,
-            file_size: None,
-        };
-
-        let entity = build_software_entity(42, 1, &info);
+    fn test_build_software_entity_different_binary() {
+        let entity = build_software_entity(42, 1, "torc-server", "/opt/torc/torc-server");
 
         assert_eq!(entity.entity_id, "#software-torc-server-run-1");
         assert_eq!(entity.entity_type, "SoftwareApplication");
 
         let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
         assert_eq!(metadata["name"], "torc-server");
-        assert!(metadata.get("contentSize").is_none());
-        assert!(metadata.get("sha256").is_none());
-    }
-
-    #[test]
-    fn test_detect_binary_finds_current_exe() {
-        // The current test binary should be findable
-        let exe = std::env::current_exe().unwrap();
-        let exe_name = exe.file_name().unwrap().to_str().unwrap();
-
-        let info = detect_binary(Box::leak(exe_name.to_string().into_boxed_str()));
-        // This may or may not succeed depending on the test runner name,
-        // but it shouldn't panic
-        if let Some(info) = info {
-            assert!(!info.path.is_empty());
-        }
+        assert_eq!(metadata["url"], "/opt/torc/torc-server");
+        assert_eq!(metadata["@type"][0], "SoftwareApplication");
+        assert_eq!(metadata["@type"][1], "prov:SoftwareAgent");
+        assert!(metadata.get("version").is_some());
+        assert!(metadata.get("torc:git_hash").is_some());
     }
 }
