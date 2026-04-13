@@ -447,8 +447,7 @@ impl RoCrateApiImpl {
                 debug!(
                     "Created SoftwareApplication entity for torc-server version={} \
                      (workflow_id={})",
-                    version,
-                    workflow_id
+                    version, workflow_id
                 );
             }
             Err(e) => {

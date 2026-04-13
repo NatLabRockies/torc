@@ -14,6 +14,10 @@ use std::path::Path;
 use torc::client::apis;
 use torc::models;
 
+fn is_job_create_action(entity: &models::RoCrateEntityModel) -> bool {
+    entity.entity_type == "CreateAction" && entity.entity_id.starts_with("#job-")
+}
+
 /// Create a simple workflow with enable_ro_crate enabled.
 /// Returns (workflow_id, input_file_id, output_file_id, job_id)
 fn create_ro_crate_enabled_workflow(
@@ -325,9 +329,38 @@ fn test_auto_ro_crate_output_files_on_job_completion(start_server: &ServerProces
         metadata["prov:wasGeneratedBy"].is_object(),
         "Output file entity should have prov:wasGeneratedBy for provenance"
     );
+    assert_eq!(
+        metadata["prov:wasGeneratedBy"]["@id"],
+        format!("#job-{}-attempt-0", job_id),
+    );
+    assert_eq!(metadata["prov:wasAttributedTo"]["@id"], "#torc-run-0");
 
-    // Find the CreateAction entity
-    let create_action = items.iter().find(|e| e.entity_type == "CreateAction");
+    let workflow_plan = items.iter().find(|e| e.entity_id == "#torc-workflow");
+    assert!(
+        workflow_plan.is_some(),
+        "Should have a synthetic workflow plan entity"
+    );
+
+    let workflow_run = items.iter().find(|e| e.entity_id == "#torc-run-0");
+    assert!(
+        workflow_run.is_some(),
+        "Should have a synthetic workflow run entity"
+    );
+    let workflow_run_metadata: serde_json::Value =
+        serde_json::from_str(&workflow_run.unwrap().metadata)
+            .expect("Failed to parse workflow run metadata");
+    assert_eq!(workflow_run_metadata["@type"][0], "CreateAction");
+    assert_eq!(
+        workflow_run_metadata["name"],
+        "test_auto_ro_crate_workflow Run 0"
+    );
+    assert!(
+        workflow_run_metadata["prov:hadPlan"].is_object(),
+        "Workflow run should have prov:hadPlan"
+    );
+
+    // Find the job CreateAction entity
+    let create_action = items.iter().find(|e| is_job_create_action(e));
     assert!(
         create_action.is_some(),
         "Should have a CreateAction entity for job provenance"
@@ -336,7 +369,10 @@ fn test_auto_ro_crate_output_files_on_job_completion(start_server: &ServerProces
     let action = create_action.unwrap();
     let action_metadata: serde_json::Value =
         serde_json::from_str(&action.metadata).expect("Failed to parse CreateAction metadata");
-    assert!(action_metadata["@type"].is_array(), "CreateAction should have array @type");
+    assert!(
+        action_metadata["@type"].is_array(),
+        "CreateAction should have array @type"
+    );
     assert_eq!(action_metadata["@type"][0], "CreateAction");
     assert_eq!(action_metadata["name"], "process");
     assert!(
@@ -519,19 +555,40 @@ fn test_auto_ro_crate_diamond_workflow(start_server: &ServerProcess) {
     // Verify CreateAction entities exist
     let create_actions: Vec<_> = final_items
         .iter()
-        .filter(|e| e.entity_type == "CreateAction")
+        .filter(|e| is_job_create_action(e))
         .collect();
     assert!(
-        create_actions.len() >= 2,
-        "Should have CreateAction entities for each job. Found: {}",
+        create_actions.len() == 2,
+        "Should have one job CreateAction per job. Found: {}",
         create_actions.len()
+    );
+
+    let workflow_run = final_items.iter().find(|e| e.entity_id == "#torc-run-0");
+    assert!(
+        workflow_run.is_some(),
+        "Should have a synthetic workflow run entity"
+    );
+    let workflow_run_metadata: serde_json::Value =
+        serde_json::from_str(&workflow_run.unwrap().metadata)
+            .expect("Failed to parse workflow run metadata");
+    assert_eq!(workflow_run_metadata["@type"][0], "CreateAction");
+    assert_eq!(
+        workflow_run_metadata["name"],
+        "test_diamond_ro_crate_workflow Run 0"
+    );
+    assert!(
+        workflow_run_metadata["prov:hadPlan"].is_object(),
+        "Workflow run should have prov:hadPlan"
     );
 
     // Verify CreateAction metadata
     for action in create_actions {
         let metadata: serde_json::Value =
             serde_json::from_str(&action.metadata).expect("Failed to parse CreateAction metadata");
-        assert!(metadata["@type"].is_array(), "CreateAction should have array @type");
+        assert!(
+            metadata["@type"].is_array(),
+            "CreateAction should have array @type"
+        );
         assert_eq!(metadata["@type"][0], "CreateAction");
         assert!(
             metadata["name"].as_str().is_some(),
@@ -710,8 +767,7 @@ fn test_auto_ro_crate_second_run_replaces_entities(start_server: &ServerProcess)
         "Output file entity should still have prov:wasGeneratedBy provenance"
     );
     assert_eq!(
-        output_meta_run2["prov:wasAttributedTo"]["@id"],
-        "#torc-run-1",
+        output_meta_run2["prov:wasAttributedTo"]["@id"], "#torc-run-1",
         "Output file should be attributed to the second workflow run"
     );
 }
