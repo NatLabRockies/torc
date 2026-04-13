@@ -8,11 +8,238 @@ use std::time::Instant;
 
 const CLAIM_JOBS_PAGE_SIZE: i64 = 256;
 const CLAIM_JOB_ID_CHUNK_SIZE: usize = 256;
+const MAX_CLAIM_PAGES: i64 = 1000;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ClaimSchedulerMode {
     Scoped,
     Fallback,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::{Connection, Executor, SqliteConnection};
+
+    fn selection_spec_for_test() -> ClaimSelectionSpec {
+        ClaimSelectionSpec {
+            workflow_id: 1,
+            selection_limit: 1,
+            max_pages: MAX_CLAIM_PAGES,
+            scheduler_mode: ClaimSchedulerMode::Scoped,
+            scheduler_config_id: None,
+            requested_memory_bytes: 1,
+            requested_num_cpus: 1,
+            requested_num_gpus: 0,
+            requested_num_nodes: 1,
+            total_nodes_for_fit: 1,
+            time_limit_seconds: i64::MAX,
+            downstream_buffer_multiplier: None,
+        }
+    }
+
+    fn ready_candidate() -> ClaimJobCandidate {
+        ClaimJobCandidate {
+            workflow_id: 1,
+            job_id: 1,
+            name: "job".to_string(),
+            command: "echo hi".to_string(),
+            invocation_script: None,
+            status: i64::from(models::JobStatus::Ready.to_int()),
+            cancel_on_blocking_job_failure: false,
+            supports_termination: false,
+            failure_handler_id: None,
+            attempt_id: None,
+            priority: 1,
+            resource_requirements_id: 1,
+            scheduler_id: None,
+            memory_bytes: 0,
+            num_cpus: 1,
+            num_gpus: 0,
+            num_nodes: 1,
+            runtime_s: 1,
+        }
+    }
+
+    async fn setup_claim_candidate_db() -> SqliteConnection {
+        let mut conn = SqliteConnection::connect("sqlite::memory:")
+            .await
+            .expect("sqlite memory connection");
+
+        conn.execute(
+            r#"
+            CREATE TABLE resource_requirements (
+                id INTEGER PRIMARY KEY,
+                memory_bytes INTEGER NOT NULL,
+                num_cpus INTEGER NOT NULL,
+                num_gpus INTEGER NOT NULL,
+                num_nodes INTEGER NOT NULL,
+                runtime_s INTEGER NOT NULL
+            )
+            "#,
+        )
+        .await
+        .expect("create resource_requirements table");
+
+        conn.execute(
+            r#"
+            CREATE TABLE job (
+                id INTEGER PRIMARY KEY,
+                workflow_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                command TEXT NOT NULL,
+                invocation_script TEXT,
+                status INTEGER NOT NULL,
+                cancel_on_blocking_job_failure BOOLEAN NOT NULL,
+                supports_termination BOOLEAN NOT NULL,
+                failure_handler_id INTEGER,
+                attempt_id INTEGER,
+                priority INTEGER NOT NULL,
+                scheduler_id INTEGER,
+                resource_requirements_id INTEGER NOT NULL
+            )
+            "#,
+        )
+        .await
+        .expect("create job table");
+
+        sqlx::query(
+            r#"
+            INSERT INTO resource_requirements (id, memory_bytes, num_cpus, num_gpus, num_nodes, runtime_s)
+            VALUES (?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(1i64)
+        .bind(1i64)
+        .bind(1i64)
+        .bind(0i64)
+        .bind(1i64)
+        .bind(60i64)
+        .execute(&mut conn)
+        .await
+        .expect("insert resource requirements");
+
+        for job_id in 1..=300i64 {
+            sqlx::query(
+                r#"
+                INSERT INTO job (
+                    id,
+                    workflow_id,
+                    name,
+                    command,
+                    invocation_script,
+                    status,
+                    cancel_on_blocking_job_failure,
+                    supports_termination,
+                    failure_handler_id,
+                    attempt_id,
+                    priority,
+                    scheduler_id,
+                    resource_requirements_id
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                "#,
+            )
+            .bind(job_id)
+            .bind(1i64)
+            .bind(format!("job_{job_id}"))
+            .bind("echo test")
+            .bind(Option::<String>::None)
+            .bind(i64::from(models::JobStatus::Ready.to_int()))
+            .bind(false)
+            .bind(false)
+            .bind(Option::<i64>::None)
+            .bind(Option::<i64>::None)
+            .bind(300i64 - job_id)
+            .bind(Option::<i64>::None)
+            .bind(1i64)
+            .execute(&mut conn)
+            .await
+            .expect("insert job");
+        }
+
+        conn
+    }
+
+    #[test]
+    fn calculate_downstream_capacity_unconstrained_is_unbounded() {
+        assert_eq!(
+            calculate_downstream_capacity(8, 16, 2, 1, 0, 0, 0, 1),
+            usize::MAX
+        );
+    }
+
+    #[test]
+    fn candidate_fits_accumulated_resources_saturates_exclusive_node_capacity() {
+        let mut spec = selection_spec_for_test();
+        spec.total_nodes_for_fit = i64::MAX;
+        spec.requested_num_cpus = i64::MAX;
+        spec.requested_memory_bytes = i64::MAX;
+        spec.requested_num_gpus = i64::MAX;
+
+        let state = ClaimSelectionState {
+            consumed_cpus: i64::MAX,
+            consumed_memory_bytes: i64::MAX,
+            consumed_gpus: i64::MAX,
+            exclusive_nodes: 1,
+            ..Default::default()
+        };
+
+        let mut candidate = ready_candidate();
+        candidate.num_nodes = 2;
+
+        assert!(candidate_fits_accumulated_resources(
+            &spec, &state, &candidate
+        ));
+    }
+
+    #[test]
+    fn candidate_fits_accumulated_resources_saturates_shared_node_capacity() {
+        let mut spec = selection_spec_for_test();
+        spec.total_nodes_for_fit = i64::MAX;
+        spec.requested_num_cpus = 2;
+        spec.requested_memory_bytes = 2;
+        spec.requested_num_gpus = 0;
+
+        let state = ClaimSelectionState {
+            consumed_cpus: i64::MAX - 1,
+            consumed_memory_bytes: i64::MAX - 1,
+            ..Default::default()
+        };
+
+        let candidate = ClaimJobCandidate {
+            num_cpus: 1,
+            memory_bytes: 1,
+            ..ready_candidate()
+        };
+
+        assert!(candidate_fits_accumulated_resources(
+            &spec, &state, &candidate
+        ));
+    }
+
+    #[tokio::test]
+    async fn collect_phase_candidates_respects_page_cap() {
+        let mut conn = setup_claim_candidate_db().await;
+        let mut spec = selection_spec_for_test();
+        spec.selection_limit = 300;
+        spec.max_pages = 1;
+        spec.requested_memory_bytes = i64::MAX;
+        spec.requested_num_cpus = i64::MAX;
+        spec.time_limit_seconds = i64::MAX;
+
+        let (state, _selection_stats, query_stats) =
+            collect_phase_candidates(&mut conn, &spec, 300)
+                .await
+                .expect("collect phase candidates");
+
+        assert_eq!(query_stats.pages_scanned, 1);
+        assert_eq!(query_stats.rows_scanned, CLAIM_JOBS_PAGE_SIZE as usize);
+        assert_eq!(
+            state.selected_candidates.len(),
+            CLAIM_JOBS_PAGE_SIZE as usize
+        );
+    }
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -125,6 +352,7 @@ impl ClaimJobCandidate {
 struct ClaimSelectionSpec {
     workflow_id: i64,
     selection_limit: usize,
+    max_pages: i64,
     scheduler_mode: ClaimSchedulerMode,
     scheduler_config_id: Option<i64>,
     requested_memory_bytes: i64,
@@ -244,6 +472,10 @@ fn calculate_downstream_capacity(
     if rr_nodes > 1 {
         capacities.push(total_nodes / rr_nodes);
     }
+    if capacities.is_empty() {
+        return usize::MAX;
+    }
+
     capacities.into_iter().min().unwrap_or(0).max(0) as usize
 }
 
@@ -264,21 +496,23 @@ fn candidate_fits_accumulated_resources(
 
     if reserved_nodes > 1 {
         let shared_nodes_after = spec.total_nodes_for_fit - state.exclusive_nodes - reserved_nodes;
-        state.exclusive_nodes + reserved_nodes <= spec.total_nodes_for_fit
-            && state.consumed_cpus <= shared_nodes_after * spec.requested_num_cpus
-            && state.consumed_memory_bytes <= shared_nodes_after * spec.requested_memory_bytes
-            && state.consumed_gpus <= shared_nodes_after * spec.requested_num_gpus
+        state.exclusive_nodes.saturating_add(reserved_nodes) <= spec.total_nodes_for_fit
+            && state.consumed_cpus <= shared_nodes_after.saturating_mul(spec.requested_num_cpus)
+            && state.consumed_memory_bytes
+                <= shared_nodes_after.saturating_mul(spec.requested_memory_bytes)
+            && state.consumed_gpus <= shared_nodes_after.saturating_mul(spec.requested_num_gpus)
     } else {
-        let shared_capacity_cpus =
-            (spec.total_nodes_for_fit - state.exclusive_nodes) * spec.requested_num_cpus;
-        let shared_capacity_memory =
-            (spec.total_nodes_for_fit - state.exclusive_nodes) * spec.requested_memory_bytes;
-        let shared_capacity_gpus =
-            (spec.total_nodes_for_fit - state.exclusive_nodes) * spec.requested_num_gpus;
+        let shared_nodes = spec.total_nodes_for_fit - state.exclusive_nodes;
+        let shared_capacity_cpus = shared_nodes.saturating_mul(spec.requested_num_cpus);
+        let shared_capacity_memory = shared_nodes.saturating_mul(spec.requested_memory_bytes);
+        let shared_capacity_gpus = shared_nodes.saturating_mul(spec.requested_num_gpus);
 
-        state.consumed_cpus + candidate.num_cpus <= shared_capacity_cpus
-            && state.consumed_memory_bytes + candidate.memory_bytes <= shared_capacity_memory
-            && state.consumed_gpus + candidate.num_gpus <= shared_capacity_gpus
+        state.consumed_cpus.saturating_add(candidate.num_cpus) <= shared_capacity_cpus
+            && state
+                .consumed_memory_bytes
+                .saturating_add(candidate.memory_bytes)
+                <= shared_capacity_memory
+            && state.consumed_gpus.saturating_add(candidate.num_gpus) <= shared_capacity_gpus
     }
 }
 
@@ -751,18 +985,21 @@ fn process_candidate_batch(
                     available,
                     state.exclusive_nodes,
                     state.consumed_cpus,
-                    (spec.total_nodes_for_fit - state.exclusive_nodes) * spec.requested_num_cpus
+                    (spec.total_nodes_for_fit - state.exclusive_nodes)
+                        .saturating_mul(spec.requested_num_cpus)
                 )
             } else {
                 let shared_nodes = spec.total_nodes_for_fit - state.exclusive_nodes;
                 format!(
                     "cpus: {}/{}, memory: {}/{}, gpus: {}/{}",
-                    state.consumed_cpus + candidate.num_cpus,
-                    shared_nodes * spec.requested_num_cpus,
-                    state.consumed_memory_bytes + candidate.memory_bytes,
-                    shared_nodes * spec.requested_memory_bytes,
-                    state.consumed_gpus + candidate.num_gpus,
-                    shared_nodes * spec.requested_num_gpus
+                    state.consumed_cpus.saturating_add(candidate.num_cpus),
+                    shared_nodes.saturating_mul(spec.requested_num_cpus),
+                    state
+                        .consumed_memory_bytes
+                        .saturating_add(candidate.memory_bytes),
+                    shared_nodes.saturating_mul(spec.requested_memory_bytes),
+                    state.consumed_gpus.saturating_add(candidate.num_gpus),
+                    shared_nodes.saturating_mul(spec.requested_num_gpus)
                 )
             };
 
@@ -941,7 +1178,7 @@ async fn collect_phase_candidates(
     let mut query_stats = ClaimQueryStats::default();
     let mut page = 0i64;
 
-    while state.selected_candidates.len() < target_count {
+    while state.selected_candidates.len() < target_count && page < spec.max_pages {
         let offset = page * CLAIM_JOBS_PAGE_SIZE;
         let candidates = fetch_candidate_page(conn, spec, offset).await?;
         if candidates.is_empty() {
@@ -972,6 +1209,18 @@ async fn collect_phase_candidates(
         }
 
         page += 1;
+    }
+
+    if page >= spec.max_pages && state.selected_candidates.len() < target_count {
+        warn!(
+            "Claim read phase hit page cap workflow_id={} scheduler_mode={:?} pages={} rows_scanned={} selected_candidates={} target_candidates={}",
+            spec.workflow_id,
+            spec.scheduler_mode,
+            query_stats.pages_scanned,
+            query_stats.rows_scanned,
+            state.selected_candidates.len(),
+            target_count
+        );
     }
 
     Ok((state, selection_stats, query_stats))
@@ -2164,8 +2413,19 @@ where
             ));
         };
 
-        let selection_limit =
-            usize::try_from(limit).map_err(|_| ApiError("Invalid limit".to_string()))?;
+        if limit < 0 {
+            let error_response = models::ErrorResponse::new(serde_json::json!({
+                "message": format!("limit must be >= 0, got {}", limit),
+                "field": "limit",
+                "value": limit
+            }));
+            return Ok(
+                ClaimJobsBasedOnResources::UnprocessableContentErrorResponse(error_response),
+            );
+        }
+
+        let selection_limit = usize::try_from(limit)
+            .map_err(|_| ApiError(format!("Limit {} does not fit on this platform", limit)))?;
 
         let downstream_buffer_multiplier = workflow_record
             .get::<Option<String>, _>("execution_config")
@@ -2216,6 +2476,7 @@ where
         let base_spec = ClaimSelectionSpec {
             workflow_id,
             selection_limit,
+            max_pages: MAX_CLAIM_PAGES,
             scheduler_mode: ClaimSchedulerMode::Scoped,
             scheduler_config_id: resources.scheduler_config_id,
             requested_memory_bytes: memory_bytes,

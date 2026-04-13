@@ -58,6 +58,12 @@ fn test_claim_jobs_based_on_resources_invalid_limit_does_not_poison_connection(
         invalid_result.is_err(),
         "negative limits should be rejected before selecting jobs"
     );
+    let invalid_error = format!("{:?}", invalid_result.unwrap_err());
+    assert!(
+        invalid_error.contains("422") || invalid_error.contains("limit must be >= 0"),
+        "negative limit should produce a 422-style validation error: {}",
+        invalid_error
+    );
 
     let valid_result =
         apis::workflows_api::claim_jobs_based_on_resources(config, workflow_id, 1, resources, None)
@@ -536,6 +542,62 @@ fn create_active_compute_node(
         .expect("Failed to create active compute node");
 }
 
+fn create_unconstrained_downstream_buffer_test_workflow(
+    config: &apis::configuration::Configuration,
+    workflow_name: &str,
+    downstream_buffer_multiplier: u32,
+    setup_job_count: usize,
+) -> i64 {
+    let mut workflow =
+        models::WorkflowModel::new(workflow_name.to_string(), "test_user".to_string());
+    workflow.execution_config = Some(
+        serde_json::to_string(&ExecutionConfig {
+            downstream_buffer_multiplier: Some(downstream_buffer_multiplier),
+            ..Default::default()
+        })
+        .expect("execution config should serialize"),
+    );
+    let created_workflow =
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
+    let workflow_id = created_workflow.id.unwrap();
+
+    let setup_rr =
+        create_test_resource_requirements(config, workflow_id, "setup_rr", 1, 0, 1, "1g", "PT5M");
+
+    let mut unconstrained_rr =
+        models::ResourceRequirementsModel::new(workflow_id, "unconstrained_rr".to_string());
+    unconstrained_rr.num_cpus = 0;
+    unconstrained_rr.num_gpus = 0;
+    unconstrained_rr.num_nodes = 1;
+    unconstrained_rr.memory = "0m".to_string();
+    unconstrained_rr.runtime = "PT5M".to_string();
+    let unconstrained_rr =
+        apis::resource_requirements_api::create_resource_requirements(config, unconstrained_rr)
+            .expect("Failed to create unconstrained resource requirements");
+
+    for i in 0..setup_job_count {
+        let mut setup =
+            models::JobModel::new(workflow_id, format!("setup_{i}"), format!("echo setup {i}"));
+        setup.resource_requirements_id = Some(setup_rr.id.unwrap());
+        let setup = apis::jobs_api::create_job(config, setup).expect("Failed to create setup job");
+        let setup_id = setup.id.unwrap();
+
+        let mut downstream = models::JobModel::new(
+            workflow_id,
+            format!("downstream_{i}"),
+            format!("echo downstream {i}"),
+        );
+        downstream.resource_requirements_id = Some(unconstrained_rr.id.unwrap());
+        downstream.depends_on_job_ids = Some(vec![setup_id]);
+        apis::jobs_api::create_job(config, downstream).expect("Failed to create downstream job");
+    }
+
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+        .expect("Failed to initialize jobs");
+
+    workflow_id
+}
+
 #[rstest]
 fn test_claim_jobs_based_on_resources_downstream_buffer_inactive_without_active_compute_nodes(
     start_server: &ServerProcess,
@@ -585,4 +647,31 @@ fn test_claim_jobs_based_on_resources_downstream_buffer_uses_active_compute_node
             .expect("second claim should succeed");
     let second_jobs = second.jobs.expect("Server must return jobs array");
     assert_eq!(second_jobs.len(), 0);
+}
+
+#[rstest]
+fn test_claim_jobs_based_on_resources_downstream_buffer_does_not_block_unconstrained_families(
+    start_server: &ServerProcess,
+) {
+    let config = &start_server.config;
+    let workflow_id = create_unconstrained_downstream_buffer_test_workflow(
+        config,
+        "downstream_buffer_unconstrained_test",
+        2,
+        6,
+    );
+    create_active_compute_node(config, workflow_id, 1, 1.0, 0);
+
+    let resources = models::ComputeNodesResources::new(6, 6.0, 0, 1);
+    let result =
+        apis::workflows_api::claim_jobs_based_on_resources(config, workflow_id, 6, resources, None)
+            .expect("claim_jobs_based_on_resources should succeed");
+
+    let returned_jobs = result.jobs.expect("Server must return jobs array");
+    assert_eq!(returned_jobs.len(), 6);
+    assert!(
+        returned_jobs
+            .iter()
+            .all(|job| job.name.starts_with("setup_"))
+    );
 }

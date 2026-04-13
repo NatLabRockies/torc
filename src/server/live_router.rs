@@ -3446,7 +3446,10 @@ pub async fn update_workflow_status(
         ("limit" = i64, Path, description = "Maximum number of jobs to claim")
     ),
     request_body = models::ComputeNodesResources,
-    responses((status = 200, body = models::ClaimJobsBasedOnResources))
+    responses(
+        (status = 200, body = models::ClaimJobsBasedOnResources),
+        (status = 422, description = "Unprocessable content", body = models::ErrorResponse)
+    )
 )]
 pub async fn claim_jobs_based_on_resources(
     State(state): State<LiveRouterState>,
