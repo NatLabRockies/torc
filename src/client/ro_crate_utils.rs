@@ -378,9 +378,11 @@ fn create_or_update_entity_by_entity_id(
             ..entity
         };
 
-        if let Err(e) =
-            apis::ro_crate_entities_api::update_ro_crate_entity(config, entity_db_id, updated_entity)
-        {
+        if let Err(e) = apis::ro_crate_entities_api::update_ro_crate_entity(
+            config,
+            entity_db_id,
+            updated_entity,
+        ) {
             warn!(
                 "Failed to update RO-Crate entity '{}' (entity_id={}): {}",
                 existing.entity_type, existing.entity_id, e
