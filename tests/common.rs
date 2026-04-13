@@ -1613,7 +1613,7 @@ pub fn start_server_with_required_auth() -> AccessControlServerProcess {
 ///
 /// Test users (all with password "correct horse battery staple"):
 /// - alice, bob (ML team members)
-/// - carol, dave (Data team members)
+/// - carol, dave (Analytics team members)
 /// - shared_user (member of both teams)
 /// - owner, api_owner, ml_owner, data_owner, job_owner, etc. (workflow owners)
 #[fixture]

@@ -32,8 +32,8 @@ other research object with JSON-LD properties. Entities can be:
 
 During workflow initialization, Torc creates **SoftwareApplication** entities for the torc binaries
 (server, CLI, job runner, etc.) that processed the workflow. In the current model, these are
-written as both `SoftwareApplication` and `prov:SoftwareAgent` so the exported RO-Crate matches the
-data team's PROV-shaped format.
+written as both `SoftwareApplication` and `prov:SoftwareAgent` so the exported RO-Crate uses a
+PROV-shaped provenance model.
 
 ### When `enable_ro_crate: true`
 

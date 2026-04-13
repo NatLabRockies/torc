@@ -549,9 +549,9 @@ fn unique_suffix() -> u64 {
 /// Helper to set up the two-team scenario:
 ///
 /// - ml-team: alice, bob, shared_user
-/// - data-team: carol, dave, shared_user
+/// - analytics-team: carol, dave, shared_user
 ///
-/// Returns (ml_team_id, data_team_id)
+/// Returns `(ml_team_id, analytics_team_id)`
 fn setup_two_teams(config: &Configuration) -> (i64, i64) {
     let suffix = unique_suffix();
 
@@ -566,16 +566,16 @@ fn setup_two_teams(config: &Configuration) -> (i64, i64) {
         .expect("Failed to create ML team");
     let ml_team_id = ml_team.id.unwrap();
 
-    // Create Data team
-    let data_group = models::AccessGroupModel {
+    // Create Analytics team
+    let analytics_group = models::AccessGroupModel {
         id: None,
-        name: format!("data-team-{}", suffix),
-        description: Some("Data Processing Team".to_string()),
+        name: format!("analytics-team-{}", suffix),
+        description: Some("Analytics Team".to_string()),
         created_at: None,
     };
-    let data_team = apis::access_control_api::create_access_group(config, data_group)
-        .expect("Failed to create Data team");
-    let data_team_id = data_team.id.unwrap();
+    let analytics_team = apis::access_control_api::create_access_group(config, analytics_group)
+        .expect("Failed to create Analytics team");
+    let analytics_team_id = analytics_team.id.unwrap();
 
     // Add users to ML team: alice, bob, shared_user
     for user in ["alice", "bob", "shared_user"] {
@@ -590,20 +590,20 @@ fn setup_two_teams(config: &Configuration) -> (i64, i64) {
             .expect("Failed to add user to ML team");
     }
 
-    // Add users to Data team: carol, dave, shared_user
+    // Add users to Analytics team: carol, dave, shared_user
     for user in ["carol", "dave", "shared_user"] {
         let membership = models::UserGroupMembershipModel {
             id: None,
             user_name: user.to_string(),
-            group_id: data_team_id,
+            group_id: analytics_team_id,
             role: "member".to_string(),
             created_at: None,
         };
-        apis::access_control_api::add_user_to_group(config, data_team_id, membership)
-            .expect("Failed to add user to Data team");
+        apis::access_control_api::add_user_to_group(config, analytics_team_id, membership)
+            .expect("Failed to add user to Analytics team");
     }
 
-    (ml_team_id, data_team_id)
+    (ml_team_id, analytics_team_id)
 }
 
 #[rstest]
@@ -654,7 +654,7 @@ fn test_enforcement_team_member_can_access_shared_workflow(
     let config = &start_server_with_access_control.config;
 
     // Set up teams
-    let (ml_team_id, _data_team_id) = setup_two_teams(config);
+    let (ml_team_id, _analytics_team_id) = setup_two_teams(config);
 
     // Create a workflow owned by "workflow_creator" (authenticate as workflow_creator)
     let creator_config = config_with_auth(config, "workflow_creator");
@@ -690,13 +690,13 @@ fn test_enforcement_team_member_can_access_shared_workflow(
         "Bob (ML team member) should have access to ML team workflow"
     );
 
-    // carol (Data team member, NOT ML team) should NOT have access
+    // carol (Analytics team member, NOT ML team) should NOT have access
     let carol_access =
         apis::access_control_api::check_workflow_access(config, workflow_id, "carol")
             .expect("Failed to check access");
     assert!(
         !carol_access.has_access,
-        "Carol (Data team only) should NOT have access to ML team workflow"
+        "Carol (Analytics team only) should NOT have access to ML team workflow"
     );
 }
 
@@ -707,7 +707,7 @@ fn test_enforcement_multi_team_member_can_access_both_team_workflows(
     let config = &start_server_with_access_control.config;
 
     // Set up teams (shared_user is in both teams)
-    let (ml_team_id, data_team_id) = setup_two_teams(config);
+    let (ml_team_id, analytics_team_id) = setup_two_teams(config);
 
     // Create an ML workflow (authenticate as ml_owner)
     let ml_config = config_with_auth(config, "ml_owner");
@@ -722,7 +722,7 @@ fn test_enforcement_multi_team_member_can_access_both_team_workflows(
     // Share workflows with respective teams
     apis::access_control_api::add_workflow_to_group(config, ml_workflow_id, ml_team_id)
         .expect("Failed to share ML workflow");
-    apis::access_control_api::add_workflow_to_group(config, data_workflow_id, data_team_id)
+    apis::access_control_api::add_workflow_to_group(config, data_workflow_id, analytics_team_id)
         .expect("Failed to share Data workflow");
 
     // shared_user should have access to BOTH workflows (member of both teams)
@@ -782,7 +782,7 @@ fn test_enforcement_revoke_access_removes_permission(
     let config = &start_server_with_access_control.config;
 
     // Set up teams
-    let (ml_team_id, _data_team_id) = setup_two_teams(config);
+    let (ml_team_id, _analytics_team_id) = setup_two_teams(config);
 
     // Create and share a workflow (authenticate as some_owner)
     let owner_config = config_with_auth(config, "some_owner");
@@ -818,7 +818,7 @@ fn test_enforcement_workflow_shared_with_multiple_groups(
     let config = &start_server_with_access_control.config;
 
     // Set up teams
-    let (ml_team_id, data_team_id) = setup_two_teams(config);
+    let (ml_team_id, analytics_team_id) = setup_two_teams(config);
 
     // Create a workflow owned by "creator" (authenticate as creator)
     let creator_config = config_with_auth(config, "creator");
@@ -828,8 +828,8 @@ fn test_enforcement_workflow_shared_with_multiple_groups(
     // Share with BOTH teams
     apis::access_control_api::add_workflow_to_group(&creator_config, workflow_id, ml_team_id)
         .expect("Failed to share with ML team");
-    apis::access_control_api::add_workflow_to_group(&creator_config, workflow_id, data_team_id)
-        .expect("Failed to share with Data team");
+    apis::access_control_api::add_workflow_to_group(&creator_config, workflow_id, analytics_team_id)
+        .expect("Failed to share with Analytics team");
 
     // All team members should have access
     for user in ["creator", "alice", "bob", "carol", "dave", "shared_user"] {
@@ -1047,7 +1047,7 @@ fn test_authorized_user_can_access_shared_workflow_via_api(
         job_result.err()
     );
 
-    // Carol (Data team, NOT ML team) should NOT be able to access
+    // Carol (Analytics team, NOT ML team) should NOT be able to access
     let carol_config = config_with_auth(config, "carol");
     let carol_workflow_result = apis::workflows_api::get_workflow(&carol_config, workflow_id);
     match carol_workflow_result {
@@ -1083,7 +1083,7 @@ fn test_multi_team_user_can_access_both_workflows_via_api(
     let config = &start_server_with_access_control.config;
 
     // Set up teams (shared_user is in both)
-    let (ml_team_id, data_team_id) = setup_two_teams(config);
+    let (ml_team_id, analytics_team_id) = setup_two_teams(config);
 
     // Create ML workflow and share with ML team (authenticate as ml_api_owner)
     let ml_config = config_with_auth(config, "ml_api_owner");
@@ -1092,13 +1092,17 @@ fn test_multi_team_user_can_access_both_workflows_via_api(
     apis::access_control_api::add_workflow_to_group(&ml_config, ml_workflow_id, ml_team_id)
         .expect("Failed to share ML workflow");
 
-    // Create Data workflow and share with Data team (authenticate as data_api_owner)
+    // Create Analytics workflow and share with Analytics team (authenticate as data_api_owner)
     let data_config = config_with_auth(config, "data_api_owner");
     let data_workflow =
         create_workflow_with_user(&data_config, "data-api-workflow", "data_api_owner");
     let data_workflow_id = data_workflow.id.unwrap();
-    apis::access_control_api::add_workflow_to_group(&data_config, data_workflow_id, data_team_id)
-        .expect("Failed to share Data workflow");
+    apis::access_control_api::add_workflow_to_group(
+        &data_config,
+        data_workflow_id,
+        analytics_team_id,
+    )
+        .expect("Failed to share Analytics workflow");
 
     // shared_user should be able to access both
     let shared_config = config_with_auth(config, "shared_user");
@@ -1272,11 +1276,11 @@ fn create_access_control_diamond_workflow(
 /// Comprehensive end-to-end test for access control with workflow execution.
 ///
 /// This test verifies:
-/// 1. Two access groups with different users (ml-team and data-team)
+/// 1. Two access groups with different users (`ml-team` and `analytics-team`)
 /// 2. A valid user (alice, ml-team member) can run a workflow to completion with `torc run`
 /// 3. The valid user can inspect results, events, jobs via CLI
 /// 4. The valid user can run reports CLI commands
-/// 5. An invalid user (carol, data-team only) cannot run the workflow
+/// 5. An invalid user (carol, analytics-team only) cannot run the workflow
 #[rstest]
 fn test_comprehensive_access_control_workflow_execution(
     start_server_with_access_control: &AccessControlServerProcess,
@@ -1287,7 +1291,7 @@ fn test_comprehensive_access_control_workflow_execution(
     // =========================================================================
     // Step 1: Set up two access groups with different users
     // =========================================================================
-    let (ml_team_id, _data_team_id) = setup_two_teams(config);
+    let (ml_team_id, _analytics_team_id) = setup_two_teams(config);
 
     // =========================================================================
     // Step 2: Create a workflow owned by alice and share it with ml-team
@@ -1317,7 +1321,7 @@ fn test_comprehensive_access_control_workflow_execution(
         "alice should have access to workflow"
     );
 
-    // Verify carol (data-team only) does NOT have access
+    // Verify carol (analytics-team only) does NOT have access
     let carol_access =
         apis::access_control_api::check_workflow_access(config, workflow_id, "carol")
             .expect("Failed to check carol's access");
@@ -1475,7 +1479,7 @@ fn test_comprehensive_access_control_workflow_execution(
     let (workflow_id_2, _) =
         create_access_control_diamond_workflow(&alice_config, "alice", &work_dir);
 
-    // Share with ml-team only (carol is in data-team, not ml-team)
+    // Share with ml-team only (carol is in analytics-team, not ml-team)
     apis::access_control_api::add_workflow_to_group(config, workflow_id_2, ml_team_id)
         .expect("Failed to share workflow with ml-team");
 

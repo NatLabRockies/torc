@@ -24,7 +24,7 @@ By the end of this tutorial, you will:
 You're setting up Torc for an organization with two teams:
 
 - **ML Team**: Alice and Bob work on machine learning workflows
-- **Data Team**: Carol and Dave work on data processing workflows
+- **Analytics Team**: Carol and Dave work on data processing workflows
 
 Each team should only be able to see and manage their own workflows, but some workflows may need to
 be shared between teams.
@@ -131,8 +131,8 @@ Successfully created access group:
 ```
 
 ```bash
-# Create the Data team group
-torc access-groups create "data-team" --description "Data Processing Team"
+# Create the Analytics team group
+torc access-groups create "analytics-team" --description "Analytics Team"
 ```
 
 Output:
@@ -140,8 +140,8 @@ Output:
 ```
 Successfully created access group:
   ID: 2
-  Name: data-team
-  Description: Data Processing Team
+  Name: analytics-team
+  Description: Analytics Team
 ```
 
 List the groups to verify:
@@ -157,7 +157,7 @@ Output:
 │ ID │ Name       │ Description             │
 ├────┼────────────┼─────────────────────────┤
 │ 1  │ ml-team    │ Machine Learning Team   │
-│ 2  │ data-team  │ Data Processing Team    │
+│ 2  │ analytics-team │ Analytics Team       │
 ╰────┴────────────┴─────────────────────────╯
 ```
 
@@ -170,7 +170,7 @@ Add users to their respective teams:
 torc access-groups add-user 1 alice
 torc access-groups add-user 1 bob
 
-# Add Carol and Dave to the Data team
+# Add Carol and Dave to the Analytics team
 torc access-groups add-user 2 carol
 torc access-groups add-user 2 dave
 ```
@@ -238,7 +238,7 @@ WORKFLOW_ID=$(torc create /tmp/ml_training.yaml -f json | jq -r '.id')
 echo "Alice created workflow: $WORKFLOW_ID"
 ```
 
-### As Carol (Data Team)
+### As Carol (Analytics Team)
 
 ```bash
 export TORC_PASSWORD="carol_password"
@@ -303,7 +303,7 @@ Carol only sees her own workflow, not Alice's.
 
 ## Step 8: Share a Workflow with Another Team
 
-Sometimes workflows need to be shared between teams. Alice can share her workflow with the Data
+Sometimes workflows need to be shared between teams. Alice can share her workflow with the Analytics
 team.
 
 ### As Alice, Share the Workflow
@@ -311,10 +311,10 @@ team.
 ```bash
 export TORC_PASSWORD="alice_password"
 
-# Share workflow 1 with the data team (group 2)
+# Share workflow 1 with the analytics team (group 2)
 torc access-groups add-workflow 1 2
 
-echo "Shared workflow 1 with data-team"
+echo "Shared workflow 1 with analytics-team"
 ```
 
 ### Verify the Sharing
@@ -330,7 +330,7 @@ Output:
 ╭────┬────────────┬─────────────────────────╮
 │ ID │ Name       │ Description             │
 ├────┼────────────┼─────────────────────────┤
-│ 2  │ data-team  │ Data Processing Team    │
+│ 2  │ analytics-team │ Analytics Team       │
 ╰────┴────────────┴─────────────────────────╯
 ```
 
@@ -357,8 +357,8 @@ Output:
 ╰────────────────────────────────────────┴────────────────────────────╯
 ```
 
-Carol can now see and interact with Alice's workflow because she's a member of the data-team, which
-has been granted access.
+Carol can now see and interact with Alice's workflow because she's a member of the
+`analytics-team`, which has been granted access.
 
 ## Step 9: Revoke Access
 
@@ -367,10 +367,10 @@ If you need to remove access:
 ```bash
 export TORC_PASSWORD="alice_password"
 
-# Remove the data team's access to workflow 1
+# Remove the analytics team's access to workflow 1
 torc access-groups remove-workflow 1 2
 
-echo "Revoked data-team access to workflow 1"
+echo "Revoked analytics-team access to workflow 1"
 ```
 
 Now Carol can no longer access the workflow.
