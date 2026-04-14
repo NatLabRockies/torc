@@ -32,7 +32,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, Sender};
 use std::thread;
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use crate::client::apis;
@@ -221,6 +223,11 @@ struct PendingJobCompletion {
     pending_slurm_stats: Option<PendingSlurmStats>,
 }
 
+#[derive(Debug)]
+struct SacctEnrichmentRequest {
+    steps: Vec<PendingSlurmStats>,
+}
+
 /// Outcome of attempting to recover a failed job via failure handler.
 #[derive(Debug, Clone, PartialEq)]
 pub enum RecoveryOutcome {
@@ -306,6 +313,8 @@ pub struct JobRunner {
     execution_config: ExecutionConfig,
     rules: ComputeNodeRules,
     resource_monitor: Option<ResourceMonitor>,
+    sacct_enrichment_tx: Option<Sender<SacctEnrichmentRequest>>,
+    sacct_worker_handle: Option<JoinHandle<()>>,
     /// Flag set when SIGTERM is received. Shared with signal handler.
     termination_requested: Arc<AtomicBool>,
     /// Monotonic timestamp of when a job was last claimed. Used for idle timeout.
@@ -554,6 +563,14 @@ impl JobRunner {
             None
         };
 
+        let (sacct_enrichment_tx, sacct_worker_handle) =
+            if execution_config.effective_mode() == ExecutionMode::Slurm {
+                let (tx, handle) = Self::spawn_sacct_worker(config.clone());
+                (Some(tx), Some(handle))
+            } else {
+                (None, None)
+            };
+
         JobRunner {
             config,
             torc_config,
@@ -583,6 +600,8 @@ impl JobRunner {
             execution_config,
             rules,
             resource_monitor,
+            sacct_enrichment_tx,
+            sacct_worker_handle,
             termination_requested: Arc::new(AtomicBool::new(false)),
             last_job_claimed_time: None,
             had_failures: false,
@@ -618,6 +637,136 @@ impl JobRunner {
         result.map_err(|err| {
             Box::new(JobRunnerApiError(err.to_string())) as Box<dyn std::error::Error>
         })
+    }
+
+    fn spawn_sacct_worker(
+        config: Configuration,
+    ) -> (Sender<SacctEnrichmentRequest>, JoinHandle<()>) {
+        let (tx, rx) = mpsc::channel::<SacctEnrichmentRequest>();
+        let handle = thread::spawn(move || {
+            while let Ok(request) = rx.recv() {
+                let expected_step_names: HashSet<String> = request
+                    .steps
+                    .iter()
+                    .map(|step| step.step_name.clone())
+                    .collect();
+                let steps_by_name: HashMap<String, PendingSlurmStats> = request
+                    .steps
+                    .into_iter()
+                    .map(|step| (step.step_name.clone(), step))
+                    .collect();
+
+                let Some(slurm_job_id) = steps_by_name
+                    .values()
+                    .next()
+                    .map(|step| step.slurm_job_id.clone())
+                else {
+                    continue;
+                };
+
+                let stats_by_step =
+                    collect_sacct_stats_for_steps(&slurm_job_id, &expected_step_names);
+                for (step_name, step) in steps_by_name {
+                    let Some(stats) = stats_by_step.get(&step_name) else {
+                        debug!(
+                            "No async sacct stats available for workflow_id={} job_id={} step={}",
+                            step.workflow_id, step.job_id, step.step_name
+                        );
+                        continue;
+                    };
+
+                    Self::persist_sacct_enrichment(&config, &step, stats);
+                }
+            }
+        });
+        (tx, handle)
+    }
+
+    fn persist_sacct_enrichment(
+        config: &Configuration,
+        step: &PendingSlurmStats,
+        stats: &SacctStats,
+    ) {
+        let slurm_stats = Self::slurm_stats_model_from_sacct(step, stats);
+
+        match Self::fetch_result_for_attempt(config, step) {
+            Ok(Some(mut result)) => {
+                backfill_sacct_into_result(&mut result, &slurm_stats);
+                if let Some(result_id) = result.id {
+                    match apis::results_api::update_result(config, result_id, result) {
+                        Ok(_) => {
+                            info!(
+                                "Updated result with async sacct enrichment workflow_id={} job_id={} run_id={} attempt_id={}",
+                                step.workflow_id, step.job_id, step.run_id, step.attempt_id
+                            );
+                        }
+                        Err(e) => {
+                            warn!(
+                                "Failed to update result from async sacct enrichment workflow_id={} job_id={} run_id={} attempt_id={} error={}",
+                                step.workflow_id, step.job_id, step.run_id, step.attempt_id, e
+                            );
+                        }
+                    }
+                } else {
+                    warn!(
+                        "Async sacct enrichment fetched result without id workflow_id={} job_id={} run_id={} attempt_id={}",
+                        step.workflow_id, step.job_id, step.run_id, step.attempt_id
+                    );
+                }
+            }
+            Ok(None) => {
+                warn!(
+                    "No result found for async sacct enrichment workflow_id={} job_id={} run_id={} attempt_id={}",
+                    step.workflow_id, step.job_id, step.run_id, step.attempt_id
+                );
+            }
+            Err(e) => {
+                warn!(
+                    "Failed to fetch result for async sacct enrichment workflow_id={} job_id={} run_id={} attempt_id={} error={}",
+                    step.workflow_id, step.job_id, step.run_id, step.attempt_id, e
+                );
+            }
+        }
+
+        match apis::slurm_stats_api::create_slurm_stats(config, slurm_stats) {
+            Ok(_) => {
+                info!(
+                    "Stored async slurm_stats workflow_id={} job_id={} run_id={} attempt_id={}",
+                    step.workflow_id, step.job_id, step.run_id, step.attempt_id
+                );
+            }
+            Err(e) => {
+                warn!(
+                    "Failed to store async slurm_stats workflow_id={} job_id={} run_id={} attempt_id={} error={}",
+                    step.workflow_id, step.job_id, step.run_id, step.attempt_id, e
+                );
+            }
+        }
+    }
+
+    fn fetch_result_for_attempt(
+        config: &Configuration,
+        step: &PendingSlurmStats,
+    ) -> Result<Option<ResultModel>, Box<dyn std::error::Error>> {
+        let response = apis::results_api::list_results(
+            config,
+            step.workflow_id,
+            Some(step.job_id),
+            Some(step.run_id),
+            None,
+            None,
+            None,
+            Some(0),
+            Some(20),
+            Some("id"),
+            Some(true),
+            Some(true),
+        )?;
+
+        Ok(response
+            .items
+            .into_iter()
+            .find(|result| result.attempt_id == Some(step.attempt_id)))
     }
 
     /// Atomically claim a workflow action for execution.
@@ -877,6 +1026,13 @@ impl JobRunner {
         if let Some(monitor) = self.resource_monitor.take() {
             info!("Shutting down resource monitor");
             monitor.shutdown();
+        }
+
+        self.sacct_enrichment_tx.take();
+        if let Some(handle) = self.sacct_worker_handle.take()
+            && let Err(e) = handle.join()
+        {
+            error!("Failed to join sacct enrichment worker: {:?}", e);
         }
 
         // Deactivate compute node and set duration
@@ -1285,7 +1441,8 @@ impl JobRunner {
             }
         }
 
-        let slurm_stats_by_job = self.collect_sacct_stats_for_completions(&completions);
+        let slurm_stats_by_job = self.collect_sync_sacct_stats_for_completions(&completions);
+        let mut async_sacct_steps = Vec::new();
 
         for mut completion in completions {
             let slurm_stats = slurm_stats_by_job.get(&completion.job_id).cloned();
@@ -1304,22 +1461,35 @@ impl JobRunner {
                 backfill_sacct_into_result(&mut completion.result, slurm_stats_model);
             }
 
-            self.handle_job_completion(
+            let should_enqueue_async_sacct = completion.result.status == JobStatus::Completed
+                && completion.pending_slurm_stats.is_some();
+
+            let completed = self.handle_job_completion(
                 completion.job_id,
                 completion.result,
                 &completion.context,
                 slurm_stats.map(|(_, model)| model),
             );
+            if completed
+                && should_enqueue_async_sacct
+                && let Some(step) = completion.pending_slurm_stats
+            {
+                async_sacct_steps.push(step);
+            }
         }
+
+        self.enqueue_async_sacct_enrichment(async_sacct_steps);
     }
 
-    fn collect_sacct_stats_for_completions(
+    fn collect_sync_sacct_stats_for_completions(
         &self,
         completions: &[PendingJobCompletion],
     ) -> HashMap<i64, (SacctStats, SlurmStatsModel)> {
         let mut by_allocation: HashMap<String, Vec<PendingSlurmStats>> = HashMap::new();
         for completion in completions {
-            if let Some(step) = completion.pending_slurm_stats.clone() {
+            if completion.process_return_code != 0
+                && let Some(step) = completion.pending_slurm_stats.clone()
+            {
                 by_allocation
                     .entry(step.slurm_job_id.clone())
                     .or_default()
@@ -1348,6 +1518,35 @@ impl JobRunner {
         }
 
         stats_by_job
+    }
+
+    fn enqueue_async_sacct_enrichment(&self, steps: Vec<PendingSlurmStats>) {
+        let Some(tx) = &self.sacct_enrichment_tx else {
+            return;
+        };
+        if steps.is_empty() {
+            return;
+        }
+
+        let mut by_allocation: HashMap<String, Vec<PendingSlurmStats>> = HashMap::new();
+        for step in steps {
+            by_allocation
+                .entry(step.slurm_job_id.clone())
+                .or_default()
+                .push(step);
+        }
+
+        for (_slurm_job_id, steps) in by_allocation {
+            let step_count = steps.len();
+            if let Err(e) = tx.send(SacctEnrichmentRequest { steps }) {
+                warn!("Failed to enqueue async sacct enrichment: {}", e);
+            } else {
+                debug!(
+                    "Enqueued async sacct enrichment for {} completed step(s)",
+                    step_count
+                );
+            }
+        }
     }
 
     fn slurm_stats_model_from_sacct(
@@ -1730,7 +1929,7 @@ impl JobRunner {
         mut final_result: ResultModel,
         context: &CompletedJobContext,
         slurm_stats: Option<SlurmStatsModel>,
-    ) {
+    ) -> bool {
         // Check if we should try to recover a failed or terminated job
         if matches!(
             final_result.status,
@@ -1753,7 +1952,7 @@ impl JobRunner {
                         "Job retry scheduled workflow_id={} job_id={} job_name={} return_code={} attempt_id={}",
                         self.workflow_id, job_id, context.job_name, return_code, context.attempt_id
                     );
-                    return;
+                    return false;
                 }
                 RecoveryOutcome::NoHandler | RecoveryOutcome::NoMatchingRule => {
                     // Check if workflow has use_pending_failed enabled
@@ -1792,7 +1991,7 @@ impl JobRunner {
         }
 
         let status_str = format!("{:?}", final_result.status).to_lowercase();
-        match self.send_with_retries(|| {
+        let completion_reported = match self.send_with_retries(|| {
             Self::box_retry_error(apis::jobs_api::complete_job(
                 &self.config,
                 job_id,
@@ -1813,6 +2012,7 @@ impl JobRunner {
                         context.stderr_path.as_deref(),
                     );
                 }
+                true
             }
             Err(e) => {
                 error!(
@@ -1825,8 +2025,9 @@ impl JobRunner {
                     job_id,
                     Self::format_error_chain(e.as_ref())
                 );
+                false
             }
-        }
+        };
 
         if let Some(stats) = slurm_stats {
             match apis::slurm_stats_api::create_slurm_stats(&self.config, stats) {
@@ -1844,6 +2045,8 @@ impl JobRunner {
                 }
             }
         }
+
+        completion_reported
     }
 
     /// Run a recovery script with environment variables set.
@@ -3231,6 +3434,36 @@ mod tests {
 
         assert_eq!(result.return_code, 0);
         assert_eq!(result.status, JobStatus::Completed);
+    }
+
+    #[test]
+    fn test_collect_sync_sacct_stats_skips_successful_completions() {
+        let runner = make_runner(ComputeNodesResources::new(1, 1.0, 0, 1));
+        let completions = vec![PendingJobCompletion {
+            job_id: 1,
+            result: make_result(None, None, None, 1.0),
+            process_return_code: 0,
+            output_file_ids: None,
+            context: CompletedJobContext {
+                job_name: "job1".to_string(),
+                attempt_id: 1,
+                failure_handler_id: None,
+                stdout_path: None,
+                stderr_path: None,
+                delete_stdio_on_success: false,
+            },
+            pending_slurm_stats: Some(PendingSlurmStats {
+                workflow_id: 1,
+                job_id: 1,
+                run_id: 1,
+                attempt_id: 1,
+                slurm_job_id: "12345".to_string(),
+                step_name: "wf1_j1_r1_a1".to_string(),
+            }),
+        }];
+
+        let stats = runner.collect_sync_sacct_stats_for_completions(&completions);
+        assert!(stats.is_empty());
     }
 
     #[test]

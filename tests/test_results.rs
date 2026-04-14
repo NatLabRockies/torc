@@ -131,6 +131,36 @@ fn test_results_get_command_json(start_server: &ServerProcess) {
 }
 
 #[rstest]
+fn test_update_result_persists_resource_metrics(start_server: &ServerProcess) {
+    let config = &start_server.config;
+
+    let workflow = create_test_workflow(config, "test_update_result_metrics");
+    let workflow_id = workflow.id.unwrap();
+    let job = create_test_job(config, workflow_id, "job_metrics");
+
+    let mut result = create_test_result(config, workflow_id, job.id.unwrap());
+    result.peak_memory_bytes = Some(1_024);
+    result.avg_memory_bytes = Some(512);
+    result.peak_cpu_percent = Some(140.0);
+    result.avg_cpu_percent = Some(85.0);
+
+    let updated = apis::results_api::update_result(config, result.id.unwrap(), result.clone())
+        .expect("Failed to update result metrics");
+
+    assert_eq!(updated.peak_memory_bytes, Some(1_024));
+    assert_eq!(updated.avg_memory_bytes, Some(512));
+    assert_eq!(updated.peak_cpu_percent, Some(140.0));
+    assert_eq!(updated.avg_cpu_percent, Some(85.0));
+
+    let fetched = apis::results_api::get_result(config, result.id.unwrap())
+        .expect("Failed to fetch updated result");
+    assert_eq!(fetched.peak_memory_bytes, Some(1_024));
+    assert_eq!(fetched.avg_memory_bytes, Some(512));
+    assert_eq!(fetched.peak_cpu_percent, Some(140.0));
+    assert_eq!(fetched.avg_cpu_percent, Some(85.0));
+}
+
+#[rstest]
 fn test_results_delete_command_json(start_server: &ServerProcess) {
     let config = &start_server.config;
 

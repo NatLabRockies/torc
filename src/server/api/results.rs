@@ -562,7 +562,11 @@ where
                 ,exec_time_minutes = COALESCE($5, exec_time_minutes)
                 ,completion_time = COALESCE($6, completion_time)
                 ,status = COALESCE($7, status)
-            WHERE id = $8
+                ,peak_memory_bytes = COALESCE($8, peak_memory_bytes)
+                ,avg_memory_bytes = COALESCE($9, avg_memory_bytes)
+                ,peak_cpu_percent = COALESCE($10, peak_cpu_percent)
+                ,avg_cpu_percent = COALESCE($11, avg_cpu_percent)
+            WHERE id = $12
             "#,
             body.job_id,
             body.workflow_id,
@@ -571,6 +575,10 @@ where
             body.exec_time_minutes,
             body.completion_time,
             status_int,
+            body.peak_memory_bytes,
+            body.avg_memory_bytes,
+            body.peak_cpu_percent,
+            body.avg_cpu_percent,
             id,
         )
         .execute(self.context.pool.as_ref())
