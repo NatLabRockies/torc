@@ -70,6 +70,22 @@ fn default_max_retries() -> i32 {
     3
 }
 
+fn scheduled_compute_node_id_from_scheduler(scheduler: Option<&serde_json::Value>) -> Option<i64> {
+    scheduler?.get("scheduler_id")?.as_i64()
+}
+
+fn active_sibling_has_running_jobs(
+    self_compute_node_id: i64,
+    active_compute_node_ids: &[i64],
+    running_compute_node_ids: &HashSet<i64>,
+) -> bool {
+    active_compute_node_ids
+        .iter()
+        .copied()
+        .filter(|compute_node_id| *compute_node_id != self_compute_node_id)
+        .any(|compute_node_id| running_compute_node_ids.contains(&compute_node_id))
+}
+
 /// Tracks per-node resource availability for multi-node Slurm allocations.
 ///
 /// When running across multiple nodes, the job runner needs to track each node's available
@@ -630,6 +646,112 @@ impl JobRunner {
         )
     }
 
+    fn should_keep_subtask_runner_alive_for_sibling_activity(&self) -> bool {
+        if !self.is_subtask {
+            return false;
+        }
+
+        let compute_node = match self.send_with_retries(|| {
+            Self::box_retry_error(apis::compute_nodes_api::get_compute_node(
+                &self.config,
+                self.compute_node_id,
+            ))
+        }) {
+            Ok(compute_node) => compute_node,
+            Err(e) => {
+                warn!(
+                    "Failed to fetch compute node {} while checking sibling runner activity: {}",
+                    self.compute_node_id, e
+                );
+                return false;
+            }
+        };
+
+        let Some(scheduled_compute_node_id) =
+            scheduled_compute_node_id_from_scheduler(compute_node.scheduler.as_ref())
+        else {
+            debug!(
+                "Compute node {} has no scheduled_compute_node_id in scheduler metadata; using normal idle timeout",
+                self.compute_node_id
+            );
+            return false;
+        };
+
+        let sibling_nodes = match self.send_with_retries(|| {
+            Self::box_retry_error(apis::compute_nodes_api::list_compute_nodes(
+                &self.config,
+                self.workflow_id,
+                Some(0),
+                Some(1000),
+                None,
+                None,
+                None,
+                Some(true),
+                Some(scheduled_compute_node_id),
+            ))
+        }) {
+            Ok(response) => response.items,
+            Err(e) => {
+                warn!(
+                    "Failed to list active compute nodes for scheduled_compute_node_id={}: {}",
+                    scheduled_compute_node_id, e
+                );
+                return false;
+            }
+        };
+
+        let active_compute_node_ids = sibling_nodes
+            .iter()
+            .filter_map(|node| node.id)
+            .collect::<Vec<_>>();
+
+        if active_compute_node_ids.len() <= 1 {
+            return false;
+        }
+
+        let mut running_compute_node_ids = HashSet::new();
+        for compute_node_id in active_compute_node_ids
+            .iter()
+            .copied()
+            .filter(|compute_node_id| *compute_node_id != self.compute_node_id)
+        {
+            let running_jobs = match self.send_with_retries(|| {
+                Self::box_retry_error(apis::jobs_api::list_jobs(
+                    &self.config,
+                    self.workflow_id,
+                    Some(JobStatus::Running),
+                    None,
+                    None,
+                    Some(0),
+                    Some(1),
+                    None,
+                    None,
+                    Some(false),
+                    Some(compute_node_id),
+                ))
+            }) {
+                Ok(response) => response.items,
+                Err(e) => {
+                    warn!(
+                        "Failed to list running jobs for sibling compute_node_id={}: {}",
+                        compute_node_id, e
+                    );
+                    return false;
+                }
+            };
+
+            if !running_jobs.is_empty() {
+                running_compute_node_ids.insert(compute_node_id);
+            }
+        }
+
+        active_sibling_has_running_jobs(
+            self.compute_node_id,
+            &active_compute_node_ids,
+            &running_compute_node_ids,
+        )
+    }
+
     fn box_retry_error<T, E>(result: Result<T, E>) -> Result<T, Box<dyn std::error::Error>>
     where
         E: std::fmt::Display,
@@ -1007,6 +1129,11 @@ impl JobRunner {
                     if self.has_pending_actions_we_can_handle() {
                         debug!(
                             "Idle for {} seconds but pending actions exist, continuing to wait",
+                            idle_seconds
+                        );
+                    } else if self.should_keep_subtask_runner_alive_for_sibling_activity() {
+                        debug!(
+                            "Idle for {} seconds but sibling runners in the same allocation still have running jobs; continuing to wait",
                             idle_seconds
                         );
                     } else {
@@ -3272,6 +3399,7 @@ mod tests {
     use super::*;
     use crate::client::apis::configuration::Configuration;
     use crate::models::{JobStatus, ResultModel, SlurmStatsModel};
+    use serde_json::json;
     use serial_test::serial;
 
     fn make_result(
@@ -3337,6 +3465,70 @@ mod tests {
             "test".to_string(),
             None,
         )
+    }
+
+    #[test]
+    fn test_scheduled_compute_node_id_from_scheduler_extracts_id() {
+        let scheduler = json!({
+            "scheduler_id": 42,
+            "type": "slurm",
+            "slurm_job_id": 12345
+        });
+
+        assert_eq!(
+            scheduled_compute_node_id_from_scheduler(Some(&scheduler)),
+            Some(42)
+        );
+    }
+
+    #[test]
+    fn test_scheduled_compute_node_id_from_scheduler_missing_id_returns_none() {
+        let scheduler = json!({
+            "type": "slurm",
+            "slurm_job_id": 12345
+        });
+
+        assert_eq!(
+            scheduled_compute_node_id_from_scheduler(Some(&scheduler)),
+            None
+        );
+        assert_eq!(scheduled_compute_node_id_from_scheduler(None), None);
+    }
+
+    #[test]
+    fn test_active_sibling_has_running_jobs_true_when_sibling_running() {
+        let active_compute_node_ids = vec![1, 2, 3];
+        let running_compute_node_ids = HashSet::from([2]);
+
+        assert!(active_sibling_has_running_jobs(
+            1,
+            &active_compute_node_ids,
+            &running_compute_node_ids,
+        ));
+    }
+
+    #[test]
+    fn test_active_sibling_has_running_jobs_false_when_only_self_running() {
+        let active_compute_node_ids = vec![1, 2, 3];
+        let running_compute_node_ids = HashSet::from([1]);
+
+        assert!(!active_sibling_has_running_jobs(
+            1,
+            &active_compute_node_ids,
+            &running_compute_node_ids,
+        ));
+    }
+
+    #[test]
+    fn test_active_sibling_has_running_jobs_false_when_siblings_idle() {
+        let active_compute_node_ids = vec![1, 2, 3];
+        let running_compute_node_ids = HashSet::new();
+
+        assert!(!active_sibling_has_running_jobs(
+            1,
+            &active_compute_node_ids,
+            &running_compute_node_ids,
+        ));
     }
 
     #[test]
