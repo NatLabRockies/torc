@@ -179,13 +179,14 @@ creation time.
 
 ### Shared fields (both modes)
 
-| Name                       | Type                        | Default    | Description                                            |
-| -------------------------- | --------------------------- | ---------- | ------------------------------------------------------ |
-| `mode`                     | string                      | `"direct"` | Execution mode: `"direct"`, `"slurm"`, or `"auto"`     |
-| `sigkill_headroom_seconds` | integer                     | `60`       | Seconds before end_time for SIGKILL or srun --time     |
-| `timeout_exit_code`        | integer                     | `152`      | Exit code for timed-out jobs (matches Slurm TIMEOUT)   |
-| `staggered_start`          | boolean                     | `true`     | Stagger job runner startup to mitigate thundering herd |
-| `stdio`                    | [StdioConfig](#stdioconfig) | see below  | Workflow-level default for stdout/stderr capture       |
+| Name                           | Type                        | Default    | Description                                            |
+| ------------------------------ | --------------------------- | ---------- | ------------------------------------------------------ |
+| `mode`                         | string                      | `"direct"` | Execution mode: `"direct"`, `"slurm"`, or `"auto"`     |
+| `sigkill_headroom_seconds`     | integer                     | `60`       | Seconds before end_time for SIGKILL or srun --time     |
+| `timeout_exit_code`            | integer                     | `152`      | Exit code for timed-out jobs (matches Slurm TIMEOUT)   |
+| `staggered_start`              | boolean                     | `true`     | Stagger job runner startup to mitigate thundering herd |
+| `downstream_buffer_multiplier` | integer                     | none       | Cap upstream admissions during resource-based claims   |
+| `stdio`                        | [StdioConfig](#stdioconfig) | see below  | Workflow-level default for stdout/stderr capture       |
 
 ### Direct mode fields
 
@@ -290,6 +291,21 @@ execution_config:
 `srun` used by `start_one_worker_per_node` in direct mode. Set it to `"none"` when you want the
 worker to start with `srun --mpi=none`.
 
+### Downstream Buffering
+
+Set `downstream_buffer_multiplier` to keep upstream stages from running too far ahead of active
+downstream work during `claim_jobs_based_on_resources`.
+
+- Torc groups downstream jobs by resource-requirement family and scheduler
+- It estimates each family's live downstream capacity from active compute nodes
+- It allows at most `downstream_capacity * downstream_buffer_multiplier` ready, pending, or running
+  jobs in that family before admitting more upstream producers
+- If there are no active compute nodes for a family, or the family has unconstrained resources, the
+  buffer is effectively disabled for that family
+
+For example, if a downstream GPU stage can currently run 2 jobs concurrently and
+`downstream_buffer_multiplier` is `3`, Torc admits at most 6 upstream jobs feeding that stage.
+
 ### Slurm Mode Example
 
 ```yaml
@@ -380,6 +396,8 @@ Use `priority` when some ready jobs should be claimed before others.
 - The default is `0`
 - Jobs with the same priority are returned in a stable order
 - Priority affects both `claim_next_jobs` and `claim_jobs_based_on_resources`
+- Resource-based claims keep scanning paged ready-queue results, so lower-priority work can still be
+  backfilled when higher-priority jobs do not fit
 
 Example:
 

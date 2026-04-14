@@ -243,16 +243,18 @@ modes:
 
 - **direct**: Torc manages job execution and termination directly via signals
 - **slurm**: Jobs are wrapped with `srun` and Slurm manages resource limits/termination
-- **auto** (default): Uses `slurm` mode if `SLURM_JOB_ID` is set, otherwise `direct`
+- **auto**: Uses `slurm` mode if `SLURM_JOB_ID` is set, otherwise `direct`
 
 ### YAML Example
 
 ```yaml
 execution_config:
   mode: direct # Options: direct, slurm, auto
+  downstream_buffer_multiplier: 2 # Optional upstream buffering guard for resource-based claims
   limit_resources: true # Enforce memory limits in direct mode (default: true)
 
   # Direct mode settings
+  slurm_worker_mpi_mode: none # Optional outer worker-launch srun mode
   termination_signal: SIGTERM # Signal before SIGKILL (default: SIGTERM)
   sigterm_lead_seconds: 30 # Seconds before SIGKILL to send signal (default: 30)
   sigkill_headroom_seconds: 60 # Seconds before end_time for SIGKILL (default: 60)
@@ -290,17 +292,19 @@ execution_config {
 
 ### Configuration Fields
 
-| Field                      | Type   | Default   | Description                                       |
-| -------------------------- | ------ | --------- | ------------------------------------------------- |
-| `mode`                     | string | `auto`    | Execution mode: `direct`, `slurm`, or `auto`      |
-| `limit_resources`          | bool   | `true`    | Enforce memory limits in direct mode only         |
-| `termination_signal`       | string | `SIGTERM` | Signal to send before SIGKILL (direct mode)       |
-| `sigterm_lead_seconds`     | int    | `30`      | Seconds before SIGKILL to send termination signal |
-| `sigkill_headroom_seconds` | int    | `60`      | Seconds before end_time to send SIGKILL           |
-| `timeout_exit_code`        | int    | `152`     | Exit code for timed-out jobs                      |
-| `oom_exit_code`            | int    | `137`     | Exit code for OOM-killed jobs                     |
-| `srun_termination_signal`  | string | (none)    | Slurm signal spec (e.g., `TERM@120`)              |
-| `enable_cpu_bind`          | bool   | `false`   | Allow Slurm CPU binding                           |
+| Field                          | Type   | Default   | Description                                          |
+| ------------------------------ | ------ | --------- | ---------------------------------------------------- |
+| `mode`                         | string | `direct`  | Execution mode: `direct`, `slurm`, or `auto`         |
+| `downstream_buffer_multiplier` | int    | (none)    | Cap upstream admissions during resource-based claims |
+| `limit_resources`              | bool   | `true`    | Enforce memory limits in direct mode only            |
+| `slurm_worker_mpi_mode`        | string | `default` | Outer `srun` MPI mode for per-node direct workers    |
+| `termination_signal`           | string | `SIGTERM` | Signal to send before SIGKILL (direct mode)          |
+| `sigterm_lead_seconds`         | int    | `30`      | Seconds before SIGKILL to send termination signal    |
+| `sigkill_headroom_seconds`     | int    | `60`      | Seconds before end_time to send SIGKILL              |
+| `timeout_exit_code`            | int    | `152`     | Exit code for timed-out jobs                         |
+| `oom_exit_code`                | int    | `137`     | Exit code for OOM-killed jobs                        |
+| `srun_termination_signal`      | string | (none)    | Slurm signal spec (e.g., `TERM@120`)                 |
+| `enable_cpu_bind`              | bool   | `false`   | Allow Slurm CPU binding                              |
 
 ### When to Use Each Mode
 
@@ -310,8 +314,8 @@ execution_config {
 - **slurm mode**: Use inside Slurm allocations when srun works correctly. Jobs are wrapped with
   `srun` and Slurm manages resource enforcement and termination.
 
-- **auto mode** (default): Automatically selects `slurm` mode if running inside a Slurm allocation
-  (detected via `SLURM_JOB_ID` environment variable), otherwise uses `direct` mode.
+- **auto mode**: Automatically selects `slurm` mode if running inside a Slurm allocation (detected
+  via `SLURM_JOB_ID` environment variable), otherwise uses `direct` mode.
 
 ### Termination Timeline (Direct Mode)
 
@@ -331,6 +335,19 @@ detect completion and report results before the allocation expires.
 
 If using `srun_termination_signal` (e.g., `TERM@120`), ensure its time value is less than
 `sigkill_headroom_seconds` so the signal is sent before Slurm kills the step.
+
+### Downstream Buffering
+
+`downstream_buffer_multiplier` applies when runners claim work with resource-aware allocation. It
+limits how far upstream jobs can run ahead of active downstream stages.
+
+- Torc estimates a downstream family's live capacity from active compute nodes
+- It allows up to `downstream_capacity * downstream_buffer_multiplier` ready, pending, or running
+  downstream jobs before admitting more upstream producers
+- Families with no active compute nodes, or unconstrained resource requirements, are not buffered
+
+This is useful for staged workflows where a fast setup stage can otherwise flood the queue ahead of
+a slower GPU or multi-node stage.
 
 ### Migration from slurm_config (Deprecated)
 

@@ -253,6 +253,9 @@ of immediately. Fields are `null` when:
 - `sacct` is not available on the node
 - The step was not found in the Slurm accounting database at collection time
 
+The corresponding `result` row may also be enriched shortly after completion as Torc backfills
+Slurm-derived peak memory and CPU metrics into the stored job result.
+
 ### Viewing Stats
 
 ```bash

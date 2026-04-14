@@ -58,9 +58,10 @@ torc run $WORKFLOW_ID
 The server's `GET /workflows/{id}/claim_jobs_based_on_resources` endpoint:
 
 1. Receives the runner's resource capacity
-2. Queries the ready queue for jobs that fit within those resources
-3. Returns a set of jobs that can run concurrently without over-subscription
-4. Updates job status from `ready` to `pending` atomically
+2. Scans the ready queue in priority order, a page at a time
+3. Keeps looking past non-fitting jobs so lower-priority work can still be backfilled when it fits
+4. Returns a set of jobs that can run concurrently without over-subscription
+5. Updates job status from `ready` to `pending` atomically
 
 ### Priority-Based Job Selection
 
@@ -89,6 +90,26 @@ jobs:
 
 In that workflow, `train_model` is preferred whenever it is ready and fits the requesting runner's
 resources. If it does not fit, Torc continues scanning lower-priority ready jobs that do fit.
+
+This scan is paged rather than limited to the first chunk of ready jobs. That matters when many
+high-priority jobs are ahead of a smaller backfill job in the queue: Torc can keep searching across
+additional pages until it finds work that fits the runner.
+
+### Downstream Buffering
+
+For staged workflows, you can also set `execution_config.downstream_buffer_multiplier` to stop early
+stages from running too far ahead of their downstream consumers.
+
+When enabled during resource-based claiming:
+
+- Torc groups downstream jobs by resource-requirement family and scheduler
+- It estimates each family's live capacity from active compute nodes
+- It allows at most `downstream_capacity * downstream_buffer_multiplier` jobs in that downstream
+  family to be ready, pending, or running before admitting more upstream producers
+- Families with no active compute nodes, or unconstrained resource requirements, are left unbuffered
+
+This is useful when a CPU-heavy setup stage feeds a smaller GPU stage and you want to avoid filling
+the workflow with too much precomputed work before GPU capacity is available.
 
 ### Job Allocation Ambiguity: Two Approaches
 
