@@ -5,10 +5,31 @@ use crate::client::parameter_expansion::{
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
+use std::sync::LazyLock;
 
 use crate::models;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+
+static SRUN_MPI_MODE_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[A-Za-z0-9+_.-]+$").expect("hardcoded regex must compile"));
+
+pub(crate) fn validate_srun_mpi_value(value: &str) -> Result<(), String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err("srun_mpi must not be empty when provided. \
+             Set a non-empty Slurm MPI mode such as 'pmix' or omit the field."
+            .to_string());
+    }
+    if trimmed != value || !SRUN_MPI_MODE_REGEX.is_match(trimmed) {
+        return Err(
+            "srun_mpi must be a single safe token matching [A-Za-z0-9+_.-]+ \
+             (for example 'none' or 'pmix')."
+                .to_string(),
+        );
+    }
+    Ok(())
+}
 
 /// Result of validating a workflow specification (dry-run)
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -2362,6 +2383,26 @@ impl WorkflowSpec {
             };
 
             let mut errors = Vec::new();
+            let has_worker_per_node_schedule_action =
+                spec.actions.as_ref().is_some_and(|actions| {
+                    actions.iter().any(|action| {
+                        action.action_type == "schedule_nodes"
+                            && action.start_one_worker_per_node == Some(true)
+                    })
+                });
+
+            if let Some(value) = ec.srun_mpi.as_deref() {
+                if let Err(err) = validate_srun_mpi_value(value) {
+                    errors.push(err);
+                }
+                if !has_worker_per_node_schedule_action {
+                    errors.push(
+                        "srun_mpi requires schedule_nodes.start_one_worker_per_node = true. \
+                        It only applies to the outer srun that launches one job runner per node."
+                            .to_string(),
+                    );
+                }
+            }
 
             if will_use_slurm {
                 if ec.limit_resources == Some(false) {
@@ -2393,17 +2434,6 @@ impl WorkflowSpec {
                             .to_string(),
                     );
                 }
-                if ec
-                    .srun_mpi
-                    .as_ref()
-                    .is_some_and(|value| value.trim().is_empty())
-                {
-                    errors.push(
-                        "srun_mpi must not be empty when provided. \
-                        Set a non-empty Slurm MPI mode such as 'pmix' or omit the field."
-                            .to_string(),
-                    );
-                }
             }
 
             if will_use_direct {
@@ -2418,20 +2448,6 @@ impl WorkflowSpec {
                     errors.push(
                         "enable_cpu_bind is only supported in slurm mode. \
                         It has no effect in direct mode."
-                            .to_string(),
-                    );
-                }
-                if ec.srun_mpi.is_some()
-                    && !spec.actions.as_ref().is_some_and(|actions| {
-                        actions.iter().any(|action| {
-                            action.action_type == "schedule_nodes"
-                                && action.start_one_worker_per_node == Some(true)
-                        })
-                    })
-                {
-                    errors.push(
-                        "srun_mpi requires schedule_nodes.start_one_worker_per_node = true. \
-                        It only applies to the outer srun that launches one job runner per node."
                             .to_string(),
                     );
                 }

@@ -1346,6 +1346,45 @@ fn test_srun_mpi_empty_rejected_with_slurm_mode(start_server: &ServerProcess) {
 }
 
 #[rstest]
+fn test_srun_mpi_whitespace_rejected_with_direct_mode_and_worker_per_node(
+    start_server: &ServerProcess,
+) {
+    assert_spec_rejected(
+        &start_server.config,
+        r#"
+            name: direct_srun_mpi_whitespace_rejected
+            user: test_user
+            jobs:
+              - name: job1
+                command: "echo test"
+                scheduler: test_scheduler
+                resource_requirements: test_req
+            resource_requirements:
+              - name: test_req
+                num_cpus: 1
+                num_nodes: 1
+                memory: "1g"
+                runtime: "PT1H"
+            slurm_schedulers:
+              - name: test_scheduler
+                account: test_account
+                nodes: 2
+                walltime: "01:00:00"
+            execution_config:
+                mode: direct
+                srun_mpi: " pmix "
+            actions:
+              - trigger_type: on_workflow_start
+                action_type: schedule_nodes
+                scheduler: test_scheduler
+                scheduler_type: slurm
+                start_one_worker_per_node: true
+        "#,
+        "single safe token",
+    );
+}
+
+#[rstest]
 fn test_srun_mpi_allowed_with_direct_mode_and_worker_per_node(start_server: &ServerProcess) {
     let spec = r#"
         name: direct_srun_mpi_allowed
@@ -1408,6 +1447,24 @@ fn test_srun_mpi_rejected_without_worker_per_node(start_server: &ServerProcess) 
                 srun_mpi: "none"
         "#,
         "srun_mpi",
+    );
+}
+
+#[rstest]
+fn test_srun_mpi_rejected_with_slurm_mode_without_worker_per_node(start_server: &ServerProcess) {
+    assert_spec_rejected(
+        &start_server.config,
+        r#"
+            name: slurm_srun_mpi_rejected
+            user: test_user
+            jobs:
+              - name: job1
+                command: "echo test"
+            execution_config:
+                mode: slurm
+                srun_mpi: "pmix"
+        "#,
+        "start_one_worker_per_node",
     );
 }
 

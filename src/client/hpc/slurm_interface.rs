@@ -18,6 +18,7 @@ use std::os::unix::fs::PermissionsExt;
 
 use super::common::{HpcJobInfo, HpcJobStats, HpcJobStatus};
 use super::hpc_interface::HpcInterface;
+use crate::client::workflow_spec::validate_srun_mpi_value;
 
 /// Slurm scheduler implementation
 pub struct SlurmInterface {
@@ -294,7 +295,8 @@ impl HpcInterface for SlurmInterface {
             command.push_str(" --is-subtask");
             script.push_str("srun --ntasks-per-node=1 ");
             if let Some(mpi_mode) = srun_mpi {
-                script.push_str(&format!("--mpi={} ", mpi_mode));
+                validate_srun_mpi_value(mpi_mode).map_err(anyhow::Error::msg)?;
+                script.push_str(&format!("--mpi={} ", mpi_mode.trim()));
             }
         }
         script.push_str(&command);

@@ -635,6 +635,42 @@ fn test_create_submission_script_with_srun_mpi() {
 }
 
 #[test]
+fn test_create_submission_script_with_invalid_srun_mpi_rejected() {
+    let interface = SlurmInterface::new().expect("Failed to create SlurmInterface");
+
+    let temp_dir = env::temp_dir();
+    let script_path = temp_dir.join("test_submission_script_with_invalid_srun_mpi.sh");
+
+    let mut config = std::collections::HashMap::new();
+    config.insert("account".to_string(), "test_account".to_string());
+    config.insert("walltime".to_string(), "01:00:00".to_string());
+
+    let result = interface.create_submission_script(
+        "test_invalid_srun_mpi_job",
+        "http://localhost:8080/torc-service/v1",
+        11111,
+        "/tmp/output",
+        5,
+        None,
+        &script_path,
+        &config,
+        true,
+        Some("pmix;rm -rf /"),
+        None,
+        false,
+        0,
+    );
+
+    assert!(result.is_err(), "Expected invalid srun_mpi to be rejected");
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("single safe token"),
+        "Expected token validation error, got: {}",
+        err
+    );
+}
+
+#[test]
 fn test_compute_startup_delay() {
     use torc::client::commands::slurm::compute_startup_delay;
 
