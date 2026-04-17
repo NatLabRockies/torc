@@ -6,7 +6,6 @@
 //! - `limit_resources` (true/false)
 //! - `enable_cpu_bind` (true/false)
 //! - `srun_termination_signal` (set/unset)
-//! - `srun_mpi` (set/unset)
 //! - `num_nodes` (1/N)
 //! - `end_time` (set/unset)
 //!
@@ -110,7 +109,6 @@ fn run_and_capture_srun_args(
         enable_cpu_bind,
         end_time,
         srun_termination_signal,
-        None,
         60, // default sigkill_headroom_seconds
     )
 }
@@ -126,7 +124,6 @@ fn run_and_capture_srun_args_with_headroom(
     enable_cpu_bind: bool,
     end_time: Option<chrono::DateTime<chrono::Utc>>,
     srun_termination_signal: Option<&str>,
-    srun_mpi: Option<&str>,
     sigkill_headroom_seconds: i64,
 ) -> Option<String> {
     let job = make_job(1, "echo hello");
@@ -146,7 +143,6 @@ fn run_and_capture_srun_args_with_headroom(
         enable_cpu_bind,
         end_time,
         srun_termination_signal,
-        srun_mpi,
         sigkill_headroom_seconds,
         None, // target_node
         &StdioMode::Separate,
@@ -222,11 +218,6 @@ fn test_srun_default_single_node() {
     assert!(
         args.contains("--mem=8192M"),
         "Missing --mem=8192M: {}",
-        args
-    );
-    assert!(
-        !args.contains("--mpi="),
-        "Unexpected --mpi in default case: {}",
         args
     );
     // Should NOT have --signal (not set)
@@ -334,48 +325,6 @@ fn test_srun_termination_signal_usr1() {
 
 #[test]
 #[serial(srun)]
-fn test_srun_mpi_mode() {
-    let temp_dir = TempDir::new().unwrap();
-    let args_log = setup_srun_env(&temp_dir);
-    let rr = make_rr("mpi_compute", 8, "16g", 2);
-
-    let args = run_and_capture_srun_args_with_headroom(
-        &temp_dir,
-        &args_log,
-        Some(&rr),
-        true,
-        ExecutionMode::Slurm,
-        true,
-        None,
-        Some("USR1@60"),
-        Some("pmix"),
-        60,
-    )
-    .expect("srun should have been invoked");
-
-    cleanup_srun_env();
-
-    assert!(args.contains("--mpi=pmix"), "Missing --mpi=pmix: {}", args);
-    assert!(
-        args.contains("--signal=USR1@60"),
-        "Missing --signal=USR1@60: {}",
-        args
-    );
-    assert!(args.contains("--nodes=2"), "Missing --nodes=2: {}", args);
-    assert!(
-        args.contains("--cpus-per-task=8"),
-        "Missing --cpus-per-task=8: {}",
-        args
-    );
-    assert!(
-        !args.contains("--cpu-bind"),
-        "Unexpected --cpu-bind with enable_cpu_bind=true: {}",
-        args
-    );
-}
-
-#[test]
-#[serial(srun)]
 fn test_srun_multi_node_step() {
     let temp_dir = TempDir::new().unwrap();
     let args_log = setup_srun_env(&temp_dir);
@@ -474,7 +423,6 @@ fn test_srun_with_end_time_insufficient_time_rejected() {
         ExecutionMode::Slurm,
         false,
         Some(end_time),
-        None,
         None,
         60,
         None,
@@ -680,7 +628,6 @@ fn test_srun_step_name_format() {
         true,
         ExecutionMode::Slurm,
         false,
-        None,
         None,
         None,
         60,   // sigkill_headroom_seconds

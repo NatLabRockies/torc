@@ -151,6 +151,7 @@ impl HpcManager {
             &filename,
             &self.config,
             start_one_worker_per_node,
+            None,
             tls_ca_cert,
             tls_insecure,
             startup_delay_seconds,

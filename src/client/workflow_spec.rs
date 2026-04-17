@@ -763,7 +763,8 @@ pub struct ExecutionConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub srun_termination_signal: Option<String>,
 
-    /// MPI launcher mode for srun steps, passed as `srun --mpi=<value>` (slurm mode only).
+    /// MPI launcher mode for the outer `srun` used to launch one job runner per allocated node.
+    /// This is only used with `schedule_nodes.start_one_worker_per_node = true`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub srun_mpi: Option<String>,
 
@@ -2420,10 +2421,17 @@ impl WorkflowSpec {
                             .to_string(),
                     );
                 }
-                if ec.srun_mpi.is_some() {
+                if ec.srun_mpi.is_some()
+                    && !spec.actions.as_ref().is_some_and(|actions| {
+                        actions.iter().any(|action| {
+                            action.action_type == "schedule_nodes"
+                                && action.start_one_worker_per_node == Some(true)
+                        })
+                    })
+                {
                     errors.push(
-                        "srun_mpi is only supported in slurm mode. \
-                        It has no effect in direct mode."
+                        "srun_mpi requires schedule_nodes.start_one_worker_per_node = true. \
+                        It only applies to the outer srun that launches one job runner per node."
                             .to_string(),
                     );
                 }

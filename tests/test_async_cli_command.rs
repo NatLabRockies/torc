@@ -74,7 +74,6 @@ fn test_async_cli_command_start_simple_command(start_server: &ServerProcess) {
         false,
         None,
         None,
-        None,
         60,   // sigkill_headroom_seconds
         None, // target_node
         &StdioMode::Separate,
@@ -120,7 +119,6 @@ fn test_async_cli_command_start_already_running() {
             false,
             None,
             None,
-            None,
             60,   // sigkill_headroom_seconds
             None, // target_node
             &StdioMode::Separate,
@@ -141,7 +139,6 @@ fn test_async_cli_command_start_already_running() {
         true,
         ExecutionMode::Direct,
         false,
-        None,
         None,
         None,
         60,   // sigkill_headroom_seconds
@@ -177,7 +174,6 @@ fn test_async_cli_command_start_invalid_directory() {
         false,
         None,
         None,
-        None,
         60,   // sigkill_headroom_seconds
         None, // target_node
         &StdioMode::Separate,
@@ -205,7 +201,6 @@ fn test_async_cli_command_check_status_completion() {
             true,
             ExecutionMode::Direct,
             false,
-            None,
             None,
             None,
             60,   // sigkill_headroom_seconds
@@ -259,7 +254,6 @@ fn test_async_cli_command_with_exit_code_success() {
             false,
             None,
             None,
-            None,
             60,   // sigkill_headroom_seconds
             None, // target_node
             &StdioMode::Separate,
@@ -293,7 +287,6 @@ fn test_async_cli_command_with_exit_code_failure() {
             true,
             ExecutionMode::Direct,
             false,
-            None,
             None,
             None,
             60,   // sigkill_headroom_seconds
@@ -330,7 +323,6 @@ fn test_async_cli_command_cancel() {
             true,
             ExecutionMode::Direct,
             false,
-            None,
             None,
             None,
             60,   // sigkill_headroom_seconds
@@ -382,7 +374,6 @@ fn test_async_cli_command_terminate() {
             false,
             None,
             None,
-            None,
             60,   // sigkill_headroom_seconds
             None, // target_node
             &StdioMode::Separate,
@@ -423,7 +414,6 @@ fn test_async_cli_command_wait_for_completion() {
             true,
             ExecutionMode::Direct,
             false,
-            None,
             None,
             None,
             60,   // sigkill_headroom_seconds
@@ -468,7 +458,6 @@ fn test_async_cli_command_get_result() {
             true,
             ExecutionMode::Direct,
             false,
-            None,
             None,
             None,
             60,   // sigkill_headroom_seconds
@@ -523,7 +512,6 @@ fn test_async_cli_command_with_invocation_script() {
         false,
         None,
         None,
-        None,
         60,   // sigkill_headroom_seconds
         None, // target_node
         &StdioMode::Separate,
@@ -560,7 +548,6 @@ fn test_async_cli_command_environment_variables() {
             true,
             ExecutionMode::Direct,
             false,
-            None,
             None,
             None,
             60,   // sigkill_headroom_seconds
@@ -605,7 +592,6 @@ fn test_async_cli_command_gpu_visible_devices_env() {
             true,
             ExecutionMode::Direct, // direct execution
             false,
-            None,
             None,
             None,
             60,   // sigkill_headroom_seconds
@@ -666,7 +652,6 @@ fn test_async_cli_command_stdout_stderr_separation() {
             false,
             None,
             None,
-            None,
             60,   // sigkill_headroom_seconds
             None, // target_node
             &StdioMode::Separate,
@@ -707,7 +692,6 @@ fn test_async_cli_command_multiple_jobs_same_workflow() {
             false,
             None,
             None,
-            None,
             60,   // sigkill_headroom_seconds
             None, // target_node
             &StdioMode::Separate,
@@ -731,7 +715,6 @@ fn test_async_cli_command_multiple_jobs_same_workflow() {
             false,
             None,
             None,
-            None,
             60,   // sigkill_headroom_seconds
             None, // target_node
             &StdioMode::Separate,
@@ -753,7 +736,6 @@ fn test_async_cli_command_multiple_jobs_same_workflow() {
             true,
             ExecutionMode::Direct,
             false,
-            None,
             None,
             None,
             60,   // sigkill_headroom_seconds
@@ -801,7 +783,6 @@ fn test_async_cli_command_long_running_job() {
             true,
             ExecutionMode::Direct,
             false,
-            None,
             None,
             None,
             60,   // sigkill_headroom_seconds
@@ -857,7 +838,6 @@ fn test_async_cli_command_complex_shell_command() {
             false,
             None,
             None,
-            None,
             60,   // sigkill_headroom_seconds
             None, // target_node
             &StdioMode::Separate,
@@ -901,7 +881,6 @@ fn test_async_cli_command_file_creation() {
             false,
             None,
             None,
-            None,
             60,   // sigkill_headroom_seconds
             None, // target_node
             &StdioMode::Separate,
@@ -937,7 +916,6 @@ fn test_async_cli_command_drop_while_running() {
             true,
             ExecutionMode::Direct,
             false,
-            None,
             None,
             None,
             60,   // sigkill_headroom_seconds
@@ -979,7 +957,6 @@ fn test_async_cli_command_execution_time() {
             false,
             None,
             None,
-            None,
             60,   // sigkill_headroom_seconds
             None, // target_node
             &StdioMode::Separate,
@@ -1015,7 +992,6 @@ fn test_async_cli_command_empty_command() {
         false,
         None,
         None,
-        None,
         60,   // sigkill_headroom_seconds
         None, // target_node
         &StdioMode::Separate,
@@ -1046,7 +1022,6 @@ fn test_async_cli_command_command_not_found() {
             true,
             ExecutionMode::Direct,
             false,
-            None,
             None,
             None,
             60,   // sigkill_headroom_seconds
@@ -1084,7 +1059,6 @@ fn test_stdio_mode_combined(start_server: &ServerProcess) {
             true,
             ExecutionMode::Direct,
             false,
-            None,
             None,
             None,
             60,
@@ -1138,7 +1112,6 @@ fn test_stdio_mode_no_stdout(start_server: &ServerProcess) {
             false,
             None,
             None,
-            None,
             60,
             None,
             &StdioMode::NoStdout,
@@ -1181,7 +1154,6 @@ fn test_stdio_mode_no_stderr(start_server: &ServerProcess) {
             true,
             ExecutionMode::Direct,
             false,
-            None,
             None,
             None,
             60,
@@ -1227,7 +1199,6 @@ fn test_stdio_mode_none(start_server: &ServerProcess) {
             true,
             ExecutionMode::Direct,
             false,
-            None,
             None,
             None,
             60,

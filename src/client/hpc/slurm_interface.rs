@@ -215,6 +215,7 @@ impl HpcInterface for SlurmInterface {
         filename: &Path,
         config: &HashMap<String, String>,
         start_one_worker_per_node: bool,
+        srun_mpi: Option<&str>,
         tls_ca_cert: Option<&str>,
         tls_insecure: bool,
         startup_delay_seconds: u64,
@@ -292,6 +293,9 @@ impl HpcInterface for SlurmInterface {
         if start_one_worker_per_node {
             command.push_str(" --is-subtask");
             script.push_str("srun --ntasks-per-node=1 ");
+            if let Some(mpi_mode) = srun_mpi {
+                script.push_str(&format!("--mpi={} ", mpi_mode));
+            }
         }
         script.push_str(&command);
         script.push('\n');
