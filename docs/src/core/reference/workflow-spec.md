@@ -211,6 +211,17 @@ whether Slurm schedulers are present in the spec.
 | `srun_termination_signal` | string  | none    | Signal spec for `srun --signal=<value>` |
 | `enable_cpu_bind`         | boolean | `false` | Allow Slurm CPU binding (`--cpu-bind`)  |
 
+### Worker-per-node Slurm launch field
+
+This field applies only when `execution_config.mode: direct` is combined with a `schedule_nodes`
+action that sets `start_one_worker_per_node: true`. In that mode, Torc launches one
+`torc-slurm-job-runner` per allocated node with an outer `srun`, and this field is passed to that
+launcher command.
+
+| Name       | Type   | Default | Description                                                        |
+| ---------- | ------ | ------- | ------------------------------------------------------------------ |
+| `srun_mpi` | string | none    | MPI mode for the outer job-runner launch: `srun --mpi=<value> ...` |
+
 ### StdioConfig
 
 Controls how stdout and stderr are captured for job processes.
@@ -282,6 +293,27 @@ execution_config:
   sigkill_headroom_seconds: 60
   timeout_exit_code: 152
   oom_exit_code: 137
+```
+
+### Direct Mode Worker-Per-Node Example
+
+```yaml
+execution_config:
+  mode: direct
+  srun_mpi: "none"
+
+actions:
+  - trigger_type: on_workflow_start
+    action_type: schedule_nodes
+    scheduler: multi_node
+    scheduler_type: slurm
+    start_one_worker_per_node: true
+```
+
+This launches the job runners with:
+
+```console
+srun --ntasks-per-node=1 --mpi=none torc-slurm-job-runner ...
 ```
 
 ### Slurm Mode Example

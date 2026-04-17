@@ -74,6 +74,7 @@ description: Run 20 analysis tasks across 2 nodes via direct execution
 
 execution_config:
   mode: direct
+  srun_mpi: "none"
 
 resource_requirements:
   - name: analysis
@@ -111,6 +112,13 @@ jobs concurrently (64 / 8 = 8). Across 4 nodes, that means up to 32 jobs running
 > **Note:** `start_one_worker_per_node` is only supported with `execution_config.mode: direct`. It
 > is not compatible with slurm execution mode, where Torc uses a single worker with `srun`-based
 > node placement.
+>
+> If your cluster requires an explicit MPI mode for the outer worker launch, set
+> `execution_config.srun_mpi`. For example, `srun_mpi: "none"` produces:
+>
+> ```console
+> srun --ntasks-per-node=1 --mpi=none torc-slurm-job-runner ...
+> ```
 
 ### Pattern 2: True Multi-Node Jobs (MPI, Distributed Training)
 
