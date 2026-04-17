@@ -364,6 +364,15 @@ whether Slurm schedulers are present in the spec.</p>
 <tr><td><code>enable_cpu_bind</code></td><td>boolean</td><td><code>false</code></td><td>Allow Slurm CPU binding (<code>--cpu-bind</code>)</td></tr>
 </tbody></table>
 </div>
+<h3 id="worker-per-node-slurm-launch-field"><a class="header" href="#worker-per-node-slurm-launch-field">Worker-per-node Slurm launch field</a></h3>
+<p>This field applies only when <code>execution_config.mode: direct</code> is combined with a <code>schedule_nodes</code>
+action that sets <code>start_one_worker_per_node: true</code>. In that mode, Torc launches one
+<code>torc-slurm-job-runner</code> per allocated node with an outer <code>srun</code>, and this field is passed to that
+launcher command.</p>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>srun_mpi</code></td><td>string</td><td>none</td><td>MPI mode for the outer job-runner launch: <code>srun --mpi=&lt;value&gt; ...</code></td></tr>
+</tbody></table>
+</div>
 <h3 id="stdioconfig"><a class="header" href="#stdioconfig">StdioConfig</a></h3>
 <p>Controls how stdout and stderr are captured for job processes.</p>
 <div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
@@ -422,6 +431,21 @@ setting the mode explicitly to avoid unexpected behavior.</p>
   sigkill_headroom_seconds: 60
   timeout_exit_code: 152
   oom_exit_code: 137
+</code></pre>
+<h3 id="direct-mode-worker-per-node-example"><a class="header" href="#direct-mode-worker-per-node-example">Direct Mode Worker-Per-Node Example</a></h3>
+<pre><code class="language-yaml">execution_config:
+  mode: direct
+  srun_mpi: "none"
+
+actions:
+  - trigger_type: on_workflow_start
+    action_type: schedule_nodes
+    scheduler: multi_node
+    scheduler_type: slurm
+    start_one_worker_per_node: true
+</code></pre>
+<p>This launches the job runners with:</p>
+<pre><code class="language-console">srun --ntasks-per-node=1 --mpi=none torc-slurm-job-runner ...
 </code></pre>
 <h3 id="slurm-mode-example"><a class="header" href="#slurm-mode-example">Slurm Mode Example</a></h3>
 <pre><code class="language-yaml">execution_config:
