@@ -2136,6 +2136,7 @@ impl JobRunner {
                         self.execution_config.enable_cpu_bind(),
                         self.end_time,
                         self.execution_config.srun_termination_signal.as_deref(),
+                        self.execution_config.srun_mpi.as_deref(),
                         self.execution_config.sigkill_headroom_seconds(),
                         target_node,
                         &stdio_config.mode,
@@ -2288,6 +2289,7 @@ impl JobRunner {
                         self.execution_config.enable_cpu_bind(),
                         self.end_time,
                         self.execution_config.srun_termination_signal.as_deref(),
+                        self.execution_config.srun_mpi.as_deref(),
                         self.execution_config.sigkill_headroom_seconds(),
                         None, // target_node: user-parallelism mode doesn't use per-node placement
                         &stdio_config.mode,

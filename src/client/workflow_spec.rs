@@ -763,6 +763,10 @@ pub struct ExecutionConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub srun_termination_signal: Option<String>,
 
+    /// MPI launcher mode for srun steps, passed as `srun --mpi=<value>` (slurm mode only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub srun_mpi: Option<String>,
+
     /// When true, allow Slurm to bind tasks to specific CPU cores (slurm mode only).
     /// By default (false), srun passes `--cpu-bind=none` to disable binding.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -912,6 +916,7 @@ impl ExecutionConfig {
             },
             limit_resources: legacy.limit_resources,
             srun_termination_signal: legacy.srun_termination_signal,
+            srun_mpi: None,
             enable_cpu_bind: legacy.enable_cpu_bind,
             // Direct mode settings use defaults when converting from legacy
             termination_signal: None,
@@ -2387,6 +2392,17 @@ impl WorkflowSpec {
                             .to_string(),
                     );
                 }
+                if ec
+                    .srun_mpi
+                    .as_ref()
+                    .is_some_and(|value| value.trim().is_empty())
+                {
+                    errors.push(
+                        "srun_mpi must not be empty when provided. \
+                        Set a non-empty Slurm MPI mode such as 'pmix' or omit the field."
+                            .to_string(),
+                    );
+                }
             }
 
             if will_use_direct {
@@ -2400,6 +2416,13 @@ impl WorkflowSpec {
                 if ec.enable_cpu_bind == Some(true) {
                     errors.push(
                         "enable_cpu_bind is only supported in slurm mode. \
+                        It has no effect in direct mode."
+                            .to_string(),
+                    );
+                }
+                if ec.srun_mpi.is_some() {
+                    errors.push(
+                        "srun_mpi is only supported in slurm mode. \
                         It has no effect in direct mode."
                             .to_string(),
                     );
@@ -3944,7 +3967,7 @@ impl WorkflowSpec {
                                 obj.insert(key.to_string(), serde_json::Value::Bool(b));
                             }
                         }
-                        "termination_signal" | "srun_termination_signal" => {
+                        "termination_signal" | "srun_termination_signal" | "srun_mpi" => {
                             if let Some(s) = value.as_string() {
                                 obj.insert(
                                     key.to_string(),
@@ -4496,6 +4519,9 @@ impl WorkflowSpec {
                     "    srun_termination_signal {}",
                     kdl_escape(signal)
                 ));
+            }
+            if let Some(ref mpi) = exec_config.srun_mpi {
+                lines.push(format!("    srun_mpi {}", kdl_escape(mpi)));
             }
             if let Some(bind) = exec_config.enable_cpu_bind {
                 lines.push(format!(
@@ -6175,6 +6201,7 @@ jobs:
             timeout_exit_code: Some(200),
             oom_exit_code: Some(201),
             srun_termination_signal: None,
+            srun_mpi: None,
             enable_cpu_bind: None,
             staggered_start: None,
             stdio: None,
@@ -6283,6 +6310,7 @@ jobs:
 execution_config:
   mode: slurm
   srun_termination_signal: "TERM@120"
+  srun_mpi: "pmix"
   enable_cpu_bind: true
 "#;
         let spec: WorkflowSpec = serde_yaml::from_str(yaml).expect("Failed to parse YAML");
@@ -6291,6 +6319,7 @@ execution_config:
             .expect("execution_config should be present");
         assert_eq!(config.mode, ExecutionMode::Slurm);
         assert_eq!(config.srun_termination_signal, Some("TERM@120".to_string()));
+        assert_eq!(config.srun_mpi, Some("pmix".to_string()));
         assert_eq!(config.enable_cpu_bind, Some(true));
     }
 

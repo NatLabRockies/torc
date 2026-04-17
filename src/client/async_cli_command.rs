@@ -48,6 +48,7 @@ struct SrunParams<'a> {
     end_time: Option<DateTime<Utc>>,
     sigkill_headroom_seconds: i64,
     srun_termination_signal: Option<&'a str>,
+    srun_mpi: Option<&'a str>,
     command_str: &'a str,
     job_id: i64,
 }
@@ -133,6 +134,10 @@ fn build_srun_command(params: &SrunParams) -> Result<Command, String> {
         srun.arg(format!("--signal={}", signal_spec));
     }
 
+    if let Some(mpi_mode) = params.srun_mpi {
+        srun.arg(format!("--mpi={}", mpi_mode));
+    }
+
     // Run via bash so job.command can use shell features
     srun.args(["bash", "-c", params.command_str]);
 
@@ -215,6 +220,7 @@ impl AsyncCliCommand {
         enable_cpu_bind: bool,
         end_time: Option<DateTime<Utc>>,
         srun_termination_signal: Option<&str>,
+        srun_mpi: Option<&str>,
         sigkill_headroom_seconds: i64,
         target_node: Option<&str>,
         stdio_mode: &StdioMode,
@@ -318,6 +324,7 @@ impl AsyncCliCommand {
                 end_time,
                 sigkill_headroom_seconds,
                 srun_termination_signal,
+                srun_mpi,
                 command_str: &command_str,
                 job_id: self.job_id,
             })
