@@ -484,7 +484,14 @@ Object.assign(TorcDashboard.prototype, {
                 `).join('');
 
             case 'compute-nodes':
-                return items.map(n => `
+                return items.map(n => {
+                    const sysCpu = n.peak_cpu_percent != null && n.avg_cpu_percent != null
+                        ? `${n.peak_cpu_percent.toFixed(1)}% / ${n.avg_cpu_percent.toFixed(1)}%`
+                        : '-';
+                    const sysMem = n.peak_memory_bytes != null && n.avg_memory_bytes != null
+                        ? `${this.formatBytes(n.peak_memory_bytes)} / ${this.formatBytes(n.avg_memory_bytes)}`
+                        : '-';
+                    return `
                     <tr>
                         <td><code>${n.id ?? '-'}</code></td>
                         <td>${this.escapeHtml(n.hostname || '-')}</td>
@@ -492,8 +499,10 @@ Object.assign(TorcDashboard.prototype, {
                         <td>${n.memory_gb ?? '-'}</td>
                         <td>${n.num_gpus ?? '-'}</td>
                         <td>${n.is_active != null ? (n.is_active ? 'Yes' : 'No') : '-'}</td>
+                        <td>${sysCpu}</td>
+                        <td>${sysMem}</td>
                     </tr>
-                `).join('');
+                `}).join('');
 
             case 'slurm-stats':
                 return items.map(stat => `

@@ -91,6 +91,11 @@ const COMPUTE_NODE_COLUMNS: &[&str] = &[
     "time_limit",
     "scheduler_config_id",
     "compute_node_type",
+    "sample_count",
+    "peak_cpu_percent",
+    "avg_cpu_percent",
+    "peak_memory_bytes",
+    "avg_memory_bytes",
 ];
 
 impl ComputeNodesApiImpl {
@@ -121,7 +126,7 @@ where
             .as_ref()
             .and_then(|s| serde_json::to_string(s).ok());
 
-        match sqlx::query!(
+        match sqlx::query(
             r#"INSERT INTO compute_node (
                 workflow_id
                 ,hostname
@@ -137,29 +142,39 @@ where
                 ,scheduler_config_id
                 ,compute_node_type
                 ,scheduler
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-            RETURNING rowid
+                ,sample_count
+                ,peak_cpu_percent
+                ,avg_cpu_percent
+                ,peak_memory_bytes
+                ,avg_memory_bytes
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+            RETURNING id
             "#,
-            body.workflow_id,
-            body.hostname,
-            body.pid,
-            body.start_time,
-            body.duration_seconds,
-            body.is_active,
-            body.num_cpus,
-            body.memory_gb,
-            body.num_gpus,
-            body.num_nodes,
-            body.time_limit,
-            body.scheduler_config_id,
-            body.compute_node_type,
-            scheduler_json,
         )
-        .fetch_all(self.context.pool.as_ref())
+        .bind(body.workflow_id)
+        .bind(&body.hostname)
+        .bind(body.pid)
+        .bind(&body.start_time)
+        .bind(body.duration_seconds)
+        .bind(body.is_active)
+        .bind(body.num_cpus)
+        .bind(body.memory_gb)
+        .bind(body.num_gpus)
+        .bind(body.num_nodes)
+        .bind(&body.time_limit)
+        .bind(body.scheduler_config_id)
+        .bind(&body.compute_node_type)
+        .bind(scheduler_json)
+        .bind(body.sample_count)
+        .bind(body.peak_cpu_percent)
+        .bind(body.avg_cpu_percent)
+        .bind(body.peak_memory_bytes)
+        .bind(body.avg_memory_bytes)
+        .fetch_one(self.context.pool.as_ref())
         .await
         {
-            Ok(results) => {
-                body.id = Some(results[0].id);
+            Ok(row) => {
+                body.id = Some(row.get("id"));
                 Ok(CreateComputeNodeResponse::SuccessfulResponse(body))
             }
             Err(e) => {
@@ -223,7 +238,10 @@ where
         let record = match sqlx::query(
             r#"
             SELECT id, workflow_id, hostname, pid, start_time, duration_seconds, is_active,
-                   num_cpus, memory_gb, num_gpus, num_nodes, time_limit, scheduler_config_id, compute_node_type, scheduler
+                   num_cpus, memory_gb, num_gpus, num_nodes, time_limit, scheduler_config_id,
+                   compute_node_type, scheduler, sample_count,
+                   peak_cpu_percent, avg_cpu_percent,
+                   peak_memory_bytes, avg_memory_bytes
             FROM compute_node
             WHERE id = $1
             "#,
@@ -274,6 +292,11 @@ where
             scheduler_config_id: record.get("scheduler_config_id"),
             compute_node_type: record.get("compute_node_type"),
             scheduler,
+            sample_count: record.get("sample_count"),
+            peak_cpu_percent: record.get("peak_cpu_percent"),
+            avg_cpu_percent: record.get("avg_cpu_percent"),
+            peak_memory_bytes: record.get("peak_memory_bytes"),
+            avg_memory_bytes: record.get("avg_memory_bytes"),
         };
 
         Ok(GetComputeNodeResponse::SuccessfulResponse(
@@ -325,6 +348,11 @@ where
                 ,scheduler_config_id
                 ,compute_node_type
                 ,scheduler
+                ,sample_count
+                ,peak_cpu_percent
+                ,avg_cpu_percent
+                ,peak_memory_bytes
+                ,avg_memory_bytes
             FROM compute_node"
             .to_string();
 
@@ -418,6 +446,11 @@ where
                 scheduler_config_id: record.get("scheduler_config_id"),
                 compute_node_type: record.get("compute_node_type"),
                 scheduler,
+                sample_count: record.get("sample_count"),
+                peak_cpu_percent: record.get("peak_cpu_percent"),
+                avg_cpu_percent: record.get("avg_cpu_percent"),
+                peak_memory_bytes: record.get("peak_memory_bytes"),
+                avg_memory_bytes: record.get("avg_memory_bytes"),
             });
         }
 
@@ -517,7 +550,12 @@ where
                 ,scheduler_config_id = COALESCE($12, scheduler_config_id)
                 ,compute_node_type = COALESCE($13, compute_node_type)
                 ,scheduler = COALESCE($14, scheduler)
-            WHERE id = $15
+                ,sample_count = COALESCE($15, sample_count)
+                ,peak_cpu_percent = COALESCE($16, peak_cpu_percent)
+                ,avg_cpu_percent = COALESCE($17, avg_cpu_percent)
+                ,peak_memory_bytes = COALESCE($18, peak_memory_bytes)
+                ,avg_memory_bytes = COALESCE($19, avg_memory_bytes)
+            WHERE id = $20
             "#,
         )
         .bind(body.workflow_id)
@@ -534,6 +572,11 @@ where
         .bind(body.scheduler_config_id)
         .bind(body.compute_node_type)
         .bind(scheduler_json)
+        .bind(body.sample_count)
+        .bind(body.peak_cpu_percent)
+        .bind(body.avg_cpu_percent)
+        .bind(body.peak_memory_bytes)
+        .bind(body.avg_memory_bytes)
         .bind(id)
         .execute(self.context.pool.as_ref())
         .await

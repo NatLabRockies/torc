@@ -2107,6 +2107,21 @@ struct ResourceDbInfo {
     name: String,
     size_bytes: u64,
     modified: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    workflow_id: Option<i64>,
+}
+
+fn workflow_id_from_resource_db_name(name: &str) -> Option<i64> {
+    let start = name.find("_wf")? + 3;
+    let rest = &name[start..];
+    let digit_count = rest.chars().take_while(|c| c.is_ascii_digit()).count();
+    if digit_count == 0 {
+        return None;
+    }
+    if rest.chars().nth(digit_count) != Some('_') {
+        return None;
+    }
+    rest[..digit_count].parse().ok()
 }
 
 /// Generate resource plots from database files
@@ -2277,12 +2292,15 @@ async fn cli_list_resource_dbs_handler(
                         })
                         .unwrap_or_default();
 
+                    let name = path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default();
+
                     databases.push(ResourceDbInfo {
+                        workflow_id: workflow_id_from_resource_db_name(&name),
                         path: path.to_string_lossy().to_string(),
-                        name: path
-                            .file_name()
-                            .map(|n| n.to_string_lossy().to_string())
-                            .unwrap_or_default(),
+                        name,
                         size_bytes: metadata.len(),
                         modified,
                     });
@@ -4002,5 +4020,42 @@ async fn run_torc_command(torc_bin: &str, args: &[&str], api_url: &str) -> CliRe
                 exit_code: None,
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::workflow_id_from_resource_db_name;
+
+    #[test]
+    fn parses_workflow_id_from_resource_database_name() {
+        assert_eq!(
+            workflow_id_from_resource_db_name("resource_metrics_wf42_j7.db"),
+            Some(42)
+        );
+        assert_eq!(
+            workflow_id_from_resource_db_name("resource_metrics_wf42_compute_node.db"),
+            Some(42)
+        );
+    }
+
+    #[test]
+    fn rejects_names_without_delimited_workflow_id() {
+        assert_eq!(
+            workflow_id_from_resource_db_name("resource_metrics.db"),
+            None
+        );
+        assert_eq!(
+            workflow_id_from_resource_db_name("resource_metrics_wf.db"),
+            None
+        );
+        assert_eq!(
+            workflow_id_from_resource_db_name("resource_metrics_wf42.db"),
+            None
+        );
+        assert_eq!(
+            workflow_id_from_resource_db_name("resource_metrics_wfabc_.db"),
+            None
+        );
     }
 }

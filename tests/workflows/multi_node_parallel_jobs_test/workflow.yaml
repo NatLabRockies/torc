@@ -24,9 +24,10 @@ description: 2-node allocation with one worker per node — parallel single-node
 project: testing
 
 resource_monitor:
-  enabled: true
-  granularity: TimeSeries
   sample_interval_seconds: 2
+  jobs:
+    enabled: true
+    granularity: TimeSeries
 
 resource_requirements:
   - name: work_resources

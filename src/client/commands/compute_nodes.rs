@@ -29,6 +29,10 @@ struct ComputeNodeTableRow {
     start_time: String,
     #[tabled(rename = "Duration")]
     duration: String,
+    #[tabled(rename = "CPU peak/avg")]
+    system_cpu: String,
+    #[tabled(rename = "Mem peak/avg")]
+    system_memory: String,
 }
 
 impl From<&models::ComputeNodeModel> for ComputeNodeTableRow {
@@ -54,7 +58,40 @@ impl From<&models::ComputeNodeModel> for ComputeNodeTableRow {
             is_active,
             start_time: node.start_time.clone(),
             duration,
+            system_cpu: format_system_cpu(node),
+            system_memory: format_system_memory(node),
         }
+    }
+}
+
+fn format_system_cpu(node: &models::ComputeNodeModel) -> String {
+    match (node.peak_cpu_percent, node.avg_cpu_percent) {
+        (Some(peak), Some(avg)) => format!("{:.1}%/{:.1}%", peak, avg),
+        _ => "-".to_string(),
+    }
+}
+
+fn format_system_memory(node: &models::ComputeNodeModel) -> String {
+    match (node.peak_memory_bytes, node.avg_memory_bytes) {
+        (Some(peak), Some(avg)) => format!("{} / {}", format_bytes(peak), format_bytes(avg)),
+        _ => "-".to_string(),
+    }
+}
+
+fn format_bytes(bytes: i64) -> String {
+    const KB: f64 = 1024.0;
+    const MB: f64 = KB * 1024.0;
+    const GB: f64 = MB * 1024.0;
+
+    let bytes_f = bytes as f64;
+    if bytes_f >= GB {
+        format!("{:.1} GB", bytes_f / GB)
+    } else if bytes_f >= MB {
+        format!("{:.1} MB", bytes_f / MB)
+    } else if bytes_f >= KB {
+        format!("{:.1} KB", bytes_f / KB)
+    } else {
+        format!("{} B", bytes)
     }
 }
 
@@ -121,6 +158,13 @@ pub fn handle_compute_node_commands(
                         if let Some(duration) = node.duration_seconds {
                             println!("  Duration: {:.2} seconds", duration);
                         }
+                        if node.sample_count.is_some() {
+                            println!("  CPU peak/avg: {}", format_system_cpu(&node));
+                            println!("  Memory peak/avg: {}", format_system_memory(&node));
+                            if let Some(samples) = node.sample_count {
+                                println!("  Resource samples: {}", samples);
+                            }
+                        }
                     }
                 }
                 Err(e) => {
@@ -186,5 +230,86 @@ pub fn handle_compute_node_commands(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_compute_node() -> models::ComputeNodeModel {
+        models::ComputeNodeModel::new(
+            7,
+            "node-a".to_string(),
+            1234,
+            "2026-04-19T00:00:00Z".to_string(),
+            12,
+            32.0,
+            0,
+            1,
+            "local".to_string(),
+            None,
+        )
+    }
+
+    #[test]
+    fn compute_node_list_row_shows_resource_summary_when_present() {
+        let mut node = make_compute_node();
+        node.sample_count = Some(7);
+        node.peak_cpu_percent = Some(41.1843);
+        node.avg_cpu_percent = Some(37.2608);
+        node.peak_memory_bytes = Some(2 * 1024 * 1024 * 1024);
+        node.avg_memory_bytes = Some(1024 * 1024 * 1024);
+
+        let row = ComputeNodeTableRow::from(&node);
+
+        assert_eq!(row.system_cpu, "41.2%/37.3%");
+        assert_eq!(row.system_memory, "2.0 GB / 1.0 GB");
+    }
+
+    #[test]
+    fn compute_node_list_row_hides_resource_summary_when_absent() {
+        let node = make_compute_node();
+
+        let row = ComputeNodeTableRow::from(&node);
+
+        assert_eq!(row.system_cpu, "-");
+        assert_eq!(row.system_memory, "-");
+    }
+
+    #[test]
+    fn compute_node_json_uses_plain_resource_summary_fields_when_present() {
+        let mut node = make_compute_node();
+        node.sample_count = Some(7);
+        node.peak_cpu_percent = Some(41.1843);
+        node.avg_cpu_percent = Some(37.2608);
+        node.peak_memory_bytes = Some(2 * 1024 * 1024 * 1024);
+        node.avg_memory_bytes = Some(1024 * 1024 * 1024);
+
+        let output = serde_json::json!({ "compute_nodes": [node] });
+
+        let json = output["compute_nodes"][0].as_object().unwrap();
+        assert_eq!(json["sample_count"], 7);
+        assert_eq!(json["peak_cpu_percent"], 41.1843);
+        assert_eq!(json["avg_cpu_percent"], 37.2608);
+        assert_eq!(json["peak_memory_bytes"], 2 * 1024 * 1024 * 1024i64);
+        assert_eq!(json["avg_memory_bytes"], 1024 * 1024 * 1024i64);
+        assert!(!json.contains_key("system_monitor_sample_count"));
+        assert!(!json.contains_key("system_monitor_peak_cpu_percent"));
+        assert!(!json.contains_key("system_monitor_avg_cpu_percent"));
+        assert!(!json.contains_key("system_monitor_peak_memory_bytes"));
+        assert!(!json.contains_key("system_monitor_avg_memory_bytes"));
+    }
+
+    #[test]
+    fn compute_node_json_omits_resource_summary_fields_when_absent() {
+        let output = serde_json::json!({ "compute_nodes": [make_compute_node()] });
+
+        let json = output["compute_nodes"][0].as_object().unwrap();
+        assert!(!json.contains_key("sample_count"));
+        assert!(!json.contains_key("peak_cpu_percent"));
+        assert!(!json.contains_key("avg_cpu_percent"));
+        assert!(!json.contains_key("peak_memory_bytes"));
+        assert!(!json.contains_key("avg_memory_bytes"));
     }
 }

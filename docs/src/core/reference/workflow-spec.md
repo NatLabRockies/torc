@@ -382,12 +382,56 @@ Defines conditional actions triggered by workflow or job state changes.
 
 Configuration for resource usage monitoring.
 
-| Name                      | Type                                      | Default     | Description                            |
-| ------------------------- | ----------------------------------------- | ----------- | -------------------------------------- |
-| `enabled`                 | boolean                                   | `false`     | Enable resource monitoring             |
-| `granularity`             | [MonitorGranularity](#monitorgranularity) | `"Summary"` | Level of detail for metrics collection |
-| `sample_interval_seconds` | integer                                   | `10`        | Sampling interval in seconds           |
-| `generate_plots`          | boolean                                   | `false`     | Generate resource usage plots          |
+| Name                      | Type                     | Default | Description                         |
+| ------------------------- | ------------------------ | ------- | ----------------------------------- |
+| `sample_interval_seconds` | integer                  | `10`    | Shared sampling interval in seconds |
+| `generate_plots`          | boolean                  | `false` | Generate resource usage plots       |
+| `jobs`                    | JobMonitorConfig         | none    | Per-job monitoring config           |
+| `compute_node`            | ComputeNodeMonitorConfig | none    | Overall compute-node monitoring     |
+
+Example with per-job summary monitoring and overall compute-node time-series monitoring:
+
+```yaml
+resource_monitor:
+  sample_interval_seconds: 5
+  jobs:
+    enabled: true
+    granularity: summary
+  compute_node:
+    enabled: true
+    granularity: time_series
+    cpu: true
+    memory: true
+```
+
+`jobs.granularity` controls per-job monitoring. `compute_node.granularity` independently controls
+overall compute-node monitoring, so a workflow can store per-job summaries while collecting
+compute-node time series. Both scopes use the parent `sample_interval_seconds`; there is not a
+separate sampling interval per scope. The current compute-node monitor records CPU and memory; GPU
+monitoring is expected to use the same nested `compute_node` configuration in a future release.
+
+For backwards compatibility, top-level `enabled` and `granularity` fields are still accepted and
+apply to job monitoring when `jobs` is omitted. New workflow specs should use `jobs`.
+
+### JobMonitorConfig
+
+Configuration for per-job CPU and memory monitoring.
+
+| Name          | Type                                      | Default     | Description                       |
+| ------------- | ----------------------------------------- | ----------- | --------------------------------- |
+| `enabled`     | boolean                                   | `false`     | Enable job monitoring             |
+| `granularity` | [MonitorGranularity](#monitorgranularity) | `"Summary"` | Summary or time-series collection |
+
+### ComputeNodeMonitorConfig
+
+Configuration for opt-in overall compute-node CPU and memory monitoring.
+
+| Name          | Type                                      | Default     | Description                       |
+| ------------- | ----------------------------------------- | ----------- | --------------------------------- |
+| `enabled`     | boolean                                   | `false`     | Enable compute-node monitoring    |
+| `granularity` | [MonitorGranularity](#monitorgranularity) | `"Summary"` | Summary or time-series collection |
+| `cpu`         | boolean                                   | `true`      | Record overall CPU utilization    |
+| `memory`      | boolean                                   | `true`      | Record overall memory usage       |
 
 ## MonitorGranularity
 

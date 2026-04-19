@@ -5030,6 +5030,16 @@ components:
       - num_nodes
       - compute_node_type
       properties:
+        avg_cpu_percent:
+          type:
+          - number
+          - 'null'
+          format: double
+        avg_memory_bytes:
+          type:
+          - integer
+          - 'null'
+          format: int64
         compute_node_type:
           type: string
         duration_seconds:
@@ -5060,8 +5070,23 @@ components:
         num_nodes:
           type: integer
           format: int64
+        peak_cpu_percent:
+          type:
+          - number
+          - 'null'
+          format: double
+        peak_memory_bytes:
+          type:
+          - integer
+          - 'null'
+          format: int64
         pid:
           type: integer
+          format: int64
+        sample_count:
+          type:
+          - integer
+          - 'null'
           format: int64
         scheduler: {}
         scheduler_config_id:

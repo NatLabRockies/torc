@@ -637,10 +637,10 @@ fn test_resource_requirements_runtime_formats(start_server: &ServerProcess) {
             runtime_format,
         ];
 
-        let json_output = run_cli_with_json(&args, start_server, None).unwrap_or_else(|_| {
+        let json_output = run_cli_with_json(&args, start_server, None).unwrap_or_else(|e| {
             panic!(
-                "Failed to create requirement with runtime format {}",
-                runtime_format
+                "Failed to create requirement with runtime format {}: {}",
+                runtime_format, e
             )
         });
 

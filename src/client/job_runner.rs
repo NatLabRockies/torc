@@ -39,7 +39,9 @@ use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
 use crate::client::async_cli_command::AsyncCliCommand;
 use crate::client::resource_correction::format_duration_iso8601;
-use crate::client::resource_monitor::{ResourceMonitor, ResourceMonitorConfig};
+use crate::client::resource_monitor::{
+    ResourceMonitor, ResourceMonitorConfig, SystemMetricsSummary,
+};
 use crate::client::utils;
 use crate::client::workflow_spec::{ExecutionConfig, ExecutionMode};
 use crate::config::TorcConfig;
@@ -489,7 +491,7 @@ impl JobRunner {
             workflow.resource_monitor_config
         {
             match serde_json::from_str::<ResourceMonitorConfig>(monitor_config_json) {
-                Ok(monitor_config) if monitor_config.enabled => {
+                Ok(monitor_config) if monitor_config.is_enabled() => {
                     match ResourceMonitor::new(monitor_config, output_dir.clone(), unique_label) {
                         Ok(monitor) => {
                             info!("Resource monitoring enabled");
@@ -839,13 +841,15 @@ impl JobRunner {
         self.execute_worker_complete_actions();
 
         // Shutdown resource monitor if enabled
-        if let Some(monitor) = self.resource_monitor.take() {
+        let system_metrics_summary = if let Some(monitor) = self.resource_monitor.take() {
             info!("Shutting down resource monitor");
-            monitor.shutdown();
-        }
+            monitor.shutdown()
+        } else {
+            None
+        };
 
         // Deactivate compute node and set duration
-        self.deactivate_compute_node();
+        self.deactivate_compute_node(system_metrics_summary);
 
         info!(
             "Job runner completed workflow_id={} run_id={} compute_node_id={} had_failures={} had_terminations={}",
@@ -887,7 +891,7 @@ impl JobRunner {
     }
 
     /// Deactivate the compute node and set its duration.
-    fn deactivate_compute_node(&self) {
+    fn deactivate_compute_node(&self, system_metrics_summary: Option<SystemMetricsSummary>) {
         let duration_seconds = self.start_instant.elapsed().as_secs_f64();
         info!(
             "Compute node deactivated workflow_id={} run_id={} compute_node_id={} duration_s={:.1}",
@@ -910,6 +914,13 @@ impl JobRunner {
         // Only update the fields we need to change
         update_model.is_active = Some(false);
         update_model.duration_seconds = Some(duration_seconds);
+        if let Some(summary) = system_metrics_summary {
+            update_model.sample_count = Some(summary.sample_count);
+            update_model.peak_cpu_percent = Some(summary.peak_cpu_percent);
+            update_model.avg_cpu_percent = Some(summary.avg_cpu_percent);
+            update_model.peak_memory_bytes = Some(summary.peak_memory_bytes as i64);
+            update_model.avg_memory_bytes = Some(summary.avg_memory_bytes as i64);
+        }
 
         if let Err(e) = apis::compute_nodes_api::update_compute_node(
             &self.config,

@@ -437,9 +437,10 @@ fn draw_tabs(f: &mut Frame, area: Rect, app: &App) {
         DetailViewType::Files => 1,
         DetailViewType::Events => 2,
         DetailViewType::Results => 3,
-        DetailViewType::ScheduledNodes => 4,
-        DetailViewType::SlurmStats => 5,
-        DetailViewType::Dag => 6,
+        DetailViewType::ComputeNodes => 4,
+        DetailViewType::ScheduledNodes => 5,
+        DetailViewType::SlurmStats => 6,
+        DetailViewType::Dag => 7,
     };
 
     let tabs = Tabs::new(titles)
@@ -467,6 +468,7 @@ fn draw_detail_table(f: &mut Frame, area: Rect, app: &mut App) {
         DetailViewType::Files => draw_files_table(f, area, app),
         DetailViewType::Events => draw_events_table(f, area, app),
         DetailViewType::Results => draw_results_table(f, area, app),
+        DetailViewType::ComputeNodes => draw_compute_nodes_table(f, area, app),
         DetailViewType::ScheduledNodes => draw_scheduled_nodes_table(f, area, app),
         DetailViewType::SlurmStats => draw_slurm_stats_table(f, area, app),
         DetailViewType::Dag => draw_dag(f, area, app),
@@ -829,6 +831,100 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
     .highlight_symbol("▸ ");
 
     f.render_stateful_widget(table, area, &mut app.results_state);
+}
+
+fn draw_compute_nodes_table(f: &mut Frame, area: Rect, app: &mut App) {
+    let is_focused = app.focus == Focus::Details;
+    let selected_style = Style::default()
+        .add_modifier(Modifier::REVERSED)
+        .fg(Color::Cyan);
+    let header_style = Style::default()
+        .fg(Color::Yellow)
+        .add_modifier(Modifier::BOLD);
+
+    let header = Row::new(vec![
+        "ID",
+        "Hostname",
+        "CPUs",
+        "Memory",
+        "GPUs",
+        "Active",
+        "CPU peak/avg",
+        "Mem peak/avg",
+    ])
+    .style(header_style)
+    .bottom_margin(1);
+
+    let rows = app.compute_nodes.iter().map(|node| {
+        let id = node.id.map(|i| i.to_string()).unwrap_or_default();
+        let active = match node.is_active {
+            Some(true) => "Yes",
+            Some(false) => "No",
+            None => "-",
+        };
+        let system_cpu = match (node.peak_cpu_percent, node.avg_cpu_percent) {
+            (Some(peak), Some(avg)) => format!("{:.0}%/{:.0}%", peak, avg),
+            _ => "-".to_string(),
+        };
+        let system_mem = match (node.peak_memory_bytes, node.avg_memory_bytes) {
+            (Some(peak), Some(avg)) => format!("{}/{}", format_bytes(peak), format_bytes(avg)),
+            _ => "-".to_string(),
+        };
+
+        Row::new(vec![
+            Cell::from(id),
+            Cell::from(node.hostname.clone()),
+            Cell::from(node.num_cpus.to_string()),
+            Cell::from(format!("{:.1} GB", node.memory_gb)),
+            Cell::from(node.num_gpus.to_string()),
+            Cell::from(active),
+            Cell::from(system_cpu),
+            Cell::from(system_mem),
+        ])
+    });
+
+    let (title, border_style) = if is_focused {
+        (
+            Line::from(vec![
+                Span::styled("▣ ", Style::default().fg(Color::Green)),
+                Span::styled("Compute Nodes", Style::default().fg(Color::White)),
+            ]),
+            Style::default().fg(Color::Green),
+        )
+    } else {
+        (
+            Line::from(vec![
+                Span::styled("▣ ", Style::default().fg(Color::Cyan)),
+                Span::styled("Compute Nodes", Style::default().fg(Color::White)),
+            ]),
+            Style::default().fg(Color::DarkGray),
+        )
+    };
+
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(8),
+            Constraint::Min(16),
+            Constraint::Length(6),
+            Constraint::Length(10),
+            Constraint::Length(6),
+            Constraint::Length(8),
+            Constraint::Length(12),
+            Constraint::Length(18),
+        ],
+    )
+    .header(header)
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(title)
+            .border_style(border_style),
+    )
+    .row_highlight_style(selected_style)
+    .highlight_symbol("▸ ");
+
+    f.render_stateful_widget(table, area, &mut app.compute_nodes_state);
 }
 
 fn draw_scheduled_nodes_table(f: &mut Frame, area: Rect, app: &mut App) {

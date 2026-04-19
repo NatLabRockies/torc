@@ -75,6 +75,7 @@ fn test_duration_string_to_seconds() {
     assert_eq!(duration_string_to_seconds("PT1H30M").unwrap(), 5400);
     assert_eq!(duration_string_to_seconds("P1D").unwrap(), 86400);
     assert_eq!(duration_string_to_seconds("P1DT2H").unwrap(), 93600);
+    assert_eq!(duration_string_to_seconds("P7DT12H").unwrap(), 648000);
     assert_eq!(duration_string_to_seconds("P0DT1M").unwrap(), 60);
     assert_eq!(duration_string_to_seconds("PT4H").unwrap(), 14400);
 }
