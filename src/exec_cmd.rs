@@ -36,7 +36,7 @@ pub struct ExecArgs {
     pub monitor: String,
     pub monitor_compute_node: String,
     pub generate_plots: bool,
-    pub sample_interval_seconds: Option<i32>,
+    pub sample_interval_seconds: Option<u32>,
     pub stdio: Option<String>,
     pub trailing: Vec<String>,
     pub format: String,
@@ -285,7 +285,7 @@ fn build_spec(
     monitor: &str,
     monitor_compute_node: &str,
     generate_plots: bool,
-    sample_interval_seconds: Option<i32>,
+    sample_interval_seconds: Option<u32>,
     stdio: Option<&str>,
 ) -> Result<WorkflowSpec, String> {
     let wf_name = name
@@ -323,7 +323,7 @@ fn build_spec(
                 .as_ref()
                 .map(|j| j.granularity.clone())
                 .unwrap_or(MonitorGranularity::Summary),
-            sample_interval_seconds: sample_interval_seconds.unwrap_or(10),
+            sample_interval_seconds: sample_interval_seconds.map(|v| v as i32).unwrap_or(10),
             generate_plots,
             jobs: jobs_cfg,
             compute_node: node_cfg,

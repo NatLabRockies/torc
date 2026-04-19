@@ -217,7 +217,10 @@ fn start_standalone_server(
                 if let Some(rest) = line.trim().strip_prefix("TORC_SERVER_PORT=")
                     && let Ok(port) = rest.parse::<u16>()
                 {
-                    let api_url = format!("http://localhost:{}/torc-service/v1", port);
+                    // Match the bind address (127.0.0.1) rather than `localhost`. On
+                    // systems where `localhost` resolves to `::1` first but the server
+                    // is only bound to v4, connections would fail.
+                    let api_url = format!("http://127.0.0.1:{}/torc-service/v1", port);
                     return Ok(StandaloneServer {
                         child,
                         api_url,

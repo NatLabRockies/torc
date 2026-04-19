@@ -334,12 +334,17 @@ SEE ALSO:
         /// (`--monitor time-series` or `--monitor-compute-node time-series`).
         #[arg(long, default_value_t = false)]
         generate_plots: bool,
-        /// Override the resource sampling interval (seconds).
+        /// Override the resource sampling interval (seconds). Must be >= 1.
         ///
         /// Matches the workflow spec's `resource_monitor.sample_interval_seconds`.
         /// When unset, torc uses the spec default (10s).
-        #[arg(short = 'i', long = "sample-interval-seconds", value_name = "SECS")]
-        sample_interval_seconds: Option<i32>,
+        #[arg(
+            short = 'i',
+            long = "sample-interval-seconds",
+            value_name = "SECS",
+            value_parser = clap::value_parser!(u32).range(1..)
+        )]
+        sample_interval_seconds: Option<u32>,
         /// Stdio capture mode for jobs. When unset, uses the spec default ("separate").
         ///
         /// Values: separate (stdout/stderr to distinct files), combined (merged),
