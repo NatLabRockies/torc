@@ -497,10 +497,45 @@ managed by torc: <code>partition</code>, <code>nodes</code>, <code>walltime</cod
 <h2 id="resourcemonitorconfig"><a class="header" href="#resourcemonitorconfig">ResourceMonitorConfig</a></h2>
 <p>Configuration for resource usage monitoring.</p>
 <div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>enabled</code></td><td>boolean</td><td><code>false</code></td><td>Enable resource monitoring</td></tr>
-<tr><td><code>granularity</code></td><td><a href="#monitorgranularity">MonitorGranularity</a></td><td><code>"Summary"</code></td><td>Level of detail for metrics collection</td></tr>
-<tr><td><code>sample_interval_seconds</code></td><td>integer</td><td><code>10</code></td><td>Sampling interval in seconds</td></tr>
+<tr><td><code>sample_interval_seconds</code></td><td>integer</td><td><code>10</code></td><td>Shared sampling interval in seconds</td></tr>
 <tr><td><code>generate_plots</code></td><td>boolean</td><td><code>false</code></td><td>Generate resource usage plots</td></tr>
+<tr><td><code>jobs</code></td><td>JobMonitorConfig</td><td>none</td><td>Per-job monitoring config</td></tr>
+<tr><td><code>compute_node</code></td><td>ComputeNodeMonitorConfig</td><td>none</td><td>Overall compute-node monitoring</td></tr>
+</tbody></table>
+</div>
+<p>Example with per-job summary monitoring and overall compute-node time-series monitoring:</p>
+<pre><code class="language-yaml">resource_monitor:
+  sample_interval_seconds: 5
+  jobs:
+    enabled: true
+    granularity: summary
+  compute_node:
+    enabled: true
+    granularity: time_series
+    cpu: true
+    memory: true
+</code></pre>
+<p><code>jobs.granularity</code> controls per-job monitoring. <code>compute_node.granularity</code> independently controls
+overall compute-node monitoring, so a workflow can store per-job summaries while collecting
+compute-node time series. Both scopes use the parent <code>sample_interval_seconds</code>; there is not a
+separate sampling interval per scope. The current compute-node monitor records CPU and memory; GPU
+monitoring is expected to use the same nested <code>compute_node</code> configuration in a future release.</p>
+<p>For backwards compatibility, top-level <code>enabled</code> and <code>granularity</code> fields are still accepted and
+apply to job monitoring when <code>jobs</code> is omitted. New workflow specs should use <code>jobs</code>.</p>
+<h3 id="jobmonitorconfig"><a class="header" href="#jobmonitorconfig">JobMonitorConfig</a></h3>
+<p>Configuration for per-job CPU and memory monitoring.</p>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>enabled</code></td><td>boolean</td><td><code>false</code></td><td>Enable job monitoring</td></tr>
+<tr><td><code>granularity</code></td><td><a href="#monitorgranularity">MonitorGranularity</a></td><td><code>"Summary"</code></td><td>Summary or time-series collection</td></tr>
+</tbody></table>
+</div>
+<h3 id="computenodemonitorconfig"><a class="header" href="#computenodemonitorconfig">ComputeNodeMonitorConfig</a></h3>
+<p>Configuration for opt-in overall compute-node CPU and memory monitoring.</p>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>enabled</code></td><td>boolean</td><td><code>false</code></td><td>Enable compute-node monitoring</td></tr>
+<tr><td><code>granularity</code></td><td><a href="#monitorgranularity">MonitorGranularity</a></td><td><code>"Summary"</code></td><td>Summary or time-series collection</td></tr>
+<tr><td><code>cpu</code></td><td>boolean</td><td><code>true</code></td><td>Record overall CPU utilization</td></tr>
+<tr><td><code>memory</code></td><td>boolean</td><td><code>true</code></td><td>Record overall memory usage</td></tr>
 </tbody></table>
 </div>
 <h2 id="monitorgranularity"><a class="header" href="#monitorgranularity">MonitorGranularity</a></h2>

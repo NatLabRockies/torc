@@ -189,8 +189,10 @@
 <h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
 <p>Enable time series monitoring in your workflow specification:</p>
 <pre><code class="language-yaml">resource_monitor:
-  granularity: "time_series"
   sample_interval_seconds: 2
+  jobs:
+    enabled: true
+    granularity: "time_series"
 </code></pre>
 <p>This creates a SQLite database with resource samples at regular intervals.</p>
 <h2 id="generate-plots"><a class="header" href="#generate-plots">Generate Plots</a></h2>
