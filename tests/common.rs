@@ -191,7 +191,10 @@ pub fn run_torc_standalone(
     );
 
     let target_debug = std::env::current_dir().expect("cwd").join("target/debug");
-    let path_var = std::env::var("PATH").unwrap_or_default();
+    let existing = std::env::var_os("PATH").unwrap_or_default();
+    let mut entries: Vec<std::path::PathBuf> = vec![target_debug];
+    entries.extend(std::env::split_paths(&existing));
+    let path_var = std::env::join_paths(entries).expect("join PATH entries");
 
     Command::new(torc_binary_path())
         .current_dir(work_dir)
@@ -201,7 +204,7 @@ pub fn run_torc_standalone(
         .args(args)
         .env_remove("TORC_API_URL")
         .env("RUST_LOG", "warn")
-        .env("PATH", format!("{}:{}", target_debug.display(), path_var))
+        .env("PATH", path_var)
         .output()
         .expect("failed to spawn torc")
 }

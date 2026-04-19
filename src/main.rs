@@ -55,13 +55,21 @@ fn print_workflow_message(format: &str, workflow_id: i64, message: &str) {
 }
 
 /// Handle to an ephemeral torc-server subprocess started by `--standalone`.
-/// The child is killed when this struct is dropped. Note that `std::process::exit`
-/// does NOT run destructors, so error paths that exit early may leave the subprocess
-/// running until the OS cleans it up.
+///
+/// Normal-exit cleanup is handled by `Drop`, which kills and reaps the child.
+/// `std::process::exit()` bypasses destructors, so we also hand the child a
+/// piped stdin that we never close and pass `--shutdown-on-stdin-eof` to the
+/// server. When the parent process terminates by any means (normal return,
+/// `process::exit`, SIGKILL, crash), the kernel closes the pipe write end, the
+/// server reads EOF, and it shuts itself down gracefully. The pipe is the
+/// safety net; the explicit kill() is the fast path.
 struct StandaloneServer {
     child: std::process::Child,
     api_url: String,
     db_path: std::path::PathBuf,
+    // Held only to keep the write end of the child's stdin pipe open for the
+    // lifetime of this struct. Never written to.
+    _stdin: std::process::ChildStdin,
 }
 
 impl Drop for StandaloneServer {
@@ -91,7 +99,6 @@ fn start_standalone_server(
         })?;
     }
 
-    let db_url = format!("sqlite:{}", db_path.display());
     let mut child = std::process::Command::new(server_bin)
         .args([
             "run",
@@ -100,8 +107,10 @@ fn start_standalone_server(
             "--port",
             "0",
             "--database",
-            &db_url,
+            &db_path.display().to_string(),
+            "--shutdown-on-stdin-eof",
         ])
+        .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
@@ -112,28 +121,68 @@ fn start_standalone_server(
             )
         })?;
 
+    let child_stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| "failed to capture torc-server stdin".to_string())?;
     let stdout = child
         .stdout
         .take()
         .ok_or_else(|| "failed to capture torc-server stdout".to_string())?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| "failed to capture torc-server stderr".to_string())?;
 
-    // Read stdout in a background thread so we can enforce a timeout here.
+    // Forward torc-server's stderr to our own stderr line-by-line. We don't inherit
+    // the fd (that would let the child keep our stderr pipe open after we exit via
+    // process::exit, which skips Drop) and we don't let the pipe buffer fill.
+    thread::spawn(move || {
+        let reader = BufReader::new(stderr);
+        for line in reader.lines().map_while(Result::ok) {
+            eprintln!("[torc-server] {}", line);
+        }
+    });
+
+    // Read stdout in a background thread. Until the port is reported, lines are
+    // forwarded over `tx` so we can enforce a timeout on the startup handshake.
+    // After the receiver is dropped (port found), the thread keeps draining stdout
+    // for the lifetime of the child so the pipe buffer can't fill and block it.
     let (tx, rx) = mpsc::channel::<Result<String, std::io::Error>>();
     thread::spawn(move || {
         let reader = BufReader::new(stdout);
+        let mut tx = Some(tx);
         for line in reader.lines() {
-            let is_err = line.is_err();
-            if tx.send(line).is_err() || is_err {
-                break;
+            match line {
+                Ok(line) => {
+                    if let Some(sender) = tx.as_ref() {
+                        if sender.send(Ok(line.clone())).is_ok() {
+                            continue;
+                        }
+                        tx = None;
+                    }
+                    eprintln!("[torc-server] {}", line);
+                }
+                Err(e) => {
+                    if let Some(sender) = tx.take() {
+                        let _ = sender.send(Err(e));
+                    }
+                    break;
+                }
             }
         }
     });
+
+    let kill_and_reap = |child: &mut std::process::Child| {
+        let _ = child.kill();
+        let _ = child.wait();
+    };
 
     let deadline = Instant::now() + Duration::from_secs(15);
     loop {
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
-            let _ = child.kill();
+            kill_and_reap(&mut child);
             return Err("timeout waiting for torc-server to report its port".to_string());
         }
         match rx.recv_timeout(remaining) {
@@ -146,32 +195,23 @@ fn start_standalone_server(
                         child,
                         api_url,
                         db_path,
+                        _stdin: child_stdin,
                     });
                 }
                 // Other lines are passed through to stderr so users see startup logs.
                 eprintln!("[torc-server] {}", line);
             }
             Ok(Err(e)) => {
-                let _ = child.kill();
+                kill_and_reap(&mut child);
                 return Err(format!("error reading torc-server stdout: {}", e));
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
-                let _ = child.kill();
+                kill_and_reap(&mut child);
                 return Err("timeout waiting for torc-server to report its port".to_string());
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => {
-                let mut stderr_buf = String::new();
-                if let Some(mut stderr) = child.stderr.take() {
-                    use std::io::Read;
-                    let _ = stderr.read_to_string(&mut stderr_buf);
-                }
                 let _ = child.wait();
-                let detail = stderr_buf.trim();
-                return Err(if detail.is_empty() {
-                    "torc-server exited before reporting a port".to_string()
-                } else {
-                    format!("torc-server exited before reporting a port: {}", detail)
-                });
+                return Err("torc-server exited before reporting a port".to_string());
             }
         }
     }
@@ -307,8 +347,12 @@ fn main() {
                     url = server.api_url.clone();
                     config.base_path = url.clone();
                     // Expose to subprocesses (e.g., the job runner may shell out).
-                    // SAFETY: runs during single-threaded CLI initialization before
-                    // any additional threads are spawned.
+                    // SAFETY: `start_standalone_server` spawned a stdout-drainer thread,
+                    // so this is technically not single-threaded. The drainer only does
+                    // IO and never touches the environment, and no other thread has been
+                    // started by this CLI at this point, so no concurrent getenv/setenv
+                    // can race. Other subprocess spawns downstream will observe this
+                    // value via inheritance.
                     unsafe { std::env::set_var("TORC_API_URL", &url) };
                     eprintln!(
                         "Started standalone torc-server on {} (db: {})",

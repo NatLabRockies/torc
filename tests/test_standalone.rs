@@ -19,7 +19,8 @@ use tempfile::TempDir;
 mod common;
 
 use common::{
-    ensure_test_binaries_built, run_torc_standalone_ok, torc_binary_path, torc_server_binary_path,
+    ensure_test_binaries_built, run_torc_standalone, run_torc_standalone_ok, torc_binary_path,
+    torc_server_binary_path,
 };
 
 #[test]
@@ -215,6 +216,7 @@ fn standalone_no_op_for_local_command_prints_notice() {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn standalone_server_shuts_down_after_command_exits() {
     ensure_test_binaries_built();
@@ -242,6 +244,50 @@ fn standalone_server_shuts_down_after_command_exits() {
     assert!(
         lingering.is_empty(),
         "expected no torc-server subprocess after `torc -s exec` exits; found: {:#?}",
+        lingering
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn standalone_server_shuts_down_when_client_exits_via_process_exit() {
+    // Failure paths in the CLI frequently call std::process::exit, which bypasses
+    // destructors. Without the parent-death pipe, the standalone subprocess would
+    // be orphaned. This test fails the client *after* the server has started
+    // (`exec` with no `-c` commands rejects via process::exit(2)) and verifies the
+    // server still shuts down.
+    ensure_test_binaries_built();
+
+    let work = TempDir::new().expect("tempdir");
+    let db = work.path().join("process_exit.db");
+
+    let out = run_torc_standalone(work.path(), &db, &["exec"]);
+    assert!(
+        !out.status.success(),
+        "`torc -s exec` with no commands should fail. stderr:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("Started standalone torc-server"),
+        "the server must have been started before the failure for this test to be meaningful"
+    );
+
+    // Give the server a moment to see stdin EOF and drain connections.
+    std::thread::sleep(Duration::from_secs(2));
+
+    let ps = Command::new("ps")
+        .args(["-Ao", "args="])
+        .output()
+        .expect("ps failed");
+    let listing = String::from_utf8_lossy(&ps.stdout);
+    let db_str = db.to_string_lossy();
+    let lingering: Vec<&str> = listing
+        .lines()
+        .filter(|l| l.contains(&*db_str) && l.contains("torc-server"))
+        .collect();
+    assert!(
+        lingering.is_empty(),
+        "torc-server subprocess leaked after client exited via process::exit; found: {:#?}",
         lingering
     );
 }

@@ -16,7 +16,6 @@ mod common;
 
 use common::{
     ensure_test_binaries_built, run_torc_standalone, run_torc_standalone_ok, torc_binary_path,
-    torc_server_binary_path,
 };
 
 /// Pull the workflow id out of `Created workflow N` (plain-text stdout).
@@ -120,7 +119,7 @@ fn exec_commands_file_skips_blanks_and_comments() {
 echo first
 
 echo second
-  # indented comment - NOT stripped by current parser because # check is at trim() start
+  # indented comment - stripped after trim(), so it is skipped
 echo third
 ",
     )
@@ -138,7 +137,7 @@ echo third
     assert_eq!(
         items.len(),
         3,
-        "expected 3 jobs (blank + full-line `#` comment skipped); got: {}",
+        "expected 3 jobs (blank + both `#` comments skipped); got: {}",
         jobs
     );
     let commands: Vec<&str> = items
@@ -565,8 +564,4 @@ fn standalone_short_flag_resolves_same_as_long() {
         "root help should advertise both -s and --standalone; got:\n{}",
         help
     );
-
-    // Keep server_bin path in scope so rustc doesn't warn about the unused import
-    // on code paths that don't need it elsewhere in this file.
-    let _ = torc_server_binary_path();
 }
