@@ -23,8 +23,9 @@ pub struct Args {
     #[arg(short, long, value_delimiter = ',')]
     pub job_ids: Vec<i64>,
 
-    /// Prefix for output filenames
-    #[arg(short = 'p', long, default_value = "resource_plot")]
+    /// Optional prefix for output filenames. When empty, files are named e.g. `job_4.html`,
+    /// `summary.html`, `system_timeline.html`.
+    #[arg(short = 'p', long, default_value = "")]
     pub prefix: String,
 
     /// Output format: html or json
@@ -168,13 +169,19 @@ pub fn run(args: &Args) -> Result<()> {
     // Generate plots
     println!("\nGenerating plots...");
     let mut total_plots = 0;
+    let filename = |stem: &str| -> String {
+        if args.prefix.is_empty() {
+            format!("{}.{}", stem, extension)
+        } else {
+            format!("{}_{}.{}", args.prefix, stem, extension)
+        }
+    };
 
     // 1. Individual job plots
     for metrics in &job_metrics {
-        let output_path = args.output_dir.join(format!(
-            "{}_job_{}.{}",
-            args.prefix, metrics.job_id, extension
-        ));
+        let output_path = args
+            .output_dir
+            .join(filename(&format!("job_{}", metrics.job_id)));
         plot_job_timeline(metrics, &output_path, &args.format)?;
         println!("  Created: {}", output_path.display());
         total_plots += 1;
@@ -182,16 +189,12 @@ pub fn run(args: &Args) -> Result<()> {
 
     // 2. Overview plots with all jobs
     if job_metrics.len() > 1 {
-        let cpu_output_path = args
-            .output_dir
-            .join(format!("{}_cpu_all_jobs.{}", args.prefix, extension));
+        let cpu_output_path = args.output_dir.join(filename("cpu_all_jobs"));
         plot_all_jobs_cpu_overview(&job_metrics, &cpu_output_path, &args.format)?;
         println!("  Created: {}", cpu_output_path.display());
         total_plots += 1;
 
-        let memory_output_path = args
-            .output_dir
-            .join(format!("{}_memory_all_jobs.{}", args.prefix, extension));
+        let memory_output_path = args.output_dir.join(filename("memory_all_jobs"));
         plot_all_jobs_memory_overview(&job_metrics, &memory_output_path, &args.format)?;
         println!("  Created: {}", memory_output_path.display());
         total_plots += 1;
@@ -199,9 +202,7 @@ pub fn run(args: &Args) -> Result<()> {
 
     // 3. Job summary dashboard
     if !job_metrics.is_empty() {
-        let output_path = args
-            .output_dir
-            .join(format!("{}_summary.{}", args.prefix, extension));
+        let output_path = args.output_dir.join(filename("summary"));
         plot_summary_dashboard(&job_metrics, &output_path, &args.format)?;
         println!("  Created: {}", output_path.display());
         total_plots += 1;
@@ -210,18 +211,14 @@ pub fn run(args: &Args) -> Result<()> {
     // 4. System resource plots
     if let Some(metrics) = &system_metrics {
         if !metrics.samples.is_empty() {
-            let output_path = args
-                .output_dir
-                .join(format!("{}_system_timeline.{}", args.prefix, extension));
+            let output_path = args.output_dir.join(filename("system_timeline"));
             plot_system_timeline(metrics, &output_path, &args.format)?;
             println!("  Created: {}", output_path.display());
             total_plots += 1;
         }
 
         if metrics.summary.is_some() {
-            let output_path = args
-                .output_dir
-                .join(format!("{}_system_summary.{}", args.prefix, extension));
+            let output_path = args.output_dir.join(filename("system_summary"));
             plot_system_summary(metrics, &output_path, &args.format)?;
             println!("  Created: {}", output_path.display());
             total_plots += 1;

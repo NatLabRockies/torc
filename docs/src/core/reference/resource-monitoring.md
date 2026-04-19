@@ -21,7 +21,7 @@ resource_monitor:
 | Field                     | Type                     | Default | Description                                |
 | ------------------------- | ------------------------ | ------- | ------------------------------------------ |
 | `sample_interval_seconds` | integer                  | `10`    | Seconds between all resource samples       |
-| `generate_plots`          | boolean                  | `false` | Reserved for future use                    |
+| `generate_plots`          | boolean                  | `false` | Emit HTML plots after the job runner exits |
 | `jobs`                    | JobMonitorConfig         | none    | Per-job CPU and memory monitoring          |
 | `compute_node`            | ComputeNodeMonitorConfig | none    | Overall compute-node CPU/memory monitoring |
 
@@ -96,8 +96,9 @@ monitoring is reserved for a future extension.
 
 ### `system_resource_samples` Table
 
-Created when compute-node monitoring is enabled. Rows are written when `compute_node.granularity` is
-`"time_series"`.
+This table is always created in the resource metrics database, but rows are only written when
+`resource_monitor.compute_node` is enabled with `granularity` set to `"time_series"`. If
+compute-node monitoring is disabled or summary-only, the table remains empty.
 
 | Column               | Type    | Description                  |
 | -------------------- | ------- | ---------------------------- |
@@ -108,8 +109,9 @@ Created when compute-node monitoring is enabled. Rows are written when `compute_
 
 ### `system_resource_summary` Table
 
-Created in the resource metrics database when compute-node time-series monitoring is enabled.
-Summary-only compute-node monitoring stores these values on the compute node record instead.
+This table is always created in the resource metrics database, but a row is only written when
+compute-node time-series monitoring is enabled. Summary-only compute-node monitoring stores these
+values on the compute node record instead, leaving this table empty.
 
 | Column              | Type    | Description                  |
 | ------------------- | ------- | ---------------------------- |

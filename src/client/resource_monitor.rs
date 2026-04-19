@@ -69,6 +69,28 @@ impl ResourceMonitorConfig {
     pub fn is_enabled(&self) -> bool {
         self.jobs_config().enabled || self.compute_node_config().is_some()
     }
+
+    /// Returns true if any enabled scope uses time-series granularity, which is when the
+    /// time-series SQLite database is created and populated.
+    pub fn has_timeseries_db(&self) -> bool {
+        let jobs_ts = {
+            let jobs = self.jobs_config();
+            jobs.enabled && matches!(jobs.granularity, MonitorGranularity::TimeSeries)
+        };
+        let node_ts = self
+            .compute_node_config()
+            .is_some_and(|c| matches!(c.granularity, MonitorGranularity::TimeSeries));
+        jobs_ts || node_ts
+    }
+}
+
+/// Returns the path of the time-series metrics database that would be produced for the
+/// given `output_dir` / `unique_label`. This mirrors the layout created by
+/// `init_timeseries_db` so callers (e.g. post-run plot generation) can locate the file.
+pub fn timeseries_db_path(output_dir: &Path, unique_label: &str) -> PathBuf {
+    output_dir
+        .join("resource_utilization")
+        .join(format!("{}_{}.db", DB_FILENAME_PREFIX, unique_label))
 }
 
 /// Configuration for per-job resource monitoring.
@@ -324,6 +346,8 @@ pub struct ResourceMonitor {
     tx: Sender<MonitorCommand>,
     handle: Option<JoinHandle<()>>,
     config: ResourceMonitorConfig,
+    /// Path of the time-series SQLite DB, set only when a time-series scope is active.
+    db_path: Option<PathBuf>,
     /// Receiver for OOM violation notifications from the monitoring thread.
     oom_rx: Receiver<OomViolation>,
 }
@@ -338,6 +362,9 @@ impl ResourceMonitor {
         let (tx, rx) = channel();
         let (oom_tx, oom_rx) = channel();
         let config_clone = config.clone();
+        let db_path = config
+            .has_timeseries_db()
+            .then(|| timeseries_db_path(&output_dir, &unique_label));
 
         let handle = thread::spawn(move || {
             if let Err(e) = run_monitoring_loop(config_clone, output_dir, unique_label, rx, oom_tx)
@@ -350,8 +377,19 @@ impl ResourceMonitor {
             tx,
             handle: Some(handle),
             config,
+            db_path,
             oom_rx,
         })
+    }
+
+    /// Path to the time-series metrics DB, or `None` if no time-series scope is enabled.
+    pub fn timeseries_db_path(&self) -> Option<&Path> {
+        self.db_path.as_deref()
+    }
+
+    /// Whether the workflow requested post-run plot generation.
+    pub fn generate_plots(&self) -> bool {
+        self.config.generate_plots
     }
 
     /// Returns `true` when the monitor is configured for `TimeSeries` granularity.
@@ -1114,7 +1152,7 @@ fn init_timeseries_db(output_dir: &Path, unique_label: &str) -> SqliteResult<Con
         return Err(rusqlite::Error::InvalidPath(resource_util_dir.clone()));
     }
 
-    let db_path = resource_util_dir.join(format!("{}_{}.db", DB_FILENAME_PREFIX, unique_label));
+    let db_path = timeseries_db_path(output_dir, unique_label);
     info!(
         "Initializing resource metrics database at: {}",
         db_path.display()

@@ -840,13 +840,23 @@ impl JobRunner {
 
         self.execute_worker_complete_actions();
 
-        // Shutdown resource monitor if enabled
+        // Shutdown resource monitor if enabled. Capture the plot request before shutdown
+        // consumes the monitor.
+        let plot_request = self
+            .resource_monitor
+            .as_ref()
+            .filter(|m| m.generate_plots())
+            .and_then(|m| m.timeseries_db_path().map(Path::to_path_buf));
         let system_metrics_summary = if let Some(monitor) = self.resource_monitor.take() {
             info!("Shutting down resource monitor");
             monitor.shutdown()
         } else {
             None
         };
+
+        if let Some(db_path) = plot_request {
+            self.generate_resource_plots(&db_path);
+        }
 
         // Deactivate compute node and set duration
         self.deactivate_compute_node(system_metrics_summary);
@@ -887,6 +897,39 @@ impl JobRunner {
                     self.workflow_id, job_id, e
                 );
             }
+        }
+    }
+
+    /// Generate HTML resource plots from the time-series metrics DB produced by the
+    /// resource monitor. No-op (with a warning) when the binary was not built with the
+    /// `plot_resources` feature.
+    fn generate_resource_plots(&self, db_path: &Path) {
+        #[cfg(feature = "plot_resources")]
+        {
+            let output_dir = db_path.parent().unwrap_or(&self.output_dir).to_path_buf();
+            let args = crate::plot_resources_cmd::Args {
+                db_paths: vec![db_path.to_path_buf()],
+                output_dir,
+                job_ids: Vec::new(),
+                prefix: String::new(),
+                format: "html".to_string(),
+            };
+            info!(
+                "Generating resource plots from {} workflow_id={}",
+                db_path.display(),
+                self.workflow_id
+            );
+            if let Err(e) = crate::plot_resources_cmd::run(&args) {
+                error!("Failed to generate resource plots: {}", e);
+            }
+        }
+        #[cfg(not(feature = "plot_resources"))]
+        {
+            let _ = db_path;
+            warn!(
+                "resource_monitor.generate_plots=true but this binary was built without the \
+                 'plot_resources' feature; skipping plot generation"
+            );
         }
     }
 
