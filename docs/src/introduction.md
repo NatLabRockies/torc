@@ -39,7 +39,7 @@ flowchart LR
 ## Key Features
 
 - **Declarative Workflow Definitions** — Define workflows in YAML, JSON, JSON5, or KDL
-- **Inline Commands with `torc exec`** — Run one command (or a queue of them) with CPU/memory
+- **Inline Commands with `torc -s exec`** — Run one command (or a queue of them) with CPU/memory
   monitoring and parallelism control, no spec file or running server required
   ([how-to](./core/how-to/run-inline-commands.md))
 - **Job Parameterization** — Create parameter sweeps with simple syntax like `index: "1:100"` to
