@@ -4,6 +4,7 @@ use rstest::*;
 use serde_json::{self, Value};
 use std::collections::HashMap;
 use std::net::TcpListener;
+use std::path::Path;
 use std::process::{Child, Command};
 use std::sync::Mutex;
 use std::thread;
@@ -15,6 +16,7 @@ use torc::models;
 const PREPROCESS: &str = "tests/scripts/preprocess.sh";
 const WORK: &str = "tests/scripts/work.sh";
 const POSTPROCESS: &str = "tests/scripts/postprocess.sh";
+const SERVER_START_ATTEMPTS: usize = 5;
 
 /// Global list of server PIDs to clean up at exit
 static SERVER_PIDS: Mutex<Vec<u32>> = Mutex::new(Vec::new());
@@ -57,10 +59,22 @@ fn track_server_pid(pid: u32) {
 /// Helper function to get the correct executable path for the current platform
 /// On Windows, appends .exe; on Unix, returns path as-is
 pub fn get_exe_path(base_path: &str) -> String {
-    if cfg!(windows) {
+    let path = if cfg!(windows) {
         format!("{}.exe", base_path)
     } else {
         base_path.to_string()
+    };
+
+    let path_ref = Path::new(&path);
+    if path_ref.is_absolute() {
+        path
+    } else if path.starts_with("./target/") || path.starts_with("target/") {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join(path.trim_start_matches("./"))
+            .to_string_lossy()
+            .into_owned()
+    } else {
+        path
     }
 }
 
@@ -92,7 +106,7 @@ fn find_available_port() -> u16 {
         .port()
 }
 
-fn wait_for_server_ready(port: u16, timeout_secs: u64) -> Result<(), String> {
+fn wait_for_server_ready(child: &mut Child, port: u16, timeout_secs: u64) -> Result<(), String> {
     let url = get_server_url(port);
     let client = reqwest::blocking::Client::new();
     let start = std::time::Instant::now();
@@ -100,6 +114,14 @@ fn wait_for_server_ready(port: u16, timeout_secs: u64) -> Result<(), String> {
     while start.elapsed().as_secs() < timeout_secs {
         if client.get(&url).send().is_ok() {
             return Ok(());
+        }
+        if let Some(status) = child
+            .try_wait()
+            .map_err(|e| format!("Failed to poll server process: {e}"))?
+        {
+            return Err(format!(
+                "Server on port {port} exited before becoming ready with status {status}"
+            ));
         }
         thread::sleep(Duration::from_millis(100));
     }
@@ -125,7 +147,6 @@ fn build_test_binaries() {
 }
 
 fn start_process(db_url: &str, db_file: NamedTempFile) -> ServerProcess {
-    let port = find_available_port();
     println!("Setting up database with url: {}", db_url);
     let status = Command::new("sqlx")
         .arg("--no-dotenv")
@@ -152,38 +173,57 @@ fn start_process(db_url: &str, db_file: NamedTempFile) -> ServerProcess {
             slurm_runner_path
         );
     }
-    eprintln!("Starting server on port {}", port);
-    let child = Command::new(get_exe_path("./target/debug/torc-server"))
-        .arg("run")
-        .arg("--port")
-        .arg(port.to_string())
-        .arg("--completion-check-interval-secs")
-        .arg("0.1")
-        .env("DATABASE_URL", db_url)
-        .env("RUST_LOG", "info")
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .spawn()
-        .expect("failed to start server process");
 
-    let pid = child.id();
+    let mut last_error = None;
+    for attempt in 1..=SERVER_START_ATTEMPTS {
+        let port = find_available_port();
+        eprintln!(
+            "Starting server on port {} (attempt {}/{})",
+            port, attempt, SERVER_START_ATTEMPTS
+        );
+        let mut child = Command::new(get_exe_path("./target/debug/torc-server"))
+            .arg("run")
+            .arg("--port")
+            .arg(port.to_string())
+            .arg("--completion-check-interval-secs")
+            .arg("0.1")
+            .env("DATABASE_URL", db_url)
+            .env("RUST_LOG", "info")
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .spawn()
+            .expect("failed to start server process");
 
-    // Track this PID for cleanup at program exit (handles #[once] fixture limitation)
-    track_server_pid(pid);
+        let pid = child.id();
 
-    if let Err(e) = wait_for_server_ready(port, 10) {
-        panic!("Server startup failed: {}", e);
+        // Track this PID for cleanup at program exit (handles #[once] fixture limitation)
+        track_server_pid(pid);
+
+        match wait_for_server_ready(&mut child, port, 10) {
+            Ok(()) => {
+                eprintln!("Server ready on port {} (PID: {})", port, pid);
+                let mut config = Configuration::new();
+                config.base_path = get_server_url(port);
+                return ServerProcess {
+                    child,
+                    db_file,
+                    port,
+                    config,
+                };
+            }
+            Err(e) => {
+                last_error = Some(e);
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
     }
 
-    eprintln!("Server ready on port {} (PID: {})", port, pid);
-    let mut config = Configuration::new();
-    config.base_path = get_server_url(port);
-    ServerProcess {
-        child,
-        db_file,
-        port,
-        config,
-    }
+    panic!(
+        "Server startup failed after {} attempts: {}",
+        SERVER_START_ATTEMPTS,
+        last_error.unwrap_or_else(|| "unknown error".to_string())
+    );
 }
 
 /// Start a test server instance
@@ -1486,7 +1526,6 @@ fn start_process_with_access_control_impl(
     htpasswd_file: NamedTempFile,
     require_auth: bool,
 ) -> AccessControlServerProcess {
-    let port = find_available_port();
     println!("Setting up database with url: {}", db_url);
     let status = Command::new("sqlx")
         .arg("--no-dotenv")
@@ -1502,73 +1541,91 @@ fn start_process_with_access_control_impl(
     }
     build_test_binaries();
 
-    eprintln!("Starting server with access control on port {}", port);
     let htpasswd_path = htpasswd_file.path().to_string_lossy().to_string();
-    let mut cmd = Command::new(get_exe_path("./target/debug/torc-server"));
-    cmd.arg("run")
-        .arg("--port")
-        .arg(port.to_string())
-        .arg("--completion-check-interval-secs")
-        .arg("0.1")
-        .arg("--enforce-access-control") // Enable access control enforcement
-        .arg("--auth-file")
-        .arg(&htpasswd_path)
-        // Add admin users - these can see all workflows
-        // Note: alice and bob are NOT admins because they're used as regular team members
-        // in group-based access control tests
-        .arg("--admin-user")
-        .arg("owner")
-        .arg("--admin-user")
-        .arg("api_owner")
-        .arg("--admin-user")
-        .arg("ml_owner")
-        .arg("--admin-user")
-        .arg("data_owner")
-        .arg("--admin-user")
-        .arg("ml_api_owner")
-        .arg("--admin-user")
-        .arg("data_api_owner");
-    if require_auth {
-        cmd.arg("--require-auth");
+    let mut last_error = None;
+    for attempt in 1..=SERVER_START_ATTEMPTS {
+        let port = find_available_port();
+        eprintln!(
+            "Starting server with access control on port {} (attempt {}/{})",
+            port, attempt, SERVER_START_ATTEMPTS
+        );
+        let mut cmd = Command::new(get_exe_path("./target/debug/torc-server"));
+        cmd.arg("run")
+            .arg("--port")
+            .arg(port.to_string())
+            .arg("--completion-check-interval-secs")
+            .arg("0.1")
+            .arg("--enforce-access-control") // Enable access control enforcement
+            .arg("--auth-file")
+            .arg(&htpasswd_path)
+            // Add admin users - these can see all workflows
+            // Note: alice and bob are NOT admins because they're used as regular team members
+            // in group-based access control tests
+            .arg("--admin-user")
+            .arg("owner")
+            .arg("--admin-user")
+            .arg("api_owner")
+            .arg("--admin-user")
+            .arg("ml_owner")
+            .arg("--admin-user")
+            .arg("data_owner")
+            .arg("--admin-user")
+            .arg("ml_api_owner")
+            .arg("--admin-user")
+            .arg("data_api_owner");
+        if require_auth {
+            cmd.arg("--require-auth");
+        }
+        let mut child = cmd
+            .env("DATABASE_URL", db_url)
+            .env("RUST_LOG", "info")
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .spawn()
+            .expect("failed to start server process");
+
+        let pid = child.id();
+
+        // Track this PID for cleanup at program exit
+        track_server_pid(pid);
+
+        match wait_for_server_ready(&mut child, port, 10) {
+            Ok(()) => {
+                eprintln!(
+                    "Server with access control ready on port {} (PID: {})",
+                    port, pid
+                );
+                let mut config = Configuration::new();
+                config.base_path = get_server_url(port);
+                // Set up basic auth as "owner" (one of the admin users)
+                // Note: alice and bob are NOT admins - they're used as regular team members in tests
+                config.basic_auth = Some((
+                    "owner".to_string(),
+                    Some("correct horse battery staple".to_string()),
+                ));
+                return AccessControlServerProcess {
+                    server: ServerProcess {
+                        child,
+                        db_file,
+                        port,
+                        config,
+                    },
+                    htpasswd_file,
+                };
+            }
+            Err(e) => {
+                last_error = Some(e);
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
     }
-    let child = cmd
-        .env("DATABASE_URL", db_url)
-        .env("RUST_LOG", "info")
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .spawn()
-        .expect("failed to start server process");
 
-    let pid = child.id();
-
-    // Track this PID for cleanup at program exit
-    track_server_pid(pid);
-
-    if let Err(e) = wait_for_server_ready(port, 10) {
-        panic!("Server startup failed: {}", e);
-    }
-
-    eprintln!(
-        "Server with access control ready on port {} (PID: {})",
-        port, pid
+    panic!(
+        "Server startup failed after {} attempts: {}",
+        SERVER_START_ATTEMPTS,
+        last_error.unwrap_or_else(|| "unknown error".to_string())
     );
-    let mut config = Configuration::new();
-    config.base_path = get_server_url(port);
-    // Set up basic auth as "owner" (one of the admin users)
-    // Note: alice and bob are NOT admins - they're used as regular team members in tests
-    config.basic_auth = Some((
-        "owner".to_string(),
-        Some("correct horse battery staple".to_string()),
-    ));
-    AccessControlServerProcess {
-        server: ServerProcess {
-            child,
-            db_file,
-            port,
-            config,
-        },
-        htpasswd_file,
-    }
 }
 
 /// Start a test server instance with access control + require-auth enabled.
