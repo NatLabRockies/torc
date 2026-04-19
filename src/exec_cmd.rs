@@ -165,6 +165,9 @@ pub fn run(args: ExecArgs, config: &Configuration, user: &str) {
 }
 
 /// If any trailing argument looks like a workflow spec file, return it.
+/// Only matches by known spec extensions; other file paths fall through to the
+/// generic "unexpected argument" error (so e.g. `torc exec commands.txt` doesn't
+/// get incorrectly steered toward `torc run`).
 fn detect_spec_file_in_trailing(trailing: &[String]) -> Option<String> {
     for arg in trailing {
         let lower = arg.to_lowercase();
@@ -173,7 +176,7 @@ fn detect_spec_file_in_trailing(trailing: &[String]) -> Option<String> {
             || lower.ends_with(".json")
             || lower.ends_with(".json5")
             || lower.ends_with(".kdl");
-        if extension_hit || std::path::Path::new(arg).is_file() {
+        if extension_hit {
             return Some(arg.clone());
         }
     }
@@ -451,5 +454,20 @@ mod tests {
     fn detect_spec_file_ignores_non_files() {
         let hit = detect_spec_file_in_trailing(&["hello world".into()]);
         assert!(hit.is_none());
+    }
+
+    #[test]
+    fn detect_spec_file_ignores_non_spec_existing_files() {
+        // A real file with a non-spec extension (e.g. `commands.txt`) should not
+        // get redirected to `torc run`; the user probably meant `-C commands.txt`.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("commands.txt");
+        std::fs::write(&path, "echo hi\n").unwrap();
+        let hit = detect_spec_file_in_trailing(&[path.to_string_lossy().into_owned()]);
+        assert!(
+            hit.is_none(),
+            "non-spec file should not be matched: {:?}",
+            hit
+        );
     }
 }

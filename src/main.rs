@@ -67,13 +67,40 @@ struct StandaloneServer {
     child: std::process::Child,
     api_url: String,
     db_path: std::path::PathBuf,
-    // Held only to keep the write end of the child's stdin pipe open for the
-    // lifetime of this struct. Never written to.
-    _stdin: std::process::ChildStdin,
+    // Write end of the child's stdin pipe. Held open to keep the child alive;
+    // dropping it (explicitly in `Drop::drop` or implicitly on parent exit)
+    // triggers the server's graceful shutdown via its `--shutdown-on-stdin-eof`
+    // path. Stored as Option so `Drop::drop` can move it out and close it
+    // before waiting.
+    stdin: Option<std::process::ChildStdin>,
 }
 
 impl Drop for StandaloneServer {
     fn drop(&mut self) {
+        // Close our end of the child's stdin pipe. The server is running with
+        // `--shutdown-on-stdin-eof`, so this alone should cause it to drain
+        // connections and exit on its own — a hard kill risks interrupting an
+        // in-flight SQLite write.
+        drop(self.stdin.take());
+
+        // Poll for graceful exit for up to 2 seconds. In practice the server
+        // exits in a few tens of milliseconds after EOF when no connections are
+        // active, which is the common case for a one-shot `torc -s ...`.
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            match self.child.try_wait() {
+                Ok(Some(_)) => return,
+                Ok(None) => {
+                    if Instant::now() >= deadline {
+                        break;
+                    }
+                    thread::sleep(Duration::from_millis(25));
+                }
+                Err(_) => break,
+            }
+        }
+
+        // Fell through the grace window — force-kill as a last resort.
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
@@ -195,7 +222,7 @@ fn start_standalone_server(
                         child,
                         api_url,
                         db_path,
-                        _stdin: child_stdin,
+                        stdin: Some(child_stdin),
                     });
                 }
                 // Other lines are passed through to stderr so users see startup logs.
@@ -346,14 +373,12 @@ fn main() {
                 Ok(server) => {
                     url = server.api_url.clone();
                     config.base_path = url.clone();
-                    // Expose to subprocesses (e.g., the job runner may shell out).
-                    // SAFETY: `start_standalone_server` spawned a stdout-drainer thread,
-                    // so this is technically not single-threaded. The drainer only does
-                    // IO and never touches the environment, and no other thread has been
-                    // started by this CLI at this point, so no concurrent getenv/setenv
-                    // can race. Other subprocess spawns downstream will observe this
-                    // value via inheritance.
-                    unsafe { std::env::set_var("TORC_API_URL", &url) };
+                    // Do NOT mutate the process-global environment here. By the time we
+                    // get here, start_standalone_server has already spawned background
+                    // threads, so std::env::set_var would be unsound. Every subprocess
+                    // torc spawns (job_runner, async_cli_command, torc-dash, etc.) already
+                    // passes TORC_API_URL explicitly at spawn time via .env(), so ambient
+                    // env is unnecessary for propagation.
                     eprintln!(
                         "Started standalone torc-server on {} (db: {})",
                         server.api_url,
