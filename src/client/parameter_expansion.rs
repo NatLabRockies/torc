@@ -53,11 +53,17 @@ impl ParameterValue {
 /// - Integer ranges: "1:100" (inclusive), "1:100:5" (with step)
 /// - Float ranges: "0.0:1.0:0.1"
 /// - Lists: "[1,5,10,50,100]" or "['train','test','validation']"
+/// - File-backed lists: "@path/to/file.txt" (one value per line; blank lines and '#' comments skipped)
 ///
 /// Also tolerates curly braces around values (e.g., "{1:100}" is treated as "1:100")
 /// since users sometimes confuse parameter value syntax with template substitution syntax.
 pub fn parse_parameter_value(value: &str) -> Result<Vec<ParameterValue>, String> {
     let trimmed = value.trim();
+
+    // File-backed list: `@path/to/file.txt` (one value per line)
+    if let Some(path) = trimmed.strip_prefix('@') {
+        return parse_file_list(path);
+    }
 
     // Strip curly braces if they wrap the entire value
     // This handles the common mistake of using {1:100} instead of 1:100
@@ -129,6 +135,34 @@ fn parse_list(value: &str) -> Result<Vec<ParameterValue>, String> {
         values.push(ParameterValue::String(unquoted.to_string()));
     }
 
+    Ok(values)
+}
+
+/// Parse a file containing one parameter value per line.
+/// Lines are trimmed; empty lines and lines starting with '#' are skipped.
+/// Each remaining line is parsed as Integer → Float → String, like list entries.
+fn parse_file_list(path: &str) -> Result<Vec<ParameterValue>, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("Empty file path after '@' in parameter value".to_string());
+    }
+    let content = std::fs::read_to_string(trimmed)
+        .map_err(|e| format!("Failed to read parameter file '{}': {}", trimmed, e))?;
+
+    let mut values = Vec::new();
+    for raw in content.lines() {
+        let line = raw.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Ok(i) = line.parse::<i64>() {
+            values.push(ParameterValue::Integer(i));
+        } else if let Ok(f) = line.parse::<f64>() {
+            values.push(ParameterValue::Float(f));
+        } else {
+            values.push(ParameterValue::String(line.to_string()));
+        }
+    }
     Ok(values)
 }
 
@@ -415,6 +449,39 @@ mod tests {
         assert_eq!(values.len(), 3);
         assert_eq!(values[0], ParameterValue::String("train".to_string()));
         assert_eq!(values[2], ParameterValue::String("validation".to_string()));
+    }
+
+    #[test]
+    fn test_parse_file_list_mixed_types() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("params.txt");
+        let mut f = std::fs::File::create(&path).unwrap();
+        writeln!(f, "# leading comment").unwrap();
+        writeln!(f).unwrap();
+        writeln!(f, "1").unwrap();
+        writeln!(f, "2.5").unwrap();
+        writeln!(f, "  alpha  ").unwrap();
+        writeln!(f, "# trailing comment").unwrap();
+
+        let arg = format!("@{}", path.display());
+        let values = parse_parameter_value(&arg).unwrap();
+        assert_eq!(values.len(), 3);
+        assert_eq!(values[0], ParameterValue::Integer(1));
+        assert_eq!(values[1], ParameterValue::Float(2.5));
+        assert_eq!(values[2], ParameterValue::String("alpha".to_string()));
+    }
+
+    #[test]
+    fn test_parse_file_list_missing_file() {
+        let result = parse_parameter_value("@/definitely/not/a/real/path.txt");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_file_list_empty_path() {
+        let result = parse_parameter_value("@");
+        assert!(result.is_err());
     }
 
     #[test]

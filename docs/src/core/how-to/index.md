@@ -2,6 +2,8 @@
 
 Step-by-step guides for common tasks.
 
+- [Run Inline Commands (torc exec)](./run-inline-commands.md) - Monitor CPU/memory of a single
+  command or run a parallel queue of commands, no spec file or running server required
 - [Track Workflow Status](./track-workflow-status.md) - Monitoring workflow progress
 - [Cancel a Workflow](./cancel-workflow.md) - Stopping running workflows
 - [View Job Logs](./view-job-logs.md) - Accessing job output

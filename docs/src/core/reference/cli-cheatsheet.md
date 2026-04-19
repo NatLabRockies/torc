@@ -6,6 +6,7 @@
 
 | Command                     | Description                                    |
 | --------------------------- | ---------------------------------------------- |
+| `torc -s exec -c '<cmd>'`   | Run inline command(s) standalone (no server)   |
 | `torc create <spec>`        | Create workflow from spec file                 |
 | `torc run <spec.yaml>`      | Create workflow from spec and run locally      |
 | `torc submit <spec.yaml>`   | Create and submit to scheduler (needs actions) |
@@ -14,6 +15,20 @@
 | `torc watch <id> --recover` | Monitor and auto-recover from failures         |
 | `torc-dash`                 | Launch web dashboard                           |
 | `torc tui`                  | Launch interactive terminal UI                 |
+
+## Inline Commands (`torc exec`)
+
+Run ad-hoc commands with CPU/memory monitoring, no spec file required. Pair with `-s` to avoid
+needing a running server. See [Run Inline Commands](../how-to/run-inline-commands.md) for details.
+
+| Command                                                            | Description                                          |
+| ------------------------------------------------------------------ | ---------------------------------------------------- |
+| `torc -s exec -c '<cmd>'`                                          | Monitor CPU/memory of one command                    |
+| `torc -s exec -c '<a>' -c '<b>' -c '<c>' -j 2`                     | Run a queue with parallelism cap (like GNU Parallel) |
+| `torc -s exec -C commands.txt -j 4`                                | Commands from a file (one per line)                  |
+| `torc -s exec -c 'run.sh {i}' --param i=1:100 -j 8`                | Parameter sweep (100 jobs)                           |
+| `torc -s exec -c 'work.sh' --monitor time-series --generate-plots` | Time-series CPU/mem + HTML plots                     |
+| `torc -s results list`                                             | Inspect past exec runs                               |
 
 ## Workflow Lifecycle
 

@@ -146,6 +146,86 @@ fn build_test_binaries() {
     }
 }
 
+static BINARIES_BUILT: std::sync::Once = std::sync::Once::new();
+
+/// Build the `torc` and `torc-server` binaries once per test-binary invocation.
+/// Use this in tests that spawn `torc` as a subprocess without relying on the
+/// `start_server` fixture (e.g. `--standalone` / `exec` tests).
+pub fn ensure_test_binaries_built() {
+    BINARIES_BUILT.call_once(build_test_binaries);
+}
+
+/// Absolute path to the debug-built `torc` binary.
+pub fn torc_binary_path() -> std::path::PathBuf {
+    std::env::current_dir()
+        .expect("Failed to get current dir")
+        .join(get_exe_path("target/debug/torc"))
+}
+
+/// Absolute path to the debug-built `torc-server` binary.
+pub fn torc_server_binary_path() -> std::path::PathBuf {
+    std::env::current_dir()
+        .expect("Failed to get current dir")
+        .join(get_exe_path("target/debug/torc-server"))
+}
+
+/// Spawn `torc -s <args...>` with a dedicated DB path, rooted in `work_dir`.
+///
+/// This is the shared harness for `--standalone` / `exec` integration tests:
+/// it wires the test-built binaries in, scrubs `TORC_API_URL` so the command
+/// cannot accidentally hit a developer's running server, and puts `target/debug`
+/// on `PATH` so child processes (the job runner, slurm runner) resolve.
+///
+/// Callers are responsible for asserting the expected outcome on the returned
+/// `Output` — some tests assert success, others assert the failure path.
+pub fn run_torc_standalone(
+    work_dir: &std::path::Path,
+    db_path: &std::path::Path,
+    args: &[&str],
+) -> std::process::Output {
+    let server_bin = torc_server_binary_path();
+    assert!(
+        server_bin.exists(),
+        "torc-server binary missing at {:?} — did ensure_test_binaries_built() run?",
+        server_bin
+    );
+
+    let target_debug = std::env::current_dir().expect("cwd").join("target/debug");
+    let path_var = std::env::var("PATH").unwrap_or_default();
+
+    Command::new(torc_binary_path())
+        .current_dir(work_dir)
+        .arg("-s")
+        .args(["--torc-server-bin", server_bin.to_str().unwrap()])
+        .args(["--db", db_path.to_str().unwrap()])
+        .args(args)
+        .env_remove("TORC_API_URL")
+        .env("RUST_LOG", "warn")
+        .env("PATH", format!("{}:{}", target_debug.display(), path_var))
+        .output()
+        .expect("failed to spawn torc")
+}
+
+/// `run_torc_standalone` plus an assertion that the command succeeded.
+/// On failure, dumps stdout/stderr for debugging.
+pub fn run_torc_standalone_ok(
+    work_dir: &std::path::Path,
+    db_path: &std::path::Path,
+    args: &[&str],
+) -> std::process::Output {
+    let out = run_torc_standalone(work_dir, db_path, args);
+    if !out.status.success() {
+        panic!(
+            "torc -s {:?} failed (status {:?}):\n--- stdout ---\n{}\n--- stderr ---\n{}",
+            args,
+            out.status.code(),
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr),
+        );
+    }
+    out
+}
+
 fn start_process(db_url: &str, db_file: NamedTempFile) -> ServerProcess {
     println!("Setting up database with url: {}", db_url);
     let status = Command::new("sqlx")

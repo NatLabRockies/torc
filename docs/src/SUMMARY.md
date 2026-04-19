@@ -30,6 +30,7 @@
   - [Exporting and Importing Workflows](./core/workflows/export-import-workflows.md)
   - [Archiving Workflows](./core/workflows/archiving.md)
 - [How-Tos](./core/how-to/index.md)
+  - [Run Inline Commands (torc exec)](./core/how-to/run-inline-commands.md)
   - [Track Workflow Status](./core/how-to/track-workflow-status.md)
   - [Cancel a Workflow](./core/how-to/cancel-workflow.md)
   - [View Job Logs](./core/how-to/view-job-logs.md)
