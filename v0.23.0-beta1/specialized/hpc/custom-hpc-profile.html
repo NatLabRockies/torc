@@ -1,0 +1,556 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Custom HPC Profile - Torc Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Distributed workflow orchestration for complex computational pipelines">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+        <link rel="stylesheet" href="../../pagetoc.css">
+        <link rel="stylesheet" href="../../version-selector.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Torc Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc/tree/v0.23.0-beta1/docs/src/specialized/hpc/custom-hpc-profile.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="creating-a-custom-hpc-profile"><a class="header" href="#creating-a-custom-hpc-profile">Creating a Custom HPC Profile</a></h1>
+<p>This tutorial walks you through creating a custom HPC profile for a cluster that Torc doesn't have
+built-in support for.</p>
+<h2 id="before-you-start"><a class="header" href="#before-you-start">Before You Start</a></h2>
+<blockquote>
+<p><strong>Request Built-in Support First!</strong></p>
+<p>If your HPC system is widely used, consider requesting that Torc developers add it as a built-in
+profile. This benefits everyone using that system.</p>
+<p>Open an issue at
+<a href="https://github.com/NatLabRockies/torc/issues">github.com/NatLabRockies/torc/issues</a> with:</p>
+<ul>
+<li>Your HPC system name and organization</li>
+<li>Partition names and their resource limits (CPUs, memory, walltime, GPUs)</li>
+<li>How to detect the system (environment variable or hostname pattern)</li>
+<li>Any special requirements (minimum nodes, exclusive partitions, etc.)</li>
+</ul>
+<p>Built-in profiles are maintained by the Torc team and stay up-to-date as systems change.</p>
+</blockquote>
+<h2 id="dynamic-slurm-support-the-easiest-way"><a class="header" href="#dynamic-slurm-support-the-easiest-way">Dynamic Slurm Support (The Easiest Way)</a></h2>
+<p>Before creating a custom profile, try using Torc's <strong>Dynamic Slurm Support</strong>. Torc can automatically
+query your cluster to discover its partitions and resource limits.</p>
+<p>If you are on a Slurm system, you can use Torc immediately without any configuration:</p>
+<ol>
+<li><strong>Auto-detection</strong>: Torc automatically falls back to dynamic Slurm detection if no other profile
+matches.</li>
+<li><strong>Explicit use</strong>: You can force dynamic detection by using <code>--hpc-profile slurm</code> in any command.</li>
+</ol>
+<p>Verify it works on your system:</p>
+<pre><code class="language-bash"># Show partitions detected from your Slurm cluster
+torc hpc partitions slurm
+</code></pre>
+<p>If the detected partitions look correct, you don't need to create a custom profile! You can jump
+straight to <a href="#step-7-use-your-profile">Step 7: Use Your Profile</a> using <code>slurm</code> as the profile name.</p>
+<h2 id="when-to-create-a-custom-profile"><a class="header" href="#when-to-create-a-custom-profile">When to Create a Custom Profile</a></h2>
+<p>Create a custom profile when:</p>
+<ul>
+<li>Your HPC isn't supported and you need to use it immediately</li>
+<li>You have a private or internal cluster</li>
+<li>You want to test profile configurations before submitting upstream</li>
+</ul>
+<h2 id="quick-start-auto-generate-from-slurm"><a class="header" href="#quick-start-auto-generate-from-slurm">Quick Start: Auto-Generate from Slurm</a></h2>
+<p>If you're on a Slurm cluster, you can automatically generate a profile from the cluster
+configuration:</p>
+<pre><code class="language-bash"># Generate profile from current Slurm cluster
+torc hpc generate
+
+# Specify a custom name
+torc hpc generate --name mycluster --display-name "My Research Cluster"
+
+# Skip standby/preemptible partitions
+torc hpc generate --skip-stdby
+
+# Save to a file
+torc hpc generate --skip-stdby -o mycluster-profile.toml
+</code></pre>
+<p>This queries <code>sinfo</code> and <code>scontrol</code> to extract:</p>
+<ul>
+<li>Partition names, CPUs, memory, and time limits</li>
+<li>GPU configuration from GRES</li>
+<li>Node sharing settings</li>
+<li>Hostname-based detection pattern</li>
+</ul>
+<p>The generated profile can be added directly to your config file. You may want to review and adjust:</p>
+<ul>
+<li><code>requires_explicit_request</code>: Set to <code>true</code> for partitions that shouldn't be auto-selected</li>
+<li><code>description</code>: Add human-readable descriptions for each partition</li>
+</ul>
+<p>After generation, skip to <a href="#step-4-verify-the-profile">Step 4: Verify the Profile</a>.</p>
+<h2 id="manual-profile-creation"><a class="header" href="#manual-profile-creation">Manual Profile Creation</a></h2>
+<p>If automatic generation isn't available or you need more control, follow these steps.</p>
+<h3 id="step-1-gather-partition-information"><a class="header" href="#step-1-gather-partition-information">Step 1: Gather Partition Information</a></h3>
+<p>Collect information about your HPC's partitions. On most Slurm systems:</p>
+<pre><code class="language-bash"># List all partitions
+sinfo -s
+
+# Get detailed partition info
+sinfo -o "%P %c %m %l %G"
+</code></pre>
+<p>For this tutorial, let's say your cluster "ResearchCluster" has these partitions:</p>
+<div class="table-wrapper"><table><thead><tr><th>Partition</th><th>CPUs/Node</th><th>Memory</th><th>Max Walltime</th><th>GPUs</th></tr></thead><tbody>
+<tr><td><code>batch</code></td><td>48</td><td>192 GB</td><td>72 hours</td><td>-</td></tr>
+<tr><td><code>short</code></td><td>48</td><td>192 GB</td><td>4 hours</td><td>-</td></tr>
+<tr><td><code>gpu</code></td><td>32</td><td>256 GB</td><td>48 hours</td><td>4x A100</td></tr>
+<tr><td><code>himem</code></td><td>48</td><td>1024 GB</td><td>48 hours</td><td>-</td></tr>
+</tbody></table>
+</div>
+<h3 id="step-2-identify-detection-method"><a class="header" href="#step-2-identify-detection-method">Step 2: Identify Detection Method</a></h3>
+<p>Determine how Torc can detect when you're on this system. Common methods:</p>
+<p><strong>Environment variable</strong> (most common):</p>
+<pre><code class="language-bash">echo $CLUSTER_NAME    # e.g., "research"
+echo $SLURM_CLUSTER   # e.g., "researchcluster"
+</code></pre>
+<p><strong>Hostname pattern</strong>:</p>
+<pre><code class="language-bash">hostname              # e.g., "login01.research.edu"
+</code></pre>
+<p>For this tutorial, we'll use the environment variable <code>CLUSTER_NAME=research</code>.</p>
+<h3 id="step-3-create-the-configuration-file"><a class="header" href="#step-3-create-the-configuration-file">Step 3: Create the Configuration File</a></h3>
+<p>Create or edit your Torc configuration file:</p>
+<pre><code class="language-bash"># Linux
+mkdir -p ~/.config/torc
+nano ~/.config/torc/config.toml
+
+# macOS
+mkdir -p ~/Library/Application\ Support/torc
+nano ~/Library/Application\ Support/torc/config.toml
+</code></pre>
+<p>Add your custom profile:</p>
+<pre><code class="language-toml"># Custom HPC Profile for ResearchCluster
+[client.hpc.custom_profiles.research]
+display_name = "Research Cluster"
+description = "University Research HPC System"
+detect_env_var = "CLUSTER_NAME=research"
+default_account = "my_project"
+
+# Batch partition - general purpose
+[[client.hpc.custom_profiles.research.partitions]]
+name = "batch"
+cpus_per_node = 48
+memory_mb = 192000        # 192 GB in MB
+max_walltime_secs = 259200  # 72 hours in seconds
+shared = false
+
+# Short partition - quick jobs
+[[client.hpc.custom_profiles.research.partitions]]
+name = "short"
+cpus_per_node = 48
+memory_mb = 192000
+max_walltime_secs = 14400   # 4 hours
+shared = true               # Allows sharing nodes
+
+# GPU partition
+[[client.hpc.custom_profiles.research.partitions]]
+name = "gpu"
+cpus_per_node = 32
+memory_mb = 256000          # 256 GB
+max_walltime_secs = 172800  # 48 hours
+gpus_per_node = 4
+gpu_type = "A100"
+shared = false
+
+# High memory partition
+[[client.hpc.custom_profiles.research.partitions]]
+name = "himem"
+cpus_per_node = 48
+memory_mb = 1048576         # 1024 GB (1 TB)
+max_walltime_secs = 172800  # 48 hours
+shared = false
+</code></pre>
+<h2 id="step-4-verify-the-profile"><a class="header" href="#step-4-verify-the-profile">Step 4: Verify the Profile</a></h2>
+<p>Check that Torc recognizes your profile:</p>
+<pre><code class="language-bash"># List all profiles
+torc hpc list
+</code></pre>
+<p>You should see your custom profile:</p>
+<pre><code>Known HPC profiles:
+
+╭──────────┬──────────────────┬────────────┬──────────╮
+│ Name     │ Display Name     │ Partitions │ Detected │
+├──────────┼──────────────────┼────────────┼──────────┤
+│ kestrel  │ NLR Kestrel      │ 15         │          │
+│ research │ Research Cluster │ 4          │ ✓        │
+╰──────────┴──────────────────┴────────────┴──────────╯
+</code></pre>
+<p>View the partitions:</p>
+<pre><code class="language-bash">torc hpc partitions research
+</code></pre>
+<pre><code>Partitions for research:
+
+╭─────────┬───────────┬───────────┬─────────────┬──────────╮
+│ Name    │ CPUs/Node │ Mem/Node  │ Max Walltime│ GPUs     │
+├─────────┼───────────┼───────────┼─────────────┼──────────┤
+│ batch   │ 48        │ 192 GB    │ 72h         │ -        │
+│ short   │ 48        │ 192 GB    │ 4h          │ -        │
+│ gpu     │ 32        │ 256 GB    │ 48h         │ 4 (A100) │
+│ himem   │ 48        │ 1024 GB   │ 48h         │ -        │
+╰─────────┴───────────┴───────────┴─────────────┴──────────╯
+</code></pre>
+<h2 id="step-5-test-partition-matching"><a class="header" href="#step-5-test-partition-matching">Step 5: Test Partition Matching</a></h2>
+<p>Verify that Torc correctly matches resource requirements to partitions:</p>
+<pre><code class="language-bash"># Should match 'short' partition
+torc hpc match research --cpus 8 --memory 16g --walltime 02:00:00
+
+# Should match 'gpu' partition
+torc hpc match research --cpus 16 --memory 64g --walltime 08:00:00 --gpus 2
+
+# Should match 'himem' partition
+torc hpc match research --cpus 24 --memory 512g --walltime 24:00:00
+</code></pre>
+<h2 id="step-6-test-scheduler-generation"><a class="header" href="#step-6-test-scheduler-generation">Step 6: Test Scheduler Generation</a></h2>
+<p>Create a test workflow to verify scheduler generation:</p>
+<pre><code class="language-yaml"># test_workflow.yaml
+name: profile_test
+description: Test custom HPC profile
+
+resource_requirements:
+  - name: standard
+    num_cpus: 16
+    memory: 64g
+    runtime: PT2H
+
+  - name: gpu_compute
+    num_cpus: 16
+    num_gpus: 2
+    memory: 128g
+    runtime: PT8H
+
+jobs:
+  - name: preprocess
+    command: echo "preprocessing"
+    resource_requirements: standard
+
+  - name: train
+    command: echo "training"
+    resource_requirements: gpu_compute
+    depends_on: [preprocess]
+</code></pre>
+<p>Generate schedulers:</p>
+<pre><code class="language-bash">torc slurm generate --account my_project --profile research test_workflow.yaml
+</code></pre>
+<p>You should see the generated workflow with appropriate schedulers for each partition.</p>
+<h2 id="step-7-use-your-profile"><a class="header" href="#step-7-use-your-profile">Step 7: Use Your Profile</a></h2>
+<p>Now you can submit workflows using your custom profile:</p>
+<pre><code class="language-bash"># Auto-detect the profile (if on the cluster)
+torc slurm generate --account my_project -o workflow_slurm.yaml workflow.yaml
+torc submit workflow_slurm.yaml
+
+# Or explicitly specify the profile
+torc slurm generate --account my_project --profile research -o workflow_slurm.yaml workflow.yaml
+torc submit workflow_slurm.yaml
+</code></pre>
+<h2 id="advanced-configuration"><a class="header" href="#advanced-configuration">Advanced Configuration</a></h2>
+<h3 id="hostname-based-detection"><a class="header" href="#hostname-based-detection">Hostname-Based Detection</a></h3>
+<p>If your cluster doesn't set a unique environment variable, use hostname detection:</p>
+<pre><code class="language-toml">[client.hpc.custom_profiles.research]
+display_name = "Research Cluster"
+detect_hostname = ".*\\.research\\.edu"  # Regex pattern
+</code></pre>
+<h3 id="minimum-node-requirements"><a class="header" href="#minimum-node-requirements">Minimum Node Requirements</a></h3>
+<p>Some partitions require a minimum number of nodes:</p>
+<pre><code class="language-toml">[[client.hpc.custom_profiles.research.partitions]]
+name = "large_scale"
+cpus_per_node = 128
+memory_mb = 512000
+max_walltime_secs = 172800
+min_nodes = 16  # Must request at least 16 nodes
+</code></pre>
+<h3 id="explicit-request-partitions"><a class="header" href="#explicit-request-partitions">Explicit Request Partitions</a></h3>
+<p>Some partitions shouldn't be auto-selected:</p>
+<pre><code class="language-toml">[[client.hpc.custom_profiles.research.partitions]]
+name = "priority"
+cpus_per_node = 48
+memory_mb = 192000
+max_walltime_secs = 86400
+requires_explicit_request = true  # Only used when explicitly requested
+</code></pre>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="profile-not-detected"><a class="header" href="#profile-not-detected">Profile Not Detected</a></h3>
+<p>If <code>torc hpc detect</code> doesn't find your profile:</p>
+<ol>
+<li>
+<p>Check the environment variable or hostname:</p>
+<pre><code class="language-bash">echo $CLUSTER_NAME
+hostname
+</code></pre>
+</li>
+<li>
+<p>Verify the detection pattern in your config matches exactly</p>
+</li>
+<li>
+<p>Test with explicit profile specification:</p>
+<pre><code class="language-bash">torc hpc show research
+</code></pre>
+</li>
+</ol>
+<h3 id="no-partition-found-for-job"><a class="header" href="#no-partition-found-for-job">No Partition Found for Job</a></h3>
+<p>If <code>torc slurm generate</code> can't find a matching partition:</p>
+<ol>
+<li>
+<p>Check if any partition satisfies all requirements:</p>
+<pre><code class="language-bash">torc hpc match research --cpus 32 --memory 128g --walltime 08:00:00
+</code></pre>
+</li>
+<li>
+<p>Verify memory is specified in MB in the config (not GB)</p>
+</li>
+<li>
+<p>Verify walltime is in seconds (not hours)</p>
+</li>
+</ol>
+<h3 id="configuration-file-location"><a class="header" href="#configuration-file-location">Configuration File Location</a></h3>
+<p>Torc looks for config files in these locations:</p>
+<ul>
+<li><strong>Linux</strong>: <code>~/.config/torc/config.toml</code></li>
+<li><strong>macOS</strong>: <code>~/Library/Application Support/torc/config.toml</code></li>
+<li><strong>Windows</strong>: <code>%APPDATA%\torc\config.toml</code></li>
+</ul>
+<p>You can also use the <code>TORC_CONFIG</code> environment variable to specify a custom path.</p>
+<h2 id="contributing-your-profile"><a class="header" href="#contributing-your-profile">Contributing Your Profile</a></h2>
+<p>If your HPC is used by others, please contribute it upstream:</p>
+<ol>
+<li>Fork the <a href="https://github.com/NatLabRockies/torc">Torc repository</a></li>
+<li>Add your profile as a new module in <code>src/client/hpc/</code> (see <code>kestrel.rs</code> for an example)</li>
+<li>Add tests for your profile</li>
+<li>Submit a pull request</li>
+</ol>
+<p>Or simply <a href="https://github.com/NatLabRockies/torc/issues">open an issue</a> with your partition
+information and we'll add it for you.</p>
+<h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>
+<ul>
+<li><a href="./hpc-profiles.html">Working with HPC Profiles</a> - General HPC profile usage</li>
+<li><a href="./hpc-profiles-reference.html">HPC Profiles Reference</a> - Complete configuration options</li>
+<li><a href="./slurm-workflows.html">Slurm Overview</a> - Simplified Slurm approach</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../specialized/hpc/hpc-deployment.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../specialized/remote/index.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../specialized/hpc/hpc-deployment.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../specialized/remote/index.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../mermaid.min.js"></script>
+        <script src="../../mermaid-init.js"></script>
+        <script src="../../pagetoc.js"></script>
+        <script src="../../version-selector.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
