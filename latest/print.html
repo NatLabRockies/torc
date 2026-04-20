@@ -219,6 +219,9 @@ dependencies, mixed resource requirements, and multiple stages.</p>
 <h2 id="key-features"><a class="header" href="#key-features">Key Features</a></h2>
 <ul>
 <li><strong>Declarative Workflow Definitions</strong> — Define workflows in YAML, JSON, JSON5, or KDL</li>
+<li><strong>Inline Commands with <code>torc -s exec</code></strong> — Run one command (or a queue of them) with CPU/memory
+monitoring and parallelism control, no spec file or running server required
+(<a href="./core/how-to/run-inline-commands.html">how-to</a>)</li>
 <li><strong>Job Parameterization</strong> — Create parameter sweeps with simple syntax like <code>index: "1:100"</code> to
 expand one job definition into hundreds (<a href="./core/tutorials/simple-params.html">tutorial</a>)</li>
 <li><strong>Automatic Dependency Resolution</strong> — Dependencies inferred from file and data relationships. No
@@ -3895,6 +3898,8 @@ management in active projects where historical data is valuable but visual clutt
 <div style="break-before: page; page-break-before: always;"></div><h1 id="how-tos"><a class="header" href="#how-tos">How-Tos</a></h1>
 <p>Step-by-step guides for common tasks.</p>
 <ul>
+<li><a href="core/how-to/./run-inline-commands.html">Run Inline Commands (torc exec)</a> - Monitor CPU/memory of a single
+command or run a parallel queue of commands, no spec file or running server required</li>
 <li><a href="core/how-to/./track-workflow-status.html">Track Workflow Status</a> - Monitoring workflow progress</li>
 <li><a href="core/how-to/./cancel-workflow.html">Cancel a Workflow</a> - Stopping running workflows</li>
 <li><a href="core/how-to/./view-job-logs.html">View Job Logs</a> - Accessing job output</li>
@@ -3906,6 +3911,117 @@ management in active projects where historical data is valuable but visual clutt
 <li><a href="core/how-to/./parameterize-with-files.html">Parameterize Jobs with Files</a> - Using file-based parameters</li>
 <li><a href="core/how-to/./use-invocation-script.html">Use Invocation Scripts</a> - Setting up job environments</li>
 <li><a href="core/how-to/./ro-crate-metadata.html">Add RO-Crate Metadata</a> - Storing provenance with RO-Crate</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="how-to-run-inline-commands-with-torc-exec"><a class="header" href="#how-to-run-inline-commands-with-torc-exec">How to Run Inline Commands with <code>torc exec</code></a></h1>
+<p><code>torc exec</code> turns an ad-hoc shell command (or a batch of them) into a torc workflow in one step — no
+spec file, no long-running server required. It's the fastest way to benefit from torc's per-job
+CPU/memory monitoring and its parallel job queue.</p>
+<p>Two common use cases:</p>
+<ol>
+<li><strong>Monitor CPU and memory</strong> for one or more commands you'd normally run directly.</li>
+<li><strong>Run a queue of commands in parallel</strong>, capped at N at a time (a torc-native alternative to GNU
+Parallel).</li>
+</ol>
+<p>Pair it with <code>-s</code>/<code>--standalone</code> and you don't need a running torc server — torc spawns a
+short-lived local server, stores the workflow in <code>./torc_output/torc.db</code>, and shuts the server down
+when the command exits. The workflow persists and can be inspected afterwards.</p>
+<h2 id="monitor-a-single-command"><a class="header" href="#monitor-a-single-command">Monitor a Single Command</a></h2>
+<pre><code class="language-console">torc -s exec -c 'bash long_script.sh'
+</code></pre>
+<p>For a single command, you can also use shell-style syntax. Everything after <code>--</code> is treated as one
+command:</p>
+<pre><code class="language-console">torc -s exec -- bash long_script.sh --flag value
+</code></pre>
+<p>While the job runs, torc samples CPU and memory usage. On completion it prints a summary and stores
+the metrics so you can review them later:</p>
+<pre><code class="language-console">torc -s results list
+</code></pre>
+<p>For higher-resolution data and plots, ask for time-series sampling:</p>
+<pre><code class="language-console">torc -s exec -c 'bash long_script.sh' --monitor time-series --generate-plots
+</code></pre>
+<p>This produces an HTML plot of CPU and memory over time under <code>torc_output/resource_utilization/</code>.</p>
+<h2 id="run-many-commands-in-parallel"><a class="header" href="#run-many-commands-in-parallel">Run Many Commands in Parallel</a></h2>
+<p>Supply multiple <code>-c</code> flags (or a file) and a parallelism cap with <code>-j</code>:</p>
+<pre><code class="language-console">torc -s exec \
+  -c 'bash process.sh sample1' \
+  -c 'bash process.sh sample2' \
+  -c 'bash process.sh sample3' \
+  -j 2
+</code></pre>
+<p>Or load the commands from a file (one per line, <code>#</code> comments and blank lines ignored):</p>
+<pre><code class="language-console">torc -s exec -C commands.txt -j 4
+</code></pre>
+<p>Stdin also works — pipe a list from another tool:</p>
+<pre><code class="language-console">ls *.fastq | sed 's|^|bash align.sh |' | torc -s exec -C - -j 8
+</code></pre>
+<h2 id="parameterize-a-template"><a class="header" href="#parameterize-a-template">Parameterize a Template</a></h2>
+<p>Use torc's standard <code>{name}</code> substitution via repeatable <code>--param NAME=VALUE</code> flags. Values can be
+integer or float ranges, lists, a literal, or <code>@file.txt</code> to read one value per line.</p>
+<h3 id="cartesian-product-default"><a class="header" href="#cartesian-product-default">Cartesian product (default)</a></h3>
+<p>Every combination of every parameter:</p>
+<pre><code class="language-console">torc -s exec -c 'python train.py --lr {lr} --bs {bs}' \
+  --param lr='[0.001,0.01,0.1]' \
+  --param bs='[32,64,128]' \
+  -j 4
+</code></pre>
+<p>That launches 3 × 3 = 9 jobs.</p>
+<h3 id="zipped-element-wise"><a class="header" href="#zipped-element-wise">Zipped (element-wise)</a></h3>
+<p>Parameters advance together — useful for paired inputs/outputs of the same length:</p>
+<pre><code class="language-console">torc -s exec -c 'curl -o {out} {url}' \
+  --param url=@urls.txt \
+  --param out=@outfiles.txt \
+  --link zip
+</code></pre>
+<p>With 5 URLs and 5 output paths this produces exactly 5 jobs.</p>
+<h2 id="preview-before-running"><a class="header" href="#preview-before-running">Preview Before Running</a></h2>
+<p>Use <code>--dry-run</code> to print the expanded workflow spec without creating a workflow or starting a
+server:</p>
+<pre><code class="language-console">torc exec --dry-run -c 'python train.py --lr {lr}' --param lr='[0.001,0.01,0.1]'
+</code></pre>
+<p>This is useful before launching a large sweep.</p>
+<h2 id="inspect-results-later"><a class="header" href="#inspect-results-later">Inspect Results Later</a></h2>
+<p>Because the workflow is persisted, you can come back to it:</p>
+<pre><code class="language-console">torc -s results list                # most recent run's jobs + metrics
+torc -s workflows list              # every workflow in the standalone DB
+torc -s jobs list &lt;workflow_id&gt;     # job statuses for a specific workflow
+torc -s tui                         # interactive browser
+</code></pre>
+<p>Give the workflow a friendly name up front to make it easier to find:</p>
+<pre><code class="language-console">torc -s exec -n hparam-sweep --description "LR sweep over ResNet50" \
+  -c 'python train.py --lr {lr}' --param lr='[0.001,0.01,0.1]'
+</code></pre>
+<h2 id="key-flags"><a class="header" href="#key-flags">Key Flags</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Flag</th><th>Default</th><th>Purpose</th></tr></thead><tbody>
+<tr><td><code>-c, --command &lt;CMD&gt;</code></td><td>—</td><td>Command to execute (repeatable)</td></tr>
+<tr><td><code>-C, --commands-file &lt;FILE&gt;</code></td><td>—</td><td>Read commands from file; <code>-</code> reads stdin</td></tr>
+<tr><td><code>--param NAME=VALUE</code></td><td>—</td><td>Template parameter (repeatable)</td></tr>
+<tr><td><code>--link product|zip</code></td><td><code>product</code></td><td>How to combine multiple params</td></tr>
+<tr><td><code>-j, --max-parallel-jobs N</code></td><td>unlimited</td><td>Cap concurrent jobs</td></tr>
+<tr><td><code>-n, --name &lt;NAME&gt;</code></td><td><code>exec_&lt;ts&gt;</code></td><td>Workflow name</td></tr>
+<tr><td><code>--description &lt;TEXT&gt;</code></td><td>—</td><td>Workflow description</td></tr>
+<tr><td><code>--dry-run</code></td><td>off</td><td>Print the expanded workflow spec without running</td></tr>
+<tr><td><code>--monitor &lt;MODE&gt;</code></td><td><code>summary</code></td><td>Per-job monitoring: <code>off</code>, <code>summary</code>, <code>time-series</code></td></tr>
+<tr><td><code>--monitor-compute-node &lt;MODE&gt;</code></td><td><code>off</code></td><td>Node-wide monitoring</td></tr>
+<tr><td><code>--generate-plots</code></td><td>off</td><td>Render HTML plots (requires time-series)</td></tr>
+<tr><td><code>-i, --sample-interval-seconds</code></td><td><code>10</code></td><td>Resource sample interval</td></tr>
+<tr><td><code>--stdio &lt;MODE&gt;</code></td><td>spec default</td><td><code>separate</code>, <code>combined</code>, <code>no-stdout</code>, <code>no-stderr</code>, <code>none</code></td></tr>
+<tr><td><code>-o, --output-dir &lt;DIR&gt;</code></td><td><code>torc_output</code></td><td>Where logs and metrics are written</td></tr>
+</tbody></table>
+</div>
+<p>For the full reference, run <code>torc exec --help</code>.</p>
+<h2 id="when-to-use-torc-run-instead"><a class="header" href="#when-to-use-torc-run-instead">When to Use <code>torc run</code> Instead</a></h2>
+<p><code>torc exec</code> is designed for ad-hoc commands. If you already have a workflow spec file (with
+dependencies, resource requirements, failure handlers, etc.), use
+<a href="core/how-to/../../getting-started/quick-start-local.html"><code>torc run</code></a> — it's the same engine, but the spec file
+gives you the full workflow model.</p>
+<p>Tip: if you pass a spec file to <code>exec</code> by mistake (e.g. <code>torc exec workflow.yaml</code>), torc detects it
+and suggests <code>torc run workflow.yaml</code>.</p>
+<h2 id="see-also-4"><a class="header" href="#see-also-4">See Also</a></h2>
+<ul>
+<li><a href="core/how-to/../monitoring/resource-monitoring.html">Resource Monitoring</a> — configuration details for the
+underlying <code>resource_monitor</code> spec</li>
+<li><a href="core/how-to/./view-resource-plots.html">View Resource Plots</a> — what <code>--generate-plots</code> produces</li>
+<li><a href="core/how-to/../reference/parameterization.html">Job Parameterization</a> — <code>{name}</code> substitution syntax</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="how-to-track-workflow-status"><a class="header" href="#how-to-track-workflow-status">How to Track Workflow Status</a></h1>
 <p>Monitor a running workflow's progress using the CLI, TUI, or dashboard.</p>
@@ -3954,7 +4070,7 @@ torc jobs list &lt;workflow_id&gt; --status failed
     echo "Workflow complete"
 fi
 </code></pre>
-<h2 id="see-also-4"><a class="header" href="#see-also-4">See Also</a></h2>
+<h2 id="see-also-5"><a class="header" href="#see-also-5">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/../monitoring/tui.html">Terminal UI (TUI)</a> — Interactive monitoring</li>
 <li><a href="core/how-to/../monitoring/dashboard.html">Web Dashboard</a> — Visual workflow management</li>
@@ -3995,7 +4111,7 @@ torc run &lt;workflow_id&gt;
 torc submit &lt;workflow_id&gt;
 </code></pre>
 <p>Jobs that completed before cancellation remain completed.</p>
-<h2 id="see-also-5"><a class="header" href="#see-also-5">See Also</a></h2>
+<h2 id="see-also-6"><a class="header" href="#see-also-6">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/./track-workflow-status.html">Track Workflow Status</a> — Monitor workflow progress</li>
 <li><a href="core/how-to/../concepts/reinitialization.html">Workflow Reinitialization</a> — Resume after issues</li>
@@ -4064,7 +4180,7 @@ torc results list --include-logs &lt;workflow_id&gt; --job-id &lt;failed_job_id&
 <li><strong>Dashboard</strong> — The web dashboard displays job logs when you click on a job. See
 <a href="core/how-to/../monitoring/dashboard.html">Web Dashboard</a>.</li>
 </ul>
-<h2 id="see-also-6"><a class="header" href="#see-also-6">See Also</a></h2>
+<h2 id="see-also-7"><a class="header" href="#see-also-7">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/../monitoring/working-with-logs.html">Working with Logs</a> — Log configuration and management</li>
 <li><a href="core/how-to/./debug-failed-job.html">Debug a Failed Job</a> — Full debugging workflow</li>
@@ -4141,7 +4257,7 @@ torc run &lt;workflow_id&gt;
 # Or re-submit to Slurm
 torc submit &lt;workflow_id&gt;
 </code></pre>
-<h2 id="see-also-7"><a class="header" href="#see-also-7">See Also</a></h2>
+<h2 id="see-also-8"><a class="header" href="#see-also-8">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/./view-job-logs.html">View Job Logs</a> — Finding log files</li>
 <li><a href="core/how-to/./check-resource-utilization.html">Check Resource Utilization</a> — Resource analysis</li>
@@ -4191,7 +4307,7 @@ source ~/.config/torc/credentials
 <li><strong>Never pass <code>--password</code> on the command line</strong> — it appears in shell history and process lists</li>
 <li><strong>Do not commit</strong> <code>~/.config/torc/credentials</code> or any file containing passwords to version control</li>
 </ul>
-<h2 id="see-also-8"><a class="header" href="#see-also-8">See Also</a></h2>
+<h2 id="see-also-9"><a class="header" href="#see-also-9">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/../reference/environment-variables.html">Environment Variables</a> — All Torc environment variables</li>
 <li><a href="core/how-to/../reference/cli.html">CLI Reference</a> — Global <code>--username</code> and <code>--password</code> flags</li>
@@ -4296,7 +4412,7 @@ under-reported peak usage.</p>
 <li>Runtime: Add 15-30% above actual duration</li>
 <li>CPU: Round up to accommodate peak percentage (e.g., 501% CPU → 6 cores)</li>
 </ul>
-<h2 id="see-also-9"><a class="header" href="#see-also-9">See Also</a></h2>
+<h2 id="see-also-10"><a class="header" href="#see-also-10">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/../monitoring/resource-monitoring.html">Resource Monitoring</a> — Enable and configure monitoring</li>
 <li><a href="core/how-to/../reference/resources.html">Resource Requirements Reference</a> — Specification format</li>
@@ -4342,7 +4458,7 @@ FROM job_resource_samples
 WHERE job_id = 1
 ORDER BY timestamp;
 </code></pre>
-<h2 id="see-also-10"><a class="header" href="#see-also-10">See Also</a></h2>
+<h2 id="see-also-11"><a class="header" href="#see-also-11">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/../monitoring/resource-monitoring.html">Resource Monitoring</a> — Configuration options</li>
 <li><a href="core/how-to/../reference/resource-monitoring.html">Resource Monitoring Database</a> — Database schema reference</li>
@@ -4509,7 +4625,7 @@ jobs:
       year: "2020:2024"
 </code></pre>
 <p>Creates 20 jobs (4 regions × 5 years).</p>
-<h2 id="see-also-11"><a class="header" href="#see-also-11">See Also</a></h2>
+<h2 id="see-also-12"><a class="header" href="#see-also-12">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/../tutorials/simple-params.html">Simple Parameterization</a> — Basic parameter tutorial</li>
 <li><a href="core/how-to/../tutorials/advanced-params.html">Advanced Parameterization</a> — Multi-dimensional sweeps</li>
@@ -4612,7 +4728,7 @@ apptainer exec /path/to/container.sif "$@"
 <li>Test the script manually before submitting: <code>bash setup.sh python --version</code></li>
 <li>Different jobs can use different invocation scripts</li>
 </ul>
-<h2 id="see-also-12"><a class="header" href="#see-also-12">See Also</a></h2>
+<h2 id="see-also-13"><a class="header" href="#see-also-13">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/../reference/workflow-spec.html">Workflow Specification</a> - Full JobSpec reference</li>
 <li><a href="core/how-to/../../specialized/hpc/slurm-workflows.html">Slurm Workflows</a> - HPC-specific configuration</li>
@@ -4872,7 +4988,7 @@ metadata JSON.</p>
 <h2 id="workflow-exportimport"><a class="header" href="#workflow-exportimport">Workflow Export/Import</a></h2>
 <p>RO-Crate entities are included in workflow exports (<code>torc workflows export</code>) and restored during
 imports (<code>torc workflows import</code>). File ID links are remapped automatically.</p>
-<h2 id="see-also-13"><a class="header" href="#see-also-13">See Also</a></h2>
+<h2 id="see-also-14"><a class="header" href="#see-also-14">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/../concepts/ro-crate.html">RO-Crate Provenance Tracking</a> — Concept overview</li>
 <li><a href="https://www.researchobject.org/ro-crate/">RO-Crate Specification</a> — Official documentation</li>
@@ -7838,7 +7954,7 @@ torc results list --include-logs &lt;workflow_id&gt; --output-dir &lt;correct_pa
 <li><strong><code>torc-dash</code></strong>: Launch web interface with interactive Debugging tab</li>
 <li><strong><code>torc tui</code></strong>: Launch terminal UI for workflow monitoring</li>
 </ul>
-<h2 id="see-also-14"><a class="header" href="#see-also-14">See Also</a></h2>
+<h2 id="see-also-15"><a class="header" href="#see-also-15">See Also</a></h2>
 <ul>
 <li><a href="core/monitoring/working-with-logs.html">Working with Logs</a> — Bundling and analyzing logs</li>
 <li><a href="core/monitoring/debugging-slurm.html">Debugging Slurm Workflows</a> — Slurm-specific debugging tools</li>
@@ -8000,7 +8116,7 @@ torc logs analyze wf&lt;id&gt;/
 <li><strong><code>torc slurm parse-logs</code></strong>: Parse Slurm logs for error patterns (Slurm-specific)</li>
 <li><strong><code>torc slurm sacct</code></strong>: Collect Slurm accounting data</li>
 </ul>
-<h2 id="see-also-15"><a class="header" href="#see-also-15">See Also</a></h2>
+<h2 id="see-also-16"><a class="header" href="#see-also-16">See Also</a></h2>
 <ul>
 <li><a href="core/monitoring/debugging.html">Debugging Workflows</a> — General debugging workflow and log file details</li>
 <li><a href="core/monitoring/debugging-slurm.html">Debugging Slurm Workflows</a> — Slurm-specific debugging tools</li>
@@ -8025,6 +8141,7 @@ all common commands. Keep it handy!</p>
 <h1 id="torc-cli-cheat-sheet"><a class="header" href="#torc-cli-cheat-sheet">Torc CLI Cheat Sheet</a></h1>
 <h2 id="quick-start-4"><a class="header" href="#quick-start-4">Quick Start</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>torc -s exec -c '&lt;cmd&gt;'</code></td><td>Run inline command(s) standalone (no server)</td></tr>
 <tr><td><code>torc create &lt;spec&gt;</code></td><td>Create workflow from spec file</td></tr>
 <tr><td><code>torc run &lt;spec.yaml&gt;</code></td><td>Create workflow from spec and run locally</td></tr>
 <tr><td><code>torc submit &lt;spec.yaml&gt;</code></td><td>Create and submit to scheduler (needs actions)</td></tr>
@@ -8033,6 +8150,20 @@ all common commands. Keep it handy!</p>
 <tr><td><code>torc watch &lt;id&gt; --recover</code></td><td>Monitor and auto-recover from failures</td></tr>
 <tr><td><code>torc-dash</code></td><td>Launch web dashboard</td></tr>
 <tr><td><code>torc tui</code></td><td>Launch interactive terminal UI</td></tr>
+</tbody></table>
+</div>
+<h2 id="inline-commands-torc-exec"><a class="header" href="#inline-commands-torc-exec">Inline Commands (<code>torc exec</code>)</a></h2>
+<p>Run ad-hoc commands with CPU/memory monitoring, no spec file required. Pair with <code>-s</code> to avoid
+needing a running server. See <a href="core/reference/../how-to/run-inline-commands.html">Run Inline Commands</a> for details.</p>
+<div class="table-wrapper"><table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>torc -s exec -c '&lt;cmd&gt;'</code></td><td>Monitor CPU/memory of one command</td></tr>
+<tr><td><code>torc -s exec -- python script.py --flag value</code></td><td>Shell-style single command invocation</td></tr>
+<tr><td><code>torc -s exec -c '&lt;a&gt;' -c '&lt;b&gt;' -c '&lt;c&gt;' -j 2</code></td><td>Run a queue with parallelism cap (like GNU Parallel)</td></tr>
+<tr><td><code>torc -s exec -C commands.txt -j 4</code></td><td>Commands from a file (one per line)</td></tr>
+<tr><td><code>torc -s exec -c 'run.sh {i}' --param i=1:100 -j 8</code></td><td>Parameter sweep (100 jobs)</td></tr>
+<tr><td><code>torc exec --dry-run -c 'run.sh {i}' --param i=1:3</code></td><td>Preview the expanded workflow spec</td></tr>
+<tr><td><code>torc -s exec -c 'work.sh' --monitor time-series --generate-plots</code></td><td>Time-series CPU/mem + HTML plots</td></tr>
+<tr><td><code>torc -s results list</code></td><td>Inspect past exec runs</td></tr>
 </tbody></table>
 </div>
 <h2 id="workflow-lifecycle"><a class="header" href="#workflow-lifecycle">Workflow Lifecycle</a></h2>
@@ -8332,7 +8463,7 @@ torc watch 123 --auto-schedule \
 # Useful for long-running checkpointable jobs
 torc watch 123 --auto-schedule --partition standard --walltime 04:00:00
 </code></pre>
-<h3 id="see-also-16"><a class="header" href="#see-also-16">See Also</a></h3>
+<h3 id="see-also-17"><a class="header" href="#see-also-17">See Also</a></h3>
 <ul>
 <li><a href="core/reference/cli.html#torc-recover"><code>torc recover</code></a> — One-shot recovery (no continuous monitoring)</li>
 <li><a href="core/reference/../../specialized/fault-tolerance/automatic-recovery.html">Automatic Failure Recovery</a> — Detailed
@@ -8395,7 +8526,7 @@ torc recover 123 --retry-unknown
 # With custom recovery hook for domain-specific fixes
 torc recover 123 --recovery-hook 'bash fix-cluster.sh'
 </code></pre>
-<h3 id="see-also-17"><a class="header" href="#see-also-17">See Also</a></h3>
+<h3 id="see-also-18"><a class="header" href="#see-also-18">See Also</a></h3>
 <ul>
 <li><a href="core/reference/cli.html#torc-watch"><code>torc watch --recover</code></a> — Continuous monitoring with automatic recovery</li>
 <li><a href="core/reference/../../specialized/fault-tolerance/automatic-recovery.html">Automatic Failure Recovery</a> — Detailed
@@ -11499,7 +11630,7 @@ standalone = false
 server_port = 0
 completion_check_interval_secs = 5
 </code></pre>
-<h2 id="see-also-18"><a class="header" href="#see-also-18">See Also</a></h2>
+<h2 id="see-also-19"><a class="header" href="#see-also-19">See Also</a></h2>
 <ul>
 <li><a href="core/reference/../../specialized/admin/configuration-files.html">Configuration Files How-To</a></li>
 <li><a href="core/reference/../../specialized/tools/configuration.html">Configuration Tutorial</a></li>
@@ -12169,7 +12300,7 @@ curl $TORC_API_URL/health
 <p>Use <code>torc hpc match</code> to see which partitions match your requirements:</p>
 <pre><code class="language-bash">torc hpc match kestrel --cpus 32 --memory 64g --walltime 02:00:00 --gpus 2
 </code></pre>
-<h2 id="see-also-19"><a class="header" href="#see-also-19">See Also</a></h2>
+<h2 id="see-also-20"><a class="header" href="#see-also-20">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/../../core/workflows/visualizing-workflows.html">Visualizing Workflow Structure</a> — Execution plans
 and DAG visualization</li>
@@ -12217,7 +12348,7 @@ jobs:
 torc slurm generate --help
 torc submit --help
 </code></pre>
-<h2 id="see-also-20"><a class="header" href="#see-also-20">See Also</a></h2>
+<h2 id="see-also-21"><a class="header" href="#see-also-21">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/../../specialized/hpc/slurm-workflows.html">Slurm Overview</a> — Full Slurm integration guide</li>
 <li><a href="specialized/hpc/../../specialized/hpc/hpc-profiles.html">HPC Profiles</a> — Available HPC system configurations</li>
@@ -12578,7 +12709,7 @@ wrap the command with <code>srun</code>.</p>
 <h3 id="using-num_nodes--1-for-independent-jobs"><a class="header" href="#using-num_nodes--1-for-independent-jobs">Using <code>num_nodes &gt; 1</code> for independent jobs</a></h3>
 <p>If your jobs don't need inter-node communication, keep <code>num_nodes=1</code> (the default) and let Torc
 schedule them independently across nodes for maximum throughput.</p>
-<h2 id="see-also-21"><a class="header" href="#see-also-21">See Also</a></h2>
+<h2 id="see-also-22"><a class="header" href="#see-also-22">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/./slurm-workflows.html">Slurm Overview</a> — Auto-generated Slurm configuration with
 <code>slurm generate</code> + <code>submit</code></li>
@@ -12930,7 +13061,7 @@ etc.) and are available via <code>torc slurm stats &lt;workflow_id&gt;</code>.</
 <h3 id="local-execution-1"><a class="header" href="#local-execution-1">Local Execution</a></h3>
 <p>When running locally (no <code>SLURM_JOB_ID</code> environment variable), Torc uses its standard shell wrapper
 and the <code>srun</code> behavior is never triggered. No configuration is needed for local runs.</p>
-<h2 id="see-also-22"><a class="header" href="#see-also-22">See Also</a></h2>
+<h2 id="see-also-23"><a class="header" href="#see-also-23">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/./slurm-workflows.html">Slurm Overview</a> — Simplified workflow approach</li>
 <li><a href="specialized/hpc/./hpc-profiles.html">HPC Profiles</a> — Automatic partition matching</li>
@@ -13393,7 +13524,7 @@ when:</p>
 <li><strong><code>torc-dash</code></strong>: Launch web interface with Slurm log viewing</li>
 <li><strong><code>torc tui</code></strong>: Launch terminal UI with Slurm log viewing</li>
 </ul>
-<h2 id="see-also-23"><a class="header" href="#see-also-23">See Also</a></h2>
+<h2 id="see-also-24"><a class="header" href="#see-also-24">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/debugging.html">Debugging Workflows</a> — General debugging tools and workflows</li>
 <li><a href="specialized/hpc/working-with-logs.html">Working with Logs</a> — Bundling and analyzing logs</li>
@@ -13515,7 +13646,7 @@ See <a href="specialized/hpc/./slurm.html">Advanced Slurm Configuration</a> for 
 <ul>
 <li><code>torc slurm generate</code> + <code>torc submit</code> - Submit workflows with auto-generated schedulers</li>
 </ul>
-<h2 id="see-also-24"><a class="header" href="#see-also-24">See Also</a></h2>
+<h2 id="see-also-25"><a class="header" href="#see-also-25">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/./slurm.html">Advanced Slurm Configuration</a></li>
 <li><a href="specialized/hpc/./custom-hpc-profile.html">Custom HPC Profile Tutorial</a></li>
@@ -13851,7 +13982,7 @@ default_account = "my_default_account"
 </div>
 <p>Generated walltime uses <code>HH:MM:SS</code> format (e.g., <code>04:00:00</code>).</p>
 <hr />
-<h2 id="see-also-25"><a class="header" href="#see-also-25">See Also</a></h2>
+<h2 id="see-also-26"><a class="header" href="#see-also-26">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/./hpc-profiles.html">Working with HPC Profiles</a></li>
 <li><a href="specialized/hpc/./custom-hpc-profile.html">Custom HPC Profile Tutorial</a></li>
@@ -14083,7 +14214,7 @@ pgrep -f torc-server
 # Check server logs
 tail -100 /scratch/$USER/torc/logs/torc-server*.log
 </code></pre>
-<h2 id="see-also-26"><a class="header" href="#see-also-26">See Also</a></h2>
+<h2 id="see-also-27"><a class="header" href="#see-also-27">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/../../core/reference/configuration.html">Configuration Reference</a></li>
 <li><a href="specialized/hpc/./hpc-profiles-reference.html">HPC Profiles Reference</a></li>
@@ -14397,7 +14528,7 @@ hostname
 </ol>
 <p>Or simply <a href="https://github.com/NatLabRockies/torc/issues">open an issue</a> with your partition
 information and we'll add it for you.</p>
-<h2 id="see-also-27"><a class="header" href="#see-also-27">See Also</a></h2>
+<h2 id="see-also-28"><a class="header" href="#see-also-28">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/./hpc-profiles.html">Working with HPC Profiles</a> - General HPC profile usage</li>
 <li><a href="specialized/hpc/./hpc-profiles-reference.html">HPC Profiles Reference</a> - Complete configuration options</li>
@@ -15225,7 +15356,7 @@ for more details.</p>
 <li>Update jobs with new scheduler reference</li>
 <li>Submit allocations via sbatch</li>
 </ol>
-<h2 id="see-also-28"><a class="header" href="#see-also-28">See Also</a></h2>
+<h2 id="see-also-29"><a class="header" href="#see-also-29">See Also</a></h2>
 <ul>
 <li><a href="specialized/fault-tolerance/./failure-handlers.html">Configurable Failure Handlers</a> - Per-job retry with exit-code-specific
 recovery</li>
@@ -17326,7 +17457,7 @@ check that the proxy is configured and the URL is correct.</p>
 <li><strong>Format:</strong> PEM-encoded (Base64 ASCII, begins with <code>-----BEGIN CERTIFICATE-----</code>)</li>
 <li><strong>Type:</strong> CA certificate (not the server's leaf certificate)</li>
 </ul>
-<h2 id="see-also-29"><a class="header" href="#see-also-29">See Also</a></h2>
+<h2 id="see-also-30"><a class="header" href="#see-also-30">See Also</a></h2>
 <ul>
 <li><a href="specialized/admin/./authentication.html">Authentication</a> — Setting up user authentication</li>
 <li><a href="specialized/admin/./security.html">Security Reference</a> — Security best practices and threat model</li>
@@ -19534,7 +19665,7 @@ remains in Torc's database.</p>
 <li>Check that jobs have actually run (logs are created at runtime)</li>
 </ul>
 <hr />
-<h2 id="see-also-30"><a class="header" href="#see-also-30">See Also</a></h2>
+<h2 id="see-also-31"><a class="header" href="#see-also-31">See Also</a></h2>
 <ul>
 <li><a href="specialized/tools/./ai-assistant.html">AI-Assisted Workflow Management Tutorial</a></li>
 <li><a href="specialized/tools/../../core/reference/configuration.html">Configuration Reference</a></li>

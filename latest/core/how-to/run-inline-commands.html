@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Track Workflow Status - Torc Documentation</title>
+        <title>Run Inline Commands (torc exec) - Torc Documentation</title>
 
 
         <!-- Custom HTML head -->
@@ -150,7 +150,7 @@
                         <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/NatLabRockies/torc/edit/main/docs/src/core/how-to/track-workflow-status.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://github.com/NatLabRockies/torc/edit/main/docs/src/core/how-to/run-inline-commands.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
@@ -184,69 +184,127 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="how-to-track-workflow-status"><a class="header" href="#how-to-track-workflow-status">How to Track Workflow Status</a></h1>
-<p>Monitor a running workflow's progress using the CLI, TUI, or dashboard.</p>
-<h2 id="quick-status-check"><a class="header" href="#quick-status-check">Quick Status Check</a></h2>
-<pre><code class="language-bash">torc status &lt;workflow_id&gt;
+                        <h1 id="how-to-run-inline-commands-with-torc-exec"><a class="header" href="#how-to-run-inline-commands-with-torc-exec">How to Run Inline Commands with <code>torc exec</code></a></h1>
+<p><code>torc exec</code> turns an ad-hoc shell command (or a batch of them) into a torc workflow in one step — no
+spec file, no long-running server required. It's the fastest way to benefit from torc's per-job
+CPU/memory monitoring and its parallel job queue.</p>
+<p>Two common use cases:</p>
+<ol>
+<li><strong>Monitor CPU and memory</strong> for one or more commands you'd normally run directly.</li>
+<li><strong>Run a queue of commands in parallel</strong>, capped at N at a time (a torc-native alternative to GNU
+Parallel).</li>
+</ol>
+<p>Pair it with <code>-s</code>/<code>--standalone</code> and you don't need a running torc server — torc spawns a
+short-lived local server, stores the workflow in <code>./torc_output/torc.db</code>, and shuts the server down
+when the command exits. The workflow persists and can be inspected afterwards.</p>
+<h2 id="monitor-a-single-command"><a class="header" href="#monitor-a-single-command">Monitor a Single Command</a></h2>
+<pre><code class="language-console">torc -s exec -c 'bash long_script.sh'
 </code></pre>
-<p>Example output:</p>
-<pre><code>Workflow 42: data_pipeline
-
-Jobs by Status:
-  Completed:  45
-  Running:     5
-  Ready:      10
-  Blocked:    40
+<p>For a single command, you can also use shell-style syntax. Everything after <code>--</code> is treated as one
+command:</p>
+<pre><code class="language-console">torc -s exec -- bash long_script.sh --flag value
 </code></pre>
-<h2 id="continuous-monitoring"><a class="header" href="#continuous-monitoring">Continuous Monitoring</a></h2>
-<p>Watch status update every 10 seconds:</p>
-<pre><code class="language-bash">watch -n 10 torc status &lt;workflow_id&gt;
+<p>While the job runs, torc samples CPU and memory usage. On completion it prints a summary and stores
+the metrics so you can review them later:</p>
+<pre><code class="language-console">torc -s results list
 </code></pre>
-<h2 id="interactive-tui"><a class="header" href="#interactive-tui">Interactive TUI</a></h2>
-<p>Launch the terminal UI for a visual dashboard:</p>
-<pre><code class="language-bash">torc tui
+<p>For higher-resolution data and plots, ask for time-series sampling:</p>
+<pre><code class="language-console">torc -s exec -c 'bash long_script.sh' --monitor time-series --generate-plots
 </code></pre>
-<p>The TUI shows:</p>
-<ul>
-<li>Job status breakdown with progress bars</li>
-<li>Running job details</li>
-<li>Failed job information</li>
-<li>Real-time updates</li>
-</ul>
-<h2 id="list-individual-jobs"><a class="header" href="#list-individual-jobs">List Individual Jobs</a></h2>
-<p>View job-level status:</p>
-<pre><code class="language-bash"># All jobs
-torc jobs list &lt;workflow_id&gt;
-
-# Filter by status
-torc jobs list &lt;workflow_id&gt; --status running
-torc jobs list &lt;workflow_id&gt; --status failed
+<p>This produces an HTML plot of CPU and memory over time under <code>torc_output/resource_utilization/</code>.</p>
+<h2 id="run-many-commands-in-parallel"><a class="header" href="#run-many-commands-in-parallel">Run Many Commands in Parallel</a></h2>
+<p>Supply multiple <code>-c</code> flags (or a file) and a parallelism cap with <code>-j</code>:</p>
+<pre><code class="language-console">torc -s exec \
+  -c 'bash process.sh sample1' \
+  -c 'bash process.sh sample2' \
+  -c 'bash process.sh sample3' \
+  -j 2
 </code></pre>
-<h2 id="check-completion"><a class="header" href="#check-completion">Check Completion</a></h2>
-<p>Verify if a workflow has finished:</p>
-<pre><code class="language-bash">torc workflows is-complete &lt;workflow_id&gt;
+<p>Or load the commands from a file (one per line, <code>#</code> comments and blank lines ignored):</p>
+<pre><code class="language-console">torc -s exec -C commands.txt -j 4
 </code></pre>
-<p>For scripting:</p>
-<pre><code class="language-bash">if torc -f json workflows is-complete "$WORKFLOW_ID" | jq -e '.is_complete' &gt; /dev/null; then
-    echo "Workflow complete"
-fi
+<p>Stdin also works — pipe a list from another tool:</p>
+<pre><code class="language-console">ls *.fastq | sed 's|^|bash align.sh |' | torc -s exec -C - -j 8
 </code></pre>
+<h2 id="parameterize-a-template"><a class="header" href="#parameterize-a-template">Parameterize a Template</a></h2>
+<p>Use torc's standard <code>{name}</code> substitution via repeatable <code>--param NAME=VALUE</code> flags. Values can be
+integer or float ranges, lists, a literal, or <code>@file.txt</code> to read one value per line.</p>
+<h3 id="cartesian-product-default"><a class="header" href="#cartesian-product-default">Cartesian product (default)</a></h3>
+<p>Every combination of every parameter:</p>
+<pre><code class="language-console">torc -s exec -c 'python train.py --lr {lr} --bs {bs}' \
+  --param lr='[0.001,0.01,0.1]' \
+  --param bs='[32,64,128]' \
+  -j 4
+</code></pre>
+<p>That launches 3 × 3 = 9 jobs.</p>
+<h3 id="zipped-element-wise"><a class="header" href="#zipped-element-wise">Zipped (element-wise)</a></h3>
+<p>Parameters advance together — useful for paired inputs/outputs of the same length:</p>
+<pre><code class="language-console">torc -s exec -c 'curl -o {out} {url}' \
+  --param url=@urls.txt \
+  --param out=@outfiles.txt \
+  --link zip
+</code></pre>
+<p>With 5 URLs and 5 output paths this produces exactly 5 jobs.</p>
+<h2 id="preview-before-running"><a class="header" href="#preview-before-running">Preview Before Running</a></h2>
+<p>Use <code>--dry-run</code> to print the expanded workflow spec without creating a workflow or starting a
+server:</p>
+<pre><code class="language-console">torc exec --dry-run -c 'python train.py --lr {lr}' --param lr='[0.001,0.01,0.1]'
+</code></pre>
+<p>This is useful before launching a large sweep.</p>
+<h2 id="inspect-results-later"><a class="header" href="#inspect-results-later">Inspect Results Later</a></h2>
+<p>Because the workflow is persisted, you can come back to it:</p>
+<pre><code class="language-console">torc -s results list                # most recent run's jobs + metrics
+torc -s workflows list              # every workflow in the standalone DB
+torc -s jobs list &lt;workflow_id&gt;     # job statuses for a specific workflow
+torc -s tui                         # interactive browser
+</code></pre>
+<p>Give the workflow a friendly name up front to make it easier to find:</p>
+<pre><code class="language-console">torc -s exec -n hparam-sweep --description "LR sweep over ResNet50" \
+  -c 'python train.py --lr {lr}' --param lr='[0.001,0.01,0.1]'
+</code></pre>
+<h2 id="key-flags"><a class="header" href="#key-flags">Key Flags</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Flag</th><th>Default</th><th>Purpose</th></tr></thead><tbody>
+<tr><td><code>-c, --command &lt;CMD&gt;</code></td><td>—</td><td>Command to execute (repeatable)</td></tr>
+<tr><td><code>-C, --commands-file &lt;FILE&gt;</code></td><td>—</td><td>Read commands from file; <code>-</code> reads stdin</td></tr>
+<tr><td><code>--param NAME=VALUE</code></td><td>—</td><td>Template parameter (repeatable)</td></tr>
+<tr><td><code>--link product|zip</code></td><td><code>product</code></td><td>How to combine multiple params</td></tr>
+<tr><td><code>-j, --max-parallel-jobs N</code></td><td>unlimited</td><td>Cap concurrent jobs</td></tr>
+<tr><td><code>-n, --name &lt;NAME&gt;</code></td><td><code>exec_&lt;ts&gt;</code></td><td>Workflow name</td></tr>
+<tr><td><code>--description &lt;TEXT&gt;</code></td><td>—</td><td>Workflow description</td></tr>
+<tr><td><code>--dry-run</code></td><td>off</td><td>Print the expanded workflow spec without running</td></tr>
+<tr><td><code>--monitor &lt;MODE&gt;</code></td><td><code>summary</code></td><td>Per-job monitoring: <code>off</code>, <code>summary</code>, <code>time-series</code></td></tr>
+<tr><td><code>--monitor-compute-node &lt;MODE&gt;</code></td><td><code>off</code></td><td>Node-wide monitoring</td></tr>
+<tr><td><code>--generate-plots</code></td><td>off</td><td>Render HTML plots (requires time-series)</td></tr>
+<tr><td><code>-i, --sample-interval-seconds</code></td><td><code>10</code></td><td>Resource sample interval</td></tr>
+<tr><td><code>--stdio &lt;MODE&gt;</code></td><td>spec default</td><td><code>separate</code>, <code>combined</code>, <code>no-stdout</code>, <code>no-stderr</code>, <code>none</code></td></tr>
+<tr><td><code>-o, --output-dir &lt;DIR&gt;</code></td><td><code>torc_output</code></td><td>Where logs and metrics are written</td></tr>
+</tbody></table>
+</div>
+<p>For the full reference, run <code>torc exec --help</code>.</p>
+<h2 id="when-to-use-torc-run-instead"><a class="header" href="#when-to-use-torc-run-instead">When to Use <code>torc run</code> Instead</a></h2>
+<p><code>torc exec</code> is designed for ad-hoc commands. If you already have a workflow spec file (with
+dependencies, resource requirements, failure handlers, etc.), use
+<a href="../../getting-started/quick-start-local.html"><code>torc run</code></a> — it's the same engine, but the spec file
+gives you the full workflow model.</p>
+<p>Tip: if you pass a spec file to <code>exec</code> by mistake (e.g. <code>torc exec workflow.yaml</code>), torc detects it
+and suggests <code>torc run workflow.yaml</code>.</p>
 <h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>
 <ul>
-<li><a href="../monitoring/tui.html">Terminal UI (TUI)</a> — Interactive monitoring</li>
-<li><a href="../monitoring/dashboard.html">Web Dashboard</a> — Visual workflow management</li>
-<li><a href="../monitoring/workflow-reports.html">Workflow Reports</a> — Generate summary reports</li>
+<li><a href="../monitoring/resource-monitoring.html">Resource Monitoring</a> — configuration details for the
+underlying <code>resource_monitor</code> spec</li>
+<li><a href="./view-resource-plots.html">View Resource Plots</a> — what <code>--generate-plots</code> produces</li>
+<li><a href="../reference/parameterization.html">Job Parameterization</a> — <code>{name}</code> substitution syntax</li>
 </ul>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../../core/how-to/run-inline-commands.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../../core/how-to/index.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../../core/how-to/cancel-workflow.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../../core/how-to/track-workflow-status.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -256,11 +314,11 @@ fi
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../../core/how-to/run-inline-commands.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../../core/how-to/index.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../../core/how-to/cancel-workflow.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../../core/how-to/track-workflow-status.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

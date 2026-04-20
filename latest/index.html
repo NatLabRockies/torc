@@ -221,6 +221,9 @@ dependencies, mixed resource requirements, and multiple stages.</p>
 <h2 id="key-features"><a class="header" href="#key-features">Key Features</a></h2>
 <ul>
 <li><strong>Declarative Workflow Definitions</strong> — Define workflows in YAML, JSON, JSON5, or KDL</li>
+<li><strong>Inline Commands with <code>torc -s exec</code></strong> — Run one command (or a queue of them) with CPU/memory
+monitoring and parallelism control, no spec file or running server required
+(<a href="./core/how-to/run-inline-commands.html">how-to</a>)</li>
 <li><strong>Job Parameterization</strong> — Create parameter sweeps with simple syntax like <code>index: "1:100"</code> to
 expand one job definition into hundreds (<a href="./core/tutorials/simple-params.html">tutorial</a>)</li>
 <li><strong>Automatic Dependency Resolution</strong> — Dependencies inferred from file and data relationships. No
