@@ -39,9 +39,6 @@ flowchart LR
 ## Key Features
 
 - **Declarative Workflow Definitions** — Define workflows in YAML, JSON, JSON5, or KDL
-- **Inline Commands with `torc -s exec`** — Run one command (or a queue of them) with CPU/memory
-  monitoring and parallelism control, no spec file or running server required
-  ([how-to](./core/how-to/run-inline-commands.md))
 - **Job Parameterization** — Create parameter sweeps with simple syntax like `index: "1:100"` to
   expand one job definition into hundreds ([tutorial](./core/tutorials/simple-params.md))
 - **Automatic Dependency Resolution** — Dependencies inferred from file and data relationships. No
@@ -54,6 +51,9 @@ flowchart LR
 - **Fault Tolerance** — Resume workflows after failures without losing progress
 - **AI-assisted configuration and management** — Use AI tools like Claude Code and Copilot to
   configure workflows and diagnose problems
+- **Inline Commands with `torc -s exec`** — Run one command (or a queue of them) in standalone mode
+  with CPU/memory monitoring and parallelism control, no spec file or running server required
+  ([how-to](./core/how-to/run-inline-commands.md))
 
 ## Who Should Use Torc?
 

@@ -407,6 +407,39 @@ fn exec_spec_file_trailing_arg_suggests_torc_run() {
 }
 
 #[test]
+fn exec_delimited_spec_like_arg_is_allowed() {
+    // `torc exec -- <command with yaml arg>` must not be misread as a
+    // `torc run <spec>` mistake; everything after `--` is a shell command.
+    ensure_test_binaries_built();
+
+    let out = Command::new(torc_binary_path())
+        .args([
+            "exec",
+            "--dry-run",
+            "--monitor",
+            "off",
+            "--",
+            "echo",
+            "workflow.yaml",
+        ])
+        .env_remove("TORC_API_URL")
+        .output()
+        .expect("failed to spawn torc");
+    assert!(
+        out.status.success(),
+        "`torc exec -- echo workflow.yaml` should succeed; stderr:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let spec: serde_json::Value = serde_json::from_str(&stdout)
+        .unwrap_or_else(|e| panic!("dry-run stdout should be JSON: {}\n{}", e, stdout));
+    let jobs = spec["jobs"].as_array().expect("jobs[]");
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0]["command"], "echo workflow.yaml");
+}
+
+#[test]
 fn exec_non_delimited_trailing_arg_is_rejected() {
     ensure_test_binaries_built();
 

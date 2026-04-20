@@ -37,7 +37,7 @@ pub struct ExecArgs {
     pub monitor: String,
     pub monitor_compute_node: String,
     pub generate_plots: bool,
-    pub sample_interval_seconds: Option<u32>,
+    pub sample_interval_seconds: Option<i32>,
     pub stdio: Option<String>,
     pub trailing: Vec<String>,
     pub shell_command_delimited: bool,
@@ -53,7 +53,11 @@ pub struct ExecArgs {
 /// Run the exec command. Returns on workflow completion; exits the process on errors.
 pub fn run(args: ExecArgs, config: &Configuration, user: &str) {
     // Detect the `torc exec <file>` mistake and redirect users to `torc run`.
-    if let Some(hint) = detect_spec_file_in_trailing(&args.trailing) {
+    // Skipped when the user passed `--`: everything after the delimiter is an intentional
+    // shell command (e.g., `torc exec -- cat workflow.yaml`) and must not be second-guessed.
+    if !args.shell_command_delimited
+        && let Some(hint) = detect_spec_file_in_trailing(&args.trailing)
+    {
         eprintln!(
             "torc exec: unexpected argument '{}' — this looks like a workflow spec file.",
             hint
@@ -360,7 +364,7 @@ fn build_spec(
     monitor: &str,
     monitor_compute_node: &str,
     generate_plots: bool,
-    sample_interval_seconds: Option<u32>,
+    sample_interval_seconds: Option<i32>,
     stdio: Option<&str>,
 ) -> Result<WorkflowSpec, String> {
     let wf_name = name
@@ -398,7 +402,7 @@ fn build_spec(
                 .as_ref()
                 .map(|j| j.granularity.clone())
                 .unwrap_or(MonitorGranularity::Summary),
-            sample_interval_seconds: sample_interval_seconds.map(|v| v as i32).unwrap_or(10),
+            sample_interval_seconds: sample_interval_seconds.unwrap_or(10),
             generate_plots,
             jobs: jobs_cfg,
             compute_node: node_cfg,

@@ -116,7 +116,7 @@ Because the workflow is persisted, you can come back to it:
 torc -s results list                # most recent run's jobs + metrics
 torc -s workflows list              # every workflow in the standalone DB
 torc -s jobs list <workflow_id>     # job statuses for a specific workflow
-torc -s tui                         # interactive browser
+torc tui --standalone               # interactive browser
 ```
 
 Give the workflow a friendly name up front to make it easier to find:
