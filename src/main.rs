@@ -54,6 +54,22 @@ fn print_workflow_message(format: &str, workflow_id: i64, message: &str) {
     }
 }
 
+fn command_used_delimiter(command_name: &str) -> bool {
+    let mut seen_command = false;
+    for arg in std::env::args_os().skip(1) {
+        if seen_command {
+            if arg == "--" {
+                return true;
+            }
+            continue;
+        }
+        if arg == command_name {
+            seen_command = true;
+        }
+    }
+    false
+}
+
 /// Handle to an ephemeral torc-server subprocess started by `--standalone`.
 ///
 /// Normal-exit cleanup is handled by `Drop`, which kills and reaps the child.
@@ -363,6 +379,7 @@ fn main() {
             | Commands::Tui(..)
             | Commands::Config { .. }
             | Commands::Hpc { .. }
+            | Commands::Exec { dry_run: true, .. }
     );
 
     // Spawn an ephemeral torc-server when --standalone is set. The guard's Drop
@@ -516,6 +533,7 @@ fn main() {
             link,
             max_parallel_jobs,
             output_dir,
+            dry_run,
             monitor,
             monitor_compute_node,
             generate_plots,
@@ -537,12 +555,14 @@ fn main() {
                 output_dir: output_dir
                     .clone()
                     .unwrap_or_else(|| run_config.output_dir.clone()),
+                dry_run: *dry_run,
                 monitor: monitor.clone(),
                 monitor_compute_node: monitor_compute_node.clone(),
                 generate_plots: *generate_plots,
                 sample_interval_seconds: *sample_interval_seconds,
                 stdio: stdio.clone(),
                 trailing: trailing.clone(),
+                shell_command_delimited: command_used_delimiter("exec"),
                 format: format.clone(),
                 log_level: log_level.clone(),
                 url: url.clone(),

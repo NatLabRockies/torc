@@ -20,6 +20,13 @@ when the command exits. The workflow persists and can be inspected afterwards.
 torc -s exec -c 'bash long_script.sh'
 ```
 
+For a single command, you can also use shell-style syntax. Everything after `--` is treated as one
+command:
+
+```console
+torc -s exec -- bash long_script.sh --flag value
+```
+
 While the job runs, torc samples CPU and memory usage. On completion it prints a summary and stores
 the metrics so you can review them later:
 
@@ -90,6 +97,17 @@ torc -s exec -c 'curl -o {out} {url}' \
 
 With 5 URLs and 5 output paths this produces exactly 5 jobs.
 
+## Preview Before Running
+
+Use `--dry-run` to print the expanded workflow spec without creating a workflow or starting a
+server:
+
+```console
+torc exec --dry-run -c 'python train.py --lr {lr}' --param lr='[0.001,0.01,0.1]'
+```
+
+This is useful before launching a large sweep.
+
 ## Inspect Results Later
 
 Because the workflow is persisted, you can come back to it:
@@ -119,6 +137,7 @@ torc -s exec -n hparam-sweep --description "LR sweep over ResNet50" \
 | `-j, --max-parallel-jobs N`     | unlimited     | Cap concurrent jobs                                      |
 | `-n, --name <NAME>`             | `exec_<ts>`   | Workflow name                                            |
 | `--description <TEXT>`          | —             | Workflow description                                     |
+| `--dry-run`                     | off           | Print the expanded workflow spec without running         |
 | `--monitor <MODE>`              | `summary`     | Per-job monitoring: `off`, `summary`, `time-series`      |
 | `--monitor-compute-node <MODE>` | `off`         | Node-wide monitoring                                     |
 | `--generate-plots`              | off           | Render HTML plots (requires time-series)                 |

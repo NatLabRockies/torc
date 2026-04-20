@@ -33,12 +33,14 @@ pub struct ExecArgs {
     pub link: String,
     pub max_parallel_jobs: Option<i64>,
     pub output_dir: PathBuf,
+    pub dry_run: bool,
     pub monitor: String,
     pub monitor_compute_node: String,
     pub generate_plots: bool,
     pub sample_interval_seconds: Option<u32>,
     pub stdio: Option<String>,
     pub trailing: Vec<String>,
+    pub shell_command_delimited: bool,
     pub format: String,
     pub log_level: String,
     pub url: String,
@@ -59,16 +61,41 @@ pub fn run(args: ExecArgs, config: &Configuration, user: &str) {
         eprintln!("Did you mean: torc run {}", hint);
         std::process::exit(2);
     }
-    if !args.trailing.is_empty() {
+    if !args.trailing.is_empty()
+        && (!args.shell_command_delimited
+            || !args.commands.is_empty()
+            || args.commands_file.is_some())
+    {
         eprintln!(
             "torc exec: unexpected trailing argument(s): {}",
             args.trailing.join(" ")
         );
-        eprintln!("Commands must be provided via -c/--command or -C/--commands-file.");
+        eprintln!(
+            "Use either -c/--command, -C/--commands-file, or shell-style `torc exec -- <command>`."
+        );
         std::process::exit(2);
     }
 
-    let commands = match gather_commands(&args.commands, args.commands_file.as_deref()) {
+    let shell_command =
+        if args.shell_command_delimited && args.commands.is_empty() && args.commands_file.is_none()
+        {
+            shell_command_from_trailing(&args.trailing)
+        } else {
+            Ok(None)
+        };
+    let shell_command = match shell_command {
+        Ok(cmd) => cmd,
+        Err(e) => {
+            eprintln!("torc exec: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let commands = match gather_commands(
+        &args.commands,
+        args.commands_file.as_deref(),
+        shell_command.as_deref(),
+    ) {
         Ok(cmds) => cmds,
         Err(e) => {
             eprintln!("torc exec: {}", e);
@@ -123,6 +150,11 @@ pub fn run(args: ExecArgs, config: &Configuration, user: &str) {
         }
     };
 
+    if args.dry_run {
+        print_dry_run(&spec, &args.format);
+        return;
+    }
+
     let workflow_id = match WorkflowSpec::create_from_validated_spec(config, spec, user, false) {
         Ok(id) => id,
         Err(e) => {
@@ -131,12 +163,7 @@ pub fn run(args: ExecArgs, config: &Configuration, user: &str) {
         }
     };
 
-    if args.format == "json" {
-        println!(
-            "{}",
-            serde_json::json!({"workflow_id": workflow_id, "message": "Created workflow"})
-        );
-    } else {
+    if args.format != "json" {
         println!("Created workflow {}", workflow_id);
     }
 
@@ -161,7 +188,30 @@ pub fn run(args: ExecArgs, config: &Configuration, user: &str) {
         tls_insecure: args.tls_insecure,
         cookie_header: args.cookie_header,
     };
-    run_jobs_cmd::run(&run_args);
+    let log_stream = if args.format == "json" {
+        run_jobs_cmd::LogStream::Stderr
+    } else {
+        run_jobs_cmd::LogStream::Stdout
+    };
+    let result = run_jobs_cmd::run_with_log_stream(&run_args, log_stream);
+    if args.format == "json" {
+        println!(
+            "{}",
+            serde_json::json!({
+                "workflow_id": workflow_id,
+                "status": if result.had_failures || result.had_terminations {
+                    "failed"
+                } else {
+                    "completed"
+                },
+                "had_failures": result.had_failures,
+                "had_terminations": result.had_terminations,
+            })
+        );
+    }
+    if result.had_failures || result.had_terminations {
+        std::process::exit(1);
+    }
 }
 
 /// If any trailing argument looks like a workflow spec file, return it.
@@ -185,7 +235,11 @@ fn detect_spec_file_in_trailing(trailing: &[String]) -> Option<String> {
 
 /// Collect commands from `-c` entries plus an optional commands file (or stdin if `-`).
 /// Blank lines and lines starting with `#` in the file are skipped.
-fn gather_commands(inline: &[String], commands_file: Option<&str>) -> Result<Vec<String>, String> {
+fn gather_commands(
+    inline: &[String],
+    commands_file: Option<&str>,
+    shell_command: Option<&str>,
+) -> Result<Vec<String>, String> {
     let mut cmds: Vec<String> = inline.iter().map(|s| s.to_string()).collect();
 
     if let Some(source) = commands_file {
@@ -216,7 +270,28 @@ fn gather_commands(inline: &[String], commands_file: Option<&str>) -> Result<Vec
         }
     }
 
+    if let Some(cmd) = shell_command {
+        cmds.push(cmd.to_string());
+    }
+
     Ok(cmds)
+}
+
+fn shell_command_from_trailing(trailing: &[String]) -> Result<Option<String>, String> {
+    if trailing.is_empty() {
+        return Ok(None);
+    }
+    let words: Vec<&str> = trailing.iter().map(String::as_str).collect();
+    shlex::try_join(words)
+        .map(Some)
+        .map_err(|e| format!("could not quote shell-style command: {}", e))
+}
+
+fn print_dry_run(spec: &WorkflowSpec, _format: &str) {
+    println!(
+        "{}",
+        serde_json::to_string_pretty(spec).expect("WorkflowSpec should serialize")
+    );
 }
 
 fn parse_params(specs: &[String]) -> Result<HashMap<String, Vec<ParameterValue>>, String> {
@@ -395,7 +470,7 @@ mod tests {
 
     #[test]
     fn gather_commands_inline_only() {
-        let cmds = gather_commands(&["echo a".into(), "echo b".into()], None).unwrap();
+        let cmds = gather_commands(&["echo a".into(), "echo b".into()], None, None).unwrap();
         assert_eq!(cmds, vec!["echo a", "echo b"]);
     }
 
@@ -404,8 +479,21 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("cmds.txt");
         std::fs::write(&path, "echo 1\n\n# comment\n  echo 2  \n").unwrap();
-        let cmds = gather_commands(&[], Some(path.to_str().unwrap())).unwrap();
+        let cmds = gather_commands(&[], Some(path.to_str().unwrap()), None).unwrap();
         assert_eq!(cmds, vec!["echo 1", "echo 2"]);
+    }
+
+    #[test]
+    fn shell_command_from_trailing_quotes_words() {
+        let cmd = shell_command_from_trailing(&[
+            "python".into(),
+            "train.py".into(),
+            "--label".into(),
+            "two words".into(),
+        ])
+        .unwrap()
+        .unwrap();
+        assert_eq!(cmd, "python train.py --label 'two words'");
     }
 
     #[test]

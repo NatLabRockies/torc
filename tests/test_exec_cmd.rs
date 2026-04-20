@@ -78,6 +78,24 @@ fn exec_single_command_creates_one_job_workflow() {
 }
 
 #[test]
+fn exec_failing_command_exits_nonzero() {
+    ensure_test_binaries_built();
+
+    let work = TempDir::new().expect("tempdir");
+    let db = work.path().join("torc.db");
+
+    let out = run_torc_standalone(
+        work.path(),
+        &db,
+        &["exec", "-c", "false", "--monitor", "off"],
+    );
+    assert!(
+        !out.status.success(),
+        "failed exec job should make `torc exec` exit nonzero"
+    );
+}
+
+#[test]
 fn exec_multiple_commands_creates_one_job_each() {
     ensure_test_binaries_built();
 
@@ -103,6 +121,27 @@ fn exec_multiple_commands_creates_one_job_each() {
     assert!(names.contains(&"job1"));
     assert!(names.contains(&"job2"));
     assert!(names.contains(&"job3"));
+}
+
+#[test]
+fn exec_shell_style_invocation_creates_one_command() {
+    ensure_test_binaries_built();
+
+    let work = TempDir::new().expect("tempdir");
+    let db = work.path().join("torc.db");
+
+    let out = run_torc_standalone_ok(
+        work.path(),
+        &db,
+        &["exec", "--monitor", "off", "--", "echo", "two words"],
+    );
+    let wf_id =
+        extract_workflow_id(&String::from_utf8_lossy(&out.stdout)).expect("workflow id in stdout");
+
+    let jobs = query_json(work.path(), &db, &["jobs", "list", &wf_id.to_string()]);
+    let items = jobs.get("jobs").and_then(|v| v.as_array()).expect("jobs[]");
+    assert_eq!(items.len(), 1, "expected 1 shell-style job, got: {}", jobs);
+    assert_eq!(items[0]["command"], "echo 'two words'");
 }
 
 #[test]
@@ -368,6 +407,29 @@ fn exec_spec_file_trailing_arg_suggests_torc_run() {
 }
 
 #[test]
+fn exec_non_delimited_trailing_arg_is_rejected() {
+    ensure_test_binaries_built();
+
+    let work = TempDir::new().expect("tempdir");
+    let db = work.path().join("torc.db");
+
+    let out = run_torc_standalone(work.path(), &db, &["exec", "echo", "hello"]);
+    assert!(!out.status.success(), "bare trailing args should fail");
+
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("unexpected trailing argument"),
+        "stderr should explain unexpected trailing args; got:\n{}",
+        stderr
+    );
+    assert!(
+        stderr.contains("torc exec -- <command>"),
+        "stderr should document delimiter form; got:\n{}",
+        stderr
+    );
+}
+
+#[test]
 fn exec_generate_plots_without_timeseries_is_rejected() {
     ensure_test_binaries_built();
 
@@ -414,6 +476,58 @@ fn exec_invalid_param_format_errors() {
         "stderr should explain the param syntax; got:\n{}",
         stderr
     );
+}
+
+#[test]
+fn exec_dry_run_prints_expanded_spec_without_server() {
+    ensure_test_binaries_built();
+
+    let out = Command::new(torc_binary_path())
+        .args([
+            "exec",
+            "--dry-run",
+            "-c",
+            "echo {i}",
+            "--param",
+            "i=1:2",
+            "--monitor",
+            "off",
+        ])
+        .env_remove("TORC_API_URL")
+        .output()
+        .expect("failed to spawn torc");
+    assert!(out.status.success(), "`torc exec --dry-run` should succeed");
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let spec: serde_json::Value = serde_json::from_str(&stdout)
+        .unwrap_or_else(|e| panic!("dry-run stdout should be JSON: {}\n{}", e, stdout));
+    let jobs = spec["jobs"].as_array().expect("jobs[]");
+    assert_eq!(jobs.len(), 2, "expanded dry-run spec should have 2 jobs");
+    assert_eq!(jobs[0]["command"], "echo 1");
+    assert_eq!(jobs[1]["command"], "echo 2");
+}
+
+#[test]
+fn exec_json_output_is_single_summary_object() {
+    ensure_test_binaries_built();
+
+    let work = TempDir::new().expect("tempdir");
+    let db = work.path().join("torc.db");
+
+    let out = run_torc_standalone_ok(
+        work.path(),
+        &db,
+        &["-f", "json", "exec", "-c", "echo json", "--monitor", "off"],
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let value: serde_json::Value = serde_json::from_str(&stdout)
+        .unwrap_or_else(|e| panic!("exec JSON stdout should parse: {}\n{}", e, stdout));
+    assert!(
+        value["workflow_id"].as_i64().is_some(),
+        "workflow_id missing"
+    );
+    assert_eq!(value["status"], "completed");
+    assert_eq!(value["had_failures"], false);
 }
 
 // ============================================================================
@@ -537,6 +651,7 @@ fn exec_help_mentions_key_flags() {
         "--monitor-compute-node",
         "--generate-plots",
         "--sample-interval-seconds",
+        "--dry-run",
     ] {
         assert!(
             help.contains(expected),

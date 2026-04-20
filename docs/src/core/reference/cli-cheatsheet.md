@@ -24,9 +24,11 @@ needing a running server. See [Run Inline Commands](../how-to/run-inline-command
 | Command                                                            | Description                                          |
 | ------------------------------------------------------------------ | ---------------------------------------------------- |
 | `torc -s exec -c '<cmd>'`                                          | Monitor CPU/memory of one command                    |
+| `torc -s exec -- python script.py --flag value`                    | Shell-style single command invocation                |
 | `torc -s exec -c '<a>' -c '<b>' -c '<c>' -j 2`                     | Run a queue with parallelism cap (like GNU Parallel) |
 | `torc -s exec -C commands.txt -j 4`                                | Commands from a file (one per line)                  |
 | `torc -s exec -c 'run.sh {i}' --param i=1:100 -j 8`                | Parameter sweep (100 jobs)                           |
+| `torc exec --dry-run -c 'run.sh {i}' --param i=1:3`                | Preview the expanded workflow spec                   |
 | `torc -s exec -c 'work.sh' --monitor time-series --generate-plots` | Time-series CPU/mem + HTML plots                     |
 | `torc -s results list`                                             | Inspect past exec runs                               |
 

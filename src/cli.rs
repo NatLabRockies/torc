@@ -265,6 +265,9 @@ EXAMPLES (standalone — no running server required):
     # Commands from a file (one per line)
     torc -s exec -C commands.txt
 
+    # Shell-style invocation (everything after '--' is one command)
+    torc -s exec -- python train.py --epochs 10
+
     # Parameterized template (Cartesian product = 9 jobs)
     torc -s exec -c 'python train.py --lr {lr} --bs {bs}' \\
         --param lr='[0.001,0.01,0.1]' \\
@@ -311,6 +314,9 @@ SEE ALSO:
         /// Output directory for job logs and metrics.
         #[arg(short = 'o', long)]
         output_dir: Option<PathBuf>,
+        /// Print the expanded workflow spec and exit without creating or running it.
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
         /// Per-job resource monitoring mode.
         ///
         /// `summary` (default): record aggregate peak/avg CPU and memory per job.
@@ -353,8 +359,11 @@ SEE ALSO:
               value_parser = clap::builder::PossibleValuesParser::new(
                   ["separate", "combined", "no-stdout", "no-stderr", "none"]))]
         stdio: Option<String>,
-        /// Hidden catch-all for positional args. If a spec file path is passed
-        /// (e.g., `torc exec workflow.yaml`), the handler suggests `torc run` instead.
+        /// Hidden catch-all for shell-style commands or accidental positional args.
+        /// If no -c/-C command source is supplied, these words are shell-quoted and
+        /// treated as one command (e.g., `torc exec -- python train.py --epochs 10`).
+        /// If a spec file path is passed (e.g., `torc exec workflow.yaml`), the
+        /// handler suggests `torc run` instead.
         #[arg(hide = true, trailing_var_arg = true)]
         trailing: Vec<String>,
     },
