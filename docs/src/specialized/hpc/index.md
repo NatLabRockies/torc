@@ -11,3 +11,5 @@ Running Torc workflows on HPC clusters with Slurm.
 - [HPC Profiles Reference](./hpc-profiles-reference.md) - Available profiles
 - [HPC Deployment](./hpc-deployment.md) - Deploying Torc on HPC systems
 - [Custom HPC Profile](./custom-hpc-profile.md) - Creating custom profiles
+- [Self-Contained Slurm Jobs](./self-contained-slurm-job.md) - Run torc inside a single Slurm job
+  without a persistent server
