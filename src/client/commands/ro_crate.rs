@@ -542,7 +542,10 @@ fn handle_export(
     let ro_crate = serde_json::json!({
         "@context": [
             "https://w3id.org/ro/crate/1.1/context",
-            {"prov": "http://www.w3.org/ns/prov#"}
+            {
+                "prov": "http://www.w3.org/ns/prov#",
+                "torc": "https://github.com/NatLabRockies/torc/terms/"
+            }
         ],
         "@graph": graph
     });

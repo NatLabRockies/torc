@@ -301,6 +301,14 @@ fn build_workflow_run_entity(
     }
 }
 
+fn parse_entity_datetime(entity: &RoCrateEntityModel, field: &str) -> Option<DateTime<Utc>> {
+    let metadata = serde_json::from_str::<serde_json::Value>(&entity.metadata).ok()?;
+    let value = metadata.get(field)?.as_str()?;
+    chrono::DateTime::parse_from_rfc3339(value)
+        .ok()
+        .map(|dt| dt.with_timezone(&Utc))
+}
+
 /// Find an existing RO-Crate entity for a file.
 ///
 /// Returns the entity if one with the given file_id already exists, None otherwise.
@@ -405,8 +413,17 @@ pub fn create_workflow_provenance_entities(
     let plan_entity = build_workflow_plan_entity(workflow_id, workflow_name);
     create_or_update_entity_by_entity_id(config, workflow_id, plan_entity);
 
+    let run_entity_id = format!("#torc-run-{}", run_id);
+    let existing_run_entity = find_entity_by_entity_id(config, workflow_id, &run_entity_id);
+    let start_time = existing_run_entity
+        .as_ref()
+        .and_then(|entity| parse_entity_datetime(entity, "startTime"))
+        .unwrap_or_else(Utc::now);
+    let end_time = existing_run_entity
+        .as_ref()
+        .and_then(|entity| parse_entity_datetime(entity, "endTime"));
     let run_entity =
-        build_workflow_run_entity(workflow_id, run_id, workflow_name, Utc::now(), None);
+        build_workflow_run_entity(workflow_id, run_id, workflow_name, start_time, end_time);
     create_or_update_entity_by_entity_id(config, workflow_id, run_entity);
 }
 
@@ -1040,5 +1057,24 @@ mod tests {
         assert_eq!(metadata["@type"][1], "prov:SoftwareAgent");
         assert!(metadata.get("version").is_some());
         assert!(metadata.get("torc:git_hash").is_some());
+    }
+
+    #[test]
+    fn test_parse_entity_datetime() {
+        let entity = crate::models::RoCrateEntityModel {
+            id: Some(1),
+            workflow_id: 100,
+            file_id: None,
+            entity_id: "#torc-run-7".to_string(),
+            entity_type: "CreateAction".to_string(),
+            metadata: serde_json::json!({
+                "startTime": "2024-01-01T00:00:00Z"
+            })
+            .to_string(),
+        };
+
+        let parsed = parse_entity_datetime(&entity, "startTime").unwrap();
+        assert_eq!(parsed.to_rfc3339(), "2024-01-01T00:00:00+00:00");
+        assert!(parse_entity_datetime(&entity, "endTime").is_none());
     }
 }

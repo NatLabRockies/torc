@@ -1471,8 +1471,7 @@ impl JobRunner {
             }
         };
 
-        // Use run_id as the attempt_id for the CreateAction
-        let attempt_id = self.run_id;
+        let attempt_id = job.attempt_id.unwrap_or(1);
 
         let input_file_paths: Vec<String> = job
             .input_file_ids

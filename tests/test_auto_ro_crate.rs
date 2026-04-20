@@ -331,7 +331,7 @@ fn test_auto_ro_crate_output_files_on_job_completion(start_server: &ServerProces
     );
     assert_eq!(
         metadata["prov:wasGeneratedBy"]["@id"],
-        format!("#job-{}-attempt-0", job_id),
+        format!("#job-{}-attempt-1", job_id),
     );
     assert_eq!(metadata["prov:wasAttributedTo"]["@id"], "#torc-run-0");
 

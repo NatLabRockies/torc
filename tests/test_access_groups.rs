@@ -828,8 +828,12 @@ fn test_enforcement_workflow_shared_with_multiple_groups(
     // Share with BOTH teams
     apis::access_control_api::add_workflow_to_group(&creator_config, workflow_id, ml_team_id)
         .expect("Failed to share with ML team");
-    apis::access_control_api::add_workflow_to_group(&creator_config, workflow_id, analytics_team_id)
-        .expect("Failed to share with Analytics team");
+    apis::access_control_api::add_workflow_to_group(
+        &creator_config,
+        workflow_id,
+        analytics_team_id,
+    )
+    .expect("Failed to share with Analytics team");
 
     // All team members should have access
     for user in ["creator", "alice", "bob", "carol", "dave", "shared_user"] {
@@ -1102,7 +1106,7 @@ fn test_multi_team_user_can_access_both_workflows_via_api(
         data_workflow_id,
         analytics_team_id,
     )
-        .expect("Failed to share Analytics workflow");
+    .expect("Failed to share Analytics workflow");
 
     // shared_user should be able to access both
     let shared_config = config_with_auth(config, "shared_user");
