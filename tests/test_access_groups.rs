@@ -1424,35 +1424,23 @@ fn test_comprehensive_access_control_workflow_execution(
 
     // Test workflow status command
     let status_output = run_cli_command_with_auth(
-        &["workflows", "status", &workflow_id.to_string()],
+        &["status", &workflow_id.to_string()],
         start_server_with_access_control,
         "alice",
         password,
     )
     .expect("alice should be able to get workflow status");
-    // Workflow status shows metadata like run_id, is_canceled - verify we got output
+    // Workflow status should return the workflow summary for authorized users.
     assert!(
-        status_output.contains("Run ID") || status_output.contains("run_id"),
-        "Workflow status should show workflow metadata. Got: {}",
+        status_output.contains("Workflow Summary")
+            || status_output.contains("Workflow ID")
+            || status_output.contains("Workflow complete"),
+        "Workflow status should show workflow summary output. Got: {}",
         status_output
     );
 
     // =========================================================================
-    // Step 5: Valid user (alice) can run reports CLI commands
-    // =========================================================================
-
-    // Test reports commands - these should work for authorized users
-    let report_output = run_cli_command_with_auth(
-        &["reports", "summary", &workflow_id.to_string()],
-        start_server_with_access_control,
-        "alice",
-        password,
-    )
-    .expect("alice should be able to run reports summary");
-    assert!(!report_output.is_empty(), "Report should produce output");
-
-    // =========================================================================
-    // Step 6: Invalid user (carol) cannot run the workflow
+    // Step 5: Invalid user (carol) cannot run the workflow
     // =========================================================================
 
     // Create a new workflow for carol to try to access

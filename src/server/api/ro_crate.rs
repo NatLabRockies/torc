@@ -36,10 +36,6 @@ fn full_version() -> String {
     format!("{} ({})", SERVER_VERSION, GIT_HASH)
 }
 
-fn id_ref(id: impl AsRef<str>) -> serde_json::Value {
-    serde_json::json!({ "@id": id.as_ref() })
-}
-
 fn typed_entity(primary_type: &str, prov_type: &str) -> serde_json::Value {
     serde_json::json!([primary_type, prov_type])
 }
@@ -255,127 +251,6 @@ impl RoCrateApiImpl {
             upserted_count, workflow_id
         );
         Ok(upserted_count)
-    }
-
-    /// Create workflow-level provenance entities for the current run.
-    ///
-    /// Creates or updates:
-    /// - `#torc-workflow` as the workflow plan entity
-    /// - `#torc-run-{run_id}` as the run activity entity
-    pub async fn create_workflow_provenance_entities(
-        &self,
-        workflow_id: i64,
-    ) -> Result<(), ApiError> {
-        let row = sqlx::query(
-            r#"
-            SELECT w.name, ws.run_id
-            FROM workflow w
-            JOIN workflow_status ws ON ws.id = w.id
-            WHERE w.id = ?
-            "#,
-        )
-        .bind(workflow_id)
-        .fetch_optional(self.context.pool.as_ref())
-        .await
-        .map_err(|e| database_error_with_msg(e, "Failed to get workflow provenance context"))?;
-
-        let Some(row) = row else {
-            return Ok(());
-        };
-
-        let run_id: i64 = row
-            .try_get("run_id")
-            .map_err(|e| database_error_with_msg(e, "Failed to read workflow run_id"))?;
-        let workflow_name: String = row
-            .try_get("name")
-            .map_err(|e| database_error_with_msg(e, "Failed to read workflow name"))?;
-
-        let plan_entity_id = "#torc-workflow".to_string();
-        let plan_metadata = serde_json::json!({
-            "@id": plan_entity_id,
-            "@type": typed_entity("SoftwareApplication", "prov:Plan"),
-            "name": workflow_name.clone()
-        })
-        .to_string();
-
-        let run_entity_id = format!("#torc-run-{}", run_id);
-        let run_metadata = serde_json::json!({
-            "@id": run_entity_id.clone(),
-            "@type": typed_entity("CreateAction", "prov:Activity"),
-            "name": format!("{} Run {}", workflow_name, run_id),
-            "prov:hadPlan": id_ref("#torc-workflow"),
-            "instrument": id_ref(format!("#software-torc-run-{}", run_id)),
-            "startTime": chrono::Utc::now().to_rfc3339(),
-            "prov:wasAssociatedWith": [
-                id_ref(format!("#software-torc-run-{}", run_id)),
-                id_ref(format!("#software-torc-server-run-{}", run_id))
-            ]
-        })
-        .to_string();
-
-        let entities = vec![
-            (
-                plan_entity_id,
-                "SoftwareApplication".to_string(),
-                plan_metadata,
-            ),
-            (run_entity_id, "CreateAction".to_string(), run_metadata),
-        ];
-
-        for (entity_id, entity_type, metadata) in entities {
-            let existing = sqlx::query(
-                "SELECT id FROM ro_crate_entity WHERE workflow_id = ? AND entity_id = ?",
-            )
-            .bind(workflow_id)
-            .bind(&entity_id)
-            .fetch_optional(self.context.pool.as_ref())
-            .await
-            .map_err(|e| {
-                database_error_with_msg(e, "Failed to check existing workflow provenance entity")
-            })?
-            .map(|row| row.try_get::<i64, _>("id"))
-            .transpose()
-            .map_err(|e| {
-                database_error_with_msg(e, "Failed to read existing workflow provenance entity")
-            })?;
-
-            if let Some(entity_db_id) = existing {
-                sqlx::query(
-                    r#"
-                    UPDATE ro_crate_entity
-                    SET entity_type = ?, metadata = ?
-                    WHERE id = ?
-                    "#,
-                )
-                .bind(&entity_type)
-                .bind(&metadata)
-                .bind(entity_db_id)
-                .execute(self.context.pool.as_ref())
-                .await
-                .map_err(|e| {
-                    database_error_with_msg(e, "Failed to update workflow provenance entity")
-                })?;
-            } else {
-                sqlx::query(
-                    r#"
-                    INSERT INTO ro_crate_entity
-                        (workflow_id, file_id, entity_id, entity_type, metadata)
-                    VALUES (?, NULL, ?, ?, ?)
-                    "#,
-                )
-                .bind(workflow_id)
-                .bind(&entity_id)
-                .bind(&entity_type)
-                .bind(&metadata)
-                .execute(self.context.pool.as_ref())
-                .await
-                .map_err(|e| {
-                    database_error_with_msg(e, "Failed to create workflow provenance entity")
-                })?;
-            }
-        }
-
-        Ok(())
     }
 
     /// Create a SoftwareApplication RO-Crate entity for the torc-server binary.
