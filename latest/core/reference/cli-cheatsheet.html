@@ -199,20 +199,6 @@
 <tr><td><code>torc tui</code></td><td>Launch interactive terminal UI</td></tr>
 </tbody></table>
 </div>
-<h2 id="inline-commands-torc-exec"><a class="header" href="#inline-commands-torc-exec">Inline Commands (<code>torc exec</code>)</a></h2>
-<p>Run ad-hoc commands with CPU/memory monitoring, no spec file required. Pair with <code>-s</code> to avoid
-needing a running server. See <a href="../how-to/run-inline-commands.html">Run Inline Commands</a> for details.</p>
-<div class="table-wrapper"><table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>torc -s exec -c '&lt;cmd&gt;'</code></td><td>Monitor CPU/memory of one command</td></tr>
-<tr><td><code>torc -s exec -- python script.py --flag value</code></td><td>Shell-style single command invocation</td></tr>
-<tr><td><code>torc -s exec -c '&lt;a&gt;' -c '&lt;b&gt;' -c '&lt;c&gt;' -j 2</code></td><td>Run a queue with parallelism cap (like GNU Parallel)</td></tr>
-<tr><td><code>torc -s exec -C commands.txt -j 4</code></td><td>Commands from a file (one per line)</td></tr>
-<tr><td><code>torc -s exec -c 'run.sh {i}' --param i=1:100 -j 8</code></td><td>Parameter sweep (100 jobs)</td></tr>
-<tr><td><code>torc exec --dry-run -c 'run.sh {i}' --param i=1:3</code></td><td>Preview the expanded workflow spec</td></tr>
-<tr><td><code>torc -s exec -c 'work.sh' --monitor time-series --generate-plots</code></td><td>Time-series CPU/mem + HTML plots</td></tr>
-<tr><td><code>torc -s results list</code></td><td>Inspect past exec runs</td></tr>
-</tbody></table>
-</div>
 <h2 id="workflow-lifecycle"><a class="header" href="#workflow-lifecycle">Workflow Lifecycle</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>torc create &lt;spec&gt;</code></td><td>Create workflow from spec file</td></tr>
@@ -258,6 +244,20 @@ needing a running server. See <a href="../how-to/run-inline-commands.html">Run I
 <tr><td><code>torc slurm sacct &lt;id&gt;</code></td><td>Get Slurm accounting data</td></tr>
 <tr><td><code>torc slurm stats &lt;id&gt;</code></td><td>Per-job sacct stats stored in the database</td></tr>
 <tr><td><code>torc slurm usage &lt;id&gt;</code></td><td>Total compute node and CPU time consumed</td></tr>
+</tbody></table>
+</div>
+<h2 id="inline-commands-torc-exec"><a class="header" href="#inline-commands-torc-exec">Inline Commands (<code>torc exec</code>)</a></h2>
+<p>Run ad-hoc commands with CPU/memory monitoring, no spec file required. Pair with <code>-s</code> to avoid
+needing a running server. See <a href="../how-to/run-inline-commands.html">Run Inline Commands</a> for details.</p>
+<div class="table-wrapper"><table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>torc -s exec -c '&lt;cmd&gt;'</code></td><td>Monitor CPU/memory of one command</td></tr>
+<tr><td><code>torc -s exec -- python script.py --flag value</code></td><td>Shell-style single command invocation</td></tr>
+<tr><td><code>torc -s exec -c '&lt;a&gt;' -c '&lt;b&gt;' -c '&lt;c&gt;' -j 2</code></td><td>Run a queue with parallelism cap (like GNU Parallel)</td></tr>
+<tr><td><code>torc -s exec -C commands.txt -j 4</code></td><td>Commands from a file (one per line)</td></tr>
+<tr><td><code>torc -s exec -c 'run.sh {i}' --param i=1:100 -j 8</code></td><td>Parameter sweep (100 jobs)</td></tr>
+<tr><td><code>torc exec --dry-run -c 'run.sh {i}' --param i=1:3</code></td><td>Preview the expanded workflow spec</td></tr>
+<tr><td><code>torc -s exec -c 'work.sh' --monitor time-series --generate-plots</code></td><td>Time-series CPU/mem + HTML plots</td></tr>
+<tr><td><code>torc -s results list</code></td><td>Inspect past exec runs</td></tr>
 </tbody></table>
 </div>
 <h2 id="remote-workers"><a class="header" href="#remote-workers">Remote Workers</a></h2>
