@@ -5,14 +5,11 @@ use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
 use crate::client::commands::get_env_user_name;
 use crate::client::commands::output::{print_if_json, print_wrapped_if_json};
-use crate::client::commands::pagination::{
-    ResultListParams, RoCrateEntityListParams, paginate_results, paginate_ro_crate_entities,
-};
+use crate::client::commands::pagination::{RoCrateEntityListParams, paginate_ro_crate_entities};
 use crate::client::commands::{
     print_error, select_workflow_interactively, table_format::display_table_with_count,
 };
 use crate::models;
-use chrono::{DateTime, Duration, FixedOffset};
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
@@ -336,7 +333,7 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
                 Some(id) => *id,
                 None => select_workflow_interactively(config, &user_name).unwrap(),
             };
-            handle_export(config, selected_workflow_id, output.as_deref(), format);
+            handle_export(config, selected_workflow_id, output.as_deref());
         }
         RoCrateCommands::AddDataset {
             workflow_id,
@@ -379,12 +376,7 @@ fn read_metadata_input(metadata: &str) -> String {
     }
 }
 
-fn handle_export(
-    config: &Configuration,
-    workflow_id: i64,
-    output_path: Option<&str>,
-    format: &str,
-) {
+fn handle_export(config: &Configuration, workflow_id: i64, output_path: Option<&str>) {
     // Fetch the workflow name and status for the root dataset and current run.
     let workflow_name = match apis::workflows_api::get_workflow(config, workflow_id) {
         Ok(w) => w.name,
@@ -411,41 +403,6 @@ fn handle_export(
             }
         };
 
-    if format == "json" {
-        // In JSON format mode, just output the raw entities list
-        if let Ok(json) = serde_json::to_string_pretty(&entities) {
-            println!("{}", json);
-        }
-        return;
-    }
-
-    let results = paginate_results(
-        config,
-        workflow_id,
-        ResultListParams::new()
-            .with_run_id(run_id)
-            .with_all_runs(true),
-    )
-    .unwrap_or_default();
-
-    let mut run_start_time: Option<DateTime<FixedOffset>> = None;
-    let mut run_end_time: Option<DateTime<FixedOffset>> = None;
-    for result in &results {
-        if let Ok(completion_time) = DateTime::parse_from_rfc3339(&result.completion_time) {
-            let exec_duration =
-                Duration::milliseconds((result.exec_time_minutes * 60_000.0).round() as i64);
-            let start_time = completion_time - exec_duration;
-            run_start_time = match run_start_time {
-                Some(current_min) if current_min <= start_time => Some(current_min),
-                _ => Some(start_time),
-            };
-            run_end_time = match run_end_time {
-                Some(current_max) if current_max >= completion_time => Some(current_max),
-                _ => Some(completion_time),
-            };
-        }
-    }
-
     let mut existing_ids: HashSet<String> = entities.iter().map(|e| e.entity_id.clone()).collect();
     let run_entity_id = format!("#torc-run-{}", run_id);
     let mut synthetic_entities: Vec<serde_json::Value> = Vec::new();
@@ -460,7 +417,7 @@ fn handle_export(
     }
 
     if !existing_ids.contains(&run_entity_id) {
-        let mut run_entity = serde_json::json!({
+        let run_entity = serde_json::json!({
             "@id": run_entity_id.clone(),
             "@type": ["CreateAction", "prov:Activity"],
             "name": format!("{} Run {}", workflow_name, run_id),
@@ -471,12 +428,6 @@ fn handle_export(
                 { "@id": format!("#software-torc-server-run-{}", run_id) }
             ]
         });
-        if let Some(start_time) = run_start_time {
-            run_entity["startTime"] = serde_json::json!(start_time.to_rfc3339());
-        }
-        if let Some(end_time) = run_end_time {
-            run_entity["endTime"] = serde_json::json!(end_time.to_rfc3339());
-        }
         synthetic_entities.push(run_entity);
     }
 
@@ -489,24 +440,6 @@ fn handle_export(
                     .or_insert_with(|| serde_json::json!(entity.entity_id));
                 obj.entry("@type".to_string())
                     .or_insert_with(|| serde_json::json!(entity.entity_type));
-                if entity.entity_id == run_entity_id {
-                    if let Some(start_time) = run_start_time
-                        && !obj.contains_key("startTime")
-                    {
-                        obj.insert(
-                            "startTime".to_string(),
-                            serde_json::json!(start_time.to_rfc3339()),
-                        );
-                    }
-                    if let Some(end_time) = run_end_time
-                        && !obj.contains_key("endTime")
-                    {
-                        obj.insert(
-                            "endTime".to_string(),
-                            serde_json::json!(end_time.to_rfc3339()),
-                        );
-                    }
-                }
             }
             graph_entities.push(parsed);
         } else {
@@ -534,8 +467,7 @@ fn handle_export(
         "@id": "./",
         "@type": "Dataset",
         "name": workflow_name,
-        "hasPart": has_part,
-        "localEvidenceGraph": { "@id": "provenance-graph.html" }
+        "hasPart": has_part
     }));
     graph.extend(graph_entities);
 

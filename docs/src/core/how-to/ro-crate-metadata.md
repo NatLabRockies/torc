@@ -318,7 +318,6 @@ The exported document has this structure:
       "@id": "./",
       "@type": "Dataset",
       "name": "my_workflow",
-      "localEvidenceGraph": {"@id": "provenance-graph.html"},
       "hasPart": [
         {"@id": "data/output.parquet"},
         {"@id": "https://example.com/simulation/v2.1"}

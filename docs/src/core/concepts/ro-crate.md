@@ -91,8 +91,7 @@ Job provenance is captured as CreateAction entities:
 }
 ```
 
-The exported root dataset also includes `localEvidenceGraph`, and the exported `@context` includes
-the `prov` namespace.
+The exported `@context` includes the `prov` namespace.
 
 ## Enabling Automatic RO-Crate
 
