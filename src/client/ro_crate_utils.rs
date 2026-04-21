@@ -76,7 +76,6 @@ pub fn compute_file_sha256(path: &str) -> Option<String> {
 /// - `@type` is emitted as `["File", "prov:Entity"]`
 pub fn build_file_entity(
     workflow_id: i64,
-    _run_id: i64,
     file: &FileModel,
     content_size: Option<u64>,
     sha256: Option<String>,
@@ -437,7 +436,6 @@ pub fn create_workflow_provenance_entities(
 pub fn create_ro_crate_entity_for_file(
     config: &Configuration,
     workflow_id: i64,
-    run_id: i64,
     file: &FileModel,
     content_size: Option<u64>,
 ) {
@@ -453,7 +451,7 @@ pub fn create_ro_crate_entity_for_file(
     let sha256 = compute_file_sha256(&file.path);
 
     // Build the entity
-    let entity = build_file_entity(workflow_id, run_id, file, content_size, sha256);
+    let entity = build_file_entity(workflow_id, file, content_size, sha256);
 
     // Check if entity already exists - if so, update it
     if let Some(existing) = find_entity_for_file(config, workflow_id, file_id) {
@@ -645,7 +643,6 @@ pub fn create_create_action_entity(
 pub fn create_entities_for_input_files(
     config: &Configuration,
     workflow_id: i64,
-    run_id: i64,
     files: &[FileModel],
 ) {
     for file in files {
@@ -654,7 +651,7 @@ pub fn create_entities_for_input_files(
             // Get file size if the file exists
             let content_size = std::fs::metadata(&file.path).ok().map(|m| m.len());
 
-            create_ro_crate_entity_for_file(config, workflow_id, run_id, file, content_size);
+            create_ro_crate_entity_for_file(config, workflow_id, file, content_size);
         }
     }
 }
@@ -806,7 +803,7 @@ mod tests {
             st_mtime: Some(1704067200.0), // 2024-01-01T00:00:00Z
         };
 
-        let entity = build_file_entity(100, 1, &file, Some(1024), None);
+        let entity = build_file_entity(100, &file, Some(1024), None);
 
         assert_eq!(entity.workflow_id, 100);
         assert_eq!(entity.file_id, Some(1));
@@ -888,7 +885,7 @@ mod tests {
                 st_mtime: None,
             };
 
-            let entity = build_file_entity(1, 1, &file, None, None);
+            let entity = build_file_entity(1, &file, None, None);
             let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
             let mime = metadata["encodingFormat"].as_str().unwrap();
 
@@ -912,7 +909,7 @@ mod tests {
                 st_mtime: None,
             };
 
-            let entity = build_file_entity(1, 1, &file, None, None);
+            let entity = build_file_entity(1, &file, None, None);
             let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
             let mime = metadata["encodingFormat"].as_str().unwrap();
 
@@ -999,7 +996,7 @@ mod tests {
         };
 
         let sha256 = Some("abc123def456".to_string());
-        let entity = build_file_entity(100, 1, &file, Some(1024), sha256);
+        let entity = build_file_entity(100, &file, Some(1024), sha256);
 
         let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
         assert_eq!(metadata["sha256"], "abc123def456");

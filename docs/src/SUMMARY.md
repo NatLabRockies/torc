@@ -124,6 +124,7 @@
   - [AI-Assisted Recovery Design](./specialized/design/ai-assisted-recovery.md)
   - [Workflow Graph](./specialized/design/workflow-graph.md)
   - [Interface Architecture](./specialized/design/interfaces.md)
+  - [RO-Crate Generation Design](./specialized/design/ro-crate.md)
   - [API Generation Architecture](./specialized/design/api-generation.md)
   - [Slurm Job Step Monitoring](./specialized/design/srun-monitoring.md)
 

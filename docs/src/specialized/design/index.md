@@ -13,5 +13,6 @@ Internal design documentation for developers.
 - [AI-Assisted Recovery Design](./ai-assisted-recovery.md) - AI-assisted error classification
 - [Workflow Graph](./workflow-graph.md) - Dependency graph implementation
 - [Interface Architecture](./interfaces.md) - Interface design patterns
+- [RO-Crate Generation Design](./ro-crate.md) - RO-Crate entity lifecycle and provenance flow
 - [Slurm Job Step Monitoring](./srun-monitoring.md) - srun wrapping, sstat monitoring, sacct
   collection

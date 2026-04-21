@@ -667,7 +667,6 @@ impl WorkflowManager {
             crate::client::ro_crate_utils::create_entities_for_input_files(
                 &self.config,
                 self.workflow_id,
-                run_id,
                 &input_files,
             );
         }
