@@ -7,6 +7,7 @@ use common::{
 use rstest::rstest;
 use serde_json::json;
 use torc::client::apis;
+use torc::models;
 
 #[rstest]
 fn test_resource_requirements_add_command_json(start_server: &ServerProcess) {
@@ -79,6 +80,26 @@ fn test_resource_requirements_add_with_defaults(start_server: &ServerProcess) {
     assert_eq!(json_output.get("num_nodes").unwrap(), &json!(1));
     assert_eq!(json_output.get("memory").unwrap(), &json!("1m"));
     assert_eq!(json_output.get("runtime").unwrap(), &json!("PT1M"));
+}
+
+#[rstest]
+fn test_resource_requirements_create_rejects_zero_cpus(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "test_reject_zero_cpus_create_workflow");
+    let workflow_id = workflow.id.unwrap();
+
+    let mut req =
+        models::ResourceRequirementsModel::new(workflow_id, "zero_cpu_requirements".to_string());
+    req.num_cpus = 0;
+
+    let result = apis::resource_requirements_api::create_resource_requirements(config, req);
+    assert!(result.is_err(), "zero-CPU requirements should be rejected");
+    let error = format!("{:?}", result.unwrap_err());
+    assert!(
+        error.contains("422") || error.contains("num_cpus must be > 0"),
+        "unexpected error for zero-CPU requirements: {}",
+        error
+    );
 }
 
 #[rstest]
@@ -491,6 +512,34 @@ fn test_resource_requirements_update_partial_fields(start_server: &ServerProcess
 }
 
 #[rstest]
+fn test_resource_requirements_update_rejects_zero_cpus(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "test_reject_zero_cpus_update_workflow");
+    let workflow_id = workflow.id.unwrap();
+    let mut req = create_test_resource_requirements(
+        config,
+        workflow_id,
+        "update_zero_cpu_req",
+        4,
+        0,
+        1,
+        "8g",
+        "P0DT2H",
+    );
+    let req_id = req.id.unwrap();
+    req.num_cpus = 0;
+
+    let result = apis::resource_requirements_api::update_resource_requirements(config, req_id, req);
+    assert!(result.is_err(), "zero-CPU requirements should be rejected");
+    let error = format!("{:?}", result.unwrap_err());
+    assert!(
+        error.contains("422") || error.contains("num_cpus must be > 0"),
+        "unexpected error for zero-CPU requirements: {}",
+        error
+    );
+}
+
+#[rstest]
 fn test_resource_requirements_remove_command_json(start_server: &ServerProcess) {
     let config = &start_server.config;
 
@@ -588,10 +637,10 @@ fn test_resource_requirements_runtime_formats(start_server: &ServerProcess) {
             runtime_format,
         ];
 
-        let json_output = run_cli_with_json(&args, start_server, None).unwrap_or_else(|_| {
+        let json_output = run_cli_with_json(&args, start_server, None).unwrap_or_else(|e| {
             panic!(
-                "Failed to create requirement with runtime format {}",
-                runtime_format
+                "Failed to create requirement with runtime format {}: {}",
+                runtime_format, e
             )
         });
 
@@ -608,7 +657,7 @@ fn test_resource_requirements_extreme_values(start_server: &ServerProcess) {
 
     // Test with extreme resource values
     let test_cases = [
-        ("zero_resources", 0, 0, 1, "0", "P0DT0M"),
+        ("minimal_resources", 1, 0, 1, "0", "P0DT0M"),
         ("single_core", 1, 0, 1, "1g", "P0DT15M"),
         ("high_cpu", 128, 0, 1, "512g", "P30DT0H"),
         ("gpu_intensive", 4, 16, 2, "256g", "P7DT0H"),

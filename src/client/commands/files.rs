@@ -211,7 +211,7 @@ pub fn handle_file_commands(config: &Configuration, command: &FileCommands, form
                 params = params.with_produced_by_job_id(*job_id);
             }
 
-            match pagination::paginate_files(config, selected_workflow_id as i64, params) {
+            match pagination::paginate_files(config, selected_workflow_id, params) {
                 Ok(files) => {
                     if format == "json" {
                         print_json_wrapped("files", &files, "files");

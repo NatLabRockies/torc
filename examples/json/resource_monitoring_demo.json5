@@ -51,10 +51,16 @@
   // Slurm schedulers
   "slurm_schedulers": [],
   
-    "resource_monitor": {
-    "enabled": true,
-    "granularity": "time_series",
-    "sample_interval_seconds": 10
+  "resource_monitor": {
+    "sample_interval_seconds": 10,
+    "jobs": {
+      "enabled": true,
+      "granularity": "time_series"
+    },
+    "compute_node": {
+      "enabled": true,
+      "granularity": "time_series"
+    }
   },
 
 }

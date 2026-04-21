@@ -20,9 +20,14 @@ slurm_defaults:
 
 # Enable resource monitoring with time-series data collection
 resource_monitor:
-  enabled: true
-  granularity: "time_series"  # Options: "summary" or "time_series"
   sample_interval_seconds: 10  # Sample every 10 seconds
+  generate_plots: true
+  jobs:
+    enabled: true
+    granularity: "time_series"  # Options: "summary" or "time_series"
+  compute_node:
+    enabled: true
+    granularity: "time_series"  # Overall system CPU/memory samples for plot-resources
 
 # Three independent jobs that run concurrently
 jobs:

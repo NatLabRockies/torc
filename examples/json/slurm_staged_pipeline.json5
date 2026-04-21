@@ -347,10 +347,12 @@
     }
   ],
   
-    "resource_monitor": {
-    "enabled": true,
+  "resource_monitor": {
     "sample_interval_seconds": 10,
-    "granularity": "time_series",
+    "jobs": {
+      "enabled": true,
+      "granularity": "time_series"
+    },
     "metrics": [
       "cpu_percent",
       "memory_bytes"

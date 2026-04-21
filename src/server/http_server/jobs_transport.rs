@@ -1,6 +1,326 @@
 use super::*;
 use crate::server::api::{EventsApi, JobsApi, ResultsApi, WorkflowsApi};
 
+const RESOURCE_CLAIM_ORDER_BY: &str = "\
+    ORDER BY \
+        job.priority DESC, \
+        rr.num_gpus DESC, \
+        rr.runtime_s DESC, \
+        rr.memory_bytes DESC, \
+        rr.num_cpus DESC, \
+        job.id ASC";
+
+#[derive(Clone, Copy)]
+struct ClaimRemainingResources {
+    cpus: i64,
+    memory_bytes: i64,
+    gpus: i64,
+    /// Remaining shared-node capacity after exclusive multi-node reservations.
+    nodes: i64,
+}
+
+struct ClaimPackingState {
+    per_node_cpus: i64,
+    per_node_memory: i64,
+    per_node_gpus: i64,
+    total_nodes: i64,
+    consumed_memory_bytes: i64,
+    consumed_cpus: i64,
+    consumed_gpus: i64,
+    exclusive_nodes: i64,
+}
+
+impl ClaimPackingState {
+    fn new(resources: &models::ComputeNodesResources, memory_bytes: i64) -> Self {
+        Self {
+            per_node_cpus: resources.num_cpus,
+            per_node_memory: memory_bytes,
+            per_node_gpus: resources.num_gpus,
+            total_nodes: resources.num_nodes.max(1),
+            consumed_memory_bytes: 0,
+            consumed_cpus: 0,
+            consumed_gpus: 0,
+            exclusive_nodes: 0,
+        }
+    }
+
+    fn remaining_resources(&self) -> ClaimRemainingResources {
+        let shared_nodes = (self.total_nodes - self.exclusive_nodes).max(0);
+        ClaimRemainingResources {
+            cpus: shared_nodes
+                .saturating_mul(self.per_node_cpus)
+                .saturating_sub(self.consumed_cpus),
+            memory_bytes: shared_nodes
+                .saturating_mul(self.per_node_memory)
+                .saturating_sub(self.consumed_memory_bytes),
+            gpus: shared_nodes
+                .saturating_mul(self.per_node_gpus)
+                .saturating_sub(self.consumed_gpus),
+            nodes: shared_nodes,
+        }
+    }
+
+    fn candidate_fits(&self, row: &sqlx::sqlite::SqliteRow) -> bool {
+        let job_memory: i64 = row.get("memory_bytes");
+        let job_cpus: i64 = row.get("num_cpus");
+        let job_gpus: i64 = row.get("num_gpus");
+        let job_nodes: i64 = row.get("num_nodes");
+        let reserved_nodes = job_nodes.max(1);
+
+        if reserved_nodes > 1 {
+            let shared_nodes_after = self.total_nodes - self.exclusive_nodes - reserved_nodes;
+            self.exclusive_nodes + reserved_nodes <= self.total_nodes
+                && self.consumed_cpus <= shared_nodes_after * self.per_node_cpus
+                && self.consumed_memory_bytes <= shared_nodes_after * self.per_node_memory
+                && self.consumed_gpus <= shared_nodes_after * self.per_node_gpus
+        } else {
+            let shared_capacity_cpus =
+                (self.total_nodes - self.exclusive_nodes) * self.per_node_cpus;
+            let shared_capacity_memory =
+                (self.total_nodes - self.exclusive_nodes) * self.per_node_memory;
+            let shared_capacity_gpus =
+                (self.total_nodes - self.exclusive_nodes) * self.per_node_gpus;
+            self.consumed_cpus + job_cpus <= shared_capacity_cpus
+                && self.consumed_memory_bytes + job_memory <= shared_capacity_memory
+                && self.consumed_gpus + job_gpus <= shared_capacity_gpus
+        }
+    }
+
+    fn consume_candidate(&mut self, row: &sqlx::sqlite::SqliteRow) {
+        let job_memory: i64 = row.get("memory_bytes");
+        let job_cpus: i64 = row.get("num_cpus");
+        let job_gpus: i64 = row.get("num_gpus");
+        let job_nodes: i64 = row.get("num_nodes");
+        let reserved_nodes = job_nodes.max(1);
+
+        if reserved_nodes > 1 {
+            self.exclusive_nodes += reserved_nodes;
+        } else {
+            self.consumed_memory_bytes += job_memory;
+            self.consumed_cpus += job_cpus;
+            self.consumed_gpus += job_gpus;
+        }
+    }
+
+    fn skip_reason(&self, row: &sqlx::sqlite::SqliteRow) -> String {
+        let job_memory: i64 = row.get("memory_bytes");
+        let job_cpus: i64 = row.get("num_cpus");
+        let job_gpus: i64 = row.get("num_gpus");
+        let job_nodes: i64 = row.get("num_nodes");
+        let reserved_nodes = job_nodes.max(1);
+
+        if reserved_nodes > 1 {
+            let available = self.total_nodes - self.exclusive_nodes;
+            format!(
+                "multi-node job needs {} free nodes, {} available \
+                 (exclusive_nodes={}, shared cpus={}/{})",
+                reserved_nodes,
+                available,
+                self.exclusive_nodes,
+                self.consumed_cpus,
+                (self.total_nodes - self.exclusive_nodes) * self.per_node_cpus
+            )
+        } else {
+            let shared_nodes = self.total_nodes - self.exclusive_nodes;
+            format!(
+                "cpus: {}/{}, memory: {}/{}, gpus: {}/{}",
+                self.consumed_cpus + job_cpus,
+                shared_nodes * self.per_node_cpus,
+                self.consumed_memory_bytes + job_memory,
+                shared_nodes * self.per_node_memory,
+                self.consumed_gpus + job_gpus,
+                shared_nodes * self.per_node_gpus
+            )
+        }
+    }
+}
+
+struct BackfillClaimParams {
+    workflow_id: i64,
+    ready_status: i32,
+    time_limit_seconds: i64,
+    scheduler_config_id: Option<i64>,
+    use_scheduler_filter: bool,
+    claim_limit: usize,
+}
+
+fn claim_candidate_row(
+    row: &sqlx::sqlite::SqliteRow,
+    packing_state: &mut ClaimPackingState,
+    selected_jobs: &mut Vec<models::JobModel>,
+    job_ids_to_update: &mut Vec<i64>,
+) -> Result<bool, ApiError> {
+    if !packing_state.candidate_fits(row) {
+        if log::log_enabled!(log::Level::Debug) {
+            debug!(
+                "Skipping job {} - would exceed resource limits ({})",
+                row.get::<i64, _>("job_id"),
+                packing_state.skip_reason(row)
+            );
+        }
+        return Ok(false);
+    }
+
+    let status = models::JobStatus::from_int(row.get::<i64, _>("status") as i32).map_err(|e| {
+        error!("Failed to parse job status: {}", e);
+        ApiError("Invalid job status".to_string())
+    })?;
+
+    if status != models::JobStatus::Ready {
+        error!("Expected job status to be Ready, but got: {}", status);
+        return Err(ApiError("Invalid job status in ready queue".to_string()));
+    }
+
+    packing_state.consume_candidate(row);
+
+    let job_id: i64 = row.get("job_id");
+    job_ids_to_update.push(job_id);
+    selected_jobs.push(models::JobModel {
+        id: Some(job_id),
+        workflow_id: row.get("workflow_id"),
+        name: row.get("name"),
+        command: row.get("command"),
+        invocation_script: row.get("invocation_script"),
+        status: Some(models::JobStatus::Pending),
+        schedule_compute_nodes: None,
+        cancel_on_blocking_job_failure: Some(row.get("cancel_on_blocking_job_failure")),
+        supports_termination: Some(row.get("supports_termination")),
+        depends_on_job_ids: None,
+        input_file_ids: None,
+        output_file_ids: None,
+        input_user_data_ids: None,
+        output_user_data_ids: None,
+        resource_requirements_id: Some(row.get("resource_requirements_id")),
+        scheduler_id: None,
+        failure_handler_id: row.get("failure_handler_id"),
+        attempt_id: row.get("attempt_id"),
+        priority: Some(row.get("priority")),
+    });
+
+    Ok(true)
+}
+
+async fn claim_backfill_jobs(
+    conn: &mut sqlx::SqliteConnection,
+    params: &BackfillClaimParams,
+    packing_state: &mut ClaimPackingState,
+    selected_jobs: &mut Vec<models::JobModel>,
+    job_ids_to_update: &mut Vec<i64>,
+) -> Result<(), ApiError> {
+    if selected_jobs.len() >= params.claim_limit {
+        return Ok(());
+    }
+
+    let remaining = packing_state.remaining_resources();
+    let remaining_limit = params.claim_limit - selected_jobs.len();
+    if remaining_limit == 0 || remaining.nodes <= 0 || remaining.cpus <= 0 {
+        return Ok(());
+    }
+
+    let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new(
+        r#"
+        SELECT
+            job.workflow_id,
+            job.id AS job_id,
+            job.name,
+            job.command,
+            job.invocation_script,
+            job.status,
+            job.cancel_on_blocking_job_failure,
+            job.supports_termination,
+            job.failure_handler_id,
+            job.attempt_id,
+            job.priority,
+            rr.id AS resource_requirements_id,
+            rr.memory_bytes,
+            rr.num_cpus,
+            rr.num_gpus,
+            rr.num_nodes,
+            rr.runtime_s
+        FROM job
+        JOIN resource_requirements rr ON job.resource_requirements_id = rr.id
+        WHERE job.workflow_id = 
+        "#,
+    );
+    builder
+        .push_bind(params.workflow_id)
+        .push(" AND job.status = ")
+        .push_bind(params.ready_status)
+        .push(" AND rr.memory_bytes <= ")
+        .push_bind(remaining.memory_bytes)
+        .push(" AND rr.num_cpus <= ")
+        .push_bind(remaining.cpus)
+        .push(" AND rr.num_gpus <= ")
+        .push_bind(remaining.gpus)
+        .push(" AND rr.memory_bytes <= ")
+        .push_bind(packing_state.per_node_memory)
+        .push(" AND rr.num_cpus <= ")
+        .push_bind(packing_state.per_node_cpus)
+        .push(" AND rr.num_gpus <= ")
+        .push_bind(packing_state.per_node_gpus)
+        .push(" AND rr.num_nodes <= ")
+        .push_bind(remaining.nodes)
+        .push(" AND rr.runtime_s <= ")
+        .push_bind(params.time_limit_seconds);
+
+    if params.use_scheduler_filter {
+        builder
+            .push(" AND (job.scheduler_id IS NULL OR job.scheduler_id = ")
+            .push_bind(params.scheduler_config_id)
+            .push(")");
+    }
+
+    if !job_ids_to_update.is_empty() {
+        builder.push(" AND job.id NOT IN (");
+        let mut separated = builder.separated(", ");
+        for job_id in job_ids_to_update.iter() {
+            separated.push_bind(job_id);
+        }
+        separated.push_unseparated(")");
+    }
+
+    builder.push(" ");
+    builder.push(RESOURCE_CLAIM_ORDER_BY);
+    builder.push(" LIMIT ");
+    builder.push_bind(remaining_limit as i64);
+
+    let backfill_rows = builder.build().fetch_all(&mut *conn).await.map_err(|e| {
+        error!("Database error in get_ready_jobs backfill query: {}", e);
+        ApiError("Database error".to_string())
+    })?;
+
+    debug!(
+        "get_ready_jobs: Found {} backfill candidates for workflow {} with remaining resources: cpus={}, memory_bytes={}, gpus={}, nodes={}",
+        backfill_rows.len(),
+        params.workflow_id,
+        remaining.cpus,
+        remaining.memory_bytes,
+        remaining.gpus,
+        remaining.nodes
+    );
+
+    let primary_selected = selected_jobs.len();
+    for row in backfill_rows {
+        if selected_jobs.len() >= params.claim_limit {
+            break;
+        }
+        claim_candidate_row(&row, packing_state, selected_jobs, job_ids_to_update)?;
+    }
+    let remaining_after = packing_state.remaining_resources();
+    debug!(
+        "get_ready_jobs backfill result: workflow_id={} primary_selected={} backfill_selected={} remaining_after_cpus={} remaining_after_memory_bytes={} remaining_after_gpus={} remaining_after_nodes={}",
+        params.workflow_id,
+        primary_selected,
+        selected_jobs.len().saturating_sub(primary_selected),
+        remaining_after.cpus,
+        remaining_after.memory_bytes,
+        remaining_after.gpus,
+        remaining_after.nodes
+    );
+
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 impl<C> Server<C>
 where
@@ -979,6 +1299,17 @@ where
         context: &C,
     ) -> Result<ClaimJobsBasedOnResources, ApiError> {
         let strict_scheduler_match = strict_scheduler_match.unwrap_or(false);
+        if limit <= 0 {
+            return Ok(ClaimJobsBasedOnResources::SuccessfulResponse(
+                models::ClaimJobsBasedOnResources {
+                    jobs: Some(Vec::new()),
+                    reason: None,
+                },
+            ));
+        }
+        let claim_limit = usize::try_from(limit)
+            .map_err(|_| ApiError(format!("Limit {} does not fit on this platform", limit)))?;
+
         let mut conn = self.pool.acquire().await.map_err(|e| {
             error!("Failed to acquire database connection: {}", e);
             ApiError("Database connection error".to_string())
@@ -1045,12 +1376,6 @@ where
         let memory_bytes = (resources.memory_gb * 1024.0 * 1024.0 * 1024.0) as i64;
 
         let ready_status = models::JobStatus::Ready.to_int();
-        let order_by_clause = "\
-            ORDER BY \
-                job.priority DESC, \
-                rr.num_gpus DESC, \
-                job.id ASC";
-
         let query_with_scheduler = format!(
             r#"
             SELECT
@@ -1082,10 +1407,12 @@ where
             AND rr.runtime_s <= $7
             AND (job.scheduler_id IS NULL OR job.scheduler_id = $8)
             {}
+            LIMIT $9
             "#,
-            order_by_clause
+            RESOURCE_CLAIM_ORDER_BY
         );
 
+        let mut used_scheduler_filter = true;
         let mut rows = match sqlx::query(&query_with_scheduler)
             .bind(workflow_id)
             .bind(ready_status)
@@ -1095,6 +1422,7 @@ where
             .bind(resources.num_nodes)
             .bind(time_limit_seconds)
             .bind(resources.scheduler_config_id)
+            .bind(limit)
             .fetch_all(&mut *conn)
             .await
         {
@@ -1137,8 +1465,9 @@ where
                 AND rr.num_nodes <= $6
                 AND rr.runtime_s <= $7
                 {}
+                LIMIT $8
                 "#,
-                order_by_clause
+                RESOURCE_CLAIM_ORDER_BY
             );
 
             rows = match sqlx::query(&query_without_scheduler)
@@ -1149,6 +1478,7 @@ where
                 .bind(resources.num_gpus)
                 .bind(resources.num_nodes)
                 .bind(time_limit_seconds)
+                .bind(limit)
                 .fetch_all(&mut *conn)
                 .await
             {
@@ -1171,17 +1501,10 @@ where
                     rows.len()
                 );
             }
+            used_scheduler_filter = false;
         }
 
-        let per_node_cpus = resources.num_cpus;
-        let per_node_memory = memory_bytes;
-        let per_node_gpus = resources.num_gpus;
-        let total_nodes = resources.num_nodes.max(1);
-
-        let mut consumed_memory_bytes = 0i64;
-        let mut consumed_cpus = 0i64;
-        let mut consumed_gpus = 0i64;
-        let mut exclusive_nodes = 0i64;
+        let mut packing_state = ClaimPackingState::new(&resources, memory_bytes);
         let mut selected_jobs = Vec::new();
         let mut job_ids_to_update = Vec::new();
 
@@ -1190,116 +1513,47 @@ where
              per_node(cpus={}, memory_bytes={}, gpus={}), nodes={}, time_limit={:?}",
             rows.len(),
             workflow_id,
-            per_node_cpus,
-            per_node_memory,
-            per_node_gpus,
-            total_nodes,
+            packing_state.per_node_cpus,
+            packing_state.per_node_memory,
+            packing_state.per_node_gpus,
+            packing_state.total_nodes,
             resources.time_limit
         );
 
         for row in rows {
-            if selected_jobs.len() >= limit as usize {
+            if selected_jobs.len() >= claim_limit {
                 break;
             }
-
-            let job_memory: i64 = row.get("memory_bytes");
-            let job_cpus: i64 = row.get("num_cpus");
-            let job_gpus: i64 = row.get("num_gpus");
-            let job_nodes: i64 = row.get("num_nodes");
-            let reserved_nodes = job_nodes.max(1);
-
-            let fits = if reserved_nodes > 1 {
-                let shared_nodes_after = total_nodes - exclusive_nodes - reserved_nodes;
-                exclusive_nodes + reserved_nodes <= total_nodes
-                    && consumed_cpus <= shared_nodes_after * per_node_cpus
-                    && consumed_memory_bytes <= shared_nodes_after * per_node_memory
-                    && consumed_gpus <= shared_nodes_after * per_node_gpus
-            } else {
-                let shared_capacity_cpus = (total_nodes - exclusive_nodes) * per_node_cpus;
-                let shared_capacity_memory = (total_nodes - exclusive_nodes) * per_node_memory;
-                let shared_capacity_gpus = (total_nodes - exclusive_nodes) * per_node_gpus;
-                consumed_cpus + job_cpus <= shared_capacity_cpus
-                    && consumed_memory_bytes + job_memory <= shared_capacity_memory
-                    && consumed_gpus + job_gpus <= shared_capacity_gpus
-            };
-
-            if fits {
-                if reserved_nodes > 1 {
-                    exclusive_nodes += reserved_nodes;
-                } else {
-                    consumed_memory_bytes += job_memory;
-                    consumed_cpus += job_cpus;
-                    consumed_gpus += job_gpus;
-                }
-
-                let job_id: i64 = row.get("job_id");
-                job_ids_to_update.push(job_id);
-
-                let status = models::JobStatus::from_int(row.get::<i64, _>("status") as i32)
-                    .map_err(|e| {
-                        error!("Failed to parse job status: {}", e);
-                        ApiError("Invalid job status".to_string())
-                    })?;
-
-                if status != models::JobStatus::Ready {
-                    error!("Expected job status to be Ready, but got: {}", status);
-                    let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-                    return Err(ApiError("Invalid job status in ready queue".to_string()));
-                }
-                let job = models::JobModel {
-                    id: Some(job_id),
-                    workflow_id: row.get("workflow_id"),
-                    name: row.get("name"),
-                    command: row.get("command"),
-                    invocation_script: row.get("invocation_script"),
-                    status: Some(models::JobStatus::Pending),
-                    schedule_compute_nodes: None,
-                    cancel_on_blocking_job_failure: Some(row.get("cancel_on_blocking_job_failure")),
-                    supports_termination: Some(row.get("supports_termination")),
-                    depends_on_job_ids: None,
-                    input_file_ids: None,
-                    output_file_ids: None,
-                    input_user_data_ids: None,
-                    output_user_data_ids: None,
-                    resource_requirements_id: Some(row.get("resource_requirements_id")),
-                    scheduler_id: None,
-                    failure_handler_id: row.get("failure_handler_id"),
-                    attempt_id: row.get("attempt_id"),
-                    priority: Some(row.get("priority")),
-                };
-
-                selected_jobs.push(job);
-            } else {
-                let reason = if reserved_nodes > 1 {
-                    let available = total_nodes - exclusive_nodes;
-                    format!(
-                        "multi-node job needs {} free nodes, {} available \
-                         (exclusive_nodes={}, shared cpus={}/{})",
-                        reserved_nodes,
-                        available,
-                        exclusive_nodes,
-                        consumed_cpus,
-                        (total_nodes - exclusive_nodes) * per_node_cpus
-                    )
-                } else {
-                    let shared_nodes = total_nodes - exclusive_nodes;
-                    format!(
-                        "cpus: {}/{}, memory: {}/{}, gpus: {}/{}",
-                        consumed_cpus + job_cpus,
-                        shared_nodes * per_node_cpus,
-                        consumed_memory_bytes + job_memory,
-                        shared_nodes * per_node_memory,
-                        consumed_gpus + job_gpus,
-                        shared_nodes * per_node_gpus
-                    )
-                };
-
-                debug!(
-                    "Skipping job {} - would exceed resource limits ({})",
-                    row.get::<i64, _>("job_id"),
-                    reason
-                );
+            if let Err(e) = claim_candidate_row(
+                &row,
+                &mut packing_state,
+                &mut selected_jobs,
+                &mut job_ids_to_update,
+            ) {
+                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                return Err(e);
             }
+        }
+
+        let backfill_params = BackfillClaimParams {
+            workflow_id,
+            ready_status,
+            time_limit_seconds,
+            scheduler_config_id: resources.scheduler_config_id,
+            use_scheduler_filter: used_scheduler_filter,
+            claim_limit,
+        };
+        if let Err(e) = claim_backfill_jobs(
+            &mut conn,
+            &backfill_params,
+            &mut packing_state,
+            &mut selected_jobs,
+            &mut job_ids_to_update,
+        )
+        .await
+        {
+            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+            return Err(e);
         }
 
         let mut output_files_map: std::collections::HashMap<i64, Vec<i64>> =

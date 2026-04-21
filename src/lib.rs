@@ -45,6 +45,9 @@ pub mod tui;
 #[cfg(feature = "client")]
 pub mod run_jobs_cmd;
 
+#[cfg(feature = "client")]
+pub mod exec_cmd;
+
 #[cfg(feature = "tui")]
 pub mod tui_runner;
 

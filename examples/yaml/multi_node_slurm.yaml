@@ -73,9 +73,10 @@ resource_requirements:
     runtime: "PT8H"
 
 resource_monitor:
-  enabled: true
-  granularity: "time_series"
   sample_interval_seconds: 5
+  jobs:
+    enabled: true
+    granularity: "time_series"
 
 files:
   - name: "input_matrix_{i:02d}"

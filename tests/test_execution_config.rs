@@ -92,6 +92,7 @@ fn test_execution_config_slurm_mode_full() {
         mode: slurm
         limit_resources: true
         srun_termination_signal: "TERM@120"
+        srun_mpi: "pmix"
         sigkill_headroom_seconds: 180
         enable_cpu_bind: true
     "#;
@@ -100,6 +101,7 @@ fn test_execution_config_slurm_mode_full() {
     assert_eq!(config.mode, ExecutionMode::Slurm);
     assert_eq!(config.limit_resources, Some(true));
     assert_eq!(config.srun_termination_signal, Some("TERM@120".to_string()));
+    assert_eq!(config.srun_mpi, Some("pmix".to_string()));
     assert_eq!(config.sigkill_headroom_seconds, Some(180));
     assert_eq!(config.enable_cpu_bind, Some(true));
 }
@@ -138,6 +140,7 @@ fn test_execution_config_default_values() {
     assert_eq!(config.timeout_exit_code, None);
     assert_eq!(config.oom_exit_code, None);
     assert_eq!(config.srun_termination_signal, None);
+    assert_eq!(config.srun_mpi, None);
     assert_eq!(config.enable_cpu_bind, None);
 }
 
@@ -294,6 +297,7 @@ fn test_workflow_spec_with_slurm_execution_config() {
             mode: slurm
             limit_resources: true
             srun_termination_signal: "TERM@120"
+            srun_mpi: "pmix"
             sigkill_headroom_seconds: 180
             enable_cpu_bind: false
     "#;
@@ -306,6 +310,7 @@ fn test_workflow_spec_with_slurm_execution_config() {
         exec_config.srun_termination_signal,
         Some("TERM@120".to_string())
     );
+    assert_eq!(exec_config.srun_mpi, Some("pmix".to_string()));
     assert_eq!(exec_config.sigkill_headroom_seconds, Some(180));
     assert_eq!(exec_config.enable_cpu_bind, Some(false));
 }
@@ -339,6 +344,7 @@ fn test_execution_config_yaml_roundtrip() {
         timeout_exit_code: Some(152),
         oom_exit_code: Some(137),
         srun_termination_signal: None,
+        srun_mpi: None,
         enable_cpu_bind: None,
         staggered_start: None,
         stdio: None,
@@ -362,6 +368,7 @@ fn test_execution_config_json_roundtrip() {
         timeout_exit_code: None,
         oom_exit_code: None,
         srun_termination_signal: Some("TERM@90".to_string()),
+        srun_mpi: Some("pmix".to_string()),
         enable_cpu_bind: Some(true),
         staggered_start: None,
         stdio: None,
@@ -911,6 +918,7 @@ fn test_execution_config_kdl_slurm_mode() {
         execution_config {
             mode "slurm"
             srun_termination_signal "TERM@120"
+            srun_mpi "pmix"
             sigkill_headroom_seconds 180
             enable_cpu_bind #true
         }
@@ -928,6 +936,7 @@ fn test_execution_config_kdl_slurm_mode() {
         exec_config.srun_termination_signal,
         Some("TERM@120".to_string())
     );
+    assert_eq!(exec_config.srun_mpi, Some("pmix".to_string()));
     assert_eq!(exec_config.sigkill_headroom_seconds, Some(180));
     assert_eq!(exec_config.enable_cpu_bind, Some(true));
 }
@@ -981,6 +990,7 @@ fn test_execution_config_with_all_fields() {
         timeout_exit_code: 200
         oom_exit_code: 201
         srun_termination_signal: "USR1@30"
+        srun_mpi: "pmix"
         enable_cpu_bind: true
     "#;
     let config: ExecutionConfig = serde_yaml::from_str(yaml).unwrap();
@@ -994,6 +1004,7 @@ fn test_execution_config_with_all_fields() {
     assert_eq!(config.timeout_exit_code, Some(200));
     assert_eq!(config.oom_exit_code, Some(201));
     assert_eq!(config.srun_termination_signal, Some("USR1@30".to_string()));
+    assert_eq!(config.srun_mpi, Some("pmix".to_string()));
     assert_eq!(config.enable_cpu_bind, Some(true));
 }
 
@@ -1313,6 +1324,147 @@ fn test_srun_termination_signal_rejected_with_direct_mode(start_server: &ServerP
                 srun_termination_signal: "TERM@120"
         "#,
         "srun_termination_signal",
+    );
+}
+
+#[rstest]
+fn test_srun_mpi_empty_rejected_with_slurm_mode(start_server: &ServerProcess) {
+    assert_spec_rejected(
+        &start_server.config,
+        r#"
+            name: slurm_srun_mpi_empty_rejected
+            user: test_user
+            jobs:
+              - name: job1
+                command: "echo test"
+            execution_config:
+                mode: slurm
+                srun_mpi: "   "
+        "#,
+        "srun_mpi",
+    );
+}
+
+#[rstest]
+fn test_srun_mpi_whitespace_rejected_with_direct_mode_and_worker_per_node(
+    start_server: &ServerProcess,
+) {
+    assert_spec_rejected(
+        &start_server.config,
+        r#"
+            name: direct_srun_mpi_whitespace_rejected
+            user: test_user
+            jobs:
+              - name: job1
+                command: "echo test"
+                scheduler: test_scheduler
+                resource_requirements: test_req
+            resource_requirements:
+              - name: test_req
+                num_cpus: 1
+                num_nodes: 1
+                memory: "1g"
+                runtime: "PT1H"
+            slurm_schedulers:
+              - name: test_scheduler
+                account: test_account
+                nodes: 2
+                walltime: "01:00:00"
+            execution_config:
+                mode: direct
+                srun_mpi: " pmix "
+            actions:
+              - trigger_type: on_workflow_start
+                action_type: schedule_nodes
+                scheduler: test_scheduler
+                scheduler_type: slurm
+                start_one_worker_per_node: true
+        "#,
+        "single safe token",
+    );
+}
+
+#[rstest]
+fn test_srun_mpi_allowed_with_direct_mode_and_worker_per_node(start_server: &ServerProcess) {
+    let spec = r#"
+        name: direct_srun_mpi_allowed
+        user: test_user
+        jobs:
+          - name: job1
+            command: "echo test"
+            scheduler: test_scheduler
+            resource_requirements: test_req
+        resource_requirements:
+          - name: test_req
+            num_cpus: 1
+            num_nodes: 1
+            memory: "1g"
+            runtime: "PT1H"
+        slurm_schedulers:
+          - name: test_scheduler
+            account: test_account
+            nodes: 2
+            walltime: "01:00:00"
+        execution_config:
+            mode: direct
+            srun_mpi: "none"
+        actions:
+          - trigger_type: on_workflow_start
+            action_type: schedule_nodes
+            scheduler: test_scheduler
+            scheduler_type: slurm
+            start_one_worker_per_node: true
+    "#;
+
+    let temp_file = NamedTempFile::new().expect("Failed to create temp file");
+    fs::write(temp_file.path(), spec).expect("Failed to write workflow file");
+
+    let result = WorkflowSpec::create_workflow_from_spec(
+        &start_server.config,
+        temp_file.path(),
+        "test_user",
+        false,
+    );
+    assert!(
+        result.is_ok(),
+        "Expected srun_mpi to be allowed for worker-per-node direct mode: {:?}",
+        result.err()
+    );
+}
+
+#[rstest]
+fn test_srun_mpi_rejected_without_worker_per_node(start_server: &ServerProcess) {
+    assert_spec_rejected(
+        &start_server.config,
+        r#"
+            name: direct_srun_mpi_rejected
+            user: test_user
+            jobs:
+              - name: job1
+                command: "echo test"
+            execution_config:
+                mode: direct
+                srun_mpi: "none"
+        "#,
+        "srun_mpi",
+    );
+}
+
+#[rstest]
+fn test_srun_mpi_rejected_with_slurm_mode_without_worker_per_node(start_server: &ServerProcess) {
+    assert_spec_rejected(
+        &start_server.config,
+        r#"
+            name: slurm_srun_mpi_rejected
+            user: test_user
+            jobs:
+              - name: job1
+                command: "echo test"
+            execution_config:
+                mode: slurm
+                srun_mpi: "pmix"
+        "#,
+        "start_one_worker_per_node",
     );
 }
 

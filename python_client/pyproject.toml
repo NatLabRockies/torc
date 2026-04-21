@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "torc-client"
 # Note: Do not update manually. Use cargo-release from the repo root, such as
 # $ cargo release minor --execute
-version = "0.22.2"
+version = "0.23.0"
 description = "Workflow management system"
 requires-python = ">=3.11,<3.14"
 license = "BSD-3-Clause"

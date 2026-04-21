@@ -183,11 +183,7 @@ pub fn handle_resource_requirements_commands(
                 params = params.with_limit(*limit_val);
             }
 
-            match pagination::paginate_resource_requirements(
-                config,
-                selected_workflow_id as i64,
-                params,
-            ) {
+            match pagination::paginate_resource_requirements(config, selected_workflow_id, params) {
                 Ok(requirements) => {
                     if print_wrapped_if_json(
                         format,

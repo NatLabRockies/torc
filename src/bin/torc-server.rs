@@ -101,6 +101,14 @@ struct ServerConfig {
     /// These users can create and manage access groups.
     #[arg(long = "admin-user", env = "TORC_ADMIN_USERS")]
     admin_users: Vec<String>,
+
+    /// Shut down gracefully when stdin reaches EOF. Used by `torc --standalone`
+    /// to tie the server's lifetime to the torc client: the parent holds the
+    /// write end of stdin, and when it exits by any means (including
+    /// std::process::exit that bypasses destructors) the kernel closes the
+    /// pipe, the server sees EOF, and it shuts down.
+    #[arg(long, default_value_t = false, hide = true)]
+    shutdown_on_stdin_eof: bool,
 }
 
 const STYLES: styling::Styles = styling::Styles::styled()
@@ -314,6 +322,7 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
             .completion_check_interval_secs
             .or(Some(server_file_config.completion_check_interval_secs)),
         admin_users: cli_config.admin_users,
+        shutdown_on_stdin_eof: cli_config.shutdown_on_stdin_eof,
     };
 
     // Handle daemonization BEFORE initializing logging
@@ -521,6 +530,7 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
             config.tls_cert,
             config.tls_key,
             config.auth_file.clone(),
+            config.shutdown_on_stdin_eof,
         )
         .await;
         Ok(())

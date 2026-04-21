@@ -4,6 +4,8 @@
 ## Properties
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
+**avg_cpu_percent** | **Float64** |  | [optional] [default to nothing]
+**avg_memory_bytes** | **Int64** |  | [optional] [default to nothing]
 **compute_node_type** | **String** |  | [default to nothing]
 **duration_seconds** | **Float64** |  | [optional] [default to nothing]
 **hostname** | **String** |  | [default to nothing]
@@ -13,7 +15,10 @@ Name | Type | Description | Notes
 **num_cpus** | **Int64** |  | [default to nothing]
 **num_gpus** | **Int64** |  | [default to nothing]
 **num_nodes** | **Int64** |  | [default to nothing]
+**peak_cpu_percent** | **Float64** |  | [optional] [default to nothing]
+**peak_memory_bytes** | **Int64** |  | [optional] [default to nothing]
 **pid** | **Int64** |  | [default to nothing]
+**sample_count** | **Int64** |  | [optional] [default to nothing]
 **scheduler** | **Any** |  | [optional] [default to nothing]
 **scheduler_config_id** | **Int64** |  | [optional] [default to nothing]
 **start_time** | **String** |  | [default to nothing]

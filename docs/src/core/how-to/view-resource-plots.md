@@ -8,8 +8,10 @@ Enable time series monitoring in your workflow specification:
 
 ```yaml
 resource_monitor:
-  granularity: "time_series"
   sample_interval_seconds: 2
+  jobs:
+    enabled: true
+    granularity: "time_series"
 ```
 
 This creates a SQLite database with resource samples at regular intervals.

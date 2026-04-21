@@ -174,6 +174,7 @@ Object.assign(TorcDashboard.prototype, {
             'dag-workflow-selector',
             'events-workflow-selector',
             'debug-workflow-selector',
+            'resource-workflow-selector',
         ];
 
         selectors.forEach(id => {
@@ -192,7 +193,7 @@ Object.assign(TorcDashboard.prototype, {
             }
 
             // Restore selection if still valid
-            if (currentValue && workflows.find(w => w.id === currentValue)) {
+            if (currentValue && workflows.find(w => String(w.id) === String(currentValue))) {
                 select.value = currentValue;
             }
         });

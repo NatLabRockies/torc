@@ -334,6 +334,13 @@
                     <div class="settings-section">
                         <h3>Resource Database Selection</h3>
                         <div class="form-group">
+                            <label for="resource-workflow-selector">Workflow</label>
+                            <select id="resource-workflow-selector" class="select-input">
+                                <option value="">Select a workflow...</option>
+                            </select>
+                            <small>Filters databases by workflow ID parsed from filenames like _wf7_</small>
+                        </div>
+                        <div class="form-group">
                             <label for="resource-db-dir">Database Directory</label>
                             <div style="display: flex; gap: 10px;">
                                 <input type="text" id="resource-db-dir" class="text-input"

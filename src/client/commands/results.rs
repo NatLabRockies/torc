@@ -237,7 +237,7 @@ pub fn handle_result_commands(config: &Configuration, command: &ResultCommands, 
                 params = params.with_compute_node_id(*compute_node_id);
             }
 
-            match pagination::paginate_results(config, selected_workflow_id as i64, params) {
+            match pagination::paginate_results(config, selected_workflow_id, params) {
                 Ok(mut results) => {
                     // Apply client-side filtering for failed jobs
                     if *failed {

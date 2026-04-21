@@ -7,6 +7,12 @@ Object.assign(TorcDashboard.prototype, {
     // ==================== Resource Plots Tab ====================
 
     setupResourcePlotsTab() {
+        document.getElementById('resource-workflow-selector')?.addEventListener('change', (e) => {
+            this.selectedWorkflowId = e.target.value;
+            this.clearResourcePlotsState();
+            this.renderResourceDatabaseList();
+        });
+
         document.getElementById('btn-scan-dbs')?.addEventListener('click', () => {
             this.scanResourceDatabases();
         });
@@ -14,6 +20,26 @@ Object.assign(TorcDashboard.prototype, {
         document.getElementById('btn-generate-plots')?.addEventListener('click', () => {
             this.generateResourcePlots();
         });
+    },
+
+    clearResourcePlotsState() {
+        this.selectedDatabases = [];
+        this.resourcePlots = [];
+        this.currentPlotIndex = 0;
+
+        const btn = document.getElementById('btn-generate-plots');
+        if (btn) btn.disabled = true;
+
+        const plotsSection = document.getElementById('plots-section');
+        if (plotsSection) plotsSection.style.display = 'none';
+
+        const plotTabs = document.getElementById('plot-tabs');
+        if (plotTabs) plotTabs.innerHTML = '';
+
+        const plotContainer = document.getElementById('plot-container');
+        if (plotContainer) {
+            plotContainer.innerHTML = '<div class="placeholder-message">Select a plot to view</div>';
+        }
     },
 
     async scanResourceDatabases() {
@@ -33,37 +59,79 @@ Object.assign(TorcDashboard.prototype, {
             }
 
             this.resourceDatabases = response.databases || [];
-            this.selectedDatabases = [];
+            this.clearResourcePlotsState();
+            this.renderResourceDatabaseList();
 
             if (this.resourceDatabases.length === 0) {
                 listContainer.innerHTML = '<div class="placeholder-message">No database files found in this directory</div>';
                 document.getElementById('btn-generate-plots').disabled = true;
-                return;
             }
 
-            listContainer.innerHTML = this.resourceDatabases.map((db, idx) => `
+        } catch (error) {
+            listContainer.innerHTML = `<div class="placeholder-message" style="color: var(--danger-color)">Error: ${error.message}</div>`;
+        }
+    },
+
+    getSelectedResourceWorkflowId() {
+        return document.getElementById('resource-workflow-selector')?.value || '';
+    },
+
+    getFilteredResourceDatabases() {
+        const workflowId = this.getSelectedResourceWorkflowId();
+        if (!workflowId) return this.resourceDatabases;
+
+        return this.resourceDatabases.filter(db => String(db.workflow_id || '') === String(workflowId));
+    },
+
+    renderResourceDatabaseList() {
+        const listContainer = document.getElementById('resource-db-list');
+        if (!listContainer) return;
+
+        const workflowId = this.getSelectedResourceWorkflowId();
+        const databases = this.getFilteredResourceDatabases();
+        const btn = document.getElementById('btn-generate-plots');
+        if (btn) btn.disabled = this.selectedDatabases.length === 0;
+
+        if (this.resourceDatabases.length === 0) {
+            listContainer.innerHTML = '<div class="placeholder-message">Click "Scan" to discover database files</div>';
+            return;
+        }
+
+        if (databases.length === 0) {
+            const message = workflowId
+                ? `No database files found for workflow ${this.escapeHtml(workflowId)}`
+                : 'No database files found in this directory';
+            listContainer.innerHTML = `<div class="placeholder-message">${message}</div>`;
+            return;
+        }
+
+        listContainer.innerHTML = databases.map((db, idx) => {
+            const workflowLabel = db.workflow_id
+                ? `<div class="db-workflow">Workflow ${this.escapeHtml(String(db.workflow_id))}</div>`
+                : '<div class="db-workflow db-workflow-unknown">Workflow unknown</div>';
+            const checked = this.selectedDatabases.includes(idx) ? 'checked' : '';
+
+            return `
                 <label class="resource-db-item">
-                    <input type="checkbox" value="${idx}" onchange="app.toggleDatabaseSelection(${idx}, this.checked)">
+                    <input type="checkbox" value="${idx}" ${checked} onchange="app.toggleDatabaseSelection(${idx}, this.checked)">
                     <div class="db-info">
                         <div class="db-name">${this.escapeHtml(db.name)}</div>
                         <div class="db-path">${this.escapeHtml(db.path)}</div>
                     </div>
                     <div class="db-meta">
+                        ${workflowLabel}
                         <div>${this.formatBytes(db.size_bytes)}</div>
                         <div>${db.modified}</div>
                     </div>
                 </label>
-            `).join('');
+            `;
+        }).join('');
 
-            // If there's only one database, auto-select it
-            if (this.resourceDatabases.length === 1) {
-                this.toggleDatabaseSelection(0, true);
-                const checkbox = listContainer.querySelector('input[type="checkbox"]');
-                if (checkbox) checkbox.checked = true;
-            }
-
-        } catch (error) {
-            listContainer.innerHTML = `<div class="placeholder-message" style="color: var(--danger-color)">Error: ${error.message}</div>`;
+        // If there's only one matching database, auto-select it
+        if (databases.length === 1) {
+            this.toggleDatabaseSelection(0, true);
+            const checkbox = listContainer.querySelector('input[type="checkbox"]');
+            if (checkbox) checkbox.checked = true;
         }
     },
 
@@ -95,7 +163,8 @@ Object.assign(TorcDashboard.prototype, {
         }
 
         // Get paths for selected databases
-        const dbPaths = this.selectedDatabases.map(idx => this.resourceDatabases[idx].path);
+        const filteredDatabases = this.getFilteredResourceDatabases();
+        const dbPaths = this.selectedDatabases.map(idx => filteredDatabases[idx].path);
 
         // Show loading state
         btn.disabled = true;

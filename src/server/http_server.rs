@@ -252,6 +252,7 @@ pub async fn create(
     #[allow(unused_variables)] tls_cert: Option<String>,
     #[allow(unused_variables)] tls_key: Option<String>,
     auth_file_path: Option<String>,
+    shutdown_on_stdin_eof: bool,
 ) -> u16 {
     bootstrap::create_server(
         addr,
@@ -266,6 +267,7 @@ pub async fn create(
         tls_cert,
         tls_key,
         auth_file_path,
+        shutdown_on_stdin_eof,
     )
     .await
 }

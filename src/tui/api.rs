@@ -3,8 +3,8 @@ use crate::client::apis::configuration::{BasicAuth, Configuration, TlsConfig};
 use crate::client::config::TorcConfig;
 use crate::client::workflow_spec::WorkflowSpec;
 use crate::models::{
-    FileModel, JobDependencyModel, JobModel, JobStatus, ResultModel, ScheduledComputeNodesModel,
-    SlurmStatsModel, WorkflowActionModel, WorkflowModel,
+    ComputeNodeModel, FileModel, JobDependencyModel, JobModel, JobStatus, ResultModel,
+    ScheduledComputeNodesModel, SlurmStatsModel, WorkflowActionModel, WorkflowModel,
 };
 use anyhow::{Context, Result};
 
@@ -206,6 +206,23 @@ impl TorcClient {
             None, // status
         )
         .context("Failed to list scheduled compute nodes")?;
+
+        Ok(response.items)
+    }
+
+    pub fn list_compute_nodes(&self, workflow_id: i64) -> Result<Vec<ComputeNodeModel>> {
+        let response = apis::compute_nodes_api::list_compute_nodes(
+            &self.config,
+            workflow_id,
+            None, // offset
+            None, // limit
+            None, // sort_by
+            None, // reverse_sort
+            None, // hostname
+            None, // is_active
+            None, // scheduled_compute_node_id
+        )
+        .context("Failed to list compute nodes")?;
 
         Ok(response.items)
     }

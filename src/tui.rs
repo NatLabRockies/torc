@@ -506,10 +506,8 @@ where
                     KeyCode::Left | KeyCode::Right => {
                         app.toggle_focus();
                     }
-                    KeyCode::Char('f') => {
-                        if app.focus == Focus::Details {
-                            app.start_filter();
-                        }
+                    KeyCode::Char('f') if app.focus == Focus::Details => {
+                        app.start_filter();
                     }
                     KeyCode::Char('c') => {
                         if app.focus == Focus::Details && app.detail_view == DetailViewType::Jobs {
@@ -570,28 +568,26 @@ where
                         app.show_server_output();
                     }
                     // Log viewing actions
-                    KeyCode::Char('l') => {
-                        if app.focus == Focus::Details {
-                            match app.detail_view {
-                                DetailViewType::Jobs => {
-                                    app.show_job_logs();
-                                }
-                                DetailViewType::ScheduledNodes => {
-                                    app.show_slurm_logs();
-                                }
-                                _ => {}
-                            }
+                    KeyCode::Char('l') if app.focus == Focus::Details => match app.detail_view {
+                        DetailViewType::Jobs => {
+                            app.show_job_logs();
                         }
+                        DetailViewType::ScheduledNodes => {
+                            app.show_slurm_logs();
+                        }
+                        _ => {}
+                    },
+                    KeyCode::Char('t')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Jobs =>
+                    {
+                        app.request_job_action(JobAction::Terminate);
                     }
-                    KeyCode::Char('t') => {
-                        if app.focus == Focus::Details && app.detail_view == DetailViewType::Jobs {
-                            app.request_job_action(JobAction::Terminate);
-                        }
-                    }
-                    KeyCode::Char('y') => {
-                        if app.focus == Focus::Details && app.detail_view == DetailViewType::Jobs {
-                            app.request_job_action(JobAction::Retry);
-                        }
+                    KeyCode::Char('y')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Jobs =>
+                    {
+                        app.request_job_action(JobAction::Retry);
                     }
                     _ => {}
                 },

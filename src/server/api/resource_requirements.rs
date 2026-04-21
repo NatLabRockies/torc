@@ -148,6 +148,19 @@ where
             }
         };
 
+        if body.num_cpus <= 0 {
+            let error_response = models::ErrorResponse::new(serde_json::json!({
+                "message": format!("num_cpus must be > 0, got {}", body.num_cpus),
+                "field": "num_cpus",
+                "value": body.num_cpus
+            }));
+            return Ok(
+                CreateResourceRequirementsResponse::UnprocessableContentErrorResponse(
+                    error_response,
+                ),
+            );
+        }
+
         if body.num_nodes <= 0 {
             let error_response = models::ErrorResponse::new(serde_json::json!({
                 "message": format!("num_nodes must be > 0, got {}", body.num_nodes),
@@ -591,6 +604,19 @@ where
                 return Err(ApiError("Failed to get resource requirements".to_string()));
             }
         };
+
+        if body.num_cpus <= 0 {
+            let error_response = models::ErrorResponse::new(serde_json::json!({
+                "message": format!("num_cpus must be > 0, got {}", body.num_cpus),
+                "field": "num_cpus",
+                "value": body.num_cpus
+            }));
+            return Ok(
+                UpdateResourceRequirementsResponse::UnprocessableContentErrorResponse(
+                    error_response,
+                ),
+            );
+        }
 
         if body.num_nodes <= 0 {
             let error_response = models::ErrorResponse::new(serde_json::json!({

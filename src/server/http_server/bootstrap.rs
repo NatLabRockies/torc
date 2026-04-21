@@ -71,6 +71,47 @@ pub(super) async fn sync_admin_group(
     Ok(())
 }
 
+/// Build the shutdown future for the server. Resolves when any of the configured
+/// triggers fires: Ctrl+C, or (when `shutdown_on_stdin_eof` is true) EOF on stdin.
+/// The stdin-EOF trigger is used by `torc --standalone` to tie the server's
+/// lifetime to the parent process — when the parent dies for any reason
+/// (including std::process::exit, which bypasses destructors), the kernel
+/// closes the pipe write end, stdin sees EOF here, and the server shuts down.
+async fn build_shutdown_future(shutdown_on_stdin_eof: bool) {
+    let stdin_eof = async {
+        if !shutdown_on_stdin_eof {
+            std::future::pending::<()>().await;
+            return;
+        }
+        let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+        std::thread::spawn(move || {
+            use std::io::Read;
+            let mut buf = [0u8; 1024];
+            let stdin = std::io::stdin();
+            let mut lock = stdin.lock();
+            loop {
+                match lock.read(&mut buf) {
+                    Ok(0) => break,
+                    Ok(_) => continue,
+                    Err(_) => break,
+                }
+            }
+            let _ = tx.send(());
+        });
+        let _ = rx.await;
+    };
+    tokio::pin!(stdin_eof);
+    tokio::select! {
+        r = tokio::signal::ctrl_c() => {
+            r.expect("Failed to install Ctrl+C handler");
+            info!("Received shutdown signal, gracefully shutting down...");
+        }
+        _ = &mut stdin_eof => {
+            info!("Parent process exited (stdin EOF), gracefully shutting down...");
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn create_server(
     addr: &str,
@@ -85,6 +126,7 @@ pub(super) async fn create_server(
     #[allow(unused_variables)] tls_cert: Option<String>,
     #[allow(unused_variables)] tls_key: Option<String>,
     auth_file_path: Option<String>,
+    shutdown_on_stdin_eof: bool,
 ) -> u16 {
     let addr = tokio::net::lookup_host(addr)
         .await
@@ -180,12 +222,7 @@ pub(super) async fn create_server(
             let tls_acceptor = ssl.build();
 
             info!("Starting a server (with https) on port {}", actual_port);
-            let shutdown = async {
-                tokio::signal::ctrl_c()
-                    .await
-                    .expect("Failed to install Ctrl+C handler");
-                info!("Received shutdown signal, gracefully shutting down TLS server...");
-            };
+            let shutdown = build_shutdown_future(shutdown_on_stdin_eof);
             tokio::pin!(shutdown);
 
             let mut connection_tasks = tokio::task::JoinSet::new();
@@ -254,12 +291,7 @@ pub(super) async fn create_server(
             "Starting a server (over http, so no TLS) on port {}",
             actual_port
         );
-        let shutdown = async {
-            tokio::signal::ctrl_c()
-                .await
-                .expect("Failed to install Ctrl+C handler");
-            info!("Received shutdown signal, gracefully shutting down...");
-        };
+        let shutdown = build_shutdown_future(shutdown_on_stdin_eof);
         tokio::pin!(shutdown);
 
         let mut connection_tasks = tokio::task::JoinSet::new();

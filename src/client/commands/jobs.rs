@@ -501,7 +501,7 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                 params = params.with_upstream_job_id(*upstream_id);
             }
 
-            match pagination::paginate_jobs(config, selected_workflow_id as i64, params) {
+            match pagination::paginate_jobs(config, selected_workflow_id, params) {
                 Ok(jobs) => {
                     if format == "json" {
                         print_json_wrapped("jobs", &jobs, "jobs");

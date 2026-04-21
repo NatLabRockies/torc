@@ -44,6 +44,7 @@ const HELP_TEMPLATE: &str = "\
 \x1b[1;32mWorkflow Lifecycle:\x1b[0m
   \x1b[1;36mcreate\x1b[0m                   Create a workflow from spec file
   \x1b[1;36mrun\x1b[0m                      Run a workflow locally
+  \x1b[1;36mexec\x1b[0m                     Run inline commands as a synthesized workflow
   \x1b[1;36msubmit\x1b[0m                   Submit a workflow to scheduler
   \x1b[1;36mstatus\x1b[0m                   Show workflow status and job summary
   \x1b[1;36mwatch\x1b[0m                    Watch workflow and recover from failures
@@ -117,6 +118,25 @@ pub struct Cli {
     /// Cookie header value for authentication (e.g., from browser-based MFA)
     #[arg(long, env = "TORC_COOKIE_HEADER", hide_env_values = true)]
     pub cookie_header: Option<String>,
+    /// Run an ephemeral torc-server alongside this command (no running server required).
+    ///
+    /// The server binds to 127.0.0.1 on an auto-assigned port, uses the SQLite
+    /// database at `--db` (default `./torc_output/torc.db`), and is shut down when
+    /// this command exits. Subsequent standalone invocations pointed at the same
+    /// `--db` can inspect the resulting workflow (e.g., `torc -s results list`).
+    #[arg(short = 's', long)]
+    pub standalone: bool,
+    /// SQLite database path for standalone mode. Defaults to `./torc_output/torc.db`.
+    #[arg(long, value_name = "PATH")]
+    pub db: Option<PathBuf>,
+    /// Path to the torc-server binary used in standalone mode.
+    #[arg(
+        long,
+        env = "TORC_SERVER_BIN",
+        value_name = "PATH",
+        default_value = "torc-server"
+    )]
+    pub torc_server_bin: String,
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -183,6 +203,9 @@ EXAMPLES:
 
     # Custom output directory
     torc run -o /path/to/torc_output workflow.yaml
+
+SEE ALSO:
+    torc exec    Run ad-hoc commands inline without a spec file.
 "
     )]
     Run {
@@ -216,6 +239,133 @@ EXAMPLES:
         /// Skip validation checks (e.g., scheduler node requirements). Use with caution.
         #[arg(long, default_value = "false")]
         skip_checks: bool,
+    },
+    /// Run inline commands as a synthesized workflow (no spec file required).
+    ///
+    /// Builds a workflow from `-c`/`-C` commands, creates it on the torc server,
+    /// and runs it locally with torc's per-job resource monitoring and parallelism
+    /// controls. Useful for monitoring one long-running command or running a batch
+    /// of commands with a parallelism cap — similar to GNU Parallel, but torc-native.
+    ///
+    /// The workflow is persisted like any other and can be inspected afterwards
+    /// (e.g., `torc -s results list`, `torc -s jobs list <id>`). Only the
+    /// `--standalone` server is short-lived — the database and its workflows are not.
+    ///
+    /// For workflows defined in a spec file, use `torc run` instead.
+    #[command(
+        hide = true,
+        after_long_help = "\
+EXAMPLES (standalone — no running server required):
+    # Monitor CPU/memory of a single command
+    torc -s exec -c 'bash long_script.sh'
+
+    # Run a batch of commands with a parallelism cap
+    torc -s exec -c 'bash work.sh 1' -c 'bash work.sh 2' -c 'bash work.sh 3' -j 2
+
+    # Commands from a file (one per line)
+    torc -s exec -C commands.txt
+
+    # Shell-style invocation (everything after '--' is one command)
+    torc -s exec -- python train.py --epochs 10
+
+    # Parameterized template (Cartesian product = 9 jobs)
+    torc -s exec -c 'python train.py --lr {lr} --bs {bs}' \\
+        --param lr='[0.001,0.01,0.1]' \\
+        --param bs='[32,64,128]'
+
+    # Parameters zipped element-wise (3 jobs)
+    torc -s exec -c 'curl -o {out} {url}' \\
+        --param url=@urls.txt \\
+        --param out=@outfiles.txt \\
+        --link zip
+
+    # Inspect the persisted results later
+    torc -s results list
+
+SEE ALSO:
+    torc run     Run a workflow defined in a spec file.
+"
+    )]
+    Exec {
+        /// Name for the synthesized workflow. Defaults to `exec_<timestamp>`.
+        #[arg(short = 'n', long, value_name = "NAME")]
+        name: Option<String>,
+        /// Description for the synthesized workflow.
+        #[arg(long, value_name = "TEXT")]
+        description: Option<String>,
+        /// Command to execute (repeat for multiple commands).
+        /// May reference `{name}` placeholders defined via --param.
+        #[arg(short = 'c', long = "command", value_name = "CMD")]
+        command: Vec<String>,
+        /// Read commands from a file, one per line (blank lines and '#' comments skipped).
+        /// Use '-' to read from stdin.
+        #[arg(short = 'C', long = "commands-file", value_name = "FILE")]
+        commands_file: Option<String>,
+        /// Parameter definition: NAME=VALUE. Repeatable.
+        /// VALUE: `1:10` (int range), `[a,b,c]` (list), `@file.txt` (one per line), or literal.
+        #[arg(long = "param", value_name = "NAME=VALUE")]
+        param: Vec<String>,
+        /// How to combine multiple parameters: "product" (Cartesian, default) or "zip".
+        #[arg(long = "link", value_name = "MODE", default_value = "product", value_parser = clap::builder::PossibleValuesParser::new(["product", "zip"]))]
+        link: String,
+        /// Maximum number of parallel jobs to run concurrently.
+        #[arg(short = 'j', long = "max-parallel-jobs")]
+        max_parallel_jobs: Option<i64>,
+        /// Output directory for job logs and metrics.
+        #[arg(short = 'o', long)]
+        output_dir: Option<PathBuf>,
+        /// Print the expanded workflow spec and exit without creating or running it.
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+        /// Per-job resource monitoring mode.
+        ///
+        /// `summary` (default): record aggregate peak/avg CPU and memory per job.
+        /// `time-series`: sample over time into a SQLite DB (required for plots).
+        /// `off`: disable per-job monitoring entirely.
+        #[arg(long, value_name = "MODE", default_value = "summary",
+              value_parser = clap::builder::PossibleValuesParser::new(
+                  ["off", "summary", "time-series"]))]
+        monitor: String,
+        /// Compute-node (system-wide) resource monitoring mode.
+        ///
+        /// `off` (default), `summary`, or `time-series`. Enable to record node-wide
+        /// CPU/memory alongside per-job metrics.
+        #[arg(long, value_name = "MODE", default_value = "off",
+              value_parser = clap::builder::PossibleValuesParser::new(
+                  ["off", "summary", "time-series"]))]
+        monitor_compute_node: String,
+        /// Render HTML resource plots after the run completes.
+        ///
+        /// Requires at least one scope to use time-series granularity
+        /// (`--monitor time-series` or `--monitor-compute-node time-series`).
+        #[arg(long, default_value_t = false)]
+        generate_plots: bool,
+        /// Override the resource sampling interval (seconds). Must be >= 1.
+        ///
+        /// Matches the workflow spec's `resource_monitor.sample_interval_seconds`.
+        /// When unset, torc uses the spec default (10s).
+        #[arg(
+            short = 'i',
+            long = "sample-interval-seconds",
+            value_name = "SECS",
+            value_parser = clap::value_parser!(i32).range(1..)
+        )]
+        sample_interval_seconds: Option<i32>,
+        /// Stdio capture mode for jobs. When unset, uses the spec default ("separate").
+        ///
+        /// Values: separate (stdout/stderr to distinct files), combined (merged),
+        /// no-stdout, no-stderr, none (discard both).
+        #[arg(long, value_name = "MODE",
+              value_parser = clap::builder::PossibleValuesParser::new(
+                  ["separate", "combined", "no-stdout", "no-stderr", "none"]))]
+        stdio: Option<String>,
+        /// Hidden catch-all for shell-style commands or accidental positional args.
+        /// If no -c/-C command source is supplied, these words are shell-quoted and
+        /// treated as one command (e.g., `torc exec -- python train.py --epochs 10`).
+        /// If a spec file path is passed (e.g., `torc exec workflow.yaml`), the
+        /// handler suggests `torc run` instead.
+        #[arg(hide = true, trailing_var_arg = true)]
+        trailing: Vec<String>,
     },
     /// Submit a workflow to scheduler (create from spec file or submit existing workflow by ID)
     ///

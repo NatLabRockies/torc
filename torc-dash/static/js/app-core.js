@@ -240,6 +240,16 @@ Object.assign(TorcDashboard.prototype, {
                 debugSelector.value = this.selectedWorkflowId;
             }
         }
+
+        // Sync resource plots workflow selector with selected workflow
+        if (tabName === 'resource-plots' && this.selectedWorkflowId) {
+            const resourceSelector = document.getElementById('resource-workflow-selector');
+            if (resourceSelector && resourceSelector.value !== this.selectedWorkflowId) {
+                resourceSelector.value = this.selectedWorkflowId;
+                this.clearResourcePlotsState?.();
+                this.renderResourceDatabaseList?.();
+            }
+        }
     },
 
     // ==================== Connection ====================

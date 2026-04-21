@@ -13,7 +13,8 @@ use crate::client::log_paths::{
 };
 use crate::client::sse_client::SseEvent;
 use crate::models::{
-    FileModel, JobModel, ResultModel, ScheduledComputeNodesModel, SlurmStatsModel, WorkflowModel,
+    ComputeNodeModel, FileModel, JobModel, ResultModel, ScheduledComputeNodesModel,
+    SlurmStatsModel, WorkflowModel,
 };
 
 use crate::client::apis::configuration::{BasicAuth, TlsConfig};
@@ -32,6 +33,7 @@ pub enum DetailViewType {
     Files,
     Events,
     Results,
+    ComputeNodes,
     ScheduledNodes,
     SlurmStats,
     Dag,
@@ -163,6 +165,7 @@ impl DetailViewType {
             Self::Files => "◫ Files",
             Self::Events => "⚡ Events",
             Self::Results => "✓ Results",
+            Self::ComputeNodes => "▣ Compute",
             Self::ScheduledNodes => "⊞ Nodes",
             Self::SlurmStats => "⚑ Slurm Stats",
             Self::Dag => "◇ DAG",
@@ -175,6 +178,7 @@ impl DetailViewType {
             Self::Files,
             Self::Events,
             Self::Results,
+            Self::ComputeNodes,
             Self::ScheduledNodes,
             Self::SlurmStats,
             Self::Dag,
@@ -186,7 +190,8 @@ impl DetailViewType {
             Self::Jobs => Self::Files,
             Self::Files => Self::Events,
             Self::Events => Self::Results,
-            Self::Results => Self::ScheduledNodes,
+            Self::Results => Self::ComputeNodes,
+            Self::ComputeNodes => Self::ScheduledNodes,
             Self::ScheduledNodes => Self::SlurmStats,
             Self::SlurmStats => Self::Dag,
             Self::Dag => Self::Jobs,
@@ -199,7 +204,8 @@ impl DetailViewType {
             Self::Files => Self::Jobs,
             Self::Events => Self::Files,
             Self::Results => Self::Events,
-            Self::ScheduledNodes => Self::Results,
+            Self::ComputeNodes => Self::Results,
+            Self::ScheduledNodes => Self::ComputeNodes,
             Self::SlurmStats => Self::ScheduledNodes,
             Self::Dag => Self::SlurmStats,
         }
@@ -244,6 +250,9 @@ pub struct App {
     pub results_state: TableState,
     pub results_workflow_id: Option<i64>,
     pub exec_time_map: std::collections::HashMap<(i64, i64, i64), f64>,
+    pub compute_nodes: Vec<ComputeNodeModel>,
+    pub compute_nodes_all: Vec<ComputeNodeModel>,
+    pub compute_nodes_state: TableState,
     pub scheduled_nodes: Vec<ScheduledComputeNodesModel>,
     pub scheduled_nodes_all: Vec<ScheduledComputeNodesModel>,
     pub scheduled_nodes_state: TableState,
@@ -347,6 +356,9 @@ impl App {
             results_state: TableState::default(),
             results_workflow_id: None,
             exec_time_map: std::collections::HashMap::new(),
+            compute_nodes: Vec::new(),
+            compute_nodes_all: Vec::new(),
+            compute_nodes_state: TableState::default(),
             scheduled_nodes: Vec::new(),
             scheduled_nodes_all: Vec::new(),
             scheduled_nodes_state: TableState::default(),
@@ -433,6 +445,9 @@ impl App {
                     DetailViewType::Files => (&mut self.files_state, self.files.len()),
                     DetailViewType::Events => (&mut self.events_state, self.events.len()),
                     DetailViewType::Results => (&mut self.results_state, self.results.len()),
+                    DetailViewType::ComputeNodes => {
+                        (&mut self.compute_nodes_state, self.compute_nodes.len())
+                    }
                     DetailViewType::ScheduledNodes => {
                         (&mut self.scheduled_nodes_state, self.scheduled_nodes.len())
                     }
@@ -475,6 +490,9 @@ impl App {
                     DetailViewType::Files => (&mut self.files_state, self.files.len()),
                     DetailViewType::Events => (&mut self.events_state, self.events.len()),
                     DetailViewType::Results => (&mut self.results_state, self.results.len()),
+                    DetailViewType::ComputeNodes => {
+                        (&mut self.compute_nodes_state, self.compute_nodes.len())
+                    }
                     DetailViewType::ScheduledNodes => {
                         (&mut self.scheduled_nodes_state, self.scheduled_nodes.len())
                     }
@@ -534,6 +552,13 @@ impl App {
                         self.results = self.results_all.clone();
                         if !self.results.is_empty() {
                             self.results_state.select(Some(0));
+                        }
+                    }
+                    DetailViewType::ComputeNodes => {
+                        self.compute_nodes_all = self.client.list_compute_nodes(workflow_id)?;
+                        self.compute_nodes = self.compute_nodes_all.clone();
+                        if !self.compute_nodes.is_empty() {
+                            self.compute_nodes_state.select(Some(0));
                         }
                     }
                     DetailViewType::ScheduledNodes => {
@@ -623,6 +648,7 @@ impl App {
             DetailViewType::Files => vec!["Name", "Path"],
             DetailViewType::Events => vec!["Event Type", "Data"],
             DetailViewType::Results => vec!["Status", "Return Code"],
+            DetailViewType::ComputeNodes => vec!["Hostname", "Active"],
             DetailViewType::ScheduledNodes => vec!["Status", "Scheduler Type"],
             DetailViewType::SlurmStats => vec!["Job ID", "Slurm Job", "Nodes"],
             DetailViewType::Dag => vec![], // DAG view doesn't support filtering
@@ -743,6 +769,26 @@ impl App {
                     self.results_state.select(None);
                 }
             }
+            DetailViewType::ComputeNodes => {
+                self.compute_nodes = self
+                    .compute_nodes_all
+                    .iter()
+                    .filter(|node| match column.as_str() {
+                        "Hostname" => node.hostname.to_lowercase().contains(&value),
+                        "Active" => node
+                            .is_active
+                            .map(|active| (if active { "yes" } else { "no" }).contains(&value))
+                            .unwrap_or(false),
+                        _ => false,
+                    })
+                    .cloned()
+                    .collect();
+                if !self.compute_nodes.is_empty() {
+                    self.compute_nodes_state.select(Some(0));
+                } else {
+                    self.compute_nodes_state.select(None);
+                }
+            }
             DetailViewType::ScheduledNodes => {
                 self.scheduled_nodes = self
                     .scheduled_nodes_all
@@ -821,6 +867,12 @@ impl App {
                 self.results = self.results_all.clone();
                 if !self.results.is_empty() {
                     self.results_state.select(Some(0));
+                }
+            }
+            DetailViewType::ComputeNodes => {
+                self.compute_nodes = self.compute_nodes_all.clone();
+                if !self.compute_nodes.is_empty() {
+                    self.compute_nodes_state.select(Some(0));
                 }
             }
             DetailViewType::ScheduledNodes => {

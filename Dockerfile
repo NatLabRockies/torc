@@ -1,6 +1,6 @@
 # Usage:
 #   # Download and extract release binaries
-#   VERSION=0.22.2
+#   VERSION=0.23.0
 #   mkdir -p artifact
 #   curl -fsSL "https://github.com/NatLabRockies/torc/releases/download/v${VERSION}/torc-x86_64-unknown-linux-musl.tar.gz" \
 #     | tar xz -C artifact/

@@ -1,4 +1,7 @@
-use std::io::IsTerminal;
+use std::io::{BufRead, BufReader, IsTerminal};
+use std::sync::mpsc;
+use std::thread;
+use std::time::{Duration, Instant};
 
 use clap::{CommandFactory, Parser};
 
@@ -34,6 +37,7 @@ use torc::client::workflow_manager::WorkflowManager;
 use torc::client::workflow_spec::WorkflowSpec;
 
 // Import the binary command modules from the library
+use torc::exec_cmd;
 use torc::plot_resources_cmd;
 use torc::run_jobs_cmd;
 use torc::tui_runner;
@@ -47,6 +51,215 @@ fn print_workflow_message(format: &str, workflow_id: i64, message: &str) {
         );
     } else {
         println!("{}", message);
+    }
+}
+
+fn command_used_delimiter(command_name: &str) -> bool {
+    let mut seen_command = false;
+    for arg in std::env::args_os().skip(1) {
+        if seen_command {
+            if arg == "--" {
+                return true;
+            }
+            continue;
+        }
+        if arg == command_name {
+            seen_command = true;
+        }
+    }
+    false
+}
+
+/// Handle to an ephemeral torc-server subprocess started by `--standalone`.
+///
+/// Normal-exit cleanup is handled by `Drop`, which kills and reaps the child.
+/// `std::process::exit()` bypasses destructors, so we also hand the child a
+/// piped stdin that we never close and pass `--shutdown-on-stdin-eof` to the
+/// server. When the parent process terminates by any means (normal return,
+/// `process::exit`, SIGKILL, crash), the kernel closes the pipe write end, the
+/// server reads EOF, and it shuts itself down gracefully. The pipe is the
+/// safety net; the explicit kill() is the fast path.
+struct StandaloneServer {
+    child: std::process::Child,
+    api_url: String,
+    db_path: std::path::PathBuf,
+    // Write end of the child's stdin pipe. Held open to keep the child alive;
+    // dropping it (explicitly in `Drop::drop` or implicitly on parent exit)
+    // triggers the server's graceful shutdown via its `--shutdown-on-stdin-eof`
+    // path. Stored as Option so `Drop::drop` can move it out and close it
+    // before waiting.
+    stdin: Option<std::process::ChildStdin>,
+}
+
+impl Drop for StandaloneServer {
+    fn drop(&mut self) {
+        // Close our end of the child's stdin pipe. The server is running with
+        // `--shutdown-on-stdin-eof`, so this alone should cause it to drain
+        // connections and exit on its own — a hard kill risks interrupting an
+        // in-flight SQLite write.
+        drop(self.stdin.take());
+
+        // Poll for graceful exit for up to 2 seconds. In practice the server
+        // exits in a few tens of milliseconds after EOF when no connections are
+        // active, which is the common case for a one-shot `torc -s ...`.
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            match self.child.try_wait() {
+                Ok(Some(_)) => return,
+                Ok(None) => {
+                    if Instant::now() >= deadline {
+                        break;
+                    }
+                    thread::sleep(Duration::from_millis(25));
+                }
+                Err(_) => break,
+            }
+        }
+
+        // Fell through the grace window — force-kill as a last resort.
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+/// Spawn a torc-server subprocess bound to 127.0.0.1 on an auto-assigned port,
+/// backed by the given SQLite database (default: `./torc_output/torc.db`).
+/// Waits up to 15 seconds for the server to print its `TORC_SERVER_PORT=<port>` line.
+fn start_standalone_server(
+    server_bin: &str,
+    db: Option<std::path::PathBuf>,
+) -> Result<StandaloneServer, String> {
+    let db_path = db.unwrap_or_else(|| std::path::PathBuf::from("torc_output/torc.db"));
+    if let Some(parent) = db_path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent).map_err(|e| {
+            format!(
+                "could not create database parent directory {}: {}",
+                parent.display(),
+                e
+            )
+        })?;
+    }
+
+    let mut child = std::process::Command::new(server_bin)
+        .args([
+            "run",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "0",
+            "--database",
+            &db_path.display().to_string(),
+            "--shutdown-on-stdin-eof",
+        ])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| {
+            format!(
+                "failed to spawn '{}': {}. Set --torc-server-bin or TORC_SERVER_BIN.",
+                server_bin, e
+            )
+        })?;
+
+    let child_stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| "failed to capture torc-server stdin".to_string())?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "failed to capture torc-server stdout".to_string())?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| "failed to capture torc-server stderr".to_string())?;
+
+    // Forward torc-server's stderr to our own stderr line-by-line. We don't inherit
+    // the fd (that would let the child keep our stderr pipe open after we exit via
+    // process::exit, which skips Drop) and we don't let the pipe buffer fill.
+    thread::spawn(move || {
+        let reader = BufReader::new(stderr);
+        for line in reader.lines().map_while(Result::ok) {
+            eprintln!("[torc-server] {}", line);
+        }
+    });
+
+    // Read stdout in a background thread. Until the port is reported, lines are
+    // forwarded over `tx` so we can enforce a timeout on the startup handshake.
+    // After the receiver is dropped (port found), the thread keeps draining stdout
+    // for the lifetime of the child so the pipe buffer can't fill and block it.
+    let (tx, rx) = mpsc::channel::<Result<String, std::io::Error>>();
+    thread::spawn(move || {
+        let reader = BufReader::new(stdout);
+        let mut tx = Some(tx);
+        for line in reader.lines() {
+            match line {
+                Ok(line) => {
+                    if let Some(sender) = tx.as_ref() {
+                        if sender.send(Ok(line.clone())).is_ok() {
+                            continue;
+                        }
+                        tx = None;
+                    }
+                    eprintln!("[torc-server] {}", line);
+                }
+                Err(e) => {
+                    if let Some(sender) = tx.take() {
+                        let _ = sender.send(Err(e));
+                    }
+                    break;
+                }
+            }
+        }
+    });
+
+    let kill_and_reap = |child: &mut std::process::Child| {
+        let _ = child.kill();
+        let _ = child.wait();
+    };
+
+    let deadline = Instant::now() + Duration::from_secs(15);
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            kill_and_reap(&mut child);
+            return Err("timeout waiting for torc-server to report its port".to_string());
+        }
+        match rx.recv_timeout(remaining) {
+            Ok(Ok(line)) => {
+                if let Some(rest) = line.trim().strip_prefix("TORC_SERVER_PORT=")
+                    && let Ok(port) = rest.parse::<u16>()
+                {
+                    // Match the bind address (127.0.0.1) rather than `localhost`. On
+                    // systems where `localhost` resolves to `::1` first but the server
+                    // is only bound to v4, connections would fail.
+                    let api_url = format!("http://127.0.0.1:{}/torc-service/v1", port);
+                    return Ok(StandaloneServer {
+                        child,
+                        api_url,
+                        db_path,
+                        stdin: Some(child_stdin),
+                    });
+                }
+                // Other lines are passed through to stderr so users see startup logs.
+                eprintln!("[torc-server] {}", line);
+            }
+            Ok(Err(e)) => {
+                kill_and_reap(&mut child);
+                return Err(format!("error reading torc-server stdout: {}", e));
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                kill_and_reap(&mut child);
+                return Err("timeout waiting for torc-server to report its port".to_string());
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                let _ = child.wait();
+                return Err("torc-server exited before reporting a port".to_string());
+            }
+        }
     }
 }
 
@@ -78,6 +291,7 @@ fn main() {
     let skip_logger_init = matches!(
         cli.command,
         Commands::Run { .. }
+            | Commands::Exec { .. }
             | Commands::Watch { .. }
             | Commands::Tui(..)
             | Commands::Completions { .. }
@@ -103,8 +317,9 @@ fn main() {
         std::process::exit(1);
     }
 
-    // Resolve URL with priority: CLI arg > file config > default
-    let url = cli
+    // Resolve URL with priority: CLI arg > file config > default.
+    // `--standalone` may override this once the ephemeral server is running.
+    let mut url = cli
         .url
         .clone()
         .unwrap_or_else(|| file_config.client.api_url.clone());
@@ -164,7 +379,42 @@ fn main() {
             | Commands::Tui(..)
             | Commands::Config { .. }
             | Commands::Hpc { .. }
+            | Commands::Exec { dry_run: true, .. }
     );
+
+    // Spawn an ephemeral torc-server when --standalone is set. The guard's Drop
+    // terminates the subprocess on normal exit of this function.
+    let _standalone_server = if cli.standalone {
+        if !requires_server {
+            eprintln!("--standalone has no effect for this command; ignoring.");
+            None
+        } else {
+            match start_standalone_server(&cli.torc_server_bin, cli.db.clone()) {
+                Ok(server) => {
+                    url = server.api_url.clone();
+                    config.base_path = url.clone();
+                    // Do NOT mutate the process-global environment here. By the time we
+                    // get here, start_standalone_server has already spawned background
+                    // threads, so std::env::set_var would be unsound. Every subprocess
+                    // torc spawns (job_runner, async_cli_command, torc-dash, etc.) already
+                    // passes TORC_API_URL explicitly at spawn time via .env(), so ambient
+                    // env is unnecessary for propagation.
+                    eprintln!(
+                        "Started standalone torc-server on {} (db: {})",
+                        server.api_url,
+                        server.db_path.display()
+                    );
+                    Some(server)
+                }
+                Err(e) => {
+                    eprintln!("Error starting standalone torc-server: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+    } else {
+        None
+    };
 
     if requires_server && !cli.skip_version_check {
         let result = version_check::check_version(&config);
@@ -273,6 +523,55 @@ fn main() {
             };
 
             run_jobs_cmd::run(&args);
+        }
+        Commands::Exec {
+            name,
+            description,
+            command,
+            commands_file,
+            param,
+            link,
+            max_parallel_jobs,
+            output_dir,
+            dry_run,
+            monitor,
+            monitor_compute_node,
+            generate_plots,
+            sample_interval_seconds,
+            stdio,
+            trailing,
+        } => {
+            let run_config = &file_config.client.run;
+            let user = torc::get_username();
+            let password = config.basic_auth.as_ref().and_then(|(_, p)| p.clone());
+            let exec_args = exec_cmd::ExecArgs {
+                name: name.clone(),
+                description: description.clone(),
+                commands: command.clone(),
+                commands_file: commands_file.clone(),
+                params: param.clone(),
+                link: link.clone(),
+                max_parallel_jobs: max_parallel_jobs.or(run_config.max_parallel_jobs),
+                output_dir: output_dir
+                    .clone()
+                    .unwrap_or_else(|| run_config.output_dir.clone()),
+                dry_run: *dry_run,
+                monitor: monitor.clone(),
+                monitor_compute_node: monitor_compute_node.clone(),
+                generate_plots: *generate_plots,
+                sample_interval_seconds: *sample_interval_seconds,
+                stdio: stdio.clone(),
+                trailing: trailing.clone(),
+                shell_command_delimited: command_used_delimiter("exec"),
+                format: format.clone(),
+                log_level: log_level.clone(),
+                url: url.clone(),
+                password,
+                tls_ca_cert: tls_ca_cert.clone(),
+                tls_insecure,
+                cookie_header: config.cookie_header.clone(),
+            };
+            exec_cmd::run(exec_args, &config, &user);
         }
         Commands::Submit {
             workflow_spec_or_id,

@@ -2,7 +2,7 @@ use crate::client::apis;
 use crate::client::apis::configuration::{Configuration, TlsConfig};
 use crate::client::commands::get_env_user_name;
 use crate::client::commands::select_workflow_interactively;
-use crate::client::job_runner::JobRunner;
+use crate::client::job_runner::{JobRunner, WorkerResult};
 use crate::client::log_paths::get_job_runner_log_file;
 use crate::client::utils::detect_nvidia_gpus;
 use crate::client::workflow_manager::WorkflowManager;
@@ -18,20 +18,52 @@ use std::io::Write;
 use std::path::PathBuf;
 use sysinfo::{CpuRefreshKind, RefreshKind, System, SystemExt};
 
-/// A writer that writes to both stdout and a file
+pub enum LogStream {
+    Stdout,
+    Stderr,
+}
+
+enum ConsoleWriter {
+    Stdout(std::io::Stdout),
+    Stderr(std::io::Stderr),
+}
+
+impl Write for ConsoleWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match self {
+            ConsoleWriter::Stdout(stdout) => {
+                stdout.write_all(buf)?;
+            }
+            ConsoleWriter::Stderr(stderr) => {
+                stderr.write_all(buf)?;
+            }
+        }
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self {
+            ConsoleWriter::Stdout(stdout) => stdout.flush(),
+            ConsoleWriter::Stderr(stderr) => stderr.flush(),
+        }
+    }
+}
+
+/// A writer that writes to a console stream and a file.
 struct MultiWriter {
-    stdout: std::io::Stdout,
+    console: ConsoleWriter,
     file: File,
 }
 
 impl Write for MultiWriter {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.stdout.write_all(buf)?;
-        self.file.write(buf)
+        self.console.write_all(buf)?;
+        self.file.write_all(buf)?;
+        Ok(buf.len())
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        self.stdout.flush()?;
+        self.console.flush()?;
         self.file.flush()
     }
 }
@@ -121,6 +153,10 @@ fn resolve_end_time(
 }
 
 pub fn run(args: &Args) {
+    let _ = run_with_log_stream(args, LogStream::Stdout);
+}
+
+pub fn run_with_log_stream(args: &Args, log_stream: LogStream) -> WorkerResult {
     let hostname = hostname::get()
         .expect("Failed to get hostname")
         .into_string()
@@ -222,8 +258,12 @@ pub fn run(args: &Args) {
         }
     };
 
+    let console = match log_stream {
+        LogStream::Stdout => ConsoleWriter::Stdout(std::io::stdout()),
+        LogStream::Stderr => ConsoleWriter::Stderr(std::io::stderr()),
+    };
     let multi_writer = MultiWriter {
-        stdout: std::io::stdout(),
+        console,
         file: log_file,
     };
 
@@ -334,6 +374,7 @@ pub fn run(args: &Args) {
                 "Job runner completed successfully (had_failures={}, had_terminations={})",
                 result.had_failures, result.had_terminations
             );
+            result
         }
         Err(e) => {
             error!("Job runner failed: {}", e);

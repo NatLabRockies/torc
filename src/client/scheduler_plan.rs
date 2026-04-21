@@ -97,11 +97,10 @@ fn calculate_allocations(
     );
 
     // Factor in runtime: how many sequential batches can run within the allocation walltime
-    let time_slots = if params.max_runtime_secs > 0 {
-        std::cmp::max(1, params.allocation_walltime_secs / params.max_runtime_secs)
-    } else {
-        1
-    };
+    let time_slots = params
+        .allocation_walltime_secs
+        .checked_div(params.max_runtime_secs)
+        .map_or(1, |slots| std::cmp::max(1, slots));
 
     // Total jobs per allocation = concurrent capacity × time slots
     let jobs_per_allocation = (concurrent_jobs_per_node as u64) * time_slots;

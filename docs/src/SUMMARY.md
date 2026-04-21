@@ -41,6 +41,7 @@
   - [Parameterize Jobs with Files](./core/how-to/parameterize-with-files.md)
   - [Use Invocation Scripts](./core/how-to/use-invocation-script.md)
   - [Add RO-Crate Metadata](./core/how-to/ro-crate-metadata.md)
+  - [Run Inline Commands (torc exec)](./core/how-to/run-inline-commands.md)
 - [Tutorials](./core/tutorials/index.md)
   - [Many Independent Jobs](./core/tutorials/many-jobs.md)
   - [Diamond Workflow](./core/tutorials/diamond.md)
@@ -81,6 +82,7 @@
   - [HPC Profiles Reference](./specialized/hpc/hpc-profiles-reference.md)
   - [HPC Deployment](./specialized/hpc/hpc-deployment.md)
   - [Custom HPC Profile](./specialized/hpc/custom-hpc-profile.md)
+  - [Self-Contained Slurm Jobs](./specialized/hpc/self-contained-slurm-job.md)
 - [Remote Workers](./specialized/remote/index.md)
   - [Setting Up Remote Workers](./specialized/remote/remote-workers.md)
 

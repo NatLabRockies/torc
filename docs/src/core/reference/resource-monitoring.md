@@ -4,14 +4,52 @@ Technical reference for Torc's resource monitoring system.
 
 ## Configuration Options
 
-The `resource_monitor` section in workflow specifications accepts the following fields:
+The `resource_monitor` section has one shared sampling interval and separate nested scopes for jobs
+and compute nodes:
 
-| Field                     | Type    | Default     | Description                      |
-| ------------------------- | ------- | ----------- | -------------------------------- |
-| `enabled`                 | boolean | `true`      | Enable or disable monitoring     |
-| `granularity`             | string  | `"summary"` | `"summary"` or `"time_series"`   |
-| `sample_interval_seconds` | integer | `10`        | Seconds between resource samples |
-| `generate_plots`          | boolean | `false`     | Reserved for future use          |
+```yaml
+resource_monitor:
+  sample_interval_seconds: 5
+  jobs:
+    enabled: true
+    granularity: summary
+  compute_node:
+    enabled: true
+    granularity: time_series
+```
+
+| Field                     | Type                     | Default | Description                                |
+| ------------------------- | ------------------------ | ------- | ------------------------------------------ |
+| `sample_interval_seconds` | integer                  | `10`    | Seconds between all resource samples       |
+| `generate_plots`          | boolean                  | `false` | Emit HTML plots after the job runner exits |
+| `jobs`                    | JobMonitorConfig         | none    | Per-job CPU and memory monitoring          |
+| `compute_node`            | ComputeNodeMonitorConfig | none    | Overall compute-node CPU/memory monitoring |
+
+For backwards compatibility, top-level `enabled` and `granularity` fields are still accepted and
+apply to job monitoring when `jobs` is omitted:
+
+```yaml
+resource_monitor:
+  enabled: true
+  granularity: time_series
+  sample_interval_seconds: 5
+```
+
+New workflow specs should use the explicit `jobs` block.
+
+### Job Monitoring
+
+`resource_monitor.jobs` controls per-job CPU and memory monitoring. Summary mode stores peak and
+average values on job results. Time-series mode also stores per-sample values in a resource metrics
+database.
+
+### Compute Node Monitoring
+
+To opt in to overall compute-node CPU and memory monitoring, add a nested `compute_node` block. The
+compute-node monitor supports `granularity: "summary"` and `granularity: "time_series"`. Summary
+mode stores peak and average values for the runner lifetime on the compute node record. Time-series
+mode also stores per-sample values. The current compute-node monitor records CPU and memory; GPU
+monitoring is reserved for a future extension.
 
 ### Granularity Modes
 
@@ -55,6 +93,49 @@ The `resource_monitor` section in workflow specifications accepts the following 
 | ---------- | ------- | ------------------------ |
 | `job_id`   | INTEGER | Primary key, Torc job ID |
 | `job_name` | TEXT    | Human-readable job name  |
+
+### `system_resource_samples` Table
+
+This table is always created in the resource metrics database, but rows are only written when
+`resource_monitor.compute_node` is enabled with `granularity` set to `"time_series"`. If
+compute-node monitoring is disabled or summary-only, the table remains empty.
+
+| Column               | Type    | Description                  |
+| -------------------- | ------- | ---------------------------- |
+| `timestamp`          | INTEGER | Unix timestamp               |
+| `cpu_percent`        | REAL    | Overall CPU utilization      |
+| `memory_bytes`       | INTEGER | Used system memory in bytes  |
+| `total_memory_bytes` | INTEGER | Total system memory in bytes |
+
+### `system_resource_summary` Table
+
+This table is always created in the resource metrics database, but a row is only written when
+compute-node time-series monitoring is enabled. Summary-only compute-node monitoring stores these
+values on the compute node record instead, leaving this table empty.
+
+| Column              | Type    | Description                  |
+| ------------------- | ------- | ---------------------------- |
+| `sample_count`      | INTEGER | Number of system samples     |
+| `peak_cpu_percent`  | REAL    | Peak overall CPU utilization |
+| `avg_cpu_percent`   | REAL    | Average CPU utilization      |
+| `peak_memory_bytes` | INTEGER | Peak used system memory      |
+| `avg_memory_bytes`  | INTEGER | Average used system memory   |
+
+### Compute Node Summary Fields
+
+When `resource_monitor.compute_node.enabled` is true, Torc stores overall summary metrics on the
+compute node record:
+
+| Field               | Description                  |
+| ------------------- | ---------------------------- |
+| `sample_count`      | Number of system samples     |
+| `peak_cpu_percent`  | Peak overall CPU utilization |
+| `avg_cpu_percent`   | Average CPU utilization      |
+| `peak_memory_bytes` | Peak used system memory      |
+| `avg_memory_bytes`  | Average used system memory   |
+
+These fields are shown by `torc compute-nodes get`, `torc compute-nodes list`, the TUI compute nodes
+view, and the dashboard compute nodes table.
 
 ## Summary Metrics in Results
 
@@ -203,6 +284,8 @@ When using `torc -f json workflows correct-resources`:
 | `resource_plot_cpu_all_jobs.html`    | CPU comparison across all jobs                   |
 | `resource_plot_memory_all_jobs.html` | Memory comparison across all jobs                |
 | `resource_plot_summary.html`         | Bar chart dashboard of peak vs average           |
+| `resource_plot_system_timeline.html` | Overall system CPU and memory over time          |
+| `resource_plot_system_summary.html`  | Overall system peak and average values           |
 
 All plots are self-contained HTML files using Plotly.js with:
 

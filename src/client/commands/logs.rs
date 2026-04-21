@@ -660,7 +660,7 @@ fn print_parse_results(
         }
     }
     let mut sorted_patterns: Vec<_> = pattern_counts.into_iter().collect();
-    sorted_patterns.sort_by(|a, b| b.1.cmp(&a.1)); // Sort by count descending
+    sorted_patterns.sort_by_key(|pattern| std::cmp::Reverse(pattern.1)); // Sort by count descending
 
     for (pattern, count) in sorted_patterns {
         println!("  {}: {} occurrence(s)", pattern, count);

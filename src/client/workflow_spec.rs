@@ -5,10 +5,31 @@ use crate::client::parameter_expansion::{
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
+use std::sync::LazyLock;
 
 use crate::models;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+
+static SRUN_MPI_MODE_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[A-Za-z0-9+_.-]+$").expect("hardcoded regex must compile"));
+
+pub(crate) fn validate_srun_mpi_value(value: &str) -> Result<(), String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err("srun_mpi must not be empty when provided. \
+             Set a non-empty Slurm MPI mode such as 'pmix' or omit the field."
+            .to_string());
+    }
+    if trimmed != value || !SRUN_MPI_MODE_REGEX.is_match(trimmed) {
+        return Err(
+            "srun_mpi must be a single safe token matching [A-Za-z0-9+_.-]+ \
+             (for example 'none' or 'pmix')."
+                .to_string(),
+        );
+    }
+    Ok(())
+}
 
 /// Result of validating a workflow specification (dry-run)
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -763,6 +784,11 @@ pub struct ExecutionConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub srun_termination_signal: Option<String>,
 
+    /// MPI launcher mode for the outer `srun` used to launch one job runner per allocated node.
+    /// This is only used with `schedule_nodes.start_one_worker_per_node = true`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub srun_mpi: Option<String>,
+
     /// When true, allow Slurm to bind tasks to specific CPU cores (slurm mode only).
     /// By default (false), srun passes `--cpu-bind=none` to disable binding.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -912,6 +938,7 @@ impl ExecutionConfig {
             },
             limit_resources: legacy.limit_resources,
             srun_termination_signal: legacy.srun_termination_signal,
+            srun_mpi: None,
             enable_cpu_bind: legacy.enable_cpu_bind,
             // Direct mode settings use defaults when converting from legacy
             termination_signal: None,
@@ -2138,6 +2165,11 @@ impl WorkflowSpec {
                 granularity: crate::client::resource_monitor::MonitorGranularity::Summary,
                 sample_interval_seconds: 10,
                 generate_plots: false,
+                jobs: Some(crate::client::resource_monitor::JobMonitorConfig {
+                    enabled: true,
+                    granularity: crate::client::resource_monitor::MonitorGranularity::Summary,
+                }),
+                compute_node: None,
             });
         }
         spec.validate_actions()?;
@@ -2158,6 +2190,11 @@ impl WorkflowSpec {
                 granularity: crate::client::resource_monitor::MonitorGranularity::Summary,
                 sample_interval_seconds: 10,
                 generate_plots: false,
+                jobs: Some(crate::client::resource_monitor::JobMonitorConfig {
+                    enabled: true,
+                    granularity: crate::client::resource_monitor::MonitorGranularity::Summary,
+                }),
+                compute_node: None,
             });
         }
         spec.expand_parameters()?;
@@ -2356,6 +2393,26 @@ impl WorkflowSpec {
             };
 
             let mut errors = Vec::new();
+            let has_worker_per_node_schedule_action =
+                spec.actions.as_ref().is_some_and(|actions| {
+                    actions.iter().any(|action| {
+                        action.action_type == "schedule_nodes"
+                            && action.start_one_worker_per_node == Some(true)
+                    })
+                });
+
+            if let Some(value) = ec.srun_mpi.as_deref() {
+                if let Err(err) = validate_srun_mpi_value(value) {
+                    errors.push(err);
+                }
+                if !has_worker_per_node_schedule_action {
+                    errors.push(
+                        "srun_mpi requires schedule_nodes.start_one_worker_per_node = true. \
+                        It only applies to the outer srun that launches one job runner per node."
+                            .to_string(),
+                    );
+                }
+            }
 
             if will_use_slurm {
                 if ec.limit_resources == Some(false) {
@@ -3902,6 +3959,40 @@ impl WorkflowSpec {
                             obj.insert("generate_plots".to_string(), serde_json::Value::Bool(v));
                         }
                     }
+                    "jobs" | "compute_node" => {
+                        let mut nested_obj = serde_json::Map::new();
+                        if let Some(nested_children) = child.children() {
+                            for nested_child in nested_children.nodes() {
+                                let key = nested_child.name().value();
+                                if let Some(entry) = nested_child.entries().first() {
+                                    let value = entry.value();
+                                    match key {
+                                        "enabled" | "cpu" | "memory" => {
+                                            if let Some(v) = value.as_bool() {
+                                                nested_obj.insert(
+                                                    key.to_string(),
+                                                    serde_json::Value::Bool(v),
+                                                );
+                                            }
+                                        }
+                                        "granularity" => {
+                                            if let Some(v) = value.as_string() {
+                                                nested_obj.insert(
+                                                    key.to_string(),
+                                                    serde_json::Value::String(v.to_string()),
+                                                );
+                                            }
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                            }
+                        }
+                        obj.insert(
+                            child.name().value().to_string(),
+                            serde_json::Value::Object(nested_obj),
+                        );
+                    }
                     _ => {}
                 }
             }
@@ -3944,7 +4035,7 @@ impl WorkflowSpec {
                                 obj.insert(key.to_string(), serde_json::Value::Bool(b));
                             }
                         }
-                        "termination_signal" | "srun_termination_signal" => {
+                        "termination_signal" | "srun_termination_signal" | "srun_mpi" => {
                             if let Some(s) = value.as_string() {
                                 obj.insert(
                                     key.to_string(),
@@ -4438,15 +4529,6 @@ impl WorkflowSpec {
         if let Some(ref monitor) = self.resource_monitor {
             lines.push("resource_monitor {".to_string());
             lines.push(format!(
-                "    enabled {}",
-                if monitor.enabled { "#true" } else { "#false" }
-            ));
-            let granularity = match monitor.granularity {
-                crate::client::resource_monitor::MonitorGranularity::Summary => "summary",
-                crate::client::resource_monitor::MonitorGranularity::TimeSeries => "time_series",
-            };
-            lines.push(format!("    granularity \"{}\"", granularity));
-            lines.push(format!(
                 "    sample_interval_seconds {}",
                 monitor.sample_interval_seconds
             ));
@@ -4458,6 +4540,53 @@ impl WorkflowSpec {
                     "#false"
                 }
             ));
+            if monitor.jobs.is_some() || monitor.enabled {
+                let jobs = monitor.jobs_config();
+                lines.push("    jobs {".to_string());
+                lines.push(format!(
+                    "        enabled {}",
+                    if jobs.enabled { "#true" } else { "#false" }
+                ));
+                let granularity = match jobs.granularity {
+                    crate::client::resource_monitor::MonitorGranularity::Summary => "summary",
+                    crate::client::resource_monitor::MonitorGranularity::TimeSeries => {
+                        "time_series"
+                    }
+                };
+                lines.push(format!("        granularity \"{}\"", granularity));
+                lines.push("    }".to_string());
+            }
+            if let Some(ref compute_node) = monitor.compute_node {
+                lines.push("    compute_node {".to_string());
+                lines.push(format!(
+                    "        enabled {}",
+                    if compute_node.enabled {
+                        "#true"
+                    } else {
+                        "#false"
+                    }
+                ));
+                let granularity = match compute_node.granularity {
+                    crate::client::resource_monitor::MonitorGranularity::Summary => "summary",
+                    crate::client::resource_monitor::MonitorGranularity::TimeSeries => {
+                        "time_series"
+                    }
+                };
+                lines.push(format!("        granularity \"{}\"", granularity));
+                lines.push(format!(
+                    "        cpu {}",
+                    if compute_node.cpu { "#true" } else { "#false" }
+                ));
+                lines.push(format!(
+                    "        memory {}",
+                    if compute_node.memory {
+                        "#true"
+                    } else {
+                        "#false"
+                    }
+                ));
+                lines.push("    }".to_string());
+            }
             lines.push("}".to_string());
             lines.push(String::new());
         }
@@ -4496,6 +4625,9 @@ impl WorkflowSpec {
                     "    srun_termination_signal {}",
                     kdl_escape(signal)
                 ));
+            }
+            if let Some(ref mpi) = exec_config.srun_mpi {
+                lines.push(format!("    srun_mpi {}", kdl_escape(mpi)));
             }
             if let Some(bind) = exec_config.enable_cpu_bind {
                 lines.push(format!(
@@ -5037,7 +5169,86 @@ impl WorkflowSpec {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client::resource_monitor::MonitorGranularity;
     use std::path::PathBuf;
+
+    #[test]
+    fn test_legacy_resource_monitor_yaml_controls_jobs() {
+        let yaml_content = r#"
+name: legacy_resource_monitor_yaml
+jobs:
+  - name: job1
+    command: echo hello
+resource_monitor:
+  enabled: true
+  granularity: time_series
+  sample_interval_seconds: 2
+"#;
+
+        let spec = WorkflowSpec::from_spec_file_content(yaml_content, "yaml")
+            .expect("Failed to parse YAML workflow spec");
+        let monitor = spec.resource_monitor.expect("missing resource monitor");
+        let jobs = monitor.jobs_config();
+
+        assert!(jobs.enabled);
+        assert_eq!(jobs.granularity, MonitorGranularity::TimeSeries);
+        assert_eq!(monitor.sample_interval_seconds, 2);
+        assert!(monitor.compute_node_config().is_none());
+    }
+
+    #[test]
+    fn test_legacy_resource_monitor_json5_controls_jobs() {
+        let json5_content = r#"
+{
+  name: "legacy_resource_monitor_json5",
+  jobs: [
+    { name: "job1", command: "echo hello" },
+  ],
+  resource_monitor: {
+    enabled: true,
+    granularity: "time_series",
+    sample_interval_seconds: 2,
+  },
+}
+"#;
+
+        let spec = WorkflowSpec::from_spec_file_content(json5_content, "json5")
+            .expect("Failed to parse JSON5 workflow spec");
+        let monitor = spec.resource_monitor.expect("missing resource monitor");
+        let jobs = monitor.jobs_config();
+
+        assert!(jobs.enabled);
+        assert_eq!(jobs.granularity, MonitorGranularity::TimeSeries);
+        assert_eq!(monitor.sample_interval_seconds, 2);
+        assert!(monitor.compute_node_config().is_none());
+    }
+
+    #[test]
+    fn test_legacy_resource_monitor_kdl_controls_jobs() {
+        let kdl_content = r#"
+name "legacy_resource_monitor_kdl"
+
+resource_monitor {
+    enabled #true
+    granularity "time_series"
+    sample_interval_seconds 2
+}
+
+job "job1" {
+    command "echo hello"
+}
+"#;
+
+        let spec = WorkflowSpec::from_spec_file_content(kdl_content, "kdl")
+            .expect("Failed to parse KDL workflow spec");
+        let monitor = spec.resource_monitor.expect("missing resource monitor");
+        let jobs = monitor.jobs_config();
+
+        assert!(jobs.enabled);
+        assert_eq!(jobs.granularity, MonitorGranularity::TimeSeries);
+        assert_eq!(monitor.sample_interval_seconds, 2);
+        assert!(monitor.compute_node_config().is_none());
+    }
 
     #[test]
     fn test_kdl_job_parameterization() {
@@ -6175,6 +6386,7 @@ jobs:
             timeout_exit_code: Some(200),
             oom_exit_code: Some(201),
             srun_termination_signal: None,
+            srun_mpi: None,
             enable_cpu_bind: None,
             staggered_start: None,
             stdio: None,
@@ -6283,6 +6495,7 @@ jobs:
 execution_config:
   mode: slurm
   srun_termination_signal: "TERM@120"
+  srun_mpi: "pmix"
   enable_cpu_bind: true
 "#;
         let spec: WorkflowSpec = serde_yaml::from_str(yaml).expect("Failed to parse YAML");
@@ -6291,6 +6504,7 @@ execution_config:
             .expect("execution_config should be present");
         assert_eq!(config.mode, ExecutionMode::Slurm);
         assert_eq!(config.srun_termination_signal, Some("TERM@120".to_string()));
+        assert_eq!(config.srun_mpi, Some("pmix".to_string()));
         assert_eq!(config.enable_cpu_bind, Some(true));
     }
 

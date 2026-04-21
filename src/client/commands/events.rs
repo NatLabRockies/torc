@@ -223,7 +223,7 @@ pub fn handle_event_commands(config: &Configuration, command: &EventCommands, fo
 
             params = params.with_reverse_sort(*reverse_sort);
 
-            match paginate_events(config, selected_workflow_id as i64, params) {
+            match paginate_events(config, selected_workflow_id, params) {
                 Ok(events) => {
                     if format == "json" {
                         let json_events: Vec<EventJsonOutput> =
@@ -301,7 +301,7 @@ pub fn handle_event_commands(config: &Configuration, command: &EventCommands, fo
 
             match apis::events_api::list_events(
                 config,
-                selected_workflow_id as i64,
+                selected_workflow_id,
                 None,              // offset
                 Some(1),           // limit to 1 event
                 Some("timestamp"), // sort by timestamp

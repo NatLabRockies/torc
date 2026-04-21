@@ -371,7 +371,9 @@ impl AsyncCliCommand {
         //   - Summary mode: skip the monitor entirely; sacct backfill in job_runner
         //     provides authoritative peak memory (MaxRSS) and average CPU data after
         //     job completion without the overhead of periodic sstat/squeue polling.
-        if let Some(monitor) = resource_monitor {
+        if let Some(monitor) = resource_monitor
+            && monitor.jobs_enabled()
+        {
             if let Some(ref step) = self.step_name {
                 if monitor.is_time_series()
                     && let Ok(slurm_job_id) = std::env::var("SLURM_JOB_ID")
@@ -465,7 +467,9 @@ impl AsyncCliCommand {
         // Get resource metrics if monitoring is enabled.
         // stop_monitoring() sends a command to the monitoring thread and waits for it to
         // return the collected metrics via a response channel.
-        let (peak_mem, avg_mem, peak_cpu, avg_cpu) = if let Some(monitor) = resource_monitor {
+        let (peak_mem, avg_mem, peak_cpu, avg_cpu) = if let Some(monitor) = resource_monitor
+            && monitor.jobs_enabled()
+        {
             if let Some(pid) = self.pid {
                 if let Some(metrics) = monitor.stop_monitoring(pid) {
                     (

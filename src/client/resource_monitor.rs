@@ -7,7 +7,7 @@ use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 use sysinfo::{
-    CpuRefreshKind, Pid, ProcessExt, ProcessRefreshKind, RefreshKind, System, SystemExt,
+    CpuExt, CpuRefreshKind, Pid, ProcessExt, ProcessRefreshKind, RefreshKind, System, SystemExt,
 };
 
 const DB_FILENAME_PREFIX: &str = "resource_metrics";
@@ -31,10 +31,14 @@ pub struct OomViolation {
 #[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct ResourceMonitorConfig {
+    /// Deprecated compatibility field. Use `jobs.enabled` for new workflow specs.
     pub enabled: bool,
+    /// Deprecated compatibility field. Use `jobs.granularity` for new workflow specs.
     pub granularity: MonitorGranularity,
     pub sample_interval_seconds: i32,
     pub generate_plots: bool,
+    pub jobs: Option<JobMonitorConfig>,
+    pub compute_node: Option<ComputeNodeMonitorConfig>,
 }
 
 impl Default for ResourceMonitorConfig {
@@ -44,6 +48,88 @@ impl Default for ResourceMonitorConfig {
             granularity: MonitorGranularity::Summary,
             sample_interval_seconds: 10,
             generate_plots: false,
+            jobs: None,
+            compute_node: None,
+        }
+    }
+}
+
+impl ResourceMonitorConfig {
+    pub fn jobs_config(&self) -> JobMonitorConfig {
+        self.jobs.clone().unwrap_or(JobMonitorConfig {
+            enabled: self.enabled,
+            granularity: self.granularity.clone(),
+        })
+    }
+
+    pub fn compute_node_config(&self) -> Option<ComputeNodeMonitorConfig> {
+        self.compute_node.clone().filter(|config| config.enabled)
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        self.jobs_config().enabled || self.compute_node_config().is_some()
+    }
+
+    /// Returns true if any enabled scope uses time-series granularity, which is when the
+    /// time-series SQLite database is created and populated.
+    pub fn has_timeseries_db(&self) -> bool {
+        let jobs_ts = {
+            let jobs = self.jobs_config();
+            jobs.enabled && matches!(jobs.granularity, MonitorGranularity::TimeSeries)
+        };
+        let node_ts = self
+            .compute_node_config()
+            .is_some_and(|c| matches!(c.granularity, MonitorGranularity::TimeSeries));
+        jobs_ts || node_ts
+    }
+}
+
+/// Returns the path of the time-series metrics database that would be produced for the
+/// given `output_dir` / `unique_label`. This mirrors the layout created by
+/// `init_timeseries_db` so callers (e.g. post-run plot generation) can locate the file.
+pub fn timeseries_db_path(output_dir: &Path, unique_label: &str) -> PathBuf {
+    output_dir
+        .join("resource_utilization")
+        .join(format!("{}_{}.db", DB_FILENAME_PREFIX, unique_label))
+}
+
+/// Configuration for per-job resource monitoring.
+#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
+#[serde(default)]
+pub struct JobMonitorConfig {
+    pub enabled: bool,
+    pub granularity: MonitorGranularity,
+}
+
+impl Default for JobMonitorConfig {
+    fn default() -> Self {
+        JobMonitorConfig {
+            enabled: false,
+            granularity: MonitorGranularity::Summary,
+        }
+    }
+}
+
+/// Configuration for compute-node resource monitoring.
+///
+/// Compute-node monitoring is intentionally configured separately from per-job monitoring so
+/// future node-level GPU sampling can be added without changing job metrics semantics.
+#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
+#[serde(default)]
+pub struct ComputeNodeMonitorConfig {
+    pub enabled: bool,
+    pub granularity: MonitorGranularity,
+    pub cpu: bool,
+    pub memory: bool,
+}
+
+impl Default for ComputeNodeMonitorConfig {
+    fn default() -> Self {
+        ComputeNodeMonitorConfig {
+            enabled: false,
+            granularity: MonitorGranularity::Summary,
+            cpu: true,
+            memory: true,
         }
     }
 }
@@ -112,6 +198,79 @@ impl JobMetrics {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct SystemMetricsSummary {
+    pub sample_count: i64,
+    pub peak_cpu_percent: f64,
+    pub avg_cpu_percent: f64,
+    pub peak_memory_bytes: u64,
+    pub avg_memory_bytes: u64,
+}
+
+/// Metrics collected for the whole system while this runner is active.
+#[derive(Debug, Clone)]
+struct SystemMetrics {
+    peak_cpu_percent: f64,
+    avg_cpu_percent: f64,
+    peak_memory_bytes: u64,
+    avg_memory_bytes: u64,
+    sample_count: usize,
+    total_cpu_percent: f64,
+    total_memory_bytes: u64,
+}
+
+impl SystemMetrics {
+    fn new() -> Self {
+        SystemMetrics {
+            peak_cpu_percent: 0.0,
+            avg_cpu_percent: 0.0,
+            peak_memory_bytes: 0,
+            avg_memory_bytes: 0,
+            sample_count: 0,
+            total_cpu_percent: 0.0,
+            total_memory_bytes: 0,
+        }
+    }
+
+    fn add_sample(&mut self, cpu_percent: f64, memory_bytes: u64) {
+        let cpu_percent = if cpu_percent.is_finite()
+            && (0.0..=JobMetrics::MAX_PLAUSIBLE_CPU_PERCENT).contains(&cpu_percent)
+        {
+            cpu_percent
+        } else {
+            0.0
+        };
+
+        self.sample_count += 1;
+        self.total_cpu_percent += cpu_percent;
+        self.total_memory_bytes += memory_bytes;
+
+        if cpu_percent > self.peak_cpu_percent {
+            self.peak_cpu_percent = cpu_percent;
+        }
+        if memory_bytes > self.peak_memory_bytes {
+            self.peak_memory_bytes = memory_bytes;
+        }
+
+        self.avg_cpu_percent = self.total_cpu_percent / self.sample_count as f64;
+        self.avg_memory_bytes = self.total_memory_bytes / self.sample_count as u64;
+    }
+
+    fn summary(&self) -> Option<SystemMetricsSummary> {
+        if self.sample_count == 0 {
+            return None;
+        }
+
+        Some(SystemMetricsSummary {
+            sample_count: self.sample_count as i64,
+            peak_cpu_percent: self.peak_cpu_percent,
+            avg_cpu_percent: self.avg_cpu_percent,
+            peak_memory_bytes: self.peak_memory_bytes,
+            avg_memory_bytes: self.avg_memory_bytes,
+        })
+    }
+}
+
 /// Source of resource samples for a monitored job.
 enum MonitorJobSource {
     /// Local execution: walk the process tree via sysinfo.
@@ -163,7 +322,9 @@ enum MonitorCommand {
         /// Channel to send back the collected metrics for this PID.
         response_tx: Sender<Option<JobMetrics>>,
     },
-    Shutdown,
+    Shutdown {
+        response_tx: Sender<Option<SystemMetricsSummary>>,
+    },
 }
 
 /// Active job being monitored
@@ -185,6 +346,8 @@ pub struct ResourceMonitor {
     tx: Sender<MonitorCommand>,
     handle: Option<JoinHandle<()>>,
     config: ResourceMonitorConfig,
+    /// Path of the time-series SQLite DB, set only when a time-series scope is active.
+    db_path: Option<PathBuf>,
     /// Receiver for OOM violation notifications from the monitoring thread.
     oom_rx: Receiver<OomViolation>,
 }
@@ -196,9 +359,23 @@ impl ResourceMonitor {
         output_dir: PathBuf,
         unique_label: String,
     ) -> Result<Self, Box<dyn std::error::Error>> {
+        // Non-CLI paths (hand-edited workflow specs) can reach here with an invalid
+        // sample interval. Reject 0 (would busy-loop) and negative (would wrap to a
+        // ~584-billion-year Duration via `as u64` in the monitoring loop).
+        if config.sample_interval_seconds < 1 {
+            return Err(format!(
+                "resource_monitor.sample_interval_seconds must be >= 1 (got {})",
+                config.sample_interval_seconds
+            )
+            .into());
+        }
+
         let (tx, rx) = channel();
         let (oom_tx, oom_rx) = channel();
         let config_clone = config.clone();
+        let db_path = config
+            .has_timeseries_db()
+            .then(|| timeseries_db_path(&output_dir, &unique_label));
 
         let handle = thread::spawn(move || {
             if let Err(e) = run_monitoring_loop(config_clone, output_dir, unique_label, rx, oom_tx)
@@ -211,13 +388,32 @@ impl ResourceMonitor {
             tx,
             handle: Some(handle),
             config,
+            db_path,
             oom_rx,
         })
     }
 
+    /// Path to the time-series metrics DB, or `None` if no time-series scope is enabled.
+    pub fn timeseries_db_path(&self) -> Option<&Path> {
+        self.db_path.as_deref()
+    }
+
+    /// Whether the workflow requested post-run plot generation.
+    pub fn generate_plots(&self) -> bool {
+        self.config.generate_plots
+    }
+
     /// Returns `true` when the monitor is configured for `TimeSeries` granularity.
     pub fn is_time_series(&self) -> bool {
-        matches!(self.config.granularity, MonitorGranularity::TimeSeries)
+        matches!(
+            self.config.jobs_config().granularity,
+            MonitorGranularity::TimeSeries
+        )
+    }
+
+    /// Returns `true` when per-job monitoring is enabled.
+    pub fn jobs_enabled(&self) -> bool {
+        self.config.jobs_config().enabled
     }
 
     /// Start monitoring a local process (sysinfo process-tree walk).
@@ -324,12 +520,24 @@ impl ResourceMonitor {
         }
     }
 
-    /// Shutdown the monitoring thread
-    pub fn shutdown(self) {
-        if let Err(e) = self.tx.send(MonitorCommand::Shutdown) {
+    /// Shutdown the monitoring thread and return compute-node summary metrics, if collected.
+    pub fn shutdown(self) -> Option<SystemMetricsSummary> {
+        let (response_tx, response_rx) = channel();
+        if let Err(e) = self.tx.send(MonitorCommand::Shutdown { response_tx }) {
             error!("Failed to send shutdown command: {}", e);
-            return;
+            return None;
         }
+
+        let system_summary = match response_rx.recv_timeout(Duration::from_secs(5)) {
+            Ok(summary) => summary,
+            Err(e) => {
+                warn!(
+                    "Timed out or error waiting for system metrics from monitoring thread: {}",
+                    e
+                );
+                None
+            }
+        };
 
         if let Some(handle) = self.handle {
             // Wait up to 10 seconds for shutdown
@@ -345,6 +553,8 @@ impl ResourceMonitor {
                 info!("Resource monitor thread shutdown successfully");
             }
         }
+
+        system_summary
     }
 }
 
@@ -365,19 +575,32 @@ fn run_monitoring_loop(
     let mut sys = System::new_with_specifics(refresh_kind);
     let mut monitored_jobs: HashMap<u32, MonitoredJob> = HashMap::new();
     let sample_interval = Duration::from_secs(config.sample_interval_seconds as u64);
+    let jobs_config = config.jobs_config();
+    let compute_node_config = config.compute_node_config();
+    let mut system_metrics = compute_node_config.as_ref().map(|_| SystemMetrics::new());
 
     // Allow tests to substitute a fake sstat binary via TORC_FAKE_SSTAT.
     let sstat_binary = std::env::var("TORC_FAKE_SSTAT").unwrap_or_else(|_| "sstat".to_string());
 
-    // Initialize database if using TimeSeries
-    let mut db_conn = match config.granularity {
-        MonitorGranularity::TimeSeries => Some(init_timeseries_db(&output_dir, &unique_label)?),
-        MonitorGranularity::Summary => None,
+    // Initialize database if job time series or compute-node monitoring needs durable storage.
+    let compute_node_time_series = compute_node_config
+        .as_ref()
+        .is_some_and(|c| matches!(c.granularity, MonitorGranularity::TimeSeries));
+    let mut db_conn = if matches!(jobs_config.granularity, MonitorGranularity::TimeSeries)
+        || compute_node_time_series
+    {
+        Some(init_timeseries_db(&output_dir, &unique_label)?)
+    } else {
+        None
     };
 
     info!(
-        "Resource monitoring started: granularity={:?}, sample_interval={}s",
-        config.granularity, config.sample_interval_seconds
+        "Resource monitoring started: jobs_enabled={}, jobs_granularity={:?}, \
+         compute_node_enabled={}, sample_interval={}s",
+        jobs_config.enabled,
+        jobs_config.granularity,
+        compute_node_config.is_some(),
+        config.sample_interval_seconds
     );
 
     let mut last_sample_time = Instant::now();
@@ -463,7 +686,55 @@ fn run_monitoring_loop(
                     // Send metrics back; ignore error if receiver was dropped.
                     let _ = response_tx.send(metrics);
                 }
-                MonitorCommand::Shutdown => {
+                MonitorCommand::Shutdown { response_tx } => {
+                    if let Some(compute_node_config) = &compute_node_config {
+                        sys.refresh_cpu();
+                        sys.refresh_memory();
+                        let timestamp = chrono::Utc::now().timestamp();
+                        let cpu_percent = if compute_node_config.cpu {
+                            sys.global_cpu_info().cpu_usage() as f64
+                        } else {
+                            0.0
+                        };
+                        let memory_bytes = if compute_node_config.memory {
+                            sys.used_memory()
+                        } else {
+                            0
+                        };
+                        let total_memory_bytes = if compute_node_config.memory {
+                            sys.total_memory()
+                        } else {
+                            0
+                        };
+
+                        if let Some(metrics) = &mut system_metrics {
+                            metrics.add_sample(cpu_percent, memory_bytes);
+                        }
+
+                        if matches!(
+                            compute_node_config.granularity,
+                            MonitorGranularity::TimeSeries
+                        ) && let Some(ref mut conn) = db_conn
+                            && let Err(e) = store_system_sample(
+                                conn,
+                                timestamp,
+                                cpu_percent,
+                                memory_bytes,
+                                total_memory_bytes,
+                            )
+                        {
+                            error!("Failed to store final system resource sample: {}", e);
+                        }
+                    }
+
+                    let summary = system_metrics.as_ref().and_then(SystemMetrics::summary);
+                    if let Some(ref mut conn) = db_conn
+                        && let Some(ref summary) = summary
+                        && let Err(e) = store_system_summary(conn, summary)
+                    {
+                        error!("Failed to store system resource summary: {}", e);
+                    }
+                    let _ = response_tx.send(summary);
                     info!("Resource monitor received shutdown command");
                     return Ok(());
                 }
@@ -471,13 +742,19 @@ fn run_monitoring_loop(
         }
 
         // Sample all monitored jobs if interval has elapsed
-        if last_sample_time.elapsed() >= sample_interval && !monitored_jobs.is_empty() {
+        if last_sample_time.elapsed() >= sample_interval
+            && (!monitored_jobs.is_empty() || compute_node_config.is_some())
+        {
             // Refresh sysinfo once for all local jobs.
             let has_local_jobs = monitored_jobs
                 .values()
                 .any(|j| matches!(j.source, MonitorJobSource::Local { .. }));
-            if has_local_jobs {
+            if has_local_jobs || compute_node_config.is_some() {
                 sys.refresh_processes();
+            }
+            if compute_node_config.is_some() {
+                sys.refresh_cpu();
+                sys.refresh_memory();
             }
 
             // Batch-discover numeric step IDs for any Slurm steps that need them.
@@ -544,6 +821,50 @@ fn run_monitoring_loop(
             }
 
             let timestamp = chrono::Utc::now().timestamp();
+
+            if let Some(compute_node_config) = &compute_node_config {
+                let cpu_percent = if compute_node_config.cpu {
+                    sys.global_cpu_info().cpu_usage() as f64
+                } else {
+                    0.0
+                };
+                let memory_bytes = if compute_node_config.memory {
+                    sys.used_memory()
+                } else {
+                    0
+                };
+                let total_memory_bytes = if compute_node_config.memory {
+                    sys.total_memory()
+                } else {
+                    0
+                };
+
+                if let Some(metrics) = &mut system_metrics {
+                    metrics.add_sample(cpu_percent, memory_bytes);
+                }
+
+                if matches!(
+                    compute_node_config.granularity,
+                    MonitorGranularity::TimeSeries
+                ) && let Some(ref mut conn) = db_conn
+                    && let Err(e) = store_system_sample(
+                        conn,
+                        timestamp,
+                        cpu_percent,
+                        memory_bytes,
+                        total_memory_bytes,
+                    )
+                {
+                    error!("Failed to store system resource sample: {}", e);
+                }
+
+                debug!(
+                    "System resources: CPU={:.1}%, Mem={:.1}/{:.1}MB",
+                    cpu_percent,
+                    memory_bytes as f64 / (1024.0 * 1024.0),
+                    total_memory_bytes as f64 / (1024.0 * 1024.0)
+                );
+            }
 
             for (pid, job) in monitored_jobs.iter_mut() {
                 let (cpu_percent, memory_bytes, num_processes) = match &mut job.source {
@@ -842,7 +1163,7 @@ fn init_timeseries_db(output_dir: &Path, unique_label: &str) -> SqliteResult<Con
         return Err(rusqlite::Error::InvalidPath(resource_util_dir.clone()));
     }
 
-    let db_path = resource_util_dir.join(format!("{}_{}.db", DB_FILENAME_PREFIX, unique_label));
+    let db_path = timeseries_db_path(output_dir, unique_label);
     info!(
         "Initializing resource metrics database at: {}",
         db_path.display()
@@ -876,6 +1197,29 @@ fn init_timeseries_db(output_dir: &Path, unique_label: &str) -> SqliteResult<Con
         [],
     )?;
 
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS system_resource_samples (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp INTEGER NOT NULL,
+            cpu_percent REAL NOT NULL,
+            memory_bytes INTEGER NOT NULL,
+            total_memory_bytes INTEGER NOT NULL
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS system_resource_summary (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            sample_count INTEGER NOT NULL,
+            peak_cpu_percent REAL NOT NULL,
+            avg_cpu_percent REAL NOT NULL,
+            peak_memory_bytes INTEGER NOT NULL,
+            avg_memory_bytes INTEGER NOT NULL
+        )",
+        [],
+    )?;
+
     Ok(conn)
 }
 
@@ -904,4 +1248,170 @@ fn store_sample(
         rusqlite::params![job_id, timestamp, cpu_percent, memory_bytes as i64, num_processes as i64],
     )?;
     Ok(())
+}
+
+/// Store an overall compute-node resource sample in the TimeSeries database.
+fn store_system_sample(
+    conn: &mut Connection,
+    timestamp: i64,
+    cpu_percent: f64,
+    memory_bytes: u64,
+    total_memory_bytes: u64,
+) -> SqliteResult<()> {
+    conn.execute(
+        "INSERT INTO system_resource_samples
+            (timestamp, cpu_percent, memory_bytes, total_memory_bytes)
+         VALUES (?1, ?2, ?3, ?4)",
+        rusqlite::params![
+            timestamp,
+            cpu_percent,
+            memory_bytes as i64,
+            total_memory_bytes as i64
+        ],
+    )?;
+    Ok(())
+}
+
+/// Store summary statistics for overall compute-node resource usage.
+fn store_system_summary(conn: &mut Connection, summary: &SystemMetricsSummary) -> SqliteResult<()> {
+    conn.execute(
+        "INSERT OR REPLACE INTO system_resource_summary
+            (id, sample_count, peak_cpu_percent, avg_cpu_percent,
+             peak_memory_bytes, avg_memory_bytes)
+         VALUES (1, ?1, ?2, ?3, ?4, ?5)",
+        rusqlite::params![
+            summary.sample_count,
+            summary.peak_cpu_percent,
+            summary.avg_cpu_percent,
+            summary.peak_memory_bytes as i64,
+            summary.avg_memory_bytes as i64
+        ],
+    )?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_scoped_monitor_config() {
+        let json = r#"{
+            "sample_interval_seconds": 1,
+            "generate_plots": false,
+            "jobs": {
+                "enabled": true,
+                "granularity": "summary"
+            },
+            "compute_node": {
+                "enabled": true,
+                "granularity": "time_series",
+                "cpu": true,
+                "memory": true
+            }
+        }"#;
+
+        let config: ResourceMonitorConfig = serde_json::from_str(json).unwrap();
+
+        let jobs = config.jobs_config();
+        assert!(jobs.enabled);
+        assert_eq!(jobs.granularity, MonitorGranularity::Summary);
+        let compute_node = config.compute_node_config().unwrap();
+        assert!(compute_node.enabled);
+        assert_eq!(compute_node.granularity, MonitorGranularity::TimeSeries);
+        assert!(compute_node.cpu);
+        assert!(compute_node.memory);
+    }
+
+    #[test]
+    fn legacy_top_level_config_controls_jobs() {
+        let json = r#"{
+            "enabled": true,
+            "granularity": "time_series",
+            "sample_interval_seconds": 1,
+            "generate_plots": false
+        }"#;
+
+        let config: ResourceMonitorConfig = serde_json::from_str(json).unwrap();
+
+        let jobs = config.jobs_config();
+        assert!(jobs.enabled);
+        assert_eq!(jobs.granularity, MonitorGranularity::TimeSeries);
+        assert!(config.compute_node_config().is_none());
+        assert!(config.is_enabled());
+    }
+
+    #[test]
+    fn new_rejects_non_positive_sample_interval() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        for bad in [0, -1, i32::MIN] {
+            let config = ResourceMonitorConfig {
+                sample_interval_seconds: bad,
+                jobs: Some(JobMonitorConfig {
+                    enabled: true,
+                    granularity: MonitorGranularity::Summary,
+                }),
+                ..ResourceMonitorConfig::default()
+            };
+            let result = ResourceMonitor::new(config, temp_dir.path().to_path_buf(), "t".into());
+            let err = match result {
+                Ok(_) => panic!("invalid sample interval {bad} should fail"),
+                Err(e) => e,
+            };
+            let msg = err.to_string();
+            assert!(
+                msg.contains("sample_interval_seconds"),
+                "error should name the field: {msg}"
+            );
+        }
+    }
+
+    #[test]
+    fn new_accepts_positive_sample_interval() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config = ResourceMonitorConfig {
+            sample_interval_seconds: 1,
+            jobs: Some(JobMonitorConfig {
+                enabled: true,
+                granularity: MonitorGranularity::Summary,
+            }),
+            ..ResourceMonitorConfig::default()
+        };
+        let monitor = ResourceMonitor::new(config, temp_dir.path().to_path_buf(), "t".into())
+            .expect("positive interval should succeed");
+        drop(monitor);
+    }
+
+    #[test]
+    fn stores_system_samples_and_summary() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut conn = init_timeseries_db(temp_dir.path(), "test").unwrap();
+
+        store_system_sample(&mut conn, 123, 42.0, 1024, 4096).unwrap();
+        store_system_sample(&mut conn, 123, 43.0, 2048, 4096).unwrap();
+
+        let mut metrics = SystemMetrics::new();
+        metrics.add_sample(10.0, 100);
+        metrics.add_sample(30.0, 300);
+        store_system_summary(&mut conn, &metrics.summary().unwrap()).unwrap();
+
+        let sample_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM system_resource_samples", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(sample_count, 2);
+
+        let (summary_count, peak_cpu, avg_memory): (i64, f64, i64) = conn
+            .query_row(
+                "SELECT sample_count, peak_cpu_percent, avg_memory_bytes
+                 FROM system_resource_summary WHERE id = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(summary_count, 2);
+        assert_eq!(peak_cpu, 30.0);
+        assert_eq!(avg_memory, 200);
+    }
 }

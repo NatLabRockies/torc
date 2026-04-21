@@ -118,6 +118,16 @@ pub struct ComputeNodeModel {
     pub compute_node_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scheduler: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sample_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub peak_cpu_percent: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avg_cpu_percent: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub peak_memory_bytes: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avg_memory_bytes: Option<i64>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -877,6 +887,11 @@ impl ComputeNodeModel {
             scheduler_config_id: None,
             compute_node_type,
             scheduler,
+            sample_count: None,
+            peak_cpu_percent: None,
+            avg_cpu_percent: None,
+            peak_memory_bytes: None,
+            avg_memory_bytes: None,
         }
     }
 }
@@ -1872,6 +1887,11 @@ mod tests {
             scheduler_config_id: Some(3),
             compute_node_type: "local".into(),
             scheduler: Some(json!({"kind": "local"})),
+            sample_count: Some(2),
+            peak_cpu_percent: Some(50.0),
+            avg_cpu_percent: Some(30.0),
+            peak_memory_bytes: Some(4096),
+            avg_memory_bytes: Some(2048),
         };
         let job = JobModel {
             id: Some(5),

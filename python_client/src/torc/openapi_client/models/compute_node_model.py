@@ -26,6 +26,8 @@ class ComputeNodeModel(BaseModel):
     """
     ComputeNodeModel
     """ # noqa: E501
+    avg_cpu_percent: Optional[Union[StrictFloat, StrictInt]] = None
+    avg_memory_bytes: Optional[StrictInt] = None
     compute_node_type: StrictStr
     duration_seconds: Optional[Union[StrictFloat, StrictInt]] = None
     hostname: StrictStr
@@ -35,13 +37,16 @@ class ComputeNodeModel(BaseModel):
     num_cpus: StrictInt
     num_gpus: StrictInt
     num_nodes: StrictInt
+    peak_cpu_percent: Optional[Union[StrictFloat, StrictInt]] = None
+    peak_memory_bytes: Optional[StrictInt] = None
     pid: StrictInt
+    sample_count: Optional[StrictInt] = None
     scheduler: Optional[Any] = None
     scheduler_config_id: Optional[StrictInt] = None
     start_time: StrictStr
     time_limit: Optional[StrictStr] = None
     workflow_id: StrictInt
-    __properties: ClassVar[List[str]] = ["compute_node_type", "duration_seconds", "hostname", "id", "is_active", "memory_gb", "num_cpus", "num_gpus", "num_nodes", "pid", "scheduler", "scheduler_config_id", "start_time", "time_limit", "workflow_id"]
+    __properties: ClassVar[List[str]] = ["avg_cpu_percent", "avg_memory_bytes", "compute_node_type", "duration_seconds", "hostname", "id", "is_active", "memory_gb", "num_cpus", "num_gpus", "num_nodes", "peak_cpu_percent", "peak_memory_bytes", "pid", "sample_count", "scheduler", "scheduler_config_id", "start_time", "time_limit", "workflow_id"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -82,6 +87,16 @@ class ComputeNodeModel(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if avg_cpu_percent (nullable) is None
+        # and model_fields_set contains the field
+        if self.avg_cpu_percent is None and "avg_cpu_percent" in self.model_fields_set:
+            _dict['avg_cpu_percent'] = None
+
+        # set to None if avg_memory_bytes (nullable) is None
+        # and model_fields_set contains the field
+        if self.avg_memory_bytes is None and "avg_memory_bytes" in self.model_fields_set:
+            _dict['avg_memory_bytes'] = None
+
         # set to None if duration_seconds (nullable) is None
         # and model_fields_set contains the field
         if self.duration_seconds is None and "duration_seconds" in self.model_fields_set:
@@ -96,6 +111,21 @@ class ComputeNodeModel(BaseModel):
         # and model_fields_set contains the field
         if self.is_active is None and "is_active" in self.model_fields_set:
             _dict['is_active'] = None
+
+        # set to None if peak_cpu_percent (nullable) is None
+        # and model_fields_set contains the field
+        if self.peak_cpu_percent is None and "peak_cpu_percent" in self.model_fields_set:
+            _dict['peak_cpu_percent'] = None
+
+        # set to None if peak_memory_bytes (nullable) is None
+        # and model_fields_set contains the field
+        if self.peak_memory_bytes is None and "peak_memory_bytes" in self.model_fields_set:
+            _dict['peak_memory_bytes'] = None
+
+        # set to None if sample_count (nullable) is None
+        # and model_fields_set contains the field
+        if self.sample_count is None and "sample_count" in self.model_fields_set:
+            _dict['sample_count'] = None
 
         # set to None if scheduler (nullable) is None
         # and model_fields_set contains the field
@@ -124,6 +154,8 @@ class ComputeNodeModel(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "avg_cpu_percent": obj.get("avg_cpu_percent"),
+            "avg_memory_bytes": obj.get("avg_memory_bytes"),
             "compute_node_type": obj.get("compute_node_type"),
             "duration_seconds": obj.get("duration_seconds"),
             "hostname": obj.get("hostname"),
@@ -133,7 +165,10 @@ class ComputeNodeModel(BaseModel):
             "num_cpus": obj.get("num_cpus"),
             "num_gpus": obj.get("num_gpus"),
             "num_nodes": obj.get("num_nodes"),
+            "peak_cpu_percent": obj.get("peak_cpu_percent"),
+            "peak_memory_bytes": obj.get("peak_memory_bytes"),
             "pid": obj.get("pid"),
+            "sample_count": obj.get("sample_count"),
             "scheduler": obj.get("scheduler"),
             "scheduler_config_id": obj.get("scheduler_config_id"),
             "start_time": obj.get("start_time"),

@@ -13,3 +13,5 @@ Step-by-step guides for common tasks.
 - [Parameterize Jobs with Files](./parameterize-with-files.md) - Using file-based parameters
 - [Use Invocation Scripts](./use-invocation-script.md) - Setting up job environments
 - [Add RO-Crate Metadata](./ro-crate-metadata.md) - Storing provenance with RO-Crate
+- [Run Inline Commands (torc exec)](./run-inline-commands.md) - Monitor CPU/memory of a single
+  command or run a parallel queue of commands, no spec file or running server required
