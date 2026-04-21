@@ -359,6 +359,17 @@ impl ResourceMonitor {
         output_dir: PathBuf,
         unique_label: String,
     ) -> Result<Self, Box<dyn std::error::Error>> {
+        // Non-CLI paths (hand-edited workflow specs) can reach here with an invalid
+        // sample interval. Reject 0 (would busy-loop) and negative (would wrap to a
+        // ~584-billion-year Duration via `as u64` in the monitoring loop).
+        if config.sample_interval_seconds < 1 {
+            return Err(format!(
+                "resource_monitor.sample_interval_seconds must be >= 1 (got {})",
+                config.sample_interval_seconds
+            )
+            .into());
+        }
+
         let (tx, rx) = channel();
         let (oom_tx, oom_rx) = channel();
         let config_clone = config.clone();
@@ -1328,6 +1339,47 @@ mod tests {
         assert_eq!(jobs.granularity, MonitorGranularity::TimeSeries);
         assert!(config.compute_node_config().is_none());
         assert!(config.is_enabled());
+    }
+
+    #[test]
+    fn new_rejects_non_positive_sample_interval() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        for bad in [0, -1, i32::MIN] {
+            let config = ResourceMonitorConfig {
+                sample_interval_seconds: bad,
+                jobs: Some(JobMonitorConfig {
+                    enabled: true,
+                    granularity: MonitorGranularity::Summary,
+                }),
+                ..ResourceMonitorConfig::default()
+            };
+            let result = ResourceMonitor::new(config, temp_dir.path().to_path_buf(), "t".into());
+            let err = match result {
+                Ok(_) => panic!("invalid sample interval {bad} should fail"),
+                Err(e) => e,
+            };
+            let msg = err.to_string();
+            assert!(
+                msg.contains("sample_interval_seconds"),
+                "error should name the field: {msg}"
+            );
+        }
+    }
+
+    #[test]
+    fn new_accepts_positive_sample_interval() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config = ResourceMonitorConfig {
+            sample_interval_seconds: 1,
+            jobs: Some(JobMonitorConfig {
+                enabled: true,
+                granularity: MonitorGranularity::Summary,
+            }),
+            ..ResourceMonitorConfig::default()
+        };
+        let monitor = ResourceMonitor::new(config, temp_dir.path().to_path_buf(), "t".into())
+            .expect("positive interval should succeed");
+        drop(monitor);
     }
 
     #[test]
