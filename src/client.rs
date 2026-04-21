@@ -12,6 +12,7 @@
 pub mod apis;
 pub mod async_cli_command;
 pub mod commands;
+pub mod default_api;
 pub mod errors;
 pub mod resource_correction;
 pub mod ro_crate_utils;

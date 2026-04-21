@@ -9,7 +9,7 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 use tempfile::NamedTempFile;
-use torc::client::{Configuration, apis};
+use torc::client::{Configuration, default_api};
 use torc::models;
 
 const PREPROCESS: &str = "tests/scripts/preprocess.sh";
@@ -110,20 +110,6 @@ fn wait_for_server_ready(port: u16, timeout_secs: u64) -> Result<(), String> {
     ))
 }
 
-fn build_test_binaries() {
-    let status = Command::new("cargo")
-        .arg("build")
-        .arg("--workspace")
-        .arg("--bins")
-        .arg("--features")
-        .arg("server-bin,slurm-runner")
-        .status()
-        .expect("Failed to execute cargo build");
-    if !status.success() {
-        panic!("cargo build failed with status: {}", status);
-    }
-}
-
 fn start_process(db_url: &str, db_file: NamedTempFile) -> ServerProcess {
     let port = find_available_port();
     println!("Setting up database with url: {}", db_url);
@@ -139,10 +125,17 @@ fn start_process(db_url: &str, db_file: NamedTempFile) -> ServerProcess {
     if !status.success() {
         panic!("sqlx database setup failed with status: {}", status);
     }
-    build_test_binaries();
+    let status = Command::new("cargo")
+        .arg("build")
+        .arg("--workspace")
+        .status()
+        .expect("Failed to execute cargo build");
+    if !status.success() {
+        panic!("cargo build failed with status: {}", status);
+    }
 
     // Ensure torc-slurm-job-runner binary is in the PATH for tests
-    // The binary is built by build_test_binaries but we need to ensure it's accessible.
+    // The binary is built as part of --workspace but we need to ensure it's accessible
     let slurm_runner_path = std::env::current_dir()
         .expect("Failed to get current dir")
         .join(get_exe_path("target/debug/torc-slurm-job-runner"));
@@ -212,8 +205,8 @@ pub fn start_server() -> ServerProcess {
 pub fn create_test_workflow(config: &Configuration, workflow_name: &str) -> models::WorkflowModel {
     let user = "test_user".to_string();
     let workflow = models::WorkflowModel::new(workflow_name.to_string(), user);
-    let created_workflow = apis::workflows_api::create_workflow(config, workflow)
-        .expect("Failed to create test workflow");
+    let created_workflow =
+        default_api::create_workflow(config, workflow).expect("Failed to create test workflow");
 
     // Create a default compute node for this workflow so tests can use compute_node_id=1
     let workflow_id = created_workflow.id.unwrap();
@@ -229,7 +222,7 @@ pub fn create_test_workflow(config: &Configuration, workflow_name: &str) -> mode
         "local".to_string(), // compute_node_type
         None,
     );
-    let _ = apis::compute_nodes_api::create_compute_node(config, compute_node)
+    let _ = default_api::create_compute_node(config, compute_node)
         .expect("Failed to create default compute node for test workflow");
 
     created_workflow
@@ -245,7 +238,7 @@ pub fn create_test_job(
         job_name.to_string(),
         format!("echo 'Running {}'", job_name),
     );
-    apis::jobs_api::create_job(config, job).expect("Failed to create test job")
+    default_api::create_job(config, job).expect("Failed to create test job")
 }
 
 pub fn create_diamond_workflow(
@@ -257,7 +250,7 @@ pub fn create_diamond_workflow(
     let user = "test_user".to_string();
     let workflow = models::WorkflowModel::new(name.clone(), user.clone());
     let created_workflow =
-        apis::workflows_api::create_workflow(config, workflow).expect("Failed to add workflow");
+        default_api::create_workflow(config, workflow).expect("Failed to add workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     // Create a default compute node for this workflow so tests can use compute_node_id=1
@@ -273,7 +266,7 @@ pub fn create_diamond_workflow(
         "local".to_string(), // compute_node_type
         None,
     );
-    let _ = apis::compute_nodes_api::create_compute_node(config, compute_node)
+    let _ = default_api::create_compute_node(config, compute_node)
         .expect("Failed to create default compute node for test workflow");
 
     // Create local variables for file paths
@@ -284,32 +277,32 @@ pub fn create_diamond_workflow(
     let f5_path = work_dir.join("f5.json").to_string_lossy().to_string();
     let f6_path = work_dir.join("f6.json").to_string_lossy().to_string();
 
-    let f1 = apis::files_api::create_file(
+    let f1 = default_api::create_file(
         config,
         models::FileModel::new(workflow_id as i64, "f1".to_string(), f1_path.clone()),
     )
     .expect("Failed to add file");
-    let f2 = apis::files_api::create_file(
+    let f2 = default_api::create_file(
         config,
         models::FileModel::new(workflow_id as i64, "f2".to_string(), f2_path.clone()),
     )
     .expect("Failed to add file");
-    let f3 = apis::files_api::create_file(
+    let f3 = default_api::create_file(
         config,
         models::FileModel::new(workflow_id as i64, "f3".to_string(), f3_path.clone()),
     )
     .expect("Failed to add file");
-    let f4 = apis::files_api::create_file(
+    let f4 = default_api::create_file(
         config,
         models::FileModel::new(workflow_id as i64, "f4".to_string(), f4_path.clone()),
     )
     .expect("Failed to add file");
-    let f5 = apis::files_api::create_file(
+    let f5 = default_api::create_file(
         config,
         models::FileModel::new(workflow_id as i64, "f5".to_string(), f5_path.clone()),
     )
     .expect("Failed to add file");
-    let f6 = apis::files_api::create_file(
+    let f6 = default_api::create_file(
         config,
         models::FileModel::new(workflow_id as i64, "f6".to_string(), f6_path.clone()),
     )
@@ -349,14 +342,14 @@ pub fn create_diamond_workflow(
     postprocess_pre.input_file_ids = Some(vec![f4.id.unwrap(), f5.id.unwrap()]);
     postprocess_pre.output_file_ids = Some(vec![f6.id.unwrap()]);
     let preprocess =
-        apis::jobs_api::create_job(config, preprocess_pre).expect("Failed to add preprocess");
-    let work1 = apis::jobs_api::create_job(config, work1_pre).expect("Failed to add work1");
-    let work2 = apis::jobs_api::create_job(config, work2_pre).expect("Failed to add work2");
+        default_api::create_job(config, preprocess_pre).expect("Failed to add preprocess");
+    let work1 = default_api::create_job(config, work1_pre).expect("Failed to add work1");
+    let work2 = default_api::create_job(config, work2_pre).expect("Failed to add work2");
     let postprocess =
-        apis::jobs_api::create_job(config, postprocess_pre).expect("Failed to add postprocess");
+        default_api::create_job(config, postprocess_pre).expect("Failed to add postprocess");
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id as i64, None, None)
+        default_api::initialize_jobs(config, workflow_id as i64, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -369,7 +362,7 @@ pub fn create_diamond_workflow(
     for job in jobs.values() {
         assert!(job.resource_requirements_id.is_some());
         let rr_id = job.resource_requirements_id.unwrap();
-        let rr = apis::resource_requirements_api::get_resource_requirements(config, rr_id)
+        let rr = default_api::get_resource_requirements(config, rr_id)
             .expect("Failed to get resource requirements");
         assert_eq!(rr.name, "default".to_string());
     }
@@ -398,7 +391,7 @@ pub fn create_test_compute_node(
         None,
     );
 
-    apis::compute_nodes_api::create_compute_node(config, compute_node)
+    default_api::create_compute_node(config, compute_node)
         .expect("Failed to create test compute node")
 }
 
@@ -420,7 +413,7 @@ pub fn create_test_result(
         models::JobStatus::Completed,
     );
 
-    apis::results_api::create_result(config, result).expect("Failed to create test result")
+    default_api::create_result(config, result).expect("Failed to create test result")
 }
 
 /// Helper function to create test user data directly via API
@@ -435,7 +428,7 @@ pub fn create_test_user_data(
     user_data.data = Some(data);
     user_data.is_ephemeral = Some(ephemeral);
 
-    apis::user_data_api::create_user_data(config, user_data, None, None)
+    default_api::create_user_data(config, user_data, None, None)
         .expect("Failed to create test user data")
 }
 
@@ -446,7 +439,7 @@ pub fn create_test_event(
     data: serde_json::Value,
 ) -> models::EventModel {
     let event = models::EventModel::new(workflow_id, data);
-    apis::events_api::create_event(config, event).expect("Failed to create test event")
+    default_api::create_event(config, event).expect("Failed to create test event")
 }
 
 /// Helper function to create test files directly via API
@@ -457,7 +450,7 @@ pub fn create_test_file(
     path: &str,
 ) -> models::FileModel {
     let file = models::FileModel::new(workflow_id, name.to_string(), path.to_string());
-    apis::files_api::create_file(config, file).expect("Failed to create test file")
+    default_api::create_file(config, file).expect("Failed to create test file")
 }
 
 /// Helper function to create test workflows with additional options directly via API
@@ -469,8 +462,8 @@ pub fn create_test_workflow_with_description(
 ) -> models::WorkflowModel {
     let mut workflow = models::WorkflowModel::new(name.to_string(), user.to_string());
     workflow.description = description;
-    let created_workflow = apis::workflows_api::create_workflow(config, workflow)
-        .expect("Failed to create test workflow");
+    let created_workflow =
+        default_api::create_workflow(config, workflow).expect("Failed to create test workflow");
 
     // Create a default compute node for this workflow so tests can use compute_node_id=1
     let workflow_id = created_workflow.id.unwrap();
@@ -486,7 +479,7 @@ pub fn create_test_workflow_with_description(
         "local".to_string(), // compute_node_type
         None,
     );
-    let _ = apis::compute_nodes_api::create_compute_node(config, compute_node)
+    let _ = default_api::create_compute_node(config, compute_node)
         .expect("Failed to create default compute node for test workflow");
 
     created_workflow
@@ -501,8 +494,8 @@ pub fn create_test_workflow_advanced(
 ) -> models::WorkflowModel {
     let mut workflow = models::WorkflowModel::new(name.to_string(), user.to_string());
     workflow.description = description;
-    let created_workflow = apis::workflows_api::create_workflow(config, workflow)
-        .expect("Failed to create test workflow");
+    let created_workflow =
+        default_api::create_workflow(config, workflow).expect("Failed to create test workflow");
 
     // Create a default compute node for this workflow so tests can use compute_node_id=1
     let workflow_id = created_workflow.id.unwrap();
@@ -518,7 +511,7 @@ pub fn create_test_workflow_advanced(
         "local".to_string(), // compute_node_type
         None,
     );
-    let _ = apis::compute_nodes_api::create_compute_node(config, compute_node)
+    let _ = default_api::create_compute_node(config, compute_node)
         .expect("Failed to create default compute node for test workflow");
 
     created_workflow
@@ -543,7 +536,7 @@ pub fn create_test_resource_requirements(
     req.memory = memory.to_string();
     req.runtime = runtime.to_string();
 
-    apis::resource_requirements_api::create_resource_requirements(config, req)
+    default_api::create_resource_requirements(config, req)
         .expect("Failed to create test resource requirements")
 }
 
@@ -558,7 +551,7 @@ pub fn create_minimal_resources_workflow(
     let user = "test_user".to_string();
     let workflow = models::WorkflowModel::new(name.clone(), user.clone());
     let created_workflow =
-        apis::workflows_api::create_workflow(config, workflow).expect("Failed to add workflow");
+        default_api::create_workflow(config, workflow).expect("Failed to add workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     // Create resource requirements that match the test scenario
@@ -590,12 +583,12 @@ pub fn create_minimal_resources_workflow(
         );
         job.resource_requirements_id = Some(resource_req.id.unwrap());
 
-        let created_job = apis::jobs_api::create_job(config, job).expect("Failed to create job");
+        let created_job = default_api::create_job(config, job).expect("Failed to create job");
         jobs.insert(job_name.to_string(), created_job);
     }
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+        default_api::initialize_jobs(config, workflow_id, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -613,7 +606,7 @@ pub fn create_high_cpu_workflow(
     let user = "test_user".to_string();
     let workflow = models::WorkflowModel::new(name.clone(), user.clone());
     let created_workflow =
-        apis::workflows_api::create_workflow(config, workflow).expect("Failed to add workflow");
+        default_api::create_workflow(config, workflow).expect("Failed to add workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     // Create resource requirements that match the test scenario
@@ -640,12 +633,12 @@ pub fn create_high_cpu_workflow(
         );
         job.resource_requirements_id = Some(resource_req.id.unwrap());
 
-        let created_job = apis::jobs_api::create_job(config, job).expect("Failed to create job");
+        let created_job = default_api::create_job(config, job).expect("Failed to create job");
         jobs.insert(job_name.to_string(), created_job);
     }
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+        default_api::initialize_jobs(config, workflow_id, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -663,7 +656,7 @@ pub fn create_high_memory_workflow(
     let user = "test_user".to_string();
     let workflow = models::WorkflowModel::new(name.clone(), user.clone());
     let created_workflow =
-        apis::workflows_api::create_workflow(config, workflow).expect("Failed to add workflow");
+        default_api::create_workflow(config, workflow).expect("Failed to add workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     // Create resource requirements that match the test scenario
@@ -690,12 +683,12 @@ pub fn create_high_memory_workflow(
         );
         job.resource_requirements_id = Some(resource_req.id.unwrap());
 
-        let created_job = apis::jobs_api::create_job(config, job).expect("Failed to create job");
+        let created_job = default_api::create_job(config, job).expect("Failed to create job");
         jobs.insert(job_name.to_string(), created_job);
     }
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+        default_api::initialize_jobs(config, workflow_id, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -713,7 +706,7 @@ pub fn create_gpu_workflow(
     let user = "test_user".to_string();
     let workflow = models::WorkflowModel::new(name.clone(), user.clone());
     let created_workflow =
-        apis::workflows_api::create_workflow(config, workflow).expect("Failed to add workflow");
+        default_api::create_workflow(config, workflow).expect("Failed to add workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     // Create resource requirements that match the test scenario
@@ -740,12 +733,12 @@ pub fn create_gpu_workflow(
         );
         job.resource_requirements_id = Some(resource_req.id.unwrap());
 
-        let created_job = apis::jobs_api::create_job(config, job).expect("Failed to create job");
+        let created_job = default_api::create_job(config, job).expect("Failed to create job");
         jobs.insert(job_name.to_string(), created_job);
     }
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+        default_api::initialize_jobs(config, workflow_id, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -763,7 +756,7 @@ pub fn create_multi_node_workflow(
     let user = "test_user".to_string();
     let workflow = models::WorkflowModel::new(name.clone(), user.clone());
     let created_workflow =
-        apis::workflows_api::create_workflow(config, workflow).expect("Failed to add workflow");
+        default_api::create_workflow(config, workflow).expect("Failed to add workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     // Create resource requirements that match the test scenario
@@ -790,12 +783,12 @@ pub fn create_multi_node_workflow(
         );
         job.resource_requirements_id = Some(resource_req.id.unwrap());
 
-        let created_job = apis::jobs_api::create_job(config, job).expect("Failed to create job");
+        let created_job = default_api::create_job(config, job).expect("Failed to create job");
         jobs.insert(job_name.to_string(), created_job);
     }
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+        default_api::initialize_jobs(config, workflow_id, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -813,7 +806,7 @@ pub fn create_maximum_resources_workflow(
     let user = "test_user".to_string();
     let workflow = models::WorkflowModel::new(name.clone(), user.clone());
     let created_workflow =
-        apis::workflows_api::create_workflow(config, workflow).expect("Failed to add workflow");
+        default_api::create_workflow(config, workflow).expect("Failed to add workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     // Create resource requirements that match the test scenario
@@ -840,12 +833,12 @@ pub fn create_maximum_resources_workflow(
         );
         job.resource_requirements_id = Some(resource_req.id.unwrap());
 
-        let created_job = apis::jobs_api::create_job(config, job).expect("Failed to create job");
+        let created_job = default_api::create_job(config, job).expect("Failed to create job");
         jobs.insert(job_name.to_string(), created_job);
     }
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+        default_api::initialize_jobs(config, workflow_id, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -870,17 +863,17 @@ pub fn create_dependency_chain_workflow(
     let user = "test_user".to_string();
     let workflow = models::WorkflowModel::new(name.clone(), user.clone());
     let created_workflow =
-        apis::workflows_api::create_workflow(config, workflow).expect("Failed to add workflow");
+        default_api::create_workflow(config, workflow).expect("Failed to add workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     // Create files for job dependencies
-    let f1 = apis::files_api::create_file(
+    let f1 = default_api::create_file(
         config,
         models::FileModel::new(workflow_id, "input".to_string(), "input.txt".to_string()),
     )
     .expect("Failed to add input file");
 
-    let f2 = apis::files_api::create_file(
+    let f2 = default_api::create_file(
         config,
         models::FileModel::new(
             workflow_id,
@@ -890,7 +883,7 @@ pub fn create_dependency_chain_workflow(
     )
     .expect("Failed to add intermediate file 1");
 
-    let f3 = apis::files_api::create_file(
+    let f3 = default_api::create_file(
         config,
         models::FileModel::new(
             workflow_id,
@@ -900,7 +893,7 @@ pub fn create_dependency_chain_workflow(
     )
     .expect("Failed to add intermediate file 2");
 
-    let f4 = apis::files_api::create_file(
+    let f4 = default_api::create_file(
         config,
         models::FileModel::new(workflow_id, "output".to_string(), "output.txt".to_string()),
     )
@@ -949,12 +942,12 @@ pub fn create_dependency_chain_workflow(
     job3.output_file_ids = Some(vec![f4.id.unwrap()]);
 
     // Create the jobs
-    let created_job1 = apis::jobs_api::create_job(config, job1).expect("Failed to create job1");
-    let created_job2 = apis::jobs_api::create_job(config, job2).expect("Failed to create job2");
-    let created_job3 = apis::jobs_api::create_job(config, job3).expect("Failed to create job3");
+    let created_job1 = default_api::create_job(config, job1).expect("Failed to create job1");
+    let created_job2 = default_api::create_job(config, job2).expect("Failed to create job2");
+    let created_job3 = default_api::create_job(config, job3).expect("Failed to create job3");
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+        default_api::initialize_jobs(config, workflow_id, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -983,7 +976,7 @@ pub fn create_custom_resources_workflow(
     let user = "test_user".to_string();
     let workflow = models::WorkflowModel::new(name.clone(), user.clone());
     let created_workflow =
-        apis::workflows_api::create_workflow(config, workflow).expect("Failed to add workflow");
+        default_api::create_workflow(config, workflow).expect("Failed to add workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     // Create resource requirements that match the test scenario
@@ -1021,12 +1014,12 @@ pub fn create_custom_resources_workflow(
         );
         job.resource_requirements_id = Some(resource_req.id.unwrap());
 
-        let created_job = apis::jobs_api::create_job(config, job).expect("Failed to create job");
+        let created_job = default_api::create_job(config, job).expect("Failed to create job");
         jobs.insert(job_name, created_job);
     }
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+        default_api::initialize_jobs(config, workflow_id, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -1045,7 +1038,7 @@ pub fn create_many_jobs_workflow(
     let user = "test_user".to_string();
     let workflow = models::WorkflowModel::new(name.clone(), user.clone());
     let created_workflow =
-        apis::workflows_api::create_workflow(config, workflow).expect("Failed to add workflow");
+        default_api::create_workflow(config, workflow).expect("Failed to add workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     // Create resource requirements for minimal jobs
@@ -1068,12 +1061,12 @@ pub fn create_many_jobs_workflow(
             models::JobModel::new(workflow_id, job_name.clone(), format!("echo 'job {}'", i));
         job.resource_requirements_id = Some(resource_req.id.unwrap());
 
-        let created_job = apis::jobs_api::create_job(config, job).expect("Failed to create job");
+        let created_job = default_api::create_job(config, job).expect("Failed to create job");
         jobs.insert(job_name, created_job);
     }
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+        default_api::initialize_jobs(config, workflow_id, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -1090,7 +1083,7 @@ pub fn create_diverse_jobs_workflow(
     let user = "test_user".to_string();
     let workflow = models::WorkflowModel::new(name.clone(), user.clone());
     let created_workflow =
-        apis::workflows_api::create_workflow(config, workflow).expect("Failed to add workflow");
+        default_api::create_workflow(config, workflow).expect("Failed to add workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     // Create different resource requirement profiles for sorting tests
@@ -1143,12 +1136,12 @@ pub fn create_diverse_jobs_workflow(
         );
         job.resource_requirements_id = Some(resource_req.id.unwrap());
 
-        let created_job = apis::jobs_api::create_job(config, job).expect("Failed to create job");
+        let created_job = default_api::create_job(config, job).expect("Failed to create job");
         jobs.insert(job_name, created_job);
     }
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+        default_api::initialize_jobs(config, workflow_id, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -1160,7 +1153,7 @@ pub fn create_diverse_jobs_workflow(
 /// Returns an error if any workflow deletion fails. Success criteria: ALL workflows must be deleted.
 pub fn delete_all_workflows(config: &Configuration) -> Result<(), Box<dyn std::error::Error>> {
     // List all workflows (no user filter to get all workflows)
-    let response = apis::workflows_api::list_workflows(
+    let response = default_api::list_workflows(
         config, None, // offset
         None, // sort_by
         None, // reverse_sort
@@ -1177,7 +1170,7 @@ pub fn delete_all_workflows(config: &Configuration) -> Result<(), Box<dyn std::e
     // Delete each workflow, collecting any failures
     for workflow in workflows {
         if let Some(workflow_id) = workflow.id
-            && let Err(e) = apis::workflows_api::delete_workflow(config, workflow_id)
+            && let Err(e) = default_api::delete_workflow(config, workflow_id)
         {
             failed_deletions.push((workflow_id, e.to_string()));
         }
@@ -1414,7 +1407,6 @@ fn create_htpasswd_file(users: &[&str]) -> NamedTempFile {
     let htpasswd_path = htpasswd_file.path().to_string_lossy().to_string();
 
     // Create each user with a strong password using torc-htpasswd add
-    // Use cost 4 (minimum) for fast test execution - cost 12 default takes ~250ms per hash
     for user in users.iter() {
         let status = Command::new(get_exe_path("./target/debug/torc-htpasswd"))
             .arg("add")
@@ -1422,8 +1414,6 @@ fn create_htpasswd_file(users: &[&str]) -> NamedTempFile {
             .arg(&htpasswd_path)
             .arg("--password")
             .arg("correct horse battery staple")
-            .arg("--cost")
-            .arg("4")
             .arg(user)
             .status()
             .expect("Failed to run torc-htpasswd");
@@ -1500,7 +1490,14 @@ fn start_process_with_access_control_impl(
     if !status.success() {
         panic!("sqlx database setup failed with status: {}", status);
     }
-    build_test_binaries();
+    let status = Command::new("cargo")
+        .arg("build")
+        .arg("--workspace")
+        .status()
+        .expect("Failed to execute cargo build");
+    if !status.success() {
+        panic!("cargo build failed with status: {}", status);
+    }
 
     eprintln!("Starting server with access control on port {}", port);
     let htpasswd_path = htpasswd_file.path().to_string_lossy().to_string();
@@ -1613,7 +1610,7 @@ pub fn start_server_with_required_auth() -> AccessControlServerProcess {
 ///
 /// Test users (all with password "correct horse battery staple"):
 /// - alice, bob (ML team members)
-/// - carol, dave (Analytics team members)
+/// - carol, dave (Data team members)
 /// - shared_user (member of both teams)
 /// - owner, api_owner, ml_owner, data_owner, job_owner, etc. (workflow owners)
 #[fixture]
