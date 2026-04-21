@@ -357,8 +357,8 @@ Output:
 ╰────────────────────────────────────────┴────────────────────────────╯
 ```
 
-Carol can now see and interact with Alice's workflow because she's a member of the
-`analytics-team`, which has been granted access.
+Carol can now see and interact with Alice's workflow because she's a member of the `analytics-team`,
+which has been granted access.
 
 ## Step 9: Revoke Access
 

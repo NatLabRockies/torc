@@ -1,9 +1,9 @@
 # RO-Crate Provenance Tracking
 
 Torc supports [Research Object Crate (RO-Crate)](https://www.researchobject.org/ro-crate/), a
-community standard for packaging research data with machine-readable metadata. This enables
-tracking of data provenance—knowing which jobs produced which outputs, what inputs they consumed,
-and when the data was created.
+community standard for packaging research data with machine-readable metadata. This enables tracking
+of data provenance—knowing which jobs produced which outputs, what inputs they consumed, and when
+the data was created.
 
 ## What is RO-Crate?
 
@@ -31,9 +31,9 @@ other research object with JSON-LD properties. Entities can be:
 ### Always recorded (all workflows)
 
 During workflow initialization, Torc creates **SoftwareApplication** entities for the torc binaries
-(server, CLI, job runner, etc.) that processed the workflow. In the current model, these are
-written as both `SoftwareApplication` and `prov:SoftwareAgent` so the exported RO-Crate uses a
-PROV-shaped provenance model.
+(server, CLI, job runner, etc.) that processed the workflow. In the current model, these are written
+as both `SoftwareApplication` and `prov:SoftwareAgent` so the exported RO-Crate uses a PROV-shaped
+provenance model.
 
 ### When `enable_ro_crate: true`
 
@@ -136,8 +136,7 @@ instead of File entities.
 ### Why Datasets?
 
 - **Efficiency** — One metadata record instead of thousands of File entities
-- **Appropriate granularity** — The directory is the meaningful unit, not individual partition
-  files
+- **Appropriate granularity** — The directory is the meaningful unit, not individual partition files
 - **Integrity verification** — Manifest-based hashing detects changes without reading all file
   contents
 
@@ -163,11 +162,11 @@ Dataset entities include file count, total size, and an optional hash:
 
 Torc supports three hash modes for datasets:
 
-| Mode       | Description                      | Speed   | Detects                    |
-| ---------- | -------------------------------- | ------- | -------------------------- |
-| `manifest` | Hash of sorted path/size/mtime   | Fast    | Additions, deletions, move |
-| `content`  | SHA256 of all file contents      | Slow    | Any content change         |
-| `none`     | No hash, only file count and size| Fastest | Nothing                    |
+| Mode       | Description                       | Speed   | Detects                    |
+| ---------- | --------------------------------- | ------- | -------------------------- |
+| `manifest` | Hash of sorted path/size/mtime    | Fast    | Additions, deletions, move |
+| `content`  | SHA256 of all file contents       | Slow    | Any content change         |
+| `none`     | No hash, only file count and size | Fastest | Nothing                    |
 
 For large datasets, `manifest` mode provides a good balance—it detects structural changes without
 the I/O cost of reading terabytes of data.
@@ -205,8 +204,8 @@ RO-Crate is valuable when you need to:
 | Custom metadata   | Basic (name, type, size, date) | Full control over properties    |
 | External entities | Not created                    | Can add software, datasets, etc |
 
-For most workflows, enable automatic generation and add manual entities only for external
-references (software versions, related datasets, etc.).
+For most workflows, enable automatic generation and add manual entities only for external references
+(software versions, related datasets, etc.).
 
 ## See Also
 
