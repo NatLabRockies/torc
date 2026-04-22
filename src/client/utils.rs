@@ -81,7 +81,7 @@ pub fn shell_command() -> Command {
 /// Check whether an error string indicates a transient failure that should be retried.
 ///
 /// Retryable errors include:
-/// - Most `apis::Error::Reqwest` variants (matched via the "error in reqwest" prefix
+/// - Most `apis::Error::Reqwest` variants (matched via the "error in reqwest" substring
 ///   produced by `apis::Error::Display`). This covers connect, send-request, and
 ///   response-read failures whose inner cause is not exposed by reqwest's top-level
 ///   `Display`. Reqwest *builder* errors (invalid URL, misconfigured client) are
@@ -90,7 +90,7 @@ pub fn shell_command() -> Command {
 /// - HTTP 5xx responses (server crash, gateway error, overloaded)
 /// - Database contention ("database is locked", "busy")
 fn is_retryable_error(error_str: &str) -> bool {
-    let s = error_str.to_lowercase();
+    let s = error_str.to_ascii_lowercase();
 
     // reqwest::Error with Kind::Builder (e.g. invalid URL, bad base_path) is
     // deterministic. It surfaces as "error in reqwest: builder error: ..." and
@@ -121,11 +121,12 @@ fn is_5xx_response_error(s: &str) -> bool {
         return false;
     };
     let status_start = start + "status code ".len();
-    let Some(status) = s.get(status_start..status_start + 3) else {
-        return false;
-    };
+    let digits: String = s[status_start..]
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect();
 
-    status
+    digits
         .parse::<u16>()
         .is_ok_and(|code| (500..600).contains(&code))
 }
