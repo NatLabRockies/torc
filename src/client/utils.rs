@@ -87,7 +87,7 @@ pub fn shell_command() -> Command {
 ///   `Display`. Reqwest *builder* errors (invalid URL, misconfigured client) are
 ///   excluded — they are deterministic and retrying will not help.
 /// - Network-level failures (connection refused, DNS, timeout, unreachable)
-/// - HTTP 500/502/503 responses (server crash, gateway error, overloaded)
+/// - HTTP 5xx responses (server crash, gateway error, overloaded)
 /// - Database contention ("database is locked", "busy")
 fn is_retryable_error(error_str: &str) -> bool {
     let s = error_str.to_lowercase();
@@ -109,13 +109,25 @@ fn is_retryable_error(error_str: &str) -> bool {
         || s.contains("dns")
         || s.contains("resolve")
         || s.contains("unreachable")
-        // HTTP server errors (formatted as "status code 500" by the generated client)
-        || s.contains("status code 500")
-        || s.contains("status code 502")
-        || s.contains("status code 503")
+        // HTTP server errors (formatted as "status code NNN" by the generated client)
+        || is_5xx_response_error(&s)
         // Database contention
         || s.contains("database is locked")
         || s.contains("database is busy")
+}
+
+fn is_5xx_response_error(s: &str) -> bool {
+    let Some(start) = s.find("status code ") else {
+        return false;
+    };
+    let status_start = start + "status code ".len();
+    let Some(status) = s.get(status_start..status_start + 3) else {
+        return false;
+    };
+
+    status
+        .parse::<u16>()
+        .is_ok_and(|code| (500..600).contains(&code))
 }
 
 pub fn send_with_retries<T, E, F>(
@@ -482,6 +494,12 @@ mod tests {
         assert!(is_retryable_error("error in response: status code 502"));
         assert!(is_retryable_error(
             "error in response: status code 503: service unavailable"
+        ));
+        assert!(is_retryable_error(
+            "error in response: status code 504: gateway timeout"
+        ));
+        assert!(is_retryable_error(
+            "error in response: status code 599: network connect timeout"
         ));
 
         // Database contention
