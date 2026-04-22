@@ -81,17 +81,25 @@ pub fn shell_command() -> Command {
 /// Check whether an error string indicates a transient failure that should be retried.
 ///
 /// Retryable errors include:
-/// - Any `apis::Error::Reqwest` variant (matched via the "error in reqwest" prefix
+/// - Most `apis::Error::Reqwest` variants (matched via the "error in reqwest" prefix
 ///   produced by `apis::Error::Display`). This covers connect, send-request, and
 ///   response-read failures whose inner cause is not exposed by reqwest's top-level
-///   `Display`.
+///   `Display`. Reqwest *builder* errors (invalid URL, misconfigured client) are
+///   excluded — they are deterministic and retrying will not help.
 /// - Network-level failures (connection refused, DNS, timeout, unreachable)
 /// - HTTP 500/502/503 responses (server crash, gateway error, overloaded)
 /// - Database contention ("database is locked", "busy")
 fn is_retryable_error(error_str: &str) -> bool {
     let s = error_str.to_lowercase();
 
-    // Any reqwest-layer failure is transient: connect, send, body read, TLS, etc.
+    // reqwest::Error with Kind::Builder (e.g. invalid URL, bad base_path) is
+    // deterministic. It surfaces as "error in reqwest: builder error: ..." and
+    // must not enter the retry loop.
+    if s.contains("builder error") {
+        return false;
+    }
+
+    // Any other reqwest-layer failure is transient: connect, send, body read, TLS, etc.
     // apis::Error::Display emits "error in reqwest: ..." for every Error::Reqwest.
     s.contains("error in reqwest")
         // Network errors
@@ -481,6 +489,10 @@ mod tests {
         assert!(is_retryable_error("database is busy"));
 
         // Non-retryable errors
+        // reqwest builder errors are deterministic (invalid URL, etc.)
+        assert!(!is_retryable_error(
+            "error in reqwest: builder error: relative URL without a base"
+        ));
         assert!(!is_retryable_error(
             "error in response: status code 404: not found"
         ));
