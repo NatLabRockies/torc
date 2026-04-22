@@ -3698,6 +3698,10 @@ pub struct RoCrateEntitiesQuery {
     #[param(nullable = true)]
     pub limit: Option<i64>,
     #[param(nullable = true)]
+    pub file_id: Option<i64>,
+    #[param(nullable = true)]
+    pub entity_id: Option<String>,
+    #[param(nullable = true)]
     pub sort_by: Option<String>,
     #[param(nullable = true)]
     pub reverse_sort: Option<bool>,
@@ -3925,6 +3929,8 @@ pub async fn list_ro_crate_entities(
             workflow_id,
             query.offset,
             query.limit,
+            query.file_id,
+            query.entity_id,
             query.sort_by,
             query.reverse_sort,
             &context,

@@ -1128,6 +1128,8 @@ class RoCrateEntitiesApi:
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
+        file_id: Optional[StrictInt] = None,
+        entity_id: Optional[StrictStr] = None,
         sort_by: Optional[StrictStr] = None,
         reverse_sort: Optional[StrictBool] = None,
         _request_timeout: Union[
@@ -1152,6 +1154,10 @@ class RoCrateEntitiesApi:
         :type offset: int
         :param limit:
         :type limit: int
+        :param file_id:
+        :type file_id: int
+        :param entity_id:
+        :type entity_id: str
         :param sort_by:
         :type sort_by: str
         :param reverse_sort:
@@ -1182,6 +1188,8 @@ class RoCrateEntitiesApi:
             id=id,
             offset=offset,
             limit=limit,
+            file_id=file_id,
+            entity_id=entity_id,
             sort_by=sort_by,
             reverse_sort=reverse_sort,
             _request_auth=_request_auth,
@@ -1213,6 +1221,8 @@ class RoCrateEntitiesApi:
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
+        file_id: Optional[StrictInt] = None,
+        entity_id: Optional[StrictStr] = None,
         sort_by: Optional[StrictStr] = None,
         reverse_sort: Optional[StrictBool] = None,
         _request_timeout: Union[
@@ -1237,6 +1247,10 @@ class RoCrateEntitiesApi:
         :type offset: int
         :param limit:
         :type limit: int
+        :param file_id:
+        :type file_id: int
+        :param entity_id:
+        :type entity_id: str
         :param sort_by:
         :type sort_by: str
         :param reverse_sort:
@@ -1267,6 +1281,8 @@ class RoCrateEntitiesApi:
             id=id,
             offset=offset,
             limit=limit,
+            file_id=file_id,
+            entity_id=entity_id,
             sort_by=sort_by,
             reverse_sort=reverse_sort,
             _request_auth=_request_auth,
@@ -1298,6 +1314,8 @@ class RoCrateEntitiesApi:
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
+        file_id: Optional[StrictInt] = None,
+        entity_id: Optional[StrictStr] = None,
         sort_by: Optional[StrictStr] = None,
         reverse_sort: Optional[StrictBool] = None,
         _request_timeout: Union[
@@ -1322,6 +1340,10 @@ class RoCrateEntitiesApi:
         :type offset: int
         :param limit:
         :type limit: int
+        :param file_id:
+        :type file_id: int
+        :param entity_id:
+        :type entity_id: str
         :param sort_by:
         :type sort_by: str
         :param reverse_sort:
@@ -1352,6 +1374,8 @@ class RoCrateEntitiesApi:
             id=id,
             offset=offset,
             limit=limit,
+            file_id=file_id,
+            entity_id=entity_id,
             sort_by=sort_by,
             reverse_sort=reverse_sort,
             _request_auth=_request_auth,
@@ -1378,6 +1402,8 @@ class RoCrateEntitiesApi:
         id,
         offset,
         limit,
+        file_id,
+        entity_id,
         sort_by,
         reverse_sort,
         _request_auth,
@@ -1411,6 +1437,14 @@ class RoCrateEntitiesApi:
         if limit is not None:
             
             _query_params.append(('limit', limit))
+            
+        if file_id is not None:
+            
+            _query_params.append(('file_id', file_id))
+            
+        if entity_id is not None:
+            
+            _query_params.append(('entity_id', entity_id))
             
         if sort_by is not None:
             
@@ -1749,5 +1783,4 @@ class RoCrateEntitiesApi:
             _host=_host,
             _request_auth=_request_auth
         )
-
 

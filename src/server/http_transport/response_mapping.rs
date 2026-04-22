@@ -127,7 +127,7 @@ map_response_std!(
     CreateSlurmStatsResponse,
     SuccessfulResponse
 );
-map_response_std!(
+map_response_unprocessable!(
     create_ro_crate_entity_response,
     CreateRoCrateEntityResponse,
     SuccessfulResponse

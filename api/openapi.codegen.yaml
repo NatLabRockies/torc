@@ -4815,6 +4815,21 @@ paths:
           - integer
           - 'null'
           format: int64
+      - name: file_id
+        in: query
+        required: false
+        schema:
+          type:
+          - integer
+          - 'null'
+          format: int64
+      - name: entity_id
+        in: query
+        required: false
+        schema:
+          type:
+          - string
+          - 'null'
       - name: sort_by
         in: query
         required: false
