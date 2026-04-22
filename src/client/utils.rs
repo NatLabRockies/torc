@@ -81,14 +81,21 @@ pub fn shell_command() -> Command {
 /// Check whether an error string indicates a transient failure that should be retried.
 ///
 /// Retryable errors include:
+/// - Any `apis::Error::Reqwest` variant (matched via the "error in reqwest" prefix
+///   produced by `apis::Error::Display`). This covers connect, send-request, and
+///   response-read failures whose inner cause is not exposed by reqwest's top-level
+///   `Display`.
 /// - Network-level failures (connection refused, DNS, timeout, unreachable)
 /// - HTTP 500/502/503 responses (server crash, gateway error, overloaded)
 /// - Database contention ("database is locked", "busy")
 fn is_retryable_error(error_str: &str) -> bool {
     let s = error_str.to_lowercase();
 
-    // Network errors
-    s.contains("connection")
+    // Any reqwest-layer failure is transient: connect, send, body read, TLS, etc.
+    // apis::Error::Display emits "error in reqwest: ..." for every Error::Reqwest.
+    s.contains("error in reqwest")
+        // Network errors
+        || s.contains("connection")
         || s.contains("timeout")
         || s.contains("network")
         || s.contains("dns")
@@ -450,6 +457,15 @@ mod tests {
         assert!(is_retryable_error("DNS lookup failed"));
         assert!(is_retryable_error("request timeout"));
         assert!(is_retryable_error("network is unreachable"));
+
+        // Any apis::Error::Reqwest variant (surfaces as "error in reqwest: ...")
+        assert!(is_retryable_error(
+            "error in reqwest: error sending request for url \
+             (http://127.0.0.1:39195/torc-service/v1/workflows/1/is_complete)"
+        ));
+        assert!(is_retryable_error(
+            "error in reqwest: error decoding response body"
+        ));
 
         // HTTP 5xx from generated client
         assert!(is_retryable_error(
