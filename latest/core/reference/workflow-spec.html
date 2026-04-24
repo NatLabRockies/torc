@@ -196,6 +196,7 @@ written in YAML, JSON, JSON5, or KDL formats.</p>
 <tr><td><code>project</code></td><td>string</td><td>none</td><td>Project name or identifier for grouping workflows</td></tr>
 <tr><td><code>metadata</code></td><td>string</td><td>none</td><td>Arbitrary metadata as JSON string</td></tr>
 <tr><td><code>parameters</code></td><td>map&lt;string, string&gt;</td><td>none</td><td>Shared parameters that can be used by jobs and files via <code>use_parameters</code></td></tr>
+<tr><td><code>env</code></td><td>map&lt;string, string&gt;</td><td>none</td><td>Environment variables exported for every job in the workflow</td></tr>
 <tr><td><code>jobs</code></td><td>[<a href="#jobspec">JobSpec</a>]</td><td><em>required</em></td><td>Jobs that make up this workflow</td></tr>
 <tr><td><code>files</code></td><td>[<a href="#filespec">FileSpec</a>]</td><td>none</td><td>Files associated with this workflow</td></tr>
 <tr><td><code>user_data</code></td><td>[<a href="#userdataspec">UserDataSpec</a>]</td><td>none</td><td>User data associated with this workflow</td></tr>
@@ -213,20 +214,28 @@ written in YAML, JSON, JSON5, or KDL formats.</p>
 <tr><td><code>enable_ro_crate</code></td><td>boolean</td><td>false</td><td>Enable automatic <a href="../concepts/ro-crate.html">RO-Crate</a> provenance tracking</td></tr>
 </tbody></table>
 </div>
-<h3 id="examples-with-project-and-metadata"><a class="header" href="#examples-with-project-and-metadata">Examples with project and metadata</a></h3>
+<h3 id="examples-with-project-metadata-and-shared-environment"><a class="header" href="#examples-with-project-metadata-and-shared-environment">Examples with project, metadata, and shared environment</a></h3>
 <p>The <code>project</code> and <code>metadata</code> fields are useful for organizing and categorizing workflows. For more
 detailed guidance on organizing workflows, see
 <a href="../workflows/organizing-workflows.html">Organizing and Managing Workflows</a>.</p>
+<p>Use the top-level <code>env</code> map to export environment variables for every job in the workflow. Jobs can
+also define their own <code>env</code> map to add variables or override workflow-level values with the same
+key.</p>
 <p><strong>YAML example:</strong></p>
 <pre><code class="language-yaml">name: "ml_training_workflow"
 project: "customer-churn-prediction"
 metadata: '{"environment":"staging","version":"1.0.0","team":"ml-engineering"}'
 description: "Train and evaluate churn prediction model"
+env:
+  DATA_ROOT: "/scratch/churn"
+  LOG_LEVEL: "info"
 jobs:
   - name: "preprocess"
     command: "python preprocess.py"
   - name: "train"
     command: "python train.py"
+    env:
+      LOG_LEVEL: "debug"
     depends_on: ["preprocess"]
 </code></pre>
 <p><strong>JSON example:</strong></p>
@@ -235,10 +244,17 @@ jobs:
   "project": "analytics-platform",
   "metadata": "{\"cost_center\":\"eng-data\",\"priority\":\"high\"}",
   "description": "Daily data processing pipeline",
+  "env": {
+    "DATA_ROOT": "/scratch/analytics",
+    "LOG_LEVEL": "info"
+  },
   "jobs": [
     {
       "name": "extract",
-      "command": "python extract.py"
+      "command": "python extract.py",
+      "env": {
+        "LOG_LEVEL": "debug"
+      }
     }
   ]
 }
@@ -250,6 +266,7 @@ jobs:
 <tr><td><code>command</code></td><td>string</td><td><em>required</em></td><td>Command to execute for this job</td></tr>
 <tr><td><code>priority</code></td><td>integer</td><td><code>0</code></td><td>Scheduling priority; higher values are claimed before lower values</td></tr>
 <tr><td><code>invocation_script</code></td><td>string</td><td>none</td><td>Optional script for job invocation</td></tr>
+<tr><td><code>env</code></td><td>map&lt;string, string&gt;</td><td>none</td><td>Environment variables exported for this job</td></tr>
 <tr><td><code>resource_requirements</code></td><td>string</td><td>none</td><td>Name of a <a href="#resourcerequirementsspec">ResourceRequirementsSpec</a> to use</td></tr>
 <tr><td><code>failure_handler</code></td><td>string</td><td>none</td><td>Name of a <a href="#failurehandlerspec">FailureHandlerSpec</a> to use</td></tr>
 <tr><td><code>scheduler</code></td><td>string</td><td>none</td><td>Name of the scheduler to use for this job</td></tr>
@@ -270,6 +287,9 @@ jobs:
 <tr><td><code>stdio</code></td><td><a href="#stdioconfig">StdioConfig</a></td><td>none</td><td>Per-job override for stdout/stderr capture (overrides workflow-level)</td></tr>
 </tbody></table>
 </div>
+<p>When both workflow-level and job-level <code>env</code> maps are present, Torc merges them when the job is
+created and stores the effective environment on the job. Job-level values win on key conflicts. Torc
+exports these variables before running the job's <code>invocation_script</code>, if any.</p>
 <h2 id="filespec"><a class="header" href="#filespec">FileSpec</a></h2>
 <p>Defines input/output file artifacts that establish implicit job dependencies.</p>
 <div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
