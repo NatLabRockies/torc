@@ -418,12 +418,13 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
     // Detect `:memory:` from the *pre-rewrite* URL via exact match. Substring
     // matching on the post-rewrite URL would false-positive on on-disk paths
     // that happen to contain `:memory:` (colons are legal in Unix filenames).
-    // Accept the bare form (`:memory:`) too, since that is what users naturally
-    // type when setting `DATABASE_URL` directly.
-    let in_memory = matches!(
-        database_url.as_str(),
-        ":memory:" | "sqlite::memory:" | "sqlite::memory"
-    );
+    // Two forms to accept:
+    //  - `sqlite::memory:` is what our own `-d :memory:` produces via the
+    //    `format!("sqlite:{}", ...)` above, and is also the canonical sqlx
+    //    URL form for in-memory.
+    //  - `:memory:` is the bare SQLite spelling, which users naturally type
+    //    when setting `DATABASE_URL` directly.
+    let in_memory = matches!(database_url.as_str(), ":memory:" | "sqlite::memory:");
 
     // A bare `:memory:` URI gives each pool connection its own private database,
     // which silently breaks data sharing across connections and prevents
