@@ -415,12 +415,22 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
         env::var("DATABASE_URL").expect("DATABASE_URL must be set or --database must be provided")
     };
 
+    // Detect `:memory:` from the *pre-rewrite* URL via exact match. Substring
+    // matching on the post-rewrite URL would false-positive on on-disk paths
+    // that happen to contain `:memory:` (colons are legal in Unix filenames).
+    // Accept the bare form (`:memory:`) too, since that is what users naturally
+    // type when setting `DATABASE_URL` directly.
+    let in_memory = matches!(
+        database_url.as_str(),
+        ":memory:" | "sqlite::memory:" | "sqlite::memory"
+    );
+
     // A bare `:memory:` URI gives each pool connection its own private database,
     // which silently breaks data sharing across connections and prevents
     // VACUUM INTO snapshots from observing any data. Rewrite to shared-cache
     // memory mode so all pool connections see the same database. Snapshots
     // (SIGUSR1) are how results are persisted in this mode.
-    let database_url = if database_url == "sqlite::memory:" || database_url == "sqlite::memory" {
+    let database_url = if in_memory {
         info!(
             "Using shared-cache in-memory database. Send SIGUSR1 to the server \
              to snapshot the database to disk. Configure with \
@@ -431,7 +441,6 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
     } else {
         database_url
     };
-    let in_memory = database_url.contains(":memory:");
 
     // Build Tokio runtime with user-specified thread count
     let runtime = tokio::runtime::Builder::new_multi_thread()

@@ -78,8 +78,11 @@ const DEFAULT_SNAPSHOT_KEEP: usize = 5;
 
 #[derive(Clone)]
 struct SnapshotConfig {
-    /// Absolute path to the canonical (newest) snapshot. Older snapshots are
-    /// kept alongside as `<base>.1`, `<base>.2`, … up to `keep - 1`.
+    /// Path to the canonical (newest) snapshot. If configured as relative,
+    /// `from_env()` resolves it against the startup CWD when possible; if
+    /// `current_dir()` itself fails (rare) it remains relative. Older
+    /// snapshots are kept alongside as `<base>.1`, `<base>.2`, … up to
+    /// `keep - 1`.
     base: std::path::PathBuf,
     /// Total snapshots to retain (canonical + rotated). Always >= 1.
     keep: usize,

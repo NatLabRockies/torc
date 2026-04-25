@@ -156,8 +156,12 @@ impl Drop for StandaloneServer {
                         // reasonable in-memory database.
                         match rx.recv_timeout(Duration::from_secs(5)) {
                             Ok(()) => {}
-                            Err(_) => eprintln!(
+                            Err(mpsc::RecvTimeoutError::Timeout) => eprintln!(
                                 "warning: timed out waiting for final snapshot to {}",
+                                self.db_path.display()
+                            ),
+                            Err(mpsc::RecvTimeoutError::Disconnected) => eprintln!(
+                                "warning: server exited before confirming final snapshot to {}",
                                 self.db_path.display()
                             ),
                         }
