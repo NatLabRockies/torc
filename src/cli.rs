@@ -129,8 +129,28 @@ pub struct Cli {
     #[arg(short = 's', long)]
     pub standalone: bool,
     /// SQLite database path for standalone mode. Defaults to `./torc_output/torc.db`.
+    ///
+    /// With `--in-memory`, this becomes the *snapshot* destination for the
+    /// in-memory database rather than the live database file.
     #[arg(long, value_name = "PATH")]
     pub db: Option<PathBuf>,
+    /// Run the standalone server with an in-memory SQLite database (Unix only).
+    ///
+    /// The database lives in RAM for the lifetime of the command and is
+    /// snapshotted to `--db` (default `./torc_output/torc.db`) right before
+    /// shutdown, so the workflow remains queryable afterwards. Useful on HPC
+    /// compute / login nodes where shared filesystems (Lustre, GPFS, NFS) are
+    /// intermittently slow. Trade-off: if the parent process is killed
+    /// unexpectedly, any state since the last snapshot is lost.
+    #[arg(long, requires = "standalone")]
+    pub in_memory: bool,
+    /// Periodically snapshot the in-memory database while the command runs.
+    ///
+    /// Only meaningful with `--in-memory`. The snapshot briefly serializes
+    /// against writes (milliseconds for small DBs, seconds for very large
+    /// ones), so prefer larger intervals for high-throughput scenarios.
+    #[arg(long, value_name = "SECONDS", requires = "in_memory")]
+    pub snapshot_interval_seconds: Option<u64>,
     /// Path to the torc-server binary used in standalone mode.
     #[arg(
         long,

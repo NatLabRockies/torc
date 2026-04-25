@@ -147,6 +147,32 @@ torc -s exec -n hparam-sweep --description "LR sweep over ResNet50" \
 
 For the full reference, run `torc exec --help`.
 
+## Running on HPC Compute Nodes (In-Memory Mode)
+
+On HPC login or compute nodes where the shared filesystem (Lustre, GPFS, NFS) is intermittently
+slow, the standalone server's writes to `./torc_output/torc.db` can stall request handlers and slow
+the workflow as a whole. Add `--in-memory` to keep the database entirely in RAM and snapshot to disk
+only at the end:
+
+```console
+torc -s --in-memory exec -C commands.txt -j 32
+```
+
+The behavior is identical from the user's perspective — `torc_output/torc.db` is created and
+`torc -s results list` works as usual — but during the run, no SQLite traffic touches the shared
+filesystem.
+
+For longer-running workflows where losing recent state on parent-process death would be costly, add
+periodic snapshots:
+
+```console
+torc -s --in-memory --snapshot-interval-seconds 600 exec -C commands.txt -j 32
+```
+
+See
+[In-Memory Database with Snapshots](../../specialized/admin/server-deployment.md#in-memory-database-with-snapshots-advanced)
+for the full reference.
+
 ## When to Use `torc run` Instead
 
 `torc exec` is designed for ad-hoc commands. If you already have a workflow spec file (with

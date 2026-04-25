@@ -415,6 +415,24 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
         env::var("DATABASE_URL").expect("DATABASE_URL must be set or --database must be provided")
     };
 
+    // A bare `:memory:` URI gives each pool connection its own private database,
+    // which silently breaks data sharing across connections and prevents
+    // VACUUM INTO snapshots from observing any data. Rewrite to shared-cache
+    // memory mode so all pool connections see the same database. Snapshots
+    // (SIGUSR1) are how results are persisted in this mode.
+    let database_url = if database_url == "sqlite::memory:" || database_url == "sqlite::memory" {
+        info!(
+            "Using shared-cache in-memory database. Send SIGUSR1 to the server \
+             to snapshot the database to disk. Configure with \
+             TORC_SERVER_SNAPSHOT_PATH (default ./torc-server-snapshot.db) and \
+             TORC_SERVER_SNAPSHOT_KEEP (default 5)."
+        );
+        "sqlite:file::memory:?cache=shared".to_string()
+    } else {
+        database_url
+    };
+    let in_memory = database_url.contains(":memory:");
+
     // Build Tokio runtime with user-specified thread count
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(config.threads as usize)
@@ -440,10 +458,13 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
         // - The background unblock task (1 connection)
         // - Concurrent read queries while write transactions hold connections
         let max_connections = config.threads.max(2) + 2;
-        let pool = SqlitePoolOptions::new()
-            .max_connections(max_connections)
-            .connect_with(connect_options)
-            .await?;
+        let mut pool_options = SqlitePoolOptions::new().max_connections(max_connections);
+        if in_memory {
+            // Shared-cache in-memory databases are destroyed when the last
+            // connection closes, so keep at least one connection alive.
+            pool_options = pool_options.min_connections(1);
+        }
+        let pool = pool_options.connect_with(connect_options).await?;
 
         let version = env!("CARGO_PKG_VERSION");
         let git_hash = env!("GIT_HASH");

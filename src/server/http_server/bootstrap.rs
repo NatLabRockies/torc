@@ -71,6 +71,158 @@ pub(super) async fn sync_admin_group(
     Ok(())
 }
 
+/// Default base path for snapshots when `TORC_SERVER_SNAPSHOT_PATH` is unset.
+const DEFAULT_SNAPSHOT_PATH: &str = "torc-server-snapshot.db";
+/// Default number of snapshots to keep when `TORC_SERVER_SNAPSHOT_KEEP` is unset.
+const DEFAULT_SNAPSHOT_KEEP: usize = 5;
+
+#[derive(Clone)]
+struct SnapshotConfig {
+    /// Absolute path to the canonical (newest) snapshot. Older snapshots are
+    /// kept alongside as `<base>.1`, `<base>.2`, … up to `keep - 1`.
+    base: std::path::PathBuf,
+    /// Total snapshots to retain (canonical + rotated). Always >= 1.
+    keep: usize,
+}
+
+impl SnapshotConfig {
+    fn from_env() -> Self {
+        let base_raw = std::env::var("TORC_SERVER_SNAPSHOT_PATH")
+            .unwrap_or_else(|_| DEFAULT_SNAPSHOT_PATH.to_string());
+        let base = std::path::PathBuf::from(&base_raw);
+        // Resolve relative paths once, at startup, against the launch CWD so
+        // the SQLite worker thread doesn't resolve them against something else.
+        let base = if base.is_absolute() {
+            base
+        } else {
+            std::env::current_dir()
+                .map(|c| c.join(&base))
+                .unwrap_or(base)
+        };
+
+        let keep = std::env::var("TORC_SERVER_SNAPSHOT_KEEP")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .map(|n| n.max(1))
+            .unwrap_or(DEFAULT_SNAPSHOT_KEEP);
+
+        Self { base, keep }
+    }
+
+    fn tmp_path(&self) -> std::path::PathBuf {
+        let mut p = self.base.clone().into_os_string();
+        p.push(".tmp");
+        p.into()
+    }
+
+    /// Path for the `n`th rotated snapshot (n >= 1). `.1` is the
+    /// most recently rotated (i.e., the previous canonical).
+    fn rotated_path(&self, n: usize) -> std::path::PathBuf {
+        let mut p = self.base.clone().into_os_string();
+        p.push(format!(".{}", n));
+        p.into()
+    }
+}
+
+/// Listen for SIGUSR1 and snapshot the database via SQLite's `VACUUM INTO`.
+/// Works for both on-disk and `:memory:` databases and is the persistence
+/// mechanism for in-memory deployments (e.g. HPC login/compute nodes where
+/// Lustre is unreliable).
+///
+/// Snapshots are written to a `.tmp` sibling first and then atomically renamed
+/// into place, so a failed or interrupted snapshot never corrupts a prior one.
+/// Older snapshots are rotated to `<base>.1`, `<base>.2`, … so the canonical
+/// path always points at the newest snapshot.
+///
+/// Configured via env vars: `TORC_SERVER_SNAPSHOT_PATH` (default
+/// `./torc-server-snapshot.db`) and `TORC_SERVER_SNAPSHOT_KEEP` (default 5,
+/// minimum 1).
+#[cfg(unix)]
+async fn snapshot_on_sigusr1(pool: SqlitePool) {
+    use tokio::signal::unix::{SignalKind, signal};
+    let mut sig = match signal(SignalKind::user_defined1()) {
+        Ok(s) => s,
+        Err(e) => {
+            error!("Failed to install SIGUSR1 handler: {}", e);
+            return;
+        }
+    };
+    let cfg = SnapshotConfig::from_env();
+    info!(
+        "SIGUSR1 handler installed: send SIGUSR1 to snapshot the database to {} (keeping {} total)",
+        cfg.base.display(),
+        cfg.keep
+    );
+    while sig.recv().await.is_some() {
+        snapshot_once(&pool, &cfg).await;
+    }
+}
+
+#[cfg(unix)]
+async fn snapshot_once(pool: &SqlitePool, cfg: &SnapshotConfig) {
+    let tmp = cfg.tmp_path();
+    info!(
+        "Received SIGUSR1, snapshotting database to {}",
+        cfg.base.display()
+    );
+    let _ = tokio::fs::remove_file(&tmp).await;
+    // Inline the path (single-quote-escaped) since parameter binding for
+    // VACUUM INTO has been unreliable across SQLite versions.
+    let escaped = tmp.to_string_lossy().replace('\'', "''");
+    let sql = format!("VACUUM INTO '{}'", escaped);
+    if let Err(e) = sqlx::query(&sql).execute(pool).await {
+        error!("Failed to snapshot database: {}", e);
+        let _ = tokio::fs::remove_file(&tmp).await;
+        return;
+    }
+    if let Err(e) = rotate_and_promote(cfg, &tmp).await {
+        error!("Failed to rotate snapshots: {}", e);
+        let _ = tokio::fs::remove_file(&tmp).await;
+        return;
+    }
+    info!("Database snapshot written to {}", cfg.base.display());
+    // Emit a machine-readable line on stdout so a parent process (e.g. `torc
+    // --standalone --in-memory`) can synchronize on snapshot completion. This
+    // is a stable contract — do not change without updating the parent-side
+    // reader in `src/main.rs`. Flush explicitly because stdout is block-
+    // buffered when piped, and the parent is waiting on this exact line.
+    use std::io::Write;
+    println!("TORC_SNAPSHOT_DONE={}", cfg.base.display());
+    let _ = std::io::stdout().flush();
+}
+
+/// Rotate `<base>.{n-1}` → `<base>.{n}` for n down to 1, drop anything beyond
+/// `keep - 1`, then move the freshly-written `tmp` file into the canonical
+/// path. Each step is best-effort — a missing source is fine, since rotation
+/// runs on every snapshot but earlier slots may not exist yet.
+#[cfg(unix)]
+async fn rotate_and_promote(cfg: &SnapshotConfig, tmp: &std::path::Path) -> std::io::Result<()> {
+    if cfg.keep > 1 {
+        // Drop the oldest if it would push us over the limit. With `keep`
+        // total slots, we retain `.1 ..= .{keep - 1}` plus the canonical.
+        let oldest = cfg.rotated_path(cfg.keep - 1);
+        let _ = tokio::fs::remove_file(&oldest).await;
+        // Shift `.{n-1}` → `.{n}` from oldest to newest so we never clobber.
+        for n in (2..cfg.keep).rev() {
+            let from = cfg.rotated_path(n - 1);
+            let to = cfg.rotated_path(n);
+            match tokio::fs::rename(&from, &to).await {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(e),
+            }
+        }
+        // Demote the previous canonical to `.1`.
+        let demoted = cfg.rotated_path(1);
+        match tokio::fs::rename(&cfg.base, &demoted).await {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e),
+        }
+    }
+    tokio::fs::rename(tmp, &cfg.base).await
+}
+
 /// Build the shutdown future for the server. Resolves when any of the configured
 /// triggers fires: Ctrl+C, or (when `shutdown_on_stdin_eof` is true) EOF on stdin.
 /// The stdin-EOF trigger is used by `torc --standalone` to tie the server's
@@ -180,6 +332,14 @@ pub(super) async fn create_server(
         )
         .await;
     });
+
+    #[cfg(unix)]
+    {
+        let snapshot_pool = pool.clone();
+        tokio::spawn(async move {
+            snapshot_on_sigusr1(snapshot_pool).await;
+        });
+    }
 
     #[cfg(feature = "openapi-codegen")]
     let app = crate::server::live_router::app_router(LiveRouterState {
