@@ -1307,8 +1307,13 @@ fn init_timeseries_db(output_dir: &Path, unique_label: &str) -> SqliteResult<Con
     );
 
     let conn = Connection::open(&db_path)?;
-    conn.pragma_update(None, "journal_mode", "MEMORY")?;
-    conn.pragma_update(None, "synchronous", "OFF")?;
+    // WAL + synchronous=NORMAL keeps the DB consistent across process kills
+    // (e.g. Slurm SIGKILL on OOM) and OS crashes, while still amortizing fsync
+    // cost. With our 5-minute default flush interval, the per-commit fsync is
+    // negligible — the perf win of this monitor comes from batching, not from
+    // disabling durability.
+    conn.pragma_update(None, "journal_mode", "WAL")?;
+    conn.pragma_update(None, "synchronous", "NORMAL")?;
     conn.pragma_update(None, "temp_store", "MEMORY")?;
 
     conn.execute(
@@ -1627,17 +1632,33 @@ mod tests {
         thread::sleep(Duration::from_millis(3200));
 
         // Open a read-only connection to inspect the DB while the monitor is
-        // still running. Safe with our PRAGMAs (journal_mode=MEMORY,
-        // synchronous=OFF) because there is no on-disk journal to coordinate.
+        // still running. The writer thread holds the SQLite write lock during
+        // each flush, so set a busy_timeout and retry briefly to avoid a
+        // flaky "database is locked" failure.
         let db_path = timeseries_db_path(temp_dir.path(), "flush");
         let inspect =
             Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
                 .unwrap();
-        let mid_run_count: i64 = inspect
-            .query_row("SELECT COUNT(*) FROM job_resource_samples", [], |row| {
+        inspect.busy_timeout(Duration::from_millis(250)).unwrap();
+        let retry_deadline = Instant::now() + Duration::from_secs(2);
+        let mid_run_count: i64 = loop {
+            match inspect.query_row("SELECT COUNT(*) FROM job_resource_samples", [], |row| {
                 row.get(0)
-            })
-            .unwrap();
+            }) {
+                Ok(count) => break count,
+                Err(rusqlite::Error::SqliteFailure(err, _))
+                    if (err.code == rusqlite::ErrorCode::DatabaseBusy
+                        || err.code == rusqlite::ErrorCode::DatabaseLocked)
+                        && Instant::now() < retry_deadline =>
+                {
+                    thread::sleep(Duration::from_millis(50));
+                }
+                Err(err) => panic!(
+                    "failed to inspect mid-run sample count from {}: {err}",
+                    db_path.display()
+                ),
+            }
+        };
         drop(inspect);
 
         let _ = monitor.stop_monitoring(child.id());
@@ -1653,7 +1674,7 @@ mod tests {
     }
 
     #[test]
-    fn init_timeseries_db_uses_low_durability_pragmas() {
+    fn init_timeseries_db_uses_wal_pragmas() {
         let temp_dir = tempfile::tempdir().unwrap();
         let conn = init_timeseries_db(temp_dir.path(), "pragmas").unwrap();
 
@@ -1667,8 +1688,8 @@ mod tests {
             .query_row("PRAGMA temp_store", [], |row| row.get(0))
             .unwrap();
 
-        assert_eq!(journal_mode.to_lowercase(), "memory");
-        assert_eq!(synchronous, 0);
+        assert_eq!(journal_mode.to_lowercase(), "wal");
+        assert_eq!(synchronous, 1);
         assert_eq!(temp_store, 2);
     }
 
