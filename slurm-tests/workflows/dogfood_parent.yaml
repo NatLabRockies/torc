@@ -90,3 +90,9 @@ jobs:
     command: >-
       bash slurm-tests/scripts/run_child_test.sh
       sync_status PLACEHOLDER_ACCOUNT PLACEHOLDER_PARTITION
+
+  - name: in_memory_exec
+    resource_requirements: parent_resources
+    command: >-
+      bash slurm-tests/scripts/run_child_test.sh
+      in_memory_exec PLACEHOLDER_ACCOUNT PLACEHOLDER_PARTITION
