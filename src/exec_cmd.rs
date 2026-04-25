@@ -406,6 +406,7 @@ fn build_spec(
             generate_plots,
             jobs: jobs_cfg,
             compute_node: node_cfg,
+            ..ResourceMonitorConfig::default()
         });
     }
 

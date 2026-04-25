@@ -2246,6 +2246,7 @@ impl WorkflowSpec {
                     granularity: crate::client::resource_monitor::MonitorGranularity::Summary,
                 }),
                 compute_node: None,
+                ..crate::client::resource_monitor::ResourceMonitorConfig::default()
             });
         }
         spec.validate_env_maps()?;
@@ -2272,6 +2273,7 @@ impl WorkflowSpec {
                     granularity: crate::client::resource_monitor::MonitorGranularity::Summary,
                 }),
                 compute_node: None,
+                ..crate::client::resource_monitor::ResourceMonitorConfig::default()
             });
         }
         spec.expand_parameters()?;
