@@ -197,6 +197,7 @@ async fn snapshot_once(pool: &SqlitePool, cfg: &SnapshotConfig) {
 /// runs on every snapshot but earlier slots may not exist yet.
 #[cfg(unix)]
 async fn rotate_and_promote(cfg: &SnapshotConfig, tmp: &std::path::Path) -> std::io::Result<()> {
+    let mut demoted_canonical = false;
     if cfg.keep > 1 {
         // Drop the oldest if it would push us over the limit. With `keep`
         // total slots, we retain `.1 ..= .{keep - 1}` plus the canonical.
@@ -215,12 +216,29 @@ async fn rotate_and_promote(cfg: &SnapshotConfig, tmp: &std::path::Path) -> std:
         // Demote the previous canonical to `.1`.
         let demoted = cfg.rotated_path(1);
         match tokio::fs::rename(&cfg.base, &demoted).await {
-            Ok(()) => {}
+            Ok(()) => demoted_canonical = true,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => return Err(e),
         }
     }
-    tokio::fs::rename(tmp, &cfg.base).await
+    // Final promotion. If this fails, roll back the canonical demotion so
+    // the canonical path keeps pointing at a valid snapshot rather than
+    // disappearing on a transient FS error (out of space, permissions, etc.).
+    if let Err(e) = tokio::fs::rename(tmp, &cfg.base).await {
+        if demoted_canonical {
+            let demoted = cfg.rotated_path(1);
+            if let Err(re) = tokio::fs::rename(&demoted, &cfg.base).await {
+                error!(
+                    "snapshot promotion failed and rollback also failed; \
+                     canonical snapshot may be missing — recover from {}: {}",
+                    demoted.display(),
+                    re
+                );
+            }
+        }
+        return Err(e);
+    }
+    Ok(())
 }
 
 /// Build the shutdown future for the server. Resolves when any of the configured

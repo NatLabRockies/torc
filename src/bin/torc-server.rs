@@ -440,15 +440,23 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
         .build()?;
 
     runtime.block_on(async {
-        // Configure SQLite connection with WAL journal mode for better concurrency
-        // and foreign key constraints enabled
+        // Configure SQLite connection. On-disk databases use WAL for
+        // concurrency; in-memory databases use Memory journal mode (WAL is
+        // silently ignored for `:memory:` and would mislead operators
+        // reading the startup log).
+        let journal_mode = if in_memory {
+            SqliteJournalMode::Memory
+        } else {
+            SqliteJournalMode::Wal
+        };
         let connect_options = SqliteConnectOptions::from_str(&database_url)?
-            .journal_mode(SqliteJournalMode::Wal)
+            .journal_mode(journal_mode)
             .foreign_keys(true)
             .create_if_missing(true)
             .busy_timeout(std::time::Duration::from_secs(45))
             // NORMAL synchronous is safe with WAL and avoids fsync on every commit,
-            // reducing latency for concurrent claim/complete operations
+            // reducing latency for concurrent claim/complete operations.
+            // For in-memory mode this pragma is harmless (no fsync to elide).
             .pragma("synchronous", "NORMAL")
             // 16MB page cache (default is 2MB)
             .pragma("cache_size", "-16000");
@@ -473,7 +481,10 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
             version, git_hash
         );
         info!("Connected to database: {}", database_url);
-        info!("Database configured with WAL journal mode and foreign key constraints");
+        info!(
+            "Database configured with {} journal mode and foreign key constraints",
+            if in_memory { "Memory" } else { "WAL" }
+        );
 
         // Run embedded migrations
         info!("Running database migrations...");

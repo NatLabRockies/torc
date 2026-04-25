@@ -94,6 +94,7 @@ struct StandaloneServer {
     /// and unlocks the SIGUSR1 path.
     in_memory: bool,
     /// Receiver for `TORC_SNAPSHOT_DONE=<path>` lines from the child's stdout.
+    /// Bounded (capacity 1) so periodic-snapshot notifications can't pile up.
     /// `None` outside in-memory mode.
     snapshot_done_rx: Option<mpsc::Receiver<()>>,
     /// Sender that, when dropped, signals the periodic-snapshot thread to
@@ -140,6 +141,13 @@ impl Drop for StandaloneServer {
         // This is what makes the user-facing contract "when the command
         // returns, the workflow is queryable from --db" hold.
         if self.in_memory {
+            // Drain any pending notifications from periodic snapshots before
+            // requesting the final one — otherwise `recv_timeout` below could
+            // return immediately on a stale notification and proceed to
+            // shutdown before the *final* snapshot has actually completed.
+            if let Some(rx) = &self.snapshot_done_rx {
+                while rx.try_recv().is_ok() {}
+            }
             match self.send_sigusr1() {
                 Ok(()) => {
                     if let Some(rx) = &self.snapshot_done_rx {
@@ -322,8 +330,14 @@ fn start_standalone_server(opts: StandaloneOptions) -> Result<StandaloneServer, 
     // lines onto `snapshot_done_tx` so the parent can synchronize on snapshot
     // completion (final snapshot during Drop, or for tests).
     let (tx, rx) = mpsc::channel::<Result<String, std::io::Error>>();
+    // Bounded `sync_channel(1)` plus `try_send` gives drop-on-full semantics:
+    // if the parent hasn't yet consumed the previous snapshot notification (it
+    // only does so during Drop), additional notifications from periodic
+    // snapshots are silently dropped rather than accumulating unboundedly.
+    // The parent drains the channel before requesting the final snapshot, so
+    // it never waits on a stale notification.
     let (snapshot_done_tx, snapshot_done_rx) = if opts.in_memory {
-        let (s, r) = mpsc::channel::<()>();
+        let (s, r) = mpsc::sync_channel::<()>(1);
         (Some(s), Some(r))
     } else {
         (None, None)
@@ -336,7 +350,7 @@ fn start_standalone_server(opts: StandaloneOptions) -> Result<StandaloneServer, 
                 Ok(line) => {
                     if line.trim().starts_with("TORC_SNAPSHOT_DONE=") {
                         if let Some(s) = &snapshot_done_tx {
-                            let _ = s.send(());
+                            let _ = s.try_send(());
                         }
                         // Don't forward to stderr — internal sync line.
                         continue;
