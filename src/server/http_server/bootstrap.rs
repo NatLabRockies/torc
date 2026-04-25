@@ -140,16 +140,25 @@ impl SnapshotConfig {
 /// Configured via env vars: `TORC_SERVER_SNAPSHOT_PATH` (default
 /// `./torc-server-snapshot.db`) and `TORC_SERVER_SNAPSHOT_KEEP` (default 5,
 /// minimum 1).
+/// Replace the kernel-default SIGUSR1 disposition (which is "terminate the
+/// process") with a tokio-managed signal stream. Must be called *before* the
+/// server advertises readiness on stdout, so a parent that races between
+/// `TORC_SERVER_PORT=` and the snapshot loop can't accidentally kill the
+/// server with SIGUSR1.
 #[cfg(unix)]
-async fn snapshot_on_sigusr1(pool: SqlitePool) {
+fn register_sigusr1() -> Option<tokio::signal::unix::Signal> {
     use tokio::signal::unix::{SignalKind, signal};
-    let mut sig = match signal(SignalKind::user_defined1()) {
-        Ok(s) => s,
+    match signal(SignalKind::user_defined1()) {
+        Ok(s) => Some(s),
         Err(e) => {
             error!("Failed to install SIGUSR1 handler: {}", e);
-            return;
+            None
         }
-    };
+    }
+}
+
+#[cfg(unix)]
+async fn snapshot_on_sigusr1(pool: SqlitePool, mut sig: tokio::signal::unix::Signal) {
     let cfg = SnapshotConfig::from_env();
     info!(
         "SIGUSR1 handler installed: send SIGUSR1 to snapshot the database to {} (keeping {} total)",
@@ -168,6 +177,17 @@ async fn snapshot_once(pool: &SqlitePool, cfg: &SnapshotConfig) {
         "Received SIGUSR1, snapshotting database to {}",
         cfg.base.display()
     );
+    if let Some(parent) = cfg.base.parent()
+        && !parent.as_os_str().is_empty()
+        && let Err(e) = tokio::fs::create_dir_all(parent).await
+    {
+        error!(
+            "Failed to create snapshot directory {}: {}",
+            parent.display(),
+            e
+        );
+        return;
+    }
     let _ = tokio::fs::remove_file(&tmp).await;
     // Inline the path (single-quote-escaped) since parameter binding for
     // VACUUM INTO has been unreliable across SQLite versions.
@@ -328,6 +348,12 @@ pub(super) async fn create_server(
         .expect("Failed to get local address");
     let actual_port = actual_addr.port();
 
+    // Register the SIGUSR1 handler *before* advertising readiness so a parent
+    // that races between `TORC_SERVER_PORT=` and snapshot-loop spawn can't
+    // accidentally kill the server (default SIGUSR1 disposition is terminate).
+    #[cfg(unix)]
+    let sigusr1 = register_sigusr1();
+
     println!("TORC_SERVER_PORT={}", actual_port);
 
     if let Err(e) = sync_admin_group(&pool, &admin_users).await {
@@ -368,10 +394,10 @@ pub(super) async fn create_server(
     });
 
     #[cfg(unix)]
-    {
+    if let Some(sig) = sigusr1 {
         let snapshot_pool = pool.clone();
         tokio::spawn(async move {
-            snapshot_on_sigusr1(snapshot_pool).await;
+            snapshot_on_sigusr1(snapshot_pool, sig).await;
         });
     }
 

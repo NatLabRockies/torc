@@ -405,7 +405,6 @@ fn start_standalone_server(opts: StandaloneOptions) -> Result<StandaloneServer, 
                     // before the final synchronous snapshot.
                     let (periodic_stop_tx, periodic_handle) = if opts.in_memory
                         && let Some(secs) = opts.snapshot_interval_seconds
-                        && secs > 0
                     {
                         let (stop_tx, stop_rx) = mpsc::channel::<()>();
                         let interval = Duration::from_secs(secs);

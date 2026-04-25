@@ -149,7 +149,12 @@ pub struct Cli {
     /// Only meaningful with `--in-memory`. The snapshot briefly serializes
     /// against writes (milliseconds for small DBs, seconds for very large
     /// ones), so prefer larger intervals for high-throughput scenarios.
-    #[arg(long, value_name = "SECONDS", requires = "in_memory")]
+    #[arg(
+        long,
+        value_name = "SECONDS",
+        requires = "in_memory",
+        value_parser = clap::value_parser!(u64).range(1..)
+    )]
     pub snapshot_interval_seconds: Option<u64>,
     /// Path to the torc-server binary used in standalone mode.
     #[arg(
