@@ -234,6 +234,7 @@ POST   /workflows/{id}/reset_status              # Reset workflow state
 POST   /workflows/{id}/process_changed_job_inputs # Detect and handle input changes
 POST   /jobs/{id}/complete                       # Mark job completed
 POST   /jobs/{id}/manage_status_change           # Transition job status
+GET    /tasks/{id}                               # Poll async task status
 </code></pre>
 <p><strong>When to use action endpoints:</strong></p>
 <ul>
@@ -242,6 +243,41 @@ POST   /jobs/{id}/manage_status_change           # Transition job status
 <li>State machine transitions</li>
 <li>Batch operations</li>
 </ul>
+<h3 id="asynchronous-actions"><a class="header" href="#asynchronous-actions">Asynchronous Actions</a></h3>
+<p>Some actions are long-running and can be invoked asynchronously by passing <code>?async=true</code>. The server
+persists a task row, returns <code>202 Accepted</code> with a <code>TaskModel</code>, and performs the work in the
+background. Currently supported on <code>POST /workflows/{id}/initialize_jobs</code>.</p>
+<pre><code>POST /workflows/{id}/initialize_jobs?async=true
+  → 202 Accepted { id, workflow_id, operation, status: "queued", created_at_ms, ... }
+  → 409 Conflict if an active task already exists for this (workflow, operation)
+</code></pre>
+<p>Clients then either poll <code>GET /tasks/{id}</code> or listen on the workflow SSE stream for a
+<code>task_completed</code> event (the event's <code>data.task_id</code> identifies the task). A partial unique index
+scoped to <code>status IN ('queued', 'running')</code> enforces at most one active task per <code>workflow_id</code>.
+Different async operations on the same workflow would conflict on overlapping state, so they are
+serialized at the workflow level rather than per-operation.</p>
+<p>Repeated async requests of the <strong>same</strong> operation with the <strong>same</strong> parameters (e.g. two
+<code>initialize_jobs?async=true&amp;only_uninitialized=false</code> calls on the same workflow) are idempotent:
+the server returns the existing task with <code>202 Accepted</code> rather than starting a new one.</p>
+<p><code>409 Conflict</code> is returned when a task is already active and the new request can't safely be folded
+into it:</p>
+<ul>
+<li>A different async operation is active (future-proofing for when more async operations exist).</li>
+<li>The same operation is active but with different parameters — silently returning it would mean the
+second caller gets different semantics than it asked for.</li>
+</ul>
+<p>The 409 response body includes <code>existing_task_id</code>, <code>existing_operation</code>, and a human-readable
+<code>message</code> explaining which case fired.</p>
+<h3 id="probing-without-mutating"><a class="header" href="#probing-without-mutating">Probing without mutating</a></h3>
+<p>On a successful <code>200</code> response, <code>GET /workflows/{id}/active_task</code> returns an object of the form
+<code>{ "task": TaskModel | null }</code>. Clients use this to detect an in-flight task before running their
+own pre-steps, so they don't double-apply side effects (like bumping the workflow's <code>run_id</code>) on top
+of someone else's task. Within that <code>200</code> response, the body distinguishes "active task exists" from
+"workflow is idle" via <code>task == null</code>. The endpoint can still return <code>404</code> if the workflow doesn't
+exist or isn't accessible to the caller, and <code>500</code> for unexpected server errors.</p>
+<p>If the server restarts while a task is in-flight, the task is reconciled to <code>failed</code> on startup so
+clients never see it stuck in <code>running</code>.</p>
+<p>Task <code>status</code> progresses through <code>queued → running → succeeded | failed</code>.</p>
 <h2 id="http-methods"><a class="header" href="#http-methods">HTTP Methods</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Method</th><th>Semantics</th><th>Idempotent</th><th>Request Body</th></tr></thead><tbody>
 <tr><td>GET</td><td>Read resource(s)</td><td>Yes</td><td>No</td></tr>
@@ -320,9 +356,11 @@ POST   /jobs/{id}/manage_status_change           # Transition job status
 <div class="table-wrapper"><table><thead><tr><th>Code</th><th>Meaning</th><th>When Used</th></tr></thead><tbody>
 <tr><td>200</td><td>OK</td><td>Successful GET, PUT, PATCH, DELETE, or POST action</td></tr>
 <tr><td>201</td><td>Created</td><td>Resource created (some POST endpoints)</td></tr>
+<tr><td>202</td><td>Accepted</td><td>Async action queued; response body is a <code>TaskModel</code></td></tr>
 <tr><td>400</td><td>Bad Request</td><td>Malformed JSON, missing required fields</td></tr>
 <tr><td>403</td><td>Forbidden</td><td>User lacks permission for this resource</td></tr>
 <tr><td>404</td><td>Not Found</td><td>Resource doesn't exist</td></tr>
+<tr><td>409</td><td>Conflict</td><td>Async action already has an active task for this resource</td></tr>
 <tr><td>422</td><td>Unprocessable Entity</td><td>Valid JSON but invalid semantics (e.g., bad status transition)</td></tr>
 <tr><td>500</td><td>Internal Server Error</td><td>Unexpected server failure</td></tr>
 </tbody></table>

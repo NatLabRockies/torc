@@ -259,6 +259,36 @@ postprocess (depends on process output) → also marked
   - merge_results
   - generate_report
 </code></pre>
+<h2 id="async-reinitialization"><a class="header" href="#async-reinitialization">Async Reinitialization</a></h2>
+<p>Reinitialization runs asynchronously on the server: even though <code>torc workflows reinit</code> feels
+synchronous, it is implemented by queuing a task and waiting for it to finish. For large workflows
+the dependency graph rebuild can take seconds to minutes, which is why the work is offloaded.</p>
+<p>By default the CLI blocks on the task using the workflow SSE stream (with polling as a fallback) and
+exits non-zero if it fails. Pass <code>--async</code> to skip the wait and get the task handle back for
+scripting:</p>
+<pre><code class="language-bash"># Kick off a reinit and resume later
+task_id=$(torc -f json workflows reinit &lt;workflow_id&gt; --async | jq -r .task_id)
+# ... do other work ...
+torc tasks wait --timeout 300 "$task_id"
+</code></pre>
+<p>A few properties worth knowing:</p>
+<ul>
+<li><strong>One active task per workflow.</strong> At most one async task is in-flight for a given workflow at a
+time (different async operations would conflict on overlapping state, so they are serialized).
+Calling <code>reinit</code> while a previous reinit is still running is idempotent: the client checks for an
+active task first and returns it, so client-side pre-steps (run_id bump, status reset,
+changed-file processing) don't double-apply on top of whatever that task is doing.</li>
+<li><strong>Mismatched parameters return 409.</strong> If a reinit is active with one set of parameters and a
+second caller asks with different parameters (e.g. a different <code>only_uninitialized</code>), the server
+refuses with <code>409 Conflict</code> rather than silently returning the running task with the wrong
+semantics.</li>
+<li><strong>Crash-safe.</strong> Tasks are persisted server-side. If the server restarts while a reinit is
+in-flight, the task is marked <code>failed</code> with an explanatory error on startup, so clients polling or
+waiting receive a terminal state rather than hanging.</li>
+<li><strong>Timeout leaves the task running.</strong> If the CLI's wait times out (via <code>--wait-timeout</code>), the
+server-side task keeps going. Resume with <code>torc tasks wait &lt;id&gt;</code>.</li>
+<li><strong>Dry-run is synchronous.</strong> <code>--dry-run</code> does not create a task; it returns the preview directly.</li>
+</ul>
 <h2 id="retrying-failed-jobs"><a class="header" href="#retrying-failed-jobs">Retrying Failed Jobs</a></h2>
 <p><strong>Important:</strong> Reinitialization does not automatically retry failed jobs. To retry failed jobs, use
 <code>reset-status</code>:</p>
