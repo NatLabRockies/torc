@@ -191,6 +191,7 @@
 and compute nodes:</p>
 <pre><code class="language-yaml">resource_monitor:
   sample_interval_seconds: 5
+  flush_interval_seconds: 300
   jobs:
     enabled: true
     granularity: summary
@@ -200,6 +201,7 @@ and compute nodes:</p>
 </code></pre>
 <div class="table-wrapper"><table><thead><tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>sample_interval_seconds</code></td><td>integer</td><td><code>10</code></td><td>Seconds between all resource samples</td></tr>
+<tr><td><code>flush_interval_seconds</code></td><td>integer</td><td><code>300</code></td><td>Seconds between batched SQLite flushes for time-series samples</td></tr>
 <tr><td><code>generate_plots</code></td><td>boolean</td><td><code>false</code></td><td>Emit HTML plots after the job runner exits</td></tr>
 <tr><td><code>jobs</code></td><td>JobMonitorConfig</td><td>none</td><td>Per-job CPU and memory monitoring</td></tr>
 <tr><td><code>compute_node</code></td><td>ComputeNodeMonitorConfig</td><td>none</td><td>Overall compute-node CPU/memory monitoring</td></tr>
@@ -211,8 +213,12 @@ apply to job monitoring when <code>jobs</code> is omitted:</p>
   enabled: true
   granularity: time_series
   sample_interval_seconds: 5
+  flush_interval_seconds: 300
 </code></pre>
 <p>New workflow specs should use the explicit <code>jobs</code> block.</p>
+<p><code>flush_interval_seconds</code> only affects time-series persistence. Samples are still collected every
+<code>sample_interval_seconds</code>, but they are buffered in memory and written to SQLite in batches to
+reduce transaction overhead.</p>
 <h3 id="job-monitoring"><a class="header" href="#job-monitoring">Job Monitoring</a></h3>
 <p><code>resource_monitor.jobs</code> controls per-job CPU and memory monitoring. Summary mode stores peak and
 average values on job results. Time-series mode also stores per-sample values in a resource metrics
