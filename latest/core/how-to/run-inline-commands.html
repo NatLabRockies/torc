@@ -281,6 +281,23 @@ torc tui --standalone               # interactive browser
 </tbody></table>
 </div>
 <p>For the full reference, run <code>torc exec --help</code>.</p>
+<h2 id="running-on-hpc-compute-nodes-in-memory-mode"><a class="header" href="#running-on-hpc-compute-nodes-in-memory-mode">Running on HPC Compute Nodes (In-Memory Mode)</a></h2>
+<p>On HPC login or compute nodes where the shared filesystem (Lustre, GPFS, NFS) is intermittently
+slow, the standalone server's writes to <code>./torc_output/torc.db</code> can stall request handlers and slow
+the workflow as a whole. Add <code>--in-memory</code> to keep the database entirely in RAM and snapshot to disk
+only at the end:</p>
+<pre><code class="language-console">torc -s --in-memory exec -C commands.txt -j 32
+</code></pre>
+<p>The behavior is identical from the user's perspective — <code>torc_output/torc.db</code> is created and
+<code>torc -s results list</code> works as usual — but during the run, no SQLite traffic touches the shared
+filesystem.</p>
+<p>For longer-running workflows where losing recent state on parent-process death would be costly, add
+periodic snapshots:</p>
+<pre><code class="language-console">torc -s --in-memory --snapshot-interval-seconds 600 exec -C commands.txt -j 32
+</code></pre>
+<p>See
+<a href="../../specialized/admin/server-deployment.html#in-memory-database-with-snapshots-advanced">In-Memory Database with Snapshots</a>
+for the full reference.</p>
 <h2 id="when-to-use-torc-run-instead"><a class="header" href="#when-to-use-torc-run-instead">When to Use <code>torc run</code> Instead</a></h2>
 <p><code>torc exec</code> is designed for ad-hoc commands. If you already have a workflow spec file (with
 dependencies, resource requirements, failure handlers, etc.), use

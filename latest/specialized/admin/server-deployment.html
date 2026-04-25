@@ -284,6 +284,10 @@ RUST_LOG=debug torc-server run --log-dir /var/log/torc
 <li><code>TORC_LOG_DIR</code>: Default log directory</li>
 <li><code>RUST_LOG</code>: Default log level</li>
 <li><code>TORC_MAX_REQUEST_BODY_MB</code>: Override the bulk job upload request-body limit in MiB</li>
+<li><code>TORC_SERVER_SNAPSHOT_PATH</code>: Snapshot output path for in-memory mode (default
+<code>./torc-server-snapshot.db</code>). See
+<a href="#in-memory-database-with-snapshots-advanced">In-Memory Database with Snapshots</a>.</li>
+<li><code>TORC_SERVER_SNAPSHOT_KEEP</code>: Number of snapshots to retain (default <code>5</code>, minimum <code>1</code>)</li>
 </ul>
 <p>Example:</p>
 <pre><code class="language-bash">export TORC_LOG_DIR=/var/log/torc
@@ -316,6 +320,118 @@ kill $(cat /var/run/torc-server.pid)
 # Or forcefully
 kill -9 $(cat /var/run/torc-server.pid)
 </code></pre>
+<h2 id="in-memory-database-with-snapshots-advanced"><a class="header" href="#in-memory-database-with-snapshots-advanced">In-Memory Database with Snapshots (Advanced)</a></h2>
+<p>Torc-server supports running entirely from a SQLite in-memory database, with on-demand snapshots to
+disk for persistence. This mode is intended for <strong>HPC login and compute nodes where shared
+filesystems (Lustre, GPFS, NFS) are intermittently slow</strong>. SQLite running against a stalled shared
+filesystem can hang request handlers for tens of seconds; running in memory eliminates that failure
+mode entirely.</p>
+<p>This is an advanced feature. The trade-off is straightforward: the database lives in RAM, and any
+data not yet snapshotted is lost if the process dies. Use it when you understand that trade-off and
+want to opt into it explicitly.</p>
+<h3 id="starting-the-server-in-memory"><a class="header" href="#starting-the-server-in-memory">Starting the Server In-Memory</a></h3>
+<p>Pass <code>:memory:</code> as the database path:</p>
+<pre><code class="language-bash">torc-server run -d ":memory:" -p 8080
+</code></pre>
+<p>On startup the server logs a confirmation message describing the snapshot configuration. Internally
+the server uses SQLite shared-cache memory mode so all pool connections share a single database;
+this is handled automatically — you only need to pass <code>:memory:</code>.</p>
+<h3 id="persisting-state-with-sigusr1"><a class="header" href="#persisting-state-with-sigusr1">Persisting State with SIGUSR1</a></h3>
+<p>To snapshot the in-memory database to disk, send <code>SIGUSR1</code> to the server process:</p>
+<pre><code class="language-bash">kill -USR1 $(pgrep -f 'torc-server run')
+</code></pre>
+<p>The server uses SQLite's <a href="https://sqlite.org/lang_vacuum.html#vacuuminto"><code>VACUUM INTO</code></a> to write a
+consistent point-in-time copy without blocking writers. The snapshot is written to a <code>.tmp</code> sibling
+first and then atomically renamed into place, so an interrupted snapshot can never corrupt a prior
+one.</p>
+<p>This works the same way for on-disk databases — you can use it as a hot-backup mechanism even when
+not running in memory.</p>
+<h3 id="snapshot-rotation"><a class="header" href="#snapshot-rotation">Snapshot Rotation</a></h3>
+<p>By default the server keeps <strong>5 snapshots</strong>, with the canonical path always pointing at the newest:</p>
+<pre><code class="language-text">./torc-server-snapshot.db      # newest
+./torc-server-snapshot.db.1    # previous
+./torc-server-snapshot.db.2
+./torc-server-snapshot.db.3
+./torc-server-snapshot.db.4    # oldest
+</code></pre>
+<p>On each <code>SIGUSR1</code>, older snapshots are shifted down (<code>.1</code> → <code>.2</code>, etc.), the oldest is dropped, and
+the freshly-written snapshot is renamed into the canonical path. If <code>TORC_SERVER_SNAPSHOT_KEEP=1</code>,
+no rotation happens — each snapshot simply overwrites the previous one.</p>
+<h3 id="configuration"><a class="header" href="#configuration">Configuration</a></h3>
+<p>Two environment variables control snapshot behavior:</p>
+<div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>TORC_SERVER_SNAPSHOT_PATH</code></td><td><code>./torc-server-snapshot.db</code></td><td>Output path for the canonical (newest) snapshot. Relative paths resolve against the launch CWD.</td></tr>
+<tr><td><code>TORC_SERVER_SNAPSHOT_KEEP</code></td><td><code>5</code></td><td>Total snapshots retained (canonical + rotated). Minimum <code>1</code>.</td></tr>
+</tbody></table>
+</div>
+<pre><code class="language-bash">export TORC_SERVER_SNAPSHOT_PATH=/scratch/$USER/torc-snapshots/torc.db
+export TORC_SERVER_SNAPSHOT_KEEP=10
+torc-server run -d ":memory:" -p 8080
+</code></pre>
+<p>Pick a snapshot path on <strong>fast local storage</strong> (e.g. <code>/tmp</code>, <code>/scratch</code>) — writing snapshots to the
+same slow shared filesystem that motivated in-memory mode in the first place defeats the purpose.</p>
+<h3 id="standalone-mode-torc---standalone---in-memory"><a class="header" href="#standalone-mode-torc---standalone---in-memory">Standalone Mode (<code>torc --standalone --in-memory</code>)</a></h3>
+<p>For ad-hoc workflows on HPC compute / login nodes, the easier entry point is the standalone client
+flag — you do not need to manage <code>torc-server</code> directly. Both <code>exec</code> (inline commands) and <code>run</code>
+(workflow spec files) support <code>--in-memory</code>:</p>
+<pre><code class="language-bash"># Inline commands
+torc -s --in-memory exec -C commands.txt -j 8
+
+# Workflow specification file
+torc -s --in-memory run workflow.yaml
+</code></pre>
+<p>This launches an ephemeral in-memory <code>torc-server</code>, runs the workflow against it, and snapshots the
+final database to <code>./torc_output/torc.db</code> (or wherever <code>--db</code> points) right before shutdown. After
+the command returns, the workflow is queryable like any other:</p>
+<pre><code class="language-bash">torc -s results list
+torc -s workflows list
+torc tui --standalone
+</code></pre>
+<p><code>--in-memory</code> is restricted to <code>exec</code> and <code>run</code> — commands that <em>create</em> workflow state in the same
+invocation. It is rejected for read-only commands like <code>results list</code> or <code>workflows list</code> because
+those would snapshot an empty database over your existing <code>torc_output/torc.db</code> and destroy prior
+data.</p>
+<p>Add <code>--snapshot-interval-seconds &lt;N&gt;</code> to also snapshot periodically while the workflow is running.
+Each snapshot briefly serializes against writes (milliseconds for small DBs, seconds for very large
+ones), so prefer larger values — <code>600</code> (10 minutes) is a sensible default for high-throughput
+workloads:</p>
+<pre><code class="language-bash">torc -s --in-memory --snapshot-interval-seconds 600 run workflow.yaml
+</code></pre>
+<p>If the parent process is killed unexpectedly, only state since the last snapshot is lost. Users who
+need stronger durability should not opt into <code>--in-memory</code> in the first place.</p>
+<h3 id="restarting-from-a-snapshot"><a class="header" href="#restarting-from-a-snapshot">Restarting from a Snapshot</a></h3>
+<p>A snapshot file is a normal SQLite database. To resume from one, copy it into place and start the
+server pointing at it:</p>
+<pre><code class="language-bash">cp /scratch/$USER/torc-snapshots/torc.db /tmp/torc-resume.db
+torc-server run -d /tmp/torc-resume.db -p 8080
+</code></pre>
+<p>If you want to keep running in memory but seed from a prior snapshot, that's not currently supported
+— the in-memory database always starts empty.</p>
+<h3 id="when-to-use-this"><a class="header" href="#when-to-use-this">When to Use This</a></h3>
+<p>Good fits:</p>
+<ul>
+<li><strong>HPC login/compute nodes</strong> with slow or unreliable shared filesystems</li>
+<li><strong>Short-lived workflow runs</strong> where you can afford to take a snapshot at the end</li>
+<li><strong>Performance-sensitive scenarios</strong> where you want to eliminate disk I/O from the hot path</li>
+</ul>
+<p>Poor fits:</p>
+<ul>
+<li>Long-running production servers (use a regular on-disk database with backups)</li>
+<li>Multi-day workflows where losing recent state on process death would be costly</li>
+<li>Deployments without operator access to send signals (signals are local-only; there is no remote
+snapshot endpoint)</li>
+</ul>
+<h3 id="operational-notes"><a class="header" href="#operational-notes">Operational Notes</a></h3>
+<ul>
+<li><strong>Snapshots are signal-driven, not automatic.</strong> Schedule them via cron, a sidecar, or
+workflow-completion hooks if you want periodic captures.</li>
+<li><strong>The snapshot completes on the server's signal-handler task</strong>, so it does not block HTTP request
+handlers. A snapshot of a small database typically completes in milliseconds; large databases
+scale linearly with size.</li>
+<li><strong><code>SIGUSR1</code> is Unix-only.</strong> This feature is not available on Windows.</li>
+<li><strong>Process death loses unsaved data.</strong> Always snapshot before stopping the server if you care about
+the current state. <code>SIGTERM</code>/<code>SIGINT</code> (graceful shutdown) does <strong>not</strong> automatically snapshot.</li>
+</ul>
 <h2 id="complete-example-production-deployment"><a class="header" href="#complete-example-production-deployment">Complete Example: Production Deployment</a></h2>
 <pre><code class="language-bash">#!/bin/bash
 # Production deployment script
