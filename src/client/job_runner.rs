@@ -47,9 +47,18 @@ use crate::client::workflow_spec::{ExecutionConfig, ExecutionMode};
 use crate::config::TorcConfig;
 use crate::memory_utils::memory_string_to_gb;
 use crate::models::{
-    ComputeNodesResources, JobStatus, ResourceRequirementsModel, ResultModel, SlurmStatsModel,
-    WorkflowModel,
+    BatchCompleteJobsRequest, ComputeNodesResources, JobCompletionEntry, JobStatus,
+    ResourceRequirementsModel, ResultModel, SlurmStatsModel, WorkflowModel,
 };
+
+/// Local-side result of preparing a job completion: the data to send to the
+/// server in a `batch_complete_jobs` call. Returned by `prepare_job_completion`
+/// for jobs that were not retried locally.
+struct PreparedCompletion {
+    job_id: i64,
+    final_result: ResultModel,
+    slurm_stats: Option<SlurmStatsModel>,
+}
 
 /// Rule definition for failure handler (parsed from JSON stored in database)
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -731,10 +740,13 @@ impl JobRunner {
                 }
             }
 
-            if let Err(e) = self.check_job_status() {
-                self.kill_running_jobs();
-                return Err(e);
-            }
+            let completions = match self.check_job_status() {
+                Ok(count) => count,
+                Err(e) => {
+                    self.kill_running_jobs();
+                    return Err(e);
+                }
+            };
             if self.execution_config.limit_resources()
                 && exec_mode == ExecutionMode::Direct
                 && let Err(e) = self.handle_oom_violations()
@@ -748,7 +760,7 @@ impl JobRunner {
             if let Some(max) = self.max_parallel_jobs {
                 // Parallelism-based mode: skip if already at max parallel jobs
                 if (self.running_jobs.len() as i64) < max {
-                    self.run_ready_jobs_based_on_user_parallelism()
+                    self.run_ready_jobs_based_on_user_parallelism();
                 } else {
                     debug!(
                         "Skipping job claim: at max parallel jobs ({}/{})",
@@ -759,7 +771,7 @@ impl JobRunner {
             } else {
                 // Resource-based mode: skip if no CPUs available or memory nearly exhausted
                 if self.resources.num_cpus > 0 && self.resources.memory_gb >= 0.1 {
-                    self.run_ready_jobs_based_on_resources()
+                    self.run_ready_jobs_based_on_resources();
                 } else {
                     debug!(
                         "Skipping job claim: no capacity (cpus={}, memory_gb={:.2})",
@@ -768,7 +780,16 @@ impl JobRunner {
                 }
             }
 
-            thread::sleep(Duration::from_secs_f64(self.job_completion_poll_interval));
+            // Skip the poll-interval sleep when this iteration reported one or
+            // more completions. Completions free capacity and the deferred
+            // unblock task may have made more jobs ready in the meantime, so
+            // reacting immediately closes the idle gap between a short job
+            // completing and the next job filling its slot. Skipping sleep on
+            // claim/start would not help — the subprocess still needs time to
+            // run before the next interesting event.
+            if completions == 0 {
+                thread::sleep(Duration::from_secs_f64(self.job_completion_poll_interval));
+            }
 
             if self.is_termination_requested() {
                 info!("Termination requested (SIGTERM received). Terminating jobs.");
@@ -1006,13 +1027,11 @@ impl JobRunner {
                 }
             };
         }
-        for (job_id, result) in results {
-            if let Err(e) = self.handle_job_completion(job_id, result) {
-                error!(
-                    "Failed to record canceled job completion workflow_id={} job_id={}: {}",
-                    self.workflow_id, job_id, e
-                );
-            }
+        if let Err(e) = self.handle_completions_batch(results) {
+            error!(
+                "Failed to record canceled job completions workflow_id={}: {}",
+                self.workflow_id, e
+            );
         }
     }
 
@@ -1191,18 +1210,21 @@ impl JobRunner {
         }
 
         // Final pass: handle completions (notify server)
-        for (job_id, result) in results {
-            if let Err(e) = self.handle_job_completion(job_id, result) {
-                error!(
-                    "Failed to record terminated job completion workflow_id={} job_id={}: {}",
-                    self.workflow_id, job_id, e
-                );
-            }
+        if let Err(e) = self.handle_completions_batch(results) {
+            error!(
+                "Failed to record terminated job completions workflow_id={}: {}",
+                self.workflow_id, e
+            );
         }
     }
 
     /// Check the status of running jobs and remove completed ones.
-    fn check_job_status(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    /// Detect locally-completed jobs and report them to the server.
+    ///
+    /// Returns the number of completions handled this iteration. Callers use
+    /// this to decide whether the runner should re-enter the main loop
+    /// immediately rather than sleeping.
+    fn check_job_status(&mut self) -> Result<usize, Box<dyn std::error::Error>> {
         let mut completed_jobs = Vec::new();
         let mut job_results = Vec::new();
 
@@ -1233,9 +1255,11 @@ impl JobRunner {
             }
         }
 
-        // Second pass: validate output files and complete jobs
+        let completion_count = job_results.len();
+
+        // Second pass: validate output files, then report all completions in one batch.
+        let mut to_report = Vec::with_capacity(completion_count);
         for (job_id, mut result, output_file_ids) in job_results {
-            // Validate output files if job completed successfully
             if result.return_code == 0
                 && let Err(e) = self.validate_and_update_output_files(job_id, &output_file_ids)
             {
@@ -1243,10 +1267,10 @@ impl JobRunner {
                 result.return_code = 1;
                 result.status = JobStatus::Failed;
             }
-
-            self.handle_job_completion(job_id, result)?;
+            to_report.push((job_id, result));
         }
-        Ok(())
+        self.handle_completions_batch(to_report)?;
+        Ok(completion_count)
     }
 
     /// Handle OOM violations detected by the resource monitor.
@@ -1340,9 +1364,7 @@ impl JobRunner {
         }
 
         // Third pass: handle completions (notify server)
-        for (job_id, result) in results {
-            self.handle_job_completion(job_id, result)?;
-        }
+        self.handle_completions_batch(results)?;
         Ok(())
     }
 
@@ -1546,11 +1568,32 @@ impl JobRunner {
         }
     }
 
-    fn handle_job_completion(
+    /// Prepare and report a list of (job_id, result) completions in one batched
+    /// server call. Each completion is run through the local-side preparation
+    /// pipeline (recovery, status determination, side-effect flags); the
+    /// surviving entries (those not retried locally) are then sent in a single
+    /// `batch_complete_jobs` request.
+    fn handle_completions_batch(
+        &mut self,
+        completions: Vec<(i64, ResultModel)>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let prepared: Vec<PreparedCompletion> = completions
+            .into_iter()
+            .filter_map(|(job_id, result)| self.prepare_job_completion(job_id, result))
+            .collect();
+        self.report_completions_batch(prepared)
+    }
+
+    /// Run the local-side preparation for a job completion: collect Slurm stats,
+    /// run failure-handler recovery, settle on the final status, and update
+    /// runner-level flags. Returns `None` when recovery scheduled a retry (in
+    /// which case all local cleanup has already happened); otherwise returns
+    /// the data that needs to be reported to the server.
+    fn prepare_job_completion(
         &mut self,
         job_id: i64,
         result: ResultModel,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Option<PreparedCompletion> {
         // Take sacct stats now, before the result is sent to the server, so we can backfill
         // resource fields.  For srun-wrapped jobs the sysinfo monitor only sees the srun process
         // (negligible overhead), so sacct provides the authoritative peak memory and CPU data.
@@ -1564,7 +1607,6 @@ impl JobRunner {
             backfill_sacct_into_result(&mut final_result, stats);
         }
 
-        // Get job info before removing from running_jobs
         let job_info = self.running_jobs.get(&job_id).map(|cmd| {
             (
                 cmd.job.name.clone(),
@@ -1573,14 +1615,12 @@ impl JobRunner {
             )
         });
 
-        // Check if we should try to recover a failed or terminated job
         if matches!(
             final_result.status,
             JobStatus::Failed | JobStatus::Terminated
         ) && let Some((job_name, attempt_id, failure_handler_id)) = &job_info
         {
             let return_code = final_result.return_code;
-            // Try to recover the job if it has a failure handler
             let outcome = self.try_recover_job(
                 job_id,
                 job_name,
@@ -1591,7 +1631,6 @@ impl JobRunner {
 
             match outcome {
                 RecoveryOutcome::Retried => {
-                    // Job was successfully scheduled for retry - clean up but don't mark as failed
                     info!(
                         "Job retry scheduled workflow_id={} job_id={} job_name={} return_code={} attempt_id={}",
                         self.workflow_id, job_id, job_name, return_code, attempt_id
@@ -1603,114 +1642,163 @@ impl JobRunner {
                     self.last_job_claimed_time = Some(Instant::now());
                     self.running_jobs.remove(&job_id);
                     self.job_resources.remove(&job_id);
-                    return Ok(());
+                    return None;
                 }
                 RecoveryOutcome::NoHandler | RecoveryOutcome::NoMatchingRule => {
-                    // Check if workflow has use_pending_failed enabled
                     if self.workflow.use_pending_failed.unwrap_or(false) {
-                        // Use PendingFailed status for AI-assisted recovery
                         info!(
                             "Job pending_failed workflow_id={} job_id={} job_name={} return_code={} reason={:?}",
                             self.workflow_id, job_id, job_name, return_code, outcome
                         );
                         final_result.status = JobStatus::PendingFailed;
                     } else {
-                        // Use Failed status (default behavior)
                         debug!(
                             "Job failed workflow_id={} job_id={} job_name={} return_code={} reason={:?}",
                             self.workflow_id, job_id, job_name, return_code, outcome
                         );
-                        // Keep status as Failed
                     }
                 }
                 RecoveryOutcome::MaxRetriesExceeded | RecoveryOutcome::Error(_) => {
-                    // Max retries exceeded or error - use Failed status (no recovery possible)
                     debug!(
                         "Job failed workflow_id={} job_id={} reason={:?}",
                         self.workflow_id, job_id, outcome
                     );
-                    // Keep status as Failed
                 }
             }
         }
 
-        // Track failures and terminations (if we reach here, no retry happened)
         match final_result.status {
             JobStatus::Failed | JobStatus::PendingFailed => self.had_failures = true,
             JobStatus::Terminated => self.had_terminations = true,
             _ => {}
         }
 
-        let status_str = format!("{:?}", final_result.status).to_lowercase();
-        match self.send_with_retries(|| {
-            Self::box_retry_error(apis::jobs_api::complete_job(
+        Some(PreparedCompletion {
+            job_id,
+            final_result,
+            slurm_stats,
+        })
+    }
+
+    /// Send a batch of prepared completions in a single request and run the
+    /// post-success finalization for each one (slurm stats upload, resource
+    /// release, stdio cleanup, removal from local state). Returns an error if
+    /// the batch call itself fails after retries; per-completion errors
+    /// reported by the server are logged and treated as terminal for that job.
+    fn report_completions_batch(
+        &mut self,
+        prepared: Vec<PreparedCompletion>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        if prepared.is_empty() {
+            return Ok(());
+        }
+
+        let request = BatchCompleteJobsRequest {
+            completions: prepared
+                .iter()
+                .map(|p| JobCompletionEntry {
+                    job_id: p.job_id,
+                    status: p.final_result.status,
+                    run_id: p.final_result.run_id,
+                    result: p.final_result.clone(),
+                })
+                .collect(),
+        };
+
+        let response = match self.send_with_retries(|| {
+            Self::box_retry_error(apis::workflows_api::batch_complete_jobs(
                 &self.config,
-                job_id,
-                final_result.status,
-                final_result.run_id,
-                final_result.clone(),
+                self.workflow_id,
+                request.clone(),
             ))
         }) {
-            Ok(_) => {
-                info!(
-                    "Job completed workflow_id={} job_id={} run_id={} status={}",
-                    self.workflow_id, job_id, final_result.run_id, status_str
-                );
-                // Store Slurm accounting stats if collected (best-effort, non-blocking).
-                // slurm_stats was taken at the top of handle_job_completion so we could backfill
-                // resource fields into the result before reporting to the server.
-                if let Some(stats) = slurm_stats {
-                    match apis::slurm_stats_api::create_slurm_stats(&self.config, stats) {
-                        Ok(_) => {
-                            info!(
-                                "Stored slurm_stats workflow_id={} job_id={}",
-                                self.workflow_id, job_id
-                            );
-                        }
-                        Err(e) => {
-                            warn!(
-                                "Failed to store slurm_stats workflow_id={} job_id={}: {}",
-                                self.workflow_id, job_id, e
-                            );
-                        }
-                    }
-                }
-                if let Some(job_rr) = self.job_resources.get(&job_id).cloned() {
-                    self.increment_node_resources(job_id, &job_rr);
-                    self.increment_resources(&job_rr);
-                }
-                // Reset the idle timer when a job completes, since blocked jobs may now
-                // become ready. This gives dependent jobs time to be picked up before
-                // the runner exits due to no jobs being claimed.
-                self.last_job_claimed_time = Some(Instant::now());
-
-                // Delete stdio files on successful completion if configured
-                if final_result.return_code == 0
-                    && let Some(cmd) = self.running_jobs.get(&job_id)
-                {
-                    let job_name = &cmd.job.name;
-                    if self.execution_config.delete_stdio_on_success(job_name) {
-                        Self::cleanup_stdio_files(cmd);
-                    }
-                }
-            }
+            Ok(response) => response,
             Err(e) => {
                 error!(
-                    "Job complete failed after retries workflow_id={} job_id={} error={}",
-                    self.workflow_id, job_id, e
+                    "batch_complete_jobs failed after retries workflow_id={} count={} error={}",
+                    self.workflow_id,
+                    prepared.len(),
+                    e
                 );
-                // Clean up local state before propagating the error
+                // Clean up local state for every prepared completion before
+                // propagating, mirroring the per-job error path of the old
+                // implementation.
+                for p in &prepared {
+                    self.running_jobs.remove(&p.job_id);
+                    self.job_resources.remove(&p.job_id);
+                    self.release_gpu_devices(p.job_id);
+                }
+                return Err(format!("Unable to record job completions: {}", e).into());
+            }
+        };
+
+        let completed: std::collections::HashSet<i64> = response.completed.into_iter().collect();
+        for err in &response.errors {
+            error!(
+                "Job complete reported as failed by server workflow_id={} job_id={} message={}",
+                self.workflow_id, err.job_id, err.message
+            );
+        }
+
+        for prep in prepared {
+            let PreparedCompletion {
+                job_id,
+                final_result,
+                slurm_stats,
+            } = prep;
+
+            if !completed.contains(&job_id) {
+                // Server rejected this individual completion. Clean up local
+                // state so we don't leak the entry in running_jobs.
                 self.running_jobs.remove(&job_id);
                 self.job_resources.remove(&job_id);
                 self.release_gpu_devices(job_id);
-                return Err(
-                    format!("Unable to record job completion for job {}: {}", job_id, e).into(),
-                );
+                continue;
             }
+
+            let status_str = format!("{:?}", final_result.status).to_lowercase();
+            info!(
+                "Job completed workflow_id={} job_id={} run_id={} status={}",
+                self.workflow_id, job_id, final_result.run_id, status_str
+            );
+
+            if let Some(stats) = slurm_stats {
+                match apis::slurm_stats_api::create_slurm_stats(&self.config, stats) {
+                    Ok(_) => {
+                        info!(
+                            "Stored slurm_stats workflow_id={} job_id={}",
+                            self.workflow_id, job_id
+                        );
+                    }
+                    Err(e) => {
+                        warn!(
+                            "Failed to store slurm_stats workflow_id={} job_id={}: {}",
+                            self.workflow_id, job_id, e
+                        );
+                    }
+                }
+            }
+
+            if let Some(job_rr) = self.job_resources.get(&job_id).cloned() {
+                self.increment_node_resources(job_id, &job_rr);
+                self.increment_resources(&job_rr);
+            }
+            self.last_job_claimed_time = Some(Instant::now());
+
+            if final_result.return_code == 0
+                && let Some(cmd) = self.running_jobs.get(&job_id)
+            {
+                let job_name = &cmd.job.name;
+                if self.execution_config.delete_stdio_on_success(job_name) {
+                    Self::cleanup_stdio_files(cmd);
+                }
+            }
+
+            self.running_jobs.remove(&job_id);
+            self.job_resources.remove(&job_id);
+            self.release_gpu_devices(job_id);
         }
-        self.running_jobs.remove(&job_id);
-        self.job_resources.remove(&job_id);
-        self.release_gpu_devices(job_id);
+
         Ok(())
     }
 
@@ -2031,9 +2119,11 @@ impl JobRunner {
         // If end_time is None, leave time_limit as-is (unlimited)
     }
 
-    fn run_ready_jobs_based_on_resources(&mut self) {
+    /// Returns the number of jobs successfully started across all nodes.
+    fn run_ready_jobs_based_on_resources(&mut self) -> usize {
         self.update_remaining_time_limit();
 
+        let mut started = 0;
         if self.node_tracker.is_some() {
             // Multi-node: claim and start jobs per-node so each claim uses that
             // node's actual available resources and we can pin jobs via --nodelist.
@@ -2046,25 +2136,27 @@ impl JobRunner {
                 .map(|n| n.name.clone())
                 .collect();
             for node_name in node_names {
-                self.claim_and_start_jobs_for_node(Some(&node_name));
+                started += self.claim_and_start_jobs_for_node(Some(&node_name));
             }
         } else {
             // Single-node: one claim call, no --nodelist pinning.
-            self.claim_and_start_jobs_for_node(None);
+            started += self.claim_and_start_jobs_for_node(None);
         }
+        started
     }
 
     /// Claim ready jobs from the server and start them. When `target_node` is
     /// Some, the claim uses that node's available resources and srun is invoked
     /// with `--nodelist=<node>` to pin the step. When None, the aggregate
     /// resources are used and no node pinning is done (single-node path).
-    fn claim_and_start_jobs_for_node(&mut self, target_node: Option<&str>) {
+    /// Returns the number of jobs that were claimed and successfully started.
+    fn claim_and_start_jobs_for_node(&mut self, target_node: Option<&str>) -> usize {
         let per_node = if let Some(node_name) = target_node {
             // Build resources from this specific node's availability
             let tracker = self.node_tracker.as_ref().unwrap();
             let node = match tracker.nodes.iter().find(|n| n.name == node_name) {
                 Some(n) => n,
-                None => return,
+                None => return 0,
             };
             // Send num_nodes=1 because this claim represents a single node's
             // available resources. The PerNodeTracker path is only used when
@@ -2085,11 +2177,12 @@ impl JobRunner {
 
         // Skip nodes with no available resources
         if per_node.num_cpus <= 0 {
-            return;
+            return 0;
         }
 
         let limit = per_node.num_cpus;
         let strict_scheduler_match = self.torc_config.client.slurm.strict_scheduler_match;
+        let mut started = 0usize;
         match self.send_with_retries(|| {
             Self::box_retry_error(apis::workflows_api::claim_jobs_based_on_resources(
                 &self.config,
@@ -2102,7 +2195,7 @@ impl JobRunner {
             Ok(response) => {
                 let jobs = response.jobs.unwrap_or_default();
                 if jobs.is_empty() {
-                    return;
+                    return 0;
                 }
                 if jobs.len() > limit as usize {
                     panic!(
@@ -2212,6 +2305,7 @@ impl JobRunner {
                             self.running_jobs.insert(job_id, async_job);
                             self.decrement_resources(&job_rr);
                             self.job_resources.insert(job_id, job_rr);
+                            started += 1;
                         }
                         Err(e) => {
                             error!(
@@ -2228,9 +2322,11 @@ impl JobRunner {
                 error!("Failed to prepare jobs for submission: {}", err);
             }
         }
+        started
     }
 
-    fn run_ready_jobs_based_on_user_parallelism(&mut self) {
+    /// Returns the number of jobs that were claimed and successfully started.
+    fn run_ready_jobs_based_on_user_parallelism(&mut self) -> usize {
         // Check if we have enough remaining time to start new jobs
         if let Some(end_time) = self.end_time {
             let remaining_seconds = (end_time - Utc::now()).num_seconds();
@@ -2239,7 +2335,7 @@ impl JobRunner {
                     "Only {} seconds remaining (min required: {}), not requesting new jobs",
                     remaining_seconds, self.rules.compute_node_min_time_for_new_jobs_seconds
                 );
-                return;
+                return 0;
             }
         }
 
@@ -2247,6 +2343,7 @@ impl JobRunner {
             .max_parallel_jobs
             .expect("max_parallel_jobs must be set")
             - self.running_jobs.len() as i64;
+        let mut started = 0usize;
         match self.send_with_retries(|| {
             Self::box_retry_error(apis::workflows_api::claim_next_jobs(
                 &self.config,
@@ -2257,7 +2354,7 @@ impl JobRunner {
             Ok(response) => {
                 let jobs = response.jobs.unwrap_or_default();
                 if jobs.is_empty() {
-                    return;
+                    return 0;
                 }
                 if jobs.len() > limit as usize {
                     panic!(
@@ -2360,6 +2457,7 @@ impl JobRunner {
                                 attempt_id
                             );
                             self.running_jobs.insert(job_id, async_job);
+                            started += 1;
                         }
                         Err(e) => {
                             error!(
@@ -2379,6 +2477,7 @@ impl JobRunner {
                 );
             }
         }
+        started
     }
 
     /// Revert a job's status back to Ready after a failed start attempt.

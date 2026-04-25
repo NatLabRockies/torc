@@ -2302,6 +2302,18 @@ where
             .await
     }
 
+    /// Complete a batch of jobs in a single request.
+    #[instrument(level = "debug", skip(self, body, context), fields(workflow_id, completion_count = body.completions.len()))]
+    async fn batch_complete_jobs(
+        &self,
+        workflow_id: i64,
+        body: models::BatchCompleteJobsRequest,
+        context: &C,
+    ) -> Result<BatchCompleteJobsResponse, ApiError> {
+        self.transport_batch_complete_jobs(workflow_id, body, context)
+            .await
+    }
+
     /// Retry a failed job by resetting it to ready status and incrementing attempt_id.
     async fn retry_job(
         &self,

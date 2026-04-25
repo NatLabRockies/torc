@@ -332,6 +332,10 @@ pub fn app_router(state: LiveRouterState) -> Router {
             post(claim_next_jobs),
         )
         .route(
+            "/torc-service/v1/workflows/{id}/batch_complete_jobs",
+            post(batch_complete_jobs),
+        )
+        .route(
             "/torc-service/v1/workflows/{id}/job_dependencies",
             get(list_job_dependencies),
         )
@@ -2179,6 +2183,32 @@ pub async fn complete_job(
         .await
     {
         Ok(response) => complete_job_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[utoipa::path(
+    post,
+    tag = "workflows",
+    path = "/workflows/{id}/batch_complete_jobs",
+    operation_id = "batch_complete_jobs",
+    params(("id" = i64, Path, description = "Workflow ID")),
+    request_body = models::BatchCompleteJobsRequest,
+    responses(
+        (status = 200, description = "Per-completion outcomes", body = models::BatchCompleteJobsResponse),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Workflow not found", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
+)]
+pub async fn batch_complete_jobs(
+    State(state): State<LiveRouterState>,
+    Path(id): Path<i64>,
+    Extension(context): Extension<EmptyContext>,
+    Json(body): Json<models::BatchCompleteJobsRequest>,
+) -> Response<Body> {
+    match state.server.batch_complete_jobs(id, body, &context).await {
+        Ok(response) => batch_complete_jobs_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
 }

@@ -16,6 +16,8 @@
 from torc.openapi_client.models.access_check_response import AccessCheckResponse
 from torc.openapi_client.models.access_group_model import AccessGroupModel
 from torc.openapi_client.models.active_task_response import ActiveTaskResponse
+from torc.openapi_client.models.batch_complete_jobs_request import BatchCompleteJobsRequest
+from torc.openapi_client.models.batch_complete_jobs_response import BatchCompleteJobsResponse
 from torc.openapi_client.models.claim_action_request import ClaimActionRequest
 from torc.openapi_client.models.claim_action_response import ClaimActionResponse
 from torc.openapi_client.models.claim_jobs_based_on_resources import ClaimJobsBasedOnResources
@@ -33,6 +35,8 @@ from torc.openapi_client.models.file_model import FileModel
 from torc.openapi_client.models.get_ready_job_requirements_response import GetReadyJobRequirementsResponse
 from torc.openapi_client.models.is_complete_response import IsCompleteResponse
 from torc.openapi_client.models.is_uninitialized_response import IsUninitializedResponse
+from torc.openapi_client.models.job_completion_entry import JobCompletionEntry
+from torc.openapi_client.models.job_completion_error import JobCompletionError
 from torc.openapi_client.models.job_dependency_model import JobDependencyModel
 from torc.openapi_client.models.job_file_relationship_model import JobFileRelationshipModel
 from torc.openapi_client.models.job_model import JobModel

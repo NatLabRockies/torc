@@ -1152,6 +1152,57 @@ where
         Ok(CompleteJobResponse::SuccessfulResponse(job))
     }
 
+    pub(super) async fn transport_batch_complete_jobs(
+        &self,
+        workflow_id: i64,
+        body: models::BatchCompleteJobsRequest,
+        context: &C,
+    ) -> Result<BatchCompleteJobsResponse, ApiError> {
+        debug!(
+            "batch_complete_jobs(workflow_id={}, count={}) - X-Span-ID: {:?}",
+            workflow_id,
+            body.completions.len(),
+            Has::<XSpanIdString>::get(context).0.clone()
+        );
+
+        let mut completed = Vec::new();
+        let mut errors = Vec::new();
+
+        for entry in body.completions {
+            let job_id = entry.job_id;
+            match self
+                .transport_complete_job(job_id, entry.status, entry.run_id, entry.result, context)
+                .await
+            {
+                Ok(CompleteJobResponse::SuccessfulResponse(_)) => {
+                    completed.push(job_id);
+                }
+                Ok(CompleteJobResponse::ForbiddenErrorResponse(err))
+                | Ok(CompleteJobResponse::NotFoundErrorResponse(err))
+                | Ok(CompleteJobResponse::UnprocessableContentErrorResponse(err))
+                | Ok(CompleteJobResponse::DefaultErrorResponse(err)) => {
+                    let message = serde_json::to_string(&err.error)
+                        .unwrap_or_else(|_| "unknown error".to_string());
+                    errors.push(models::JobCompletionError { job_id, message });
+                }
+                Err(e) => {
+                    error!(
+                        "transport_complete_job failed inside batch for job_id={}: {}",
+                        job_id, e.0
+                    );
+                    errors.push(models::JobCompletionError {
+                        job_id,
+                        message: e.0,
+                    });
+                }
+            }
+        }
+
+        Ok(BatchCompleteJobsResponse::SuccessfulResponse(
+            models::BatchCompleteJobsResponse { completed, errors },
+        ))
+    }
+
     pub(super) async fn transport_prepare_ready_jobs(
         &self,
         workflow_id: i64,
@@ -1172,53 +1223,10 @@ where
         let claim_limit = usize::try_from(limit)
             .map_err(|_| ApiError(format!("Limit {} does not fit on this platform", limit)))?;
 
-        let mut conn = self.pool.acquire().await.map_err(|e| {
-            error!("Failed to acquire database connection: {}", e);
-            ApiError("Database connection error".to_string())
-        })?;
-
-        sqlx::query("BEGIN IMMEDIATE")
-            .execute(&mut *conn)
-            .await
-            .map_err(|e| {
-                error!("Failed to begin immediate transaction: {}", e);
-                ApiError("Database lock error".to_string())
-            })?;
-
-        debug!(
-            "get_ready_jobs: workflow_id={}, limit={}, resources={:?} - X-Span-ID: {:?}",
-            workflow_id,
-            limit,
-            resources,
-            Has::<XSpanIdString>::get(context).0.clone()
-        );
-
-        let workflow_exists = sqlx::query("SELECT id FROM workflow WHERE id = $1")
-            .bind(workflow_id)
-            .fetch_optional(&mut *conn)
-            .await
-            .map_err(|e| {
-                error!("Database error checking workflow existence: {}", e);
-                ApiError("Database error".to_string())
-            })?;
-
-        if workflow_exists.is_none() {
-            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("Workflow not found with ID: {}", workflow_id)
-            }));
-            return Ok(ClaimJobsBasedOnResources::NotFoundErrorResponse(
-                error_response,
-            ));
-        }
-
         let time_limit_seconds = if let Some(ref time_limit) = resources.time_limit {
             match duration_string_to_seconds(time_limit) {
                 Ok(seconds) => seconds,
                 Err(e) => {
-                    let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-
                     let error_response = models::ErrorResponse::new(serde_json::json!({
                         "message": format!("Invalid time_limit format '{}': {}", time_limit, e),
                         "field": "time_limit",
@@ -1236,8 +1244,91 @@ where
         };
 
         let memory_bytes = (resources.memory_gb * 1024.0 * 1024.0 * 1024.0) as i64;
-
         let ready_status = models::JobStatus::Ready.to_int();
+
+        let mut conn = self.pool.acquire().await.map_err(|e| {
+            error!("Failed to acquire database connection: {}", e);
+            ApiError("Database connection error".to_string())
+        })?;
+
+        debug!(
+            "get_ready_jobs: workflow_id={}, limit={}, resources={:?} - X-Span-ID: {:?}",
+            workflow_id,
+            limit,
+            resources,
+            Has::<XSpanIdString>::get(context).0.clone()
+        );
+
+        // Workflow existence check runs without a transaction. WAL mode allows
+        // concurrent reads, so this never contends with productive writes.
+        let workflow_exists = sqlx::query("SELECT id FROM workflow WHERE id = $1")
+            .bind(workflow_id)
+            .fetch_optional(&mut *conn)
+            .await
+            .map_err(|e| {
+                error!("Database error checking workflow existence: {}", e);
+                ApiError("Database error".to_string())
+            })?;
+
+        if workflow_exists.is_none() {
+            let error_response = models::ErrorResponse::new(serde_json::json!({
+                "message": format!("Workflow not found with ID: {}", workflow_id)
+            }));
+            return Ok(ClaimJobsBasedOnResources::NotFoundErrorResponse(
+                error_response,
+            ));
+        }
+
+        // Lock-free pre-check: skip the BEGIN IMMEDIATE write lock when no
+        // ready job in this workflow could possibly fit the runner's resources.
+        // We deliberately omit the scheduler filter here so a positive result
+        // covers both the strict and lenient code paths below; false positives
+        // simply fall through to the normal locked path.
+        let pre_check = sqlx::query(
+            r#"
+            SELECT 1
+            FROM job
+            JOIN resource_requirements rr ON job.resource_requirements_id = rr.id
+            WHERE job.workflow_id = $1
+            AND job.status = $2
+            AND rr.memory_bytes <= $3
+            AND rr.num_cpus <= $4
+            AND rr.num_gpus <= $5
+            AND rr.num_nodes <= $6
+            AND rr.runtime_s <= $7
+            LIMIT 1
+            "#,
+        )
+        .bind(workflow_id)
+        .bind(ready_status)
+        .bind(memory_bytes)
+        .bind(resources.num_cpus)
+        .bind(resources.num_gpus)
+        .bind(resources.num_nodes)
+        .bind(time_limit_seconds)
+        .fetch_optional(&mut *conn)
+        .await
+        .map_err(|e| {
+            error!("Database error in claim pre-check: {}", e);
+            ApiError("Database error".to_string())
+        })?;
+
+        if pre_check.is_none() {
+            return Ok(ClaimJobsBasedOnResources::SuccessfulResponse(
+                models::ClaimJobsBasedOnResources {
+                    jobs: Some(Vec::new()),
+                    reason: None,
+                },
+            ));
+        }
+
+        sqlx::query("BEGIN IMMEDIATE")
+            .execute(&mut *conn)
+            .await
+            .map_err(|e| {
+                error!("Failed to begin immediate transaction: {}", e);
+                ApiError("Database lock error".to_string())
+            })?;
         let query_with_scheduler = format!(
             r#"
             SELECT

@@ -11,6 +11,37 @@ This can be used to construct the `OpenAPI.Clients.Client` instance.
 """
 basepath(::Type{ WorkflowsApi }) = "http://localhost/torc-service/v1"
 
+const _returntypes_batch_complete_jobs_WorkflowsApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => BatchCompleteJobsResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
+)
+
+function _oacinternal_batch_complete_jobs(_api::WorkflowsApi, id::Int64, batch_complete_jobs_request::BatchCompleteJobsRequest; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_batch_complete_jobs_WorkflowsApi, "/workflows/{id}/batch_complete_jobs", [], batch_complete_jobs_request)
+    OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Params:
+- id::Int64 (required)
+- batch_complete_jobs_request::BatchCompleteJobsRequest (required)
+
+Return: BatchCompleteJobsResponse, OpenAPI.Clients.ApiResponse
+"""
+function batch_complete_jobs(_api::WorkflowsApi, id::Int64, batch_complete_jobs_request::BatchCompleteJobsRequest; _mediaType=nothing)
+    _ctx = _oacinternal_batch_complete_jobs(_api, id, batch_complete_jobs_request; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function batch_complete_jobs(_api::WorkflowsApi, response_stream::Channel, id::Int64, batch_complete_jobs_request::BatchCompleteJobsRequest; _mediaType=nothing)
+    _ctx = _oacinternal_batch_complete_jobs(_api, id, batch_complete_jobs_request; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
 const _returntypes_cancel_workflow_WorkflowsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => Any,
 )
@@ -734,6 +765,7 @@ function update_workflow_status(_api::WorkflowsApi, response_stream::Channel, id
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
+export batch_complete_jobs
 export cancel_workflow
 export claim_jobs_based_on_resources
 export claim_next_jobs

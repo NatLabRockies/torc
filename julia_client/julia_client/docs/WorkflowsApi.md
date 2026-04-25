@@ -4,6 +4,7 @@ All URIs are relative to *http://localhost/torc-service/v1*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
+[**batch_complete_jobs**](WorkflowsApi.md#batch_complete_jobs) | **POST** /workflows/{id}/batch_complete_jobs | 
 [**cancel_workflow**](WorkflowsApi.md#cancel_workflow) | **PUT** /workflows/{id}/cancel | 
 [**claim_jobs_based_on_resources**](WorkflowsApi.md#claim_jobs_based_on_resources) | **POST** /workflows/{id}/claim_jobs_based_on_resources/{limit} | 
 [**claim_next_jobs**](WorkflowsApi.md#claim_next_jobs) | **POST** /workflows/{id}/claim_next_jobs | 
@@ -29,6 +30,35 @@ Method | HTTP request | Description
 [**update_workflow**](WorkflowsApi.md#update_workflow) | **PUT** /workflows/{id} | 
 [**update_workflow_status**](WorkflowsApi.md#update_workflow_status) | **PUT** /workflows/{id}/status | 
 
+
+# **batch_complete_jobs**
+> batch_complete_jobs(_api::WorkflowsApi, id::Int64, batch_complete_jobs_request::BatchCompleteJobsRequest; _mediaType=nothing) -> BatchCompleteJobsResponse, OpenAPI.Clients.ApiResponse <br/>
+> batch_complete_jobs(_api::WorkflowsApi, response_stream::Channel, id::Int64, batch_complete_jobs_request::BatchCompleteJobsRequest; _mediaType=nothing) -> Channel{ BatchCompleteJobsResponse }, OpenAPI.Clients.ApiResponse
+
+
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **WorkflowsApi** | API context | 
+**id** | **Int64** | Workflow ID |
+**batch_complete_jobs_request** | [**BatchCompleteJobsRequest**](BatchCompleteJobsRequest.md) |  |
+
+### Return type
+
+[**BatchCompleteJobsResponse**](BatchCompleteJobsResponse.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **cancel_workflow**
 > cancel_workflow(_api::WorkflowsApi, id::Int64; _mediaType=nothing) -> Any, OpenAPI.Clients.ApiResponse <br/>

@@ -4229,6 +4229,50 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /workflows/{id}/batch_complete_jobs:
+    post:
+      tags:
+      - workflows
+      operationId: batch_complete_jobs
+      parameters:
+      - name: id
+        in: path
+        description: Workflow ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchCompleteJobsRequest'
+        required: true
+      responses:
+        '200':
+          description: Per-completion outcomes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchCompleteJobsResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Workflow not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /workflows/{id}/cancel:
     put:
       tags:
@@ -5136,6 +5180,30 @@ components:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/TaskModel'
+    BatchCompleteJobsRequest:
+      type: object
+      required:
+      - completions
+      properties:
+        completions:
+          type: array
+          items:
+            $ref: '#/components/schemas/JobCompletionEntry'
+    BatchCompleteJobsResponse:
+      type: object
+      required:
+      - completed
+      - errors
+      properties:
+        completed:
+          type: array
+          items:
+            type: integer
+            format: int64
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/JobCompletionError'
     ClaimActionRequest:
       type: object
       properties:
@@ -5475,6 +5543,35 @@ components:
       properties:
         is_uninitialized:
           type: boolean
+    JobCompletionEntry:
+      type: object
+      required:
+      - job_id
+      - status
+      - run_id
+      - result
+      properties:
+        job_id:
+          type: integer
+          format: int64
+        result:
+          $ref: '#/components/schemas/ResultModel'
+        run_id:
+          type: integer
+          format: int64
+        status:
+          $ref: '#/components/schemas/JobStatus'
+    JobCompletionError:
+      type: object
+      required:
+      - job_id
+      - message
+      properties:
+        job_id:
+          type: integer
+          format: int64
+        message:
+          type: string
     JobDependencyModel:
       type: object
       required:

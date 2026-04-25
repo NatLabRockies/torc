@@ -1481,6 +1481,19 @@ pub enum CompleteJobResponse {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[must_use]
+pub enum BatchCompleteJobsResponse {
+    /// Successful response. Per-completion failures are reported in the body's `errors` field.
+    SuccessfulResponse(models::BatchCompleteJobsResponse),
+    /// Forbidden - user does not have access to the workflow
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Workflow not found
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
 pub enum CreateAccessGroupResponse {
     /// Successful response
     SuccessfulResponse(models::AccessGroupModel),

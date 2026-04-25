@@ -990,6 +990,18 @@ pub trait TransportApiCore<C: Send + Sync> {
         context: &C,
     ) -> Result<CompleteJobResponse, ApiError>;
 
+    /// Complete a batch of jobs in a single request.
+    ///
+    /// Each completion is processed independently and may succeed or fail on its own
+    /// merits. Per-completion failures are returned in the response body's `errors`
+    /// field; transport-level errors abort the whole batch.
+    async fn batch_complete_jobs(
+        &self,
+        workflow_id: i64,
+        body: models::BatchCompleteJobsRequest,
+        context: &C,
+    ) -> Result<BatchCompleteJobsResponse, ApiError>;
+
     /// Retry a failed job by resetting it to ready status and incrementing attempt_id.
     async fn retry_job(
         &self,

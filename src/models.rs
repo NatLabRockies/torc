@@ -336,6 +336,35 @@ pub struct ListResultsResponse {
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct JobCompletionEntry {
+    pub job_id: i64,
+    pub status: JobStatus,
+    pub run_id: i64,
+    pub result: ResultModel,
+}
+
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BatchCompleteJobsRequest {
+    pub completions: Vec<JobCompletionEntry>,
+}
+
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct JobCompletionError {
+    pub job_id: i64,
+    pub message: String,
+}
+
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BatchCompleteJobsResponse {
+    pub completed: Vec<i64>,
+    pub errors: Vec<JobCompletionError>,
+}
+
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ScheduledComputeNodesModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<i64>,

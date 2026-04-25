@@ -492,6 +492,11 @@ map_response_unprocessable!(
     CompleteJobResponse,
     SuccessfulResponse
 );
+map_response_std!(
+    batch_complete_jobs_response,
+    BatchCompleteJobsResponse,
+    SuccessfulResponse
+);
 map_response_unprocessable!(
     manage_status_change_response,
     ManageStatusChangeResponse,
