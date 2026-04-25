@@ -10,6 +10,7 @@ and compute nodes:
 ```yaml
 resource_monitor:
   sample_interval_seconds: 5
+  flush_interval_seconds: 300
   jobs:
     enabled: true
     granularity: summary
@@ -18,12 +19,13 @@ resource_monitor:
     granularity: time_series
 ```
 
-| Field                     | Type                     | Default | Description                                |
-| ------------------------- | ------------------------ | ------- | ------------------------------------------ |
-| `sample_interval_seconds` | integer                  | `10`    | Seconds between all resource samples       |
-| `generate_plots`          | boolean                  | `false` | Emit HTML plots after the job runner exits |
-| `jobs`                    | JobMonitorConfig         | none    | Per-job CPU and memory monitoring          |
-| `compute_node`            | ComputeNodeMonitorConfig | none    | Overall compute-node CPU/memory monitoring |
+| Field                     | Type                     | Default | Description                                                    |
+| ------------------------- | ------------------------ | ------- | -------------------------------------------------------------- |
+| `sample_interval_seconds` | integer                  | `10`    | Seconds between all resource samples                           |
+| `flush_interval_seconds`  | integer                  | `300`   | Seconds between batched SQLite flushes for time-series samples |
+| `generate_plots`          | boolean                  | `false` | Emit HTML plots after the job runner exits                     |
+| `jobs`                    | JobMonitorConfig         | none    | Per-job CPU and memory monitoring                              |
+| `compute_node`            | ComputeNodeMonitorConfig | none    | Overall compute-node CPU/memory monitoring                     |
 
 For backwards compatibility, top-level `enabled` and `granularity` fields are still accepted and
 apply to job monitoring when `jobs` is omitted:
@@ -33,9 +35,14 @@ resource_monitor:
   enabled: true
   granularity: time_series
   sample_interval_seconds: 5
+  flush_interval_seconds: 300
 ```
 
 New workflow specs should use the explicit `jobs` block.
+
+`flush_interval_seconds` only affects time-series persistence. Samples are still collected every
+`sample_interval_seconds`, but they are buffered in memory and written to SQLite in batches to
+reduce transaction overhead.
 
 ### Job Monitoring
 

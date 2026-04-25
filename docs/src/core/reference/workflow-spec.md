@@ -404,18 +404,20 @@ Defines conditional actions triggered by workflow or job state changes.
 
 Configuration for resource usage monitoring.
 
-| Name                      | Type                     | Default | Description                         |
-| ------------------------- | ------------------------ | ------- | ----------------------------------- |
-| `sample_interval_seconds` | integer                  | `10`    | Shared sampling interval in seconds |
-| `generate_plots`          | boolean                  | `false` | Generate resource usage plots       |
-| `jobs`                    | JobMonitorConfig         | none    | Per-job monitoring config           |
-| `compute_node`            | ComputeNodeMonitorConfig | none    | Overall compute-node monitoring     |
+| Name                      | Type                     | Default | Description                                     |
+| ------------------------- | ------------------------ | ------- | ----------------------------------------------- |
+| `sample_interval_seconds` | integer                  | `10`    | Shared sampling interval in seconds             |
+| `flush_interval_seconds`  | integer                  | `300`   | Flush interval for buffered time-series samples |
+| `generate_plots`          | boolean                  | `false` | Generate resource usage plots                   |
+| `jobs`                    | JobMonitorConfig         | none    | Per-job monitoring config                       |
+| `compute_node`            | ComputeNodeMonitorConfig | none    | Overall compute-node monitoring                 |
 
 Example with per-job summary monitoring and overall compute-node time-series monitoring:
 
 ```yaml
 resource_monitor:
   sample_interval_seconds: 5
+  flush_interval_seconds: 300
   jobs:
     enabled: true
     granularity: summary
@@ -429,8 +431,10 @@ resource_monitor:
 `jobs.granularity` controls per-job monitoring. `compute_node.granularity` independently controls
 overall compute-node monitoring, so a workflow can store per-job summaries while collecting
 compute-node time series. Both scopes use the parent `sample_interval_seconds`; there is not a
-separate sampling interval per scope. The current compute-node monitor records CPU and memory; GPU
-monitoring is expected to use the same nested `compute_node` configuration in a future release.
+separate sampling interval per scope. When time-series monitoring is enabled, samples are flushed to
+SQLite every `flush_interval_seconds`, which trades lower commit overhead for a bounded amount of
+crash-exposed buffered data. The current compute-node monitor records CPU and memory; GPU monitoring
+is expected to use the same nested `compute_node` configuration in a future release.
 
 For backwards compatibility, top-level `enabled` and `granularity` fields are still accepted and
 apply to job monitoring when `jobs` is omitted. New workflow specs should use `jobs`.

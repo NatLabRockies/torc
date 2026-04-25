@@ -4049,6 +4049,16 @@ impl WorkflowSpec {
                             );
                         }
                     }
+                    "flush_interval_seconds" => {
+                        if let Some(v) =
+                            child.entries().first().and_then(|e| e.value().as_integer())
+                        {
+                            obj.insert(
+                                "flush_interval_seconds".to_string(),
+                                serde_json::Value::Number(serde_json::Number::from(v as i64)),
+                            );
+                        }
+                    }
                     "generate_plots" => {
                         if let Some(v) = child.entries().first().and_then(|e| e.value().as_bool()) {
                             obj.insert("generate_plots".to_string(), serde_json::Value::Bool(v));
@@ -4642,6 +4652,10 @@ impl WorkflowSpec {
             lines.push(format!(
                 "    sample_interval_seconds {}",
                 monitor.sample_interval_seconds
+            ));
+            lines.push(format!(
+                "    flush_interval_seconds {}",
+                monitor.flush_interval_seconds
             ));
             lines.push(format!(
                 "    generate_plots {}",
@@ -5354,6 +5368,7 @@ resource_monitor {
     enabled #true
     granularity "time_series"
     sample_interval_seconds 2
+    flush_interval_seconds 17
 }
 
 job "job1" {
@@ -5369,6 +5384,7 @@ job "job1" {
         assert!(jobs.enabled);
         assert_eq!(jobs.granularity, MonitorGranularity::TimeSeries);
         assert_eq!(monitor.sample_interval_seconds, 2);
+        assert_eq!(monitor.flush_interval_seconds, 17);
         assert!(monitor.compute_node_config().is_none());
     }
 
