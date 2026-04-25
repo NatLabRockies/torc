@@ -189,9 +189,22 @@ async fn snapshot_once(pool: &SqlitePool, cfg: &SnapshotConfig) {
     // is a stable contract — do not change without updating the parent-side
     // reader in `src/main.rs`. Flush explicitly because stdout is block-
     // buffered when piped, and the parent is waiting on this exact line.
-    use std::io::Write;
-    println!("TORC_SNAPSHOT_DONE={}", cfg.base.display());
-    let _ = std::io::stdout().flush();
+    // Run in spawn_blocking so a slow/backpressured stdout pipe can't park a
+    // Tokio worker thread.
+    let line = format!("TORC_SNAPSHOT_DONE={}", cfg.base.display());
+    let join = tokio::task::spawn_blocking(move || -> std::io::Result<()> {
+        use std::io::Write;
+        let stdout = std::io::stdout();
+        let mut handle = stdout.lock();
+        writeln!(handle, "{}", line)?;
+        handle.flush()
+    })
+    .await;
+    match join {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => error!("Failed to write snapshot completion line: {}", e),
+        Err(e) => error!("snapshot stdout-notify task panicked: {}", e),
+    }
 }
 
 /// Rotate `<base>.{n-1}` → `<base>.{n}` for n down to 1, drop anything beyond

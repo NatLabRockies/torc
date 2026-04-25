@@ -423,12 +423,13 @@ fn standalone_in_memory_periodic_snapshot_lands_before_exit() {
 
     // Run a workflow that sleeps long enough for at least one periodic
     // snapshot to fire mid-run, then verify the final snapshot is intact
-    // and contains the completed job.
+    // and contains the completed job. 1.5 s vs the 1 s interval gives one
+    // guaranteed tick without paying for a full multi-second sleep on CI.
     let out = run_torc_in_memory(
         work.path(),
         &db,
         &["--snapshot-interval-seconds", "1"],
-        &["exec", "-c", "sleep 3 && echo periodic-ok"],
+        &["exec", "-c", "sleep 1.5 && echo periodic-ok"],
     );
     assert!(
         out.status.success(),

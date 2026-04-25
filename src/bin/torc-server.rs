@@ -415,23 +415,26 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
         env::var("DATABASE_URL").expect("DATABASE_URL must be set or --database must be provided")
     };
 
-    // Detect `:memory:` from the *pre-rewrite* URL via exact match. Substring
-    // matching on the post-rewrite URL would false-positive on on-disk paths
-    // that happen to contain `:memory:` (colons are legal in Unix filenames).
-    // Two forms to accept:
+    // Detect supported SQLite in-memory URLs:
     //  - `sqlite::memory:` is what our own `-d :memory:` produces via the
     //    `format!("sqlite:{}", ...)` above, and is also the canonical sqlx
     //    URL form for in-memory.
     //  - `:memory:` is the bare SQLite spelling, which users naturally type
     //    when setting `DATABASE_URL` directly.
-    let in_memory = matches!(database_url.as_str(), ":memory:" | "sqlite::memory:");
-
+    //  - Any URL containing `file::memory:` is the shared-cache in-memory
+    //    SQLite URI form. We rewrite bare `:memory:` to one of these below,
+    //    but a power user can also supply it directly (e.g.
+    //    `sqlite:file::memory:?cache=shared`); without this branch they'd
+    //    miss `min_connections(1)` and the pool could drop the only
+    //    connection and destroy their data between requests.
     // A bare `:memory:` URI gives each pool connection its own private database,
     // which silently breaks data sharing across connections and prevents
-    // VACUUM INTO snapshots from observing any data. Rewrite to shared-cache
-    // memory mode so all pool connections see the same database. Snapshots
-    // (SIGUSR1) are how results are persisted in this mode.
-    let database_url = if in_memory {
+    // VACUUM INTO snapshots from observing any data. Only the bare forms get
+    // rewritten — a user who supplied an explicit shared-cache URI should
+    // have it preserved verbatim.
+    let needs_rewrite = matches!(database_url.as_str(), ":memory:" | "sqlite::memory:");
+    let in_memory = needs_rewrite || database_url.contains("file::memory:");
+    let database_url = if needs_rewrite {
         info!(
             "Using shared-cache in-memory database. Send SIGUSR1 to the server \
              to snapshot the database to disk. Configure with \
