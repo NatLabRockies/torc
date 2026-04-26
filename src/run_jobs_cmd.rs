@@ -177,6 +177,10 @@ pub fn run_with_log_stream(args: &Args, log_stream: LogStream) -> WorkerResult {
     // Set cookie header for authentication (e.g., from browser-based MFA)
     if let Some(ref cookie_header) = args.cookie_header {
         config.cookie_header = Some(cookie_header.clone());
+        if let Err(e) = config.apply_cookie_header() {
+            eprintln!("Error applying cookie header: {e}");
+            std::process::exit(1);
+        }
     }
     let user = get_env_user_name();
     let workflow_id = args.workflow_id.unwrap_or_else(|| {

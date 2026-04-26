@@ -511,6 +511,30 @@ where
         );
 
         authorize_workflow!(self, id, context, ClaimJobsBasedOnResources);
+
+        let status = match self.get_workflow_status(id, context).await {
+            Ok(GetWorkflowStatusResponse::SuccessfulResponse(status)) => status,
+            Ok(_) => {
+                error!(
+                    "Unexpected response from get_workflow_status for workflow_id={}",
+                    id
+                );
+                return Err(ApiError(
+                    "Unexpected response from get_workflow_status".to_string(),
+                ));
+            }
+            Err(e) => return Err(e),
+        };
+
+        if status.is_canceled {
+            return Ok(ClaimJobsBasedOnResources::SuccessfulResponse(
+                models::ClaimJobsBasedOnResources {
+                    jobs: Some(vec![]),
+                    reason: Some("Workflow is canceled".to_string()),
+                },
+            ));
+        }
+
         self.transport_prepare_ready_jobs(id, body, limit, strict_scheduler_match, context)
             .await
     }
