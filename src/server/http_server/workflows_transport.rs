@@ -239,7 +239,9 @@ where
             Has::<XSpanIdString>::get(context).0.clone()
         );
         authorize_workflow!(self, id, context, CancelWorkflowResponse);
-        self.workflows_api.cancel_workflow(id, context).await
+        let response = self.workflows_api.cancel_workflow(id, context).await?;
+        self.signal_workflow_ready(id);
+        Ok(response)
     }
 
     pub(super) async fn transport_delete_events(
@@ -498,43 +500,68 @@ where
         body: models::ComputeNodesResources,
         limit: i64,
         strict_scheduler_match: Option<bool>,
+        wait_seconds: Option<i64>,
         context: &C,
     ) -> Result<ClaimJobsBasedOnResources, ApiError> {
         debug!(
-            "claim_jobs_based_on_resources({}, {:?}, {:?}, strict_scheduler_match={:?}) - X-Span-ID: {:?}",
+            "claim_jobs_based_on_resources({}, {:?}, {:?}, strict_scheduler_match={:?}, wait_seconds={:?}) - X-Span-ID: {:?}",
             id,
             body,
             limit,
             strict_scheduler_match,
+            wait_seconds,
             Has::<XSpanIdString>::get(context).0.clone()
         );
 
         authorize_workflow!(self, id, context, ClaimJobsBasedOnResources);
 
-        let status = match self.get_workflow_status(id, context).await {
-            Ok(GetWorkflowStatusResponse::SuccessfulResponse(status)) => status,
-            Ok(_) => {
-                error!(
-                    "Unexpected response from get_workflow_status for workflow_id={}",
-                    id
-                );
-                return Err(ApiError(
-                    "Unexpected response from get_workflow_status".to_string(),
+        let wait_seconds = wait_seconds.unwrap_or(0).clamp(0, 60);
+        loop {
+            let status = match self.get_workflow_status(id, context).await {
+                Ok(GetWorkflowStatusResponse::SuccessfulResponse(status)) => status,
+                Ok(_) => {
+                    error!(
+                        "Unexpected response from get_workflow_status for workflow_id={}",
+                        id
+                    );
+                    return Err(ApiError(
+                        "Unexpected response from get_workflow_status".to_string(),
+                    ));
+                }
+                Err(e) => return Err(e),
+            };
+
+            if status.is_canceled {
+                return Ok(ClaimJobsBasedOnResources::SuccessfulResponse(
+                    models::ClaimJobsBasedOnResources {
+                        jobs: Some(vec![]),
+                        reason: Some("Workflow is canceled".to_string()),
+                    },
                 ));
             }
-            Err(e) => return Err(e),
-        };
 
-        if status.is_canceled {
-            return Ok(ClaimJobsBasedOnResources::SuccessfulResponse(
-                models::ClaimJobsBasedOnResources {
-                    jobs: Some(vec![]),
-                    reason: Some("Workflow is canceled".to_string()),
-                },
-            ));
+            let response = self
+                .transport_prepare_ready_jobs(
+                    id,
+                    body.clone(),
+                    limit,
+                    strict_scheduler_match,
+                    context,
+                )
+                .await?;
+            let should_wait = matches!(
+                &response,
+                ClaimJobsBasedOnResources::SuccessfulResponse(models::ClaimJobsBasedOnResources {
+                    jobs: Some(jobs),
+                    ..
+                }) if jobs.is_empty() && wait_seconds > 0
+            );
+            if !should_wait {
+                return Ok(response);
+            }
+            if !self.wait_for_workflow_ready(id, wait_seconds).await? {
+                return Ok(response);
+            }
         }
-
-        self.transport_prepare_ready_jobs(id, body, limit, strict_scheduler_match, context)
-            .await
     }
 }

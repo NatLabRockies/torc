@@ -60,6 +60,11 @@ struct PreparedCompletion {
     slurm_stats: Option<SlurmStatsModel>,
 }
 
+#[derive(Default)]
+struct ClaimAttemptResult {
+    waited: bool,
+}
+
 /// Rule definition for failure handler (parsed from JSON stored in database)
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct FailureHandlerRule {
@@ -757,10 +762,11 @@ impl JobRunner {
             self.check_and_execute_actions();
 
             debug!("Check for new jobs");
+            let mut claim_result = ClaimAttemptResult::default();
             if let Some(max) = self.max_parallel_jobs {
                 // Parallelism-based mode: skip if already at max parallel jobs
                 if (self.running_jobs.len() as i64) < max {
-                    self.run_ready_jobs_based_on_user_parallelism();
+                    claim_result = self.run_ready_jobs_based_on_user_parallelism();
                 } else {
                     debug!(
                         "Skipping job claim: at max parallel jobs ({}/{})",
@@ -771,7 +777,7 @@ impl JobRunner {
             } else {
                 // Resource-based mode: skip if no CPUs available or memory nearly exhausted
                 if self.resources.num_cpus > 0 && self.resources.memory_gb >= 0.1 {
-                    self.run_ready_jobs_based_on_resources();
+                    claim_result = self.run_ready_jobs_based_on_resources();
                 } else {
                     debug!(
                         "Skipping job claim: no capacity (cpus={}, memory_gb={:.2})",
@@ -787,7 +793,7 @@ impl JobRunner {
             // completing and the next job filling its slot. Skipping sleep on
             // claim/start would not help — the subprocess still needs time to
             // run before the next interesting event.
-            if completions == 0 {
+            if completions == 0 && !claim_result.waited {
                 thread::sleep(Duration::from_secs_f64(self.job_completion_poll_interval));
             }
 
@@ -2119,11 +2125,21 @@ impl JobRunner {
         // If end_time is None, leave time_limit as-is (unlimited)
     }
 
-    /// Returns the number of jobs successfully started across all nodes.
-    fn run_ready_jobs_based_on_resources(&mut self) -> usize {
+    fn claim_wait_seconds(&self, allow_wait_with_node_tracker: bool) -> Option<i64> {
+        if self.job_completion_poll_interval <= 0.0 {
+            return None;
+        }
+        if self.node_tracker.is_some() && !allow_wait_with_node_tracker {
+            return None;
+        }
+        Some(self.job_completion_poll_interval.ceil() as i64)
+    }
+
+    /// Returns claim behavior for this iteration across all nodes.
+    fn run_ready_jobs_based_on_resources(&mut self) -> ClaimAttemptResult {
         self.update_remaining_time_limit();
 
-        let mut started = 0;
+        let mut result = ClaimAttemptResult::default();
         if self.node_tracker.is_some() {
             // Multi-node: claim and start jobs per-node so each claim uses that
             // node's actual available resources and we can pin jobs via --nodelist.
@@ -2136,27 +2152,32 @@ impl JobRunner {
                 .map(|n| n.name.clone())
                 .collect();
             for node_name in node_names {
-                started += self.claim_and_start_jobs_for_node(Some(&node_name));
+                let node_result = self.claim_and_start_jobs_for_node(Some(&node_name), None);
+                result.waited |= node_result.waited;
             }
         } else {
             // Single-node: one claim call, no --nodelist pinning.
-            started += self.claim_and_start_jobs_for_node(None);
+            result = self.claim_and_start_jobs_for_node(None, self.claim_wait_seconds(false));
         }
-        started
+        result
     }
 
     /// Claim ready jobs from the server and start them. When `target_node` is
     /// Some, the claim uses that node's available resources and srun is invoked
     /// with `--nodelist=<node>` to pin the step. When None, the aggregate
     /// resources are used and no node pinning is done (single-node path).
-    /// Returns the number of jobs that were claimed and successfully started.
-    fn claim_and_start_jobs_for_node(&mut self, target_node: Option<&str>) -> usize {
+    /// Returns claim behavior for this iteration.
+    fn claim_and_start_jobs_for_node(
+        &mut self,
+        target_node: Option<&str>,
+        wait_seconds: Option<i64>,
+    ) -> ClaimAttemptResult {
         let per_node = if let Some(node_name) = target_node {
             // Build resources from this specific node's availability
             let tracker = self.node_tracker.as_ref().unwrap();
             let node = match tracker.nodes.iter().find(|n| n.name == node_name) {
                 Some(n) => n,
-                None => return 0,
+                None => return ClaimAttemptResult::default(),
             };
             // Send num_nodes=1 because this claim represents a single node's
             // available resources. The PerNodeTracker path is only used when
@@ -2177,25 +2198,29 @@ impl JobRunner {
 
         // Skip nodes with no available resources
         if per_node.num_cpus <= 0 {
-            return 0;
+            return ClaimAttemptResult::default();
         }
 
         let limit = per_node.num_cpus;
         let strict_scheduler_match = self.torc_config.client.slurm.strict_scheduler_match;
-        let mut started = 0usize;
+        let mut waited = false;
         match self.send_with_retries(|| {
-            Self::box_retry_error(apis::workflows_api::claim_jobs_based_on_resources(
-                &self.config,
-                self.workflow_id,
-                limit,
-                per_node.clone(),
-                Some(strict_scheduler_match),
-            ))
+            Self::box_retry_error(
+                apis::workflows_api::claim_jobs_based_on_resources_with_wait(
+                    &self.config,
+                    self.workflow_id,
+                    limit,
+                    per_node.clone(),
+                    Some(strict_scheduler_match),
+                    wait_seconds,
+                ),
+            )
         }) {
             Ok(response) => {
                 let jobs = response.jobs.unwrap_or_default();
                 if jobs.is_empty() {
-                    return 0;
+                    waited = wait_seconds.unwrap_or(0) > 0;
+                    return ClaimAttemptResult { waited };
                 }
                 if jobs.len() > limit as usize {
                     panic!(
@@ -2305,7 +2330,6 @@ impl JobRunner {
                             self.running_jobs.insert(job_id, async_job);
                             self.decrement_resources(&job_rr);
                             self.job_resources.insert(job_id, job_rr);
-                            started += 1;
                         }
                         Err(e) => {
                             error!(
@@ -2322,11 +2346,11 @@ impl JobRunner {
                 error!("Failed to prepare jobs for submission: {}", err);
             }
         }
-        started
+        ClaimAttemptResult { waited }
     }
 
-    /// Returns the number of jobs that were claimed and successfully started.
-    fn run_ready_jobs_based_on_user_parallelism(&mut self) -> usize {
+    /// Returns claim behavior for this iteration.
+    fn run_ready_jobs_based_on_user_parallelism(&mut self) -> ClaimAttemptResult {
         // Check if we have enough remaining time to start new jobs
         if let Some(end_time) = self.end_time {
             let remaining_seconds = (end_time - Utc::now()).num_seconds();
@@ -2335,7 +2359,7 @@ impl JobRunner {
                     "Only {} seconds remaining (min required: {}), not requesting new jobs",
                     remaining_seconds, self.rules.compute_node_min_time_for_new_jobs_seconds
                 );
-                return 0;
+                return ClaimAttemptResult::default();
             }
         }
 
@@ -2343,18 +2367,21 @@ impl JobRunner {
             .max_parallel_jobs
             .expect("max_parallel_jobs must be set")
             - self.running_jobs.len() as i64;
-        let mut started = 0usize;
+        let wait_seconds = self.claim_wait_seconds(true);
+        let mut waited = false;
         match self.send_with_retries(|| {
-            Self::box_retry_error(apis::workflows_api::claim_next_jobs(
+            Self::box_retry_error(apis::workflows_api::claim_next_jobs_with_wait(
                 &self.config,
                 self.workflow_id,
                 Some(limit),
+                wait_seconds,
             ))
         }) {
             Ok(response) => {
                 let jobs = response.jobs.unwrap_or_default();
                 if jobs.is_empty() {
-                    return 0;
+                    waited = wait_seconds.unwrap_or(0) > 0;
+                    return ClaimAttemptResult { waited };
                 }
                 if jobs.len() > limit as usize {
                     panic!(
@@ -2457,7 +2484,6 @@ impl JobRunner {
                                 attempt_id
                             );
                             self.running_jobs.insert(job_id, async_job);
-                            started += 1;
                         }
                         Err(e) => {
                             error!(
@@ -2477,7 +2503,7 @@ impl JobRunner {
                 );
             }
         }
-        started
+        ClaimAttemptResult { waited }
     }
 
     /// Revert a job's status back to Ready after a failed start attempt.

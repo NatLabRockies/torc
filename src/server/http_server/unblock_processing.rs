@@ -266,6 +266,7 @@ where
     );
 
     if !all_ready_job_ids.is_empty() {
+        server.signal_workflow_ready(workflow_id);
         debug!(
             "process_workflow_unblocks: checking on_jobs_ready actions for {} jobs that became ready",
             all_ready_job_ids.len()

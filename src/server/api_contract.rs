@@ -866,6 +866,7 @@ pub trait TransportApiCore<C: Send + Sync> {
         body: models::ComputeNodesResources,
         limit: i64,
         strict_scheduler_match: Option<bool>,
+        wait_seconds: Option<i64>,
         context: &C,
     ) -> Result<ClaimJobsBasedOnResources, ApiError>;
 
@@ -874,6 +875,7 @@ pub trait TransportApiCore<C: Send + Sync> {
         &self,
         id: i64,
         limit: Option<i64>,
+        wait_seconds: Option<i64>,
         context: &C,
     ) -> Result<ClaimNextJobsResponse, ApiError>;
 

@@ -449,12 +449,16 @@ pub struct ResetJobStatusQuery {
 pub struct ClaimJobsBasedOnResourcesQuery {
     #[param(nullable = true)]
     pub strict_scheduler_match: Option<bool>,
+    #[param(nullable = true)]
+    pub wait_seconds: Option<i64>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct ClaimNextJobsQuery {
     #[param(nullable = true)]
     pub limit: Option<i64>,
+    #[param(nullable = true)]
+    pub wait_seconds: Option<i64>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
@@ -3566,7 +3570,14 @@ pub async fn claim_jobs_based_on_resources(
 ) -> Response<Body> {
     match state
         .server
-        .claim_jobs_based_on_resources(id, body, limit, query.strict_scheduler_match, &context)
+        .claim_jobs_based_on_resources(
+            id,
+            body,
+            limit,
+            query.strict_scheduler_match,
+            query.wait_seconds,
+            &context,
+        )
         .await
     {
         Ok(response) => claim_jobs_based_on_resources_response(response),
@@ -3590,7 +3601,7 @@ pub async fn claim_next_jobs(
 ) -> Response<Body> {
     match state
         .server
-        .claim_next_jobs(id, query.limit, &context)
+        .claim_next_jobs(id, query.limit, query.wait_seconds, &context)
         .await
     {
         Ok(response) => claim_next_jobs_response(response),
