@@ -73,9 +73,16 @@ pub fn app_router(state: LiveRouterState) -> Router {
     Router::new()
         .merge(
             Router::new()
-                // Axum defaults JSON request bodies to 2 MiB, so bulk job creation needs an
-                // explicit override to preserve large workflow submissions.
+                // Axum defaults JSON request bodies to 2 MiB. Bulk job creation needs the
+                // override to preserve large workflow submissions; batch_complete_jobs is
+                // capped server-side at MAX_BATCH_COMPLETION_SIZE entries but a single
+                // entry includes a full ResultModel, so headroom matters when the runner
+                // flushes a full batch (especially termination/cancel paths).
                 .route("/torc-service/v1/bulk_jobs", post(create_jobs))
+                .route(
+                    "/torc-service/v1/workflows/{id}/batch_complete_jobs",
+                    post(batch_complete_jobs),
+                )
                 .layer(DefaultBodyLimit::max(max_bulk_request_body_bytes())),
         )
         .route(
@@ -330,10 +337,6 @@ pub fn app_router(state: LiveRouterState) -> Router {
         .route(
             "/torc-service/v1/workflows/{id}/claim_next_jobs",
             post(claim_next_jobs),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/batch_complete_jobs",
-            post(batch_complete_jobs),
         )
         .route(
             "/torc-service/v1/workflows/{id}/job_dependencies",

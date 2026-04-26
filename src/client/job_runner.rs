@@ -51,6 +51,16 @@ use crate::models::{
     ResourceRequirementsModel, ResultModel, SlurmStatsModel, WorkflowModel,
 };
 
+/// Maximum number of completions sent in a single `batch_complete_jobs` request.
+///
+/// The server rejects batches larger than its own `MAX_BATCH_COMPLETION_SIZE`
+/// (currently 256) with HTTP 422; pick the same cap here so a runner that
+/// flushes a large group (e.g. termination/cancel reporting every running job
+/// at once) splits into chunks that always fit. Chunking also keeps any single
+/// request body comfortably below the server's `DefaultBodyLimit`, even with
+/// fully populated `ResultModel`s.
+const MAX_COMPLETION_BATCH_SIZE: usize = 256;
+
 /// Local-side result of preparing a job completion: the data to send to the
 /// server in a `batch_complete_jobs` call. Returned by `prepare_job_completion`
 /// for jobs that were not retried locally.
@@ -1772,11 +1782,13 @@ impl JobRunner {
         })
     }
 
-    /// Send a batch of prepared completions in a single request and run the
-    /// post-success finalization for each one (slurm stats upload, resource
-    /// release, stdio cleanup, removal from local state). Returns an error if
-    /// the batch call itself fails after retries; per-completion errors
-    /// reported by the server are logged and treated as terminal for that job.
+    /// Send a batch of prepared completions to the server, splitting into
+    /// chunks of `MAX_COMPLETION_BATCH_SIZE` so large flushes (e.g. termination
+    /// or cancel paths reporting every running job at once) cannot exceed the
+    /// server's batch size cap or its `DefaultBodyLimit`. Each chunk is sent
+    /// independently; on failure the chunk's local state is still released so
+    /// finished subprocesses don't keep slots reserved, and an error is
+    /// returned at the end if any chunk failed.
     fn report_completions_batch(
         &mut self,
         prepared: Vec<PreparedCompletion>,
@@ -1785,6 +1797,45 @@ impl JobRunner {
             return Ok(());
         }
 
+        let total = prepared.len();
+        let mut last_error: Option<Box<dyn std::error::Error>> = None;
+        let mut iter = prepared.into_iter();
+        loop {
+            let chunk: Vec<PreparedCompletion> =
+                iter.by_ref().take(MAX_COMPLETION_BATCH_SIZE).collect();
+            if chunk.is_empty() {
+                break;
+            }
+            if let Err(e) = self.report_completions_chunk(chunk) {
+                // Keep going so subsequent chunks still drain their local
+                // state, but remember the error so the runner caller still
+                // sees the failure.
+                last_error = Some(e);
+            }
+        }
+
+        match last_error {
+            None => Ok(()),
+            Some(e) => Err(format!(
+                "Unable to record one or more job completion chunks (total={}): {}",
+                total, e
+            )
+            .into()),
+        }
+    }
+
+    /// Send a single chunk of prepared completions in one `batch_complete_jobs`
+    /// request and run the post-success finalization for each entry (slurm
+    /// stats upload, resource release, stdio cleanup, removal from local
+    /// state). Returns an error if the batch call itself fails after retries;
+    /// per-completion errors reported by the server are logged and treated as
+    /// terminal for that job. Local resource accounting is always released for
+    /// every entry in `prepared`, regardless of outcome, so a finished
+    /// subprocess never leaks its slot.
+    fn report_completions_chunk(
+        &mut self,
+        prepared: Vec<PreparedCompletion>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let request = BatchCompleteJobsRequest {
             completions: prepared
                 .iter()
