@@ -208,6 +208,8 @@ SSH-es into multiple machines and starts a <code>torc run</code> process on each
 </code></pre>
 <p>Each remote worker runs as a detached process and polls the server for jobs, just like the local
 runner. The server coordinates job distribution to prevent double-allocation.</p>
+<p>On Unix systems, runners also use a <code>SIGCHLD</code>-driven wakeup path so local subprocess exits can be
+observed promptly instead of always waiting for the full poll interval.</p>
 <h2 id="job-allocation-strategies"><a class="header" href="#job-allocation-strategies">Job Allocation Strategies</a></h2>
 <p>The job runner supports two different strategies for retrieving and executing jobs:</p>
 <h3 id="resource-based-allocation-default"><a class="header" href="#resource-based-allocation-default">Resource-Based Allocation (Default)</a></h3>
@@ -285,8 +287,8 @@ higher than the number of CPUs in the worker.</p>
     ClaimResources --&gt; StartJobs
     ClaimQueue --&gt; StartJobs
     StartJobs[Start claimed jobs] --&gt; ForEachJob[For each job:&lt;br/&gt;1. Call start_job&lt;br/&gt;2. Execute command&lt;br/&gt;3. Record stdout/stderr]
-    ForEachJob --&gt; Sleep[Sleep for poll interval]
-    Sleep --&gt; CheckStatus
+    ForEachJob --&gt; Wait[Wait for poll interval&lt;br/&gt;or SIGCHLD wakeup]
+    Wait --&gt; CheckStatus
 
     style Start fill:#10b981,stroke:#059669,color:#fff
     style End fill:#ef4444,stroke:#dc2626,color:#fff
@@ -299,7 +301,7 @@ higher than the number of CPUs in the worker.</p>
     style ClaimJobs fill:#3b82f6,stroke:#2563eb,color:#fff
     style StartJobs fill:#3b82f6,stroke:#2563eb,color:#fff
     style ForEachJob fill:#3b82f6,stroke:#2563eb,color:#fff
-    style Sleep fill:#6b7280,stroke:#4b5563,color:#fff
+    style Wait fill:#6b7280,stroke:#4b5563,color:#fff
     style ClaimResources fill:#8b5cf6,stroke:#7c3aed,color:#fff
     style ClaimQueue fill:#ec4899,stroke:#db2777,color:#fff
 </pre>
@@ -323,11 +325,12 @@ scheduling new Slurm allocations.</li>
 </li>
 <li><strong>Complete jobs</strong> - When running jobs finish:
 <ul>
-<li>Call <code>complete_job</code> with exit code and result</li>
+<li>Report completions to the server using <code>batch_complete_jobs</code></li>
 <li>Server updates job status and automatically marks dependent jobs as ready</li>
 </ul>
 </li>
-<li><strong>Sleep and repeat</strong> - Wait for job completion poll interval, then repeat loop</li>
+<li><strong>Wait and repeat</strong> - Wait for the job completion poll interval, but wake early when a local
+subprocess exit delivers <code>SIGCHLD</code></li>
 </ol>
 <p>The runner continues until the workflow is complete or canceled.</p>
 <h2 id="resource-management-resource-based-allocation-only"><a class="header" href="#resource-management-resource-based-allocation-only">Resource Management (Resource-Based Allocation Only)</a></h2>

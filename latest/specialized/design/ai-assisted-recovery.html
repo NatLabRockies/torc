@@ -300,7 +300,7 @@ rule-based mechanisms (failure handlers, OOM/timeout detection). It introduces a
     Note over JR,DB: Job Failure
     JR-&gt;&gt;JR: Job exits with code 1
     JR-&gt;&gt;JR: No failure handler match
-    JR-&gt;&gt;API: complete_job(status=pending_failed)
+    JR-&gt;&gt;API: batch_complete_jobs(... pending_failed ...)
     API-&gt;&gt;DB: UPDATE job SET status=10
 
     Note over AI,DB: AI Classification
