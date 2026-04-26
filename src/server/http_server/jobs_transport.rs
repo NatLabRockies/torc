@@ -1,5 +1,5 @@
 use super::*;
-use crate::server::api::{EventsApi, JobsApi, ResultsApi, WorkflowsApi, database_error_with_msg};
+use crate::server::api::{EventsApi, JobsApi, WorkflowsApi, database_error_with_msg};
 use std::collections::HashMap;
 
 const RESOURCE_CLAIM_ORDER_BY: &str = "\
@@ -1112,6 +1112,11 @@ where
         }
     }
 
+    /// Single-completion entry point. Fetches the full `JobModel` (so the
+    /// HTTP response carries the canonical record) and then delegates the
+    /// validation + writes to the same transaction-scoped helper the batch
+    /// path uses, so both paths share one source of truth for the SQL
+    /// ordering, the orphan-row guard, and the run-id check.
     async fn apply_job_completion_state(
         &self,
         expected_workflow_id: Option<i64>,
@@ -1149,121 +1154,55 @@ where
             Err(error) => return Err(CompletionMutationError::Transport(error)),
         };
 
-        validate_completion_inputs(
-            id,
-            expected_workflow_id,
-            status,
-            run_id,
-            &result,
-            job.workflow_id,
-            job.status,
-        )?;
+        let job_info = BatchJobInfo {
+            name: job.name.clone(),
+            workflow_id: job.workflow_id,
+            status: job.status,
+        };
 
-        job.status = Some(status);
+        let mut tx = self.pool.begin().await.map_err(|e| {
+            CompletionMutationError::Transport(database_error_with_msg(
+                e,
+                "Failed to begin completion transaction",
+            ))
+        })?;
 
-        match sqlx::query!(
-            "UPDATE job_internal SET active_compute_node_id = NULL WHERE job_id = ?",
-            id
-        )
-        .execute(self.pool.as_ref())
-        .await
-        {
-            Ok(_) => {
-                debug!("Cleared active_compute_node_id for job_id={}", id);
-            }
-            Err(e) => {
-                error!(
-                    "Failed to clear active_compute_node_id for job_id={}: {}",
-                    id, e
-                );
-            }
-        }
-
-        let result_return_code = result.return_code;
-        let result_response = self
-            .results_api
-            .create_result(result, context)
+        let completion = match self
+            .apply_job_completion_state_tx(
+                &mut tx,
+                expected_workflow_id,
+                id,
+                status,
+                run_id,
+                result,
+                job_info,
+            )
             .await
-            .map_err(CompletionMutationError::Transport)?;
-
-        let result_id = match result_response {
-            CreateResultResponse::SuccessfulResponse(result) => {
-                debug!(
-                    "complete_job: added result with ID {:?} for job_id={}",
-                    result.id, id
-                );
-                result.id
-            }
-            CreateResultResponse::ForbiddenErrorResponse(err) => {
-                error!("Forbidden to add result for job {}: {:?}", id, err);
-                return Err(CompletionMutationError::Response {
-                    code: completion_codes::FORBIDDEN,
-                    response: Box::new(CompleteJobResponse::ForbiddenErrorResponse(err)),
-                });
-            }
-            CreateResultResponse::NotFoundErrorResponse(err) => {
-                error!("Failed to add result for job {}: {:?}", id, err);
-                return Err(CompletionMutationError::Response {
-                    code: completion_codes::NOT_FOUND,
-                    response: Box::new(CompleteJobResponse::NotFoundErrorResponse(err)),
-                });
-            }
-            CreateResultResponse::DefaultErrorResponse(err) => {
-                error!("Failed to add result for job {}: {:?}", id, err);
-                return Err(CompletionMutationError::Response {
-                    code: completion_codes::INTERNAL,
-                    response: Box::new(CompleteJobResponse::DefaultErrorResponse(err)),
-                });
+        {
+            Ok(completion) => completion,
+            Err(e) => {
+                let _ = tx.rollback().await;
+                return Err(e);
             }
         };
 
-        let workflow_id = job.workflow_id;
-        let result_id_value = result_id.ok_or_else(|| {
-            error!("Result ID is missing after creating result");
-            CompletionMutationError::Transport(ApiError("Result ID is missing".to_string()))
+        tx.commit().await.map_err(|e| {
+            CompletionMutationError::Transport(database_error_with_msg(
+                e,
+                "Failed to commit completion transaction",
+            ))
         })?;
 
-        match sqlx::query!(
-            r#"
-            INSERT OR REPLACE INTO workflow_result (workflow_id, job_id, result_id)
-            VALUES (?, ?, ?)
-            "#,
-            workflow_id,
-            id,
-            result_id_value
-        )
-        .execute(self.pool.as_ref())
-        .await
-        {
-            Ok(_) => {
-                debug!(
-                    "complete_job: added workflow_result record for workflow_id={}, job_id={}, result_id={}",
-                    workflow_id, id, result_id_value
-                );
-            }
-            Err(e) => {
-                error!(
-                    "Failed to insert workflow_result for workflow_id={}, job_id={}, result_id={}: {}",
-                    workflow_id, id, result_id_value, e
-                );
-                return Err(CompletionMutationError::Transport(ApiError(
-                    "Database error".to_string(),
-                )));
-            }
-        }
+        // The unblock task wakes on this signal; the batch path also fires it
+        // once after commit, so we mirror that here.
+        self.signal_job_completion();
 
-        self.manage_job_status_change(&job, run_id)
-            .await
-            .map_err(CompletionMutationError::Transport)?;
-
-        Ok(CompletedJobRecord {
-            job,
-            job_id: id,
-            workflow_id,
-            status,
-            result_return_code,
-            result_id: result_id_value,
-        })
+        // The shared helper synthesizes a minimal JobModel from BatchJobInfo
+        // (only the fields finalize_completed_jobs needs); replace it with the
+        // full model we already fetched so HTTP callers still see the
+        // canonical job record.
+        job.status = Some(status);
+        Ok(CompletedJobRecord { job, ..completion })
     }
 
     /// Apply a single completion inside an open SQLite transaction. The caller
