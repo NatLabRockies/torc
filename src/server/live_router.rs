@@ -4577,6 +4577,153 @@ mod live_router_tests {
         );
     }
 
+    /// Submit a completion for a job that lives in a *different* workflow than
+    /// the one the request authorizes for. The server must surface this as an
+    /// indistinguishable `not_found` error and never reveal the foreign
+    /// workflow id (the prefetch is workflow-scoped, and the defense-in-depth
+    /// path also uses a generic message).
+    #[tokio::test]
+    async fn batch_complete_jobs_does_not_leak_cross_workflow_membership() {
+        let (server, _db_file) = test_server_with_file_backed_schema(1).await;
+        let foreign_workflow_id = create_workflow_record(&server).await;
+        let foreign_job_id = create_job_record(&server, foreign_workflow_id).await;
+
+        let target_workflow_id = create_workflow_record(&server).await;
+        let target_run_id = get_workflow_run_id(&server, target_workflow_id).await;
+        let target_compute_node_id = create_compute_node_record(&server, target_workflow_id).await;
+
+        let router = test_router(server);
+
+        let body = BatchCompleteJobsRequest {
+            completions: vec![JobCompletionEntry {
+                job_id: foreign_job_id,
+                status: JobStatus::Completed,
+                run_id: target_run_id,
+                result: ResultModel::new(
+                    foreign_job_id,
+                    target_workflow_id,
+                    target_run_id,
+                    1,
+                    target_compute_node_id,
+                    0,
+                    0.25,
+                    chrono::Utc::now().to_rfc3339(),
+                    JobStatus::Completed,
+                ),
+            }],
+        };
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!(
+                        "/torc-service/v1/workflows/{target_workflow_id}/batch_complete_jobs"
+                    ))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&body).expect("serialize cross-workflow request"),
+                    ))
+                    .expect("valid request"),
+            )
+            .await
+            .expect("cross-workflow response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body: serde_json::Value = read_json_body(response).await;
+        assert_eq!(body["completed"], serde_json::json!([]));
+        let errors = body["errors"].as_array().expect("errors array");
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0]["job_id"], serde_json::json!(foreign_job_id));
+        assert_eq!(errors[0]["error_code"], serde_json::json!("not_found"));
+        let message = errors[0]["message"]
+            .as_str()
+            .expect("error message present");
+        // The pre-fix message was of the form
+        //   "Job {} belongs to workflow {} but batch target is workflow {}"
+        // — make sure none of those revealing fragments appear.
+        assert!(
+            !message.contains("belongs to workflow"),
+            "error message must not reveal cross-workflow membership, got: {message}"
+        );
+        assert!(
+            !message.contains("batch target is workflow"),
+            "error message must not reveal cross-workflow membership, got: {message}"
+        );
+        // Treat foreign-workflow rejections as indistinguishable from
+        // genuine misses. Only an unrelated (offset) workflow id appearing
+        // in the message would be suspicious; the message we emit ("Job N
+        // not found") happens to share digits with the foreign id when
+        // ids are small, so we don't substring-match the id directly.
+        assert_eq!(
+            errors[0]["error_code"],
+            serde_json::json!("not_found"),
+            "must surface as not_found for indistinguishability"
+        );
+    }
+
+    /// A request containing the same `job_id` twice must be rejected up front
+    /// with 422 — `BatchCompleteJobsResponse` is keyed by `job_id`, so
+    /// duplicates would produce an ambiguous shape that clients deduping by
+    /// id (e.g. into a HashSet) cannot interpret correctly.
+    #[tokio::test]
+    async fn batch_complete_jobs_rejects_duplicate_job_ids() {
+        let (server, _db_file) = test_server_with_file_backed_schema(1).await;
+        let workflow_id = create_workflow_record(&server).await;
+        let run_id = get_workflow_run_id(&server, workflow_id).await;
+        let compute_node_id = create_compute_node_record(&server, workflow_id).await;
+        let job_id = create_job_record(&server, workflow_id).await;
+        let router = test_router(server);
+
+        let entry = || JobCompletionEntry {
+            job_id,
+            status: JobStatus::Completed,
+            run_id,
+            result: ResultModel::new(
+                job_id,
+                workflow_id,
+                run_id,
+                1,
+                compute_node_id,
+                0,
+                0.25,
+                chrono::Utc::now().to_rfc3339(),
+                JobStatus::Completed,
+            ),
+        };
+        let body = BatchCompleteJobsRequest {
+            completions: vec![entry(), entry()],
+        };
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!(
+                        "/torc-service/v1/workflows/{workflow_id}/batch_complete_jobs"
+                    ))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&body).expect("serialize duplicate request"),
+                    ))
+                    .expect("valid request"),
+            )
+            .await
+            .expect("duplicate response");
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let body: serde_json::Value = read_json_body(response).await;
+        let inner = &body["error"];
+        assert_eq!(inner["duplicate_job_id"], serde_json::json!(job_id));
+        assert!(
+            inner["message"]
+                .as_str()
+                .unwrap_or("")
+                .contains("duplicate job_id"),
+            "error message should describe the duplicate, got: {body}"
+        );
+    }
+
     fn test_router(server: Server<EmptyContext>) -> Router {
         app_router(LiveRouterState {
             openapi_state: server.openapi_app_state(),

@@ -238,12 +238,14 @@ fn validate_completion_inputs(
     if let Some(expected_workflow_id) = expected_workflow_id
         && job_workflow_id != expected_workflow_id
     {
+        // Defense in depth — the batch path's prefetch is already
+        // workflow-scoped, so this branch should be unreachable. Don't
+        // include the foreign workflow id in the message: callers are only
+        // authorized for `expected_workflow_id` and shouldn't be able to
+        // confirm membership of a job in a different workflow.
         return Err(unprocessable_completion_error(
-            completion_codes::VALIDATION,
-            format!(
-                "Job {} belongs to workflow {} but batch target is workflow {}",
-                id, job_workflow_id, expected_workflow_id
-            ),
+            completion_codes::NOT_FOUND,
+            format!("Job {} not found", id),
         ));
     }
 
@@ -1412,12 +1414,20 @@ where
     }
 
     /// Bulk-load just the fields the batch completion path needs (`name`,
-    /// `workflow_id`, `status`) for every job referenced by `job_ids`. Issued
-    /// against the open transaction so the read sees the same snapshot used by
-    /// subsequent writes.
+    /// `workflow_id`, `status`) for every job referenced by `job_ids`, scoped
+    /// to `workflow_id`. Issued against the open transaction so the read sees
+    /// the same snapshot used by subsequent writes.
+    ///
+    /// The `workflow_id` filter matters for authorization: the caller has
+    /// already been authorized for `workflow_id` via `authorize_workflow!`,
+    /// so jobs from any other workflow must not be loaded. Cross-workflow
+    /// IDs simply don't appear in the returned map and surface to the caller
+    /// as `not_found` errors, with no information about whether they exist
+    /// elsewhere or which workflow they belong to.
     async fn fetch_batch_job_info_tx(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        workflow_id: i64,
         job_ids: &[i64],
     ) -> Result<HashMap<i64, BatchJobInfo>, ApiError> {
         if job_ids.is_empty() {
@@ -1428,10 +1438,10 @@ where
             .collect::<Vec<_>>()
             .join(",");
         let query_str = format!(
-            "SELECT id, name, workflow_id, status FROM job WHERE id IN ({})",
+            "SELECT id, name, workflow_id, status FROM job WHERE workflow_id = ? AND id IN ({})",
             placeholders
         );
-        let mut query = sqlx::query(&query_str);
+        let mut query = sqlx::query(&query_str).bind(workflow_id);
         for id in job_ids {
             query = query.bind(id);
         }
@@ -1444,14 +1454,14 @@ where
         for row in rows {
             let id: i64 = row.get("id");
             let name: String = row.get("name");
-            let workflow_id: i64 = row.get("workflow_id");
+            let row_workflow_id: i64 = row.get("workflow_id");
             let status_int: i64 = row.get("status");
             let status = models::JobStatus::from_int(status_int as i32).ok();
             out.insert(
                 id,
                 BatchJobInfo {
                     name,
-                    workflow_id,
+                    workflow_id: row_workflow_id,
                     status,
                 },
             );
@@ -1581,6 +1591,27 @@ where
             );
         }
 
+        // Reject duplicate job_ids. The response shape (`completed: Vec<i64>`,
+        // `errors` keyed by job_id) is ambiguous when the same job_id appears
+        // twice — the server can produce one success plus one already_complete
+        // error for it, and clients that index the result by job_id (e.g.
+        // `HashSet<i64>`) cannot tell which entry succeeded. Reject upfront
+        // so the response stays unambiguously per-entry.
+        let job_ids: Vec<i64> = body.completions.iter().map(|c| c.job_id).collect();
+        let mut seen = std::collections::HashSet::with_capacity(job_ids.len());
+        if let Some(&dup) = job_ids.iter().find(|id| !seen.insert(**id)) {
+            let error_response = models::ErrorResponse::new(serde_json::json!({
+                "message": format!(
+                    "batch_complete_jobs request contains duplicate job_id {}",
+                    dup
+                ),
+                "duplicate_job_id": dup,
+            }));
+            return Ok(
+                BatchCompleteJobsResponse::UnprocessableContentErrorResponse(error_response),
+            );
+        }
+
         let mut completed = Vec::new();
         let mut errors = Vec::new();
         let mut completion_records = Vec::new();
@@ -1589,11 +1620,14 @@ where
         })?;
 
         // Pre-fetch every referenced job in one SELECT against the open
-        // transaction. This avoids an `ApiError` per entry caused by
-        // `jobs_api.get_job` opening a separate connection, and gives us a
-        // consistent snapshot for the workflow-id and is_complete checks.
-        let job_ids: Vec<i64> = body.completions.iter().map(|c| c.job_id).collect();
-        let job_info_map = match self.fetch_batch_job_info_tx(&mut tx, &job_ids).await {
+        // transaction, scoped to `workflow_id` so cross-workflow IDs never
+        // appear in the map (they surface to the caller as `not_found`,
+        // identical to truly missing IDs, with no info leak about whether
+        // they exist elsewhere).
+        let job_info_map = match self
+            .fetch_batch_job_info_tx(&mut tx, workflow_id, &job_ids)
+            .await
+        {
             Ok(map) => map,
             Err(e) => {
                 let _ = tx.rollback().await;
