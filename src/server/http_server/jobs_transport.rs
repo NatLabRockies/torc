@@ -1,5 +1,6 @@
 use super::*;
 use crate::server::api::{EventsApi, JobsApi, ResultsApi, WorkflowsApi, database_error_with_msg};
+use std::collections::HashMap;
 
 const RESOURCE_CLAIM_ORDER_BY: &str = "\
     ORDER BY \
@@ -135,6 +136,13 @@ impl ClaimPackingState {
     }
 }
 
+/// Maximum number of completions accepted in a single `batch_complete_jobs`
+/// request. The handler processes each completion sequentially inside one
+/// SQLite write transaction, so an unbounded batch size would let a single
+/// caller hold the database write lock for an arbitrary period and starve
+/// other writers.
+pub(super) const MAX_BATCH_COMPLETION_SIZE: usize = 256;
+
 struct CompletedJobRecord {
     job: models::JobModel,
     job_id: i64,
@@ -142,6 +150,17 @@ struct CompletedJobRecord {
     status: models::JobStatus,
     result_return_code: i64,
     result_id: i64,
+}
+
+/// Lightweight projection of a `job` row used by the batch completion path.
+/// Only the fields needed for validation and downstream broadcast events are
+/// loaded, so a single bulk `SELECT … WHERE id IN (…)` replaces the per-entry
+/// `jobs_api.get_job` calls.
+#[derive(Clone)]
+struct BatchJobInfo {
+    name: String,
+    workflow_id: i64,
+    status: Option<models::JobStatus>,
 }
 
 enum CompletionMutationError {
@@ -157,6 +176,82 @@ fn completion_error_message(err: &models::ErrorResponse) -> String {
         .unwrap_or_else(|| {
             serde_json::to_string(&err.error).unwrap_or_else(|_| "unknown error".to_string())
         })
+}
+
+/// Build an `UnprocessableContentErrorResponse` carrying a short human-readable
+/// message. Used by the validation helper so call sites stay terse.
+fn unprocessable_completion_error(message: String) -> CompletionMutationError {
+    let error_response = models::ErrorResponse::new(serde_json::json!({ "message": message }));
+    CompletionMutationError::Response(Box::new(
+        CompleteJobResponse::UnprocessableContentErrorResponse(error_response),
+    ))
+}
+
+/// Run all in-memory validation that is shared between the single
+/// `complete_job` and the batched `batch_complete_jobs` paths. Both paths fetch
+/// the target job (in different ways) and then call this helper with the
+/// fetched values; keeping the rules in one place prevents the two code paths
+/// from drifting.
+fn validate_completion_inputs(
+    id: i64,
+    expected_workflow_id: Option<i64>,
+    status: models::JobStatus,
+    run_id: i64,
+    result: &models::ResultModel,
+    job_workflow_id: i64,
+    job_status: Option<models::JobStatus>,
+) -> Result<(), CompletionMutationError> {
+    if !status.is_terminal() {
+        return Err(CompletionMutationError::Transport(ApiError(format!(
+            "Status '{}' is not a terminal status for job completion",
+            status
+        ))));
+    }
+
+    if let Some(expected_workflow_id) = expected_workflow_id
+        && job_workflow_id != expected_workflow_id
+    {
+        return Err(unprocessable_completion_error(format!(
+            "Job {} belongs to workflow {} but batch target is workflow {}",
+            id, job_workflow_id, expected_workflow_id
+        )));
+    }
+
+    if let Some(current_status) = job_status
+        && current_status.is_complete()
+    {
+        return Err(unprocessable_completion_error(format!(
+            "Job {} is already complete with status {:?}",
+            id, current_status
+        )));
+    }
+
+    if result.job_id != id {
+        return Err(unprocessable_completion_error(format!(
+            "ResultModel job_id {} does not match target job_id {}",
+            result.job_id, id
+        )));
+    }
+    if result.workflow_id != job_workflow_id {
+        return Err(unprocessable_completion_error(format!(
+            "ResultModel workflow_id {} does not match job's workflow_id {}",
+            result.workflow_id, job_workflow_id
+        )));
+    }
+    if result.status != status {
+        return Err(unprocessable_completion_error(format!(
+            "ResultModel status '{}' does not match target status '{}'",
+            result.status, status
+        )));
+    }
+    if result.run_id != run_id {
+        return Err(unprocessable_completion_error(format!(
+            "ResultModel run_id {} does not match target run_id {}",
+            result.run_id, run_id
+        )));
+    }
+
+    Ok(())
 }
 
 struct BackfillClaimParams {
@@ -981,17 +1076,6 @@ where
         result: models::ResultModel,
         context: &C,
     ) -> Result<CompletedJobRecord, CompletionMutationError> {
-        if !status.is_terminal() {
-            error!(
-                "Attempted to complete job {} with non-terminal status '{}'",
-                id, status
-            );
-            return Err(CompletionMutationError::Transport(ApiError(format!(
-                "Status '{}' is not a terminal status for job completion",
-                status
-            ))));
-        }
-
         let mut job = match self.jobs_api.get_job(id, context).await {
             Ok(response) => match response {
                 GetJobResponse::SuccessfulResponse(job) => job,
@@ -1017,79 +1101,15 @@ where
             Err(error) => return Err(CompletionMutationError::Transport(error)),
         };
 
-        if let Some(expected_workflow_id) = expected_workflow_id
-            && job.workflow_id != expected_workflow_id
-        {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!(
-                    "Job {} belongs to workflow {} but batch target is workflow {}",
-                    id, job.workflow_id, expected_workflow_id
-                )
-            }));
-            return Err(CompletionMutationError::Response(Box::new(
-                CompleteJobResponse::UnprocessableContentErrorResponse(error_response),
-            )));
-        }
-
-        if let Some(current_status) = &job.status
-            && current_status.is_complete()
-        {
-            error!(
-                "Job {} is already complete with status {:?}",
-                id, current_status
-            );
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("Job {} is already complete with status {:?}", id, current_status)
-            }));
-            return Err(CompletionMutationError::Response(Box::new(
-                CompleteJobResponse::UnprocessableContentErrorResponse(error_response),
-            )));
-        }
-
-        if result.job_id != id {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!(
-                    "ResultModel job_id {} does not match target job_id {}",
-                    result.job_id, id
-                )
-            }));
-            return Err(CompletionMutationError::Response(Box::new(
-                CompleteJobResponse::UnprocessableContentErrorResponse(error_response),
-            )));
-        }
-        if result.workflow_id != job.workflow_id {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!(
-                    "ResultModel workflow_id {} does not match job's workflow_id {}",
-                    result.workflow_id, job.workflow_id
-                )
-            }));
-            return Err(CompletionMutationError::Response(Box::new(
-                CompleteJobResponse::UnprocessableContentErrorResponse(error_response),
-            )));
-        }
-        if result.status != status {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!(
-                    "ResultModel status '{}' does not match target status '{}'",
-                    result.status, status
-                )
-            }));
-            return Err(CompletionMutationError::Response(Box::new(
-                CompleteJobResponse::UnprocessableContentErrorResponse(error_response),
-            )));
-        }
-        if result.run_id != run_id {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!(
-                    "ResultModel run_id {} does not match target run_id {}",
-                    result.run_id, run_id
-                )
-            }));
-            return Err(CompletionMutationError::Response(Box::new(
-                CompleteJobResponse::UnprocessableContentErrorResponse(error_response),
-            )));
-        }
+        validate_completion_inputs(
+            id,
+            expected_workflow_id,
+            status,
+            run_id,
+            &result,
+            job.workflow_id,
+            job.status,
+        )?;
 
         job.status = Some(status);
 
@@ -1195,6 +1215,21 @@ where
         })
     }
 
+    /// Apply a single completion inside an open SQLite transaction. The caller
+    /// has already pulled `job_info` from a single bulk `SELECT` (see
+    /// `fetch_batch_job_info_tx`) so this function does no extra `SELECT`s for
+    /// per-entry validation.
+    ///
+    /// Order of operations:
+    ///   1. In-memory validation (shared with the single-call path).
+    ///   2. Run-id validation (read against the live state, not `tx`).
+    ///   3. Guarded `UPDATE job SET status = ? WHERE id = ? AND status NOT IN
+    ///      (terminal_states)`. If `rows_affected == 0` the job already
+    ///      reached a terminal state under us — return an Unprocessable
+    ///      response *before* writing any result rows so a duplicate caller
+    ///      cannot leak result rows into the database.
+    ///   4. Clear `job_internal.active_compute_node_id`.
+    ///   5. Insert the `result` and `workflow_result` rows.
     async fn apply_job_completion_state_tx(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
@@ -1203,112 +1238,81 @@ where
         status: models::JobStatus,
         run_id: i64,
         result: models::ResultModel,
-        context: &C,
+        job_info: BatchJobInfo,
     ) -> Result<CompletedJobRecord, CompletionMutationError> {
-        if !status.is_terminal() {
-            return Err(CompletionMutationError::Transport(ApiError(format!(
-                "Status '{}' is not a terminal status for job completion",
-                status
-            ))));
+        validate_completion_inputs(
+            id,
+            expected_workflow_id,
+            status,
+            run_id,
+            &result,
+            job_info.workflow_id,
+            job_info.status,
+        )?;
+
+        if let Err(e) = self.validate_run_id(job_info.workflow_id, run_id).await {
+            return Err(unprocessable_completion_error(e));
         }
 
-        let job = match self.jobs_api.get_job(id, context).await {
-            Ok(response) => match response {
-                GetJobResponse::SuccessfulResponse(job) => job,
-                GetJobResponse::ForbiddenErrorResponse(err) => {
-                    return Err(CompletionMutationError::Response(Box::new(
-                        CompleteJobResponse::ForbiddenErrorResponse(err),
-                    )));
+        // Guarded status update FIRST. If another writer already settled this
+        // job to a terminal state, this UPDATE is a no-op and we return the
+        // Unprocessable response without inserting any result rows. Doing this
+        // before the result insert is what prevents orphan result rows under a
+        // duplicate-completion race.
+        let new_status_int = status.to_int();
+        let completed_int = models::JobStatus::Completed.to_int();
+        let failed_int = models::JobStatus::Failed.to_int();
+        let canceled_int = models::JobStatus::Canceled.to_int();
+        let terminated_int = models::JobStatus::Terminated.to_int();
+        let disabled_int = models::JobStatus::Disabled.to_int();
+        let pending_failed_int = models::JobStatus::PendingFailed.to_int();
+        let update_result = sqlx::query!(
+            "UPDATE job SET status = ?, unblocking_processed = 0 WHERE id = ? AND status NOT IN (?, ?, ?, ?, ?, ?)",
+            new_status_int,
+            id,
+            completed_int,
+            failed_int,
+            canceled_int,
+            terminated_int,
+            disabled_int,
+            pending_failed_int,
+        )
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| CompletionMutationError::Transport(database_error_with_msg(e, "Failed to update job status")))?;
+
+        if update_result.rows_affected() == 0 {
+            let current = sqlx::query_scalar!("SELECT status FROM job WHERE id = ?", id)
+                .fetch_optional(&mut **tx)
+                .await
+                .map_err(|e| {
+                    CompletionMutationError::Transport(database_error_with_msg(
+                        e,
+                        "Failed to re-check job status",
+                    ))
+                })?;
+
+            return match current {
+                Some(status_int) => {
+                    let current_status = models::JobStatus::from_int(status_int as i32)
+                        .unwrap_or(models::JobStatus::Failed);
+                    if current_status.is_complete() {
+                        Err(unprocessable_completion_error(format!(
+                            "Job {} is already complete with status {:?}",
+                            id, current_status
+                        )))
+                    } else {
+                        Err(CompletionMutationError::Transport(ApiError(format!(
+                            "Job {} is in unexpected status {:?}",
+                            id, current_status
+                        ))))
+                    }
                 }
-                GetJobResponse::NotFoundErrorResponse(err) => {
-                    return Err(CompletionMutationError::Response(Box::new(
-                        CompleteJobResponse::NotFoundErrorResponse(err),
-                    )));
-                }
-                GetJobResponse::DefaultErrorResponse(err) => {
-                    return Err(CompletionMutationError::Response(Box::new(
-                        CompleteJobResponse::DefaultErrorResponse(err),
-                    )));
-                }
-            },
-            Err(error) => return Err(CompletionMutationError::Transport(error)),
-        };
-
-        if let Some(expected_workflow_id) = expected_workflow_id
-            && job.workflow_id != expected_workflow_id
-        {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!(
-                    "Job {} belongs to workflow {} but batch target is workflow {}",
-                    id, job.workflow_id, expected_workflow_id
-                )
-            }));
-            return Err(CompletionMutationError::Response(Box::new(
-                CompleteJobResponse::UnprocessableContentErrorResponse(error_response),
-            )));
-        }
-
-        if let Some(current_status) = &job.status
-            && current_status.is_complete()
-        {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("Job {} is already complete with status {:?}", id, current_status)
-            }));
-            return Err(CompletionMutationError::Response(Box::new(
-                CompleteJobResponse::UnprocessableContentErrorResponse(error_response),
-            )));
-        }
-
-        if result.job_id != id {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!(
-                    "ResultModel job_id {} does not match target job_id {}",
-                    result.job_id, id
-                )
-            }));
-            return Err(CompletionMutationError::Response(Box::new(
-                CompleteJobResponse::UnprocessableContentErrorResponse(error_response),
-            )));
-        }
-        if result.workflow_id != job.workflow_id {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!(
-                    "ResultModel workflow_id {} does not match job's workflow_id {}",
-                    result.workflow_id, job.workflow_id
-                )
-            }));
-            return Err(CompletionMutationError::Response(Box::new(
-                CompleteJobResponse::UnprocessableContentErrorResponse(error_response),
-            )));
-        }
-        if result.status != status {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!(
-                    "ResultModel status '{}' does not match target status '{}'",
-                    result.status, status
-                )
-            }));
-            return Err(CompletionMutationError::Response(Box::new(
-                CompleteJobResponse::UnprocessableContentErrorResponse(error_response),
-            )));
-        }
-        if result.run_id != run_id {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!(
-                    "ResultModel run_id {} does not match target run_id {}",
-                    result.run_id, run_id
-                )
-            }));
-            return Err(CompletionMutationError::Response(Box::new(
-                CompleteJobResponse::UnprocessableContentErrorResponse(error_response),
-            )));
-        }
-
-        if let Err(e) = self.validate_run_id(job.workflow_id, run_id).await {
-            let error_response = models::ErrorResponse::new(serde_json::json!({ "message": e }));
-            return Err(CompletionMutationError::Response(Box::new(
-                CompleteJobResponse::UnprocessableContentErrorResponse(error_response),
-            )));
+                None => Err(CompletionMutationError::Transport(ApiError(format!(
+                    "Job {} not found",
+                    id
+                )))),
+            };
         }
 
         if let Err(e) = sqlx::query!(
@@ -1377,7 +1381,7 @@ where
             INSERT OR REPLACE INTO workflow_result (workflow_id, job_id, result_id)
             VALUES (?, ?, ?)
             "#,
-            job.workflow_id,
+            job_info.workflow_id,
             id,
             result_id_value
         )
@@ -1390,76 +1394,70 @@ where
             ))
         })?;
 
-        let new_status_int = status.to_int();
-        let completed_int = models::JobStatus::Completed.to_int();
-        let failed_int = models::JobStatus::Failed.to_int();
-        let canceled_int = models::JobStatus::Canceled.to_int();
-        let terminated_int = models::JobStatus::Terminated.to_int();
-        let disabled_int = models::JobStatus::Disabled.to_int();
-        let pending_failed_int = models::JobStatus::PendingFailed.to_int();
-        let update_result = sqlx::query!(
-            "UPDATE job SET status = ?, unblocking_processed = 0 WHERE id = ? AND status NOT IN (?, ?, ?, ?, ?, ?)",
-            new_status_int,
-            id,
-            completed_int,
-            failed_int,
-            canceled_int,
-            terminated_int,
-            disabled_int,
-            pending_failed_int,
-        )
-        .execute(&mut **tx)
-        .await
-        .map_err(|e| CompletionMutationError::Transport(database_error_with_msg(e, "Failed to update job status")))?;
-
-        if update_result.rows_affected() == 0 {
-            let current = sqlx::query_scalar!("SELECT status FROM job WHERE id = ?", id)
-                .fetch_optional(&mut **tx)
-                .await
-                .map_err(|e| {
-                    CompletionMutationError::Transport(database_error_with_msg(
-                        e,
-                        "Failed to re-check job status",
-                    ))
-                })?;
-
-            match current {
-                Some(status_int) => {
-                    let current_status = models::JobStatus::from_int(status_int as i32)
-                        .unwrap_or(models::JobStatus::Failed);
-                    if current_status.is_complete() {
-                        let error_response = models::ErrorResponse::new(serde_json::json!({
-                            "message": format!("Job {} is already complete with status {:?}", id, current_status)
-                        }));
-                        return Err(CompletionMutationError::Response(Box::new(
-                            CompleteJobResponse::UnprocessableContentErrorResponse(error_response),
-                        )));
-                    }
-                    return Err(CompletionMutationError::Transport(ApiError(format!(
-                        "Job {} is in unexpected status {:?}",
-                        id, current_status
-                    ))));
-                }
-                None => {
-                    return Err(CompletionMutationError::Transport(ApiError(format!(
-                        "Job {} not found",
-                        id
-                    ))));
-                }
-            }
-        }
-
-        let mut completed_job = job.clone();
+        // Synthesize a JobModel for the broadcast event in finalize_completed_jobs.
+        // Only `name`, `id`, `workflow_id`, and `status` are read downstream, so we
+        // construct a minimal model rather than re-fetching the full row.
+        let mut completed_job =
+            models::JobModel::new(job_info.workflow_id, job_info.name.clone(), String::new());
+        completed_job.id = Some(id);
         completed_job.status = Some(status);
 
         Ok(CompletedJobRecord {
             job: completed_job,
             job_id: id,
-            workflow_id: job.workflow_id,
+            workflow_id: job_info.workflow_id,
             status,
             result_return_code,
             result_id: result_id_value,
         })
+    }
+
+    /// Bulk-load just the fields the batch completion path needs (`name`,
+    /// `workflow_id`, `status`) for every job referenced by `job_ids`. Issued
+    /// against the open transaction so the read sees the same snapshot used by
+    /// subsequent writes.
+    async fn fetch_batch_job_info_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        job_ids: &[i64],
+    ) -> Result<HashMap<i64, BatchJobInfo>, ApiError> {
+        if job_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let placeholders = std::iter::repeat_n("?", job_ids.len())
+            .collect::<Vec<_>>()
+            .join(",");
+        let query_str = format!(
+            "SELECT id, name, workflow_id, status FROM job WHERE id IN ({})",
+            placeholders
+        );
+        let mut query = sqlx::query(&query_str);
+        for id in job_ids {
+            query = query.bind(id);
+        }
+        let rows = query
+            .fetch_all(&mut **tx)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to batch-fetch job rows"))?;
+
+        let mut out = HashMap::with_capacity(rows.len());
+        for row in rows {
+            let id: i64 = row.get("id");
+            let name: String = row.get("name");
+            let workflow_id: i64 = row.get("workflow_id");
+            let status_int: i64 = row.get("status");
+            let status = models::JobStatus::from_int(status_int as i32).ok();
+            out.insert(
+                id,
+                BatchJobInfo {
+                    name,
+                    workflow_id,
+                    status,
+                },
+            );
+        }
+        Ok(out)
     }
 
     async fn finalize_completed_jobs(
@@ -1570,6 +1568,20 @@ where
 
         authorize_workflow!(self, workflow_id, context, BatchCompleteJobsResponse);
 
+        if body.completions.len() > MAX_BATCH_COMPLETION_SIZE {
+            let error_response = models::ErrorResponse::new(serde_json::json!({
+                "message": format!(
+                    "batch_complete_jobs request size {} exceeds maximum of {}",
+                    body.completions.len(),
+                    MAX_BATCH_COMPLETION_SIZE
+                ),
+                "max_size": MAX_BATCH_COMPLETION_SIZE,
+            }));
+            return Ok(
+                BatchCompleteJobsResponse::UnprocessableContentErrorResponse(error_response),
+            );
+        }
+
         let mut completed = Vec::new();
         let mut errors = Vec::new();
         let mut completion_records = Vec::new();
@@ -1577,8 +1589,32 @@ where
             database_error_with_msg(e, "Failed to begin batch completion transaction")
         })?;
 
+        // Pre-fetch every referenced job in one SELECT against the open
+        // transaction. This avoids an `ApiError` per entry caused by
+        // `jobs_api.get_job` opening a separate connection, and gives us a
+        // consistent snapshot for the workflow-id and is_complete checks.
+        let job_ids: Vec<i64> = body.completions.iter().map(|c| c.job_id).collect();
+        let job_info_map = match self.fetch_batch_job_info_tx(&mut tx, &job_ids).await {
+            Ok(map) => map,
+            Err(e) => {
+                let _ = tx.rollback().await;
+                return Err(e);
+            }
+        };
+
         for entry in body.completions {
             let job_id = entry.job_id;
+            let info = match job_info_map.get(&job_id) {
+                Some(info) => info.clone(),
+                None => {
+                    errors.push(models::JobCompletionError {
+                        job_id,
+                        message: format!("Job {} not found", job_id),
+                    });
+                    continue;
+                }
+            };
+
             match self
                 .apply_job_completion_state_tx(
                     &mut tx,
@@ -1587,7 +1623,7 @@ where
                     entry.status,
                     entry.run_id,
                     entry.result,
-                    context,
+                    info,
                 )
                 .await
             {

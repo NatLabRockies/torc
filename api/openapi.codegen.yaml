@@ -4250,7 +4250,7 @@ paths:
         required: true
       responses:
         '200':
-          description: Per-completion outcomes
+          description: Per-completion outcomes. Successful entries are returned in `completed`; per-completion failures are returned in `errors`.
           content:
             application/json:
               schema:
@@ -4263,6 +4263,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Workflow not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Request rejected (e.g. batch size exceeds the server's maximum)
           content:
             application/json:
               schema:

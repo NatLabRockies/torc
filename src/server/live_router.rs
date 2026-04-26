@@ -2195,9 +2195,10 @@ pub async fn complete_job(
     params(("id" = i64, Path, description = "Workflow ID")),
     request_body = models::BatchCompleteJobsRequest,
     responses(
-        (status = 200, description = "Per-completion outcomes", body = models::BatchCompleteJobsResponse),
+        (status = 200, description = "Per-completion outcomes. Successful entries are returned in `completed`; per-completion failures are returned in `errors`.", body = models::BatchCompleteJobsResponse),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Workflow not found", body = models::ErrorResponse),
+        (status = 422, description = "Request rejected (e.g. batch size exceeds the server's maximum)", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]

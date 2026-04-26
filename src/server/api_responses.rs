@@ -1488,6 +1488,8 @@ pub enum BatchCompleteJobsResponse {
     ForbiddenErrorResponse(models::ErrorResponse),
     /// Workflow not found
     NotFoundErrorResponse(models::ErrorResponse),
+    /// Request was rejected (e.g. batch exceeds the server's maximum size)
+    UnprocessableContentErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }

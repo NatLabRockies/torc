@@ -20,6 +20,7 @@ use serde::{Deserialize, Serialize, de::Error as _};
 pub enum BatchCompleteJobsError {
     Status403(models::ErrorResponse),
     Status404(models::ErrorResponse),
+    Status422(models::ErrorResponse),
     Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }

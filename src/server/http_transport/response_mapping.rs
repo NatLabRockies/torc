@@ -492,7 +492,7 @@ map_response_unprocessable!(
     CompleteJobResponse,
     SuccessfulResponse
 );
-map_response_std!(
+map_response_unprocessable!(
     batch_complete_jobs_response,
     BatchCompleteJobsResponse,
     SuccessfulResponse

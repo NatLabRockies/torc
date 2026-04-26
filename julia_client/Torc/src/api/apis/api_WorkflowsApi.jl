@@ -15,6 +15,7 @@ const _returntypes_batch_complete_jobs_WorkflowsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => BatchCompleteJobsResponse,
     Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
     Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("422", "x"=>".") * "\$") => ErrorResponse,
     Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 

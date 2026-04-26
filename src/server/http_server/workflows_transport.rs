@@ -239,8 +239,7 @@ where
             Has::<XSpanIdString>::get(context).0.clone()
         );
         authorize_workflow!(self, id, context, CancelWorkflowResponse);
-        let response = self.workflows_api.cancel_workflow(id, context).await?;
-        Ok(response)
+        self.workflows_api.cancel_workflow(id, context).await
     }
 
     pub(super) async fn transport_delete_events(
