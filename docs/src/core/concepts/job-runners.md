@@ -36,6 +36,9 @@ torc remote run workers.txt <workflow-id>
 Each remote worker runs as a detached process and polls the server for jobs, just like the local
 runner. The server coordinates job distribution to prevent double-allocation.
 
+On Unix systems, runners also use a `SIGCHLD`-driven wakeup path so local subprocess exits can be
+observed promptly instead of always waiting for the full poll interval.
+
 ## Job Allocation Strategies
 
 The job runner supports two different strategies for retrieving and executing jobs:
@@ -132,8 +135,8 @@ flowchart TD
     ClaimResources --> StartJobs
     ClaimQueue --> StartJobs
     StartJobs[Start claimed jobs] --> ForEachJob[For each job:<br/>1. Call start_job<br/>2. Execute command<br/>3. Record stdout/stderr]
-    ForEachJob --> Sleep[Sleep for poll interval]
-    Sleep --> CheckStatus
+    ForEachJob --> Wait[Wait for poll interval<br/>or SIGCHLD wakeup]
+    Wait --> CheckStatus
 
     style Start fill:#10b981,stroke:#059669,color:#fff
     style End fill:#ef4444,stroke:#dc2626,color:#fff
@@ -146,7 +149,7 @@ flowchart TD
     style ClaimJobs fill:#3b82f6,stroke:#2563eb,color:#fff
     style StartJobs fill:#3b82f6,stroke:#2563eb,color:#fff
     style ForEachJob fill:#3b82f6,stroke:#2563eb,color:#fff
-    style Sleep fill:#6b7280,stroke:#4b5563,color:#fff
+    style Wait fill:#6b7280,stroke:#4b5563,color:#fff
     style ClaimResources fill:#8b5cf6,stroke:#7c3aed,color:#fff
     style ClaimQueue fill:#ec4899,stroke:#db2777,color:#fff
 ```
@@ -163,9 +166,10 @@ flowchart TD
    - Execute job command in a non-blocking subprocess
    - Record stdout/stderr output to files
 6. **Complete jobs** - When running jobs finish:
-   - Call `complete_job` with exit code and result
+   - Report completions to the server using `batch_complete_jobs`
    - Server updates job status and automatically marks dependent jobs as ready
-7. **Sleep and repeat** - Wait for job completion poll interval, then repeat loop
+7. **Wait and repeat** - Wait for the job completion poll interval, but wake early when a local
+   subprocess exit delivers `SIGCHLD`
 
 The runner continues until the workflow is complete or canceled.
 

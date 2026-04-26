@@ -95,16 +95,32 @@ impl Wakeup {
     /// Wait until notified or `timeout` elapses. Returns `true` if a
     /// notification was consumed, `false` on timeout.
     pub fn wait_with_timeout(&self, timeout: Duration) -> bool {
-        let pending = self.pending.lock().unwrap();
+        let mut pending = self.pending.lock().unwrap();
         if *pending {
-            let mut pending = pending;
             *pending = false;
             return true;
         }
-        let (mut pending, _wait_result) = self.cv.wait_timeout(pending, timeout).unwrap();
-        let notified = *pending;
-        *pending = false;
-        notified
+
+        let deadline = Instant::now() + timeout;
+        loop {
+            let now = Instant::now();
+            if now >= deadline {
+                return false;
+            }
+
+            let remaining = deadline.saturating_duration_since(now);
+            let (next_pending, wait_result) = self.cv.wait_timeout(pending, remaining).unwrap();
+            pending = next_pending;
+
+            if *pending {
+                *pending = false;
+                return true;
+            }
+
+            if wait_result.timed_out() {
+                return false;
+            }
+        }
     }
 }
 
@@ -1797,8 +1813,8 @@ impl JobRunner {
                     e
                 );
                 // Clean up local state for every prepared completion before
-                // propagating, mirroring the per-job error path of the old
-                // implementation.
+                // propagating the batch error so finished subprocesses do not
+                // keep local resources reserved.
                 for p in &prepared {
                     if let Some(job_rr) = self.job_resources.get(&p.job_id).cloned() {
                         self.increment_node_resources(p.job_id, &job_rr);
@@ -3170,6 +3186,27 @@ mod tests {
         assert!(
             start.elapsed() >= Duration::from_millis(40),
             "wait should respect the timeout, only waited {:?}",
+            start.elapsed()
+        );
+    }
+
+    #[test]
+    fn wakeup_ignores_spurious_condvar_notifications() {
+        let w = Wakeup::new();
+        let w2 = Arc::clone(&w);
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(20));
+            w2.cv.notify_all();
+        });
+        let start = Instant::now();
+        let notified = w.wait_with_timeout(Duration::from_millis(60));
+        assert!(
+            !notified,
+            "spurious condvar wake should not look like notify()"
+        );
+        assert!(
+            start.elapsed() >= Duration::from_millis(45),
+            "wait should continue until timeout after a spurious wake, only waited {:?}",
             start.elapsed()
         );
     }

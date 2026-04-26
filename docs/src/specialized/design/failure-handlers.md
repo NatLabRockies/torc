@@ -522,7 +522,7 @@ sequenceDiagram
     participant MCP as torc-mcp-server
     participant AI as AI Agent
 
-    JR->>API: complete_job(status=pending_failed)
+    JR->>API: batch_complete_jobs(... pending_failed ...)
     Note over JR,API: Job awaiting classification
 
     AI->>MCP: list_pending_failed_jobs(workflow_id)

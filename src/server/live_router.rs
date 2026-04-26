@@ -4216,10 +4216,17 @@ fn anonymous_authorization() -> Authorization {
 #[cfg(test)]
 mod live_router_tests {
     use super::*;
-    use crate::models::{ComputeNodeModel, JobModel, JobsModel, WorkflowModel};
+    use crate::models::{
+        BatchCompleteJobsRequest, ComputeNodeModel, JobCompletionEntry, JobModel, JobStatus,
+        JobsModel, ResultModel, WorkflowModel,
+    };
     use crate::server::api_contract::TransportApiCore;
     use crate::server::auth::{SharedCredentialCache, SharedHtpasswd};
-    use crate::server::response_types::workflows::CreateWorkflowResponse;
+    use crate::server::response_types::jobs::CreateJobResponse;
+    use crate::server::response_types::scheduling::CreateComputeNodeResponse;
+    use crate::server::response_types::workflows::{
+        CreateWorkflowResponse, GetWorkflowStatusResponse,
+    };
     use axum::http::Request;
     use axum::http::header::CONTENT_TYPE;
     use http_body_util::BodyExt;
@@ -4228,6 +4235,7 @@ mod live_router_tests {
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
     use std::str::FromStr;
     use std::sync::Arc;
+    use tempfile::NamedTempFile;
     use tower::ServiceExt;
 
     #[tokio::test]
@@ -4441,6 +4449,72 @@ mod live_router_tests {
         assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
     }
 
+    #[tokio::test]
+    async fn batch_complete_jobs_round_trip_via_router() {
+        let (server, _db_file) = test_server_with_file_backed_schema(4).await;
+        let workflow_id = create_workflow_record(&server).await;
+        let run_id = get_workflow_run_id(&server, workflow_id).await;
+        let compute_node_id = create_compute_node_record(&server, workflow_id).await;
+        let job_id = create_job_record(&server, workflow_id).await;
+        let router = test_router(server);
+
+        let body = BatchCompleteJobsRequest {
+            completions: vec![JobCompletionEntry {
+                job_id,
+                status: JobStatus::Completed,
+                run_id,
+                result: ResultModel::new(
+                    job_id,
+                    workflow_id,
+                    run_id,
+                    1,
+                    compute_node_id,
+                    0,
+                    0.25,
+                    chrono::Utc::now().to_rfc3339(),
+                    JobStatus::Completed,
+                ),
+            }],
+        };
+
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!(
+                        "/torc-service/v1/workflows/{workflow_id}/batch_complete_jobs"
+                    ))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&body).expect("serialize batch complete request"),
+                    ))
+                    .expect("valid request"),
+            )
+            .await
+            .expect("batch complete response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let completed: serde_json::Value = read_json_body(response).await;
+        assert_eq!(completed["completed"], serde_json::json!([job_id]));
+        assert_eq!(completed["errors"], serde_json::json!([]));
+
+        let get_response = router
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(format!("/torc-service/v1/jobs/{job_id}"))
+                    .body(Body::empty())
+                    .expect("valid request"),
+            )
+            .await
+            .expect("get job response");
+
+        assert_eq!(get_response.status(), StatusCode::OK);
+        let job: JobModel = read_json_body(get_response).await;
+        assert_eq!(job.status, Some(JobStatus::Completed));
+    }
+
     fn test_router(server: Server<EmptyContext>) -> Router {
         app_router(LiveRouterState {
             openapi_state: server.openapi_app_state(),
@@ -4473,6 +4547,33 @@ mod live_router_tests {
         Server::new(pool, false, htpasswd, None, credential_cache)
     }
 
+    async fn test_server_with_file_backed_schema(
+        max_connections: u32,
+    ) -> (Server<EmptyContext>, NamedTempFile) {
+        let db_file = NamedTempFile::new().expect("temporary sqlite file");
+        let url = format!("sqlite:{}", db_file.path().display());
+        let pool = SqlitePoolOptions::new()
+            .max_connections(max_connections)
+            .connect_with(
+                SqliteConnectOptions::from_str(&url)
+                    .expect("sqlite file connection")
+                    .create_if_missing(true),
+            )
+            .await
+            .expect("sqlite pool");
+        sqlx::migrate!("./torc-server/migrations")
+            .run(&pool)
+            .await
+            .expect("migrations");
+
+        let htpasswd: SharedHtpasswd = Arc::new(RwLock::new(None));
+        let credential_cache: SharedCredentialCache = Arc::new(RwLock::new(None));
+        (
+            Server::new(pool, false, htpasswd, None, credential_cache),
+            db_file,
+        )
+    }
+
     async fn create_workflow_record(server: &Server<EmptyContext>) -> i64 {
         let workflow_response = server
             .create_workflow(
@@ -4487,6 +4588,65 @@ mod live_router_tests {
                 workflow.id.expect("workflow id")
             }
             other => panic!("unexpected workflow response: {other:?}"),
+        }
+    }
+
+    async fn create_job_record(server: &Server<EmptyContext>, workflow_id: i64) -> i64 {
+        let response = server
+            .create_job(
+                JobModel::new(
+                    workflow_id,
+                    "transport-job".to_string(),
+                    "echo transport".to_string(),
+                ),
+                &EmptyContext::default(),
+            )
+            .await
+            .expect("create job");
+
+        match response {
+            CreateJobResponse::SuccessfulResponse(job) => job.id.expect("job id"),
+            other => panic!("unexpected create_job response: {other:?}"),
+        }
+    }
+
+    async fn create_compute_node_record(server: &Server<EmptyContext>, workflow_id: i64) -> i64 {
+        let response = server
+            .create_compute_node(
+                ComputeNodeModel::new(
+                    workflow_id,
+                    "router-node".to_string(),
+                    4321,
+                    chrono::Utc::now().to_rfc3339(),
+                    8,
+                    16.0,
+                    0,
+                    1,
+                    "local".to_string(),
+                    None,
+                ),
+                &EmptyContext::default(),
+            )
+            .await
+            .expect("create compute node");
+
+        match response {
+            CreateComputeNodeResponse::SuccessfulResponse(node) => {
+                node.id.expect("compute node id")
+            }
+            other => panic!("unexpected create_compute_node response: {other:?}"),
+        }
+    }
+
+    async fn get_workflow_run_id(server: &Server<EmptyContext>, workflow_id: i64) -> i64 {
+        let response = server
+            .get_workflow_status(workflow_id, &EmptyContext::default())
+            .await
+            .expect("get workflow status");
+
+        match response {
+            GetWorkflowStatusResponse::SuccessfulResponse(status) => status.run_id,
+            other => panic!("unexpected get_workflow_status response: {other:?}"),
         }
     }
 
