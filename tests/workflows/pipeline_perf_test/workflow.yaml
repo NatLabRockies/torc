@@ -1,19 +1,19 @@
-name: "GPU Pipeline Perf Test (3K Jobs)"
+name: "Pipeline Perf Test (3K Jobs)"
 description: |
-  Stress-test the runner-server interaction hot path with a three-stage GPU
+  Stress-test the runner-server interaction hot path with a three-stage
   pipeline:
 
-    setup_{i}    (CPU)  ──▶  gpu_{i}    (1 GPU)  ──▶  post_{i}    (CPU)
-                                                       │
-                                                       ▼
-                                                  final_aggregate
+    setup_{i}    (CPU)  ──▶  work_{i}    (CPU)  ──▶  post_{i}    (CPU)
+                                                     │
+                                                     ▼
+                                                final_aggregate
 
   - 1,000 setup jobs (CPU only) each produce one input file.
-  - 1,000 GPU jobs each consume the matching setup file, run on 1 GPU,
-    and emit a result file. GPU jobs delete their input file on the way
+  - 1,000 middle-stage jobs each consume the matching setup file, run on
+    1 CPU, and emit a result file. These jobs delete their input file on the way
     through.
-  - 1,000 postprocess jobs (1 CPU each) each consume one GPU output and
-    emit a tiny result stub. Postprocess jobs delete their GPU input on
+  - 1,000 postprocess jobs (1 CPU each) each consume one middle-stage output and
+    emit a tiny result stub. Postprocess jobs delete their input on
     the way through.
   - 1 final_aggregate job fans in over all postprocess outputs.
 
@@ -22,14 +22,14 @@ description: |
   ## Designed scheduling shape
 
   Priorities (higher = claimed first):
-    - gpu_*           : 100  (always preferred when a GPU is free)
-    - post_*          :  50  (drains finished GPU outputs as fast as possible)
+    - work_*          : 100  (always preferred when mid-stage work is ready)
+    - post_*          :  50  (drains finished mid-stage outputs as fast as possible)
     - setup_*         :   1  (only fills CPUs that have no postprocess work)
     - final_aggregate :   0
 
   In steady state this produces roughly:
-    setup files created and consumed continuously by GPU jobs,
-    GPU jobs running flat-out limited by GPU count,
+    setup files created and consumed continuously by mid-stage jobs,
+    mid-stage jobs running flat-out limited by CPU count,
     postprocess jobs filling whatever CPU capacity isn't taken by setups.
 
   The only files that accumulate end-to-end are the postprocess output stubs,
@@ -41,9 +41,9 @@ description: |
   runner-server hot path that recent perf changes target:
 
   1. Empty-poll cost while runners with free CPU capacity wait for upstream
-     GPU jobs to finish (lock-free pre-check).
+     jobs to finish.
   2. Per-iteration sleep gap between short jobs completing and the next
-     batch being claimed (skip-sleep-on-completions).
+     batch being claimed.
   3. Per-job round-trip cost for completion reporting at high throughput
      (batch_complete_jobs).
 
@@ -55,35 +55,28 @@ description: |
       ./target/release/torc-server run
 
   Submit the workflow (creates jobs and triggers the on_workflow_start action
-  so Slurm allocates the GPU node block):
+  so Slurm allocates the node block):
 
-      torc submit tests/workflows/gpu_pipeline_perf_test/workflow.yaml
+      torc submit tests/workflows/pipeline_perf_test/workflow.yaml
 
   Or create now and submit later:
 
-      torc create tests/workflows/gpu_pipeline_perf_test/workflow.yaml
+      torc create tests/workflows/pipeline_perf_test/workflow.yaml
       torc submit <workflow_id>
 
   Replace the `account` field below with your Slurm account before running.
+  Adjust the `partition` if your site uses a different CPU debug queue.
 
 slurm_schedulers:
-  - name: "debug_gpu"
+  - name: "debug_cpu"
     account: "PLACEHOLDER_ACCOUNT"
-    partition: "debug-gpu"
+    partition: "debug"
     nodes: 2
     walltime: "08:00:00"
 
 resource_requirements:
   - name: "cpu_small"
     num_cpus: 1
-    num_gpus: 0
-    num_nodes: 1
-    memory: "256m"
-    runtime: "PT1M"
-
-  - name: "one_gpu"
-    num_cpus: 1
-    num_gpus: 1
     num_nodes: 1
     memory: "256m"
     runtime: "PT1M"
@@ -94,8 +87,8 @@ files:
     parameters:
       i: "0:999"
 
-  - name: "gpu_out_{i:04d}"
-    path: "output/gpu/gpu_out_{i:04d}.txt"
+  - name: "work_out_{i:04d}"
+    path: "output/work/work_out_{i:04d}.txt"
     parameters:
       i: "0:999"
 
@@ -115,37 +108,37 @@ jobs:
       printf 'setup-%s\n' "{i}" > output/setup/setup_out_{i:04d}.txt
     priority: 1
     resource_requirements: "cpu_small"
-    scheduler: "debug_gpu"
+    scheduler: "debug_cpu"
     output_files: ["setup_out_{i:04d}"]
     parameters:
       i: "0:999"
 
-  # 1k GPU jobs — 1 GPU each, highest priority. Consume setup file,
-  # produce gpu output, delete the setup file on the way through.
-  - name: "gpu_{i:04d}"
+  # 1k mid-stage jobs — CPU only, highest priority. Consume setup file,
+  # produce the middle-stage output, delete the setup file on the way through.
+  - name: "work_{i:04d}"
     command: |
-      mkdir -p output/gpu
-      cat output/setup/setup_out_{i:04d}.txt > output/gpu/gpu_out_{i:04d}.txt
+      mkdir -p output/work
+      cat output/setup/setup_out_{i:04d}.txt > output/work/work_out_{i:04d}.txt
       rm -f output/setup/setup_out_{i:04d}.txt
     priority: 100
-    resource_requirements: "one_gpu"
-    scheduler: "debug_gpu"
+    resource_requirements: "cpu_small"
+    scheduler: "debug_cpu"
     input_files: ["setup_out_{i:04d}"]
-    output_files: ["gpu_out_{i:04d}"]
+    output_files: ["work_out_{i:04d}"]
     parameters:
       i: "0:999"
 
   # 1k postprocess jobs — CPU only, second-highest priority so finished
-  # GPU outputs drain before new setup files are created.
+  # mid-stage outputs drain before new setup files are created.
   - name: "post_{i:04d}"
     command: |
       mkdir -p output/post
-      cat output/gpu/gpu_out_{i:04d}.txt > output/post/post_out_{i:04d}.txt
-      rm -f output/gpu/gpu_out_{i:04d}.txt
+      cat output/work/work_out_{i:04d}.txt > output/post/post_out_{i:04d}.txt
+      rm -f output/work/work_out_{i:04d}.txt
     priority: 50
     resource_requirements: "cpu_small"
-    scheduler: "debug_gpu"
-    input_files: ["gpu_out_{i:04d}"]
+    scheduler: "debug_cpu"
+    input_files: ["work_out_{i:04d}"]
     output_files: ["post_out_{i:04d}"]
     parameters:
       i: "0:999"
@@ -159,14 +152,14 @@ jobs:
       printf 'completed_at=%s\n' "$(date -Iseconds)" >> output/final_report.txt
     priority: 0
     resource_requirements: "cpu_small"
-    scheduler: "debug_gpu"
+    scheduler: "debug_cpu"
     input_file_regexes: ["^post_out_\\d+$"]
     output_files: ["final_report"]
 
 actions:
   - trigger_type: "on_workflow_start"
     action_type: "schedule_nodes"
-    scheduler: "debug_gpu"
+    scheduler: "debug_cpu"
     scheduler_type: "slurm"
     num_allocations: 1
     start_one_worker_per_node: true
