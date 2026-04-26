@@ -32,7 +32,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, SyncSender, TrySendError};
 use std::thread;
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use crate::client::apis;
@@ -63,6 +65,106 @@ struct PreparedCompletion {
 #[derive(Default)]
 struct ClaimAttemptResult {
     waited: bool,
+}
+
+enum CompletionWatcherCommand {
+    RunningJobsChanged(usize),
+    Shutdown,
+}
+
+struct CompletionWatcher {
+    command_tx: Sender<CompletionWatcherCommand>,
+    tick_rx: Receiver<()>,
+    join_handle: Option<JoinHandle<()>>,
+    last_running_jobs: usize,
+}
+
+impl CompletionWatcher {
+    const MIN_POLL_INTERVAL: Duration = Duration::from_millis(100);
+    const MAX_POLL_INTERVAL: Duration = Duration::from_secs(1);
+    const WAIT_MARGIN: Duration = Duration::from_millis(100);
+
+    fn new() -> Self {
+        let (command_tx, command_rx) = mpsc::channel();
+        let (tick_tx, tick_rx) = mpsc::sync_channel(1);
+        let join_handle = thread::spawn(move || Self::run(command_rx, tick_tx));
+        Self {
+            command_tx,
+            tick_rx,
+            join_handle: Some(join_handle),
+            last_running_jobs: 0,
+        }
+    }
+
+    fn run(command_rx: Receiver<CompletionWatcherCommand>, tick_tx: SyncSender<()>) {
+        let mut running_jobs = 0usize;
+        let mut poll_interval = Self::MIN_POLL_INTERVAL;
+
+        loop {
+            if running_jobs == 0 {
+                match command_rx.recv() {
+                    Ok(CompletionWatcherCommand::RunningJobsChanged(count)) => {
+                        running_jobs = count;
+                        poll_interval = Self::MIN_POLL_INTERVAL;
+                    }
+                    Ok(CompletionWatcherCommand::Shutdown) | Err(_) => break,
+                }
+                continue;
+            }
+
+            match command_rx.recv_timeout(poll_interval) {
+                Ok(CompletionWatcherCommand::RunningJobsChanged(count)) => {
+                    running_jobs = count;
+                    poll_interval = Self::MIN_POLL_INTERVAL;
+                }
+                Ok(CompletionWatcherCommand::Shutdown) | Err(RecvTimeoutError::Disconnected) => {
+                    break;
+                }
+                Err(RecvTimeoutError::Timeout) => {
+                    match tick_tx.try_send(()) {
+                        Ok(()) | Err(TrySendError::Full(_)) => {}
+                        Err(TrySendError::Disconnected(_)) => break,
+                    }
+                    poll_interval =
+                        std::cmp::min(poll_interval.saturating_mul(2), Self::MAX_POLL_INTERVAL);
+                }
+            }
+        }
+    }
+
+    fn sync_running_jobs(&mut self, running_jobs: usize) {
+        if running_jobs == self.last_running_jobs {
+            return;
+        }
+        self.last_running_jobs = running_jobs;
+        if let Err(e) = self
+            .command_tx
+            .send(CompletionWatcherCommand::RunningJobsChanged(running_jobs))
+        {
+            debug!("Completion watcher sync failed: {}", e);
+        }
+        self.drain_ticks();
+    }
+
+    fn wait_for_tick(&mut self) {
+        let timeout = Self::MAX_POLL_INTERVAL + Self::WAIT_MARGIN;
+        match self.tick_rx.recv_timeout(timeout) {
+            Ok(()) | Err(RecvTimeoutError::Timeout) | Err(RecvTimeoutError::Disconnected) => {}
+        }
+    }
+
+    fn drain_ticks(&mut self) {
+        while self.tick_rx.try_recv().is_ok() {}
+    }
+}
+
+impl Drop for CompletionWatcher {
+    fn drop(&mut self) {
+        let _ = self.command_tx.send(CompletionWatcherCommand::Shutdown);
+        if let Some(join_handle) = self.join_handle.take() {
+            let _ = join_handle.join();
+        }
+    }
 }
 
 /// Rule definition for failure handler (parsed from JSON stored in database)
@@ -302,6 +404,7 @@ pub struct JobRunner {
     had_terminations: bool,
     /// When this job runner started (for calculating duration_seconds)
     start_instant: Instant,
+    completion_watcher: CompletionWatcher,
 }
 
 impl JobRunner {
@@ -428,6 +531,19 @@ impl JobRunner {
                 self.available_gpu_devices.push_back(dev);
             }
         }
+    }
+
+    fn sync_completion_watcher(&mut self) {
+        self.completion_watcher
+            .sync_running_jobs(self.running_jobs.len());
+    }
+
+    fn wait_for_completion_watcher(&mut self) {
+        if self.running_jobs.is_empty() {
+            thread::sleep(Duration::from_secs_f64(self.job_completion_poll_interval));
+            return;
+        }
+        self.completion_watcher.wait_for_tick();
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -561,6 +677,7 @@ impl JobRunner {
             had_failures: false,
             had_terminations: false,
             start_instant: Instant::now(),
+            completion_watcher: CompletionWatcher::new(),
         }
     }
 
@@ -703,6 +820,8 @@ impl JobRunner {
             version_check::print_version_warning(&version_result);
         }
 
+        self.sync_completion_watcher();
+
         // Check for and execute on_workflow_start and on_worker_start actions before entering main loop
         self.execute_workflow_start_actions();
         self.execute_worker_start_actions();
@@ -794,7 +913,7 @@ impl JobRunner {
             // claim/start would not help — the subprocess still needs time to
             // run before the next interesting event.
             if completions == 0 && !claim_result.waited {
-                thread::sleep(Duration::from_secs_f64(self.job_completion_poll_interval));
+                self.wait_for_completion_watcher();
             }
 
             if self.is_termination_requested() {
@@ -1231,7 +1350,6 @@ impl JobRunner {
     /// this to decide whether the runner should re-enter the main loop
     /// immediately rather than sleeping.
     fn check_job_status(&mut self) -> Result<usize, Box<dyn std::error::Error>> {
-        let mut completed_jobs = Vec::new();
         let mut job_results = Vec::new();
 
         // First pass: check status and collect completed jobs
@@ -1239,8 +1357,6 @@ impl JobRunner {
             match async_job.check_status() {
                 Ok(()) => {
                     if async_job.is_complete {
-                        completed_jobs.push(*job_id);
-
                         let attempt_id = async_job.job.attempt_id.unwrap_or(1);
                         let result = async_job.get_result(
                             self.run_id,
@@ -1587,7 +1703,9 @@ impl JobRunner {
             .into_iter()
             .filter_map(|(job_id, result)| self.prepare_job_completion(job_id, result))
             .collect();
-        self.report_completions_batch(prepared)
+        let result = self.report_completions_batch(prepared);
+        self.sync_completion_watcher();
+        result
     }
 
     /// Run the local-side preparation for a job completion: collect Slurm stats,
@@ -2220,7 +2338,9 @@ impl JobRunner {
                 let jobs = response.jobs.unwrap_or_default();
                 if jobs.is_empty() {
                     waited = wait_seconds.unwrap_or(0) > 0;
-                    return ClaimAttemptResult { waited };
+                    let result = ClaimAttemptResult { waited };
+                    self.sync_completion_watcher();
+                    return result;
                 }
                 if jobs.len() > limit as usize {
                     panic!(
@@ -2346,6 +2466,7 @@ impl JobRunner {
                 error!("Failed to prepare jobs for submission: {}", err);
             }
         }
+        self.sync_completion_watcher();
         ClaimAttemptResult { waited }
     }
 
@@ -2381,7 +2502,9 @@ impl JobRunner {
                 let jobs = response.jobs.unwrap_or_default();
                 if jobs.is_empty() {
                     waited = wait_seconds.unwrap_or(0) > 0;
-                    return ClaimAttemptResult { waited };
+                    let result = ClaimAttemptResult { waited };
+                    self.sync_completion_watcher();
+                    return result;
                 }
                 if jobs.len() > limit as usize {
                     panic!(
@@ -2503,6 +2626,7 @@ impl JobRunner {
                 );
             }
         }
+        self.sync_completion_watcher();
         ClaimAttemptResult { waited }
     }
 
