@@ -368,6 +368,8 @@ pub fn run_with_log_stream(args: &Args, log_stream: LogStream) -> WorkerResult {
         None, // No per-node tracking for local runner
     );
 
+    register_sigchld_wakeup(&job_runner);
+
     match job_runner.run_worker() {
         Ok(result) => {
             info!(
@@ -382,6 +384,41 @@ pub fn run_with_log_stream(args: &Args, log_stream: LogStream) -> WorkerResult {
         }
     }
 }
+
+#[cfg(unix)]
+fn register_sigchld_wakeup(job_runner: &JobRunner) {
+    use signal_hook::consts::SIGCHLD;
+    use signal_hook::iterator::Signals;
+
+    let wakeup = job_runner.get_wakeup_handle();
+    let mut signals = match Signals::new([SIGCHLD]) {
+        Ok(s) => s,
+        Err(e) => {
+            error!(
+                "Failed to register SIGCHLD handler ({}); subprocess completions will be observed only on the poll interval",
+                e
+            );
+            return;
+        }
+    };
+
+    std::thread::spawn(move || {
+        unsafe {
+            let mut set: libc::sigset_t = std::mem::zeroed();
+            libc::sigemptyset(&mut set);
+            libc::sigaddset(&mut set, libc::SIGCHLD);
+            libc::pthread_sigmask(libc::SIG_UNBLOCK, &set, std::ptr::null_mut());
+        }
+        for sig in signals.forever() {
+            if sig == SIGCHLD {
+                wakeup.notify();
+            }
+        }
+    });
+}
+
+#[cfg(not(unix))]
+fn register_sigchld_wakeup(_job_runner: &JobRunner) {}
 
 #[cfg(test)]
 mod tests {

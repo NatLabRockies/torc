@@ -30,11 +30,9 @@ use log::{self, debug, error, info, warn};
 use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, SyncSender, TrySendError};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
-use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use crate::client::apis;
@@ -67,102 +65,59 @@ struct ClaimAttemptResult {
     waited: bool,
 }
 
-enum CompletionWatcherCommand {
-    RunningJobsChanged(usize),
-    Shutdown,
+/// Condvar-backed wakeup primitive used by the runner's main loop.
+///
+/// `wait_with_timeout` blocks up to the given duration; `notify` wakes any
+/// waiter immediately. Notifications are remembered: if `notify` is called
+/// while no one is waiting, the next `wait_with_timeout` returns immediately
+/// without sleeping. This makes it safe for an external thread (e.g. a
+/// SIGCHLD handler thread) to call `notify` at any time without coordinating
+/// with the runner's loop position.
+///
+/// `notify` takes a mutex and so is not async-signal-safe. Call it from a
+/// normal thread that consumes signals, never from a raw signal handler.
+pub struct Wakeup {
+    pending: Mutex<bool>,
+    cv: Condvar,
 }
 
-struct CompletionWatcher {
-    command_tx: Sender<CompletionWatcherCommand>,
-    tick_rx: Receiver<()>,
-    join_handle: Option<JoinHandle<()>>,
-    last_running_jobs: usize,
+impl Wakeup {
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {
+            pending: Mutex::new(false),
+            cv: Condvar::new(),
+        })
+    }
+
+    /// Wake any waiter. If no one is waiting, the next `wait_with_timeout`
+    /// returns immediately.
+    pub fn notify(&self) {
+        let mut pending = self.pending.lock().unwrap();
+        *pending = true;
+        self.cv.notify_all();
+    }
+
+    /// Wait until notified or `timeout` elapses. Returns `true` if a
+    /// notification was consumed, `false` on timeout.
+    pub fn wait_with_timeout(&self, timeout: Duration) -> bool {
+        let pending = self.pending.lock().unwrap();
+        if *pending {
+            let mut pending = pending;
+            *pending = false;
+            return true;
+        }
+        let (mut pending, _wait_result) = self.cv.wait_timeout(pending, timeout).unwrap();
+        let notified = *pending;
+        *pending = false;
+        notified
+    }
 }
 
-impl CompletionWatcher {
-    const MIN_POLL_INTERVAL: Duration = Duration::from_millis(100);
-    const MAX_POLL_INTERVAL: Duration = Duration::from_secs(1);
-    const WAIT_MARGIN: Duration = Duration::from_millis(100);
-
-    fn new() -> Self {
-        let (command_tx, command_rx) = mpsc::channel();
-        let (tick_tx, tick_rx) = mpsc::sync_channel(1);
-        let join_handle = thread::spawn(move || Self::run(command_rx, tick_tx));
+impl Default for Wakeup {
+    fn default() -> Self {
         Self {
-            command_tx,
-            tick_rx,
-            join_handle: Some(join_handle),
-            last_running_jobs: 0,
-        }
-    }
-
-    fn run(command_rx: Receiver<CompletionWatcherCommand>, tick_tx: SyncSender<()>) {
-        let mut running_jobs = 0usize;
-        let mut poll_interval = Self::MIN_POLL_INTERVAL;
-
-        loop {
-            if running_jobs == 0 {
-                match command_rx.recv() {
-                    Ok(CompletionWatcherCommand::RunningJobsChanged(count)) => {
-                        running_jobs = count;
-                        poll_interval = Self::MIN_POLL_INTERVAL;
-                    }
-                    Ok(CompletionWatcherCommand::Shutdown) | Err(_) => break,
-                }
-                continue;
-            }
-
-            match command_rx.recv_timeout(poll_interval) {
-                Ok(CompletionWatcherCommand::RunningJobsChanged(count)) => {
-                    running_jobs = count;
-                    poll_interval = Self::MIN_POLL_INTERVAL;
-                }
-                Ok(CompletionWatcherCommand::Shutdown) | Err(RecvTimeoutError::Disconnected) => {
-                    break;
-                }
-                Err(RecvTimeoutError::Timeout) => {
-                    match tick_tx.try_send(()) {
-                        Ok(()) | Err(TrySendError::Full(_)) => {}
-                        Err(TrySendError::Disconnected(_)) => break,
-                    }
-                    poll_interval =
-                        std::cmp::min(poll_interval.saturating_mul(2), Self::MAX_POLL_INTERVAL);
-                }
-            }
-        }
-    }
-
-    fn sync_running_jobs(&mut self, running_jobs: usize) {
-        if running_jobs == self.last_running_jobs {
-            return;
-        }
-        self.last_running_jobs = running_jobs;
-        if let Err(e) = self
-            .command_tx
-            .send(CompletionWatcherCommand::RunningJobsChanged(running_jobs))
-        {
-            debug!("Completion watcher sync failed: {}", e);
-        }
-        self.drain_ticks();
-    }
-
-    fn wait_for_tick(&mut self) {
-        let timeout = Self::MAX_POLL_INTERVAL + Self::WAIT_MARGIN;
-        match self.tick_rx.recv_timeout(timeout) {
-            Ok(()) | Err(RecvTimeoutError::Timeout) | Err(RecvTimeoutError::Disconnected) => {}
-        }
-    }
-
-    fn drain_ticks(&mut self) {
-        while self.tick_rx.try_recv().is_ok() {}
-    }
-}
-
-impl Drop for CompletionWatcher {
-    fn drop(&mut self) {
-        let _ = self.command_tx.send(CompletionWatcherCommand::Shutdown);
-        if let Some(join_handle) = self.join_handle.take() {
-            let _ = join_handle.join();
+            pending: Mutex::new(false),
+            cv: Condvar::new(),
         }
     }
 }
@@ -394,6 +349,10 @@ pub struct JobRunner {
     resource_monitor: Option<ResourceMonitor>,
     /// Flag set when SIGTERM is received. Shared with signal handler.
     termination_requested: Arc<AtomicBool>,
+    /// Notified when SIGCHLD fires (or termination is requested) so the main
+    /// loop can wake from its idle wait without waiting for the full
+    /// `job_completion_poll_interval`. Shared with signal-handler threads.
+    wakeup: Arc<Wakeup>,
     /// Monotonic timestamp of when a job was last claimed. Used for idle timeout.
     /// Uses std::time::Instant instead of wall clock time to avoid issues with
     /// NTP clock adjustments that could cause premature idle timeout exits.
@@ -404,7 +363,6 @@ pub struct JobRunner {
     had_terminations: bool,
     /// When this job runner started (for calculating duration_seconds)
     start_instant: Instant,
-    completion_watcher: CompletionWatcher,
 }
 
 impl JobRunner {
@@ -531,19 +489,6 @@ impl JobRunner {
                 self.available_gpu_devices.push_back(dev);
             }
         }
-    }
-
-    fn sync_completion_watcher(&mut self) {
-        self.completion_watcher
-            .sync_running_jobs(self.running_jobs.len());
-    }
-
-    fn wait_for_completion_watcher(&mut self) {
-        if self.running_jobs.is_empty() {
-            thread::sleep(Duration::from_secs_f64(self.job_completion_poll_interval));
-            return;
-        }
-        self.completion_watcher.wait_for_tick();
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -673,11 +618,11 @@ impl JobRunner {
             rules,
             resource_monitor,
             termination_requested: Arc::new(AtomicBool::new(false)),
+            wakeup: Wakeup::new(),
             last_job_claimed_time: None,
             had_failures: false,
             had_terminations: false,
             start_instant: Instant::now(),
-            completion_watcher: CompletionWatcher::new(),
         }
     }
 
@@ -745,6 +690,16 @@ impl JobRunner {
     /// ```
     pub fn get_termination_flag(&self) -> Arc<AtomicBool> {
         Arc::clone(&self.termination_requested)
+    }
+
+    /// Returns a clone of the wakeup primitive for use by signal-handler
+    /// threads. Calling `notify()` on the returned handle wakes the runner's
+    /// main loop from its idle wait, shrinking subprocess-completion latency
+    /// from up to `job_completion_poll_interval` down to the time it takes
+    /// the loop to call `try_wait` on each child. Intended for SIGCHLD
+    /// handlers, but safe for any thread to call.
+    pub fn get_wakeup_handle(&self) -> Arc<Wakeup> {
+        Arc::clone(&self.wakeup)
     }
 
     /// Checks if termination has been requested.
@@ -819,8 +774,6 @@ impl JobRunner {
         if version_result.severity.has_warning() {
             version_check::print_version_warning(&version_result);
         }
-
-        self.sync_completion_watcher();
 
         // Check for and execute on_workflow_start and on_worker_start actions before entering main loop
         self.execute_workflow_start_actions();
@@ -905,15 +858,22 @@ impl JobRunner {
                 }
             }
 
-            // Skip the poll-interval sleep when this iteration reported one or
+            // Skip the poll-interval wait when this iteration reported one or
             // more completions. Completions free capacity and the deferred
             // unblock task may have made more jobs ready in the meantime, so
             // reacting immediately closes the idle gap between a short job
-            // completing and the next job filling its slot. Skipping sleep on
-            // claim/start would not help — the subprocess still needs time to
-            // run before the next interesting event.
+            // completing and the next job filling its slot.
+            //
+            // When we do wait, use the SIGCHLD-aware wakeup primitive instead
+            // of a plain sleep. A subprocess that exits during the wait
+            // delivers SIGCHLD to this process; the signal-handler thread
+            // calls `wakeup.notify()`, and we re-enter the loop to call
+            // `try_wait` on each child immediately. This eliminates the case
+            // where short jobs spawned in the prior iteration finish during
+            // the wait but aren't observed until the full interval elapses.
             if completions == 0 && !claim_result.waited {
-                self.wait_for_completion_watcher();
+                self.wakeup
+                    .wait_with_timeout(Duration::from_secs_f64(self.job_completion_poll_interval));
             }
 
             if self.is_termination_requested() {
@@ -1703,9 +1663,7 @@ impl JobRunner {
             .into_iter()
             .filter_map(|(job_id, result)| self.prepare_job_completion(job_id, result))
             .collect();
-        let result = self.report_completions_batch(prepared);
-        self.sync_completion_watcher();
-        result
+        self.report_completions_batch(prepared)
     }
 
     /// Run the local-side preparation for a job completion: collect Slurm stats,
@@ -2338,9 +2296,7 @@ impl JobRunner {
                 let jobs = response.jobs.unwrap_or_default();
                 if jobs.is_empty() {
                     waited = wait_seconds.unwrap_or(0) > 0;
-                    let result = ClaimAttemptResult { waited };
-                    self.sync_completion_watcher();
-                    return result;
+                    return ClaimAttemptResult { waited };
                 }
                 if jobs.len() > limit as usize {
                     panic!(
@@ -2466,7 +2422,6 @@ impl JobRunner {
                 error!("Failed to prepare jobs for submission: {}", err);
             }
         }
-        self.sync_completion_watcher();
         ClaimAttemptResult { waited }
     }
 
@@ -2502,9 +2457,7 @@ impl JobRunner {
                 let jobs = response.jobs.unwrap_or_default();
                 if jobs.is_empty() {
                     waited = wait_seconds.unwrap_or(0) > 0;
-                    let result = ClaimAttemptResult { waited };
-                    self.sync_completion_watcher();
-                    return result;
+                    return ClaimAttemptResult { waited };
                 }
                 if jobs.len() > limit as usize {
                     panic!(
@@ -2626,7 +2579,6 @@ impl JobRunner {
                 );
             }
         }
-        self.sync_completion_watcher();
         ClaimAttemptResult { waited }
     }
 
@@ -3203,6 +3155,74 @@ mod tests {
     use crate::client::apis::configuration::Configuration;
     use crate::models::{JobStatus, ResultModel, SlurmStatsModel};
     use serial_test::serial;
+
+    #[test]
+    fn wakeup_notify_before_wait_returns_immediately() {
+        let w = Wakeup::new();
+        w.notify();
+        let start = Instant::now();
+        let notified = w.wait_with_timeout(Duration::from_secs(2));
+        assert!(notified, "wait should report a notification");
+        assert!(
+            start.elapsed() < Duration::from_millis(100),
+            "wait should return immediately when a notification is already pending, took {:?}",
+            start.elapsed()
+        );
+    }
+
+    #[test]
+    fn wakeup_notify_during_wait_wakes_waiter() {
+        let w = Wakeup::new();
+        let w2 = Arc::clone(&w);
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(50));
+            w2.notify();
+        });
+        let start = Instant::now();
+        let notified = w.wait_with_timeout(Duration::from_secs(5));
+        let elapsed = start.elapsed();
+        assert!(notified, "wait should be notified, not time out");
+        assert!(
+            elapsed < Duration::from_millis(500),
+            "wait should wake shortly after notify, took {:?}",
+            elapsed
+        );
+    }
+
+    #[test]
+    fn wakeup_timeout_returns_false_without_notify() {
+        let w = Wakeup::new();
+        let start = Instant::now();
+        let notified = w.wait_with_timeout(Duration::from_millis(50));
+        assert!(!notified, "wait should report timeout, not notification");
+        assert!(
+            start.elapsed() >= Duration::from_millis(40),
+            "wait should respect the timeout, only waited {:?}",
+            start.elapsed()
+        );
+    }
+
+    #[test]
+    fn wakeup_notification_does_not_persist_across_waits() {
+        let w = Wakeup::new();
+        w.notify();
+        assert!(w.wait_with_timeout(Duration::from_millis(10)));
+        let start = Instant::now();
+        assert!(!w.wait_with_timeout(Duration::from_millis(50)));
+        assert!(start.elapsed() >= Duration::from_millis(40));
+    }
+
+    #[test]
+    fn wakeup_multiple_notifies_coalesce() {
+        let w = Wakeup::new();
+        for _ in 0..100 {
+            w.notify();
+        }
+        assert!(w.wait_with_timeout(Duration::from_millis(10)));
+        let start = Instant::now();
+        assert!(!w.wait_with_timeout(Duration::from_millis(50)));
+        assert!(start.elapsed() >= Duration::from_millis(40));
+    }
 
     fn make_result(
         peak_memory_bytes: Option<i64>,
