@@ -33,6 +33,8 @@ use crate::client::apis::configuration::Configuration;
 use crate::models;
 
 const PING_INTERVAL_SECONDS: u64 = 30;
+const LONG_POLL_TCP_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(10);
+const LONG_POLL_REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// Creates a cross-platform shell command for executing shell scripts/commands.
 ///
@@ -63,6 +65,36 @@ pub fn shell_command() -> Command {
         cmd.arg("-c");
         cmd
     }
+}
+
+/// Rebuild the blocking API client with settings appropriate for long-poll claim
+/// requests issued by runners.
+///
+/// The OpenAPI-generated client uses reqwest's default 30 second request timeout,
+/// which is shorter than Torc's 60 second server-side long-poll cap. Scope the
+/// longer timeout to runner code so generated client defaults stay unchanged for
+/// other callers.
+pub fn configure_runner_long_poll_client(config: &mut Configuration) -> Result<(), String> {
+    let mut builder = reqwest::blocking::Client::builder()
+        .tcp_keepalive(LONG_POLL_TCP_KEEPALIVE_INTERVAL)
+        .timeout(LONG_POLL_REQUEST_TIMEOUT);
+
+    if let Some(ref cookie) = config.cookie_header {
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert(
+            reqwest::header::COOKIE,
+            reqwest::header::HeaderValue::from_str(cookie)
+                .map_err(|e| format!("Invalid cookie header value: {e}"))?,
+        );
+        builder = builder.default_headers(headers);
+    }
+
+    config.client = config
+        .tls
+        .configure_blocking_builder(builder)
+        .build()
+        .map_err(|e| format!("Failed to build runner HTTP client: {e}"))?;
+    Ok(())
 }
 
 /// Execute an API call with automatic retries for network errors
