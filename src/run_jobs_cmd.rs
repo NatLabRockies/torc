@@ -178,10 +178,6 @@ pub fn run_with_log_stream(args: &Args, log_stream: LogStream) -> WorkerResult {
     if let Some(ref cookie_header) = args.cookie_header {
         config.cookie_header = Some(cookie_header.clone());
     }
-    if let Err(e) = crate::client::utils::configure_runner_long_poll_client(&mut config) {
-        eprintln!("Error: {e}");
-        std::process::exit(1);
-    }
     let user = get_env_user_name();
     let workflow_id = args.workflow_id.unwrap_or_else(|| {
         select_workflow_interactively(&config, &user).unwrap_or_else(|e| {

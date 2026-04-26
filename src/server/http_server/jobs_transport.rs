@@ -555,39 +555,21 @@ where
         &self,
         id: i64,
         limit: Option<i64>,
-        wait_seconds: Option<i64>,
         context: &C,
     ) -> Result<ClaimNextJobsResponse, ApiError> {
         debug!(
-            "claim_next_jobs({}, {:?}, wait_seconds={:?}) - X-Span-ID: {:?}",
+            "claim_next_jobs({}, {:?}) - X-Span-ID: {:?}",
             id,
             limit,
-            wait_seconds,
             Has::<XSpanIdString>::get(context).0.clone()
         );
 
         authorize_workflow!(self, id, context, ClaimNextJobsResponse);
 
         let requested_limit = limit.unwrap_or(10);
-        let wait_seconds = wait_seconds.unwrap_or(0).clamp(0, 60);
-        loop {
-            let response = self
-                .jobs_api
-                .claim_next_jobs(id, requested_limit, context)
-                .await?;
-            let should_wait = matches!(
-                &response,
-                ClaimNextJobsResponse::SuccessfulResponse(models::ClaimNextJobsResponse {
-                    jobs: Some(jobs),
-                }) if jobs.is_empty() && wait_seconds > 0
-            );
-            if !should_wait {
-                return Ok(response);
-            }
-            if !self.wait_for_workflow_ready(id, wait_seconds).await? {
-                return Ok(response);
-            }
-        }
+        self.jobs_api
+            .claim_next_jobs(id, requested_limit, context)
+            .await
     }
 
     pub(super) async fn transport_process_changed_job_inputs(

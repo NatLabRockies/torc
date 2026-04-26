@@ -10,17 +10,15 @@ use crate::server::auth::{SharedCredentialCache, SharedHtpasswd};
 use crate::server::authorization::AuthorizationService;
 use crate::server::event_broadcast::EventBroadcaster;
 use sqlx::sqlite::SqlitePool;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
-use tokio::sync::broadcast;
 
 #[derive(Clone)]
 pub struct LiveServerState {
     pub pool: Arc<SqlitePool>,
     pub last_completion_time: Arc<AtomicU64>,
     pub workflows_with_failures: Arc<std::sync::RwLock<HashSet<i64>>>,
-    pub workflow_ready_notifiers: Arc<std::sync::Mutex<HashMap<i64, broadcast::Sender<()>>>>,
     pub authorization_service: AuthorizationService,
     pub event_broadcaster: EventBroadcaster,
     pub htpasswd: SharedHtpasswd,
@@ -60,7 +58,6 @@ impl LiveServerState {
             pool: pool_arc,
             last_completion_time: Arc::new(AtomicU64::new(1)),
             workflows_with_failures: Arc::new(std::sync::RwLock::new(HashSet::new())),
-            workflow_ready_notifiers: Arc::new(std::sync::Mutex::new(HashMap::new())),
             authorization_service,
             event_broadcaster: EventBroadcaster::new(512),
             htpasswd,

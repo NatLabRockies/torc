@@ -4,7 +4,6 @@ Internal design documentation for developers.
 
 - [Client Architecture](./client.md) - Torc client design
 - [HTTP API Design](./http-api.md) - REST API conventions and design principles
-- [Long-Poll Claims](./long-poll-claims.md) - Short-job claim waiting and runner HTTP behavior
 - [Workflow Actions](./workflow-actions.md) - Workflow action system
 - [Web Dashboard Design](./dashboard.md) - Dashboard architecture
 - [Server API Handler](./server.md) - Server implementation

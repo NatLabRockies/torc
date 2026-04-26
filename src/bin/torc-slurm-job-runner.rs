@@ -261,10 +261,6 @@ mod unix_main {
             eprintln!("Error: {e}");
             std::process::exit(1);
         }
-        if let Err(e) = utils::configure_runner_long_poll_client(&mut config) {
-            eprintln!("Error: {e}");
-            std::process::exit(1);
-        }
 
         // Stagger startup to avoid thundering herd when many compute nodes start
         // simultaneously. The delay window is set by the caller (sbatch script)

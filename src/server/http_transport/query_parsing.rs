@@ -176,13 +176,11 @@ pub(super) struct InitializeJobsQuery {
 #[derive(Debug, PartialEq)]
 pub(super) struct ClaimJobsBasedOnResourcesQuery {
     pub(super) strict_scheduler_match: Option<bool>,
-    pub(super) wait_seconds: Option<i64>,
 }
 
 #[derive(Debug, PartialEq)]
 pub(super) struct ClaimNextJobsQuery {
     pub(super) limit: Option<i64>,
-    pub(super) wait_seconds: Option<i64>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -487,7 +485,6 @@ pub(super) fn parse_claim_jobs_based_on_resources_query(
         .collect();
     Ok(ClaimJobsBasedOnResourcesQuery {
         strict_scheduler_match: parse_optional_bool(&params, "strict_scheduler_match")?,
-        wait_seconds: parse_optional_i64(&params, "wait_seconds")?,
     })
 }
 
@@ -499,7 +496,6 @@ pub(super) fn parse_claim_next_jobs_query(
         .collect();
     Ok(ClaimNextJobsQuery {
         limit: parse_optional_i64(&params, "limit")?,
-        wait_seconds: parse_optional_i64(&params, "wait_seconds")?,
     })
 }
 

@@ -13,7 +13,6 @@ use sqlx::Row;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use tokio::sync::broadcast;
 use tracing::instrument;
 
 use sqlx::sqlite::SqlitePool;
@@ -342,38 +341,6 @@ impl<C> Server<C> {
             .map(|d| d.as_millis() as u64)
             .unwrap_or(1);
         self.last_completion_time.store(now, Ordering::Release);
-    }
-
-    fn workflow_ready_sender(&self, workflow_id: i64) -> broadcast::Sender<()> {
-        let mut notifiers = self
-            .workflow_ready_notifiers
-            .lock()
-            .expect("workflow_ready_notifiers mutex poisoned");
-        notifiers
-            .entry(workflow_id)
-            .or_insert_with(|| broadcast::channel(32).0)
-            .clone()
-    }
-
-    fn signal_workflow_ready(&self, workflow_id: i64) {
-        let _ = self.workflow_ready_sender(workflow_id).send(());
-    }
-
-    async fn wait_for_workflow_ready(
-        &self,
-        workflow_id: i64,
-        wait_seconds: i64,
-    ) -> Result<bool, ApiError> {
-        if wait_seconds <= 0 {
-            return Ok(false);
-        }
-        let mut receiver = self.workflow_ready_sender(workflow_id).subscribe();
-        let wait_duration = std::time::Duration::from_secs(wait_seconds as u64);
-        match tokio::time::timeout(wait_duration, receiver.recv()).await {
-            Ok(Ok(())) | Ok(Err(broadcast::error::RecvError::Lagged(_))) => Ok(true),
-            Ok(Err(broadcast::error::RecvError::Closed)) => Ok(false),
-            Err(_) => Ok(false),
-        }
     }
 
     /// Get a reference to the event broadcaster for SSE subscriptions.
@@ -821,8 +788,6 @@ impl<C> Server<C> {
             error!("Failed to commit transaction for initialize_jobs: {}", e);
             return Err(ApiError("Database error".to_string()));
         }
-
-        self.signal_workflow_ready(id);
 
         // Compute and store input hashes for all jobs in the workflow.
         // IMPORTANT: This must happen after the transaction commits so the hash computation sees
@@ -2150,7 +2115,6 @@ where
         body: models::ComputeNodesResources,
         limit: i64,
         strict_scheduler_match: Option<bool>,
-        wait_seconds: Option<i64>,
         context: &C,
     ) -> Result<ClaimJobsBasedOnResources, ApiError> {
         self.transport_claim_jobs_based_on_resources(
@@ -2158,7 +2122,6 @@ where
             body,
             limit,
             strict_scheduler_match,
-            wait_seconds,
             context,
         )
         .await
@@ -2170,11 +2133,9 @@ where
         &self,
         id: i64,
         limit: Option<i64>,
-        wait_seconds: Option<i64>,
         context: &C,
     ) -> Result<ClaimNextJobsResponse, ApiError> {
-        self.transport_claim_next_jobs(id, limit, wait_seconds, context)
-            .await
+        self.transport_claim_next_jobs(id, limit, context).await
     }
 
     /// Check for changed job inputs and update status accordingly.
