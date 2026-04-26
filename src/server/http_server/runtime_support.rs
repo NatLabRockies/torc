@@ -284,33 +284,58 @@ impl<C> Server<C> {
         workflow_id: i64,
         provided_run_id: i64,
     ) -> Result<(), String> {
-        let workflow_status = match sqlx::query!(
-            "SELECT run_id FROM workflow_status WHERE id = ?",
-            workflow_id
-        )
-        .fetch_optional(self.pool.as_ref())
-        .await
-        {
-            Ok(Some(row)) => row,
-            Ok(None) => {
-                return Err(format!(
-                    "Workflow status not found for workflow ID: {}",
-                    workflow_id
-                ));
-            }
-            Err(e) => {
-                error!("Database error looking up workflow status: {}", e);
-                return Err("Database error".to_string());
-            }
-        };
+        validate_run_id_with_executor(self.pool.as_ref(), workflow_id, provided_run_id).await
+    }
 
-        if provided_run_id != workflow_status.run_id {
+    /// Variant of `validate_run_id` that runs against an explicit executor
+    /// (e.g. an open SQLite transaction). Use this from code paths that
+    /// already hold a transaction so the validation doesn't acquire a second
+    /// pool connection — important under tight `max_connections` settings
+    /// where the transaction would deadlock against itself.
+    pub(super) async fn validate_run_id_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        workflow_id: i64,
+        provided_run_id: i64,
+    ) -> Result<(), String> {
+        validate_run_id_with_executor(&mut **tx, workflow_id, provided_run_id).await
+    }
+}
+
+async fn validate_run_id_with_executor<'e, E>(
+    executor: E,
+    workflow_id: i64,
+    provided_run_id: i64,
+) -> Result<(), String>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
+    let workflow_status = match sqlx::query!(
+        "SELECT run_id FROM workflow_status WHERE id = ?",
+        workflow_id
+    )
+    .fetch_optional(executor)
+    .await
+    {
+        Ok(Some(row)) => row,
+        Ok(None) => {
             return Err(format!(
-                "Run ID mismatch: provided {} but workflow status has {}",
-                provided_run_id, workflow_status.run_id
+                "Workflow status not found for workflow ID: {}",
+                workflow_id
             ));
         }
+        Err(e) => {
+            error!("Database error looking up workflow status: {}", e);
+            return Err("Database error".to_string());
+        }
+    };
 
-        Ok(())
+    if provided_run_id != workflow_status.run_id {
+        return Err(format!(
+            "Run ID mismatch: provided {} but workflow status has {}",
+            provided_run_id, workflow_status.run_id
+        ));
     }
+
+    Ok(())
 }

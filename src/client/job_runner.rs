@@ -61,6 +61,12 @@ use crate::models::{
 /// fully populated `ResultModel`s.
 const MAX_COMPLETION_BATCH_SIZE: usize = 256;
 
+/// `JobCompletionError::error_code` values the client treats as benign.
+/// Anything else returned by the server is treated as a real desync and
+/// surfaced as a fatal error so the runner stops rather than silently leaking
+/// server-side state.
+const COMPLETION_ERROR_CODE_ALREADY_COMPLETE: &str = "already_complete";
+
 /// Local-side result of preparing a job completion: the data to send to the
 /// server in a `batch_complete_jobs` call. Returned by `prepare_job_completion`
 /// for jobs that were not retried locally.
@@ -1880,11 +1886,28 @@ impl JobRunner {
         };
 
         let completed: std::collections::HashSet<i64> = response.completed.into_iter().collect();
+
+        // Index per-job server errors by job_id so we can tag local cleanup
+        // with the right code. Anything other than `already_complete` is a
+        // real desync we surface as fatal at the end of this function so the
+        // runner stops rather than silently leaking server-side state.
+        let mut error_codes: std::collections::HashMap<i64, &str> =
+            std::collections::HashMap::with_capacity(response.errors.len());
+        let mut fatal_failure_count: usize = 0;
         for err in &response.errors {
-            error!(
-                "Job complete reported as failed by server workflow_id={} job_id={} message={}",
-                self.workflow_id, err.job_id, err.message
-            );
+            if err.error_code == COMPLETION_ERROR_CODE_ALREADY_COMPLETE {
+                debug!(
+                    "Server reported job_id={} as already complete (benign race) workflow_id={} message={}",
+                    err.job_id, self.workflow_id, err.message
+                );
+            } else {
+                fatal_failure_count += 1;
+                error!(
+                    "Job complete rejected by server workflow_id={} job_id={} code={} message={}",
+                    self.workflow_id, err.job_id, err.error_code, err.message
+                );
+            }
+            error_codes.insert(err.job_id, err.error_code.as_str());
         }
 
         for prep in prepared {
@@ -1897,7 +1920,9 @@ impl JobRunner {
             if !completed.contains(&job_id) {
                 // Server rejected this individual completion. Clean up local
                 // state so we don't leak the entry in running_jobs or keep
-                // local resources reserved for a finished subprocess.
+                // local resources reserved for a finished subprocess. The
+                // fatal-vs-benign decision is made by the per-error loop
+                // above; here we just always release local state.
                 if let Some(job_rr) = self.job_resources.get(&job_id).cloned() {
                     self.increment_node_resources(job_id, &job_rr);
                     self.increment_resources(&job_rr);
@@ -1905,6 +1930,15 @@ impl JobRunner {
                 self.running_jobs.remove(&job_id);
                 self.job_resources.remove(&job_id);
                 self.release_gpu_devices(job_id);
+                // Reset the idle timer on benign races too — a subprocess
+                // really did finish locally even though the server had
+                // already settled the job.
+                if matches!(
+                    error_codes.get(&job_id).copied(),
+                    Some(COMPLETION_ERROR_CODE_ALREADY_COMPLETE)
+                ) {
+                    self.last_job_claimed_time = Some(Instant::now());
+                }
                 continue;
             }
 
@@ -1949,6 +1983,15 @@ impl JobRunner {
             self.running_jobs.remove(&job_id);
             self.job_resources.remove(&job_id);
             self.release_gpu_devices(job_id);
+        }
+
+        if fatal_failure_count > 0 {
+            self.had_failures = true;
+            return Err(format!(
+                "{} job completion(s) rejected by server with non-benign error codes",
+                fatal_failure_count
+            )
+            .into());
         }
 
         Ok(())

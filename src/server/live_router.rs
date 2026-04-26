@@ -4453,9 +4453,16 @@ mod live_router_tests {
         assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
     }
 
+    /// Runs the batch_complete_jobs HTTP path against a single-connection pool
+    /// and a hard timeout. The handler opens a transaction and then calls
+    /// `validate_run_id_tx` against the same `tx`; if those reads ever revert
+    /// to acquiring a second pool connection this test will hang and the
+    /// `tokio::time::timeout` will fail it. The assertions also cover the
+    /// success body shape (including the new `error_code` field on errors)
+    /// and confirm the job's persisted status flips to Completed.
     #[tokio::test]
     async fn batch_complete_jobs_round_trip_via_router() {
-        let (server, _db_file) = test_server_with_file_backed_schema(4).await;
+        let (server, _db_file) = test_server_with_file_backed_schema(1).await;
         let workflow_id = create_workflow_record(&server).await;
         let run_id = get_workflow_run_id(&server, workflow_id).await;
         let compute_node_id = create_compute_node_record(&server, workflow_id).await;
@@ -4481,9 +4488,9 @@ mod live_router_tests {
             }],
         };
 
-        let response = router
-            .clone()
-            .oneshot(
+        let response = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            router.clone().oneshot(
                 Request::builder()
                     .method("POST")
                     .uri(format!(
@@ -4494,9 +4501,11 @@ mod live_router_tests {
                         serde_json::to_vec(&body).expect("serialize batch complete request"),
                     ))
                     .expect("valid request"),
-            )
-            .await
-            .expect("batch complete response");
+            ),
+        )
+        .await
+        .expect("batch_complete_jobs hung — possible single-connection deadlock")
+        .expect("batch complete response");
 
         assert_eq!(response.status(), StatusCode::OK);
         let completed: serde_json::Value = read_json_body(response).await;
@@ -4504,6 +4513,7 @@ mod live_router_tests {
         assert_eq!(completed["errors"], serde_json::json!([]));
 
         let get_response = router
+            .clone()
             .oneshot(
                 Request::builder()
                     .method("GET")
@@ -4517,6 +4527,54 @@ mod live_router_tests {
         assert_eq!(get_response.status(), StatusCode::OK);
         let job: JobModel = read_json_body(get_response).await;
         assert_eq!(job.status, Some(JobStatus::Completed));
+
+        // Re-submit the same completion. The server must report it in
+        // `errors[]` with the benign `already_complete` code, not a
+        // generic validation error, so the runner can distinguish a
+        // benign race from a real desync.
+        let dup_body = BatchCompleteJobsRequest {
+            completions: vec![JobCompletionEntry {
+                job_id,
+                status: JobStatus::Completed,
+                run_id,
+                result: ResultModel::new(
+                    job_id,
+                    workflow_id,
+                    run_id,
+                    1,
+                    compute_node_id,
+                    0,
+                    0.25,
+                    chrono::Utc::now().to_rfc3339(),
+                    JobStatus::Completed,
+                ),
+            }],
+        };
+        let dup_response = router
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!(
+                        "/torc-service/v1/workflows/{workflow_id}/batch_complete_jobs"
+                    ))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&dup_body).expect("serialize duplicate request"),
+                    ))
+                    .expect("valid request"),
+            )
+            .await
+            .expect("duplicate complete response");
+        assert_eq!(dup_response.status(), StatusCode::OK);
+        let dup_body: serde_json::Value = read_json_body(dup_response).await;
+        assert_eq!(dup_body["completed"], serde_json::json!([]));
+        let errors = dup_body["errors"].as_array().expect("errors array");
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0]["job_id"], serde_json::json!(job_id));
+        assert_eq!(
+            errors[0]["error_code"],
+            serde_json::json!("already_complete")
+        );
     }
 
     fn test_router(server: Server<EmptyContext>) -> Router {

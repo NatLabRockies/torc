@@ -163,8 +163,28 @@ struct BatchJobInfo {
     status: Option<models::JobStatus>,
 }
 
+/// Stable string codes attached to per-completion failures in
+/// `JobCompletionError::error_code`. Clients use these to decide whether a
+/// failure is benign (only `ALREADY_COMPLETE`) or fatal.
+pub(super) mod completion_codes {
+    pub const ALREADY_COMPLETE: &str = "already_complete";
+    pub const NOT_FOUND: &str = "not_found";
+    pub const FORBIDDEN: &str = "forbidden";
+    pub const VALIDATION: &str = "validation";
+    pub const INTERNAL: &str = "internal";
+}
+
 enum CompletionMutationError {
-    Response(Box<CompleteJobResponse>),
+    /// A per-completion failure that should be returned to the caller as a
+    /// structured response. The `code` is used by the batch path to populate
+    /// `JobCompletionError::error_code`; the single-call path ignores it and
+    /// just returns the inner `CompleteJobResponse` to the HTTP layer.
+    Response {
+        code: &'static str,
+        response: Box<CompleteJobResponse>,
+    },
+    /// A transport-level failure (DB error, internal logic bug). The batch
+    /// path treats these as fatal for the entire request.
     Transport(ApiError),
 }
 
@@ -178,13 +198,17 @@ fn completion_error_message(err: &models::ErrorResponse) -> String {
         })
 }
 
-/// Build an `UnprocessableContentErrorResponse` carrying a short human-readable
-/// message. Used by the validation helper so call sites stay terse.
-fn unprocessable_completion_error(message: String) -> CompletionMutationError {
+/// Build an `UnprocessableContentErrorResponse` tagged with a stable code.
+/// `code` should come from `completion_codes::*` so clients can decide whether
+/// the failure is benign or fatal without parsing the message string.
+fn unprocessable_completion_error(code: &'static str, message: String) -> CompletionMutationError {
     let error_response = models::ErrorResponse::new(serde_json::json!({ "message": message }));
-    CompletionMutationError::Response(Box::new(
-        CompleteJobResponse::UnprocessableContentErrorResponse(error_response),
-    ))
+    CompletionMutationError::Response {
+        code,
+        response: Box::new(CompleteJobResponse::UnprocessableContentErrorResponse(
+            error_response,
+        )),
+    }
 }
 
 /// Run all in-memory validation that is shared between the single
@@ -202,53 +226,74 @@ fn validate_completion_inputs(
     job_status: Option<models::JobStatus>,
 ) -> Result<(), CompletionMutationError> {
     if !status.is_terminal() {
-        return Err(CompletionMutationError::Transport(ApiError(format!(
-            "Status '{}' is not a terminal status for job completion",
-            status
-        ))));
+        return Err(unprocessable_completion_error(
+            completion_codes::VALIDATION,
+            format!(
+                "Status '{}' is not a terminal status for job completion",
+                status
+            ),
+        ));
     }
 
     if let Some(expected_workflow_id) = expected_workflow_id
         && job_workflow_id != expected_workflow_id
     {
-        return Err(unprocessable_completion_error(format!(
-            "Job {} belongs to workflow {} but batch target is workflow {}",
-            id, job_workflow_id, expected_workflow_id
-        )));
+        return Err(unprocessable_completion_error(
+            completion_codes::VALIDATION,
+            format!(
+                "Job {} belongs to workflow {} but batch target is workflow {}",
+                id, job_workflow_id, expected_workflow_id
+            ),
+        ));
     }
 
     if let Some(current_status) = job_status
         && current_status.is_complete()
     {
-        return Err(unprocessable_completion_error(format!(
-            "Job {} is already complete with status {:?}",
-            id, current_status
-        )));
+        return Err(unprocessable_completion_error(
+            completion_codes::ALREADY_COMPLETE,
+            format!(
+                "Job {} is already complete with status {:?}",
+                id, current_status
+            ),
+        ));
     }
 
     if result.job_id != id {
-        return Err(unprocessable_completion_error(format!(
-            "ResultModel job_id {} does not match target job_id {}",
-            result.job_id, id
-        )));
+        return Err(unprocessable_completion_error(
+            completion_codes::VALIDATION,
+            format!(
+                "ResultModel job_id {} does not match target job_id {}",
+                result.job_id, id
+            ),
+        ));
     }
     if result.workflow_id != job_workflow_id {
-        return Err(unprocessable_completion_error(format!(
-            "ResultModel workflow_id {} does not match job's workflow_id {}",
-            result.workflow_id, job_workflow_id
-        )));
+        return Err(unprocessable_completion_error(
+            completion_codes::VALIDATION,
+            format!(
+                "ResultModel workflow_id {} does not match job's workflow_id {}",
+                result.workflow_id, job_workflow_id
+            ),
+        ));
     }
     if result.status != status {
-        return Err(unprocessable_completion_error(format!(
-            "ResultModel status '{}' does not match target status '{}'",
-            result.status, status
-        )));
+        return Err(unprocessable_completion_error(
+            completion_codes::VALIDATION,
+            format!(
+                "ResultModel status '{}' does not match target status '{}'",
+                result.status, status
+            ),
+        ));
     }
     if result.run_id != run_id {
-        return Err(unprocessable_completion_error(format!(
-            "ResultModel run_id {} does not match target run_id {}",
-            result.run_id, run_id
-        )));
+        return Err(unprocessable_completion_error(
+            completion_codes::VALIDATION,
+            format!(
+                "ResultModel run_id {} does not match target run_id {}",
+                result.run_id, run_id
+            ),
+        ));
     }
 
     Ok(())
@@ -1062,7 +1107,7 @@ where
                     .await;
                 Ok(CompleteJobResponse::SuccessfulResponse(job))
             }
-            Err(CompletionMutationError::Response(response)) => Ok(*response),
+            Err(CompletionMutationError::Response { response, .. }) => Ok(*response),
             Err(CompletionMutationError::Transport(error)) => Err(error),
         }
     }
@@ -1081,21 +1126,24 @@ where
                 GetJobResponse::SuccessfulResponse(job) => job,
                 GetJobResponse::ForbiddenErrorResponse(err) => {
                     error!("Access denied for job {}: {:?}", id, err);
-                    return Err(CompletionMutationError::Response(Box::new(
-                        CompleteJobResponse::ForbiddenErrorResponse(err),
-                    )));
+                    return Err(CompletionMutationError::Response {
+                        code: completion_codes::FORBIDDEN,
+                        response: Box::new(CompleteJobResponse::ForbiddenErrorResponse(err)),
+                    });
                 }
                 GetJobResponse::NotFoundErrorResponse(err) => {
                     error!("Job not found {}: {:?}", id, err);
-                    return Err(CompletionMutationError::Response(Box::new(
-                        CompleteJobResponse::NotFoundErrorResponse(err),
-                    )));
+                    return Err(CompletionMutationError::Response {
+                        code: completion_codes::NOT_FOUND,
+                        response: Box::new(CompleteJobResponse::NotFoundErrorResponse(err)),
+                    });
                 }
                 GetJobResponse::DefaultErrorResponse(err) => {
                     error!("Failed to get job {}: {:?}", id, err);
-                    return Err(CompletionMutationError::Response(Box::new(
-                        CompleteJobResponse::DefaultErrorResponse(err),
-                    )));
+                    return Err(CompletionMutationError::Response {
+                        code: completion_codes::INTERNAL,
+                        response: Box::new(CompleteJobResponse::DefaultErrorResponse(err)),
+                    });
                 }
             },
             Err(error) => return Err(CompletionMutationError::Transport(error)),
@@ -1148,21 +1196,24 @@ where
             }
             CreateResultResponse::ForbiddenErrorResponse(err) => {
                 error!("Forbidden to add result for job {}: {:?}", id, err);
-                return Err(CompletionMutationError::Response(Box::new(
-                    CompleteJobResponse::ForbiddenErrorResponse(err),
-                )));
+                return Err(CompletionMutationError::Response {
+                    code: completion_codes::FORBIDDEN,
+                    response: Box::new(CompleteJobResponse::ForbiddenErrorResponse(err)),
+                });
             }
             CreateResultResponse::NotFoundErrorResponse(err) => {
                 error!("Failed to add result for job {}: {:?}", id, err);
-                return Err(CompletionMutationError::Response(Box::new(
-                    CompleteJobResponse::NotFoundErrorResponse(err),
-                )));
+                return Err(CompletionMutationError::Response {
+                    code: completion_codes::NOT_FOUND,
+                    response: Box::new(CompleteJobResponse::NotFoundErrorResponse(err)),
+                });
             }
             CreateResultResponse::DefaultErrorResponse(err) => {
                 error!("Failed to add result for job {}: {:?}", id, err);
-                return Err(CompletionMutationError::Response(Box::new(
-                    CompleteJobResponse::DefaultErrorResponse(err),
-                )));
+                return Err(CompletionMutationError::Response {
+                    code: completion_codes::INTERNAL,
+                    response: Box::new(CompleteJobResponse::DefaultErrorResponse(err)),
+                });
             }
         };
 
@@ -1250,8 +1301,14 @@ where
             job_info.status,
         )?;
 
-        if let Err(e) = self.validate_run_id(job_info.workflow_id, run_id).await {
-            return Err(unprocessable_completion_error(e));
+        if let Err(e) = self
+            .validate_run_id_tx(tx, job_info.workflow_id, run_id)
+            .await
+        {
+            return Err(unprocessable_completion_error(
+                completion_codes::VALIDATION,
+                e,
+            ));
         }
 
         // Guarded status update FIRST. If another writer already settled this
@@ -1297,10 +1354,13 @@ where
                     let current_status = models::JobStatus::from_int(status_int as i32)
                         .unwrap_or(models::JobStatus::Failed);
                     if current_status.is_complete() {
-                        Err(unprocessable_completion_error(format!(
-                            "Job {} is already complete with status {:?}",
-                            id, current_status
-                        )))
+                        Err(unprocessable_completion_error(
+                            completion_codes::ALREADY_COMPLETE,
+                            format!(
+                                "Job {} is already complete with status {:?}",
+                                id, current_status
+                            ),
+                        ))
                     } else {
                         Err(CompletionMutationError::Transport(ApiError(format!(
                             "Job {} is in unexpected status {:?}",
@@ -1308,10 +1368,10 @@ where
                         ))))
                     }
                 }
-                None => Err(CompletionMutationError::Transport(ApiError(format!(
-                    "Job {} not found",
-                    id
-                )))),
+                None => Err(unprocessable_completion_error(
+                    completion_codes::NOT_FOUND,
+                    format!("Job {} not found", id),
+                )),
             };
         }
 
@@ -1609,6 +1669,7 @@ where
                 None => {
                     errors.push(models::JobCompletionError {
                         job_id,
+                        error_code: completion_codes::NOT_FOUND.to_string(),
                         message: format!("Job {} not found", job_id),
                     });
                     continue;
@@ -1631,13 +1692,17 @@ where
                     completed.push(job_id);
                     completion_records.push(completion);
                 }
-                Err(CompletionMutationError::Response(response)) => match *response {
+                Err(CompletionMutationError::Response { code, response }) => match *response {
                     CompleteJobResponse::ForbiddenErrorResponse(err)
                     | CompleteJobResponse::NotFoundErrorResponse(err)
                     | CompleteJobResponse::UnprocessableContentErrorResponse(err)
                     | CompleteJobResponse::DefaultErrorResponse(err) => {
                         let message = completion_error_message(&err);
-                        errors.push(models::JobCompletionError { job_id, message });
+                        errors.push(models::JobCompletionError {
+                            job_id,
+                            error_code: code.to_string(),
+                            message,
+                        });
                     }
                     CompleteJobResponse::SuccessfulResponse(_) => {
                         unreachable!("successful completion should not be returned as an error")

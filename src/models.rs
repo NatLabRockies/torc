@@ -353,6 +353,18 @@ pub struct BatchCompleteJobsRequest {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct JobCompletionError {
     pub job_id: i64,
+    /// Machine-readable category for the failure. Stable values:
+    /// - `already_complete` — benign race; the job was already in a
+    ///   terminal state when the completion arrived.
+    /// - `not_found` — the job_id does not exist.
+    /// - `forbidden` — the caller cannot complete this job.
+    /// - `validation` — input failed a per-completion validation check
+    ///   (workflow mismatch, run-id mismatch, status not terminal, etc.).
+    /// - `internal` — unmapped server-side failure.
+    ///
+    /// Clients should treat `already_complete` as benign and any other
+    /// value as a real desync that warrants stopping/escalating.
+    pub error_code: String,
     pub message: String,
 }
 

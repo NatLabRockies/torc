@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List
 from typing import Optional, Set
 from typing_extensions import Self
@@ -26,9 +26,10 @@ class JobCompletionError(BaseModel):
     """
     JobCompletionError
     """ # noqa: E501
+    error_code: StrictStr = Field(description="Machine-readable category for the failure. Stable values: - `already_complete` — benign race; the job was already in a   terminal state when the completion arrived. - `not_found` — the job_id does not exist. - `forbidden` — the caller cannot complete this job. - `validation` — input failed a per-completion validation check   (workflow mismatch, run-id mismatch, status not terminal, etc.). - `internal` — unmapped server-side failure.  Clients should treat `already_complete` as benign and any other value as a real desync that warrants stopping/escalating.")
     job_id: StrictInt
     message: StrictStr
-    __properties: ClassVar[List[str]] = ["job_id", "message"]
+    __properties: ClassVar[List[str]] = ["error_code", "job_id", "message"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -81,6 +82,7 @@ class JobCompletionError(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "error_code": obj.get("error_code"),
             "job_id": obj.get("job_id"),
             "message": obj.get("message")
         })

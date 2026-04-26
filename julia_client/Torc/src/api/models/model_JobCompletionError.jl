@@ -5,39 +5,45 @@
 @doc raw"""JobCompletionError
 
     JobCompletionError(;
+        error_code=nothing,
         job_id=nothing,
         message=nothing,
     )
 
+    - error_code::String : Machine-readable category for the failure. Stable values: - &#x60;already_complete&#x60; — benign race; the job was already in a   terminal state when the completion arrived. - &#x60;not_found&#x60; — the job_id does not exist. - &#x60;forbidden&#x60; — the caller cannot complete this job. - &#x60;validation&#x60; — input failed a per-completion validation check   (workflow mismatch, run-id mismatch, status not terminal, etc.). - &#x60;internal&#x60; — unmapped server-side failure.  Clients should treat &#x60;already_complete&#x60; as benign and any other value as a real desync that warrants stopping/escalating.
     - job_id::Int64
     - message::String
 """
 Base.@kwdef mutable struct JobCompletionError <: OpenAPI.APIModel
+    error_code::Union{Nothing, String} = nothing
     job_id::Union{Nothing, Int64} = nothing
     message::Union{Nothing, String} = nothing
 
-    function JobCompletionError(job_id, message, )
-        o = new(job_id, message, )
+    function JobCompletionError(error_code, job_id, message, )
+        o = new(error_code, job_id, message, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type JobCompletionError
 
-const _property_types_JobCompletionError = Dict{Symbol,String}(Symbol("job_id")=>"Int64", Symbol("message")=>"String", )
+const _property_types_JobCompletionError = Dict{Symbol,String}(Symbol("error_code")=>"String", Symbol("job_id")=>"Int64", Symbol("message")=>"String", )
 OpenAPI.property_type(::Type{ JobCompletionError }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_JobCompletionError[name]))}
 
 function OpenAPI.check_required(o::JobCompletionError)
+    o.error_code === nothing && (return false)
     o.job_id === nothing && (return false)
     o.message === nothing && (return false)
     true
 end
 
 function OpenAPI.validate_properties(o::JobCompletionError)
+    OpenAPI.validate_property(JobCompletionError, Symbol("error_code"), o.error_code)
     OpenAPI.validate_property(JobCompletionError, Symbol("job_id"), o.job_id)
     OpenAPI.validate_property(JobCompletionError, Symbol("message"), o.message)
 end
 
 function OpenAPI.validate_property(::Type{ JobCompletionError }, name::Symbol, val)
+
 
     if name === Symbol("job_id")
         OpenAPI.validate_param(name, "JobCompletionError", :format, val, "int64")
