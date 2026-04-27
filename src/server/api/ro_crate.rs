@@ -13,6 +13,7 @@ use crate::server::api_responses::{
 };
 
 use crate::models;
+use crate::ro_crate_json_ld::typed_entity;
 
 use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg};
 
@@ -34,10 +35,6 @@ const GIT_HASH: &str = env!("GIT_HASH");
 /// Returns the full version string including git hash (e.g., "0.8.0 (abc1234)")
 fn full_version() -> String {
     format!("{} ({})", SERVER_VERSION, GIT_HASH)
-}
-
-fn typed_entity(primary_type: &str, prov_type: &str) -> serde_json::Value {
-    serde_json::json!([primary_type, prov_type])
 }
 
 /// Trait defining RO-Crate entity-related API operations

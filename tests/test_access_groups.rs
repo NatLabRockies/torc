@@ -9,7 +9,7 @@ use std::fs;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use rstest::rstest;
-use torc::client::{Configuration, default_api};
+use torc::client::{Configuration, apis};
 use torc::models;
 
 /// Atomic counter for generating unique names in tests
@@ -22,7 +22,7 @@ fn create_workflow_with_user(
     user: &str,
 ) -> models::WorkflowModel {
     let workflow = models::WorkflowModel::new(name.to_string(), user.to_string());
-    default_api::create_workflow(config, workflow).expect("Failed to create workflow")
+    apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow")
 }
 
 // ============================================================================
@@ -40,8 +40,8 @@ fn test_create_access_group(start_server: &ServerProcess) {
         created_at: None,
     };
 
-    let result =
-        default_api::create_access_group(config, group).expect("Failed to create access group");
+    let result = apis::access_control_api::create_access_group(config, group)
+        .expect("Failed to create access group");
 
     assert!(result.id.is_some());
     assert_eq!(result.name, "test-group");
@@ -60,7 +60,7 @@ fn test_create_access_group_without_description(start_server: &ServerProcess) {
         created_at: None,
     };
 
-    let result = default_api::create_access_group(config, group)
+    let result = apis::access_control_api::create_access_group(config, group)
         .expect("Failed to create access group without description");
 
     assert!(result.id.is_some());
@@ -80,13 +80,13 @@ fn test_get_access_group(start_server: &ServerProcess) {
         created_at: None,
     };
 
-    let created =
-        default_api::create_access_group(config, group).expect("Failed to create access group");
+    let created = apis::access_control_api::create_access_group(config, group)
+        .expect("Failed to create access group");
     let group_id = created.id.unwrap();
 
     // Now get it by ID
-    let fetched =
-        default_api::get_access_group(config, group_id).expect("Failed to get access group");
+    let fetched = apis::access_control_api::get_access_group(config, group_id)
+        .expect("Failed to get access group");
 
     assert_eq!(fetched.id, Some(group_id));
     assert_eq!(fetched.name, "get-test-group");
@@ -105,12 +105,13 @@ fn test_list_access_groups(start_server: &ServerProcess) {
             description: Some(format!("List test group {}", i)),
             created_at: None,
         };
-        default_api::create_access_group(config, group).expect("Failed to create access group");
+        apis::access_control_api::create_access_group(config, group)
+            .expect("Failed to create access group");
     }
 
     // List all groups
-    let result =
-        default_api::list_access_groups(config, None, None).expect("Failed to list access groups");
+    let result = apis::access_control_api::list_access_groups(config, None, None)
+        .expect("Failed to list access groups");
 
     assert!(result.items.len() >= 3);
     assert!(result.total_count >= 3);
@@ -134,11 +135,11 @@ fn test_list_access_groups_pagination(start_server: &ServerProcess) {
             description: None,
             created_at: None,
         };
-        let _ = default_api::create_access_group(config, group);
+        let _ = apis::access_control_api::create_access_group(config, group);
     }
 
     // Test with limit
-    let page1 = default_api::list_access_groups(config, Some(0), Some(2))
+    let page1 = apis::access_control_api::list_access_groups(config, Some(0), Some(2))
         .expect("Failed to list first page");
 
     assert!(page1.items.len() <= 2);
@@ -158,19 +159,19 @@ fn test_delete_access_group(start_server: &ServerProcess) {
         created_at: None,
     };
 
-    let created =
-        default_api::create_access_group(config, group).expect("Failed to create access group");
+    let created = apis::access_control_api::create_access_group(config, group)
+        .expect("Failed to create access group");
     let group_id = created.id.unwrap();
 
     // Delete it
-    let deleted =
-        default_api::delete_access_group(config, group_id).expect("Failed to delete access group");
+    let deleted = apis::access_control_api::delete_access_group(config, group_id)
+        .expect("Failed to delete access group");
 
     assert_eq!(deleted.id, Some(group_id));
     assert_eq!(deleted.name, "delete-test-group");
 
     // Verify it's gone (should return an error)
-    let result = default_api::get_access_group(config, group_id);
+    let result = apis::access_control_api::get_access_group(config, group_id);
     assert!(result.is_err(), "Deleted group should not be found");
 }
 
@@ -190,8 +191,8 @@ fn test_add_user_to_group(start_server: &ServerProcess) {
         created_at: None,
     };
 
-    let created =
-        default_api::create_access_group(config, group).expect("Failed to create access group");
+    let created = apis::access_control_api::create_access_group(config, group)
+        .expect("Failed to create access group");
     let group_id = created.id.unwrap();
 
     // Add a user to the group
@@ -203,7 +204,7 @@ fn test_add_user_to_group(start_server: &ServerProcess) {
         created_at: None,
     };
 
-    let result = default_api::add_user_to_group(config, group_id, membership)
+    let result = apis::access_control_api::add_user_to_group(config, group_id, membership)
         .expect("Failed to add user to group");
 
     assert!(result.id.is_some());
@@ -224,8 +225,8 @@ fn test_list_group_members(start_server: &ServerProcess) {
         created_at: None,
     };
 
-    let created =
-        default_api::create_access_group(config, group).expect("Failed to create access group");
+    let created = apis::access_control_api::create_access_group(config, group)
+        .expect("Failed to create access group");
     let group_id = created.id.unwrap();
 
     // Add multiple users
@@ -237,12 +238,12 @@ fn test_list_group_members(start_server: &ServerProcess) {
             role: "member".to_string(),
             created_at: None,
         };
-        default_api::add_user_to_group(config, group_id, membership)
+        apis::access_control_api::add_user_to_group(config, group_id, membership)
             .expect("Failed to add user to group");
     }
 
     // List members
-    let result = default_api::list_group_members(config, group_id, None, None)
+    let result = apis::access_control_api::list_group_members(config, group_id, None, None)
         .expect("Failed to list group members");
 
     assert_eq!(result.items.len(), 3);
@@ -264,8 +265,8 @@ fn test_remove_user_from_group(start_server: &ServerProcess) {
         created_at: None,
     };
 
-    let created =
-        default_api::create_access_group(config, group).expect("Failed to create access group");
+    let created = apis::access_control_api::create_access_group(config, group)
+        .expect("Failed to create access group");
     let group_id = created.id.unwrap();
 
     // Add a user
@@ -276,17 +277,17 @@ fn test_remove_user_from_group(start_server: &ServerProcess) {
         role: "member".to_string(),
         created_at: None,
     };
-    default_api::add_user_to_group(config, group_id, membership)
+    apis::access_control_api::add_user_to_group(config, group_id, membership)
         .expect("Failed to add user to group");
 
     // Remove the user
-    let removed = default_api::remove_user_from_group(config, group_id, "eve")
+    let removed = apis::access_control_api::remove_user_from_group(config, group_id, "eve")
         .expect("Failed to remove user from group");
 
     assert_eq!(removed.user_name, "eve");
 
     // Verify user is no longer in the group
-    let members = default_api::list_group_members(config, group_id, None, None)
+    let members = apis::access_control_api::list_group_members(config, group_id, None, None)
         .expect("Failed to list group members");
 
     let names: Vec<&str> = members.items.iter().map(|m| m.user_name.as_str()).collect();
@@ -307,8 +308,8 @@ fn test_list_user_groups(start_server: &ServerProcess) {
             created_at: None,
         };
 
-        let created =
-            default_api::create_access_group(config, group).expect("Failed to create access group");
+        let created = apis::access_control_api::create_access_group(config, group)
+            .expect("Failed to create access group");
         group_ids.push(created.id.unwrap());
     }
 
@@ -321,12 +322,12 @@ fn test_list_user_groups(start_server: &ServerProcess) {
             role: "member".to_string(),
             created_at: None,
         };
-        default_api::add_user_to_group(config, *group_id, membership)
+        apis::access_control_api::add_user_to_group(config, *group_id, membership)
             .expect("Failed to add user to group");
     }
 
     // List the user's groups
-    let result = default_api::list_user_groups(config, "multi-group-user", None, None)
+    let result = apis::access_control_api::list_user_groups(config, "multi-group-user", None, None)
         .expect("Failed to list user groups");
 
     assert!(result.items.len() >= 3);
@@ -356,13 +357,14 @@ fn test_add_workflow_to_group(start_server: &ServerProcess) {
         created_at: None,
     };
 
-    let created_group =
-        default_api::create_access_group(config, group).expect("Failed to create access group");
+    let created_group = apis::access_control_api::create_access_group(config, group)
+        .expect("Failed to create access group");
     let group_id = created_group.id.unwrap();
 
     // Add workflow to group
-    let association = default_api::add_workflow_to_group(config, workflow_id, group_id)
-        .expect("Failed to add workflow to group");
+    let association =
+        apis::access_control_api::add_workflow_to_group(config, workflow_id, group_id)
+            .expect("Failed to add workflow to group");
 
     assert_eq!(association.workflow_id, workflow_id);
     assert_eq!(association.group_id, group_id);
@@ -386,16 +388,16 @@ fn test_list_workflow_groups(start_server: &ServerProcess) {
             created_at: None,
         };
 
-        let created_group =
-            default_api::create_access_group(config, group).expect("Failed to create access group");
+        let created_group = apis::access_control_api::create_access_group(config, group)
+            .expect("Failed to create access group");
         let group_id = created_group.id.unwrap();
 
-        default_api::add_workflow_to_group(config, workflow_id, group_id)
+        apis::access_control_api::add_workflow_to_group(config, workflow_id, group_id)
             .expect("Failed to add workflow to group");
     }
 
     // List the workflow's groups
-    let result = default_api::list_workflow_groups(config, workflow_id, None, None)
+    let result = apis::access_control_api::list_workflow_groups(config, workflow_id, None, None)
         .expect("Failed to list workflow groups");
 
     assert!(result.items.len() >= 3);
@@ -421,23 +423,24 @@ fn test_remove_workflow_from_group(start_server: &ServerProcess) {
         created_at: None,
     };
 
-    let created_group =
-        default_api::create_access_group(config, group).expect("Failed to create access group");
+    let created_group = apis::access_control_api::create_access_group(config, group)
+        .expect("Failed to create access group");
     let group_id = created_group.id.unwrap();
 
     // Add workflow to group
-    default_api::add_workflow_to_group(config, workflow_id, group_id)
+    apis::access_control_api::add_workflow_to_group(config, workflow_id, group_id)
         .expect("Failed to add workflow to group");
 
     // Remove workflow from group
-    let removed = default_api::remove_workflow_from_group(config, workflow_id, group_id)
-        .expect("Failed to remove workflow from group");
+    let removed =
+        apis::access_control_api::remove_workflow_from_group(config, workflow_id, group_id)
+            .expect("Failed to remove workflow from group");
 
     assert_eq!(removed.workflow_id, workflow_id);
     assert_eq!(removed.group_id, group_id);
 
     // Verify the association is gone
-    let groups = default_api::list_workflow_groups(config, workflow_id, None, None)
+    let groups = apis::access_control_api::list_workflow_groups(config, workflow_id, None, None)
         .expect("Failed to list workflow groups");
 
     let group_ids: Vec<i64> = groups.items.iter().filter_map(|g| g.id).collect();
@@ -457,7 +460,7 @@ fn test_check_workflow_access_owner(start_server: &ServerProcess) {
     let workflow_id = workflow.id.unwrap();
 
     // Check that the owner has access
-    let result = default_api::check_workflow_access(config, workflow_id, "owner-user")
+    let result = apis::access_control_api::check_workflow_access(config, workflow_id, "owner-user")
         .expect("Failed to check workflow access");
 
     assert!(result.has_access);
@@ -481,8 +484,8 @@ fn test_check_workflow_access_group_member(start_server: &ServerProcess) {
         created_at: None,
     };
 
-    let created_group =
-        default_api::create_access_group(config, group).expect("Failed to create access group");
+    let created_group = apis::access_control_api::create_access_group(config, group)
+        .expect("Failed to create access group");
     let group_id = created_group.id.unwrap();
 
     // Add a user to the group
@@ -493,21 +496,23 @@ fn test_check_workflow_access_group_member(start_server: &ServerProcess) {
         role: "member".to_string(),
         created_at: None,
     };
-    default_api::add_user_to_group(config, group_id, membership)
+    apis::access_control_api::add_user_to_group(config, group_id, membership)
         .expect("Failed to add user to group");
 
     // Initially, group member should NOT have access
-    let no_access = default_api::check_workflow_access(config, workflow_id, "group-member")
-        .expect("Failed to check workflow access");
+    let no_access =
+        apis::access_control_api::check_workflow_access(config, workflow_id, "group-member")
+            .expect("Failed to check workflow access");
     assert!(!no_access.has_access);
 
     // Add workflow to the group
-    default_api::add_workflow_to_group(config, workflow_id, group_id)
+    apis::access_control_api::add_workflow_to_group(config, workflow_id, group_id)
         .expect("Failed to add workflow to group");
 
     // Now the group member should have access
-    let has_access = default_api::check_workflow_access(config, workflow_id, "group-member")
-        .expect("Failed to check workflow access");
+    let has_access =
+        apis::access_control_api::check_workflow_access(config, workflow_id, "group-member")
+            .expect("Failed to check workflow access");
     assert!(has_access.has_access);
     assert_eq!(has_access.user_name, "group-member");
 }
@@ -521,8 +526,9 @@ fn test_check_workflow_access_non_member(start_server: &ServerProcess) {
     let workflow_id = workflow.id.unwrap();
 
     // A random user should NOT have access
-    let result = default_api::check_workflow_access(config, workflow_id, "random-user")
-        .expect("Failed to check workflow access");
+    let result =
+        apis::access_control_api::check_workflow_access(config, workflow_id, "random-user")
+            .expect("Failed to check workflow access");
 
     assert!(!result.has_access);
     assert_eq!(result.user_name, "random-user");
@@ -556,8 +562,8 @@ fn setup_two_teams(config: &Configuration) -> (i64, i64) {
         description: Some("Machine Learning Team".to_string()),
         created_at: None,
     };
-    let ml_team =
-        default_api::create_access_group(config, ml_group).expect("Failed to create ML team");
+    let ml_team = apis::access_control_api::create_access_group(config, ml_group)
+        .expect("Failed to create ML team");
     let ml_team_id = ml_team.id.unwrap();
 
     // Create Data team
@@ -567,8 +573,8 @@ fn setup_two_teams(config: &Configuration) -> (i64, i64) {
         description: Some("Data Processing Team".to_string()),
         created_at: None,
     };
-    let data_team =
-        default_api::create_access_group(config, data_group).expect("Failed to create Data team");
+    let data_team = apis::access_control_api::create_access_group(config, data_group)
+        .expect("Failed to create Data team");
     let data_team_id = data_team.id.unwrap();
 
     // Add users to ML team: alice, bob, shared_user
@@ -580,7 +586,7 @@ fn setup_two_teams(config: &Configuration) -> (i64, i64) {
             role: "member".to_string(),
             created_at: None,
         };
-        default_api::add_user_to_group(config, ml_team_id, membership)
+        apis::access_control_api::add_user_to_group(config, ml_team_id, membership)
             .expect("Failed to add user to ML team");
     }
 
@@ -593,7 +599,7 @@ fn setup_two_teams(config: &Configuration) -> (i64, i64) {
             role: "member".to_string(),
             created_at: None,
         };
-        default_api::add_user_to_group(config, data_team_id, membership)
+        apis::access_control_api::add_user_to_group(config, data_team_id, membership)
             .expect("Failed to add user to Data team");
     }
 
@@ -613,7 +619,7 @@ fn test_enforcement_owner_can_access_own_workflow(
 
     // The owner should be able to access their own workflow
     // Note: With access control enabled, this should succeed because ownership grants access
-    let result = default_api::check_workflow_access(config, workflow_id, "owner_user")
+    let result = apis::access_control_api::check_workflow_access(config, workflow_id, "owner_user")
         .expect("Failed to check access");
     assert!(
         result.has_access,
@@ -633,7 +639,7 @@ fn test_enforcement_non_member_cannot_access_workflow(
     let workflow_id = workflow.id.unwrap();
 
     // A user with no access should be denied
-    let result = default_api::check_workflow_access(config, workflow_id, "outsider")
+    let result = apis::access_control_api::check_workflow_access(config, workflow_id, "outsider")
         .expect("Failed to check access");
     assert!(
         !result.has_access,
@@ -657,7 +663,7 @@ fn test_enforcement_team_member_can_access_shared_workflow(
     let workflow_id = workflow.id.unwrap();
 
     // Initially, alice (ML team member) should NOT have access
-    let no_access = default_api::check_workflow_access(config, workflow_id, "alice")
+    let no_access = apis::access_control_api::check_workflow_access(config, workflow_id, "alice")
         .expect("Failed to check access");
     assert!(
         !no_access.has_access,
@@ -665,11 +671,11 @@ fn test_enforcement_team_member_can_access_shared_workflow(
     );
 
     // Share the workflow with the ML team
-    default_api::add_workflow_to_group(config, workflow_id, ml_team_id)
+    apis::access_control_api::add_workflow_to_group(config, workflow_id, ml_team_id)
         .expect("Failed to add workflow to ML team");
 
     // Now alice should have access
-    let has_access = default_api::check_workflow_access(config, workflow_id, "alice")
+    let has_access = apis::access_control_api::check_workflow_access(config, workflow_id, "alice")
         .expect("Failed to check access");
     assert!(
         has_access.has_access,
@@ -677,7 +683,7 @@ fn test_enforcement_team_member_can_access_shared_workflow(
     );
 
     // bob (also ML team member) should also have access
-    let bob_access = default_api::check_workflow_access(config, workflow_id, "bob")
+    let bob_access = apis::access_control_api::check_workflow_access(config, workflow_id, "bob")
         .expect("Failed to check access");
     assert!(
         bob_access.has_access,
@@ -685,8 +691,9 @@ fn test_enforcement_team_member_can_access_shared_workflow(
     );
 
     // carol (Data team member, NOT ML team) should NOT have access
-    let carol_access = default_api::check_workflow_access(config, workflow_id, "carol")
-        .expect("Failed to check access");
+    let carol_access =
+        apis::access_control_api::check_workflow_access(config, workflow_id, "carol")
+            .expect("Failed to check access");
     assert!(
         !carol_access.has_access,
         "Carol (Data team only) should NOT have access to ML team workflow"
@@ -713,51 +720,55 @@ fn test_enforcement_multi_team_member_can_access_both_team_workflows(
     let data_workflow_id = data_workflow.id.unwrap();
 
     // Share workflows with respective teams
-    default_api::add_workflow_to_group(config, ml_workflow_id, ml_team_id)
+    apis::access_control_api::add_workflow_to_group(config, ml_workflow_id, ml_team_id)
         .expect("Failed to share ML workflow");
-    default_api::add_workflow_to_group(config, data_workflow_id, data_team_id)
+    apis::access_control_api::add_workflow_to_group(config, data_workflow_id, data_team_id)
         .expect("Failed to share Data workflow");
 
     // shared_user should have access to BOTH workflows (member of both teams)
-    let ml_access = default_api::check_workflow_access(config, ml_workflow_id, "shared_user")
-        .expect("Failed to check ML access");
+    let ml_access =
+        apis::access_control_api::check_workflow_access(config, ml_workflow_id, "shared_user")
+            .expect("Failed to check ML access");
     assert!(
         ml_access.has_access,
         "shared_user should have access to ML workflow (member of both teams)"
     );
 
-    let data_access = default_api::check_workflow_access(config, data_workflow_id, "shared_user")
-        .expect("Failed to check Data access");
+    let data_access =
+        apis::access_control_api::check_workflow_access(config, data_workflow_id, "shared_user")
+            .expect("Failed to check Data access");
     assert!(
         data_access.has_access,
         "shared_user should have access to Data workflow (member of both teams)"
     );
 
     // alice should only have access to ML workflow
-    let alice_ml = default_api::check_workflow_access(config, ml_workflow_id, "alice")
+    let alice_ml = apis::access_control_api::check_workflow_access(config, ml_workflow_id, "alice")
         .expect("Failed to check");
     assert!(
         alice_ml.has_access,
         "alice should have access to ML workflow"
     );
 
-    let alice_data = default_api::check_workflow_access(config, data_workflow_id, "alice")
-        .expect("Failed to check");
+    let alice_data =
+        apis::access_control_api::check_workflow_access(config, data_workflow_id, "alice")
+            .expect("Failed to check");
     assert!(
         !alice_data.has_access,
         "alice should NOT have access to Data workflow"
     );
 
     // carol should only have access to Data workflow
-    let carol_ml = default_api::check_workflow_access(config, ml_workflow_id, "carol")
+    let carol_ml = apis::access_control_api::check_workflow_access(config, ml_workflow_id, "carol")
         .expect("Failed to check");
     assert!(
         !carol_ml.has_access,
         "carol should NOT have access to ML workflow"
     );
 
-    let carol_data = default_api::check_workflow_access(config, data_workflow_id, "carol")
-        .expect("Failed to check");
+    let carol_data =
+        apis::access_control_api::check_workflow_access(config, data_workflow_id, "carol")
+            .expect("Failed to check");
     assert!(
         carol_data.has_access,
         "carol should have access to Data workflow"
@@ -775,23 +786,24 @@ fn test_enforcement_revoke_access_removes_permission(
 
     // Create and share a workflow (authenticate as some_owner)
     let owner_config = config_with_auth(config, "some_owner");
-    let workflow = create_workflow_with_user(&owner_config, "revoke-test-workflow", "some_owner");
+    let workflow_name = format!("revoke-test-workflow-{}", unique_suffix());
+    let workflow = create_workflow_with_user(&owner_config, &workflow_name, "some_owner");
     let workflow_id = workflow.id.unwrap();
 
-    default_api::add_workflow_to_group(config, workflow_id, ml_team_id)
+    apis::access_control_api::add_workflow_to_group(config, workflow_id, ml_team_id)
         .expect("Failed to share workflow");
 
     // Verify alice has access
-    let has_access = default_api::check_workflow_access(config, workflow_id, "alice")
+    let has_access = apis::access_control_api::check_workflow_access(config, workflow_id, "alice")
         .expect("Failed to check access");
     assert!(has_access.has_access, "alice should have access initially");
 
     // Revoke access by removing workflow from group
-    default_api::remove_workflow_from_group(config, workflow_id, ml_team_id)
+    apis::access_control_api::remove_workflow_from_group(config, workflow_id, ml_team_id)
         .expect("Failed to remove workflow from group");
 
     // Verify alice no longer has access
-    let no_access = default_api::check_workflow_access(config, workflow_id, "alice")
+    let no_access = apis::access_control_api::check_workflow_access(config, workflow_id, "alice")
         .expect("Failed to check access");
     assert!(
         !no_access.has_access,
@@ -814,14 +826,14 @@ fn test_enforcement_workflow_shared_with_multiple_groups(
     let workflow_id = workflow.id.unwrap();
 
     // Share with BOTH teams
-    default_api::add_workflow_to_group(&creator_config, workflow_id, ml_team_id)
+    apis::access_control_api::add_workflow_to_group(&creator_config, workflow_id, ml_team_id)
         .expect("Failed to share with ML team");
-    default_api::add_workflow_to_group(&creator_config, workflow_id, data_team_id)
+    apis::access_control_api::add_workflow_to_group(&creator_config, workflow_id, data_team_id)
         .expect("Failed to share with Data team");
 
     // All team members should have access
     for user in ["creator", "alice", "bob", "carol", "dave", "shared_user"] {
-        let access = default_api::check_workflow_access(config, workflow_id, user)
+        let access = apis::access_control_api::check_workflow_access(config, workflow_id, user)
             .expect("Failed to check access");
         assert!(
             access.has_access,
@@ -831,7 +843,7 @@ fn test_enforcement_workflow_shared_with_multiple_groups(
     }
 
     // An outsider should still not have access
-    let outsider = default_api::check_workflow_access(config, workflow_id, "outsider")
+    let outsider = apis::access_control_api::check_workflow_access(config, workflow_id, "outsider")
         .expect("Failed to check access");
     assert!(
         !outsider.has_access,
@@ -852,8 +864,8 @@ fn test_enforcement_remove_user_from_group_revokes_access(
         description: None,
         created_at: None,
     };
-    let created_group =
-        default_api::create_access_group(config, group).expect("Failed to create group");
+    let created_group = apis::access_control_api::create_access_group(config, group)
+        .expect("Failed to create group");
     let group_id = created_group.id.unwrap();
 
     // Add user to group
@@ -864,7 +876,7 @@ fn test_enforcement_remove_user_from_group_revokes_access(
         role: "member".to_string(),
         created_at: None,
     };
-    default_api::add_user_to_group(config, group_id, membership)
+    apis::access_control_api::add_user_to_group(config, group_id, membership)
         .expect("Failed to add user to group");
 
     // Create and share a workflow owned by "wf_owner" (authenticate as wf_owner)
@@ -872,21 +884,23 @@ fn test_enforcement_remove_user_from_group_revokes_access(
     let workflow = create_workflow_with_user(&wf_owner_config, "user-removal-workflow", "wf_owner");
     let workflow_id = workflow.id.unwrap();
 
-    default_api::add_workflow_to_group(config, workflow_id, group_id)
+    apis::access_control_api::add_workflow_to_group(config, workflow_id, group_id)
         .expect("Failed to share workflow");
 
     // User should have access
-    let has_access = default_api::check_workflow_access(config, workflow_id, "removable_user")
-        .expect("Failed to check access");
+    let has_access =
+        apis::access_control_api::check_workflow_access(config, workflow_id, "removable_user")
+            .expect("Failed to check access");
     assert!(has_access.has_access, "User should have access initially");
 
     // Remove user from group
-    default_api::remove_user_from_group(config, group_id, "removable_user")
+    apis::access_control_api::remove_user_from_group(config, group_id, "removable_user")
         .expect("Failed to remove user from group");
 
     // User should no longer have access
-    let no_access = default_api::check_workflow_access(config, workflow_id, "removable_user")
-        .expect("Failed to check access");
+    let no_access =
+        apis::access_control_api::check_workflow_access(config, workflow_id, "removable_user")
+            .expect("Failed to check access");
     assert!(
         !no_access.has_access,
         "User should NOT have access after being removed from group"
@@ -925,7 +939,7 @@ fn create_job_for_workflow(
     name: &str,
 ) -> models::JobModel {
     let job = models::JobModel::new(workflow_id, name.to_string(), "echo test".to_string());
-    default_api::create_job(config, job).expect("Failed to create job")
+    apis::jobs_api::create_job(config, job).expect("Failed to create job")
 }
 
 /// Helper to check if an error response indicates access denial (HTTP 403 Forbidden).
@@ -956,7 +970,7 @@ fn test_get_workflow_returns_error_for_unauthorized_user(
     let unauthorized_config = config_with_auth(config, "unauthorized_user");
 
     // Try to get the workflow - should fail with access denied
-    let result = default_api::get_workflow(&unauthorized_config, workflow_id);
+    let result = apis::workflows_api::get_workflow(&unauthorized_config, workflow_id);
 
     assert!(
         is_access_denied_error(&result),
@@ -985,7 +999,7 @@ fn test_get_job_returns_error_for_unauthorized_user(
     let unauthorized_config = config_with_auth(config, "unauthorized_job_user");
 
     // Try to get the job - should fail with access denied
-    let result = default_api::get_job(&unauthorized_config, job_id);
+    let result = apis::jobs_api::get_job(&unauthorized_config, job_id);
 
     assert!(
         is_access_denied_error(&result),
@@ -1009,7 +1023,7 @@ fn test_authorized_user_can_access_shared_workflow_via_api(
     let workflow_id = workflow.id.unwrap();
 
     // Share with ML team
-    default_api::add_workflow_to_group(&owner_config, workflow_id, ml_team_id)
+    apis::access_control_api::add_workflow_to_group(&owner_config, workflow_id, ml_team_id)
         .expect("Failed to share workflow");
 
     // Create a job
@@ -1018,7 +1032,7 @@ fn test_authorized_user_can_access_shared_workflow_via_api(
 
     // Alice (ML team member) should be able to access the workflow
     let alice_config = config_with_auth(config, "alice");
-    let workflow_result = default_api::get_workflow(&alice_config, workflow_id);
+    let workflow_result = apis::workflows_api::get_workflow(&alice_config, workflow_id);
     assert!(
         workflow_result.is_ok(),
         "Alice should be able to get workflow: {:?}",
@@ -1026,7 +1040,7 @@ fn test_authorized_user_can_access_shared_workflow_via_api(
     );
 
     // Alice should also be able to access the job
-    let job_result = default_api::get_job(&alice_config, job_id);
+    let job_result = apis::jobs_api::get_job(&alice_config, job_id);
     assert!(
         job_result.is_ok(),
         "Alice should be able to get job: {:?}",
@@ -1035,7 +1049,7 @@ fn test_authorized_user_can_access_shared_workflow_via_api(
 
     // Carol (Data team, NOT ML team) should NOT be able to access
     let carol_config = config_with_auth(config, "carol");
-    let carol_workflow_result = default_api::get_workflow(&carol_config, workflow_id);
+    let carol_workflow_result = apis::workflows_api::get_workflow(&carol_config, workflow_id);
     match carol_workflow_result {
         Err(torc::client::apis::Error::ResponseError(content)) => {
             assert_eq!(
@@ -1048,7 +1062,7 @@ fn test_authorized_user_can_access_shared_workflow_via_api(
         Err(e) => panic!("Unexpected error for Carol: {:?}", e),
     }
 
-    let carol_job_result = default_api::get_job(&carol_config, job_id);
+    let carol_job_result = apis::jobs_api::get_job(&carol_config, job_id);
     match carol_job_result {
         Err(torc::client::apis::Error::ResponseError(content)) => {
             assert_eq!(
@@ -1075,7 +1089,7 @@ fn test_multi_team_user_can_access_both_workflows_via_api(
     let ml_config = config_with_auth(config, "ml_api_owner");
     let ml_workflow = create_workflow_with_user(&ml_config, "ml-api-workflow", "ml_api_owner");
     let ml_workflow_id = ml_workflow.id.unwrap();
-    default_api::add_workflow_to_group(&ml_config, ml_workflow_id, ml_team_id)
+    apis::access_control_api::add_workflow_to_group(&ml_config, ml_workflow_id, ml_team_id)
         .expect("Failed to share ML workflow");
 
     // Create Data workflow and share with Data team (authenticate as data_api_owner)
@@ -1083,20 +1097,20 @@ fn test_multi_team_user_can_access_both_workflows_via_api(
     let data_workflow =
         create_workflow_with_user(&data_config, "data-api-workflow", "data_api_owner");
     let data_workflow_id = data_workflow.id.unwrap();
-    default_api::add_workflow_to_group(&data_config, data_workflow_id, data_team_id)
+    apis::access_control_api::add_workflow_to_group(&data_config, data_workflow_id, data_team_id)
         .expect("Failed to share Data workflow");
 
     // shared_user should be able to access both
     let shared_config = config_with_auth(config, "shared_user");
 
-    let ml_result = default_api::get_workflow(&shared_config, ml_workflow_id);
+    let ml_result = apis::workflows_api::get_workflow(&shared_config, ml_workflow_id);
     assert!(
         ml_result.is_ok(),
         "shared_user should access ML workflow: {:?}",
         ml_result.err()
     );
 
-    let data_result = default_api::get_workflow(&shared_config, data_workflow_id);
+    let data_result = apis::workflows_api::get_workflow(&shared_config, data_workflow_id);
     assert!(
         data_result.is_ok(),
         "shared_user should access Data workflow: {:?}",
@@ -1106,10 +1120,10 @@ fn test_multi_team_user_can_access_both_workflows_via_api(
     // alice (ML only) should only access ML workflow
     let alice_config = config_with_auth(config, "alice");
 
-    let alice_ml = default_api::get_workflow(&alice_config, ml_workflow_id);
+    let alice_ml = apis::workflows_api::get_workflow(&alice_config, ml_workflow_id);
     assert!(alice_ml.is_ok(), "Alice should access ML workflow");
 
-    let alice_data = default_api::get_workflow(&alice_config, data_workflow_id);
+    let alice_data = apis::workflows_api::get_workflow(&alice_config, data_workflow_id);
     match alice_data {
         Err(torc::client::apis::Error::ResponseError(content)) => {
             assert_eq!(content.status, reqwest::StatusCode::FORBIDDEN);
@@ -1141,7 +1155,7 @@ fn create_access_control_diamond_workflow(
     let name = format!("access_control_diamond_workflow_{}", suffix);
     let workflow = models::WorkflowModel::new(name.clone(), owner.to_string());
     let created_workflow =
-        default_api::create_workflow(config, workflow).expect("Failed to add workflow");
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to add workflow");
     let workflow_id = created_workflow.id.unwrap();
 
     // Create a compute node for this workflow
@@ -1157,7 +1171,7 @@ fn create_access_control_diamond_workflow(
         "local".to_string(), // compute_node_type
         None,
     );
-    let _ = default_api::create_compute_node(config, compute_node)
+    let _ = apis::compute_nodes_api::create_compute_node(config, compute_node)
         .expect("Failed to create compute node");
 
     // Create local variables for file paths
@@ -1168,32 +1182,32 @@ fn create_access_control_diamond_workflow(
     let f5_path = work_dir.join("f5.json").to_string_lossy().to_string();
     let f6_path = work_dir.join("f6.json").to_string_lossy().to_string();
 
-    let f1 = default_api::create_file(
+    let f1 = apis::files_api::create_file(
         config,
         models::FileModel::new(workflow_id, "f1".to_string(), f1_path.clone()),
     )
     .expect("Failed to add file");
-    let f2 = default_api::create_file(
+    let f2 = apis::files_api::create_file(
         config,
         models::FileModel::new(workflow_id, "f2".to_string(), f2_path.clone()),
     )
     .expect("Failed to add file");
-    let f3 = default_api::create_file(
+    let f3 = apis::files_api::create_file(
         config,
         models::FileModel::new(workflow_id, "f3".to_string(), f3_path.clone()),
     )
     .expect("Failed to add file");
-    let f4 = default_api::create_file(
+    let f4 = apis::files_api::create_file(
         config,
         models::FileModel::new(workflow_id, "f4".to_string(), f4_path.clone()),
     )
     .expect("Failed to add file");
-    let f5 = default_api::create_file(
+    let f5 = apis::files_api::create_file(
         config,
         models::FileModel::new(workflow_id, "f5".to_string(), f5_path.clone()),
     )
     .expect("Failed to add file");
-    let f6 = default_api::create_file(
+    let f6 = apis::files_api::create_file(
         config,
         models::FileModel::new(workflow_id, "f6".to_string(), f6_path.clone()),
     )
@@ -1240,11 +1254,11 @@ fn create_access_control_diamond_workflow(
     postprocess_pre.output_file_ids = Some(vec![f6.id.unwrap()]);
 
     let preprocess =
-        default_api::create_job(config, preprocess_pre).expect("Failed to add preprocess");
-    let work1 = default_api::create_job(config, work1_pre).expect("Failed to add work1");
-    let work2 = default_api::create_job(config, work2_pre).expect("Failed to add work2");
+        apis::jobs_api::create_job(config, preprocess_pre).expect("Failed to add preprocess");
+    let work1 = apis::jobs_api::create_job(config, work1_pre).expect("Failed to add work1");
+    let work2 = apis::jobs_api::create_job(config, work2_pre).expect("Failed to add work2");
     let postprocess =
-        default_api::create_job(config, postprocess_pre).expect("Failed to add postprocess");
+        apis::jobs_api::create_job(config, postprocess_pre).expect("Failed to add postprocess");
 
     let mut jobs = std::collections::HashMap::new();
     jobs.insert("preprocess".to_string(), preprocess);
@@ -1291,20 +1305,22 @@ fn test_comprehensive_access_control_workflow_execution(
         create_access_control_diamond_workflow(&alice_config, "alice", &work_dir);
 
     // Share workflow with ml-team
-    default_api::add_workflow_to_group(config, workflow_id, ml_team_id)
+    apis::access_control_api::add_workflow_to_group(config, workflow_id, ml_team_id)
         .expect("Failed to share workflow with ml-team");
 
     // Verify alice has access
-    let alice_access = default_api::check_workflow_access(config, workflow_id, "alice")
-        .expect("Failed to check alice's access");
+    let alice_access =
+        apis::access_control_api::check_workflow_access(config, workflow_id, "alice")
+            .expect("Failed to check alice's access");
     assert!(
         alice_access.has_access,
         "alice should have access to workflow"
     );
 
     // Verify carol (data-team only) does NOT have access
-    let carol_access = default_api::check_workflow_access(config, workflow_id, "carol")
-        .expect("Failed to check carol's access");
+    let carol_access =
+        apis::access_control_api::check_workflow_access(config, workflow_id, "carol")
+            .expect("Failed to check carol's access");
     assert!(
         !carol_access.has_access,
         "carol should NOT have access to workflow"
@@ -1336,7 +1352,7 @@ fn test_comprehensive_access_control_workflow_execution(
     .expect("alice should be able to run workflow");
 
     // Verify workflow completion - all jobs should be completed
-    let jobs = default_api::list_jobs(
+    let jobs = apis::jobs_api::list_jobs(
         &alice_config,
         workflow_id,
         None,
@@ -1422,7 +1438,7 @@ fn test_comprehensive_access_control_workflow_execution(
         "Files list should contain file names"
     );
 
-    // Test workflow status command
+    // Test workflow status command (now at top level, shows summary)
     let status_output = run_cli_command_with_auth(
         &["status", &workflow_id.to_string()],
         start_server_with_access_control,
@@ -1430,17 +1446,29 @@ fn test_comprehensive_access_control_workflow_execution(
         password,
     )
     .expect("alice should be able to get workflow status");
-    // Workflow status should return the workflow summary for authorized users.
+    // Status command shows workflow summary - verify we got output
     assert!(
-        status_output.contains("Workflow Summary")
-            || status_output.contains("Workflow ID")
-            || status_output.contains("Workflow complete"),
-        "Workflow status should show workflow summary output. Got: {}",
+        status_output.contains("Workflow Summary") || status_output.contains("workflow_id"),
+        "Workflow status should show workflow summary. Got: {}",
         status_output
     );
 
     // =========================================================================
-    // Step 5: Invalid user (carol) cannot run the workflow
+    // Step 5: Valid user (alice) can run status CLI command
+    // =========================================================================
+
+    // Test status command - this should work for authorized users
+    let report_output = run_cli_command_with_auth(
+        &["status", &workflow_id.to_string()],
+        start_server_with_access_control,
+        "alice",
+        password,
+    )
+    .expect("alice should be able to run status");
+    assert!(!report_output.is_empty(), "Report should produce output");
+
+    // =========================================================================
+    // Step 6: Invalid user (carol) cannot run the workflow
     // =========================================================================
 
     // Create a new workflow for carol to try to access
@@ -1448,7 +1476,7 @@ fn test_comprehensive_access_control_workflow_execution(
         create_access_control_diamond_workflow(&alice_config, "alice", &work_dir);
 
     // Share with ml-team only (carol is in data-team, not ml-team)
-    default_api::add_workflow_to_group(config, workflow_id_2, ml_team_id)
+    apis::access_control_api::add_workflow_to_group(config, workflow_id_2, ml_team_id)
         .expect("Failed to share workflow with ml-team");
 
     // Carol should not be able to run the workflow
@@ -1578,8 +1606,8 @@ fn test_workflows_list_all_users_with_access_control(
         description: Some("Test group for all-users listing".to_string()),
         created_at: None,
     };
-    let created_group =
-        default_api::create_access_group(admin_config, group).expect("Failed to create group");
+    let created_group = apis::access_control_api::create_access_group(admin_config, group)
+        .expect("Failed to create group");
     let group_id = created_group.id.unwrap();
 
     // Add wf-user to the group
@@ -1590,11 +1618,11 @@ fn test_workflows_list_all_users_with_access_control(
         role: "member".to_string(),
         created_at: None,
     };
-    default_api::add_user_to_group(admin_config, group_id, membership)
+    apis::access_control_api::add_user_to_group(admin_config, group_id, membership)
         .expect("Failed to add wf-user to group");
 
     // Share workflow B with the group (so wf-user can access it)
-    default_api::add_workflow_to_group(admin_config, wf_b_id, group_id)
+    apis::access_control_api::add_workflow_to_group(admin_config, wf_b_id, group_id)
         .expect("Failed to share workflow B with group");
 
     // Verify wf-user can see workflow A (owned) and workflow B (group-shared)
@@ -1779,12 +1807,12 @@ fn test_resource_access_denied_for_unauthorized_user(
         "/tmp/test-file.txt".to_string(),
     );
     let created_file =
-        default_api::create_file(&owner_config, file).expect("Failed to create file");
+        apis::files_api::create_file(&owner_config, file).expect("Failed to create file");
     let file_id = created_file.id.unwrap();
 
     // An unauthorized user should get 403 when accessing the file
     let unauthorized_config = config_with_auth(config, "resource_intruder");
-    let result = default_api::get_file(&unauthorized_config, file_id);
+    let result = apis::files_api::get_file(&unauthorized_config, file_id);
     assert!(
         is_access_denied_error(&result),
         "Expected 403 for unauthorized file access, got: {:?}",
@@ -1802,7 +1830,7 @@ fn test_resource_access_not_found_for_nonexistent_resource(
     let user_config = config_with_auth(config, "nf_user");
 
     // Try to get a file with an ID that doesn't exist
-    let result = default_api::get_file(&user_config, 999999);
+    let result = apis::files_api::get_file(&user_config, 999999);
     assert!(
         result.is_err(),
         "Expected error for nonexistent file, got: {:?}",
@@ -1839,11 +1867,11 @@ fn test_resource_access_allowed_for_owner(
         "/tmp/owner-file.txt".to_string(),
     );
     let created_file =
-        default_api::create_file(&owner_config, file).expect("Failed to create file");
+        apis::files_api::create_file(&owner_config, file).expect("Failed to create file");
     let file_id = created_file.id.unwrap();
 
     // Owner should be able to access their own file
-    let result = default_api::get_file(&owner_config, file_id);
+    let result = apis::files_api::get_file(&owner_config, file_id);
     assert!(
         result.is_ok(),
         "Owner should be able to access their own file: {:?}",
@@ -1871,7 +1899,7 @@ fn test_resource_access_allowed_via_group(
     let workflow_id = workflow.id.unwrap();
 
     // Share the workflow with the ML team
-    default_api::add_workflow_to_group(config, workflow_id, ml_team_id)
+    apis::access_control_api::add_workflow_to_group(config, workflow_id, ml_team_id)
         .expect("Failed to share workflow");
 
     // Create a file in that workflow
@@ -1881,12 +1909,12 @@ fn test_resource_access_allowed_via_group(
         "/tmp/group-shared-file.txt".to_string(),
     );
     let created_file =
-        default_api::create_file(&owner_config, file).expect("Failed to create file");
+        apis::files_api::create_file(&owner_config, file).expect("Failed to create file");
     let file_id = created_file.id.unwrap();
 
     // alice (ML team member) should be able to access the file
     let alice_config = config_with_auth(config, "alice");
-    let result = default_api::get_file(&alice_config, file_id);
+    let result = apis::files_api::get_file(&alice_config, file_id);
     assert!(
         result.is_ok(),
         "Group member should be able to access shared file: {:?}",

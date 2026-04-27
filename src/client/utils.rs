@@ -6,7 +6,7 @@
 //! # Example
 //!
 //! ```rust
-//! use torc::client::{Configuration, utils::send_with_retries, default_api};
+//! use torc::client::{Configuration, apis, utils::send_with_retries};
 //!
 //! # fn example(config: &Configuration) -> Result<(), Box<dyn std::error::Error>> {
 //! // Retry API calls with automatic network error handling

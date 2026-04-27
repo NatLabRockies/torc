@@ -7,6 +7,7 @@ use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
 use crate::client::version_check;
 use crate::models::{FileModel, JobModel, RoCrateEntityModel};
+use crate::ro_crate_json_ld::typed_entity;
 use chrono::{DateTime, Utc};
 use log::{debug, warn};
 use sha2::{Digest, Sha256};
@@ -16,10 +17,6 @@ use std::path::Path;
 
 fn id_ref(id: impl AsRef<str>) -> serde_json::Value {
     serde_json::json!({ "@id": id.as_ref() })
-}
-
-fn typed_entity(primary_type: &str, prov_type: &str) -> serde_json::Value {
-    serde_json::json!([primary_type, prov_type])
 }
 
 fn refs_value(ids: &[String]) -> Option<serde_json::Value> {
