@@ -1,0 +1,533 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Workflow Actions - Torc Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Distributed workflow orchestration for complex computational pipelines">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+        <link rel="stylesheet" href="../../pagetoc.css">
+        <link rel="stylesheet" href="../../version-selector.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Torc Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc/tree/v0.25.0/docs/src/specialized/design/workflow-actions.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="workflow-actions"><a class="header" href="#workflow-actions">Workflow Actions</a></h1>
+<p>Workflow actions enable automatic execution of commands and resource allocation in response to
+workflow lifecycle events. Actions provide hooks for setup, teardown, monitoring, and dynamic
+resource management throughout workflow execution.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>Actions consist of three components:</p>
+<ol>
+<li><strong>Trigger</strong> - The condition that activates the action</li>
+<li><strong>Action Type</strong> - The operation to perform</li>
+<li><strong>Configuration</strong> - Parameters specific to the action</li>
+</ol>
+<pre><code class="language-yaml">actions:
+  - trigger_type: "on_workflow_start"
+    action_type: "run_commands"
+    commands:
+      - "mkdir -p output logs"
+      - "echo 'Workflow started' &gt; logs/status.txt"
+</code></pre>
+<h2 id="trigger-types"><a class="header" href="#trigger-types">Trigger Types</a></h2>
+<h3 id="workflow-lifecycle-triggers"><a class="header" href="#workflow-lifecycle-triggers">Workflow Lifecycle Triggers</a></h3>
+<h4 id="on_workflow_start"><a class="header" href="#on_workflow_start"><code>on_workflow_start</code></a></h4>
+<p>Executes once when the workflow is initialized.</p>
+<p><strong>When it fires</strong>: During <code>initialize_jobs</code> after jobs are transitioned from uninitialized to
+ready/blocked states.</p>
+<p><strong>Typical use cases</strong>:</p>
+<ul>
+<li>Scheduling Slurm allocations</li>
+<li>Creating directory structures</li>
+<li>Copying initial data</li>
+</ul>
+<pre><code class="language-yaml">- trigger_type: "on_workflow_start"
+  action_type: "run_commands"
+  commands:
+    - "mkdir -p output checkpoints temp"
+    - "echo 'Workflow started at $(date)' &gt; workflow.log"
+</code></pre>
+<h4 id="on_workflow_complete"><a class="header" href="#on_workflow_complete"><code>on_workflow_complete</code></a></h4>
+<p>Executes once when all jobs reach terminal states (completed, failed, or canceled).</p>
+<p><strong>When it fires</strong>: After the last job completes, as detected by the job runner.</p>
+<p><strong>Typical use cases</strong>:</p>
+<ul>
+<li>Archiving final results</li>
+<li>Uploading to remote storage</li>
+<li>Cleanup of temporary files</li>
+<li>Generating summary reports</li>
+</ul>
+<pre><code class="language-yaml">- trigger_type: "on_workflow_complete"
+  action_type: "run_commands"
+  commands:
+    - "tar -czf results.tar.gz output/"
+    - "aws s3 cp results.tar.gz s3://bucket/results/"
+    - "rm -rf temp/"
+</code></pre>
+<h3 id="job-based-triggers"><a class="header" href="#job-based-triggers">Job-Based Triggers</a></h3>
+<h4 id="on_jobs_ready"><a class="header" href="#on_jobs_ready"><code>on_jobs_ready</code></a></h4>
+<p>Executes when <strong>all</strong> specified jobs transition to the "ready" state.</p>
+<p><strong>When it fires</strong>: When the last specified job becomes ready to execute (all dependencies
+satisfied).</p>
+<p><strong>Typical use cases</strong>:</p>
+<ul>
+<li>Scheduling Slurm allocations</li>
+<li>Starting phase-specific monitoring</li>
+<li>Pre-computation setup</li>
+<li>Notifications before expensive operations</li>
+</ul>
+<pre><code class="language-yaml">- trigger_type: "on_jobs_ready"
+  action_type: "schedule_nodes"
+  jobs: ["train_model_001", "train_model_002", "train_model_003"]
+  scheduler: "gpu_cluster"
+  scheduler_type: "slurm"
+  num_allocations: 2
+</code></pre>
+<p><strong>Important</strong>: The action triggers only when <strong>all</strong> matching jobs are ready, not individually as
+each job becomes ready.</p>
+<h4 id="on_jobs_complete"><a class="header" href="#on_jobs_complete"><code>on_jobs_complete</code></a></h4>
+<p>Executes when <strong>all</strong> specified jobs reach terminal states (completed, failed, or canceled).</p>
+<p><strong>When it fires</strong>: When the last specified job finishes execution.</p>
+<p><strong>Typical use cases</strong>:</p>
+<ul>
+<li>Scheduling Slurm allocations</li>
+<li>Cleaning up intermediate files</li>
+<li>Archiving phase results</li>
+<li>Freeing storage space</li>
+<li>Phase-specific reporting</li>
+</ul>
+<pre><code class="language-yaml">- trigger_type: "on_jobs_complete"
+  action_type: "run_commands"
+  jobs: ["preprocess_1", "preprocess_2", "preprocess_3"]
+  commands:
+    - "echo 'Preprocessing phase complete' &gt;&gt; workflow.log"
+    - "rm -rf raw_data/"
+</code></pre>
+<h3 id="worker-lifecycle-triggers"><a class="header" href="#worker-lifecycle-triggers">Worker Lifecycle Triggers</a></h3>
+<p>Worker lifecycle triggers are <strong>persistent by default</strong>, meaning they execute once per worker (job
+runner), not once per workflow.</p>
+<h4 id="on_worker_start"><a class="header" href="#on_worker_start"><code>on_worker_start</code></a></h4>
+<p>Executes when each worker (job runner) starts.</p>
+<p><strong>When it fires</strong>: After a job runner starts and checks for workflow actions, before claiming any
+jobs.</p>
+<p><strong>Typical use cases</strong>:</p>
+<ul>
+<li>Worker-specific initialization</li>
+<li>Setting up worker-local logging</li>
+<li>Copying data to compute node local storage</li>
+<li>Initializing worker-specific resources</li>
+<li>Recording worker startup metrics</li>
+</ul>
+<pre><code class="language-yaml">- trigger_type: "on_worker_start"
+  action_type: "run_commands"
+  persistent: true  # Each worker executes this
+  commands:
+    - "echo 'Worker started on $(hostname) at $(date)' &gt;&gt; worker.log"
+    - "mkdir -p worker_temp"
+</code></pre>
+<h4 id="on_worker_complete"><a class="header" href="#on_worker_complete"><code>on_worker_complete</code></a></h4>
+<p>Executes when each worker completes (exits the main loop).</p>
+<p><strong>When it fires</strong>: After a worker finishes processing jobs and before it shuts down.</p>
+<p><strong>Typical use cases</strong>:</p>
+<ul>
+<li>Worker-specific cleanup</li>
+<li>Uploading worker-specific logs</li>
+<li>Recording worker completion metrics</li>
+<li>Cleaning up worker-local resources</li>
+</ul>
+<pre><code class="language-yaml">- trigger_type: "on_worker_complete"
+  action_type: "run_commands"
+  persistent: true  # Each worker executes this
+  commands:
+    - "echo 'Worker completed on $(hostname) at $(date)' &gt;&gt; worker.log"
+    - "rm -rf worker_temp"
+</code></pre>
+<h2 id="job-selection"><a class="header" href="#job-selection">Job Selection</a></h2>
+<p>For <code>on_jobs_ready</code> and <code>on_jobs_complete</code> triggers, specify which jobs to monitor.</p>
+<h3 id="exact-job-names"><a class="header" href="#exact-job-names">Exact Job Names</a></h3>
+<pre><code class="language-yaml">- trigger_type: "on_jobs_complete"
+  action_type: "run_commands"
+  jobs: ["job1", "job2", "job3"]
+  commands:
+    - "echo 'Specific jobs complete'"
+</code></pre>
+<h3 id="regular-expressions"><a class="header" href="#regular-expressions">Regular Expressions</a></h3>
+<pre><code class="language-yaml">- trigger_type: "on_jobs_ready"
+  action_type: "schedule_nodes"
+  job_name_regexes: ["train_model_[0-9]+", "eval_.*"]
+  scheduler: "gpu_cluster"
+  scheduler_type: "slurm"
+  num_allocations: 2
+</code></pre>
+<p><strong>Common regex patterns</strong>:</p>
+<ul>
+<li><code>"train_.*"</code> - All jobs starting with "train_"</li>
+<li><code>"model_[0-9]+"</code> - Jobs like "model_1", "model_2"</li>
+<li><code>".*_stage1"</code> - All jobs ending with "_stage1"</li>
+<li><code>"job_(a|b|c)"</code> - Jobs "job_a", "job_b", or "job_c"</li>
+</ul>
+<h3 id="combining-selection-methods"><a class="header" href="#combining-selection-methods">Combining Selection Methods</a></h3>
+<p>You can use both together - the action triggers when <strong>all</strong> matching jobs meet the condition:</p>
+<pre><code class="language-yaml">jobs: ["critical_job"]
+job_name_regexes: ["batch_.*"]
+# Triggers when "critical_job" AND all "batch_*" jobs are ready/complete
+</code></pre>
+<h2 id="action-types"><a class="header" href="#action-types">Action Types</a></h2>
+<h3 id="run_commands"><a class="header" href="#run_commands"><code>run_commands</code></a></h3>
+<p>Execute shell commands sequentially on a compute node.</p>
+<p><strong>Configuration</strong>:</p>
+<pre><code class="language-yaml">- trigger_type: "on_workflow_complete"
+  action_type: "run_commands"
+  commands:
+    - "tar -czf results.tar.gz output/"
+    - "aws s3 cp results.tar.gz s3://bucket/"
+</code></pre>
+<p><strong>Execution details</strong>:</p>
+<ul>
+<li>Commands run in the workflow's output directory</li>
+<li>Commands execute sequentially (one after another)</li>
+<li>If a command fails, the action fails (but workflow continues)</li>
+<li>Commands run on compute nodes, not the submission node</li>
+<li>Uses the shell environment of the job runner process</li>
+</ul>
+<h3 id="schedule_nodes"><a class="header" href="#schedule_nodes"><code>schedule_nodes</code></a></h3>
+<p>Dynamically allocate compute resources from a Slurm scheduler.</p>
+<p><strong>Configuration</strong>:</p>
+<pre><code class="language-yaml">- trigger_type: "on_jobs_ready"
+  action_type: "schedule_nodes"
+  jobs: ["train_model_1", "train_model_2"]
+  scheduler: "gpu_cluster"
+  scheduler_type: "slurm"
+  num_allocations: 2
+</code></pre>
+<p><strong>Parameters</strong>:</p>
+<ul>
+<li><code>scheduler</code> (required) - Name of Slurm scheduler configuration (must exist in <code>slurm_schedulers</code>)</li>
+<li><code>scheduler_type</code> (required) - Must be "slurm"</li>
+<li><code>num_allocations</code> (required) - Number of Slurm allocation requests to submit</li>
+<li><code>start_one_worker_per_node</code> (optional, default: false) - Launch one worker per allocated node via
+<code>srun --ntasks-per-node=1</code>. Use this for direct-mode workflows with single-node jobs sharing a
+multi-node allocation. Not compatible with <code>execution_config.mode: slurm</code>.</li>
+</ul>
+<p><strong>Use cases</strong>:</p>
+<ul>
+<li>Just-in-time resource allocation</li>
+<li>Cost optimization (allocate only when needed)</li>
+<li>Separating workflow phases with different resource requirements</li>
+</ul>
+<h2 id="complete-examples"><a class="header" href="#complete-examples">Complete Examples</a></h2>
+<p>Refer to this
+<a href="https://github.com/NatLabRockies/torc/blob/main/examples/yaml/workflow_actions_simple_slurm.yaml">example</a></p>
+<h2 id="execution-model"><a class="header" href="#execution-model">Execution Model</a></h2>
+<h3 id="action-claiming-and-execution"><a class="header" href="#action-claiming-and-execution">Action Claiming and Execution</a></h3>
+<ol>
+<li><strong>Atomic Claiming</strong>: Actions are claimed atomically by workers to prevent duplicate execution</li>
+<li><strong>Non-Persistent Actions</strong>: Execute once per workflow (first worker to claim executes)</li>
+<li><strong>Persistent Actions</strong>: Can be claimed and executed by multiple workers</li>
+<li><strong>Trigger Counting</strong>: Job-based triggers increment a counter as jobs transition; action becomes
+pending when count reaches threshold</li>
+<li><strong>Immediate Availability</strong>: Worker lifecycle actions are immediately available after workflow
+initialization</li>
+</ol>
+<h3 id="action-lifecycle"><a class="header" href="#action-lifecycle">Action Lifecycle</a></h3>
+<pre><code>[Workflow Created]
+    ↓
+[initialize_jobs called]
+    ↓
+├─→ on_workflow_start actions become pending
+├─→ on_worker_start actions become pending (persistent)
+├─→ on_worker_complete actions become pending (persistent)
+└─→ on_jobs_ready actions wait for job transitions
+    ↓
+[Worker Claims and Executes Actions]
+    ↓
+[Jobs Execute]
+    ↓
+[Jobs Complete]
+    ↓
+├─→ on_jobs_complete actions become pending when all specified jobs complete
+└─→ on_workflow_complete actions become pending when all jobs complete
+    ↓
+[Workers Exit]
+    ↓
+[on_worker_complete actions execute per worker]
+</code></pre>
+<h3 id="important-characteristics"><a class="header" href="#important-characteristics">Important Characteristics</a></h3>
+<ol>
+<li><strong>No Rollback</strong>: Failed actions don't affect workflow execution</li>
+<li><strong>Compute Node Execution</strong>: Actions run on compute nodes via job runners</li>
+<li><strong>One-Time Triggers</strong>: Non-persistent actions trigger once when conditions are first met</li>
+<li><strong>No Inter-Action Dependencies</strong>: Actions don't depend on other actions</li>
+<li><strong>Concurrent Workers</strong>: Multiple workers can execute different actions simultaneously</li>
+</ol>
+<h3 id="workflow-reinitialization"><a class="header" href="#workflow-reinitialization">Workflow Reinitialization</a></h3>
+<p>When a workflow is reinitialized (e.g., after resetting failed jobs), actions are reset to allow
+them to trigger again:</p>
+<ol>
+<li><strong>Executed flags are cleared</strong>: All actions can be claimed and executed again</li>
+<li><strong>Trigger counts are recalculated</strong>: For <code>on_jobs_ready</code> and <code>on_jobs_complete</code> actions, the
+trigger count is set based on current job states</li>
+</ol>
+<p><strong>Example scenario</strong>:</p>
+<ul>
+<li>job1 and job2 are independent jobs</li>
+<li>postprocess_job depends on both job1 and job2</li>
+<li>An <code>on_jobs_ready</code> action triggers when postprocess_job becomes ready</li>
+</ul>
+<p>After first run completes:</p>
+<ol>
+<li>job1 fails, job2 succeeds</li>
+<li>User resets failed jobs and reinitializes</li>
+<li>job2 is already Completed, so it counts toward the trigger count</li>
+<li>When job1 completes in the second run, postprocess_job becomes ready</li>
+<li>The action triggers again because the trigger count reaches the required threshold</li>
+</ol>
+<p>This ensures actions properly re-trigger after workflow reinitialization, even when some jobs remain
+in their completed state.</p>
+<h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
+<ol>
+<li><strong>No Action Dependencies</strong>: Actions cannot depend on other actions completing</li>
+<li><strong>No Conditional Execution</strong>: Actions cannot have conditional logic (use multiple actions with
+different job selections instead)</li>
+<li><strong>No Action Retries</strong>: Failed actions are not automatically retried</li>
+<li><strong>Single Action Type</strong>: Each action has one action_type (cannot combine run_commands and
+schedule_nodes)</li>
+<li><strong>No Dynamic Job Selection</strong>: Job names/patterns are fixed at action creation time</li>
+</ol>
+<p>For complex workflows requiring these features, consider:</p>
+<ul>
+<li>Using job dependencies to order operations</li>
+<li>Creating separate jobs for conditional logic</li>
+<li>Implementing retry logic within command scripts</li>
+<li>Creating multiple actions for different scenarios</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../specialized/design/http-api.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../specialized/design/dashboard.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../specialized/design/http-api.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../specialized/design/dashboard.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../mermaid.min.js"></script>
+        <script src="../../mermaid-init.js"></script>
+        <script src="../../pagetoc.js"></script>
+        <script src="../../version-selector.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
