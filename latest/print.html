@@ -4209,11 +4209,13 @@ Slack, etc.). They will add it to the server's htpasswd file.</p>
 <p><strong>Create the credentials file</strong> using <code>read -s</code> so the password never appears on screen or in shell
 history:</p>
 <pre><code class="language-bash">mkdir -p ~/.config/torc
-(
+</code></pre>
+<pre><code class="language-bash">(
   read -s -p "Enter Torc password: " _pw &amp;&amp; echo
   printf 'export TORC_PASSWORD="%s"\n' "$_pw"
 ) &gt; ~/.config/torc/credentials
-chmod 600 ~/.config/torc/credentials
+</code></pre>
+<pre><code class="language-bash">chmod 600 ~/.config/torc/credentials
 </code></pre>
 <p><strong>Source the file from your shell configuration</strong> so it loads automatically. Add this line to
 <code>~/.bashrc</code> or <code>~/.zshrc</code>:</p>
