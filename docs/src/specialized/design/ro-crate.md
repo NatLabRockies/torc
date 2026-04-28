@@ -5,9 +5,6 @@ current branch.
 
 ## Current Model
 
-The current branch uses a PROV-shaped model introduced in commit `c0d53b98`
-(`AD-324: Switch RO-Crate generation to PROV model`).
-
 The important identity rules are:
 
 - Workflow plan entity: one per workflow, `#torc-workflow`
@@ -53,9 +50,11 @@ flowchart TD
     D --> I
 
     I --> J[Job completes successfully]
-    J --> K[Client refreshes<br/>#torc-workflow and #torc-run-N]
-    J --> L[Client creates<br/>#job-job_id-attempt-attempt_id]
-    J --> M[Client creates or updates<br/>output File entity]
+    J --> J2{Job has output files?}
+    J2 -->|yes| K[Client refreshes<br/>#torc-workflow and #torc-run-N]
+    J2 -->|yes| L[Client creates<br/>#job-job_id-attempt-attempt_id]
+    J2 -->|yes| M[Client creates or updates<br/>output File entity]
+    J2 -->|no| P[No additional automatic<br/>RO-Crate entities for this job]
 
     L --> N[Job CreateAction metadata]
     N --> N1[prov:hadPlan -> #torc-workflow]
@@ -83,7 +82,7 @@ flowchart TD
     class F,K run;
     class L,N,N1,N2,N3,N4,N5 job;
     class M,O,O1,O2,O3 output;
-    class H disabled;
+    class H,P disabled;
 ```
 
 ## What Gets Created
@@ -99,9 +98,12 @@ flowchart TD
 
 ### Jobs
 
-- The client creates one `CreateAction` per successful job completion
+- The client creates one `CreateAction` per successful job completion **that has at least one
+  output file**
 - The entity id is `#job-{job_id}-attempt-{attempt_id}`
-- The job entity is the main join point between inputs, outputs, workflow run, and software agents
+- Jobs with no output files currently do not emit an automatic `CreateAction`
+- When present, the job entity is the main join point between inputs, outputs, workflow run, and
+  software agents
 
 ### Input files
 
@@ -119,6 +121,8 @@ flowchart TD
   rather than creating a new file entity for each run
 - Run-specific provenance is recorded in the metadata relationships, not by giving the file entity a
   run-specific identity
+- The same successful-job path also refreshes `#torc-workflow`, refreshes `#torc-run-{run_id}`,
+  and creates the job `CreateAction`, but only when there is at least one output file to process
 
 ## Important Asymmetries
 
@@ -132,16 +136,3 @@ These asymmetries are intentional and match `tests/test_auto_ro_crate.rs`, espec
 - file entity count to stay stable across runs
 - software entity count to grow across runs
 - output file provenance to point at the newer `#torc-run-{run_id}`
-
-## Current Gap
-
-The current code creates and refreshes `#torc-run-{run_id}`, but it does not appear to write
-`endTime` automatically when the workflow completes. The helper supports preserving an existing
-`endTime`, yet the normal workflow execution path does not seem to set it.
-
-For release purposes, the diagram above reflects the implemented behavior, not the idealized
-behavior. In particular:
-
-- Input file creation is implemented as upsert, not create-only
-- Output file provenance is refreshed on successful job completion
-- Workflow completion does not currently finalize the run entity with `endTime`
