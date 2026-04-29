@@ -488,6 +488,8 @@ where
                     KeyCode::Char('?') => app.show_help(),
                     KeyCode::Down => app.next_in_active_table(),
                     KeyCode::Up => app.previous_in_active_table(),
+                    KeyCode::PageDown => app.page_down_in_active_table(),
+                    KeyCode::PageUp => app.page_up_in_active_table(),
                     KeyCode::Enter => {
                         if app.focus == Focus::Workflows {
                             app.load_detail_data()?;
@@ -506,14 +508,14 @@ where
                     KeyCode::Left | KeyCode::Right => {
                         app.toggle_focus();
                     }
-                    KeyCode::Char('f') if app.focus == Focus::Details => {
+                    KeyCode::Char('f') => {
                         app.start_filter();
                     }
                     KeyCode::Char('c') => {
                         if app.focus == Focus::Details && app.detail_view == DetailViewType::Jobs {
                             // Cancel job (with confirmation)
                             app.request_job_action(JobAction::Cancel);
-                        } else if app.focus == Focus::Details {
+                        } else {
                             app.clear_filter();
                         }
                     }

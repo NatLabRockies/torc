@@ -234,6 +234,16 @@ pub struct Filter {
     pub value: String,
 }
 
+/// Which table the active filter applies to.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum FilterTarget {
+    Workflows,
+    Details,
+}
+
+/// Number of rows to advance/retreat for PageDown/PageUp.
+pub const PAGE_STEP: usize = 10;
+
 /// Aggregated high-level information about a single workflow, computed from
 /// list_jobs + get_workflow + is_workflow_complete and rendered by the
 /// Summary detail view.
@@ -257,6 +267,7 @@ pub struct App {
     pub server_url_input: String,
     pub user_filter: Option<String>,
     pub workflows: Vec<WorkflowModel>,
+    pub workflows_all: Vec<WorkflowModel>,
     pub workflows_state: TableState,
     pub jobs: Vec<JobModel>,
     pub jobs_all: Vec<JobModel>,
@@ -291,6 +302,7 @@ pub struct App {
     pub filter: Option<Filter>,
     pub filter_input: String,
     pub filter_column_index: usize,
+    pub filter_target: FilterTarget,
 
     // New fields for enhanced functionality
     pub popup: Option<PopupType>,
@@ -365,6 +377,7 @@ impl App {
             server_url_input: String::new(),
             user_filter: Some(current_user.clone()),
             workflows: Vec::new(),
+            workflows_all: Vec::new(),
             workflows_state: TableState::default(),
             jobs: Vec::new(),
             jobs_all: Vec::new(),
@@ -399,6 +412,7 @@ impl App {
             filter: None,
             filter_input: String::new(),
             filter_column_index: 0,
+            filter_target: FilterTarget::Details,
             popup: None,
             status_message: None,
             workflow_path_input: String::new(),
@@ -430,11 +444,21 @@ impl App {
     }
 
     pub fn refresh_workflows(&mut self) -> Result<()> {
-        self.workflows = if let Some(ref user) = self.user_filter {
+        self.workflows_all = if let Some(ref user) = self.user_filter {
             self.client.list_workflows_for_user(user)?
         } else {
             self.client.list_workflows()?
         };
+
+        // Re-apply any active workflow filter against the freshly loaded data.
+        if self.filter_target == FilterTarget::Workflows
+            && let Some(ref filter) = self.filter.clone()
+        {
+            self.workflows =
+                filter_workflow_list(&self.workflows_all, &filter.column, &filter.value);
+        } else {
+            self.workflows = self.workflows_all.clone();
+        }
 
         if !self.workflows.is_empty() && self.workflows_state.selected().is_none() {
             self.workflows_state.select(Some(0));
@@ -534,6 +558,99 @@ impl App {
                 }
             }
             // No navigation in input/popup modes
+            Focus::FilterInput
+            | Focus::ServerUrlInput
+            | Focus::WorkflowPathInput
+            | Focus::OutputDirInput
+            | Focus::Popup => {}
+        }
+    }
+
+    pub fn page_down_in_active_table(&mut self) {
+        match self.focus {
+            Focus::Workflows => {
+                let len = self.workflows.len();
+                if len == 0 {
+                    return;
+                }
+                let next = self
+                    .workflows_state
+                    .selected()
+                    .map(|i| (i + PAGE_STEP).min(len.saturating_sub(1)))
+                    .unwrap_or(0);
+                self.workflows_state.select(Some(next));
+            }
+            Focus::Details => {
+                let (state, len) = match self.detail_view {
+                    DetailViewType::Jobs => (&mut self.jobs_state, self.jobs.len()),
+                    DetailViewType::Files => (&mut self.files_state, self.files.len()),
+                    DetailViewType::Events => (&mut self.events_state, self.events.len()),
+                    DetailViewType::Results => (&mut self.results_state, self.results.len()),
+                    DetailViewType::ComputeNodes => {
+                        (&mut self.compute_nodes_state, self.compute_nodes.len())
+                    }
+                    DetailViewType::ScheduledNodes => {
+                        (&mut self.scheduled_nodes_state, self.scheduled_nodes.len())
+                    }
+                    DetailViewType::SlurmStats => {
+                        (&mut self.slurm_stats_state, self.slurm_stats.len())
+                    }
+                    DetailViewType::Summary | DetailViewType::Dag => return,
+                };
+                if len > 0 {
+                    let next = state
+                        .selected()
+                        .map(|i| (i + PAGE_STEP).min(len.saturating_sub(1)))
+                        .unwrap_or(0);
+                    state.select(Some(next));
+                }
+            }
+            Focus::FilterInput
+            | Focus::ServerUrlInput
+            | Focus::WorkflowPathInput
+            | Focus::OutputDirInput
+            | Focus::Popup => {}
+        }
+    }
+
+    pub fn page_up_in_active_table(&mut self) {
+        match self.focus {
+            Focus::Workflows => {
+                if self.workflows.is_empty() {
+                    return;
+                }
+                let next = self
+                    .workflows_state
+                    .selected()
+                    .map(|i| i.saturating_sub(PAGE_STEP))
+                    .unwrap_or(0);
+                self.workflows_state.select(Some(next));
+            }
+            Focus::Details => {
+                let (state, len) = match self.detail_view {
+                    DetailViewType::Jobs => (&mut self.jobs_state, self.jobs.len()),
+                    DetailViewType::Files => (&mut self.files_state, self.files.len()),
+                    DetailViewType::Events => (&mut self.events_state, self.events.len()),
+                    DetailViewType::Results => (&mut self.results_state, self.results.len()),
+                    DetailViewType::ComputeNodes => {
+                        (&mut self.compute_nodes_state, self.compute_nodes.len())
+                    }
+                    DetailViewType::ScheduledNodes => {
+                        (&mut self.scheduled_nodes_state, self.scheduled_nodes.len())
+                    }
+                    DetailViewType::SlurmStats => {
+                        (&mut self.slurm_stats_state, self.slurm_stats.len())
+                    }
+                    DetailViewType::Summary | DetailViewType::Dag => return,
+                };
+                if len > 0 {
+                    let next = state
+                        .selected()
+                        .map(|i| i.saturating_sub(PAGE_STEP))
+                        .unwrap_or(0);
+                    state.select(Some(next));
+                }
+            }
             Focus::FilterInput
             | Focus::ServerUrlInput
             | Focus::WorkflowPathInput
@@ -685,6 +802,13 @@ impl App {
     }
 
     pub fn start_filter(&mut self) {
+        // Decide which table is being filtered based on which pane has focus.
+        let target = match self.focus {
+            Focus::Workflows => FilterTarget::Workflows,
+            _ => FilterTarget::Details,
+        };
+        self.filter_target = target;
+
         if self.get_filter_columns().is_empty() {
             self.set_status(StatusMessage::info(
                 "Filtering is not supported in this view",
@@ -697,11 +821,17 @@ impl App {
     }
 
     pub fn cancel_filter(&mut self) {
-        self.focus = Focus::Details;
+        self.focus = match self.filter_target {
+            FilterTarget::Workflows => Focus::Workflows,
+            FilterTarget::Details => Focus::Details,
+        };
         self.filter_input.clear();
     }
 
     pub fn get_filter_columns(&self) -> Vec<&str> {
+        if self.filter_target == FilterTarget::Workflows {
+            return vec!["Name", "User", "Description"];
+        }
         match self.detail_view {
             DetailViewType::Summary => vec![], // Summary view doesn't support filtering
             DetailViewType::Jobs => vec!["Status", "Name", "Command"],
@@ -746,15 +876,21 @@ impl App {
     }
 
     pub fn apply_filter(&mut self) {
+        let target = self.filter_target;
+        let return_focus = match target {
+            FilterTarget::Workflows => Focus::Workflows,
+            FilterTarget::Details => Focus::Details,
+        };
+
         if self.filter_input.is_empty() {
             self.clear_filter();
-            self.focus = Focus::Details;
+            self.focus = return_focus;
             return;
         }
 
         let columns = self.get_filter_columns();
         if columns.is_empty() {
-            self.focus = Focus::Details;
+            self.focus = return_focus;
             return;
         }
         let column = columns[self.filter_column_index].to_string();
@@ -764,6 +900,17 @@ impl App {
             column: column.clone(),
             value: value.clone(),
         });
+
+        if target == FilterTarget::Workflows {
+            self.workflows = filter_workflow_list(&self.workflows_all, &column, &value);
+            if !self.workflows.is_empty() {
+                self.workflows_state.select(Some(0));
+            } else {
+                self.workflows_state.select(None);
+            }
+            self.focus = return_focus;
+            return;
+        }
 
         match self.detail_view {
             DetailViewType::Jobs => {
@@ -915,7 +1062,25 @@ impl App {
     }
 
     pub fn clear_filter(&mut self) {
-        self.filter = None;
+        // Clear the filter for whichever pane currently has focus. This way
+        // pressing `c` on the Workflows pane always restores the workflow
+        // list, even if the last filter applied was a Details filter.
+        let target = match self.focus {
+            Focus::Workflows => FilterTarget::Workflows,
+            _ => FilterTarget::Details,
+        };
+        if self.filter_target == target {
+            self.filter = None;
+        }
+        if target == FilterTarget::Workflows {
+            self.workflows = self.workflows_all.clone();
+            if !self.workflows.is_empty() {
+                self.workflows_state.select(Some(0));
+            } else {
+                self.workflows_state.select(None);
+            }
+            return;
+        }
         match self.detail_view {
             DetailViewType::Jobs => {
                 self.jobs = self.jobs_all.clone();
@@ -2428,4 +2593,27 @@ impl App {
             }
         }
     }
+}
+
+/// Apply a case-insensitive substring filter on the given column to a list of
+/// workflows. Returns a new owned vector containing only matching entries.
+pub fn filter_workflow_list(
+    workflows: &[WorkflowModel],
+    column: &str,
+    value: &str,
+) -> Vec<WorkflowModel> {
+    workflows
+        .iter()
+        .filter(|w| match column {
+            "Name" => w.name.to_lowercase().contains(value),
+            "User" => w.user.to_lowercase().contains(value),
+            "Description" => w
+                .description
+                .as_deref()
+                .map(|d| d.to_lowercase().contains(value))
+                .unwrap_or(false),
+            _ => false,
+        })
+        .cloned()
+        .collect()
 }
