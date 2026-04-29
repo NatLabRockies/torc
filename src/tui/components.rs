@@ -302,7 +302,10 @@ impl HelpPopup {
             Self::key_line("Tab/Shift+Tab", "Switch between detail tabs"),
             Self::key_line(left_right_arrows(), "Switch focus between panes"),
             Self::key_line(up_down_arrows(), "Navigate rows in tables"),
+            Self::key_line("PgUp/PgDn", "Page through rows (10 at a time)"),
             Self::key_line("Enter", "Load details / Confirm action"),
+            Self::key_line("f", "Filter current pane (Workflows or Details)"),
+            Self::key_line("c", "Clear filter on current pane"),
             Line::from(""),
             Line::from(vec![Span::styled(
                 "Workflow Actions",
