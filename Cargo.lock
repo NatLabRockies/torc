@@ -4922,7 +4922,7 @@ checksum = "756daf9b1013ebe47a8776667b466417e2d4c5679d441c26230efd9ef78692db"
 
 [[package]]
 name = "torc"
-version = "0.25.1"
+version = "0.26.0"
 dependencies = [
  "anyhow",
  "async-stream",
