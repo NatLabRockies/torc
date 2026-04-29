@@ -98,8 +98,8 @@ flowchart TD
 
 ### Jobs
 
-- The client creates one `CreateAction` per successful job completion **that has at least one
-  output file**
+- The client creates one `CreateAction` per successful job completion **that has at least one output
+  file**
 - The entity id is `#job-{job_id}-attempt-{attempt_id}`
 - Jobs with no output files currently do not emit an automatic `CreateAction`
 - When present, the job entity is the main join point between inputs, outputs, workflow run, and
@@ -121,8 +121,8 @@ flowchart TD
   rather than creating a new file entity for each run
 - Run-specific provenance is recorded in the metadata relationships, not by giving the file entity a
   run-specific identity
-- The same successful-job path also refreshes `#torc-workflow`, refreshes `#torc-run-{run_id}`,
-  and creates the job `CreateAction`, but only when there is at least one output file to process
+- The same successful-job path also refreshes `#torc-workflow`, refreshes `#torc-run-{run_id}`, and
+  creates the job `CreateAction`, but only when there is at least one output file to process
 
 ## Important Asymmetries
 
