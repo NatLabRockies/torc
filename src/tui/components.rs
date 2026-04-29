@@ -315,7 +315,7 @@ impl HelpPopup {
             Self::key_line("Enter", "Load details / Confirm action"),
             Self::key_line("f", "Filter current pane (Workflows or Details)"),
             Self::key_line("=", "Filter to the selected row's value"),
-            Self::key_line("c", "Clear filter on current pane (Jobs tab: cancel job)"),
+            Self::key_line("c", "Clear filter on current pane"),
         ];
 
         // Context-specific section.
@@ -330,13 +330,16 @@ impl HelpPopup {
                 lines.push(Self::key_line("s", "Submit workflow to scheduler"));
                 lines.push(Self::key_line("W", "Watch workflow (recovery)"));
                 lines.push(Self::key_line("d", "Delete workflow"));
-                lines.push(Self::key_line("C", "Cancel workflow"));
+                lines.push(Self::key_line(
+                    "C",
+                    "Cancel workflow (Jobs tab: cancel job)",
+                ));
             }
             HelpContext::DetailJobs => {
                 lines.extend(Self::section("Jobs Tab"));
                 lines.push(Self::key_line("Enter", "View job details"));
                 lines.push(Self::key_line("l", "View logs"));
-                lines.push(Self::key_line("c", "Cancel job"));
+                lines.push(Self::key_line("C", "Cancel job"));
                 lines.push(Self::key_line("t", "Terminate job"));
                 lines.push(Self::key_line("y", "Retry failed job"));
                 lines.push(Self::key_line("1 / 2 / 3", "Sort by ID / Name / Status"));

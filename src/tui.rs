@@ -517,12 +517,7 @@ where
                         app.filter_by_current_row();
                     }
                     KeyCode::Char('c') => {
-                        if app.focus == Focus::Details && app.detail_view == DetailViewType::Jobs {
-                            // Cancel job (with confirmation)
-                            app.request_job_action(JobAction::Cancel);
-                        } else {
-                            app.clear_filter();
-                        }
+                        app.clear_filter();
                     }
                     KeyCode::Char('u') => {
                         app.start_server_url_input();
@@ -559,7 +554,13 @@ where
                         app.request_workflow_action(WorkflowAction::Delete);
                     }
                     KeyCode::Char('C') => {
-                        app.request_workflow_action(WorkflowAction::Cancel);
+                        // On the Jobs detail tab, cancel the selected job;
+                        // anywhere else, cancel the selected workflow.
+                        if app.focus == Focus::Details && app.detail_view == DetailViewType::Jobs {
+                            app.request_job_action(JobAction::Cancel);
+                        } else {
+                            app.request_workflow_action(WorkflowAction::Cancel);
+                        }
                     }
                     KeyCode::Char('W') => {
                         app.request_workflow_action(WorkflowAction::Watch);

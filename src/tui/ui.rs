@@ -807,7 +807,7 @@ fn draw_jobs_table(f: &mut Frame, area: Rect, app: &mut App) {
                 Span::styled("Jobs", Style::default().fg(Color::White)),
                 Span::styled(filter, Style::default().fg(Color::Magenta)),
                 Span::styled(
-                    " │ Enter: details  l: logs  c: cancel  t: terminate  y: retry",
+                    " │ Enter: details  l: logs  C: cancel  t: terminate  y: retry",
                     Style::default().fg(Color::DarkGray),
                 ),
             ]),
