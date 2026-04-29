@@ -12,10 +12,56 @@ use ratatui::{
 
 use crate::models::JobStatus;
 
-use super::app::{App, DetailViewType, Focus, PopupType, WorkflowSummary};
-use super::components::HelpPopup;
+use super::app::{App, DetailViewType, FilterTarget, Focus, PopupType, WorkflowSummary};
+use super::components::{HelpContext, HelpPopup};
 
 /// Format a timestamp (milliseconds since epoch) as a human-readable local time string
+/// Map the current focus + detail tab to a `HelpContext` so the help popup
+/// can show only the relevant keybindings. While a popup is open the
+/// runtime sets `focus = Focus::Popup` and stashes the prior focus in
+/// `previous_focus`; we use that so the help shown reflects the underlying
+/// pane the user came from rather than collapsing to `Other`.
+fn help_context_for(app: &App) -> HelpContext {
+    let effective_focus = if app.focus == Focus::Popup {
+        app.previous_focus
+    } else {
+        app.focus
+    };
+    if effective_focus == Focus::FilterInput {
+        return HelpContext::FilterInput;
+    }
+    if effective_focus == Focus::Workflows {
+        return HelpContext::Workflows;
+    }
+    if effective_focus == Focus::Details {
+        return match app.detail_view {
+            DetailViewType::Summary => HelpContext::DetailSummary,
+            DetailViewType::Jobs => HelpContext::DetailJobs,
+            DetailViewType::Files => HelpContext::DetailFiles,
+            DetailViewType::Events => HelpContext::DetailEvents,
+            DetailViewType::Results => HelpContext::DetailResults,
+            DetailViewType::ComputeNodes => HelpContext::DetailComputeNodes,
+            DetailViewType::ScheduledNodes => HelpContext::DetailScheduledNodes,
+            DetailViewType::SlurmStats => HelpContext::DetailSlurmStats,
+            DetailViewType::Dag => HelpContext::DetailDag,
+        };
+    }
+    HelpContext::Other
+}
+
+/// Returns " │ filter: column~value" if `app.filter` is set and applies to
+/// `target`, otherwise an empty string. Caller appends this to the table
+/// title so users can see at a glance why rows are missing.
+fn filter_suffix(app: &App, target: FilterTarget) -> String {
+    if app.filter_target == target
+        && let Some(f) = app.filter.as_ref()
+    {
+        format!(" │ filter: {}~{}", f.column, f.value)
+    } else {
+        String::new()
+    }
+}
+
 fn format_timestamp_ms(timestamp_ms: i64) -> String {
     DateTime::from_timestamp_millis(timestamp_ms)
         .map(|dt: DateTime<Utc>| {
@@ -95,7 +141,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     if let Some(ref popup) = app.popup {
         match popup {
             PopupType::Help => {
-                HelpPopup::render(f, f.area(), "");
+                HelpPopup::render(f, f.area(), help_context_for(app));
             }
             PopupType::Confirmation { dialog, .. } => {
                 dialog.render(f, f.area());
@@ -386,11 +432,13 @@ fn draw_workflows_table(f: &mut Frame, area: Rect, app: &mut App) {
         ])
     });
 
+    let filter = filter_suffix(app, FilterTarget::Workflows);
     let (title, border_style) = if app.focus == Focus::Workflows {
         (
             Line::from(vec![
                 Span::styled("◆ ", Style::default().fg(Color::Green)),
                 Span::styled("Workflows", Style::default().fg(Color::White)),
+                Span::styled(filter, Style::default().fg(Color::Magenta)),
                 Span::styled(
                     " │ Enter: load details",
                     Style::default().fg(Color::DarkGray),
@@ -403,6 +451,7 @@ fn draw_workflows_table(f: &mut Frame, area: Rect, app: &mut App) {
             Line::from(vec![
                 Span::styled("◇ ", Style::default().fg(Color::Cyan)),
                 Span::styled("Workflows", Style::default().fg(Color::White)),
+                Span::styled(filter, Style::default().fg(Color::Magenta)),
             ]),
             Style::default().fg(Color::DarkGray),
         )
@@ -720,9 +769,17 @@ fn draw_jobs_table(f: &mut Frame, area: Rect, app: &mut App) {
         .fg(Color::Yellow)
         .add_modifier(Modifier::BOLD);
 
-    let header = Row::new(vec!["ID", "Name", "Status", "Command"])
-        .style(header_style)
-        .bottom_margin(1);
+    let id_header = format!("ID{}", app.jobs_sort.id_indicator());
+    let name_header = format!("Name{}", app.jobs_sort.name_indicator());
+    let status_header = format!("Status{}", app.jobs_sort.status_indicator());
+    let header = Row::new(vec![
+        id_header,
+        name_header,
+        status_header,
+        "Command".to_string(),
+    ])
+    .style(header_style)
+    .bottom_margin(1);
 
     let rows = app.jobs.iter().map(|job| {
         let id = job.id.map(|i| i.to_string()).unwrap_or_default();
@@ -742,13 +799,15 @@ fn draw_jobs_table(f: &mut Frame, area: Rect, app: &mut App) {
         ])
     });
 
+    let filter = filter_suffix(app, FilterTarget::Details);
     let (title, border_style) = if app.focus == Focus::Details {
         (
             Line::from(vec![
                 Span::styled("▶ ", Style::default().fg(Color::Green)),
                 Span::styled("Jobs", Style::default().fg(Color::White)),
+                Span::styled(filter, Style::default().fg(Color::Magenta)),
                 Span::styled(
-                    " │ Enter: details  l: logs  c: cancel  t: terminate  y: retry",
+                    " │ Enter: details  l: logs  C: cancel  t: terminate  y: retry",
                     Style::default().fg(Color::DarkGray),
                 ),
             ]),
@@ -759,6 +818,7 @@ fn draw_jobs_table(f: &mut Frame, area: Rect, app: &mut App) {
             Line::from(vec![
                 Span::styled("▶ ", Style::default().fg(Color::Cyan)),
                 Span::styled("Jobs", Style::default().fg(Color::White)),
+                Span::styled(filter, Style::default().fg(Color::Magenta)),
             ]),
             Style::default().fg(Color::DarkGray),
         )
@@ -823,11 +883,13 @@ fn draw_files_table(f: &mut Frame, area: Rect, app: &mut App) {
         ])
     });
 
+    let filter = filter_suffix(app, FilterTarget::Details);
     let (title, border_style) = if is_focused {
         (
             Line::from(vec![
                 Span::styled("◫ ", Style::default().fg(Color::Green)),
                 Span::styled("Files", Style::default().fg(Color::White)),
+                Span::styled(filter, Style::default().fg(Color::Magenta)),
             ]),
             Style::default().fg(Color::Green),
         )
@@ -836,6 +898,7 @@ fn draw_files_table(f: &mut Frame, area: Rect, app: &mut App) {
             Line::from(vec![
                 Span::styled("◫ ", Style::default().fg(Color::Cyan)),
                 Span::styled("Files", Style::default().fg(Color::White)),
+                Span::styled(filter, Style::default().fg(Color::Magenta)),
             ]),
             Style::default().fg(Color::DarkGray),
         )
@@ -902,6 +965,7 @@ fn draw_events_table(f: &mut Frame, area: Rect, app: &mut App) {
     });
 
     let event_count = app.events.len();
+    let filter = filter_suffix(app, FilterTarget::Details);
     let (title, border_style) = if is_focused {
         (
             Line::from(vec![
@@ -910,6 +974,7 @@ fn draw_events_table(f: &mut Frame, area: Rect, app: &mut App) {
                     format!("Events ({})", event_count),
                     Style::default().fg(Color::White),
                 ),
+                Span::styled(filter, Style::default().fg(Color::Magenta)),
                 Span::styled(" [SSE Live]", Style::default().fg(Color::Green)),
             ]),
             Style::default().fg(Color::Green),
@@ -922,6 +987,7 @@ fn draw_events_table(f: &mut Frame, area: Rect, app: &mut App) {
                     format!("Events ({})", event_count),
                     Style::default().fg(Color::White),
                 ),
+                Span::styled(filter, Style::default().fg(Color::Magenta)),
             ]),
             Style::default().fg(Color::DarkGray),
         )
@@ -958,15 +1024,17 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
         .fg(Color::Yellow)
         .add_modifier(Modifier::BOLD);
 
+    let peak_mem_header = format!("Peak Mem{}", app.results_sort.peak_memory_indicator());
+    let peak_cpu_header = format!("Peak CPU %{}", app.results_sort.peak_cpu_indicator());
     let header = Row::new(vec![
-        "ID",
-        "Job ID",
-        "Run",
-        "Attempt",
-        "Return",
-        "Status",
-        "Peak Mem",
-        "Avg CPU %",
+        "ID".to_string(),
+        "Job ID".to_string(),
+        "Run".to_string(),
+        "Attempt".to_string(),
+        "Return".to_string(),
+        "Status".to_string(),
+        peak_mem_header,
+        peak_cpu_header,
     ])
     .style(header_style)
     .bottom_margin(1);
@@ -985,9 +1053,8 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
             .map(format_bytes)
             .unwrap_or_else(|| "-".to_string());
 
-        // Format average CPU percentage
-        let avg_cpu = result
-            .avg_cpu_percent
+        let peak_cpu = result
+            .peak_cpu_percent
             .map(|pct| format!("{:.1}%", pct))
             .unwrap_or_else(|| "-".to_string());
 
@@ -1009,15 +1076,17 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
             )),
             Cell::from(Span::styled(status, Style::default().fg(row_color))),
             Cell::from(peak_mem),
-            Cell::from(avg_cpu),
+            Cell::from(peak_cpu),
         ])
     });
 
+    let filter = filter_suffix(app, FilterTarget::Details);
     let (title, border_style) = if is_focused {
         (
             Line::from(vec![
                 Span::styled("✓ ", Style::default().fg(Color::Green)),
                 Span::styled("Results", Style::default().fg(Color::White)),
+                Span::styled(filter, Style::default().fg(Color::Magenta)),
             ]),
             Style::default().fg(Color::Green),
         )
@@ -1026,6 +1095,7 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
             Line::from(vec![
                 Span::styled("✓ ", Style::default().fg(Color::Cyan)),
                 Span::styled("Results", Style::default().fg(Color::White)),
+                Span::styled(filter, Style::default().fg(Color::Magenta)),
             ]),
             Style::default().fg(Color::DarkGray),
         )
@@ -1040,8 +1110,8 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
             Constraint::Length(7),  // Attempt
             Constraint::Length(7),  // Return
             Constraint::Length(12), // Status
-            Constraint::Length(10), // Peak Mem
-            Constraint::Length(10), // Avg CPU %
+            Constraint::Length(11), // Peak Mem (+ optional sort indicator)
+            Constraint::Length(13), // Peak CPU % (+ optional sort indicator)
         ],
     )
     .header(header)
@@ -1107,11 +1177,13 @@ fn draw_compute_nodes_table(f: &mut Frame, area: Rect, app: &mut App) {
         ])
     });
 
+    let filter = filter_suffix(app, FilterTarget::Details);
     let (title, border_style) = if is_focused {
         (
             Line::from(vec![
                 Span::styled("▣ ", Style::default().fg(Color::Green)),
                 Span::styled("Compute Nodes", Style::default().fg(Color::White)),
+                Span::styled(filter, Style::default().fg(Color::Magenta)),
             ]),
             Style::default().fg(Color::Green),
         )
@@ -1120,6 +1192,7 @@ fn draw_compute_nodes_table(f: &mut Frame, area: Rect, app: &mut App) {
             Line::from(vec![
                 Span::styled("▣ ", Style::default().fg(Color::Cyan)),
                 Span::styled("Compute Nodes", Style::default().fg(Color::White)),
+                Span::styled(filter, Style::default().fg(Color::Magenta)),
             ]),
             Style::default().fg(Color::DarkGray),
         )
@@ -1189,11 +1262,13 @@ fn draw_scheduled_nodes_table(f: &mut Frame, area: Rect, app: &mut App) {
         ])
     });
 
+    let filter = filter_suffix(app, FilterTarget::Details);
     let (title, border_style) = if is_focused {
         (
             Line::from(vec![
                 Span::styled("⊞ ", Style::default().fg(Color::Green)),
                 Span::styled("Scheduled Nodes", Style::default().fg(Color::White)),
+                Span::styled(filter, Style::default().fg(Color::Magenta)),
             ]),
             Style::default().fg(Color::Green),
         )
@@ -1202,6 +1277,7 @@ fn draw_scheduled_nodes_table(f: &mut Frame, area: Rect, app: &mut App) {
             Line::from(vec![
                 Span::styled("⊞ ", Style::default().fg(Color::Cyan)),
                 Span::styled("Scheduled Nodes", Style::default().fg(Color::White)),
+                Span::styled(filter, Style::default().fg(Color::Magenta)),
             ]),
             Style::default().fg(Color::DarkGray),
         )
@@ -1300,6 +1376,7 @@ fn draw_slurm_stats_table(f: &mut Frame, area: Rect, app: &mut App) {
     });
 
     let stat_count = app.slurm_stats.len();
+    let filter = filter_suffix(app, FilterTarget::Details);
     let (title, border_style) = if is_focused {
         (
             Line::from(vec![
@@ -1308,6 +1385,7 @@ fn draw_slurm_stats_table(f: &mut Frame, area: Rect, app: &mut App) {
                     format!("Slurm Stats ({})", stat_count),
                     Style::default().fg(Color::White),
                 ),
+                Span::styled(filter, Style::default().fg(Color::Magenta)),
             ]),
             Style::default().fg(Color::Green),
         )
@@ -1319,6 +1397,7 @@ fn draw_slurm_stats_table(f: &mut Frame, area: Rect, app: &mut App) {
                     format!("Slurm Stats ({})", stat_count),
                     Style::default().fg(Color::White),
                 ),
+                Span::styled(filter, Style::default().fg(Color::Magenta)),
             ]),
             Style::default().fg(Color::DarkGray),
         )

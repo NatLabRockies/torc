@@ -262,39 +262,47 @@ impl ErrorDialog {
     }
 }
 
-/// A help popup showing all available keybindings
+/// Identifies which pane / detail tab the user is currently looking at, so
+/// the help popup can show only the relevant keybindings instead of the
+/// full reference.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HelpContext {
+    Workflows,
+    DetailSummary,
+    DetailJobs,
+    DetailFiles,
+    DetailEvents,
+    DetailResults,
+    DetailComputeNodes,
+    DetailScheduledNodes,
+    DetailSlurmStats,
+    DetailDag,
+    FilterInput,
+    Other,
+}
+
+/// A help popup showing keybindings relevant to the current context.
 pub struct HelpPopup;
 
 impl HelpPopup {
-    pub fn render(f: &mut Frame, area: Rect, context: &str) {
-        // Calculate popup size
+    pub fn render(f: &mut Frame, area: Rect, context: HelpContext) {
         let popup_width = 70.min(area.width.saturating_sub(4));
-        let popup_height = 44.min(area.height.saturating_sub(2));
+        let popup_height = 48.min(area.height.saturating_sub(2));
 
         let popup_x = (area.width.saturating_sub(popup_width)) / 2;
         let popup_y = (area.height.saturating_sub(popup_height)) / 2;
-
         let popup_area = Rect::new(popup_x, popup_y, popup_width, popup_height);
-
-        // Clear the area behind the popup
         f.render_widget(Clear, popup_area);
 
         let block = Block::default()
             .title(" Help (press q or Esc to close) ")
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Cyan));
-
         let inner = block.inner(popup_area);
         f.render_widget(block, popup_area);
 
         let mut lines = vec![
-            Line::from(vec![Span::styled(
-                "Global Keys",
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            )]),
-            Line::from(""),
+            Self::section_header("Global Keys"),
             Self::key_line("q", "Quit / Close popup"),
             Self::key_line("?", "Show this help"),
             Self::key_line("r", "Refresh current view"),
@@ -303,75 +311,78 @@ impl HelpPopup {
             Self::key_line(left_right_arrows(), "Switch focus between panes"),
             Self::key_line(up_down_arrows(), "Navigate rows in tables"),
             Self::key_line("PgUp/PgDn", "Page through rows (10 at a time)"),
+            Self::key_line("g / G", "Jump to top / bottom of table"),
             Self::key_line("Enter", "Load details / Confirm action"),
             Self::key_line("f", "Filter current pane (Workflows or Details)"),
-            Self::key_line("c", "Clear filter on current pane (Jobs tab: cancel job)"),
-            Line::from(""),
-            Line::from(vec![Span::styled(
-                "Workflow Actions",
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            )]),
-            Line::from(""),
-            Self::key_line("n", "Create new workflow from spec file"),
-            Self::key_line("i", "Initialize workflow"),
-            Self::key_line("I", "Re-initialize workflow"),
-            Self::key_line("R", "Reset workflow status"),
-            Self::key_line("x", "Run workflow locally"),
-            Self::key_line("s", "Submit workflow to scheduler"),
-            Self::key_line("W", "Watch workflow (recovery)"),
-            Self::key_line("d", "Delete workflow"),
-            Line::from(""),
-            Line::from(vec![Span::styled(
-                "Job Actions (Jobs tab)",
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            )]),
-            Line::from(""),
-            Self::key_line("l", "View logs (Jobs/Scheduled Nodes)"),
-            Self::key_line("Enter", "View job details"),
-            Self::key_line("c", "Cancel job"),
-            Self::key_line("t", "Terminate job"),
-            Self::key_line("y", "Retry failed job"),
+            Self::key_line("=", "Filter to the selected row's value"),
+            Self::key_line("c", "Clear filter on current pane"),
+            Self::key_line("e", "Jump to Events tab and open the live SSE stream"),
         ];
 
-        // Add context-specific help
-        if context == "filter" {
-            lines.push(Line::from(""));
-            lines.push(Line::from(vec![Span::styled(
-                "Filter Mode",
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            )]));
-            lines.push(Line::from(""));
-            lines.push(Self::key_line("Tab", "Change filter column"));
-            lines.push(Self::key_line("Enter", "Apply filter"));
-            lines.push(Self::key_line("Esc", "Cancel filter"));
+        // Context-specific section.
+        match context {
+            HelpContext::Workflows => {
+                lines.extend(Self::section("Workflow Actions"));
+                lines.push(Self::key_line("n", "Create new workflow from spec file"));
+                lines.push(Self::key_line("i", "Initialize workflow"));
+                lines.push(Self::key_line("I", "Re-initialize workflow"));
+                lines.push(Self::key_line("R", "Reset workflow status"));
+                lines.push(Self::key_line("x", "Run workflow locally"));
+                lines.push(Self::key_line("s", "Submit workflow to scheduler"));
+                lines.push(Self::key_line("W", "Watch workflow (recovery)"));
+                lines.push(Self::key_line("d", "Delete workflow"));
+                lines.push(Self::key_line(
+                    "C",
+                    "Cancel workflow (Jobs tab: cancel job)",
+                ));
+            }
+            HelpContext::DetailJobs => {
+                lines.extend(Self::section("Jobs Tab"));
+                lines.push(Self::key_line("Enter", "View job details"));
+                lines.push(Self::key_line("l", "View logs"));
+                lines.push(Self::key_line("C", "Cancel job"));
+                lines.push(Self::key_line("t", "Terminate job"));
+                lines.push(Self::key_line("y", "Retry failed job"));
+                lines.push(Self::key_line("1 / 2 / 3", "Sort by ID / Name / Status"));
+            }
+            HelpContext::DetailResults => {
+                lines.extend(Self::section("Results Tab"));
+                lines.push(Self::key_line(
+                    "m",
+                    "Sort by Peak Memory (cycles desc / asc / off)",
+                ));
+                lines.push(Self::key_line(
+                    "p",
+                    "Sort by Peak CPU % (cycles desc / asc / off)",
+                ));
+            }
+            HelpContext::DetailScheduledNodes => {
+                lines.extend(Self::section("Scheduled Nodes Tab"));
+                lines.push(Self::key_line("l", "View Slurm stdout/stderr logs"));
+            }
+            HelpContext::FilterInput => {
+                lines.extend(Self::section("Filter Mode"));
+                lines.push(Self::key_line("Tab", "Change filter column"));
+                lines.push(Self::key_line("Enter", "Apply filter"));
+                lines.push(Self::key_line("Esc", "Cancel filter"));
+            }
+            HelpContext::DetailSummary
+            | HelpContext::DetailFiles
+            | HelpContext::DetailEvents
+            | HelpContext::DetailComputeNodes
+            | HelpContext::DetailSlurmStats
+            | HelpContext::DetailDag
+            | HelpContext::Other => {
+                // No tab-specific keys to surface beyond globals.
+            }
         }
 
-        lines.push(Line::from(""));
-        lines.push(Line::from(vec![Span::styled(
-            "Server Management",
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
-        )]));
-        lines.push(Line::from(""));
+        lines.extend(Self::section("Server Management"));
         lines.push(Self::key_line("S", "Start torc-server"));
         lines.push(Self::key_line("K", "Stop/Kill server"));
         lines.push(Self::key_line("O", "Show server output"));
 
-        lines.push(Line::from(""));
-        lines.push(Line::from(vec![Span::styled(
-            "Connection",
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
-        )]));
-        lines.push(Line::from(""));
+        lines.extend(Self::section("Connection"));
         lines.push(Self::key_line("u", "Change server URL"));
         lines.push(Self::key_line("o", "Change output directory"));
         lines.push(Self::key_line("w", "Change user filter"));
@@ -382,6 +393,21 @@ impl HelpPopup {
             .wrap(Wrap { trim: false });
 
         f.render_widget(paragraph, inner);
+    }
+
+    fn section_header(title: &str) -> Line<'static> {
+        Line::from(vec![Span::styled(
+            title.to_string(),
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )])
+    }
+
+    /// Returns the two lines that introduce a new section (blank separator
+    /// + bold title).
+    fn section(title: &str) -> Vec<Line<'static>> {
+        vec![Line::from(""), Self::section_header(title), Line::from("")]
     }
 
     fn key_line(key: &str, description: &str) -> Line<'static> {
