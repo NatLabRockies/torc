@@ -582,8 +582,17 @@ impl App {
             && let Some(idx) = self.workflows.iter().position(|w| w.id == Some(id))
         {
             self.workflows_state.select(Some(idx));
-        } else if !self.workflows.is_empty() && self.workflows_state.selected().is_none() {
-            self.workflows_state.select(Some(0));
+        } else if self.workflows.is_empty() {
+            self.workflows_state.select(None);
+        } else {
+            // Repair the selection if the previously-selected row vanished
+            // and we don't have a stable id to recover. Leaving a stale,
+            // out-of-bounds index would let later actions operate on the
+            // wrong row.
+            match self.workflows_state.selected() {
+                Some(idx) if idx < self.workflows.len() => {}
+                _ => self.workflows_state.select(Some(0)),
+            }
         }
         Ok(())
     }
@@ -1041,7 +1050,8 @@ impl App {
     }
 
     /// Re-select the row whose stable id matches `prev_id`. Falls back to
-    /// row 0 if the previously-selected row is no longer present.
+    /// row 0 if the previously-selected row is no longer present, or clears
+    /// selection entirely when the list is empty.
     fn restore_results_selection(&mut self, prev_id: Option<i64>) {
         if let Some(id) = prev_id
             && let Some(idx) = self.results.iter().position(|r| r.id == Some(id))
@@ -1049,7 +1059,9 @@ impl App {
             self.results_state.select(Some(idx));
             return;
         }
-        if !self.results.is_empty() {
+        if self.results.is_empty() {
+            self.results_state.select(None);
+        } else {
             self.results_state.select(Some(0));
         }
     }
@@ -1058,14 +1070,20 @@ impl App {
     pub fn apply_jobs_sort(&mut self) {
         match self.jobs_sort {
             JobsSort::None => {}
+            // Sort missing IDs last in either direction (server-assigned IDs
+            // should always be present, but match the None-last convention
+            // used by the Results / Status sorts for consistency).
             JobsSort::IdDesc => self
                 .jobs
-                .sort_by_key(|j| std::cmp::Reverse(j.id.unwrap_or(0))),
-            JobsSort::IdAsc => self.jobs.sort_by_key(|j| j.id.unwrap_or(0)),
+                .sort_by_key(|j| (j.id.is_none(), std::cmp::Reverse(j.id.unwrap_or(i64::MIN)))),
+            JobsSort::IdAsc => self
+                .jobs
+                .sort_by_key(|j| (j.id.is_none(), j.id.unwrap_or(i64::MAX))),
+            // Cache lowercased keys so we don't allocate on every comparison.
             JobsSort::NameDesc => self
                 .jobs
-                .sort_by_key(|j| std::cmp::Reverse(j.name.to_lowercase())),
-            JobsSort::NameAsc => self.jobs.sort_by_key(|j| j.name.to_lowercase()),
+                .sort_by_cached_key(|j| std::cmp::Reverse(j.name.to_lowercase())),
+            JobsSort::NameAsc => self.jobs.sort_by_cached_key(|j| j.name.to_lowercase()),
             JobsSort::StatusDesc => self.jobs.sort_by(|a, b| {
                 let ka = a.status.map(|s| s as u8).unwrap_or(u8::MAX);
                 let kb = b.status.map(|s| s as u8).unwrap_or(u8::MAX);
@@ -1114,7 +1132,9 @@ impl App {
             self.jobs_state.select(Some(idx));
             return;
         }
-        if !self.jobs.is_empty() {
+        if self.jobs.is_empty() {
+            self.jobs_state.select(None);
+        } else {
             self.jobs_state.select(Some(0));
         }
     }
