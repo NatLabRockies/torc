@@ -1003,12 +1003,15 @@ impl App {
                         (None, None) => std::cmp::Ordering::Equal,
                     });
             }
+            // f64::total_cmp gives a total order for floats; partial_cmp +
+            // unwrap_or(Equal) violates the strict-weak-ordering required by
+            // sort_by when NaN is present, which can scramble unrelated
+            // rows. NaN sorts to the end via its natural total_cmp position
+            // (greater than +inf), which we don't bother special-casing.
             ResultsSort::PeakCpuDesc => {
                 self.results
                     .sort_by(|a, b| match (a.peak_cpu_percent, b.peak_cpu_percent) {
-                        (Some(x), Some(y)) => {
-                            y.partial_cmp(&x).unwrap_or(std::cmp::Ordering::Equal)
-                        }
+                        (Some(x), Some(y)) => y.total_cmp(&x),
                         (Some(_), None) => std::cmp::Ordering::Less,
                         (None, Some(_)) => std::cmp::Ordering::Greater,
                         (None, None) => std::cmp::Ordering::Equal,
@@ -1017,9 +1020,7 @@ impl App {
             ResultsSort::PeakCpuAsc => {
                 self.results
                     .sort_by(|a, b| match (a.peak_cpu_percent, b.peak_cpu_percent) {
-                        (Some(x), Some(y)) => {
-                            x.partial_cmp(&y).unwrap_or(std::cmp::Ordering::Equal)
-                        }
+                        (Some(x), Some(y)) => x.total_cmp(&y),
                         (Some(_), None) => std::cmp::Ordering::Less,
                         (None, Some(_)) => std::cmp::Ordering::Greater,
                         (None, None) => std::cmp::Ordering::Equal,
@@ -1288,9 +1289,13 @@ impl App {
             _ => return,
         };
 
+        // Resolve the column index *before* mutating any state so that an
+        // invalid mapping doesn't leave us with a stale `filter_target`.
+        let saved_target = self.filter_target;
         self.filter_target = target;
         let columns = self.get_filter_columns();
         let Some(col_idx) = columns.iter().position(|c| *c == column_name) else {
+            self.filter_target = saved_target;
             return;
         };
         self.filter_column_index = col_idx;

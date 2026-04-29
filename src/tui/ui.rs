@@ -17,15 +17,23 @@ use super::components::{HelpContext, HelpPopup};
 
 /// Format a timestamp (milliseconds since epoch) as a human-readable local time string
 /// Map the current focus + detail tab to a `HelpContext` so the help popup
-/// can show only the relevant keybindings.
+/// can show only the relevant keybindings. While a popup is open the
+/// runtime sets `focus = Focus::Popup` and stashes the prior focus in
+/// `previous_focus`; we use that so the help shown reflects the underlying
+/// pane the user came from rather than collapsing to `Other`.
 fn help_context_for(app: &App) -> HelpContext {
-    if app.focus == Focus::FilterInput {
+    let effective_focus = if app.focus == Focus::Popup {
+        app.previous_focus
+    } else {
+        app.focus
+    };
+    if effective_focus == Focus::FilterInput {
         return HelpContext::FilterInput;
     }
-    if app.focus == Focus::Workflows {
+    if effective_focus == Focus::Workflows {
         return HelpContext::Workflows;
     }
-    if app.focus == Focus::Details {
+    if effective_focus == Focus::Details {
         return match app.detail_view {
             DetailViewType::Summary => HelpContext::DetailSummary,
             DetailViewType::Jobs => HelpContext::DetailJobs,
