@@ -1154,6 +1154,17 @@ impl App {
             .collect();
     }
 
+    /// Jump to the Events tab for the currently-highlighted workflow and
+    /// open its live SSE stream. Works whether focus is on the Workflows
+    /// pane or already on a Details tab — `load_detail_data` reads the
+    /// highlighted workflow row from `workflows_state` and `Events` is the
+    /// case that starts the SSE connection.
+    pub fn jump_to_events(&mut self) -> Result<()> {
+        self.detail_view = DetailViewType::Events;
+        self.focus = Focus::Details;
+        self.load_detail_data()
+    }
+
     pub fn next_detail_view(&mut self) {
         self.detail_view = self.detail_view.next();
         // Load data for the new tab if a workflow is selected

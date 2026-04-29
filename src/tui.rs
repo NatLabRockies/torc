@@ -516,6 +516,14 @@ where
                     KeyCode::Char('=') => {
                         app.filter_by_current_row();
                     }
+                    KeyCode::Char('e') => {
+                        if let Err(err) = app.jump_to_events() {
+                            app.set_status(components::StatusMessage::error(&format!(
+                                "Failed to load events: {}",
+                                err
+                            )));
+                        }
+                    }
                     KeyCode::Char('c') => {
                         app.clear_filter();
                     }

@@ -75,6 +75,7 @@ When the TUI starts, you'll see:
 | `←` / `→`       | Switch focus between Workflows and Details panes                   |
 | `Tab`           | Switch between detail tabs (Jobs → Files → Events → Results → DAG) |
 | `Enter`         | Load details for selected workflow                                 |
+| `e`             | Jump to Events tab for the highlighted workflow (opens SSE stream) |
 | `q`             | Quit (or close popup/dialog)                                       |
 | `?`             | Show context-aware help popup (scoped to current pane / tab)       |
 

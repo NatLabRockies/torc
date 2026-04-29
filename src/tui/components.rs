@@ -316,6 +316,7 @@ impl HelpPopup {
             Self::key_line("f", "Filter current pane (Workflows or Details)"),
             Self::key_line("=", "Filter to the selected row's value"),
             Self::key_line("c", "Clear filter on current pane"),
+            Self::key_line("e", "Jump to Events tab and open the live SSE stream"),
         ];
 
         // Context-specific section.
