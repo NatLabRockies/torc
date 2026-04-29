@@ -591,6 +591,20 @@ where
                     {
                         app.request_job_action(JobAction::Retry);
                     }
+                    // Sort the Results table by Peak Memory / Peak CPU. Each
+                    // press cycles None → Desc → Asc → None.
+                    KeyCode::Char('m')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Results =>
+                    {
+                        app.cycle_results_sort_peak_memory();
+                    }
+                    KeyCode::Char('p')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Results =>
+                    {
+                        app.cycle_results_sort_peak_cpu();
+                    }
                     _ => {}
                 },
             }

@@ -958,15 +958,17 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
         .fg(Color::Yellow)
         .add_modifier(Modifier::BOLD);
 
+    let peak_mem_header = format!("Peak Mem{}", app.results_sort.peak_memory_indicator());
+    let peak_cpu_header = format!("Peak CPU %{}", app.results_sort.peak_cpu_indicator());
     let header = Row::new(vec![
-        "ID",
-        "Job ID",
-        "Run",
-        "Attempt",
-        "Return",
-        "Status",
-        "Peak Mem",
-        "Avg CPU %",
+        "ID".to_string(),
+        "Job ID".to_string(),
+        "Run".to_string(),
+        "Attempt".to_string(),
+        "Return".to_string(),
+        "Status".to_string(),
+        peak_mem_header,
+        peak_cpu_header,
     ])
     .style(header_style)
     .bottom_margin(1);
@@ -985,9 +987,8 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
             .map(format_bytes)
             .unwrap_or_else(|| "-".to_string());
 
-        // Format average CPU percentage
-        let avg_cpu = result
-            .avg_cpu_percent
+        let peak_cpu = result
+            .peak_cpu_percent
             .map(|pct| format!("{:.1}%", pct))
             .unwrap_or_else(|| "-".to_string());
 
@@ -1009,7 +1010,7 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
             )),
             Cell::from(Span::styled(status, Style::default().fg(row_color))),
             Cell::from(peak_mem),
-            Cell::from(avg_cpu),
+            Cell::from(peak_cpu),
         ])
     });
 
@@ -1040,8 +1041,8 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
             Constraint::Length(7),  // Attempt
             Constraint::Length(7),  // Return
             Constraint::Length(12), // Status
-            Constraint::Length(10), // Peak Mem
-            Constraint::Length(10), // Avg CPU %
+            Constraint::Length(11), // Peak Mem (+ optional sort indicator)
+            Constraint::Length(13), // Peak CPU % (+ optional sort indicator)
         ],
     )
     .header(header)

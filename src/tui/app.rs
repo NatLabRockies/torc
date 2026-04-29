@@ -244,6 +244,53 @@ pub enum FilterTarget {
 /// Number of rows to advance/retreat for PageDown/PageUp.
 pub const PAGE_STEP: usize = 10;
 
+/// Sort state for the Results detail table.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResultsSort {
+    None,
+    PeakMemoryDesc,
+    PeakMemoryAsc,
+    PeakCpuDesc,
+    PeakCpuAsc,
+}
+
+impl ResultsSort {
+    /// Cycle: None → Desc → Asc → None for the Peak Memory column. If currently
+    /// sorting by another column, jump to PeakMemoryDesc.
+    pub fn cycle_peak_memory(self) -> Self {
+        match self {
+            Self::PeakMemoryDesc => Self::PeakMemoryAsc,
+            Self::PeakMemoryAsc => Self::None,
+            _ => Self::PeakMemoryDesc,
+        }
+    }
+
+    pub fn cycle_peak_cpu(self) -> Self {
+        match self {
+            Self::PeakCpuDesc => Self::PeakCpuAsc,
+            Self::PeakCpuAsc => Self::None,
+            _ => Self::PeakCpuDesc,
+        }
+    }
+
+    /// Returns the arrow indicator for the Peak Memory column header.
+    pub fn peak_memory_indicator(self) -> &'static str {
+        match self {
+            Self::PeakMemoryDesc => " ↓",
+            Self::PeakMemoryAsc => " ↑",
+            _ => "",
+        }
+    }
+
+    pub fn peak_cpu_indicator(self) -> &'static str {
+        match self {
+            Self::PeakCpuDesc => " ↓",
+            Self::PeakCpuAsc => " ↑",
+            _ => "",
+        }
+    }
+}
+
 /// Aggregated high-level information about a single workflow, computed from
 /// list_jobs + get_workflow + is_workflow_complete and rendered by the
 /// Summary detail view.
@@ -283,6 +330,7 @@ pub struct App {
     pub results_all: Vec<ResultModel>,
     pub results_state: TableState,
     pub results_workflow_id: Option<i64>,
+    pub results_sort: ResultsSort,
     pub exec_time_map: std::collections::HashMap<(i64, i64, i64), f64>,
     pub compute_nodes: Vec<ComputeNodeModel>,
     pub compute_nodes_all: Vec<ComputeNodeModel>,
@@ -393,6 +441,7 @@ impl App {
             results_all: Vec::new(),
             results_state: TableState::default(),
             results_workflow_id: None,
+            results_sort: ResultsSort::None,
             exec_time_map: std::collections::HashMap::new(),
             compute_nodes: Vec::new(),
             compute_nodes_all: Vec::new(),
@@ -721,6 +770,7 @@ impl App {
                             self.results_workflow_id = Some(workflow_id);
                         }
                         self.results = self.results_all.clone();
+                        self.apply_results_sort();
                         if !self.results.is_empty() {
                             self.results_state.select(Some(0));
                         }
@@ -753,6 +803,7 @@ impl App {
                         {
                             self.results_all = r;
                             self.results = self.results_all.clone();
+                            self.apply_results_sort();
                             self.results_workflow_id = Some(workflow_id);
                         }
                         self.rebuild_exec_time_map();
@@ -769,6 +820,71 @@ impl App {
             }
         }
         Ok(())
+    }
+
+    /// Sort `self.results` in-place based on `self.results_sort`. Rows with
+    /// missing values sort last in both directions so they don't crowd the
+    /// top.
+    pub fn apply_results_sort(&mut self) {
+        match self.results_sort {
+            ResultsSort::None => {}
+            ResultsSort::PeakMemoryDesc => {
+                self.results
+                    .sort_by(|a, b| match (a.peak_memory_bytes, b.peak_memory_bytes) {
+                        (Some(x), Some(y)) => y.cmp(&x),
+                        (Some(_), None) => std::cmp::Ordering::Less,
+                        (None, Some(_)) => std::cmp::Ordering::Greater,
+                        (None, None) => std::cmp::Ordering::Equal,
+                    });
+            }
+            ResultsSort::PeakMemoryAsc => {
+                self.results
+                    .sort_by(|a, b| match (a.peak_memory_bytes, b.peak_memory_bytes) {
+                        (Some(x), Some(y)) => x.cmp(&y),
+                        (Some(_), None) => std::cmp::Ordering::Less,
+                        (None, Some(_)) => std::cmp::Ordering::Greater,
+                        (None, None) => std::cmp::Ordering::Equal,
+                    });
+            }
+            ResultsSort::PeakCpuDesc => {
+                self.results
+                    .sort_by(|a, b| match (a.peak_cpu_percent, b.peak_cpu_percent) {
+                        (Some(x), Some(y)) => {
+                            y.partial_cmp(&x).unwrap_or(std::cmp::Ordering::Equal)
+                        }
+                        (Some(_), None) => std::cmp::Ordering::Less,
+                        (None, Some(_)) => std::cmp::Ordering::Greater,
+                        (None, None) => std::cmp::Ordering::Equal,
+                    });
+            }
+            ResultsSort::PeakCpuAsc => {
+                self.results
+                    .sort_by(|a, b| match (a.peak_cpu_percent, b.peak_cpu_percent) {
+                        (Some(x), Some(y)) => {
+                            x.partial_cmp(&y).unwrap_or(std::cmp::Ordering::Equal)
+                        }
+                        (Some(_), None) => std::cmp::Ordering::Less,
+                        (None, Some(_)) => std::cmp::Ordering::Greater,
+                        (None, None) => std::cmp::Ordering::Equal,
+                    });
+            }
+        }
+    }
+
+    pub fn cycle_results_sort_peak_memory(&mut self) {
+        self.results_sort = self.results_sort.cycle_peak_memory();
+        self.apply_results_sort();
+        if !self.results.is_empty() {
+            self.results_state.select(Some(0));
+        }
+    }
+
+    pub fn cycle_results_sort_peak_cpu(&mut self) {
+        self.results_sort = self.results_sort.cycle_peak_cpu();
+        self.apply_results_sort();
+        if !self.results.is_empty() {
+            self.results_state.select(Some(0));
+        }
     }
 
     /// Rebuild the cached exec_time_map from results_all.
@@ -982,6 +1098,7 @@ impl App {
                     })
                     .cloned()
                     .collect();
+                self.apply_results_sort();
                 if !self.results.is_empty() {
                     self.results_state.select(Some(0));
                 } else {
@@ -1102,6 +1219,7 @@ impl App {
             }
             DetailViewType::Results => {
                 self.results = self.results_all.clone();
+                self.apply_results_sort();
                 if !self.results.is_empty() {
                     self.results_state.select(Some(0));
                 }
@@ -1316,6 +1434,7 @@ impl App {
                 if let Ok(results) = self.client.list_results(workflow_id) {
                     self.results_all = results.clone();
                     self.results = results;
+                    self.apply_results_sort();
                     self.results_workflow_id = Some(workflow_id);
                     if !self.results.is_empty() {
                         self.results_state.select(Some(0));

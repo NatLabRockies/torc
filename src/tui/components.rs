@@ -269,7 +269,7 @@ impl HelpPopup {
     pub fn render(f: &mut Frame, area: Rect, context: &str) {
         // Calculate popup size
         let popup_width = 70.min(area.width.saturating_sub(4));
-        let popup_height = 44.min(area.height.saturating_sub(2));
+        let popup_height = 48.min(area.height.saturating_sub(2));
 
         let popup_x = (area.width.saturating_sub(popup_width)) / 2;
         let popup_y = (area.height.saturating_sub(popup_height)) / 2;
@@ -335,6 +335,16 @@ impl HelpPopup {
             Self::key_line("c", "Cancel job"),
             Self::key_line("t", "Terminate job"),
             Self::key_line("y", "Retry failed job"),
+            Line::from(""),
+            Line::from(vec![Span::styled(
+                "Results Tab",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )]),
+            Line::from(""),
+            Self::key_line("m", "Sort by Peak Memory (cycles desc / asc / off)"),
+            Self::key_line("p", "Sort by Peak CPU % (cycles desc / asc / off)"),
         ];
 
         // Add context-specific help
