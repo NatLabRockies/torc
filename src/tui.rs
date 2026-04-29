@@ -490,6 +490,8 @@ where
                     KeyCode::Up => app.previous_in_active_table(),
                     KeyCode::PageDown => app.page_down_in_active_table(),
                     KeyCode::PageUp => app.page_up_in_active_table(),
+                    KeyCode::Char('g') => app.jump_to_top_in_active_table(),
+                    KeyCode::Char('G') => app.jump_to_bottom_in_active_table(),
                     KeyCode::Enter => {
                         if app.focus == Focus::Workflows {
                             app.load_detail_data()?;
@@ -510,6 +512,9 @@ where
                     }
                     KeyCode::Char('f') => {
                         app.start_filter();
+                    }
+                    KeyCode::Char('=') => {
+                        app.filter_by_current_row();
                     }
                     KeyCode::Char('c') => {
                         if app.focus == Focus::Details && app.detail_view == DetailViewType::Jobs {
@@ -604,6 +609,25 @@ where
                             && app.detail_view == DetailViewType::Results =>
                     {
                         app.cycle_results_sort_peak_cpu();
+                    }
+                    // Sort the Jobs table by column index 1=ID, 2=Name, 3=Status.
+                    KeyCode::Char('1')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Jobs =>
+                    {
+                        app.cycle_jobs_sort_id();
+                    }
+                    KeyCode::Char('2')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Jobs =>
+                    {
+                        app.cycle_jobs_sort_name();
+                    }
+                    KeyCode::Char('3')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Jobs =>
+                    {
+                        app.cycle_jobs_sort_status();
                     }
                     _ => {}
                 },
