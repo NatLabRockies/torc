@@ -616,6 +616,9 @@ impl App {
     pub fn page_up_in_active_table(&mut self) {
         match self.focus {
             Focus::Workflows => {
+                if self.workflows.is_empty() {
+                    return;
+                }
                 let next = self
                     .workflows_state
                     .selected()

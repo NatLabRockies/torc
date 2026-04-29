@@ -305,7 +305,7 @@ impl HelpPopup {
             Self::key_line("PgUp/PgDn", "Page through rows (10 at a time)"),
             Self::key_line("Enter", "Load details / Confirm action"),
             Self::key_line("f", "Filter current pane (Workflows or Details)"),
-            Self::key_line("c", "Clear filter on current pane"),
+            Self::key_line("c", "Clear filter on current pane (Jobs tab: cancel job)"),
             Line::from(""),
             Line::from(vec![Span::styled(
                 "Workflow Actions",
