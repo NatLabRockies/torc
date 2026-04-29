@@ -7075,11 +7075,14 @@ configuration.</p>
 <h2 id="basic-navigation"><a class="header" href="#basic-navigation">Basic Navigation</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Key</th><th>Action</th></tr></thead><tbody>
 <tr><td><code>↑</code> / <code>↓</code></td><td>Move up/down in the current table</td></tr>
+<tr><td><code>PgUp</code> / <code>PgDn</code></td><td>Page through rows (10 at a time)</td></tr>
+<tr><td><code>g</code> / <code>G</code></td><td>Jump to top / bottom of the current table</td></tr>
 <tr><td><code>←</code> / <code>→</code></td><td>Switch focus between Workflows and Details panes</td></tr>
 <tr><td><code>Tab</code></td><td>Switch between detail tabs (Jobs → Files → Events → Results → DAG)</td></tr>
 <tr><td><code>Enter</code></td><td>Load details for selected workflow</td></tr>
+<tr><td><code>e</code></td><td>Jump to Events tab for the highlighted workflow (opens SSE stream)</td></tr>
 <tr><td><code>q</code></td><td>Quit (or close popup/dialog)</td></tr>
-<tr><td><code>?</code></td><td>Show help popup with all keybindings</td></tr>
+<tr><td><code>?</code></td><td>Show context-aware help popup (scoped to current pane / tab)</td></tr>
 </tbody></table>
 </div>
 <h2 id="workflow-actions"><a class="header" href="#workflow-actions">Workflow Actions</a></h2>
@@ -7105,10 +7108,10 @@ show a confirmation dialog listing the files that will be deleted. Press <code>y
 <div class="table-wrapper"><table><thead><tr><th>Key</th><th>Action</th></tr></thead><tbody>
 <tr><td><code>Enter</code></td><td>View job details</td></tr>
 <tr><td><code>l</code></td><td>View job logs (stdout/stderr)</td></tr>
-<tr><td><code>c</code></td><td>Cancel job</td></tr>
+<tr><td><code>C</code></td><td>Cancel job</td></tr>
 <tr><td><code>t</code></td><td>Terminate job</td></tr>
 <tr><td><code>y</code></td><td>Retry failed job</td></tr>
-<tr><td><code>f</code></td><td>Filter jobs by column</td></tr>
+<tr><td><code>1</code>/<code>2</code>/<code>3</code></td><td>Sort by ID / Name / Status (cycles ↓ ↑ off)</td></tr>
 </tbody></table>
 </div>
 <h3 id="job-status-colors"><a class="header" href="#job-status-colors">Job Status Colors</a></h3>
@@ -7141,6 +7144,47 @@ supports:</p>
 <li>Binary files show a hex dump preview</li>
 <li>Same navigation keys as the log viewer</li>
 </ul>
+<h2 id="filtering-and-sorting"><a class="header" href="#filtering-and-sorting">Filtering and Sorting</a></h2>
+<h3 id="filtering"><a class="header" href="#filtering">Filtering</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Key</th><th>Action</th></tr></thead><tbody>
+<tr><td><code>f</code></td><td>Open the filter input for the focused pane (Workflows or Details)</td></tr>
+<tr><td><code>=</code></td><td>Filter to the selected row's value on a sensible primary column</td></tr>
+<tr><td><code>c</code></td><td>Clear the active filter on the focused pane</td></tr>
+</tbody></table>
+</div>
+<p>When a filter is active, the table title shows it in magenta so you don't lose track of why rows are
+missing — for example, <code>▶ Jobs │ filter: Status~failed</code>.</p>
+<p>The <code>=</code> shortcut maps the focused pane to a primary column and applies the filter using the selected
+row's value: Workflows → User, Jobs → Status, Results → Status, Events → Event Type, Files → Name,
+Compute Nodes → Hostname, Scheduled Nodes → Status. Use it to quickly narrow down to "rows like this
+one."</p>
+<h3 id="sorting"><a class="header" href="#sorting">Sorting</a></h3>
+<p>The Jobs and Results tables support cycling sort indicators in their column headers.</p>
+<div class="table-wrapper"><table><thead><tr><th>Tab</th><th>Key</th><th>Action</th></tr></thead><tbody>
+<tr><td>Jobs</td><td><code>1</code></td><td>Sort by ID (cycles ↓ ↑ off)</td></tr>
+<tr><td>Jobs</td><td><code>2</code></td><td>Sort by Name (cycles ↓ ↑ off)</td></tr>
+<tr><td>Jobs</td><td><code>3</code></td><td>Sort by Status (cycles ↓ ↑ off)</td></tr>
+<tr><td>Results</td><td><code>m</code></td><td>Sort by Peak Memory (cycles ↓ ↑ off)</td></tr>
+<tr><td>Results</td><td><code>p</code></td><td>Sort by Peak CPU % (cycles ↓ ↑ off)</td></tr>
+</tbody></table>
+</div>
+<p>Selection is preserved across sort changes and refreshes — re-sorting the table keeps the row you
+were looking at highlighted.</p>
+<h2 id="results-tab"><a class="header" href="#results-tab">Results Tab</a></h2>
+<p>The Results tab shows execution results for completed and failed jobs:</p>
+<div class="table-wrapper"><table><thead><tr><th>Column</th><th>Meaning</th></tr></thead><tbody>
+<tr><td>ID</td><td>Result row ID</td></tr>
+<tr><td>Job ID</td><td>The job that produced this result</td></tr>
+<tr><td>Run</td><td>Workflow run number</td></tr>
+<tr><td>Attempt</td><td>Attempt number for this job</td></tr>
+<tr><td>Return</td><td>Process exit code (0 green, non-zero red)</td></tr>
+<tr><td>Status</td><td>Final job status</td></tr>
+<tr><td>Peak Mem</td><td>Highest sampled memory usage</td></tr>
+<tr><td>Peak CPU %</td><td>Highest sampled CPU% across the job's lifetime</td></tr>
+</tbody></table>
+</div>
+<p>Use <code>m</code> and <code>p</code> to surface jobs that exceeded their resource allocation (sort descending and the
+worst offenders rise to the top).</p>
 <h2 id="events-tab-sse-live-streaming-1"><a class="header" href="#events-tab-sse-live-streaming-1">Events Tab (SSE Live Streaming)</a></h2>
 <p>The Events tab shows real-time events from the server using Server-Sent Events (SSE). When you
 select a workflow and navigate to the Events tab, the TUI establishes a live connection to receive
@@ -21478,8 +21522,8 @@ clients never see it stuck in <code>running</code>.</p>
 <pre><code>GET /workflows?offset=0&amp;limit=50
 GET /workflows?offset=50&amp;limit=50  # Next page
 </code></pre>
-<h2 id="filtering-and-sorting"><a class="header" href="#filtering-and-sorting">Filtering and Sorting</a></h2>
-<h3 id="filtering"><a class="header" href="#filtering">Filtering</a></h3>
+<h2 id="filtering-and-sorting-1"><a class="header" href="#filtering-and-sorting-1">Filtering and Sorting</a></h2>
+<h3 id="filtering-1"><a class="header" href="#filtering-1">Filtering</a></h3>
 <p>List endpoints support query parameters for filtering:</p>
 <pre><code>GET /workflows?user=dthom&amp;is_archived=false
 GET /jobs?workflow_id=1&amp;status=ready
@@ -21492,7 +21536,7 @@ GET /compute_nodes?workflow_id=1&amp;is_active=true
 <li><code>user</code>: Filter by owner</li>
 <li><code>status</code>: Filter by status value</li>
 </ul>
-<h3 id="sorting"><a class="header" href="#sorting">Sorting</a></h3>
+<h3 id="sorting-1"><a class="header" href="#sorting-1">Sorting</a></h3>
 <pre><code>GET /workflows?sort_by=created_at&amp;reverse_sort=true
 GET /jobs?sort_by=name&amp;reverse_sort=false
 </code></pre>
