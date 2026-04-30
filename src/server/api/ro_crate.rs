@@ -36,6 +36,46 @@ fn full_version() -> String {
     format!("{} ({})", SERVER_VERSION, GIT_HASH)
 }
 
+fn ro_crate_duplicate_details(error_string: &str) -> Option<(&'static str, &'static str)> {
+    if !error_string.contains("UNIQUE constraint failed") {
+        return None;
+    }
+
+    if error_string.contains("ro_crate_entity.workflow_id, ro_crate_entity.file_id") {
+        Some((
+            "RO-Crate entity already exists for this workflow/file link",
+            "file_id",
+        ))
+    } else if error_string.contains("ro_crate_entity.workflow_id, ro_crate_entity.entity_id") {
+        Some((
+            "RO-Crate entity already exists for this workflow/entity_id link",
+            "entity_id",
+        ))
+    } else {
+        Some(("RO-Crate entity already exists", "unknown"))
+    }
+}
+
+fn log_duplicate_ro_crate_entity(
+    operation: &str,
+    workflow_id: i64,
+    duplicate_field: &str,
+    file_id: Option<i64>,
+    entity_id: &str,
+) {
+    if let Some(file_id) = file_id {
+        warn!(
+            "Duplicate RO-Crate entity {} for workflow_id={} duplicate_field={} file_id={} has_file_id=true entity_id={}",
+            operation, workflow_id, duplicate_field, file_id, entity_id
+        );
+    } else {
+        warn!(
+            "Duplicate RO-Crate entity {} for workflow_id={} duplicate_field={} has_file_id=false entity_id={}",
+            operation, workflow_id, duplicate_field, entity_id
+        );
+    }
+}
+
 /// Trait defining RO-Crate entity-related API operations
 #[async_trait]
 pub trait RoCrateApi<C> {
@@ -367,28 +407,14 @@ where
             Ok(result) => result,
             Err(e) => {
                 let error_string = e.to_string();
-                if error_string.contains("UNIQUE constraint failed") {
-                    let (message, duplicate_field) = if error_string
-                        .contains("ro_crate_entity.workflow_id, ro_crate_entity.file_id")
-                    {
-                        (
-                            "RO-Crate entity already exists for this workflow/file link",
-                            "file_id",
-                        )
-                    } else if error_string
-                        .contains("ro_crate_entity.workflow_id, ro_crate_entity.entity_id")
-                    {
-                        (
-                            "RO-Crate entity already exists for this workflow/entity_id link",
-                            "entity_id",
-                        )
-                    } else {
-                        ("RO-Crate entity already exists", "unknown")
-                    };
-
-                    warn!(
-                        "Duplicate RO-Crate entity rejected for workflow_id={} duplicate_field={} file_id={:?} entity_id={}",
-                        body.workflow_id, duplicate_field, body.file_id, body.entity_id
+                if let Some((message, duplicate_field)) = ro_crate_duplicate_details(&error_string)
+                {
+                    log_duplicate_ro_crate_entity(
+                        "rejected on create",
+                        body.workflow_id,
+                        duplicate_field,
+                        body.file_id,
+                        &body.entity_id,
                     );
                     let error_response = models::ErrorResponse::new(serde_json::json!({
                         "message": message
@@ -625,6 +651,25 @@ where
         {
             Ok(result) => result,
             Err(e) => {
+                let error_string = e.to_string();
+                if let Some((message, duplicate_field)) = ro_crate_duplicate_details(&error_string)
+                {
+                    log_duplicate_ro_crate_entity(
+                        "rejected on update",
+                        body.workflow_id,
+                        duplicate_field,
+                        body.file_id,
+                        &body.entity_id,
+                    );
+                    let error_response = models::ErrorResponse::new(serde_json::json!({
+                        "message": message
+                    }));
+                    return Ok(
+                        UpdateRoCrateEntityResponse::UnprocessableContentErrorResponse(
+                            error_response,
+                        ),
+                    );
+                }
                 return Err(database_error_with_msg(
                     e,
                     "Failed to update RO-Crate entity",
