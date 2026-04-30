@@ -259,8 +259,8 @@ jobs:
 </ul>
 <h2 id="submit-the-workflow"><a class="header" href="#submit-the-workflow">Submit the Workflow</a></h2>
 <p>First, generate Slurm schedulers for your account, then submit:</p>
-<pre><code class="language-console">torc slurm generate --account &lt;your-account&gt; workflow.yaml
-torc submit workflow.yaml
+<pre><code class="language-console">torc slurm generate --account &lt;your-account&gt; workflow.yaml -o workflow_slurm.yaml
+torc submit workflow_slurm.yaml
 </code></pre>
 <p>Torc will:</p>
 <ol>

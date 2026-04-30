@@ -1535,8 +1535,8 @@ done, ready, scheduled, running, pending, disabled)</li>
 <li><code>--single-allocation</code> — Bundle all nodes into a single Slurm allocation per scheduler. By default,
 creates one Slurm allocation per node (N×1 mode). With this flag, creates one large allocation
 with all nodes (1×N mode).</li>
-<li><code>--group-by &lt;GROUP_BY&gt;</code> — Strategy for grouping jobs into schedulers. Possible values:
-<code>resource-requirements</code> (default), <code>partition</code></li>
+<li><code>--group-by &lt;GROUP_BY&gt;</code> — Strategy for grouping jobs into schedulers. Possible values: <code>partition</code>
+(default), <code>resource-requirements</code></li>
 <li><code>--walltime-strategy &lt;STRATEGY&gt;</code> — Strategy for determining Slurm job walltime. Possible values:
 <code>max-job-runtime</code> (default), <code>max-partition-time</code>. <code>max-job-runtime</code> uses the maximum job runtime
 multiplied by <code>--walltime-multiplier</code>. <code>max-partition-time</code> uses the partition's maximum allowed
@@ -1572,8 +1572,8 @@ automatic walltime calculation. Node count is still calculated dynamically.</li>
 Default: <code>output</code></li>
 <li><code>-p</code>, <code>--poll-interval &lt;POLL_INTERVAL&gt;</code> — Poll interval in seconds (used when submitting).
 Default: <code>60</code></li>
-<li><code>--group-by &lt;GROUP_BY&gt;</code> — Strategy for grouping jobs into schedulers. Possible values:
-<code>resource-requirements</code> (default), <code>partition</code></li>
+<li><code>--group-by &lt;GROUP_BY&gt;</code> — Strategy for grouping jobs into schedulers. Possible values: <code>partition</code>
+(default), <code>resource-requirements</code></li>
 <li><code>--walltime-strategy &lt;STRATEGY&gt;</code> — Strategy for determining Slurm job walltime. Possible values:
 <code>max-job-runtime</code> (default), <code>max-partition-time</code>. Ignored when <code>--walltime</code> is set.</li>
 <li><code>--walltime-multiplier &lt;MULTIPLIER&gt;</code> — Multiplier for job runtime when using

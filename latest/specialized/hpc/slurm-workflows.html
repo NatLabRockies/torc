@@ -399,26 +399,27 @@ examples.</p>
 </code></pre>
 <p>This outputs the complete workflow with generated schedulers and actions:</p>
 <h4 id="scheduler-grouping-options"><a class="header" href="#scheduler-grouping-options">Scheduler Grouping Options</a></h4>
-<p>By default, Torc creates <strong>one scheduler per unique <code>resource_requirements</code> name</strong>. This means if
-you have three jobs with three different resource requirement definitions (e.g., <code>cpu</code>, <code>memory</code>,
-<code>mixed</code>), you get three schedulers—even if all three would fit on the same partition.</p>
+<p>By default, Torc creates <strong>one scheduler per partition</strong>: jobs whose resource requirements would
+land on the same partition share an allocation. So if three jobs have three different resource
+requirement definitions (e.g., <code>cpu</code>, <code>memory</code>, <code>mixed</code>) but all fit on the same partition, you get
+one scheduler instead of three.</p>
 <p>The <code>--group-by</code> option controls how jobs are grouped into schedulers:</p>
-<pre><code class="language-bash"># Default: one scheduler per resource_requirements name
+<pre><code class="language-bash"># Default: one scheduler per partition
 torc slurm generate --account myproject workflow.yaml
-torc slurm generate --account myproject --group-by resource-requirements workflow.yaml
-# Result: 3 schedulers (cpu_scheduler, memory_scheduler, mixed_scheduler)
-
-# Group by partition: one scheduler per partition
 torc slurm generate --account myproject --group-by partition workflow.yaml
 # Result: 1 scheduler (short_scheduler) if all jobs fit on the "short" partition
+
+# One scheduler per resource_requirements name
+torc slurm generate --account myproject --group-by resource-requirements workflow.yaml
+# Result: 3 schedulers (cpu_scheduler, memory_scheduler, mixed_scheduler)
 </code></pre>
-<p><strong>When to use <code>--group-by partition</code>:</strong></p>
+<p><strong>When to use <code>--group-by partition</code> (default):</strong></p>
 <ul>
-<li>Your workflow has many small resource requirement definitions that all fit on the same partition</li>
+<li>Your workflow has resource requirement definitions that all fit on the same partition</li>
 <li>You want to minimize Slurm queue overhead by reducing the number of allocations</li>
 <li>Jobs have similar characteristics and can share nodes efficiently</li>
 </ul>
-<p><strong>When to use <code>--group-by resource-requirements</code> (default):</strong></p>
+<p><strong>When to use <code>--group-by resource-requirements</code>:</strong></p>
 <ul>
 <li>Jobs have significantly different resource profiles that benefit from separate allocations</li>
 <li>You want fine-grained control over which jobs share resources</li>

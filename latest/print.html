@@ -765,8 +765,8 @@ jobs:
 </ul>
 <h2 id="submit-the-workflow"><a class="header" href="#submit-the-workflow">Submit the Workflow</a></h2>
 <p>First, generate Slurm schedulers for your account, then submit:</p>
-<pre><code class="language-console">torc slurm generate --account &lt;your-account&gt; workflow.yaml
-torc submit workflow.yaml
+<pre><code class="language-console">torc slurm generate --account &lt;your-account&gt; workflow.yaml -o workflow_slurm.yaml
+torc submit workflow_slurm.yaml
 </code></pre>
 <p>Torc will:</p>
 <ol>
@@ -8247,10 +8247,10 @@ all common commands. Keep it handy!</p>
 <h1 id="torc-cli-cheat-sheet"><a class="header" href="#torc-cli-cheat-sheet">Torc CLI Cheat Sheet</a></h1>
 <h2 id="quick-start-4"><a class="header" href="#quick-start-4">Quick Start</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>torc -s exec -c '&lt;cmd&gt;'</code></td><td>Run inline command(s) standalone (no server)</td></tr>
 <tr><td><code>torc create &lt;spec&gt;</code></td><td>Create workflow from spec file</td></tr>
 <tr><td><code>torc run &lt;spec.yaml&gt;</code></td><td>Create workflow from spec and run locally</td></tr>
 <tr><td><code>torc submit &lt;spec.yaml&gt;</code></td><td>Create and submit to scheduler (needs actions)</td></tr>
+<tr><td><code>torc -s exec -c '&lt;cmd&gt;'</code></td><td>Run inline command(s) standalone (no server)</td></tr>
 <tr><td><code>torc status &lt;id&gt;</code></td><td>Workflow status and job summary</td></tr>
 <tr><td><code>torc watch &lt;id&gt;</code></td><td>Monitor workflow until completion</td></tr>
 <tr><td><code>torc watch &lt;id&gt; --recover</code></td><td>Monitor and auto-recover from failures</td></tr>
@@ -9693,8 +9693,8 @@ done, ready, scheduled, running, pending, disabled)</li>
 <li><code>--single-allocation</code> — Bundle all nodes into a single Slurm allocation per scheduler. By default,
 creates one Slurm allocation per node (N×1 mode). With this flag, creates one large allocation
 with all nodes (1×N mode).</li>
-<li><code>--group-by &lt;GROUP_BY&gt;</code> — Strategy for grouping jobs into schedulers. Possible values:
-<code>resource-requirements</code> (default), <code>partition</code></li>
+<li><code>--group-by &lt;GROUP_BY&gt;</code> — Strategy for grouping jobs into schedulers. Possible values: <code>partition</code>
+(default), <code>resource-requirements</code></li>
 <li><code>--walltime-strategy &lt;STRATEGY&gt;</code> — Strategy for determining Slurm job walltime. Possible values:
 <code>max-job-runtime</code> (default), <code>max-partition-time</code>. <code>max-job-runtime</code> uses the maximum job runtime
 multiplied by <code>--walltime-multiplier</code>. <code>max-partition-time</code> uses the partition's maximum allowed
@@ -9730,8 +9730,8 @@ automatic walltime calculation. Node count is still calculated dynamically.</li>
 Default: <code>output</code></li>
 <li><code>-p</code>, <code>--poll-interval &lt;POLL_INTERVAL&gt;</code> — Poll interval in seconds (used when submitting).
 Default: <code>60</code></li>
-<li><code>--group-by &lt;GROUP_BY&gt;</code> — Strategy for grouping jobs into schedulers. Possible values:
-<code>resource-requirements</code> (default), <code>partition</code></li>
+<li><code>--group-by &lt;GROUP_BY&gt;</code> — Strategy for grouping jobs into schedulers. Possible values: <code>partition</code>
+(default), <code>resource-requirements</code></li>
 <li><code>--walltime-strategy &lt;STRATEGY&gt;</code> — Strategy for determining Slurm job walltime. Possible values:
 <code>max-job-runtime</code> (default), <code>max-partition-time</code>. Ignored when <code>--walltime</code> is set.</li>
 <li><code>--walltime-multiplier &lt;MULTIPLIER&gt;</code> — Multiplier for job runtime when using
@@ -12249,26 +12249,27 @@ examples.</p>
 </code></pre>
 <p>This outputs the complete workflow with generated schedulers and actions:</p>
 <h4 id="scheduler-grouping-options"><a class="header" href="#scheduler-grouping-options">Scheduler Grouping Options</a></h4>
-<p>By default, Torc creates <strong>one scheduler per unique <code>resource_requirements</code> name</strong>. This means if
-you have three jobs with three different resource requirement definitions (e.g., <code>cpu</code>, <code>memory</code>,
-<code>mixed</code>), you get three schedulers—even if all three would fit on the same partition.</p>
+<p>By default, Torc creates <strong>one scheduler per partition</strong>: jobs whose resource requirements would
+land on the same partition share an allocation. So if three jobs have three different resource
+requirement definitions (e.g., <code>cpu</code>, <code>memory</code>, <code>mixed</code>) but all fit on the same partition, you get
+one scheduler instead of three.</p>
 <p>The <code>--group-by</code> option controls how jobs are grouped into schedulers:</p>
-<pre><code class="language-bash"># Default: one scheduler per resource_requirements name
+<pre><code class="language-bash"># Default: one scheduler per partition
 torc slurm generate --account myproject workflow.yaml
-torc slurm generate --account myproject --group-by resource-requirements workflow.yaml
-# Result: 3 schedulers (cpu_scheduler, memory_scheduler, mixed_scheduler)
-
-# Group by partition: one scheduler per partition
 torc slurm generate --account myproject --group-by partition workflow.yaml
 # Result: 1 scheduler (short_scheduler) if all jobs fit on the "short" partition
+
+# One scheduler per resource_requirements name
+torc slurm generate --account myproject --group-by resource-requirements workflow.yaml
+# Result: 3 schedulers (cpu_scheduler, memory_scheduler, mixed_scheduler)
 </code></pre>
-<p><strong>When to use <code>--group-by partition</code>:</strong></p>
+<p><strong>When to use <code>--group-by partition</code> (default):</strong></p>
 <ul>
-<li>Your workflow has many small resource requirement definitions that all fit on the same partition</li>
+<li>Your workflow has resource requirement definitions that all fit on the same partition</li>
 <li>You want to minimize Slurm queue overhead by reducing the number of allocations</li>
 <li>Jobs have similar characteristics and can share nodes efficiently</li>
 </ul>
-<p><strong>When to use <code>--group-by resource-requirements</code> (default):</strong></p>
+<p><strong>When to use <code>--group-by resource-requirements</code>:</strong></p>
 <ul>
 <li>Jobs have significantly different resource profiles that benefit from separate allocations</li>
 <li>You want fine-grained control over which jobs share resources</li>
