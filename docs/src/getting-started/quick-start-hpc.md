@@ -101,8 +101,8 @@ Key differences from local workflows:
 First, generate Slurm schedulers for your account, then submit:
 
 ```console
-torc slurm generate --account <your-account> workflow.yaml
-torc submit workflow.yaml
+torc slurm generate --account <your-account> workflow.yaml -o workflow_slurm.yaml
+torc submit workflow_slurm.yaml
 ```
 
 Torc will:
