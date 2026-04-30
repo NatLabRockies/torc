@@ -255,30 +255,31 @@ This outputs the complete workflow with generated schedulers and actions:
 
 #### Scheduler Grouping Options
 
-By default, Torc creates **one scheduler per unique `resource_requirements` name**. This means if
-you have three jobs with three different resource requirement definitions (e.g., `cpu`, `memory`,
-`mixed`), you get three schedulers—even if all three would fit on the same partition.
+By default, Torc creates **one scheduler per partition**: jobs whose resource requirements would
+land on the same partition share an allocation. So if three jobs have three different resource
+requirement definitions (e.g., `cpu`, `memory`, `mixed`) but all fit on the same partition, you get
+one scheduler instead of three.
 
 The `--group-by` option controls how jobs are grouped into schedulers:
 
 ```bash
-# Default: one scheduler per resource_requirements name
+# Default: one scheduler per partition
 torc slurm generate --account myproject workflow.yaml
-torc slurm generate --account myproject --group-by resource-requirements workflow.yaml
-# Result: 3 schedulers (cpu_scheduler, memory_scheduler, mixed_scheduler)
-
-# Group by partition: one scheduler per partition
 torc slurm generate --account myproject --group-by partition workflow.yaml
 # Result: 1 scheduler (short_scheduler) if all jobs fit on the "short" partition
+
+# One scheduler per resource_requirements name
+torc slurm generate --account myproject --group-by resource-requirements workflow.yaml
+# Result: 3 schedulers (cpu_scheduler, memory_scheduler, mixed_scheduler)
 ```
 
-**When to use `--group-by partition`:**
+**When to use `--group-by partition` (default):**
 
-- Your workflow has many small resource requirement definitions that all fit on the same partition
+- Your workflow has resource requirement definitions that all fit on the same partition
 - You want to minimize Slurm queue overhead by reducing the number of allocations
 - Jobs have similar characteristics and can share nodes efficiently
 
-**When to use `--group-by resource-requirements` (default):**
+**When to use `--group-by resource-requirements`:**
 
 - Jobs have significantly different resource profiles that benefit from separate allocations
 - You want fine-grained control over which jobs share resources
