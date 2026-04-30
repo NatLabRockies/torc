@@ -284,14 +284,18 @@ impl HpcProfile {
             &non_debug
         };
 
+        // Pick the tightest fit: smallest memory, then smallest max_walltime among ties.
+        // Tying on walltime matters when the dynamic Slurm detector marks every partition
+        // as auto-routed -- without it, a job that fits in a 24h partition can land on a
+        // 7-day or unlimited partition and inherit a much larger walltime cap.
+
         // If GPUs requested, prefer GPU partitions that don't require explicit request
-        // Use min_by_key on memory to pick the tightest fit (smallest sufficient partition)
         if gpus.map(|g| g > 0).unwrap_or(false) {
             // First try auto-routed GPU partitions
             if let Some(gpu_partition) = candidates
                 .iter()
                 .filter(|p| p.gpus_per_node.is_some() && !p.requires_explicit_request)
-                .min_by_key(|p| p.memory_mb)
+                .min_by_key(|p| (p.memory_mb, p.max_walltime_secs))
             {
                 return Some(gpu_partition);
             }
@@ -299,7 +303,7 @@ impl HpcProfile {
             if let Some(gpu_partition) = candidates
                 .iter()
                 .filter(|p| p.gpus_per_node.is_some())
-                .min_by_key(|p| p.memory_mb)
+                .min_by_key(|p| (p.memory_mb, p.max_walltime_secs))
             {
                 return Some(gpu_partition);
             }
@@ -312,7 +316,7 @@ impl HpcProfile {
             if let Some(shared_partition) = candidates
                 .iter()
                 .filter(|p| p.shared && !p.requires_explicit_request && p.gpus_per_node.is_none())
-                .min_by_key(|p| p.memory_mb)
+                .min_by_key(|p| (p.memory_mb, p.max_walltime_secs))
             {
                 return Some(shared_partition);
             }
@@ -323,7 +327,7 @@ impl HpcProfile {
             && let Some(cpu_partition) = candidates
                 .iter()
                 .filter(|p| !p.requires_explicit_request && p.gpus_per_node.is_none())
-                .min_by_key(|p| p.memory_mb)
+                .min_by_key(|p| (p.memory_mb, p.max_walltime_secs))
         {
             return Some(cpu_partition);
         }
@@ -332,13 +336,16 @@ impl HpcProfile {
         if let Some(auto_partition) = candidates
             .iter()
             .filter(|p| !p.requires_explicit_request)
-            .min_by_key(|p| p.memory_mb)
+            .min_by_key(|p| (p.memory_mb, p.max_walltime_secs))
         {
             return Some(auto_partition);
         }
 
-        // Return partition with smallest memory from candidates
-        candidates.iter().min_by_key(|p| p.memory_mb).copied()
+        // Return tightest-fitting partition from candidates
+        candidates
+            .iter()
+            .min_by_key(|p| (p.memory_mb, p.max_walltime_secs))
+            .copied()
     }
 
     /// Get all GPU partitions
