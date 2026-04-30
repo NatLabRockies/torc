@@ -70,18 +70,19 @@ use tabled::Tabled;
 /// Strategy for grouping jobs into Slurm schedulers
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
 pub enum GroupByStrategy {
-    /// Group by resource requirements name (default)
+    /// Group by resource requirements name
     ///
     /// Each unique resource_requirements creates a separate scheduler.
     /// This preserves the user's intent and provides fine-grained control.
-    #[default]
     #[value(name = "resource-requirements")]
     ResourceRequirements,
 
-    /// Group by partition
+    /// Group by partition (default)
     ///
     /// Jobs whose resource requirements map to the same partition are grouped together.
-    /// This reduces the number of schedulers and can improve resource utilization.
+    /// This reduces the number of Slurm allocations and improves resource utilization
+    /// when multiple resource_requirements would land on the same partition anyway.
+    #[default]
     #[value(name = "partition")]
     Partition,
 }
@@ -522,8 +523,8 @@ EXAMPLES:
     # Use specific HPC profile
     torc slurm generate --account myproject --profile kestrel workflow.yaml
 
-    # Group by partition instead of resource requirements
-    torc slurm generate --account myproject --group-by partition workflow.yaml
+    # Use one scheduler per resource_requirements (default groups by partition)
+    torc slurm generate --account myproject --group-by resource-requirements workflow.yaml
 "
     )]
     Generate {
@@ -555,13 +556,13 @@ EXAMPLES:
 
         /// Strategy for grouping jobs into schedulers
         ///
-        /// - resource-requirements: Each unique resource_requirements creates a
-        ///   separate scheduler. This preserves user intent and provides
-        ///   fine-grained control.
+        /// - partition (default): Jobs whose resource requirements map to the same
+        ///   partition are grouped together, reducing the number of Slurm allocations.
         ///
-        /// - partition: Jobs whose resource requirements map to the same partition
-        ///   are grouped together, reducing the number of schedulers.
-        #[arg(long, value_enum, default_value_t = GroupByStrategy::ResourceRequirements)]
+        /// - resource-requirements: Each unique resource_requirements creates a
+        ///   separate scheduler. Use this when distinct resource profiles should be
+        ///   isolated in separate allocations.
+        #[arg(long, value_enum, default_value_t = GroupByStrategy::Partition)]
         group_by: GroupByStrategy,
 
         /// Strategy for determining Slurm job walltime
@@ -642,7 +643,7 @@ EXAMPLES:
         single_allocation: bool,
 
         /// Strategy for grouping jobs into schedulers
-        #[arg(long, value_enum, default_value_t = GroupByStrategy::ResourceRequirements)]
+        #[arg(long, value_enum, default_value_t = GroupByStrategy::Partition)]
         group_by: GroupByStrategy,
 
         /// Strategy for determining Slurm job walltime
@@ -738,7 +739,7 @@ EXAMPLES:
         skip_test_only: bool,
 
         /// Strategy for grouping jobs into schedulers
-        #[arg(long, value_enum, default_value_t = GroupByStrategy::ResourceRequirements)]
+        #[arg(long, value_enum, default_value_t = GroupByStrategy::Partition)]
         group_by: GroupByStrategy,
 
         /// Strategy for determining Slurm job walltime
@@ -768,8 +769,11 @@ pub fn secs_to_walltime(secs: u64) -> String {
 
 /// Generate Slurm schedulers for a workflow spec based on resource requirements
 ///
-/// This creates one scheduler per unique resource requirement (not per job).
-/// All jobs with the same resource requirements share a scheduler.
+/// The number of schedulers depends on `group_by`:
+/// - `Partition` (default): one scheduler per partition; jobs whose resource
+///   requirements map to the same partition share an allocation.
+/// - `ResourceRequirements`: one scheduler per unique resource requirement.
+///
 /// Actions are generated based on whether any job using that scheduler has dependencies.
 ///
 /// # Arguments

@@ -6,10 +6,10 @@
 
 | Command                     | Description                                    |
 | --------------------------- | ---------------------------------------------- |
-| `torc -s exec -c '<cmd>'`   | Run inline command(s) standalone (no server)   |
 | `torc create <spec>`        | Create workflow from spec file                 |
 | `torc run <spec.yaml>`      | Create workflow from spec and run locally      |
 | `torc submit <spec.yaml>`   | Create and submit to scheduler (needs actions) |
+| `torc -s exec -c '<cmd>'`   | Run inline command(s) standalone (no server)   |
 | `torc status <id>`          | Workflow status and job summary                |
 | `torc watch <id>`           | Monitor workflow until completion              |
 | `torc watch <id> --recover` | Monitor and auto-recover from failures         |

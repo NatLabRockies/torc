@@ -2053,8 +2053,8 @@ pub fn run_slurm_job_runner_cli_command(
 ///
 /// The resource_monitoring_demo.kdl workflow has 3 resource requirements (cpu, memory, mixed)
 /// that all map to the same partition.
-/// - With `--group-by partition`: 1 scheduler (all jobs map to same partition)
-/// - With `--group-by resource-requirements` (default): 3 schedulers (one per resource_requirements)
+/// - With `--group-by partition` (default): 1 scheduler (all jobs map to same partition)
+/// - With `--group-by resource-requirements`: 3 schedulers (one per resource_requirements)
 #[rstest]
 fn test_slurm_generate_group_by_strategy() {
     let current_dir = env::current_dir().expect("Failed to get current directory");
@@ -2133,7 +2133,7 @@ fn test_slurm_generate_group_by_strategy() {
         scheduler_count_explicit, stdout_explicit
     );
 
-    // Test without --group-by (default): should also produce 3 schedulers
+    // Test without --group-by (default = partition): should produce 1 scheduler
     let output_default = Command::new(common::get_exe_path("./target/debug/torc"))
         .args([
             "slurm",
@@ -2161,8 +2161,8 @@ fn test_slurm_generate_group_by_strategy() {
         .count();
 
     assert_eq!(
-        scheduler_count_default, 3,
-        "Default (no --group-by) should generate 3 schedulers (one per resource_requirements), \
+        scheduler_count_default, 1,
+        "Default (no --group-by, defaults to partition) should generate 1 scheduler, \
          but got {}. Output:\n{}",
         scheduler_count_default, stdout_default
     );

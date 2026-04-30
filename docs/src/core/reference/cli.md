@@ -1665,8 +1665,8 @@ Generate Slurm schedulers for a workflow based on job resource requirements
 - `--single-allocation` — Bundle all nodes into a single Slurm allocation per scheduler. By default,
   creates one Slurm allocation per node (N×1 mode). With this flag, creates one large allocation
   with all nodes (1×N mode).
-- `--group-by <GROUP_BY>` — Strategy for grouping jobs into schedulers. Possible values:
-  `resource-requirements` (default), `partition`
+- `--group-by <GROUP_BY>` — Strategy for grouping jobs into schedulers. Possible values: `partition`
+  (default), `resource-requirements`
 - `--walltime-strategy <STRATEGY>` — Strategy for determining Slurm job walltime. Possible values:
   `max-job-runtime` (default), `max-partition-time`. `max-job-runtime` uses the maximum job runtime
   multiplied by `--walltime-multiplier`. `max-partition-time` uses the partition's maximum allowed
@@ -1707,8 +1707,8 @@ regenerate schedulers to submit new allocations.
   Default: `output`
 - `-p`, `--poll-interval <POLL_INTERVAL>` — Poll interval in seconds (used when submitting).
   Default: `60`
-- `--group-by <GROUP_BY>` — Strategy for grouping jobs into schedulers. Possible values:
-  `resource-requirements` (default), `partition`
+- `--group-by <GROUP_BY>` — Strategy for grouping jobs into schedulers. Possible values: `partition`
+  (default), `resource-requirements`
 - `--walltime-strategy <STRATEGY>` — Strategy for determining Slurm job walltime. Possible values:
   `max-job-runtime` (default), `max-partition-time`. Ignored when `--walltime` is set.
 - `--walltime-multiplier <MULTIPLIER>` — Multiplier for job runtime when using

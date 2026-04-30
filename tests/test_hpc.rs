@@ -3216,6 +3216,67 @@ fn test_find_best_partition_gpu_prefers_smallest() {
     );
 }
 
+/// Build a dane-like dynamic profile: every partition is auto-routed (as the dynamic
+/// Slurm detector emits them) and they all have the same memory, so memory cannot
+/// be the only tie-breaker. Without a walltime tie-breaker, alphabetical ordering
+/// would pick "pall" (1-year walltime) and `slurm generate` would inflate a 24h job
+/// up to 36h via the 1.5x multiplier.
+fn dynamic_dane_like_profile() -> HpcProfile {
+    let make = |name: &str, max_walltime_secs: u64| HpcPartition {
+        name: name.to_string(),
+        description: String::new(),
+        cpus_per_node: 112,
+        memory_mb: 257_054,
+        max_walltime_secs,
+        max_nodes: None,
+        max_nodes_per_user: None,
+        min_nodes: None,
+        gpus_per_node: None,
+        gpu_type: None,
+        gpu_memory_gb: None,
+        local_disk_gb: None,
+        shared: false,
+        requires_explicit_request: false,
+        default_qos: None,
+        features: vec![],
+    };
+    HpcProfile {
+        name: "dane_dynamic".to_string(),
+        display_name: "Dane (dynamic)".to_string(),
+        description: "Dane partitions as emitted by detect_slurm_profile".to_string(),
+        detection: vec![],
+        default_account: None,
+        charge_factor_cpu: 1.0,
+        charge_factor_gpu: 1.0,
+        metadata: HashMap::new(),
+        partitions: vec![
+            make("pall", 365 * 24 * 3600),
+            make("pbatch", 24 * 3600),
+            make("pci", 24 * 3600),
+            make("pdebug", 3600),
+            make("pjupyter", 24 * 3600),
+            make("pserial", 7 * 24 * 3600),
+        ],
+    }
+}
+
+#[rstest]
+fn test_find_best_partition_prefers_smaller_max_walltime_on_ties() {
+    let profile = dynamic_dane_like_profile();
+
+    // 24h job: pbatch, pci, pjupyter all share (memory, max_walltime). The selector
+    // must avoid picking pall (1y) or pserial (7d) just because they sort earlier.
+    let best = profile
+        .find_best_partition(4, 8_000, 24 * 3600, None)
+        .expect("Should find a partition");
+    assert!(
+        best.max_walltime_secs <= 24 * 3600,
+        "Expected a 24h-or-less partition but got '{}' with max_walltime_secs={}",
+        best.name,
+        best.max_walltime_secs
+    );
+}
+
 // ============== Scheduler Override Tests ==============
 
 /// Helper to create a simple workflow spec for override tests
