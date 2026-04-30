@@ -150,6 +150,18 @@ where
                         }
                         _ => {}
                     },
+                    Some(PopupType::RecoverPrompt { .. }) => match key.code {
+                        KeyCode::Esc => app.recover_prompt_cancel(),
+                        KeyCode::Tab | KeyCode::BackTab | KeyCode::Up | KeyCode::Down => {
+                            app.recover_prompt_toggle_field();
+                        }
+                        KeyCode::Backspace => app.recover_prompt_backspace(),
+                        KeyCode::Enter => {
+                            let _ = app.recover_prompt_submit();
+                        }
+                        KeyCode::Char(c) => app.recover_prompt_add_char(c),
+                        _ => {}
+                    },
                     Some(PopupType::JobDetails(_)) => match key.code {
                         KeyCode::Char('q') | KeyCode::Esc => app.close_popup(),
                         KeyCode::Char('l') => {
@@ -480,8 +492,8 @@ where
                     KeyCode::Char(c) => app.add_output_dir_char(c),
                     _ => {}
                 },
-                Focus::Popup => {
-                    // Handled above
+                Focus::Popup | Focus::RecoverPrompt => {
+                    // Handled above (popup-specific match)
                 }
                 Focus::Workflows | Focus::Details => match key.code {
                     KeyCode::Char('q') => return Ok(()),
@@ -572,6 +584,12 @@ where
                     }
                     KeyCode::Char('W') => {
                         app.request_workflow_action(WorkflowAction::Watch);
+                    }
+                    KeyCode::Char('V') => {
+                        app.request_workflow_action(WorkflowAction::Recover);
+                    }
+                    KeyCode::Char('v') => {
+                        app.request_workflow_action(WorkflowAction::RecoverDryRun);
                     }
                     // Server management
                     KeyCode::Char('S') => {

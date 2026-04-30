@@ -146,6 +146,9 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             PopupType::Confirmation { dialog, .. } => {
                 dialog.render(f, f.area());
             }
+            PopupType::RecoverPrompt { dialog, .. } => {
+                dialog.render(f, f.area());
+            }
             PopupType::JobDetails(details) => {
                 details.render(f, f.area());
             }

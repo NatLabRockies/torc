@@ -23,7 +23,7 @@ use crate::client::config::TorcConfig;
 use super::api::TorcClient;
 use super::components::{
     ConfirmationDialog, ErrorDialog, FileViewer, JobDetailsPopup, LogViewer, ProcessViewer,
-    StatusMessage,
+    RecoverPromptDialog, StatusMessage,
 };
 use super::dag::{DagLayout, JobNode};
 
@@ -50,8 +50,10 @@ pub enum WorkflowAction {
     Reset,
     Run,
     Submit,
-    Watch,       // Watch workflow with recovery
-    WatchNoAuto, // Watch workflow without recovery
+    Watch,         // Watch workflow with recovery
+    WatchNoAuto,   // Watch workflow without recovery
+    Recover,       // One-shot recovery: adjust resources and resubmit failed jobs
+    RecoverDryRun, // Preview what recovery would do without applying changes
     Delete,
     Cancel,
 }
@@ -84,6 +86,19 @@ impl WorkflowAction {
                 "Watch workflow '{}'?\nThis will monitor without automatic recovery.",
                 workflow_name
             ),
+            Self::Recover => format!(
+                "Recover workflow '{}'?\n\
+                 Diagnoses failures, increases memory/runtime for OOM/timeout jobs, \
+                 resets failed jobs, and resubmits Slurm allocations.\n\
+                 Workflow must be complete with no active workers.",
+                workflow_name
+            ),
+            Self::RecoverDryRun => format!(
+                "Preview recovery for workflow '{}'?\n\
+                 Shows the proposed resource adjustments and Slurm scheduler plan \
+                 without making any changes.",
+                workflow_name
+            ),
             Self::Delete => format!(
                 "DELETE workflow '{}'?\nThis action cannot be undone!",
                 workflow_name
@@ -100,6 +115,7 @@ impl WorkflowAction {
                 | Self::Reinitialize
                 | Self::ReinitializeForce
                 | Self::InitializeForce
+                | Self::Recover
         )
     }
 
@@ -114,6 +130,8 @@ impl WorkflowAction {
             Self::Submit => "Submit Workflow",
             Self::Watch => "Watch Workflow (Auto-Recovery)",
             Self::WatchNoAuto => "Watch Workflow",
+            Self::Recover => "Recover Workflow",
+            Self::RecoverDryRun => "Recover Workflow (Dry Run)",
             Self::Delete => "Delete Workflow",
             Self::Cancel => "Cancel Workflow",
         }
@@ -148,6 +166,12 @@ pub enum PopupType {
     Confirmation {
         dialog: ConfirmationDialog,
         action: PendingAction,
+    },
+    RecoverPrompt {
+        dialog: RecoverPromptDialog,
+        workflow_id: i64,
+        workflow_name: String,
+        dry_run: bool,
     },
     Error(ErrorDialog),
 }
@@ -225,6 +249,7 @@ pub enum Focus {
     ServerUrlInput,
     WorkflowPathInput,
     OutputDirInput,
+    RecoverPrompt,
     Popup,
 }
 
@@ -606,6 +631,7 @@ impl App {
             Focus::ServerUrlInput => Focus::ServerUrlInput,
             Focus::WorkflowPathInput => Focus::WorkflowPathInput,
             Focus::OutputDirInput => Focus::OutputDirInput,
+            Focus::RecoverPrompt => Focus::RecoverPrompt,
             Focus::Popup => Focus::Popup,
         };
     }
@@ -651,6 +677,7 @@ impl App {
             | Focus::ServerUrlInput
             | Focus::WorkflowPathInput
             | Focus::OutputDirInput
+            | Focus::RecoverPrompt
             | Focus::Popup => {}
         }
     }
@@ -693,6 +720,7 @@ impl App {
             | Focus::ServerUrlInput
             | Focus::WorkflowPathInput
             | Focus::OutputDirInput
+            | Focus::RecoverPrompt
             | Focus::Popup => {}
         }
     }
@@ -740,6 +768,7 @@ impl App {
             | Focus::ServerUrlInput
             | Focus::WorkflowPathInput
             | Focus::OutputDirInput
+            | Focus::RecoverPrompt
             | Focus::Popup => {}
         }
     }
@@ -786,6 +815,7 @@ impl App {
             | Focus::ServerUrlInput
             | Focus::WorkflowPathInput
             | Focus::OutputDirInput
+            | Focus::RecoverPrompt
             | Focus::Popup => {}
         }
     }
@@ -822,6 +852,7 @@ impl App {
             | Focus::ServerUrlInput
             | Focus::WorkflowPathInput
             | Focus::OutputDirInput
+            | Focus::RecoverPrompt
             | Focus::Popup => {}
         }
     }
@@ -858,6 +889,7 @@ impl App {
             | Focus::ServerUrlInput
             | Focus::WorkflowPathInput
             | Focus::OutputDirInput
+            | Focus::RecoverPrompt
             | Focus::Popup => {}
         }
     }
@@ -1873,6 +1905,19 @@ impl App {
         if let Some(workflow) = self.get_selected_workflow() {
             if let Some(workflow_id) = workflow.id {
                 let workflow_name = workflow.name.clone();
+
+                // Recover actions skip the standard yes/no confirmation
+                // and use a dedicated prompt that collects multipliers.
+                // The prompt itself acts as the confirmation gate.
+                if matches!(
+                    action,
+                    WorkflowAction::Recover | WorkflowAction::RecoverDryRun
+                ) {
+                    let dry_run = action == WorkflowAction::RecoverDryRun;
+                    self.open_recover_prompt(workflow_id, &workflow_name, dry_run);
+                    return;
+                }
+
                 let dialog = ConfirmationDialog::new(
                     action.title(),
                     &action.confirmation_message(&workflow_name),
@@ -1966,6 +2011,8 @@ impl App {
             WorkflowAction::Run => unreachable!(),        // Handled above
             WorkflowAction::Watch => unreachable!(),      // Handled above
             WorkflowAction::WatchNoAuto => unreachable!(), // Handled above
+            WorkflowAction::Recover => unreachable!(),    // Handled above
+            WorkflowAction::RecoverDryRun => unreachable!(), // Handled above
             WorkflowAction::Submit => self.client.submit_workflow(workflow_id),
             WorkflowAction::Delete => self.client.delete_workflow(workflow_id),
             WorkflowAction::Cancel => self.client.cancel_workflow(workflow_id),
@@ -1982,6 +2029,8 @@ impl App {
                     WorkflowAction::Run => unreachable!(),
                     WorkflowAction::Watch => unreachable!(),
                     WorkflowAction::WatchNoAuto => unreachable!(),
+                    WorkflowAction::Recover => unreachable!(),
+                    WorkflowAction::RecoverDryRun => unreachable!(),
                     WorkflowAction::Submit => {
                         format!("Workflow '{}' submitted to scheduler", workflow_name)
                     }
@@ -2399,6 +2448,159 @@ impl App {
         }
 
         Ok(())
+    }
+
+    fn recover_workflow_with_viewer(
+        &mut self,
+        workflow_id: i64,
+        workflow_name: &str,
+        dry_run: bool,
+        memory_multiplier: f64,
+        runtime_multiplier: f64,
+    ) -> Result<()> {
+        let title = if dry_run {
+            format!("Recover (dry run): {}", workflow_name)
+        } else {
+            format!("Recovering: {}", workflow_name)
+        };
+        let mut viewer = ProcessViewer::new(title);
+
+        let exe_path = self.get_torc_exe_path();
+        let workflow_id_str = workflow_id.to_string();
+        let url = self.client.get_base_url();
+        let output_dir = self.output_dir.display().to_string();
+        let mem_str = format!("{}", memory_multiplier);
+        let rt_str = format!("{}", runtime_multiplier);
+
+        // --no-prompts is required because the interactive wizard would
+        // try to read from stdin, which the TUI owns.
+        let mut args = vec![
+            "--url",
+            &url,
+            "recover",
+            &workflow_id_str,
+            "--output-dir",
+            &output_dir,
+            "--memory-multiplier",
+            &mem_str,
+            "--runtime-multiplier",
+            &rt_str,
+            "--no-prompts",
+        ];
+        if dry_run {
+            args.push("--dry-run");
+        }
+
+        match viewer.start(&exe_path, &args) {
+            Ok(()) => {
+                self.previous_focus = self.focus;
+                self.focus = Focus::Popup;
+                self.popup = Some(PopupType::ProcessViewer(viewer));
+                let msg = if dry_run {
+                    format!("Previewing recovery for '{}'...", workflow_name)
+                } else {
+                    format!("Recovering workflow '{}'...", workflow_name)
+                };
+                self.set_status(StatusMessage::info(&msg));
+            }
+            Err(e) => {
+                self.set_status(StatusMessage::error(&format!(
+                    "Failed to start recovery: {}",
+                    e
+                )));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Open the multiplier-input modal that gates the actual `torc recover`
+    /// subprocess launch.
+    pub fn open_recover_prompt(&mut self, workflow_id: i64, workflow_name: &str, dry_run: bool) {
+        let title = if dry_run {
+            format!(" Recover '{}' (dry run) ", workflow_name)
+        } else {
+            format!(" Recover '{}' ", workflow_name)
+        };
+        let message = if dry_run {
+            "Preview proposed resource adjustments without applying them.".to_string()
+        } else {
+            "Bumps memory/runtime for OOM/timeout jobs, resets failed jobs, \
+             and resubmits Slurm allocations."
+                .to_string()
+        };
+
+        let dialog = RecoverPromptDialog::new(&title, &message, !dry_run);
+        self.previous_focus = self.focus;
+        self.focus = Focus::RecoverPrompt;
+        self.popup = Some(PopupType::RecoverPrompt {
+            dialog,
+            workflow_id,
+            workflow_name: workflow_name.to_string(),
+            dry_run,
+        });
+    }
+
+    pub fn recover_prompt_add_char(&mut self, c: char) {
+        if let Some(PopupType::RecoverPrompt { dialog, .. }) = self.popup.as_mut() {
+            dialog.add_char(c);
+        }
+    }
+
+    pub fn recover_prompt_backspace(&mut self) {
+        if let Some(PopupType::RecoverPrompt { dialog, .. }) = self.popup.as_mut() {
+            dialog.backspace();
+        }
+    }
+
+    pub fn recover_prompt_toggle_field(&mut self) {
+        if let Some(PopupType::RecoverPrompt { dialog, .. }) = self.popup.as_mut() {
+            dialog.toggle_field();
+        }
+    }
+
+    pub fn recover_prompt_cancel(&mut self) {
+        if matches!(self.popup, Some(PopupType::RecoverPrompt { .. })) {
+            self.popup = None;
+            self.focus = self.previous_focus;
+        }
+    }
+
+    pub fn recover_prompt_submit(&mut self) -> Result<()> {
+        // Parse first; if invalid, attach the error to the dialog and keep
+        // the modal open.
+        let parsed = if let Some(PopupType::RecoverPrompt { dialog, .. }) = self.popup.as_mut() {
+            match dialog.parse() {
+                Ok(values) => Some(values),
+                Err(err) => {
+                    dialog.set_error(err);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        let Some((mem, rt)) = parsed else {
+            return Ok(());
+        };
+
+        // Take ownership of the popup so we can drop it before launching
+        // the subprocess (which installs its own popup).
+        let (workflow_id, workflow_name, dry_run) = if let Some(PopupType::RecoverPrompt {
+            workflow_id,
+            workflow_name,
+            dry_run,
+            ..
+        }) = self.popup.take()
+        {
+            (workflow_id, workflow_name, dry_run)
+        } else {
+            return Ok(());
+        };
+
+        self.focus = self.previous_focus;
+        self.recover_workflow_with_viewer(workflow_id, &workflow_name, dry_run, mem, rt)
     }
 
     // === Job Actions ===

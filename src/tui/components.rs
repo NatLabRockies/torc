@@ -115,6 +115,207 @@ impl ConfirmationDialog {
     }
 }
 
+/// A small modal that asks the user for the two recovery multipliers
+/// (memory and runtime) before launching `torc recover`. The modal also
+/// serves as the confirmation gate: pressing Enter applies, Esc cancels.
+#[derive(Debug, Clone)]
+pub struct RecoverPromptDialog {
+    pub title: String,
+    pub message: String,
+    pub memory_input: String,
+    pub runtime_input: String,
+    /// 0 = memory field, 1 = runtime field
+    pub active_field: u8,
+    /// Validation error to show under the inputs (e.g. unparseable number)
+    pub error: Option<String>,
+    pub is_destructive: bool,
+}
+
+impl RecoverPromptDialog {
+    pub fn new(title: &str, message: &str, is_destructive: bool) -> Self {
+        Self {
+            title: title.to_string(),
+            message: message.to_string(),
+            memory_input: "1.5".to_string(),
+            runtime_input: "1.4".to_string(),
+            active_field: 0,
+            error: None,
+            is_destructive,
+        }
+    }
+
+    pub fn toggle_field(&mut self) {
+        self.active_field = 1 - self.active_field;
+    }
+
+    fn active_buf_mut(&mut self) -> &mut String {
+        if self.active_field == 0 {
+            &mut self.memory_input
+        } else {
+            &mut self.runtime_input
+        }
+    }
+
+    pub fn add_char(&mut self, c: char) {
+        // Allow only digits and a single decimal point.
+        if c.is_ascii_digit() || c == '.' {
+            let buf = self.active_buf_mut();
+            if c == '.' && buf.contains('.') {
+                return;
+            }
+            if buf.len() < 8 {
+                buf.push(c);
+            }
+            self.error = None;
+        }
+    }
+
+    pub fn backspace(&mut self) {
+        self.active_buf_mut().pop();
+        self.error = None;
+    }
+
+    /// Parse the two fields. Returns (memory_multiplier, runtime_multiplier)
+    /// or an error message suitable for inline display.
+    pub fn parse(&self) -> Result<(f64, f64), String> {
+        let mem = self
+            .memory_input
+            .parse::<f64>()
+            .map_err(|_| format!("Invalid memory multiplier: '{}'", self.memory_input))?;
+        let rt = self
+            .runtime_input
+            .parse::<f64>()
+            .map_err(|_| format!("Invalid runtime multiplier: '{}'", self.runtime_input))?;
+        if mem <= 0.0 || rt <= 0.0 {
+            return Err("Multipliers must be greater than 0".to_string());
+        }
+        Ok((mem, rt))
+    }
+
+    pub fn set_error(&mut self, message: String) {
+        self.error = Some(message);
+    }
+
+    pub fn render(&self, f: &mut Frame, area: Rect) {
+        let dialog_width = 60.min(area.width.saturating_sub(4));
+        let dialog_height = 12.min(area.height.saturating_sub(2));
+
+        let dialog_x = (area.width.saturating_sub(dialog_width)) / 2;
+        let dialog_y = (area.height.saturating_sub(dialog_height)) / 2;
+        let dialog_area = Rect::new(dialog_x, dialog_y, dialog_width, dialog_height);
+
+        f.render_widget(Clear, dialog_area);
+
+        let border_color = if self.is_destructive {
+            Color::Red
+        } else {
+            Color::Yellow
+        };
+
+        let block = Block::default()
+            .title(self.title.as_str())
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(border_color));
+        let inner = block.inner(dialog_area);
+        f.render_widget(block, dialog_area);
+
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Min(2),    // Message
+                Constraint::Length(1), // Memory field
+                Constraint::Length(1), // Runtime field
+                Constraint::Length(1), // Error / spacer
+                Constraint::Length(1), // Hints
+            ])
+            .split(inner);
+
+        let message = Paragraph::new(self.message.as_str())
+            .style(Style::default().fg(Color::White))
+            .alignment(Alignment::Center)
+            .wrap(Wrap { trim: true });
+        f.render_widget(message, chunks[0]);
+
+        let mem_line = Self::field_line(
+            "Memory multiplier  ",
+            &self.memory_input,
+            self.active_field == 0,
+        );
+        let rt_line = Self::field_line(
+            "Runtime multiplier ",
+            &self.runtime_input,
+            self.active_field == 1,
+        );
+        f.render_widget(
+            Paragraph::new(mem_line).alignment(Alignment::Center),
+            chunks[1],
+        );
+        f.render_widget(
+            Paragraph::new(rt_line).alignment(Alignment::Center),
+            chunks[2],
+        );
+
+        if let Some(ref err) = self.error {
+            let err_line = Paragraph::new(Line::from(Span::styled(
+                err.clone(),
+                Style::default().fg(Color::Red),
+            )))
+            .alignment(Alignment::Center);
+            f.render_widget(err_line, chunks[3]);
+        }
+
+        let confirm_color = if self.is_destructive {
+            Color::Red
+        } else {
+            Color::Green
+        };
+        let hints = Line::from(vec![
+            Span::styled("Tab", Style::default().fg(Color::Yellow)),
+            Span::raw(": switch field | "),
+            Span::styled(
+                "Enter",
+                Style::default()
+                    .fg(confirm_color)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(": apply | "),
+            Span::styled("Esc", Style::default().fg(Color::DarkGray)),
+            Span::raw(": cancel"),
+        ]);
+        f.render_widget(
+            Paragraph::new(hints).alignment(Alignment::Center),
+            chunks[4],
+        );
+    }
+
+    fn field_line(label: &str, value: &str, active: bool) -> Line<'static> {
+        let value_style = if active {
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Cyan)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::Cyan)
+        };
+        // The input buffer is capped at 8 chars; when active we render a cursor
+        // glyph in place of the trailing character so the field always occupies
+        // exactly 8 columns inside the brackets.
+        let display_value = if active {
+            let mut visible: String = value.chars().take(7).collect();
+            visible.push('_');
+            visible
+        } else {
+            value.to_string()
+        };
+        Line::from(vec![
+            Span::styled(label.to_string(), Style::default().fg(Color::White)),
+            Span::raw("["),
+            Span::styled(format!("{:<8}", display_value), value_style),
+            Span::raw("]"),
+        ])
+    }
+}
+
 /// Status message types for the status bar
 #[derive(Debug, Clone, PartialEq)]
 pub enum StatusLevel {
@@ -330,6 +531,8 @@ impl HelpPopup {
                 lines.push(Self::key_line("x", "Run workflow locally"));
                 lines.push(Self::key_line("s", "Submit workflow to scheduler"));
                 lines.push(Self::key_line("W", "Watch workflow (recovery)"));
+                lines.push(Self::key_line("V", "Recover workflow (one-shot)"));
+                lines.push(Self::key_line("v", "Preview recovery (dry run)"));
                 lines.push(Self::key_line("d", "Delete workflow"));
                 lines.push(Self::key_line(
                     "C",
