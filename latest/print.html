@@ -7094,11 +7094,21 @@ configuration.</p>
 <tr><td><code>R</code></td><td>Reset</td><td>Reset all job statuses</td></tr>
 <tr><td><code>x</code></td><td>Run</td><td>Run workflow locally (shows real-time output)</td></tr>
 <tr><td><code>s</code></td><td>Submit</td><td>Submit to HPC scheduler (Slurm)</td></tr>
+<tr><td><code>W</code></td><td>Watch</td><td>Watch workflow with auto-recovery (live output)</td></tr>
+<tr><td><code>V</code></td><td>Recover</td><td>One-shot recovery: bump resources and resubmit failures</td></tr>
+<tr><td><code>v</code></td><td>Recover (dry)</td><td>Preview recovery without applying changes</td></tr>
 <tr><td><code>C</code></td><td>Cancel</td><td>Cancel running workflow</td></tr>
 <tr><td><code>d</code></td><td>Delete</td><td>Delete workflow (destructive!)</td></tr>
 </tbody></table>
 </div>
-<p>All destructive actions show a confirmation dialog.</p>
+<p>Most destructive actions show a yes/no confirmation dialog. Recovery (<code>V</code>) is gated by the
+multiplier prompt modal instead — pressing Enter in that modal both applies the multipliers and
+confirms the recovery (Esc cancels).</p>
+<h3 id="recovery-prompt"><a class="header" href="#recovery-prompt">Recovery Prompt</a></h3>
+<p>Pressing <code>V</code> or <code>v</code> opens a small modal that pre-fills the default <code>--memory-multiplier</code> (1.5) and
+<code>--runtime-multiplier</code> (1.4). Tab switches between the two fields, Enter applies them and launches
+the recovery (Esc cancels). The modal accepts only digits and a single decimal point; invalid input
+is reported inline.</p>
 <h3 id="handling-existing-output-files"><a class="header" href="#handling-existing-output-files">Handling Existing Output Files</a></h3>
 <p>When initializing or re-initializing a workflow, if existing output files are detected, the TUI will
 show a confirmation dialog listing the files that will be deleted. Press <code>y</code> to proceed with
