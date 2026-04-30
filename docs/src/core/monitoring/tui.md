@@ -91,10 +91,20 @@ Select a workflow and use these keys:
 | `R` | Reset         | Reset all job statuses                                  |
 | `x` | Run           | Run workflow locally (shows real-time output)           |
 | `s` | Submit        | Submit to HPC scheduler (Slurm)                         |
+| `W` | Watch         | Watch workflow with auto-recovery (live output)         |
+| `V` | Recover       | One-shot recovery: bump resources and resubmit failures |
+| `v` | Recover (dry) | Preview recovery without applying changes               |
 | `C` | Cancel        | Cancel running workflow                                 |
 | `d` | Delete        | Delete workflow (destructive!)                          |
 
 All destructive actions show a confirmation dialog.
+
+### Recovery Prompt
+
+Pressing `V` or `v` opens a small modal that pre-fills the default `--memory-multiplier` (1.5) and
+`--runtime-multiplier` (1.4). Tab switches between the two fields, Enter applies them and launches
+the recovery (Esc cancels). The modal accepts only digits and a single decimal point; invalid input
+is reported inline.
 
 ### Handling Existing Output Files
 
