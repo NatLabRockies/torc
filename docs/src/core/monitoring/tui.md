@@ -97,7 +97,9 @@ Select a workflow and use these keys:
 | `C` | Cancel        | Cancel running workflow                                 |
 | `d` | Delete        | Delete workflow (destructive!)                          |
 
-All destructive actions show a confirmation dialog.
+Most destructive actions show a yes/no confirmation dialog. Recovery (`V`) is gated by the
+multiplier prompt modal instead — pressing Enter in that modal both applies the multipliers and
+confirms the recovery (Esc cancels).
 
 ### Recovery Prompt
 

@@ -297,14 +297,20 @@ impl RecoverPromptDialog {
         } else {
             Style::default().fg(Color::Cyan)
         };
-        let cursor = if active { "_" } else { " " };
+        // The input buffer is capped at 8 chars; when active we render a cursor
+        // glyph in place of the trailing character so the field always occupies
+        // exactly 8 columns inside the brackets.
+        let display_value = if active {
+            let mut visible: String = value.chars().take(7).collect();
+            visible.push('_');
+            visible
+        } else {
+            value.to_string()
+        };
         Line::from(vec![
             Span::styled(label.to_string(), Style::default().fg(Color::White)),
             Span::raw("["),
-            Span::styled(
-                format!("{:<8}", format!("{}{}", value, cursor)),
-                value_style,
-            ),
+            Span::styled(format!("{:<8}", display_value), value_style),
             Span::raw("]"),
         ])
     }
