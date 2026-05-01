@@ -36,6 +36,8 @@ where
         workflow_id: i64,
         offset: Option<i64>,
         limit: Option<i64>,
+        file_id: Option<i64>,
+        entity_id: Option<String>,
         sort_by: Option<String>,
         reverse_sort: Option<bool>,
         context: &C,
@@ -43,7 +45,16 @@ where
         authorize_workflow!(self, workflow_id, context, ListRoCrateEntitiesResponse);
         let (offset, limit) = process_pagination_params(offset, limit)?;
         self.ro_crate_api
-            .list_ro_crate_entities(workflow_id, offset, limit, sort_by, reverse_sort, context)
+            .list_ro_crate_entities(
+                workflow_id,
+                offset,
+                limit,
+                file_id,
+                entity_id,
+                sort_by,
+                reverse_sort,
+                context,
+            )
             .await
     }
     pub(super) async fn transport_update_ro_crate_entity(

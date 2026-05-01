@@ -4,7 +4,7 @@
 
 use crate::server::transport_types::context_types::{ApiError, Has, XSpanIdString};
 use async_trait::async_trait;
-use log::{debug, info};
+use log::{debug, info, warn};
 use sqlx::Row;
 
 use crate::server::api_responses::{
@@ -36,6 +36,46 @@ fn full_version() -> String {
     format!("{} ({})", SERVER_VERSION, GIT_HASH)
 }
 
+fn ro_crate_duplicate_details(error_string: &str) -> Option<(&'static str, &'static str)> {
+    if !error_string.contains("UNIQUE constraint failed") {
+        return None;
+    }
+
+    if error_string.contains("ro_crate_entity.workflow_id, ro_crate_entity.file_id") {
+        Some((
+            "RO-Crate entity already exists for this workflow/file link",
+            "file_id",
+        ))
+    } else if error_string.contains("ro_crate_entity.workflow_id, ro_crate_entity.entity_id") {
+        Some((
+            "RO-Crate entity already exists for this workflow/entity_id link",
+            "entity_id",
+        ))
+    } else {
+        Some(("RO-Crate entity already exists", "unknown"))
+    }
+}
+
+fn log_duplicate_ro_crate_entity(
+    operation: &str,
+    workflow_id: i64,
+    duplicate_field: &str,
+    file_id: Option<i64>,
+    entity_id: &str,
+) {
+    if let Some(file_id) = file_id {
+        warn!(
+            "Duplicate RO-Crate entity {} for workflow_id={} duplicate_field={} file_id={} has_file_id=true entity_id={}",
+            operation, workflow_id, duplicate_field, file_id, entity_id
+        );
+    } else {
+        warn!(
+            "Duplicate RO-Crate entity {} for workflow_id={} duplicate_field={} has_file_id=false entity_id={}",
+            operation, workflow_id, duplicate_field, entity_id
+        );
+    }
+}
+
 /// Trait defining RO-Crate entity-related API operations
 #[async_trait]
 pub trait RoCrateApi<C> {
@@ -59,6 +99,8 @@ pub trait RoCrateApi<C> {
         workflow_id: i64,
         offset: i64,
         limit: i64,
+        file_id: Option<i64>,
+        entity_id: Option<String>,
         sort_by: Option<String>,
         reverse_sort: Option<bool>,
         context: &C,
@@ -364,6 +406,25 @@ where
         {
             Ok(result) => result,
             Err(e) => {
+                let error_string = e.to_string();
+                if let Some((message, duplicate_field)) = ro_crate_duplicate_details(&error_string)
+                {
+                    log_duplicate_ro_crate_entity(
+                        "rejected on create",
+                        body.workflow_id,
+                        duplicate_field,
+                        body.file_id,
+                        &body.entity_id,
+                    );
+                    let error_response = models::ErrorResponse::new(serde_json::json!({
+                        "message": message
+                    }));
+                    return Ok(
+                        CreateRoCrateEntityResponse::UnprocessableContentErrorResponse(
+                            error_response,
+                        ),
+                    );
+                }
                 return Err(database_error_with_msg(
                     e,
                     "Failed to create RO-Crate entity record",
@@ -436,15 +497,19 @@ where
         workflow_id: i64,
         offset: i64,
         limit: i64,
+        file_id: Option<i64>,
+        entity_id: Option<String>,
         sort_by: Option<String>,
         reverse_sort: Option<bool>,
         context: &C,
     ) -> Result<ListRoCrateEntitiesResponse, ApiError> {
         debug!(
-            "list_ro_crate_entities({}, {}, {}, {:?}, {:?}) - X-Span-ID: {:?}",
+            "list_ro_crate_entities({}, {}, {}, {:?}, {:?}, {:?}, {:?}) - X-Span-ID: {:?}",
             workflow_id,
             offset,
             limit,
+            file_id,
+            entity_id,
             sort_by,
             reverse_sort,
             context.get().0.clone()
@@ -461,11 +526,19 @@ where
             None => None,
         };
 
+        let mut where_clauses = vec!["workflow_id = ?".to_string()];
+        if file_id.is_some() {
+            where_clauses.push("file_id = ?".to_string());
+        }
+        if entity_id.is_some() {
+            where_clauses.push("entity_id = ?".to_string());
+        }
+
         let query = SqlQueryBuilder::new(
             "SELECT id, workflow_id, file_id, entity_id, entity_type, metadata FROM ro_crate_entity"
                 .to_string(),
         )
-        .with_where("workflow_id = ?".to_string())
+        .with_where(where_clauses.join(" AND "))
         .with_pagination_and_sorting(
             offset,
             limit,
@@ -476,11 +549,15 @@ where
         )
         .build();
 
-        let records = match sqlx::query(&query)
-            .bind(workflow_id)
-            .fetch_all(self.context.pool.as_ref())
-            .await
-        {
+        let mut query_builder = sqlx::query(&query).bind(workflow_id);
+        if let Some(file_id) = file_id {
+            query_builder = query_builder.bind(file_id);
+        }
+        if let Some(ref entity_id) = entity_id {
+            query_builder = query_builder.bind(entity_id);
+        }
+
+        let records = match query_builder.fetch_all(self.context.pool.as_ref()).await {
             Ok(records) => records,
             Err(e) => {
                 return Err(database_error_with_msg(
@@ -504,15 +581,24 @@ where
 
         let count = items.len() as i64;
 
-        // Get total count
-        let total_count = match sqlx::query!(
-            r#"SELECT COUNT(*) as total FROM ro_crate_entity WHERE workflow_id = $1"#,
-            workflow_id
-        )
-        .fetch_one(self.context.pool.as_ref())
-        .await
+        // Get total count with the same filters but without pagination.
+        let count_query = format!(
+            "SELECT COUNT(*) as total FROM ro_crate_entity WHERE {}",
+            where_clauses.join(" AND ")
+        );
+        let mut count_query_builder = sqlx::query(&count_query).bind(workflow_id);
+        if let Some(file_id) = file_id {
+            count_query_builder = count_query_builder.bind(file_id);
+        }
+        if let Some(ref entity_id) = entity_id {
+            count_query_builder = count_query_builder.bind(entity_id);
+        }
+
+        let total_count = match count_query_builder
+            .fetch_one(self.context.pool.as_ref())
+            .await
         {
-            Ok(row) => row.total,
+            Ok(row) => row.get("total"),
             Err(e) => {
                 return Err(database_error_with_msg(
                     e,
@@ -565,6 +651,25 @@ where
         {
             Ok(result) => result,
             Err(e) => {
+                let error_string = e.to_string();
+                if let Some((message, duplicate_field)) = ro_crate_duplicate_details(&error_string)
+                {
+                    log_duplicate_ro_crate_entity(
+                        "rejected on update",
+                        body.workflow_id,
+                        duplicate_field,
+                        body.file_id,
+                        &body.entity_id,
+                    );
+                    let error_response = models::ErrorResponse::new(serde_json::json!({
+                        "message": message
+                    }));
+                    return Ok(
+                        UpdateRoCrateEntityResponse::UnprocessableContentErrorResponse(
+                            error_response,
+                        ),
+                    );
+                }
                 return Err(database_error_with_msg(
                     e,
                     "Failed to update RO-Crate entity",

@@ -125,8 +125,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **list_ro_crate_entities**
-> list_ro_crate_entities(_api::RoCrateEntitiesApi, id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, _mediaType=nothing) -> ListRoCrateEntitiesResponse, OpenAPI.Clients.ApiResponse <br/>
-> list_ro_crate_entities(_api::RoCrateEntitiesApi, response_stream::Channel, id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, _mediaType=nothing) -> Channel{ ListRoCrateEntitiesResponse }, OpenAPI.Clients.ApiResponse
+> list_ro_crate_entities(_api::RoCrateEntitiesApi, id::Int64; offset=nothing, limit=nothing, file_id=nothing, entity_id=nothing, sort_by=nothing, reverse_sort=nothing, _mediaType=nothing) -> ListRoCrateEntitiesResponse, OpenAPI.Clients.ApiResponse <br/>
+> list_ro_crate_entities(_api::RoCrateEntitiesApi, response_stream::Channel, id::Int64; offset=nothing, limit=nothing, file_id=nothing, entity_id=nothing, sort_by=nothing, reverse_sort=nothing, _mediaType=nothing) -> Channel{ ListRoCrateEntitiesResponse }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -143,6 +143,8 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **offset** | **Int64** |  | [default to nothing]
  **limit** | **Int64** |  | [default to nothing]
+ **file_id** | **Int64** |  | [default to nothing]
+ **entity_id** | **String** |  | [default to nothing]
  **sort_by** | **String** |  | [default to nothing]
  **reverse_sort** | **Bool** |  | [default to nothing]
 
