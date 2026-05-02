@@ -948,7 +948,7 @@ job</li>
 <li><a href="core/concepts/./dependencies.html">Dependency Resolution</a> - How job dependencies are managed</li>
 <li><a href="core/concepts/./job-runners.html">Job Runners</a> - Executing jobs locally and on clusters</li>
 <li><a href="core/concepts/./parallelization.html">Parallelization Strategies</a> - Running jobs in parallel</li>
-<li><a href="core/concepts/./reinitialization.html">Workflow Reinitialization</a> - Restarting workflows</li>
+<li><a href="core/concepts/./intelligent-restart.html">Intelligent Restart</a> - Rerunning affected jobs after input changes</li>
 <li><a href="core/concepts/./ro-crate.html">RO-Crate Provenance</a> - Automatic provenance tracking with RO-Crate</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="architecture-1"><a class="header" href="#architecture-1">Architecture</a></h1>
@@ -2411,15 +2411,53 @@ capacity, while the queue-depth runner gets small jobs for fast parallel executi
 </div>
 <p>Choose the strategy that best matches your workflow characteristics and execution environment. You
 can even mix strategies across different runners for maximum flexibility.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="workflow-reinitialization"><a class="header" href="#workflow-reinitialization">Workflow Reinitialization</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="intelligent-restart"><a class="header" href="#intelligent-restart">Intelligent Restart</a></h1>
 <p>When you modify input files or configuration after a workflow has run, you need a way to re-execute
-only the affected jobs. Reinitialization handles this by detecting what changed and marking the
-appropriate jobs for re-execution.</p>
-<h2 id="when-to-use-reinitialization"><a class="header" href="#when-to-use-reinitialization">When to Use Reinitialization</a></h2>
+only the affected jobs. Intelligent restart — implemented by <code>torc workflows reinit</code> — detects what
+changed and resets just the jobs whose inputs are now stale, then propagates that reset through the
+dependency graph.</p>
+<blockquote>
+<p><strong>Note:</strong> Intelligent restart is for <em>correct workflows that need to be rerun with different
+inputs</em>. For <em>failed</em> workflows, use
+<a href="core/concepts/../../specialized/fault-tolerance/automatic-recovery.html"><code>torc recover</code></a> instead — it diagnoses
+failures, adjusts resources, and resubmits jobs.</p>
+</blockquote>
+<h2 id="motivating-example"><a class="header" href="#motivating-example">Motivating Example</a></h2>
+<p>Suppose you have three input files, each consumed by a <code>work</code> job, that fan in to a <code>postprocess</code>
+job. The workflow completes successfully, but you discover a bug in <code>input_2</code>. After fixing it, you
+run:</p>
+<pre><code class="language-bash">torc workflows reinit &lt;workflow_id&gt;
+</code></pre>
+<p>Torc detects that <code>input_2</code> was modified, resets <code>work_2</code> (which reads it) and <code>postprocess</code> (which
+depends on <code>work_2</code>'s output), and leaves <code>work_1</code> and <code>work_3</code> alone:</p>
+<pre class="mermaid">flowchart TD
+    in1([input_1])
+    in2([input_2&lt;br/&gt;modified])
+    in3([input_3])
+
+    work1[work_1&lt;br/&gt;unchanged]
+    work2[work_2&lt;br/&gt;reset → ready]
+    work3[work_3&lt;br/&gt;unchanged]
+
+    post[postprocess&lt;br/&gt;reset → ready]
+
+    in1 --&gt; work1 --&gt; post
+    in2 --&gt; work2 --&gt; post
+    in3 --&gt; work3 --&gt; post
+
+    style in1 fill:#d4edda,stroke:#28a745,color:#155724
+    style in3 fill:#d4edda,stroke:#28a745,color:#155724
+    style in2 fill:#f8d7da,stroke:#dc3545,color:#721c24
+    style work1 fill:#d4edda,stroke:#28a745,color:#155724
+    style work3 fill:#d4edda,stroke:#28a745,color:#155724
+    style work2 fill:#fff3cd,stroke:#ffc107,color:#856404
+    style post fill:#fff3cd,stroke:#ffc107,color:#856404
+</pre>
+<h2 id="when-to-use"><a class="header" href="#when-to-use">When to Use</a></h2>
 <p>Use <code>torc workflows reinit</code> when:</p>
 <ul>
 <li><strong>Input files changed</strong> — You modified an input file and want dependent jobs to rerun</li>
-<li><strong>Configuration updated</strong> — You changed user_data parameters</li>
+<li><strong>Configuration updated</strong> — You changed <code>user_data</code> parameters</li>
 <li><strong>Output files missing</strong> — Output files were deleted and need regeneration</li>
 <li><strong>Job definition changed</strong> — You modified a job's command or other attributes</li>
 <li><strong>Iterative development</strong> — You're refining a workflow and need quick iteration</li>
@@ -2455,7 +2493,7 @@ changes like modified commands, updated scripts, or changed configuration parame
 <p>If a job's output file no longer exists on disk, the job is marked for re-execution regardless of
 whether inputs changed.</p>
 <h2 id="the-reinitialization-process"><a class="header" href="#the-reinitialization-process">The Reinitialization Process</a></h2>
-<p>When you run <code>reinitialize</code>, Torc performs these steps:</p>
+<p>When you run <code>reinit</code>, Torc performs these steps:</p>
 <ol>
 <li><strong>Bump run_id</strong> — Increments the workflow's run counter for tracking</li>
 <li><strong>Reset workflow status</strong> — Clears the previous run's completion state</li>
@@ -2516,25 +2554,15 @@ waiting receive a terminal state rather than hanging.</li>
 server-side task keeps going. Resume with <code>torc tasks wait &lt;id&gt;</code>.</li>
 <li><strong>Dry-run is synchronous.</strong> <code>--dry-run</code> does not create a task; it returns the preview directly.</li>
 </ul>
-<h2 id="retrying-failed-jobs"><a class="header" href="#retrying-failed-jobs">Retrying Failed Jobs</a></h2>
-<p><strong>Important:</strong> Reinitialization does not automatically retry failed jobs. To retry failed jobs, use
-<code>reset-status</code>:</p>
-<pre><code class="language-bash"># Reset failed jobs to ready status, then reinitialize to check for other changes
-torc workflows reset-status &lt;workflow_id&gt; --failed-only --reinitialize
-
-# Or just reset failed jobs without reinitialization
-torc workflows reset-status &lt;workflow_id&gt; --failed-only
-</code></pre>
-<h2 id="comparison-with-full-reset"><a class="header" href="#comparison-with-full-reset">Comparison with Full Reset</a></h2>
-<div class="table-wrapper"><table><thead><tr><th>Scenario</th><th>Use <code>reinitialize</code></th><th>Use <code>reset-status</code></th></tr></thead><tbody>
-<tr><td>Input file changed</td><td>Yes</td><td>No</td></tr>
-<tr><td>Job command changed</td><td>Yes</td><td>No</td></tr>
-<tr><td>Want to rerun everything</td><td>No</td><td>Yes</td></tr>
-<tr><td>Retry failed jobs only</td><td>No</td><td><strong>Yes</strong> (<code>--failed-only</code>)</td></tr>
-<tr><td>Iterative development</td><td>Yes</td><td>Depends</td></tr>
-<tr><td>Changed workflow spec</td><td>Create new workflow</td><td>Create new workflow</td></tr>
-</tbody></table>
-</div><div style="break-before: page; page-break-before: always;"></div><h1 id="ro-crate-provenance-tracking"><a class="header" href="#ro-crate-provenance-tracking">RO-Crate Provenance Tracking</a></h1>
+<h2 id="see-also-2"><a class="header" href="#see-also-2">See Also</a></h2>
+<ul>
+<li><a href="core/concepts/../../specialized/fault-tolerance/automatic-recovery.html">Automatic Failure Recovery</a> — Use
+<code>torc recover</code> to rerun <em>failed</em> jobs (different from intelligent restart, which is for changed
+inputs)</li>
+<li><a href="core/concepts/../how-to/rerun-failed-jobs.html">Rerun Failed Jobs</a> — Quick how-to for retrying failures</li>
+<li><a href="core/concepts/./dependencies.html">Dependency Resolution</a> — How Torc tracks which jobs depend on which files</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="ro-crate-provenance-tracking"><a class="header" href="#ro-crate-provenance-tracking">RO-Crate Provenance Tracking</a></h1>
 <p>Torc supports <a href="https://www.researchobject.org/ro-crate/">Research Object Crate (RO-Crate)</a>, a
 community standard for packaging research data with machine-readable metadata. This enables tracking
 of data provenance—knowing which jobs produced which outputs, what inputs they consumed, and when
@@ -2690,7 +2718,7 @@ the I/O cost of reading terabytes of data.</p>
 </div>
 <p>For most workflows, enable automatic generation and add manual entities only for external references
 (software versions, related datasets, etc.).</p>
-<h2 id="see-also-2"><a class="header" href="#see-also-2">See Also</a></h2>
+<h2 id="see-also-3"><a class="header" href="#see-also-3">See Also</a></h2>
 <ul>
 <li><a href="core/concepts/../how-to/ro-crate-metadata.html">How to Add RO-Crate Metadata</a> — Step-by-step guide</li>
 <li><a href="https://www.researchobject.org/ro-crate/">RO-Crate Specification</a> — Official documentation</li>
@@ -3560,7 +3588,7 @@ torc workflows execution-plan examples/subgraphs/subgraphs_workflow.yaml
 <li>Stages align with your expected execution order</li>
 <li>Slurm allocations are timed appropriately</li>
 </ul>
-<h2 id="see-also-3"><a class="header" href="#see-also-3">See Also</a></h2>
+<h2 id="see-also-4"><a class="header" href="#see-also-4">See Also</a></h2>
 <ul>
 <li><a href="core/workflows/../monitoring/dashboard.html">Web Dashboard</a> — Full dashboard documentation</li>
 <li><a href="core/workflows/../../specialized/hpc/slurm-workflows.html">Slurm Overview</a> — Understanding Slurm integration</li>
@@ -3935,6 +3963,7 @@ management in active projects where historical data is valuable but visual clutt
 <li><a href="core/how-to/./cancel-workflow.html">Cancel a Workflow</a> - Stopping running workflows</li>
 <li><a href="core/how-to/./view-job-logs.html">View Job Logs</a> - Accessing job output</li>
 <li><a href="core/how-to/./debug-failed-job.html">Debug a Failed Job</a> - Troubleshooting failures</li>
+<li><a href="core/how-to/./rerun-failed-jobs.html">Rerun Failed Jobs</a> - Retrying failures with <code>recover</code> or <code>reset-status</code></li>
 <li><a href="core/how-to/./set-up-authentication.html">Set Up Authentication</a> - Saving credentials for CLI access</li>
 <li><a href="core/how-to/./check-resource-utilization.html">Check Resource Utilization</a> - Monitoring resource usage</li>
 <li><a href="core/how-to/./view-resource-plots.html">View Resource Plots</a> - Visualizing resource metrics</li>
@@ -3992,7 +4021,7 @@ torc jobs list &lt;workflow_id&gt; --status failed
     echo "Workflow complete"
 fi
 </code></pre>
-<h2 id="see-also-4"><a class="header" href="#see-also-4">See Also</a></h2>
+<h2 id="see-also-5"><a class="header" href="#see-also-5">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/../monitoring/tui.html">Terminal UI (TUI)</a> — Interactive monitoring</li>
 <li><a href="core/how-to/../monitoring/dashboard.html">Web Dashboard</a> — Visual workflow management</li>
@@ -4033,10 +4062,12 @@ torc run &lt;workflow_id&gt;
 torc submit &lt;workflow_id&gt;
 </code></pre>
 <p>Jobs that completed before cancellation remain completed.</p>
-<h2 id="see-also-5"><a class="header" href="#see-also-5">See Also</a></h2>
+<h2 id="see-also-6"><a class="header" href="#see-also-6">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/./track-workflow-status.html">Track Workflow Status</a> — Monitor workflow progress</li>
-<li><a href="core/how-to/../concepts/reinitialization.html">Workflow Reinitialization</a> — Resume after issues</li>
+<li><a href="core/how-to/../concepts/intelligent-restart.html">Intelligent Restart</a> — Rerun affected jobs after editing
+inputs</li>
+<li><a href="core/how-to/./rerun-failed-jobs.html">Rerun Failed Jobs</a> — Retry jobs that failed</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="how-to-view-job-logs"><a class="header" href="#how-to-view-job-logs">How to View Job Logs</a></h1>
 <p>Find and read the stdout/stderr output from job execution.</p>
@@ -4102,7 +4133,7 @@ torc results list --include-logs &lt;workflow_id&gt; --job-id &lt;failed_job_id&
 <li><strong>Dashboard</strong> — The web dashboard displays job logs when you click on a job. See
 <a href="core/how-to/../monitoring/dashboard.html">Web Dashboard</a>.</li>
 </ul>
-<h2 id="see-also-6"><a class="header" href="#see-also-6">See Also</a></h2>
+<h2 id="see-also-7"><a class="header" href="#see-also-7">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/../monitoring/working-with-logs.html">Working with Logs</a> — Log configuration and management</li>
 <li><a href="core/how-to/./debug-failed-job.html">Debug a Failed Job</a> — Full debugging workflow</li>
@@ -4179,11 +4210,66 @@ torc run &lt;workflow_id&gt;
 # Or re-submit to Slurm
 torc submit &lt;workflow_id&gt;
 </code></pre>
-<h2 id="see-also-7"><a class="header" href="#see-also-7">See Also</a></h2>
+<h2 id="see-also-8"><a class="header" href="#see-also-8">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/./view-job-logs.html">View Job Logs</a> — Finding log files</li>
 <li><a href="core/how-to/./check-resource-utilization.html">Check Resource Utilization</a> — Resource analysis</li>
 <li><a href="core/how-to/../monitoring/debugging.html">Debugging Workflows</a> — Comprehensive debugging guide</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="rerun-failed-jobs"><a class="header" href="#rerun-failed-jobs">Rerun Failed Jobs</a></h1>
+<p>When jobs in a workflow fail, you have several options for retrying them depending on your execution
+environment and how much automation you want.</p>
+<blockquote>
+<p><strong>Looking to rerun jobs after editing an input file?</strong> That's a different operation — see
+<a href="core/how-to/../concepts/intelligent-restart.html">Intelligent Restart</a>.</p>
+</blockquote>
+<h2 id="slurm-workflows-torc-recover"><a class="header" href="#slurm-workflows-torc-recover">Slurm Workflows: <code>torc recover</code></a></h2>
+<p>For Slurm workflows, <code>torc recover</code> is the comprehensive option. It diagnoses each failure (OOM,
+timeout, unknown), adjusts resource requirements, resets the failed jobs, reinitializes the
+workflow, and resubmits Slurm allocations:</p>
+<pre><code class="language-bash"># Preview what recovery would do
+torc recover &lt;workflow_id&gt; --dry-run
+
+# Interactive recovery wizard (default)
+torc recover &lt;workflow_id&gt;
+
+# Non-interactive recovery (for scripts/CI)
+torc recover &lt;workflow_id&gt; --no-prompts
+</code></pre>
+<p>For continuous monitoring with auto-recovery, use <code>torc watch --recover</code> instead — it polls until
+the workflow completes and re-runs recovery on each round of failures.</p>
+<p>See <a href="core/how-to/../../specialized/fault-tolerance/automatic-recovery.html">Automatic Failure Recovery</a> for the
+full guide.</p>
+<h2 id="local-workflows-torc-workflows-reset-status"><a class="header" href="#local-workflows-torc-workflows-reset-status">Local Workflows: <code>torc workflows reset-status</code></a></h2>
+<p>For local (non-Slurm) workflows, or when you just want to retry without resource adjustment:</p>
+<pre><code class="language-bash"># Reset only failed jobs to ready and rerun
+torc workflows reset-status &lt;workflow_id&gt; --failed-only --reinitialize
+
+# Or reset failed jobs without reinitializing (e.g. transient infrastructure issue)
+torc workflows reset-status &lt;workflow_id&gt; --failed-only
+</code></pre>
+<p>Then resume execution with <code>torc run &lt;workflow_id&gt;</code> (local) or <code>torc submit &lt;workflow_id&gt;</code> (Slurm).</p>
+<h2 id="choosing-the-right-tool"><a class="header" href="#choosing-the-right-tool">Choosing the Right Tool</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Scenario</th><th>Use</th></tr></thead><tbody>
+<tr><td>Slurm workflow with OOM/timeout failures</td><td><code>torc recover</code></td></tr>
+<tr><td>Slurm workflow, want continuous self-healing</td><td><code>torc watch --recover</code></td></tr>
+<tr><td>Local workflow with failures</td><td><code>torc workflows reset-status --failed-only</code></td></tr>
+<tr><td>Want to retry without changing resource allocations</td><td><code>torc workflows reset-status --failed-only</code></td></tr>
+<tr><td>Workflow ran fine but inputs changed</td><td><a href="core/how-to/../concepts/intelligent-restart.html">Intelligent Restart</a></td></tr>
+<tr><td>Need AI-driven classification of unfamiliar failure modes</td><td><a href="core/how-to/../../specialized/fault-tolerance/ai-assisted-recovery.html">AI-Assisted Recovery</a></td></tr>
+</tbody></table>
+</div>
+<h2 id="see-also-9"><a class="header" href="#see-also-9">See Also</a></h2>
+<ul>
+<li><a href="core/how-to/../../specialized/fault-tolerance/automatic-recovery.html">Automatic Failure Recovery</a> — Full guide
+to <code>torc recover</code> and <code>torc watch --recover</code></li>
+<li><a href="core/how-to/../../specialized/fault-tolerance/ai-assisted-recovery.html">AI-Assisted Recovery</a> — Classify
+unknown failures with an AI agent</li>
+<li><a href="core/how-to/../../specialized/fault-tolerance/failure-handlers.html">Configurable Failure Handlers</a> — Per-job
+retry logic configured in the workflow spec</li>
+<li><a href="core/how-to/./debug-failed-job.html">Debug a Failed Job</a> — Investigate why a job failed</li>
+<li><a href="core/how-to/../concepts/intelligent-restart.html">Intelligent Restart</a> — Rerun affected jobs after editing
+inputs</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="how-to-set-up-authentication"><a class="header" href="#how-to-set-up-authentication">How to Set Up Authentication</a></h1>
 <p>Configure your Torc credentials so that CLI commands authenticate automatically.</p>
@@ -4231,7 +4317,7 @@ source ~/.config/torc/credentials
 <li><strong>Never pass <code>--password</code> on the command line</strong> — it appears in shell history and process lists</li>
 <li><strong>Do not commit</strong> <code>~/.config/torc/credentials</code> or any file containing passwords to version control</li>
 </ul>
-<h2 id="see-also-8"><a class="header" href="#see-also-8">See Also</a></h2>
+<h2 id="see-also-10"><a class="header" href="#see-also-10">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/../reference/environment-variables.html">Environment Variables</a> — All Torc environment variables</li>
 <li><a href="core/how-to/../reference/cli.html">CLI Reference</a> — Global <code>--username</code> and <code>--password</code> flags</li>
@@ -4336,7 +4422,7 @@ under-reported peak usage.</p>
 <li>Runtime: Add 15-30% above actual duration</li>
 <li>CPU: Round up to accommodate peak percentage (e.g., 501% CPU → 6 cores)</li>
 </ul>
-<h2 id="see-also-9"><a class="header" href="#see-also-9">See Also</a></h2>
+<h2 id="see-also-11"><a class="header" href="#see-also-11">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/../monitoring/resource-monitoring.html">Resource Monitoring</a> — Enable and configure monitoring</li>
 <li><a href="core/how-to/../reference/resources.html">Resource Requirements Reference</a> — Specification format</li>
@@ -4382,7 +4468,7 @@ FROM job_resource_samples
 WHERE job_id = 1
 ORDER BY timestamp;
 </code></pre>
-<h2 id="see-also-10"><a class="header" href="#see-also-10">See Also</a></h2>
+<h2 id="see-also-12"><a class="header" href="#see-also-12">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/../monitoring/resource-monitoring.html">Resource Monitoring</a> — Configuration options</li>
 <li><a href="core/how-to/../reference/resource-monitoring.html">Resource Monitoring Database</a> — Database schema reference</li>
@@ -4549,7 +4635,7 @@ jobs:
       year: "2020:2024"
 </code></pre>
 <p>Creates 20 jobs (4 regions × 5 years).</p>
-<h2 id="see-also-11"><a class="header" href="#see-also-11">See Also</a></h2>
+<h2 id="see-also-13"><a class="header" href="#see-also-13">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/../tutorials/simple-params.html">Simple Parameterization</a> — Basic parameter tutorial</li>
 <li><a href="core/how-to/../tutorials/advanced-params.html">Advanced Parameterization</a> — Multi-dimensional sweeps</li>
@@ -4652,7 +4738,7 @@ apptainer exec /path/to/container.sif "$@"
 <li>Test the script manually before submitting: <code>bash setup.sh python --version</code></li>
 <li>Different jobs can use different invocation scripts</li>
 </ul>
-<h2 id="see-also-12"><a class="header" href="#see-also-12">See Also</a></h2>
+<h2 id="see-also-14"><a class="header" href="#see-also-14">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/../reference/workflow-spec.html">Workflow Specification</a> - Full JobSpec reference</li>
 <li><a href="core/how-to/../../specialized/hpc/slurm-workflows.html">Slurm Workflows</a> - HPC-specific configuration</li>
@@ -4912,7 +4998,7 @@ metadata JSON.</p>
 <h2 id="workflow-exportimport"><a class="header" href="#workflow-exportimport">Workflow Export/Import</a></h2>
 <p>RO-Crate entities are included in workflow exports (<code>torc workflows export</code>) and restored during
 imports (<code>torc workflows import</code>). File ID links are remapped automatically.</p>
-<h2 id="see-also-13"><a class="header" href="#see-also-13">See Also</a></h2>
+<h2 id="see-also-15"><a class="header" href="#see-also-15">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/../concepts/ro-crate.html">RO-Crate Provenance Tracking</a> — Concept overview</li>
 <li><a href="https://www.researchobject.org/ro-crate/">RO-Crate Specification</a> — Official documentation</li>
@@ -5038,7 +5124,7 @@ dependencies, resource requirements, failure handlers, etc.), use
 gives you the full workflow model.</p>
 <p>Tip: if you pass a spec file to <code>exec</code> by mistake (e.g. <code>torc exec workflow.yaml</code>), torc detects it
 and suggests <code>torc run workflow.yaml</code>.</p>
-<h2 id="see-also-14"><a class="header" href="#see-also-14">See Also</a></h2>
+<h2 id="see-also-16"><a class="header" href="#see-also-16">See Also</a></h2>
 <ul>
 <li><a href="core/how-to/../monitoring/resource-monitoring.html">Resource Monitoring</a> — configuration details for the
 underlying <code>resource_monitor</code> spec</li>
@@ -8060,7 +8146,7 @@ torc results list --include-logs &lt;workflow_id&gt; --output-dir &lt;correct_pa
 <li><strong><code>torc-dash</code></strong>: Launch web interface with interactive Debugging tab</li>
 <li><strong><code>torc tui</code></strong>: Launch terminal UI for workflow monitoring</li>
 </ul>
-<h2 id="see-also-15"><a class="header" href="#see-also-15">See Also</a></h2>
+<h2 id="see-also-17"><a class="header" href="#see-also-17">See Also</a></h2>
 <ul>
 <li><a href="core/monitoring/working-with-logs.html">Working with Logs</a> — Bundling and analyzing logs</li>
 <li><a href="core/monitoring/debugging-slurm.html">Debugging Slurm Workflows</a> — Slurm-specific debugging tools</li>
@@ -8222,7 +8308,7 @@ torc logs analyze wf&lt;id&gt;/
 <li><strong><code>torc slurm parse-logs</code></strong>: Parse Slurm logs for error patterns (Slurm-specific)</li>
 <li><strong><code>torc slurm sacct</code></strong>: Collect Slurm accounting data</li>
 </ul>
-<h2 id="see-also-16"><a class="header" href="#see-also-16">See Also</a></h2>
+<h2 id="see-also-18"><a class="header" href="#see-also-18">See Also</a></h2>
 <ul>
 <li><a href="core/monitoring/debugging.html">Debugging Workflows</a> — General debugging workflow and log file details</li>
 <li><a href="core/monitoring/debugging-slurm.html">Debugging Slurm Workflows</a> — Slurm-specific debugging tools</li>
@@ -8570,7 +8656,7 @@ torc watch 123 --auto-schedule \
 # Useful for long-running checkpointable jobs
 torc watch 123 --auto-schedule --partition standard --walltime 04:00:00
 </code></pre>
-<h3 id="see-also-17"><a class="header" href="#see-also-17">See Also</a></h3>
+<h3 id="see-also-19"><a class="header" href="#see-also-19">See Also</a></h3>
 <ul>
 <li><a href="core/reference/cli.html#torc-recover"><code>torc recover</code></a> — One-shot recovery (no continuous monitoring)</li>
 <li><a href="core/reference/../../specialized/fault-tolerance/automatic-recovery.html">Automatic Failure Recovery</a> — Detailed
@@ -8601,7 +8687,7 @@ not a terminal (e.g., piped or scripted), non-interactive mode is used automatic
 <li><code>--dry-run</code> — Show what would be done without making any changes</li>
 <li><code>--no-prompts</code> — Skip interactive wizard and apply heuristics automatically</li>
 </ul>
-<h3 id="when-to-use"><a class="header" href="#when-to-use">When to Use</a></h3>
+<h3 id="when-to-use-1"><a class="header" href="#when-to-use-1">When to Use</a></h3>
 <p>Use <code>torc recover</code> for:</p>
 <ul>
 <li>One-shot recovery after a workflow has completed with failures</li>
@@ -8633,7 +8719,7 @@ torc recover 123 --retry-unknown
 # With custom recovery hook for domain-specific fixes
 torc recover 123 --recovery-hook 'bash fix-cluster.sh'
 </code></pre>
-<h3 id="see-also-18"><a class="header" href="#see-also-18">See Also</a></h3>
+<h3 id="see-also-20"><a class="header" href="#see-also-20">See Also</a></h3>
 <ul>
 <li><a href="core/reference/cli.html#torc-watch"><code>torc watch --recover</code></a> — Continuous monitoring with automatic recovery</li>
 <li><a href="core/reference/../../specialized/fault-tolerance/automatic-recovery.html">Automatic Failure Recovery</a> — Detailed
@@ -11808,7 +11894,7 @@ standalone = false
 server_port = 0
 completion_check_interval_secs = 5
 </code></pre>
-<h2 id="see-also-19"><a class="header" href="#see-also-19">See Also</a></h2>
+<h2 id="see-also-21"><a class="header" href="#see-also-21">See Also</a></h2>
 <ul>
 <li><a href="core/reference/../../specialized/admin/configuration-files.html">Configuration Files How-To</a></li>
 <li><a href="core/reference/../../specialized/tools/configuration.html">Configuration Tutorial</a></li>
@@ -12481,7 +12567,7 @@ curl $TORC_API_URL/health
 <p>Use <code>torc hpc match</code> to see which partitions match your requirements:</p>
 <pre><code class="language-bash">torc hpc match kestrel --cpus 32 --memory 64g --walltime 02:00:00 --gpus 2
 </code></pre>
-<h2 id="see-also-20"><a class="header" href="#see-also-20">See Also</a></h2>
+<h2 id="see-also-22"><a class="header" href="#see-also-22">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/../../core/workflows/visualizing-workflows.html">Visualizing Workflow Structure</a> — Execution plans
 and DAG visualization</li>
@@ -12529,7 +12615,7 @@ jobs:
 torc slurm generate --help
 torc submit --help
 </code></pre>
-<h2 id="see-also-21"><a class="header" href="#see-also-21">See Also</a></h2>
+<h2 id="see-also-23"><a class="header" href="#see-also-23">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/../../specialized/hpc/slurm-workflows.html">Slurm Overview</a> — Full Slurm integration guide</li>
 <li><a href="specialized/hpc/../../specialized/hpc/hpc-profiles.html">HPC Profiles</a> — Available HPC system configurations</li>
@@ -12890,7 +12976,7 @@ wrap the command with <code>srun</code>.</p>
 <h3 id="using-num_nodes--1-for-independent-jobs"><a class="header" href="#using-num_nodes--1-for-independent-jobs">Using <code>num_nodes &gt; 1</code> for independent jobs</a></h3>
 <p>If your jobs don't need inter-node communication, keep <code>num_nodes=1</code> (the default) and let Torc
 schedule them independently across nodes for maximum throughput.</p>
-<h2 id="see-also-22"><a class="header" href="#see-also-22">See Also</a></h2>
+<h2 id="see-also-24"><a class="header" href="#see-also-24">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/./slurm-workflows.html">Slurm Overview</a> — Auto-generated Slurm configuration with
 <code>slurm generate</code> + <code>submit</code></li>
@@ -13242,7 +13328,7 @@ etc.) and are available via <code>torc slurm stats &lt;workflow_id&gt;</code>.</
 <h3 id="local-execution-1"><a class="header" href="#local-execution-1">Local Execution</a></h3>
 <p>When running locally (no <code>SLURM_JOB_ID</code> environment variable), Torc uses its standard shell wrapper
 and the <code>srun</code> behavior is never triggered. No configuration is needed for local runs.</p>
-<h2 id="see-also-23"><a class="header" href="#see-also-23">See Also</a></h2>
+<h2 id="see-also-25"><a class="header" href="#see-also-25">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/./slurm-workflows.html">Slurm Overview</a> — Simplified workflow approach</li>
 <li><a href="specialized/hpc/./hpc-profiles.html">HPC Profiles</a> — Automatic partition matching</li>
@@ -13705,7 +13791,7 @@ when:</p>
 <li><strong><code>torc-dash</code></strong>: Launch web interface with Slurm log viewing</li>
 <li><strong><code>torc tui</code></strong>: Launch terminal UI with Slurm log viewing</li>
 </ul>
-<h2 id="see-also-24"><a class="header" href="#see-also-24">See Also</a></h2>
+<h2 id="see-also-26"><a class="header" href="#see-also-26">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/debugging.html">Debugging Workflows</a> — General debugging tools and workflows</li>
 <li><a href="specialized/hpc/working-with-logs.html">Working with Logs</a> — Bundling and analyzing logs</li>
@@ -13827,7 +13913,7 @@ See <a href="specialized/hpc/./slurm.html">Advanced Slurm Configuration</a> for 
 <ul>
 <li><code>torc slurm generate</code> + <code>torc submit</code> - Submit workflows with auto-generated schedulers</li>
 </ul>
-<h2 id="see-also-25"><a class="header" href="#see-also-25">See Also</a></h2>
+<h2 id="see-also-27"><a class="header" href="#see-also-27">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/./slurm.html">Advanced Slurm Configuration</a></li>
 <li><a href="specialized/hpc/./custom-hpc-profile.html">Custom HPC Profile Tutorial</a></li>
@@ -14163,7 +14249,7 @@ default_account = "my_default_account"
 </div>
 <p>Generated walltime uses <code>HH:MM:SS</code> format (e.g., <code>04:00:00</code>).</p>
 <hr />
-<h2 id="see-also-26"><a class="header" href="#see-also-26">See Also</a></h2>
+<h2 id="see-also-28"><a class="header" href="#see-also-28">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/./hpc-profiles.html">Working with HPC Profiles</a></li>
 <li><a href="specialized/hpc/./custom-hpc-profile.html">Custom HPC Profile Tutorial</a></li>
@@ -14395,7 +14481,7 @@ pgrep -f torc-server
 # Check server logs
 tail -100 /scratch/$USER/torc/logs/torc-server*.log
 </code></pre>
-<h2 id="see-also-27"><a class="header" href="#see-also-27">See Also</a></h2>
+<h2 id="see-also-29"><a class="header" href="#see-also-29">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/../../core/reference/configuration.html">Configuration Reference</a></li>
 <li><a href="specialized/hpc/./hpc-profiles-reference.html">HPC Profiles Reference</a></li>
@@ -14709,7 +14795,7 @@ hostname
 </ol>
 <p>Or simply <a href="https://github.com/NatLabRockies/torc/issues">open an issue</a> with your partition
 information and we'll add it for you.</p>
-<h2 id="see-also-28"><a class="header" href="#see-also-28">See Also</a></h2>
+<h2 id="see-also-30"><a class="header" href="#see-also-30">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/./hpc-profiles.html">Working with HPC Profiles</a> - General HPC profile usage</li>
 <li><a href="specialized/hpc/./hpc-profiles-reference.html">HPC Profiles Reference</a> - Complete configuration options</li>
@@ -14793,7 +14879,7 @@ srun torc run workflow.yaml
 <p>On many HPC systems <code>$(hostname)</code> returns the default interface rather than the high-speed
 interconnect one that compute nodes route through. See <a href="specialized/hpc/./hpc-deployment.html">HPC Deployment</a> for
 hostname selection on specific systems.</p>
-<h2 id="see-also-29"><a class="header" href="#see-also-29">See Also</a></h2>
+<h2 id="see-also-31"><a class="header" href="#see-also-31">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/../../core/how-to/run-inline-commands.html">Run Inline Commands (<code>torc exec</code>)</a> — full <code>exec</code> flag
 reference, parameterization, plots</li>
@@ -15623,7 +15709,7 @@ for more details.</p>
 <li>Update jobs with new scheduler reference</li>
 <li>Submit allocations via sbatch</li>
 </ol>
-<h2 id="see-also-30"><a class="header" href="#see-also-30">See Also</a></h2>
+<h2 id="see-also-32"><a class="header" href="#see-also-32">See Also</a></h2>
 <ul>
 <li><a href="specialized/fault-tolerance/./failure-handlers.html">Configurable Failure Handlers</a> - Per-job retry with exit-code-specific
 recovery</li>
@@ -17840,7 +17926,7 @@ check that the proxy is configured and the URL is correct.</p>
 <li><strong>Format:</strong> PEM-encoded (Base64 ASCII, begins with <code>-----BEGIN CERTIFICATE-----</code>)</li>
 <li><strong>Type:</strong> CA certificate (not the server's leaf certificate)</li>
 </ul>
-<h2 id="see-also-31"><a class="header" href="#see-also-31">See Also</a></h2>
+<h2 id="see-also-33"><a class="header" href="#see-also-33">See Also</a></h2>
 <ul>
 <li><a href="specialized/admin/./authentication.html">Authentication</a> — Setting up user authentication</li>
 <li><a href="specialized/admin/./security.html">Security Reference</a> — Security best practices and threat model</li>
@@ -20048,7 +20134,7 @@ remains in Torc's database.</p>
 <li>Check that jobs have actually run (logs are created at runtime)</li>
 </ul>
 <hr />
-<h2 id="see-also-32"><a class="header" href="#see-also-32">See Also</a></h2>
+<h2 id="see-also-34"><a class="header" href="#see-also-34">See Also</a></h2>
 <ul>
 <li><a href="specialized/tools/./ai-assistant.html">AI-Assisted Workflow Management Tutorial</a></li>
 <li><a href="specialized/tools/../../core/reference/configuration.html">Configuration Reference</a></li>
@@ -21892,7 +21978,7 @@ initialization</li>
 <li><strong>No Inter-Action Dependencies</strong>: Actions don't depend on other actions</li>
 <li><strong>Concurrent Workers</strong>: Multiple workers can execute different actions simultaneously</li>
 </ol>
-<h3 id="workflow-reinitialization-1"><a class="header" href="#workflow-reinitialization-1">Workflow Reinitialization</a></h3>
+<h3 id="workflow-reinitialization"><a class="header" href="#workflow-reinitialization">Workflow Reinitialization</a></h3>
 <p>When a workflow is reinitialized (e.g., after resetting failed jobs), actions are reset to allow
 them to trigger again:</p>
 <ol>

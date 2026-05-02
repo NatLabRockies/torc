@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Workflow Reinitialization - Torc Documentation</title>
+        <title>Rerun Failed Jobs - Torc Documentation</title>
 
 
         <!-- Custom HTML head -->
@@ -150,7 +150,7 @@
                         <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/NatLabRockies/torc/edit/main/docs/src/core/concepts/reinitialization.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://github.com/NatLabRockies/torc/edit/main/docs/src/core/how-to/rerun-failed-jobs.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
@@ -184,139 +184,71 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="workflow-reinitialization"><a class="header" href="#workflow-reinitialization">Workflow Reinitialization</a></h1>
-<p>When you modify input files or configuration after a workflow has run, you need a way to re-execute
-only the affected jobs. Reinitialization handles this by detecting what changed and marking the
-appropriate jobs for re-execution.</p>
-<h2 id="when-to-use-reinitialization"><a class="header" href="#when-to-use-reinitialization">When to Use Reinitialization</a></h2>
-<p>Use <code>torc workflows reinit</code> when:</p>
-<ul>
-<li><strong>Input files changed</strong> — You modified an input file and want dependent jobs to rerun</li>
-<li><strong>Configuration updated</strong> — You changed user_data parameters</li>
-<li><strong>Output files missing</strong> — Output files were deleted and need regeneration</li>
-<li><strong>Job definition changed</strong> — You modified a job's command or other attributes</li>
-<li><strong>Iterative development</strong> — You're refining a workflow and need quick iteration</li>
-</ul>
-<h2 id="basic-usage"><a class="header" href="#basic-usage">Basic Usage</a></h2>
-<pre><code class="language-bash"># Preview what would change (recommended first step)
-torc workflows reinit &lt;workflow_id&gt; --dry-run
+                        <h1 id="rerun-failed-jobs"><a class="header" href="#rerun-failed-jobs">Rerun Failed Jobs</a></h1>
+<p>When jobs in a workflow fail, you have several options for retrying them depending on your execution
+environment and how much automation you want.</p>
+<blockquote>
+<p><strong>Looking to rerun jobs after editing an input file?</strong> That's a different operation — see
+<a href="../concepts/intelligent-restart.html">Intelligent Restart</a>.</p>
+</blockquote>
+<h2 id="slurm-workflows-torc-recover"><a class="header" href="#slurm-workflows-torc-recover">Slurm Workflows: <code>torc recover</code></a></h2>
+<p>For Slurm workflows, <code>torc recover</code> is the comprehensive option. It diagnoses each failure (OOM,
+timeout, unknown), adjusts resource requirements, resets the failed jobs, reinitializes the
+workflow, and resubmits Slurm allocations:</p>
+<pre><code class="language-bash"># Preview what recovery would do
+torc recover &lt;workflow_id&gt; --dry-run
 
-# Reinitialize the workflow
-torc workflows reinit &lt;workflow_id&gt;
+# Interactive recovery wizard (default)
+torc recover &lt;workflow_id&gt;
 
-# Force reinitialization even with warnings
-torc workflows reinit &lt;workflow_id&gt; --force
+# Non-interactive recovery (for scripts/CI)
+torc recover &lt;workflow_id&gt; --no-prompts
 </code></pre>
-<h2 id="how-change-detection-works"><a class="header" href="#how-change-detection-works">How Change Detection Works</a></h2>
-<p>Reinitialization detects changes through three mechanisms:</p>
-<h3 id="1-file-modification-times"><a class="header" href="#1-file-modification-times">1. File Modification Times</a></h3>
-<p>For files tracked in the workflow, Torc compares the current <code>st_mtime</code> (modification time) against
-the stored value. If a file was modified since the last run, jobs that use it as input are marked
-for re-execution.</p>
-<pre><code class="language-bash"># Modify an input file
-echo "new data" &gt; input.json
-
-# Reinitialize detects the change
-torc workflows reinit &lt;workflow_id&gt;
-# Output: Reset 3 jobs due to changed inputs
-</code></pre>
-<h3 id="2-job-attribute-and-user-data-hashing"><a class="header" href="#2-job-attribute-and-user-data-hashing">2. Job Attribute and User Data Hashing</a></h3>
-<p>Torc computes SHA256 hashes of critical job attributes (such as the command) and <code>user_data</code> input
-values. If any hash differs from the stored value, the job is marked for re-execution. This detects
-changes like modified commands, updated scripts, or changed configuration parameters.</p>
-<h3 id="3-missing-output-files"><a class="header" href="#3-missing-output-files">3. Missing Output Files</a></h3>
-<p>If a job's output file no longer exists on disk, the job is marked for re-execution regardless of
-whether inputs changed.</p>
-<h2 id="the-reinitialization-process"><a class="header" href="#the-reinitialization-process">The Reinitialization Process</a></h2>
-<p>When you run <code>reinitialize</code>, Torc performs these steps:</p>
-<ol>
-<li><strong>Bump run_id</strong> — Increments the workflow's run counter for tracking</li>
-<li><strong>Reset workflow status</strong> — Clears the previous run's completion state</li>
-<li><strong>Check file modifications</strong> — Compares current <code>st_mtime</code> values to stored values</li>
-<li><strong>Check missing outputs</strong> — Identifies jobs whose output files no longer exist</li>
-<li><strong>Check user_data changes</strong> — Computes and compares input hashes</li>
-<li><strong>Mark affected jobs</strong> — Sets jobs needing re-execution to <code>uninitialized</code></li>
-<li><strong>Re-evaluate dependencies</strong> — Runs <code>initialize_jobs</code> to set jobs to <code>ready</code> or <code>blocked</code></li>
-</ol>
-<h2 id="dependency-propagation"><a class="header" href="#dependency-propagation">Dependency Propagation</a></h2>
-<p>When a job is marked for re-execution, all downstream jobs that depend on its outputs are also
-marked. This ensures the entire dependency chain is re-executed:</p>
-<pre><code>preprocess (input changed) → marked for rerun
-    ↓
-process (depends on preprocess output) → also marked
-    ↓
-postprocess (depends on process output) → also marked
-</code></pre>
-<h2 id="dry-run-mode"><a class="header" href="#dry-run-mode">Dry Run Mode</a></h2>
-<p>Always use <code>--dry-run</code> first to preview changes without modifying anything:</p>
-<pre><code class="language-bash">torc workflows reinit &lt;workflow_id&gt; --dry-run
-</code></pre>
-<p>Example output:</p>
-<pre><code>Dry run: 5 jobs would be reset due to changed inputs
-  - preprocess
-  - analyze_batch_1
-  - analyze_batch_2
-  - merge_results
-  - generate_report
-</code></pre>
-<h2 id="async-reinitialization"><a class="header" href="#async-reinitialization">Async Reinitialization</a></h2>
-<p>Reinitialization runs asynchronously on the server: even though <code>torc workflows reinit</code> feels
-synchronous, it is implemented by queuing a task and waiting for it to finish. For large workflows
-the dependency graph rebuild can take seconds to minutes, which is why the work is offloaded.</p>
-<p>By default the CLI blocks on the task using the workflow SSE stream (with polling as a fallback) and
-exits non-zero if it fails. Pass <code>--async</code> to skip the wait and get the task handle back for
-scripting:</p>
-<pre><code class="language-bash"># Kick off a reinit and resume later
-task_id=$(torc -f json workflows reinit &lt;workflow_id&gt; --async | jq -r .task_id)
-# ... do other work ...
-torc tasks wait --timeout 300 "$task_id"
-</code></pre>
-<p>A few properties worth knowing:</p>
-<ul>
-<li><strong>One active task per workflow.</strong> At most one async task is in-flight for a given workflow at a
-time (different async operations would conflict on overlapping state, so they are serialized).
-Calling <code>reinit</code> while a previous reinit is still running is idempotent: the client checks for an
-active task first and returns it, so client-side pre-steps (run_id bump, status reset,
-changed-file processing) don't double-apply on top of whatever that task is doing.</li>
-<li><strong>Mismatched parameters return 409.</strong> If a reinit is active with one set of parameters and a
-second caller asks with different parameters (e.g. a different <code>only_uninitialized</code>), the server
-refuses with <code>409 Conflict</code> rather than silently returning the running task with the wrong
-semantics.</li>
-<li><strong>Crash-safe.</strong> Tasks are persisted server-side. If the server restarts while a reinit is
-in-flight, the task is marked <code>failed</code> with an explanatory error on startup, so clients polling or
-waiting receive a terminal state rather than hanging.</li>
-<li><strong>Timeout leaves the task running.</strong> If the CLI's wait times out (via <code>--wait-timeout</code>), the
-server-side task keeps going. Resume with <code>torc tasks wait &lt;id&gt;</code>.</li>
-<li><strong>Dry-run is synchronous.</strong> <code>--dry-run</code> does not create a task; it returns the preview directly.</li>
-</ul>
-<h2 id="retrying-failed-jobs"><a class="header" href="#retrying-failed-jobs">Retrying Failed Jobs</a></h2>
-<p><strong>Important:</strong> Reinitialization does not automatically retry failed jobs. To retry failed jobs, use
-<code>reset-status</code>:</p>
-<pre><code class="language-bash"># Reset failed jobs to ready status, then reinitialize to check for other changes
+<p>For continuous monitoring with auto-recovery, use <code>torc watch --recover</code> instead — it polls until
+the workflow completes and re-runs recovery on each round of failures.</p>
+<p>See <a href="../../specialized/fault-tolerance/automatic-recovery.html">Automatic Failure Recovery</a> for the
+full guide.</p>
+<h2 id="local-workflows-torc-workflows-reset-status"><a class="header" href="#local-workflows-torc-workflows-reset-status">Local Workflows: <code>torc workflows reset-status</code></a></h2>
+<p>For local (non-Slurm) workflows, or when you just want to retry without resource adjustment:</p>
+<pre><code class="language-bash"># Reset only failed jobs to ready and rerun
 torc workflows reset-status &lt;workflow_id&gt; --failed-only --reinitialize
 
-# Or just reset failed jobs without reinitialization
+# Or reset failed jobs without reinitializing (e.g. transient infrastructure issue)
 torc workflows reset-status &lt;workflow_id&gt; --failed-only
 </code></pre>
-<h2 id="comparison-with-full-reset"><a class="header" href="#comparison-with-full-reset">Comparison with Full Reset</a></h2>
-<div class="table-wrapper"><table><thead><tr><th>Scenario</th><th>Use <code>reinitialize</code></th><th>Use <code>reset-status</code></th></tr></thead><tbody>
-<tr><td>Input file changed</td><td>Yes</td><td>No</td></tr>
-<tr><td>Job command changed</td><td>Yes</td><td>No</td></tr>
-<tr><td>Want to rerun everything</td><td>No</td><td>Yes</td></tr>
-<tr><td>Retry failed jobs only</td><td>No</td><td><strong>Yes</strong> (<code>--failed-only</code>)</td></tr>
-<tr><td>Iterative development</td><td>Yes</td><td>Depends</td></tr>
-<tr><td>Changed workflow spec</td><td>Create new workflow</td><td>Create new workflow</td></tr>
+<p>Then resume execution with <code>torc run &lt;workflow_id&gt;</code> (local) or <code>torc submit &lt;workflow_id&gt;</code> (Slurm).</p>
+<h2 id="choosing-the-right-tool"><a class="header" href="#choosing-the-right-tool">Choosing the Right Tool</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Scenario</th><th>Use</th></tr></thead><tbody>
+<tr><td>Slurm workflow with OOM/timeout failures</td><td><code>torc recover</code></td></tr>
+<tr><td>Slurm workflow, want continuous self-healing</td><td><code>torc watch --recover</code></td></tr>
+<tr><td>Local workflow with failures</td><td><code>torc workflows reset-status --failed-only</code></td></tr>
+<tr><td>Want to retry without changing resource allocations</td><td><code>torc workflows reset-status --failed-only</code></td></tr>
+<tr><td>Workflow ran fine but inputs changed</td><td><a href="../concepts/intelligent-restart.html">Intelligent Restart</a></td></tr>
+<tr><td>Need AI-driven classification of unfamiliar failure modes</td><td><a href="../../specialized/fault-tolerance/ai-assisted-recovery.html">AI-Assisted Recovery</a></td></tr>
 </tbody></table>
 </div>
+<h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>
+<ul>
+<li><a href="../../specialized/fault-tolerance/automatic-recovery.html">Automatic Failure Recovery</a> — Full guide
+to <code>torc recover</code> and <code>torc watch --recover</code></li>
+<li><a href="../../specialized/fault-tolerance/ai-assisted-recovery.html">AI-Assisted Recovery</a> — Classify
+unknown failures with an AI agent</li>
+<li><a href="../../specialized/fault-tolerance/failure-handlers.html">Configurable Failure Handlers</a> — Per-job
+retry logic configured in the workflow spec</li>
+<li><a href="./debug-failed-job.html">Debug a Failed Job</a> — Investigate why a job failed</li>
+<li><a href="../concepts/intelligent-restart.html">Intelligent Restart</a> — Rerun affected jobs after editing
+inputs</li>
+</ul>
+
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../../core/concepts/parallelization.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../../core/how-to/debug-failed-job.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../../core/concepts/ro-crate.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../../core/how-to/set-up-authentication.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -326,11 +258,11 @@ torc workflows reset-status &lt;workflow_id&gt; --failed-only
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../../core/concepts/parallelization.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../../core/how-to/debug-failed-job.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../../core/concepts/ro-crate.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../../core/how-to/set-up-authentication.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
