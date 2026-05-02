@@ -1,15 +1,59 @@
-# Workflow Reinitialization
+# Intelligent Restart
 
 When you modify input files or configuration after a workflow has run, you need a way to re-execute
-only the affected jobs. Reinitialization handles this by detecting what changed and marking the
-appropriate jobs for re-execution.
+only the affected jobs. Intelligent restart — implemented by `torc workflows reinit` — detects what
+changed and resets just the jobs whose inputs are now stale, then propagates that reset through the
+dependency graph.
 
-## When to Use Reinitialization
+> **Note:** Intelligent restart is for _correct workflows that need to be rerun with different
+> inputs_. For _failed_ workflows, use
+> [`torc recover`](../../specialized/fault-tolerance/automatic-recovery.md) instead — it diagnoses
+> failures, adjusts resources, and resubmits jobs.
+
+## Motivating Example
+
+Suppose you have three input files, each consumed by a `work` job, that fan in to a `postprocess`
+job. The workflow completes successfully, but you discover a bug in `input_2`. After fixing it, you
+run:
+
+```bash
+torc workflows reinit <workflow_id>
+```
+
+Torc detects that `input_2` was modified, resets `work_2` (which reads it) and `postprocess` (which
+depends on `work_2`'s output), and leaves `work_1` and `work_3` alone:
+
+```mermaid
+flowchart TD
+    in1([input_1])
+    in2([input_2<br/>modified])
+    in3([input_3])
+
+    work1[work_1<br/>unchanged]
+    work2[work_2<br/>reset → ready]
+    work3[work_3<br/>unchanged]
+
+    post[postprocess<br/>reset → ready]
+
+    in1 --> work1 --> post
+    in2 --> work2 --> post
+    in3 --> work3 --> post
+
+    style in1 fill:#d4edda,stroke:#28a745,color:#155724
+    style in3 fill:#d4edda,stroke:#28a745,color:#155724
+    style in2 fill:#f8d7da,stroke:#dc3545,color:#721c24
+    style work1 fill:#d4edda,stroke:#28a745,color:#155724
+    style work3 fill:#d4edda,stroke:#28a745,color:#155724
+    style work2 fill:#fff3cd,stroke:#ffc107,color:#856404
+    style post fill:#fff3cd,stroke:#ffc107,color:#856404
+```
+
+## When to Use
 
 Use `torc workflows reinit` when:
 
 - **Input files changed** — You modified an input file and want dependent jobs to rerun
-- **Configuration updated** — You changed user_data parameters
+- **Configuration updated** — You changed `user_data` parameters
 - **Output files missing** — Output files were deleted and need regeneration
 - **Job definition changed** — You modified a job's command or other attributes
 - **Iterative development** — You're refining a workflow and need quick iteration
@@ -59,7 +103,7 @@ whether inputs changed.
 
 ## The Reinitialization Process
 
-When you run `reinitialize`, Torc performs these steps:
+When you run `reinit`, Torc performs these steps:
 
 1. **Bump run_id** — Increments the workflow's run counter for tracking
 2. **Reset workflow status** — Clears the previous run's completion state
@@ -136,26 +180,10 @@ A few properties worth knowing:
   server-side task keeps going. Resume with `torc tasks wait <id>`.
 - **Dry-run is synchronous.** `--dry-run` does not create a task; it returns the preview directly.
 
-## Retrying Failed Jobs
+## See Also
 
-**Important:** Reinitialization does not automatically retry failed jobs. To retry failed jobs, use
-`reset-status`:
-
-```bash
-# Reset failed jobs to ready status, then reinitialize to check for other changes
-torc workflows reset-status <workflow_id> --failed-only --reinitialize
-
-# Or just reset failed jobs without reinitialization
-torc workflows reset-status <workflow_id> --failed-only
-```
-
-## Comparison with Full Reset
-
-| Scenario                 | Use `reinitialize`  | Use `reset-status`        |
-| ------------------------ | ------------------- | ------------------------- |
-| Input file changed       | Yes                 | No                        |
-| Job command changed      | Yes                 | No                        |
-| Want to rerun everything | No                  | Yes                       |
-| Retry failed jobs only   | No                  | **Yes** (`--failed-only`) |
-| Iterative development    | Yes                 | Depends                   |
-| Changed workflow spec    | Create new workflow | Create new workflow       |
+- [Automatic Failure Recovery](../../specialized/fault-tolerance/automatic-recovery.md) — Use
+  `torc recover` to rerun _failed_ jobs (different from intelligent restart, which is for changed
+  inputs)
+- [Rerun Failed Jobs](../how-to/rerun-failed-jobs.md) — Quick how-to for retrying failures
+- [Dependency Resolution](./dependencies.md) — How Torc tracks which jobs depend on which files

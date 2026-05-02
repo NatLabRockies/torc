@@ -2215,9 +2215,9 @@ fn doc_topic_mapping() -> Vec<(&'static str, &'static str, &'static str)> {
             "Job runner types and configuration",
         ),
         (
-            "reinitialization",
-            "core/concepts/reinitialization.md",
-            "Workflow reinitialization",
+            "intelligent-restart",
+            "core/concepts/intelligent-restart.md",
+            "Intelligent restart: rerun affected jobs after input changes (torc workflows reinit)",
         ),
         (
             "resources",
