@@ -348,8 +348,11 @@ async fn full_copy_keeps_acl_tables() {
         .expect("export");
 
     assert_eq!(count(&out, "SELECT COUNT(*) FROM workflow").await, 2);
-    // No filter applied, so ACL tables and workflow_status are preserved
-    // verbatim — no orphan pruning runs in unfiltered mode.
+    // No filter applied, so ACL tables remain intact and `workflow_status`
+    // keeps both rows. Orphan pruning still runs in unfiltered mode, but the
+    // seed produces a clean DB, so the sweep finds nothing to remove. Any
+    // pruning behavior with actual orphans is exercised by
+    // `full_copy_also_prunes_pre_existing_orphans`.
     assert_eq!(count(&out, "SELECT COUNT(*) FROM access_group").await, 1);
     assert_eq!(
         count(&out, "SELECT COUNT(*) FROM user_group_membership").await,
@@ -676,4 +679,61 @@ async fn no_vacuum_flag_skips_final_vacuum_but_still_produces_valid_export() {
         0,
     );
     assert_eq!(count(&out, "SELECT COUNT(*) FROM access_group").await, 0);
+}
+
+#[tokio::test]
+async fn refuses_to_export_over_source_database() {
+    // Regression test: a slip like `--database prod.db --output prod.db
+    // --overwrite` would otherwise call remove_file() on the source before
+    // opening it for VACUUM INTO — turning a typo into permanent data loss.
+    // The export must reject this case before any destructive action.
+
+    let tmp = TempDir::new().unwrap();
+    let src = tmp.path().join("src.db");
+    let pool = setup_source_db(&src).await;
+    let _ = seed(&pool).await;
+    pool.close().await;
+
+    let mut o = opts(&src, src.clone(), Filter::None);
+    o.overwrite = true;
+    let err = run_export(o)
+        .await
+        .expect_err("expected refusal to overwrite source");
+    assert!(
+        err.to_string().contains("source database"),
+        "unexpected error: {err}"
+    );
+
+    // Source must still be intact — both the file and its content.
+    assert!(
+        src.exists(),
+        "source DB should not have been deleted by the failed export"
+    );
+    assert_eq!(count(&src, "SELECT COUNT(*) FROM workflow").await, 2);
+}
+
+#[tokio::test]
+async fn refuses_self_overwrite_when_paths_differ_textually_but_resolve_the_same() {
+    // Symlinks, `./`, etc. all collapse to the same canonical path. Make
+    // sure the check uses canonical comparison, not string equality.
+
+    let tmp = TempDir::new().unwrap();
+    let src = tmp.path().join("src.db");
+    let pool = setup_source_db(&src).await;
+    let _ = seed(&pool).await;
+    pool.close().await;
+
+    // Construct a textually different path that resolves to the same file
+    // by routing through `./` and a redundant component.
+    let aliased = tmp.path().join(".").join("src.db");
+    let mut o = opts(&src, aliased, Filter::None);
+    o.overwrite = true;
+    let err = run_export(o)
+        .await
+        .expect_err("expected refusal even via aliased path");
+    assert!(
+        err.to_string().contains("source database"),
+        "unexpected error: {err}"
+    );
+    assert!(src.exists(), "source DB should still be intact");
 }

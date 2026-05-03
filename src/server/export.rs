@@ -42,7 +42,7 @@
 
 use anyhow::{Context, Result, anyhow, bail};
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
 use tracing::info;
@@ -69,6 +69,7 @@ pub struct ExportOptions {
 pub async fn run_export(opts: ExportOptions) -> Result<()> {
     let source_url = normalize_db_url(&opts.source_db_url);
 
+    refuse_self_overwrite(&source_url, &opts.output_path)?;
     prepare_output_path(&opts.output_path, opts.overwrite)?;
 
     let mut src = SqliteConnection::connect_with(
@@ -188,6 +189,63 @@ async fn finalize_snapshot(opts: &ExportOptions) -> Result<()> {
         bytes as f64 / (1024.0 * 1024.0)
     );
     Ok(())
+}
+
+/// Reject `--output` paths that resolve to the same filesystem location as the
+/// source database. Without this check, a slip like
+/// `torc-server export --database prod.db --output prod.db --overwrite` would
+/// trigger `prepare_output_path` to `remove_file(prod.db)` before the export
+/// even opens the source — turning a typo into permanent data loss.
+///
+/// Comparison is by canonical filesystem path so symlinks, relative paths, and
+/// the various `sqlite:` URL prefixes all collapse to the same target. If the
+/// source URL is in-memory or refers to a path that doesn't exist on disk
+/// (which would fail later anyway), this check abstains.
+fn refuse_self_overwrite(source_url: &str, output: &Path) -> Result<()> {
+    let raw_source = strip_sqlite_url_prefix(source_url);
+    if raw_source == ":memory:" || raw_source.contains("file::memory:") {
+        return Ok(());
+    }
+    let source_canonical = match Path::new(raw_source).canonicalize() {
+        Ok(p) => p,
+        // Source path doesn't resolve — opening it for VACUUM INTO will fail
+        // with a clearer error than anything we'd produce here.
+        Err(_) => return Ok(()),
+    };
+    let output_canonical = canonicalize_with_missing_file(output)?;
+    if source_canonical == output_canonical {
+        bail!(
+            "refusing to overwrite the source database with itself ({})",
+            source_canonical.display()
+        );
+    }
+    Ok(())
+}
+
+/// Canonicalize a path that may not exist yet by canonicalizing its parent
+/// directory and rejoining the file name. The parent must exist — that's a
+/// reasonable precondition for a writeable output location.
+fn canonicalize_with_missing_file(path: &Path) -> Result<PathBuf> {
+    if let Ok(p) = path.canonicalize() {
+        return Ok(p);
+    }
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let parent_canonical = parent
+        .canonicalize()
+        .with_context(|| format!("canonicalizing output directory {}", parent.display()))?;
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| anyhow!("output path has no file name"))?;
+    Ok(parent_canonical.join(file_name))
+}
+
+/// Strip whichever `sqlite:` URL form is in front of the path. Handles the
+/// bare `sqlite:` form (e.g. `sqlite:relative.db`) and the URL-style
+/// `sqlite://` (e.g. `sqlite:///abs/path.db`).
+fn strip_sqlite_url_prefix(s: &str) -> &str {
+    s.strip_prefix("sqlite://")
+        .or_else(|| s.strip_prefix("sqlite:"))
+        .unwrap_or(s)
 }
 
 fn prepare_output_path(path: &PathBuf, overwrite: bool) -> Result<()> {
