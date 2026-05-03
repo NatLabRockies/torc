@@ -73,8 +73,40 @@ async fn seed(pool: &SqlitePool) -> SeedIds {
         .execute(pool)
         .await
         .unwrap();
-    sqlx::query("INSERT INTO job (workflow_id, name, command, status) VALUES (?, 'j1', 'echo', 0)")
+    let bob_job: i64 = sqlx::query_scalar(
+        "INSERT INTO job (workflow_id, name, command, status) \
+         VALUES (?, 'j1', 'echo', 0) RETURNING id",
+    )
+    .bind(bob)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+
+    // Seed rows in workflow-scoped tables added across multiple migration eras
+    // so the cascade chain is verified end-to-end. If any of these tables ever
+    // loses its ON DELETE CASCADE on workflow_id, the filtered export tests
+    // will fail because bob's rows will survive the workflow DELETE.
+    sqlx::query("INSERT INTO event (workflow_id, timestamp, data) VALUES (?, 0, '{}')")
         .bind(bob)
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO failure_handler (workflow_id, name, rules) VALUES (?, 'h', '[]')")
+        .bind(bob)
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO ro_crate_entity (workflow_id, entity_id, entity_type, metadata) \
+         VALUES (?, '#bob', 'Workflow', '{}')",
+    )
+    .bind(bob)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO slurm_stats (workflow_id, job_id, run_id) VALUES (?, ?, 1)")
+        .bind(bob)
+        .bind(bob_job)
         .execute(pool)
         .await
         .unwrap();
@@ -144,7 +176,6 @@ fn opts(src: &Path, out: PathBuf, filter: Filter) -> ExportOptions {
         source_db_url: src.display().to_string(),
         output_path: out,
         filter,
-        checkpoint: false,
         overwrite: false,
         preserve_access_groups: false,
         run_final_vacuum: true,
@@ -239,6 +270,22 @@ async fn user_filter_preserves_ids_and_strips_acl_tables() {
     // Cascade removed bob's job; alice's two jobs remain.
     assert_eq!(count(&out, "SELECT COUNT(*) FROM job").await, 2);
 
+    // Cascade also removed bob's rows in every other workflow-scoped table.
+    // Alice has no rows in these tables (the seed only populates them for
+    // bob), so all four counts must be zero.
+    for table in ["event", "failure_handler", "ro_crate_entity", "slurm_stats"] {
+        assert_eq!(
+            count(&out, &format!("SELECT COUNT(*) FROM {table}")).await,
+            0,
+            "{table} should be empty after bob's workflow was filtered out — \
+             missing ON DELETE CASCADE on workflow_id?",
+        );
+    }
+
+    // workflow_status has no cascade FK; the export prunes orphans explicitly
+    // so bob's status row is not left behind to leak workflow counts.
+    assert_eq!(count(&out, "SELECT COUNT(*) FROM workflow_status").await, 1);
+
     // ACL tables stripped by default in filtered mode.
     assert_eq!(count(&out, "SELECT COUNT(*) FROM access_group").await, 0);
     assert_eq!(
@@ -301,7 +348,8 @@ async fn full_copy_keeps_acl_tables() {
         .expect("export");
 
     assert_eq!(count(&out, "SELECT COUNT(*) FROM workflow").await, 2);
-    // No filter applied, so ACL tables are preserved verbatim.
+    // No filter applied, so ACL tables and workflow_status are preserved
+    // verbatim — no orphan pruning runs in unfiltered mode.
     assert_eq!(count(&out, "SELECT COUNT(*) FROM access_group").await, 1);
     assert_eq!(
         count(&out, "SELECT COUNT(*) FROM user_group_membership").await,
@@ -311,6 +359,7 @@ async fn full_copy_keeps_acl_tables() {
         count(&out, "SELECT COUNT(*) FROM workflow_access_group").await,
         2
     );
+    assert_eq!(count(&out, "SELECT COUNT(*) FROM workflow_status").await, 2);
 }
 
 #[tokio::test]

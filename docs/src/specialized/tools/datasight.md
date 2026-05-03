@@ -62,7 +62,7 @@ cp /path/to/torc/examples/datasight/queries.yaml .
 Edit `.env` to point at the torc SQLite database:
 
 ```bash
-DATABASE_URL=sqlite:///absolute/path/to/torc/server/db/sqlite/dev.db
+DATABASE_URL=sqlite:////absolute/path/to/torc/server/db/sqlite/dev.db
 LLM_PROVIDER=anthropic
 ANTHROPIC_API_KEY=...
 ```
@@ -116,7 +116,6 @@ Useful flags:
 
 | Flag                       | Effect                                                                                                      |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `--checkpoint`             | Flush the source WAL before snapshotting; without this the snapshot may be a few seconds stale.             |
 | `--overwrite`              | Replace an existing output file.                                                                            |
 | `--preserve-access-groups` | Keep ACL tables instead of stripping them. Only safe for full copies or vetted recipients.                  |
 | `--no-vacuum`              | Skip the final `VACUUM`; faster, but the file keeps the source's original size even after rows are deleted. |
@@ -188,11 +187,11 @@ file.
 
 ## The Reference Files
 
-| File                                                                                                       | Purpose                                                                                                       |
-| ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| [`schema.yaml`](https://github.com/NREL/torc/blob/main/examples/datasight/schema.yaml)                     | Restricts AI exploration to the analytically useful tables; hides internal scheduling columns.                |
-| [`schema_description.md`](https://github.com/NREL/torc/blob/main/examples/datasight/schema_description.md) | Domain context for the AI: status integer enum, return code conventions, key joins, JSON metadata extraction. |
-| [`queries.yaml`](https://github.com/NREL/torc/blob/main/examples/datasight/queries.yaml)                   | Seeded NL/SQL pairs the AI uses as few-shot examples.                                                         |
+| File                                                                                                                | Purpose                                                                                                       |
+| ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| [`schema.yaml`](https://github.com/NatLabRockies/torc/blob/main/examples/datasight/schema.yaml)                     | Restricts AI exploration to the analytically useful tables; hides internal scheduling columns.                |
+| [`schema_description.md`](https://github.com/NatLabRockies/torc/blob/main/examples/datasight/schema_description.md) | Domain context for the AI: status integer enum, return code conventions, key joins, JSON metadata extraction. |
+| [`queries.yaml`](https://github.com/NatLabRockies/torc/blob/main/examples/datasight/queries.yaml)                   | Seeded NL/SQL pairs the AI uses as few-shot examples.                                                         |
 
 The `schema_description.md` is the highest-leverage file — without it, the AI will see raw integer
 status codes (0–10) on `job.status` and have no way to decode them, won't know that `137` return

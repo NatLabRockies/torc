@@ -8,19 +8,20 @@
 //! (datasight, sqlite3, etc.).
 //!
 //! Strategy:
-//! 1. Optionally `PRAGMA wal_checkpoint(TRUNCATE)` on the source so the WAL is
-//!    flushed into the main file before snapshotting.
-//! 2. `VACUUM INTO '<output>'` — produces a transactionally consistent,
-//!    defragmented snapshot without quiescing the source server.
-//! 3. Open the snapshot, `PRAGMA foreign_keys=ON`, and
+//! 1. `VACUUM INTO '<output>'` — produces a transactionally consistent,
+//!    defragmented snapshot without quiescing the source server. A separate
+//!    SQLite connection participates in the source's WAL coherency (it
+//!    opens the `-wal` and `-shm` files), so the snapshot reflects every
+//!    committed transaction the running server can see.
+//! 2. Open the snapshot, `PRAGMA foreign_keys=ON`, and
 //!    `DELETE FROM workflow WHERE id NOT IN (<filter>)`. Every per-workflow
 //!    table has `ON DELETE CASCADE` on `workflow_id`, so the cascade chain
 //!    cleans up jobs, files, results, events, etc. automatically.
-//! 4. Unless `preserve_access_groups` is set, wipe `user_group_membership`
+//! 3. Unless `preserve_access_groups` is set, wipe `user_group_membership`
 //!    (which has no per-workflow scoping and would leak unrelated users'
 //!    group affiliations) and `access_group` (which cascades the
 //!    `workflow_access_group` join table).
-//! 5. Optional final `VACUUM` to reclaim space freed by the deletes.
+//! 4. Optional final `VACUUM` to reclaim space freed by the deletes.
 
 use anyhow::{Context, Result, anyhow, bail};
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
@@ -43,7 +44,6 @@ pub struct ExportOptions {
     pub source_db_url: String,
     pub output_path: PathBuf,
     pub filter: Filter,
-    pub checkpoint: bool,
     pub overwrite: bool,
     pub preserve_access_groups: bool,
     pub run_final_vacuum: bool,
@@ -61,14 +61,6 @@ pub async fn run_export(opts: ExportOptions) -> Result<()> {
     )
     .await
     .with_context(|| format!("opening source database at {source_url}"))?;
-
-    if opts.checkpoint {
-        info!("Checkpointing source WAL before snapshot");
-        sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
-            .execute(&mut src)
-            .await
-            .context("PRAGMA wal_checkpoint(TRUNCATE)")?;
-    }
 
     let target = opts
         .output_path
@@ -107,6 +99,16 @@ pub async fn run_export(opts: ExportOptions) -> Result<()> {
             bail!("filter matched no workflows; refusing to write empty export");
         }
         info!("Retained {remaining} workflow(s) after filter");
+
+        // workflow_status has no ON DELETE CASCADE from workflow (the FK column
+        // was added via ALTER TABLE ADD COLUMN, which SQLite cannot extend with
+        // FK constraints). The DELETE above leaves orphan status rows whose
+        // count alone would leak how many workflows existed in the source DB.
+        // Prune them here.
+        sqlx::query("DELETE FROM workflow_status WHERE id NOT IN (SELECT status_id FROM workflow)")
+            .execute(&mut dst)
+            .await
+            .context("DELETE FROM workflow_status (orphan prune)")?;
     }
 
     if filter_applied && !opts.preserve_access_groups {

@@ -377,24 +377,26 @@ The filters are mutually exclusive — pick one of `--user` (repeatable), `--acc
    `DELETE FROM workflow WHERE id NOT IN (<filter>)` runs. Every per-workflow table has
    `ON DELETE CASCADE` on `workflow_id`, so jobs, files, results, events, ro_crate entities, compute
    nodes, etc. are removed automatically by the cascade chain.
-3. **Sanitize.** Unless `--preserve-access-groups` is set, the exported database has its
+3. **Sanitize.** Orphan `workflow_status` rows are pruned (this table has no `ON DELETE CASCADE`
+   from `workflow` because the back-reference column was added via `ALTER TABLE ADD COLUMN`, which
+   SQLite cannot extend with FK constraints — leaving the orphans behind would leak the total
+   workflow count). Then, unless `--preserve-access-groups` is set, the exported database has its
    `user_group_membership` and `access_group` tables emptied. See
    [Access-control sanitization](#access-control-sanitization) below.
 4. **Compact.** A final `VACUUM` reclaims the space freed by the deletes (skip with `--no-vacuum`).
 
 ### Flags
 
-| Flag                       | Effect                                                                                                                      |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `-o`, `--output <PATH>`    | Output SQLite file path (required).                                                                                         |
-| `-d`, `--database <PATH>`  | Source database path. Defaults to `DATABASE_URL`.                                                                           |
-| `--user <NAME>`            | Keep only workflows owned by this user. Repeatable.                                                                         |
-| `--access-group <ID>`      | Keep only workflows linked to this access-group ID. Repeatable.                                                             |
-| (positional)               | Keep only these workflow IDs.                                                                                               |
-| `--checkpoint`             | Run `PRAGMA wal_checkpoint(TRUNCATE)` on the source first. Without this the snapshot may lag the live WAL by a few seconds. |
-| `--overwrite`              | Replace the output file if it already exists.                                                                               |
-| `--preserve-access-groups` | Keep `access_group` / `user_group_membership` / `workflow_access_group` instead of stripping them.                          |
-| `--no-vacuum`              | Skip the final `VACUUM`. Faster, but the output file retains the source database's allocated size.                          |
+| Flag                       | Effect                                                                                             |
+| -------------------------- | -------------------------------------------------------------------------------------------------- |
+| `-o`, `--output <PATH>`    | Output SQLite file path (required).                                                                |
+| `-d`, `--database <PATH>`  | Source database path. Defaults to `DATABASE_URL`.                                                  |
+| `--user <NAME>`            | Keep only workflows owned by this user. Repeatable.                                                |
+| `--access-group <ID>`      | Keep only workflows linked to this access-group ID. Repeatable.                                    |
+| (positional)               | Keep only these workflow IDs.                                                                      |
+| `--overwrite`              | Replace the output file if it already exists.                                                      |
+| `--preserve-access-groups` | Keep `access_group` / `user_group_membership` / `workflow_access_group` instead of stripping them. |
+| `--no-vacuum`              | Skip the final `VACUUM`. Faster, but the output file retains the source database's allocated size. |
 
 If a filter is specified and matches zero workflows, the command errors out and removes the
 partially-written output file rather than producing an empty database.
@@ -433,9 +435,9 @@ still giving them a faithful debugging artifact.
 
 ### Notes
 
-- **Live server safe.** `VACUUM INTO` does not block the source server's writers or readers. Use
-  `--checkpoint` first if you want the snapshot to include very recent writes that may still be in
-  the WAL.
+- **Live server safe.** `VACUUM INTO` does not block the source server's writers or readers, and the
+  export connection participates in SQLite's normal WAL coherency, so the snapshot reflects every
+  committed transaction the running server can see.
 - **Same-IDs guarantee.** The export preserves all primary keys. By contrast,
   [`torc workflows export`](../../core/workflows/export-import-workflows.md) emits portable JSON
   that loses ID identity on import — use that flow when the recipient cannot get a SQLite file from

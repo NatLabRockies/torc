@@ -2,7 +2,8 @@
 #
 # These are injected into the AI's system prompt as few-shot examples and
 # seeded into agent memory, so similar future questions return better answers.
-# Replace `:workflow_id` placeholders with real IDs when running by hand.
+# Examples use `123` as a stand-in workflow ID — substitute a real ID when
+# running these by hand.
 
 - question: List all workflows for a user, newest first
   sql: |

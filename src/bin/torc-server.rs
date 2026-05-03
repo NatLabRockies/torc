@@ -177,11 +177,6 @@ struct ExportArgs {
     #[arg(conflicts_with_all = ["users", "access_groups"])]
     workflow_ids: Vec<i64>,
 
-    /// Checkpoint the WAL on the source database before snapshotting.
-    /// Without this the snapshot may be slightly stale relative to in-flight writes.
-    #[arg(long)]
-    checkpoint: bool,
-
     /// Overwrite the output file if it already exists.
     #[arg(long)]
     overwrite: bool,
@@ -324,7 +319,6 @@ fn handle_export(args: ExportArgs) -> Result<()> {
         source_db_url: source_db,
         output_path: args.output,
         filter,
-        checkpoint: args.checkpoint,
         overwrite: args.overwrite,
         preserve_access_groups: args.preserve_access_groups,
         run_final_vacuum: !args.no_vacuum,
