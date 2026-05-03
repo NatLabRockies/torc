@@ -378,16 +378,21 @@ The filters are mutually exclusive — pick one of `--user` (repeatable), `--acc
    `ON DELETE CASCADE` on `workflow_id`, so jobs, files, results, events, ro_crate entities, compute
    nodes, etc. are removed automatically by the cascade chain — for the workflows the filter
    actually deleted.
-3. **Sweep orphans.** Cascade only fires when the parent row IS deleted, so any pre-existing orphans
-   in the source DB (for example, rows left behind by a `delete_workflow` code path that bypassed
-   cascade by toggling `PRAGMA foreign_keys = OFF`) survive the snapshot. The export iteratively
-   runs `PRAGMA foreign_key_check` and deletes every reported violation until none remain.
-   `workflow_status` is pruned separately (its back-reference column has no FK declared and so is
-   invisible to `foreign_key_check`).
-4. **Sanitize.** Unless `--preserve-access-groups` is set, the exported database has its
-   `user_group_membership` and `access_group` tables emptied. See
+3. **Sweep orphans (always).** Cascade only fires when the parent row IS deleted, so pre-existing
+   orphans in the source DB survive the snapshot. Common sources: a `delete_workflow` code path that
+   toggled `PRAGMA foreign_keys = OFF`, or a bare `sqlite3` CLI session (the CLI defaults to
+   `foreign_keys = OFF`). The export iteratively runs `PRAGMA foreign_key_check` and deletes every
+   reported violation until none remain. `workflow_status` is pruned separately (its back-reference
+   column has no FK declared and so is invisible to `foreign_key_check`). This step runs for
+   unfiltered exports too — FK violations are data corruption, not fidelity to the source.
+4. **Sanitize.** If a filter was applied and `--preserve-access-groups` is not set, the exported
+   database has its `user_group_membership` and `access_group` tables emptied. See
    [Access-control sanitization](#access-control-sanitization) below.
 5. **Compact.** A final `VACUUM` reclaims the space freed by the deletes (skip with `--no-vacuum`).
+
+If anything in steps 2–5 fails after step 1 has written the snapshot, the partial output file is
+removed before the error is reported — a failed export never leaves a half-finished database on
+disk.
 
 ### Flags
 

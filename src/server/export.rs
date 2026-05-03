@@ -13,25 +13,32 @@
 //!    SQLite connection participates in the source's WAL coherency (it
 //!    opens the `-wal` and `-shm` files), so the snapshot reflects every
 //!    committed transaction the running server can see.
-//! 2. Open the snapshot, `PRAGMA foreign_keys=ON`, and
-//!    `DELETE FROM workflow WHERE id NOT IN (<filter>)`. Every per-workflow
-//!    table has `ON DELETE CASCADE` on `workflow_id`, so the cascade chain
-//!    cleans up jobs, files, results, events, etc. automatically — for the
+//! 2. Open the snapshot, `PRAGMA foreign_keys=ON`, and (if a filter was
+//!    requested) `DELETE FROM workflow WHERE id NOT IN (<filter>)`. Every
+//!    per-workflow table has `ON DELETE CASCADE` on `workflow_id`, so the
+//!    cascade chain cleans up jobs, files, results, events, etc. for the
 //!    rows we just deleted.
-//! 3. Sweep pre-existing orphans. The source DB can carry orphan rows
-//!    (workflow_id pointing at a workflow row that was already gone before
-//!    the export ran — typically from a `delete_workflow` code path that
-//!    bypasses cascade by toggling `PRAGMA foreign_keys = OFF`). Cascade
-//!    only fires for the rows the filter deleted, so those orphans survive
-//!    the snapshot. Iteratively run `PRAGMA foreign_key_check` and delete
-//!    every reported violation until none remain. Also explicitly prune
-//!    `workflow_status` (whose back-reference column has no FK and so is
-//!    invisible to `foreign_key_check`).
-//! 4. Unless `preserve_access_groups` is set, wipe `user_group_membership`
-//!    (which has no per-workflow scoping and would leak unrelated users'
-//!    group affiliations) and `access_group` (which cascades the
-//!    `workflow_access_group` join table).
+//! 3. Sweep pre-existing orphans, regardless of whether a filter was
+//!    applied. The source DB can carry rows whose `workflow_id` already
+//!    pointed at a missing workflow before the export ran — typically from
+//!    a `delete_workflow` code path that bypasses cascade by toggling
+//!    `PRAGMA foreign_keys = OFF`, or a bare `sqlite3` CLI session (the
+//!    CLI defaults to FKs off). Cascade only fires for parent rows we
+//!    actually delete, so orphans survive verbatim. Iteratively run
+//!    `PRAGMA foreign_key_check` and delete every reported violation until
+//!    none remain. Then explicitly prune `workflow_status` (whose
+//!    back-reference column has no FK declared and so is invisible to
+//!    `foreign_key_check`). Both steps run in unfiltered mode too — FK
+//!    violations are data corruption, not "fidelity to the source."
+//! 4. If a filter was applied and `preserve_access_groups` is false, wipe
+//!    `user_group_membership` (which has no per-workflow scoping and would
+//!    leak unrelated users' group affiliations) and `access_group` (which
+//!    cascades the `workflow_access_group` join table).
 //! 5. Optional final `VACUUM` to reclaim space freed by the deletes.
+//!
+//! If anything in steps 2–5 fails after `VACUUM INTO` has written the file,
+//! the partial output is removed before the error propagates so callers
+//! can't mistake it for a valid export.
 
 use anyhow::{Context, Result, anyhow, bail};
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
@@ -86,6 +93,23 @@ pub async fn run_export(opts: ExportOptions) -> Result<()> {
         .context("VACUUM INTO")?;
     let _ = src.close().await;
 
+    // Once VACUUM INTO writes the snapshot, any subsequent failure must clean
+    // up the partial output file so a caller can't mistake it for a valid
+    // export.
+    match finalize_snapshot(&opts).await {
+        Ok(()) => Ok(()),
+        Err(err) => {
+            let _ = std::fs::remove_file(&opts.output_path);
+            Err(err)
+        }
+    }
+}
+
+async fn finalize_snapshot(opts: &ExportOptions) -> Result<()> {
+    let target = opts
+        .output_path
+        .to_str()
+        .ok_or_else(|| anyhow!("output path is not valid UTF-8"))?;
     let dest_url = format!("sqlite:{target}");
     let mut dst = SqliteConnection::connect_with(
         &SqliteConnectOptions::from_str(&dest_url)?
@@ -103,34 +127,24 @@ pub async fn run_export(opts: ExportOptions) -> Result<()> {
             .fetch_one(&mut dst)
             .await?;
         if remaining == 0 {
-            // Drop the connection so we can remove the file cleanly.
-            let _ = dst.close().await;
-            let _ = std::fs::remove_file(&opts.output_path);
             bail!("filter matched no workflows; refusing to write empty export");
         }
         info!("Retained {remaining} workflow(s) after filter");
-
-        // Cascade-from-workflow only fires for parent rows that the filter
-        // actually deleted. The source DB can contain pre-existing orphans
-        // (rows whose FK target was already missing — e.g., from a prior
-        // delete_workflow run that bypassed foreign_keys), and VACUUM INTO
-        // copies those verbatim. Sweep them now using foreign_key_check,
-        // which enumerates every FK violation in the database. Iterate
-        // because a deletion may itself cascade (or surface a violation that
-        // the previous pass masked).
-        prune_orphans(&mut dst).await?;
-
-        // workflow_status has no FK declared back to workflow at all (the
-        // workflow_id column was added via ALTER TABLE ADD COLUMN, which
-        // SQLite cannot extend with FK constraints), so foreign_key_check
-        // doesn't see those rows. Prune them explicitly: any status row not
-        // referenced by a surviving workflow.status_id is dead weight, and
-        // its count alone would leak how many workflows the source held.
-        sqlx::query("DELETE FROM workflow_status WHERE id NOT IN (SELECT status_id FROM workflow)")
-            .execute(&mut dst)
-            .await
-            .context("DELETE FROM workflow_status (orphan prune)")?;
     }
+
+    // Always sweep FK orphans and orphan workflow_status rows, regardless of
+    // filter mode. Cascade only fires for parent rows the filter deleted;
+    // pre-existing orphans (from any code path that ran with foreign_keys=OFF
+    // — including the bare sqlite3 CLI, which defaults to OFF) survive
+    // VACUUM INTO and are data corruption, not fidelity to the source.
+    prune_orphans(&mut dst).await?;
+    // workflow_status has no FK declared back to workflow (the back-reference
+    // column was added via ALTER TABLE ADD COLUMN, which SQLite cannot extend
+    // with FK constraints), so foreign_key_check doesn't see its orphans.
+    sqlx::query("DELETE FROM workflow_status WHERE id NOT IN (SELECT status_id FROM workflow)")
+        .execute(&mut dst)
+        .await
+        .context("DELETE FROM workflow_status (orphan prune)")?;
 
     if filter_applied && !opts.preserve_access_groups {
         info!(

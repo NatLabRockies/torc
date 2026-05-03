@@ -609,3 +609,71 @@ async fn pre_existing_orphans_in_source_are_pruned() {
         "pragma_foreign_key_check should report no violations",
     );
 }
+
+#[tokio::test]
+async fn full_copy_also_prunes_pre_existing_orphans() {
+    // Same orphan-injection pattern as the filtered test, but with no
+    // filter applied. Full-copy exports must still produce a DB free of FK
+    // violations — orphans are data corruption, not fidelity to the source.
+
+    let tmp = TempDir::new().unwrap();
+    let src = tmp.path().join("src.db");
+    let pool = setup_source_db(&src).await;
+    let _ids = seed(&pool).await;
+
+    let mut conn = pool.acquire().await.unwrap();
+    sqlx::query("PRAGMA foreign_keys = OFF")
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO failure_handler (workflow_id, name, rules) \
+         VALUES (999999, 'orphan', '[]')",
+    )
+    .execute(&mut *conn)
+    .await
+    .unwrap();
+    drop(conn);
+    pool.close().await;
+
+    let out = tmp.path().join("full.db");
+    run_export(opts(&src, out.clone(), Filter::None))
+        .await
+        .expect("export");
+
+    assert_eq!(
+        count(&out, "SELECT COUNT(*) FROM pragma_foreign_key_check").await,
+        0,
+        "full copy should still prune pre-existing orphans",
+    );
+    // Workflow rows are preserved (no filter); the orphan failure_handler row
+    // is gone, but bob's legitimate one (seeded for his existing workflow)
+    // remains.
+    assert_eq!(count(&out, "SELECT COUNT(*) FROM workflow").await, 2);
+    assert_eq!(count(&out, "SELECT COUNT(*) FROM failure_handler").await, 1);
+}
+
+#[tokio::test]
+async fn no_vacuum_flag_skips_final_vacuum_but_still_produces_valid_export() {
+    // Exercises run_final_vacuum=false (the --no-vacuum CLI flag). The output
+    // file size assertion is intentionally loose — we just confirm a valid
+    // SQLite database with the expected logical contents was produced.
+
+    let tmp = TempDir::new().unwrap();
+    let (src, ids) = fresh_source(&tmp).await;
+    let out = tmp.path().join("no_vacuum.db");
+
+    let mut o = opts(&src, out.clone(), Filter::Users(vec!["alice".into()]));
+    o.run_final_vacuum = false;
+    run_export(o).await.expect("export");
+
+    // Same correctness guarantees as a normal filtered export — VACUUM is
+    // purely a space-reclamation step.
+    assert_eq!(workflow_ids(&out).await, vec![ids.alice_workflow]);
+    assert_eq!(count(&out, "SELECT COUNT(*) FROM job").await, 2);
+    assert_eq!(
+        count(&out, "SELECT COUNT(*) FROM pragma_foreign_key_check").await,
+        0,
+    );
+    assert_eq!(count(&out, "SELECT COUNT(*) FROM access_group").await, 0);
+}
