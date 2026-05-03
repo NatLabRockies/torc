@@ -535,3 +535,77 @@ async fn single_access_group_excludes_workflows_not_in_that_group() {
 
     assert_eq!(workflow_ids(&out).await, vec![ext.carol_workflow]);
 }
+
+#[tokio::test]
+async fn pre_existing_orphans_in_source_are_pruned() {
+    // Regression test for the case observed in the wild: the source DB
+    // contains rows in workflow-scoped tables whose workflow_id points at a
+    // workflow row that was already gone before the export ran. Cascade
+    // can't help (the parent row is missing, so there's nothing to delete),
+    // and VACUUM INTO copies the orphans verbatim. The export must sweep
+    // them with PRAGMA foreign_key_check.
+
+    let tmp = TempDir::new().unwrap();
+    let src = tmp.path().join("src.db");
+    let pool = setup_source_db(&src).await;
+    let ids = seed(&pool).await;
+
+    // Inject orphan rows on a single connection with foreign_keys disabled
+    // so the inserts succeed without a real workflow parent.
+    let mut conn = pool.acquire().await.unwrap();
+    sqlx::query("PRAGMA foreign_keys = OFF")
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    let orphan_workflow_id: i64 = 999_999;
+    sqlx::query(
+        "INSERT INTO failure_handler (workflow_id, name, rules) \
+         VALUES (?, 'orphan-handler', '[]')",
+    )
+    .bind(orphan_workflow_id)
+    .execute(&mut *conn)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO ro_crate_entity (workflow_id, entity_id, entity_type, metadata) \
+         VALUES (?, '#orphan', 'Workflow', '{}')",
+    )
+    .bind(orphan_workflow_id)
+    .execute(&mut *conn)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO event (workflow_id, timestamp, data) VALUES (?, 0, '{}')")
+        .bind(orphan_workflow_id)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    drop(conn);
+    pool.close().await;
+
+    // Filter to alice. Cascade fires for bob's rows; orphan rows referencing
+    // workflow 999_999 are not the cascade's responsibility — they must be
+    // pruned by the foreign_key_check sweep.
+    let out = tmp.path().join("alice.db");
+    run_export(opts(&src, out.clone(), Filter::Users(vec!["alice".into()])))
+        .await
+        .expect("export");
+
+    assert_eq!(workflow_ids(&out).await, vec![ids.alice_workflow]);
+
+    // Every table that had orphan rows should now be empty.
+    for table in ["failure_handler", "ro_crate_entity", "event"] {
+        assert_eq!(
+            count(&out, &format!("SELECT COUNT(*) FROM {table}")).await,
+            0,
+            "{table} still contains orphan rows after export",
+        );
+    }
+
+    // Belt-and-suspenders: the output database should have zero FK
+    // violations of any kind.
+    assert_eq!(
+        count(&out, "SELECT COUNT(*) FROM pragma_foreign_key_check").await,
+        0,
+        "pragma_foreign_key_check should report no violations",
+    );
+}

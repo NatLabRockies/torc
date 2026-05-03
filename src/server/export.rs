@@ -16,12 +16,22 @@
 //! 2. Open the snapshot, `PRAGMA foreign_keys=ON`, and
 //!    `DELETE FROM workflow WHERE id NOT IN (<filter>)`. Every per-workflow
 //!    table has `ON DELETE CASCADE` on `workflow_id`, so the cascade chain
-//!    cleans up jobs, files, results, events, etc. automatically.
-//! 3. Unless `preserve_access_groups` is set, wipe `user_group_membership`
+//!    cleans up jobs, files, results, events, etc. automatically — for the
+//!    rows we just deleted.
+//! 3. Sweep pre-existing orphans. The source DB can carry orphan rows
+//!    (workflow_id pointing at a workflow row that was already gone before
+//!    the export ran — typically from a `delete_workflow` code path that
+//!    bypasses cascade by toggling `PRAGMA foreign_keys = OFF`). Cascade
+//!    only fires for the rows the filter deleted, so those orphans survive
+//!    the snapshot. Iteratively run `PRAGMA foreign_key_check` and delete
+//!    every reported violation until none remain. Also explicitly prune
+//!    `workflow_status` (whose back-reference column has no FK and so is
+//!    invisible to `foreign_key_check`).
+//! 4. Unless `preserve_access_groups` is set, wipe `user_group_membership`
 //!    (which has no per-workflow scoping and would leak unrelated users'
 //!    group affiliations) and `access_group` (which cascades the
 //!    `workflow_access_group` join table).
-//! 4. Optional final `VACUUM` to reclaim space freed by the deletes.
+//! 5. Optional final `VACUUM` to reclaim space freed by the deletes.
 
 use anyhow::{Context, Result, anyhow, bail};
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
@@ -100,11 +110,22 @@ pub async fn run_export(opts: ExportOptions) -> Result<()> {
         }
         info!("Retained {remaining} workflow(s) after filter");
 
-        // workflow_status has no ON DELETE CASCADE from workflow (the FK column
-        // was added via ALTER TABLE ADD COLUMN, which SQLite cannot extend with
-        // FK constraints). The DELETE above leaves orphan status rows whose
-        // count alone would leak how many workflows existed in the source DB.
-        // Prune them here.
+        // Cascade-from-workflow only fires for parent rows that the filter
+        // actually deleted. The source DB can contain pre-existing orphans
+        // (rows whose FK target was already missing — e.g., from a prior
+        // delete_workflow run that bypassed foreign_keys), and VACUUM INTO
+        // copies those verbatim. Sweep them now using foreign_key_check,
+        // which enumerates every FK violation in the database. Iterate
+        // because a deletion may itself cascade (or surface a violation that
+        // the previous pass masked).
+        prune_orphans(&mut dst).await?;
+
+        // workflow_status has no FK declared back to workflow at all (the
+        // workflow_id column was added via ALTER TABLE ADD COLUMN, which
+        // SQLite cannot extend with FK constraints), so foreign_key_check
+        // doesn't see those rows. Prune them explicitly: any status row not
+        // referenced by a surviving workflow.status_id is dead weight, and
+        // its count alone would leak how many workflows the source held.
         sqlx::query("DELETE FROM workflow_status WHERE id NOT IN (SELECT status_id FROM workflow)")
             .execute(&mut dst)
             .await
@@ -217,6 +238,63 @@ async fn apply_workflow_filter(dst: &mut SqliteConnection, filter: &Filter) -> R
             Ok(())
         }
     }
+}
+
+/// Iteratively delete rows that violate any foreign-key constraint.
+///
+/// `PRAGMA foreign_key_check` enumerates every FK violation currently present
+/// in the database — in our case, this catches pre-existing orphans the
+/// source DB carried in (where the FK parent was already missing before our
+/// filter ran). Deletes are performed per-table in batches keyed off the
+/// virtual-table's `rowid` column (the violating row's rowid), and the loop
+/// repeats because a single deletion can cascade and surface further
+/// violations on the next pass. Bounded by `MAX_ITERATIONS` so a pathological
+/// schema can't spin forever.
+async fn prune_orphans(dst: &mut SqliteConnection) -> Result<()> {
+    use std::collections::BTreeMap;
+    const MAX_ITERATIONS: usize = 16;
+
+    for pass in 1..=MAX_ITERATIONS {
+        let violations: Vec<(String, i64)> =
+            sqlx::query_as(r#"SELECT "table", rowid FROM pragma_foreign_key_check"#)
+                .fetch_all(&mut *dst)
+                .await
+                .context("PRAGMA foreign_key_check")?;
+        if violations.is_empty() {
+            return Ok(());
+        }
+        let mut by_table: BTreeMap<String, Vec<i64>> = BTreeMap::new();
+        for (t, r) in violations {
+            by_table.entry(t).or_default().push(r);
+        }
+        let total: usize = by_table.values().map(|v| v.len()).sum();
+        info!(
+            "Pruning {total} orphan row(s) across {} table(s) (pass {pass})",
+            by_table.len()
+        );
+        for (table, rowids) in by_table {
+            let placeholders = repeat_placeholders(rowids.len());
+            // Quote the identifier in case a future migration introduces a
+            // table name that needs it; double any embedded quote per the SQL
+            // standard.
+            let sql = format!(
+                r#"DELETE FROM "{}" WHERE rowid IN ({})"#,
+                table.replace('"', "\"\""),
+                placeholders,
+            );
+            let mut q = sqlx::query(&sql);
+            for r in &rowids {
+                q = q.bind(*r);
+            }
+            q.execute(&mut *dst)
+                .await
+                .with_context(|| format!("DELETE orphans from {table}"))?;
+        }
+    }
+    bail!(
+        "orphan pruning did not converge after {MAX_ITERATIONS} iterations \
+         — likely a schema issue, refusing to loop forever"
+    );
 }
 
 fn repeat_placeholders(n: usize) -> String {
