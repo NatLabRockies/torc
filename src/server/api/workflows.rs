@@ -9,10 +9,11 @@ use log::{debug, error, info};
 use sqlx::Row;
 
 use crate::server::api_responses::{
-    CancelWorkflowResponse, CreateWorkflowResponse, DeleteWorkflowResponse, GetWorkflowResponse,
-    IsWorkflowCompleteResponse, IsWorkflowUninitializedResponse, ListJobDependenciesResponse,
-    ListJobFileRelationshipsResponse, ListJobUserDataRelationshipsResponse, ListWorkflowsResponse,
-    ResetWorkflowStatusResponse, UpdateWorkflowResponse,
+    ArchiveWorkflowResponse, CancelWorkflowResponse, CreateWorkflowResponse,
+    DeleteWorkflowResponse, GetWorkflowResponse, IsWorkflowCompleteResponse,
+    IsWorkflowUninitializedResponse, ListJobDependenciesResponse, ListJobFileRelationshipsResponse,
+    ListJobUserDataRelationshipsResponse, ListWorkflowsResponse, ResetWorkflowStatusResponse,
+    UpdateWorkflowResponse,
 };
 
 use crate::models;
@@ -42,6 +43,14 @@ pub trait WorkflowsApi<C> {
         id: i64,
         context: &C,
     ) -> Result<CancelWorkflowResponse, ApiError>;
+
+    /// Archive or unarchive a workflow.
+    async fn archive_workflow(
+        &self,
+        id: i64,
+        body: models::ArchiveWorkflowRequest,
+        context: &C,
+    ) -> Result<ArchiveWorkflowResponse, ApiError>;
 
     /// Retrieve a workflow.
     async fn get_workflow(&self, id: i64, context: &C) -> Result<GetWorkflowResponse, ApiError>;
@@ -757,6 +766,51 @@ where
         Ok(CancelWorkflowResponse::SuccessfulResponse(response_json))
     }
 
+    /// Archive or unarchive a workflow.
+    async fn archive_workflow(
+        &self,
+        id: i64,
+        body: models::ArchiveWorkflowRequest,
+        context: &C,
+    ) -> Result<ArchiveWorkflowResponse, ApiError> {
+        debug!(
+            "archive_workflow({}, is_archived={}) - X-Span-ID: {:?}",
+            id,
+            body.is_archived,
+            context.get().0.clone()
+        );
+
+        let is_archived_int = if body.is_archived { 1 } else { 0 };
+        let result = sqlx::query!(
+            "UPDATE workflow SET is_archived = ? WHERE id = ?",
+            is_archived_int,
+            id
+        )
+        .execute(self.context.pool.as_ref())
+        .await
+        .map_err(|e| database_error_with_msg(e, "Failed to update workflow archive flag"))?;
+
+        if result.rows_affected() == 0 {
+            let error_response = models::ErrorResponse::new(serde_json::json!({
+                "message": format!("Workflow not found with ID: {}", id)
+            }));
+            return Ok(ArchiveWorkflowResponse::NotFoundErrorResponse(
+                error_response,
+            ));
+        }
+
+        let updated = match self.get_workflow(id, context).await? {
+            GetWorkflowResponse::SuccessfulResponse(wf) => wf,
+            _ => {
+                error!("Failed to get workflow {} after archive update", id);
+                return Err(ApiError(
+                    "Failed to get workflow after archive update".to_string(),
+                ));
+            }
+        };
+        Ok(ArchiveWorkflowResponse::SuccessfulResponse(updated))
+    }
+
     /// Retrieve a workflow.
     async fn get_workflow(&self, id: i64, context: &C) -> Result<GetWorkflowResponse, ApiError> {
         debug!(
@@ -1059,14 +1113,16 @@ where
             }
         };
 
-        // Convert boolean to integer for SQLite if provided
+        // Convert boolean to integer for SQLite if provided.
+        // run_id, is_canceled, is_archived are read-only on this endpoint —
+        // mutate them via /workflows/{id}/cancel, /archive, and
+        // /reset_status (which also bumps run_id) so their dedicated side
+        // effects fire.
         let compute_node_ignore_workflow_completion_int = body
             .compute_node_ignore_workflow_completion
             .map(|val| if val { 1 } else { 0 });
         let use_pending_failed_int = body.use_pending_failed.map(|val| if val { 1 } else { 0 });
         let enable_ro_crate_int = body.enable_ro_crate.map(|val| if val { 1 } else { 0 });
-        let is_canceled_int = body.is_canceled.map(|val| if val { 1 } else { 0 });
-        let is_archived_int = body.is_archived.map(|val| if val { 1 } else { 0 });
         let body_env = normalize_env_map(body.env.clone());
         if body.env.is_some() && body_env != current_workflow.env {
             let error_response = models::ErrorResponse::new(serde_json::json!({
@@ -1094,11 +1150,8 @@ where
                 project = COALESCE($10, project),
                 metadata = COALESCE($11, metadata),
                 slurm_config = COALESCE($12, slurm_config),
-                execution_config = COALESCE($13, execution_config),
-                run_id = COALESCE($14, run_id),
-                is_canceled = COALESCE($15, is_canceled),
-                is_archived = COALESCE($16, is_archived)
-            WHERE id = $17
+                execution_config = COALESCE($13, execution_config)
+            WHERE id = $14
             "#,
             body.name,
             body.description,
@@ -1113,9 +1166,6 @@ where
             body.metadata,
             body.slurm_config,
             body.execution_config,
-            body.run_id,
-            is_canceled_int,
-            is_archived_int,
             id
         )
         .execute(self.context.pool.as_ref())
@@ -1501,13 +1551,15 @@ where
             }
         };
 
-        // Reset workflow status to default values:
-        // is_canceled = false (0), is_archived = false (0)
+        // Reset clears the lifecycle flags and bumps run_id by one — semantically
+        // "start a new run". Folding the bump in here keeps the API surface
+        // small and means run_id is only mutated through this endpoint.
         match sqlx::query!(
             r#"
             UPDATE workflow
             SET is_canceled = 0,
-                is_archived = 0
+                is_archived = 0,
+                run_id = run_id + 1
             WHERE id = ?
             "#,
             id

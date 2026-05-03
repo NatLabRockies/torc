@@ -1184,12 +1184,12 @@ fn test_workflow_list_excludes_archived_by_default(start_server: &ServerProcess)
     let archived_id = to_archive_workflow.id.unwrap();
 
     // Archive the second workflow
-    let archived_wf =
-        apis::workflows_api::get_workflow(config, archived_id).expect("Failed to get workflow");
-    let mut update = torc::WorkflowModel::new(archived_wf.name, archived_wf.user);
-    update.is_archived = Some(true);
-    apis::workflows_api::update_workflow(config, archived_id, update)
-        .expect("Failed to archive workflow");
+    apis::workflows_api::archive_workflow(
+        config,
+        archived_id,
+        torc::models::ArchiveWorkflowRequest { is_archived: true },
+    )
+    .expect("Failed to archive workflow");
 
     // List workflows without archived filter (default behavior)
     let list_args = ["workflows", "list", "--limit", "100"];
@@ -1235,12 +1235,12 @@ fn test_workflow_list_archived_only(start_server: &ServerProcess) {
     let archived_id = to_archive_workflow.id.unwrap();
 
     // Archive the second workflow
-    let archived_wf =
-        apis::workflows_api::get_workflow(config, archived_id).expect("Failed to get workflow");
-    let mut update = torc::WorkflowModel::new(archived_wf.name, archived_wf.user);
-    update.is_archived = Some(true);
-    apis::workflows_api::update_workflow(config, archived_id, update)
-        .expect("Failed to archive workflow");
+    apis::workflows_api::archive_workflow(
+        config,
+        archived_id,
+        torc::models::ArchiveWorkflowRequest { is_archived: true },
+    )
+    .expect("Failed to archive workflow");
 
     // List only archived workflows
     let list_args = ["workflows", "list", "--limit", "100", "--archived-only"];
@@ -1283,12 +1283,12 @@ fn test_cannot_reset_archived_workflow_status(start_server: &ServerProcess) {
     let workflow_id = workflow.id.unwrap();
 
     // Archive the workflow
-    let wf =
-        apis::workflows_api::get_workflow(config, workflow_id).expect("Failed to get workflow");
-    let mut update = torc::WorkflowModel::new(wf.name, wf.user);
-    update.is_archived = Some(true);
-    apis::workflows_api::update_workflow(config, workflow_id, update)
-        .expect("Failed to archive workflow");
+    apis::workflows_api::archive_workflow(
+        config,
+        workflow_id,
+        torc::models::ArchiveWorkflowRequest { is_archived: true },
+    )
+    .expect("Failed to archive workflow");
 
     // Attempt to reset workflow status - should fail
     let reset_result = apis::workflows_api::reset_workflow_status(config, workflow_id, None);
@@ -1318,12 +1318,12 @@ fn test_archived_workflow_other_operations_still_work(start_server: &ServerProce
     let workflow_id = workflow.id.unwrap();
 
     // Archive the workflow
-    let wf =
-        apis::workflows_api::get_workflow(config, workflow_id).expect("Failed to get workflow");
-    let mut update = torc::WorkflowModel::new(wf.name, wf.user);
-    update.is_archived = Some(true);
-    apis::workflows_api::update_workflow(config, workflow_id, update)
-        .expect("Failed to archive workflow");
+    apis::workflows_api::archive_workflow(
+        config,
+        workflow_id,
+        torc::models::ArchiveWorkflowRequest { is_archived: true },
+    )
+    .expect("Failed to archive workflow");
 
     // Verify get_workflow still works on archived workflows (status fields are
     // returned inline on the workflow row).

@@ -300,6 +300,10 @@ pub fn app_router(state: LiveRouterState) -> Router {
             put(cancel_workflow),
         )
         .route(
+            "/torc-service/v1/workflows/{id}/archive",
+            post(archive_workflow),
+        )
+        .route(
             "/torc-service/v1/workflows/{id}/initialize_jobs",
             post(initialize_jobs),
         )
@@ -3318,6 +3322,27 @@ pub async fn cancel_workflow(
 ) -> Response<Body> {
     match state.server.cancel_workflow(id, &context).await {
         Ok(response) => cancel_workflow_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[utoipa::path(
+    post,
+    tag = "workflows",
+    path = "/workflows/{id}/archive",
+    operation_id = "archive_workflow",
+    params(("id" = i64, Path, description = "Workflow ID")),
+    request_body = models::ArchiveWorkflowRequest,
+    responses((status = 200, body = models::WorkflowModel))
+)]
+pub async fn archive_workflow(
+    State(state): State<LiveRouterState>,
+    Path(id): Path<i64>,
+    Extension(context): Extension<EmptyContext>,
+    Json(body): Json<models::ArchiveWorkflowRequest>,
+) -> Response<Body> {
+    match state.server.archive_workflow(id, body, &context).await {
+        Ok(response) => archive_workflow_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
 }

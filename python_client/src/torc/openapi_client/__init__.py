@@ -49,6 +49,7 @@ __all__ = [
     "AccessCheckResponse",
     "AccessGroupModel",
     "ActiveTaskResponse",
+    "ArchiveWorkflowRequest",
     "BatchCompleteJobsRequest",
     "BatchCompleteJobsResponse",
     "ClaimActionRequest",
@@ -157,6 +158,7 @@ from torc.openapi_client.exceptions import ApiException as ApiException
 from torc.openapi_client.models.access_check_response import AccessCheckResponse as AccessCheckResponse
 from torc.openapi_client.models.access_group_model import AccessGroupModel as AccessGroupModel
 from torc.openapi_client.models.active_task_response import ActiveTaskResponse as ActiveTaskResponse
+from torc.openapi_client.models.archive_workflow_request import ArchiveWorkflowRequest as ArchiveWorkflowRequest
 from torc.openapi_client.models.batch_complete_jobs_request import BatchCompleteJobsRequest as BatchCompleteJobsRequest
 from torc.openapi_client.models.batch_complete_jobs_response import BatchCompleteJobsResponse as BatchCompleteJobsResponse
 from torc.openapi_client.models.claim_action_request import ClaimActionRequest as ClaimActionRequest

@@ -555,6 +555,11 @@ map_response_std!(
     CancelWorkflowResponse,
     SuccessfulResponse
 );
+map_response_std!(
+    archive_workflow_response,
+    ArchiveWorkflowResponse,
+    SuccessfulResponse
+);
 map_response_unprocessable!(
     claim_jobs_based_on_resources_response,
     ClaimJobsBasedOnResources,

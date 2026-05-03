@@ -644,6 +644,14 @@ pub trait TransportApiCore<C: Send + Sync> {
         context: &C,
     ) -> Result<CancelWorkflowResponse, ApiError>;
 
+    /// Archive or unarchive a workflow.
+    async fn archive_workflow(
+        &self,
+        id: i64,
+        body: models::ArchiveWorkflowRequest,
+        context: &C,
+    ) -> Result<ArchiveWorkflowResponse, ApiError>;
+
     /// Retrieve a compute node by ID.
     async fn get_compute_node(
         &self,

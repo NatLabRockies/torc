@@ -393,12 +393,12 @@ fn test_start_workflow_archived(start_server: &ServerProcess) {
     let workflow_id = workflow.id.unwrap();
 
     // Archive the workflow
-    let wf =
-        apis::workflows_api::get_workflow(&config, workflow_id).expect("Failed to get workflow");
-    let mut update = torc::WorkflowModel::new(wf.name, wf.user);
-    update.is_archived = Some(true);
-    apis::workflows_api::update_workflow(&config, workflow_id, update)
-        .expect("Failed to archive workflow");
+    apis::workflows_api::archive_workflow(
+        &config,
+        workflow_id,
+        torc::models::ArchiveWorkflowRequest { is_archived: true },
+    )
+    .expect("Failed to archive workflow");
 
     // Start should fail for archived workflow
     let result = manager.initialize(false);
@@ -493,21 +493,23 @@ fn test_get_run_id(start_server: &ServerProcess) {
 }
 
 #[rstest]
-fn test_bump_run_id(start_server: &ServerProcess) {
+fn test_reset_workflow_status_bumps_run_id(start_server: &ServerProcess) {
     let config = start_server.config.clone();
-    let (manager, workflow) = create_test_workflow_manager(config.clone(), "test_bump_run_id");
-    let _workflow_id = workflow.id.unwrap();
+    let (manager, workflow) =
+        create_test_workflow_manager(config.clone(), "test_reset_bumps_run_id");
+    let workflow_id = workflow.id.unwrap();
 
-    // Get original run_id
     let original_run_id = manager.get_run_id().expect("Failed to get original run_id");
 
-    // Bump run_id
-    let result = manager.bump_run_id();
-    assert!(result.is_ok());
+    apis::workflows_api::reset_workflow_status(&config, workflow_id, None)
+        .expect("reset_workflow_status should succeed");
 
-    // Should be incremented
     let new_run_id = manager.get_run_id().expect("Failed to get new run_id");
-    assert_eq!(new_run_id, original_run_id + 1);
+    assert_eq!(
+        new_run_id,
+        original_run_id + 1,
+        "reset_workflow_status must bump run_id"
+    );
 }
 
 #[rstest]
@@ -527,12 +529,12 @@ fn test_check_workflow_archived(start_server: &ServerProcess) {
     let workflow_id = workflow.id.unwrap();
 
     // Archive the workflow
-    let wf =
-        apis::workflows_api::get_workflow(&config, workflow_id).expect("Failed to get workflow");
-    let mut update = torc::WorkflowModel::new(wf.name, wf.user);
-    update.is_archived = Some(true);
-    apis::workflows_api::update_workflow(&config, workflow_id, update)
-        .expect("Failed to archive workflow");
+    apis::workflows_api::archive_workflow(
+        &config,
+        workflow_id,
+        torc::models::ArchiveWorkflowRequest { is_archived: true },
+    )
+    .expect("Failed to archive workflow");
 
     // Check should fail for archived workflow
     let result = manager.check_workflow(false);

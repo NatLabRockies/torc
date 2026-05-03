@@ -39,13 +39,13 @@
     - env::Dict{String, String}
     - execution_config::String
     - id::Int64
-    - is_archived::Bool : True when the workflow has been archived.
-    - is_canceled::Bool : True when a user (or scheduler) has canceled the workflow.
+    - is_archived::Bool : True when the workflow has been archived. Read-only on the API: set via &#x60;POST /workflows/{id}/archive&#x60;, cleared via &#x60;POST /workflows/{id}/reset_status&#x60;. Values supplied to create/update workflow endpoints are ignored.
+    - is_canceled::Bool : True when a user (or scheduler) has canceled the workflow. Read-only on the API: set via &#x60;POST /workflows/{id}/cancel&#x60;, cleared via &#x60;POST /workflows/{id}/reset_status&#x60;. Values supplied to create/update workflow endpoints are ignored.
     - metadata::String
     - name::String
     - project::String
     - resource_monitor_config::String
-    - run_id::Int64 : Current run number; incremented on each restart/recovery.
+    - run_id::Int64 : Current run number; incremented on each restart/recovery. Read-only on the API: incremented as a side effect of &#x60;POST /workflows/{id}/reset_status&#x60;. Values supplied to create/update workflow endpoints are ignored.
     - slurm_config::String
     - slurm_defaults::String
     - timestamp::String

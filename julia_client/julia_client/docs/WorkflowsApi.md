@@ -4,6 +4,7 @@ All URIs are relative to *http://localhost/torc-service/v1*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
+[**archive_workflow**](WorkflowsApi.md#archive_workflow) | **POST** /workflows/{id}/archive | 
 [**batch_complete_jobs**](WorkflowsApi.md#batch_complete_jobs) | **POST** /workflows/{id}/batch_complete_jobs | 
 [**cancel_workflow**](WorkflowsApi.md#cancel_workflow) | **PUT** /workflows/{id}/cancel | 
 [**claim_jobs_based_on_resources**](WorkflowsApi.md#claim_jobs_based_on_resources) | **POST** /workflows/{id}/claim_jobs_based_on_resources/{limit} | 
@@ -28,6 +29,35 @@ Method | HTTP request | Description
 [**reset_workflow_status**](WorkflowsApi.md#reset_workflow_status) | **POST** /workflows/{id}/reset_status | 
 [**update_workflow**](WorkflowsApi.md#update_workflow) | **PUT** /workflows/{id} | 
 
+
+# **archive_workflow**
+> archive_workflow(_api::WorkflowsApi, id::Int64, archive_workflow_request::ArchiveWorkflowRequest; _mediaType=nothing) -> WorkflowModel, OpenAPI.Clients.ApiResponse <br/>
+> archive_workflow(_api::WorkflowsApi, response_stream::Channel, id::Int64, archive_workflow_request::ArchiveWorkflowRequest; _mediaType=nothing) -> Channel{ WorkflowModel }, OpenAPI.Clients.ApiResponse
+
+
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **WorkflowsApi** | API context | 
+**id** | **Int64** | Workflow ID |
+**archive_workflow_request** | [**ArchiveWorkflowRequest**](ArchiveWorkflowRequest.md) |  |
+
+### Return type
+
+[**WorkflowModel**](WorkflowModel.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **batch_complete_jobs**
 > batch_complete_jobs(_api::WorkflowsApi, id::Int64, batch_complete_jobs_request::BatchCompleteJobsRequest; _mediaType=nothing) -> BatchCompleteJobsResponse, OpenAPI.Clients.ApiResponse <br/>

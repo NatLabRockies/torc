@@ -489,13 +489,25 @@ pub struct WorkflowModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub execution_config: Option<String>,
     /// Current run number; incremented on each restart/recovery.
+    /// Read-only on the API: incremented as a side effect of
+    /// `POST /workflows/{id}/reset_status`. Values supplied to
+    /// create/update workflow endpoints are ignored.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi-codegen", schema(read_only))]
     pub run_id: Option<i64>,
     /// True when a user (or scheduler) has canceled the workflow.
+    /// Read-only on the API: set via `POST /workflows/{id}/cancel`,
+    /// cleared via `POST /workflows/{id}/reset_status`. Values supplied to
+    /// create/update workflow endpoints are ignored.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi-codegen", schema(read_only))]
     pub is_canceled: Option<bool>,
     /// True when the workflow has been archived.
+    /// Read-only on the API: set via `POST /workflows/{id}/archive`,
+    /// cleared via `POST /workflows/{id}/reset_status`. Values supplied to
+    /// create/update workflow endpoints are ignored.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi-codegen", schema(read_only))]
     pub is_archived: Option<bool>,
 }
 
@@ -508,6 +520,14 @@ pub struct ListWorkflowsResponse {
     pub count: i64,
     pub total_count: i64,
     pub has_more: bool,
+}
+
+/// Request body for `POST /workflows/{id}/archive`. Setting `is_archived`
+/// to true marks the workflow as archived; false unarchives it.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ArchiveWorkflowRequest {
+    pub is_archived: bool,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]

@@ -156,7 +156,7 @@ impl WorkflowManager {
                 return Err(TorcError::ApiError(err.to_string()));
             }
         }
-        let _run_id = self.bump_run_id()?;
+        // reset_workflow_status above bumps run_id — no separate bump call needed.
         self.initialize_files()?;
         self.initialize_jobs(false)?;
         // Event is now broadcast via SSE from the server
@@ -202,7 +202,7 @@ impl WorkflowManager {
                 return Err(TorcError::ApiError(err.to_string()));
             }
         }
-        let _run_id = self.bump_run_id()?;
+        // reset_workflow_status above bumps run_id — no separate bump call needed.
         self.initialize_files()?;
         self.initialize_jobs_async(false)
     }
@@ -357,11 +357,11 @@ impl WorkflowManager {
         Ok(())
     }
 
-    /// Reinitialize the workflow. Reset workflow status, bump run_id, and run startup script.
+    /// Reinitialize the workflow. Resets workflow status (which also bumps
+    /// run_id) and runs the startup script.
     pub fn reinitialize(&self, force: bool, dry_run: bool) -> Result<(), TorcError> {
         self.check_workflow(force)?;
         if !dry_run {
-            self.bump_run_id()?;
             match apis::workflows_api::reset_workflow_status(&self.config, self.workflow_id, None) {
                 Ok(_) => {
                     info!("Reset status of workflow_id={}", self.workflow_id);
@@ -408,7 +408,6 @@ impl WorkflowManager {
             return Ok(None);
         }
 
-        self.bump_run_id()?;
         match apis::workflows_api::reset_workflow_status(&self.config, self.workflow_id, None) {
             Ok(_) => {
                 info!("Reset status of workflow_id={}", self.workflow_id);
@@ -450,18 +449,6 @@ impl WorkflowManager {
                 .map_err(|e| TorcError::ApiError(format!("Failed to parse task response: {}", e))),
             Err(err) => Err(TorcError::ApiError(err.to_string())),
         }
-    }
-
-    /// Increment the run_id field of the workflow.
-    pub fn bump_run_id(&self) -> Result<i64, TorcError> {
-        let workflow = apis::workflows_api::get_workflow(&self.config, self.workflow_id)
-            .map_err(|err| TorcError::ApiError(err.to_string()))?;
-        let new_run_id = workflow.run_id.unwrap_or(0) + 1;
-        let mut update = WorkflowModel::new(workflow.name, workflow.user);
-        update.run_id = Some(new_run_id);
-        apis::workflows_api::update_workflow(&self.config, self.workflow_id, update)
-            .map_err(|err| TorcError::ApiError(err.to_string()))?;
-        Ok(new_run_id)
     }
 
     /// Initialize the file stats in the database.

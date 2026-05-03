@@ -36,13 +36,13 @@ class WorkflowModel(BaseModel):
     env: Optional[Dict[str, StrictStr]] = None
     execution_config: Optional[StrictStr] = None
     id: Optional[StrictInt] = None
-    is_archived: Optional[StrictBool] = Field(default=None, description="True when the workflow has been archived.")
-    is_canceled: Optional[StrictBool] = Field(default=None, description="True when a user (or scheduler) has canceled the workflow.")
+    is_archived: Optional[StrictBool] = Field(default=None, description="True when the workflow has been archived. Read-only on the API: set via `POST /workflows/{id}/archive`, cleared via `POST /workflows/{id}/reset_status`. Values supplied to create/update workflow endpoints are ignored.")
+    is_canceled: Optional[StrictBool] = Field(default=None, description="True when a user (or scheduler) has canceled the workflow. Read-only on the API: set via `POST /workflows/{id}/cancel`, cleared via `POST /workflows/{id}/reset_status`. Values supplied to create/update workflow endpoints are ignored.")
     metadata: Optional[StrictStr] = None
     name: StrictStr
     project: Optional[StrictStr] = None
     resource_monitor_config: Optional[StrictStr] = None
-    run_id: Optional[StrictInt] = Field(default=None, description="Current run number; incremented on each restart/recovery.")
+    run_id: Optional[StrictInt] = Field(default=None, description="Current run number; incremented on each restart/recovery. Read-only on the API: incremented as a side effect of `POST /workflows/{id}/reset_status`. Values supplied to create/update workflow endpoints are ignored.")
     slurm_config: Optional[StrictStr] = None
     slurm_defaults: Optional[StrictStr] = None
     timestamp: Optional[StrictStr] = None
@@ -80,8 +80,14 @@ class WorkflowModel(BaseModel):
         * `None` is only added to the output dict for nullable fields that
           were set at model initialization. Other fields with value `None`
           are ignored.
+        * OpenAPI `readOnly` fields are excluded.
+        * OpenAPI `readOnly` fields are excluded.
+        * OpenAPI `readOnly` fields are excluded.
         """
         excluded_fields: Set[str] = set([
+            "is_archived",
+            "is_canceled",
+            "run_id",
         ])
 
         _dict = self.model_dump(

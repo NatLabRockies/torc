@@ -243,6 +243,29 @@ where
         Ok(response)
     }
 
+    pub(super) async fn transport_archive_workflow(
+        &self,
+        id: i64,
+        body: models::ArchiveWorkflowRequest,
+        context: &C,
+    ) -> Result<ArchiveWorkflowResponse, ApiError> {
+        info!(
+            "archive_workflow(workflow_id={}, is_archived={}) - X-Span-ID: {:?}",
+            id,
+            body.is_archived,
+            Has::<XSpanIdString>::get(context).0.clone()
+        );
+        authorize_workflow!(self, id, context, ArchiveWorkflowResponse);
+        // When archiving, drop the workflow from the failures cache (mirrors
+        // the previous behavior of the now-removed update_workflow_status flow).
+        if body.is_archived
+            && let Ok(mut set) = self.workflows_with_failures.write()
+        {
+            set.remove(&id);
+        }
+        self.workflows_api.archive_workflow(id, body, context).await
+    }
+
     pub(super) async fn transport_delete_events(
         &self,
         workflow_id: i64,

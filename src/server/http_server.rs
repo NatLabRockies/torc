@@ -1314,6 +1314,15 @@ where
         self.transport_cancel_workflow(id, context).await
     }
 
+    async fn archive_workflow(
+        &self,
+        id: i64,
+        body: models::ArchiveWorkflowRequest,
+        context: &C,
+    ) -> Result<ArchiveWorkflowResponse, ApiError> {
+        self.transport_archive_workflow(id, body, context).await
+    }
+
     async fn delete_compute_nodes(
         &self,
         workflow_id: i64,

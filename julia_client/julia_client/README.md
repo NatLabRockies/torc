@@ -121,6 +121,7 @@ Class | Method
 *WorkflowActionsApi* | [**create_workflow_action**](docs/WorkflowActionsApi.md#create_workflow_action)<br/>**POST** /workflows/{id}/actions<br/>
 *WorkflowActionsApi* | [**get_pending_actions**](docs/WorkflowActionsApi.md#get_pending_actions)<br/>**GET** /workflows/{id}/actions/pending<br/>
 *WorkflowActionsApi* | [**get_workflow_actions**](docs/WorkflowActionsApi.md#get_workflow_actions)<br/>**GET** /workflows/{id}/actions<br/>
+*WorkflowsApi* | [**archive_workflow**](docs/WorkflowsApi.md#archive_workflow)<br/>**POST** /workflows/{id}/archive<br/>
 *WorkflowsApi* | [**batch_complete_jobs**](docs/WorkflowsApi.md#batch_complete_jobs)<br/>**POST** /workflows/{id}/batch_complete_jobs<br/>
 *WorkflowsApi* | [**cancel_workflow**](docs/WorkflowsApi.md#cancel_workflow)<br/>**PUT** /workflows/{id}/cancel<br/>
 *WorkflowsApi* | [**claim_jobs_based_on_resources**](docs/WorkflowsApi.md#claim_jobs_based_on_resources)<br/>**POST** /workflows/{id}/claim_jobs_based_on_resources/{limit}<br/>
@@ -151,6 +152,7 @@ Class | Method
  - [AccessCheckResponse](docs/AccessCheckResponse.md)
  - [AccessGroupModel](docs/AccessGroupModel.md)
  - [ActiveTaskResponse](docs/ActiveTaskResponse.md)
+ - [ArchiveWorkflowRequest](docs/ArchiveWorkflowRequest.md)
  - [BatchCompleteJobsRequest](docs/BatchCompleteJobsRequest.md)
  - [BatchCompleteJobsResponse](docs/BatchCompleteJobsResponse.md)
  - [ClaimActionRequest](docs/ClaimActionRequest.md)

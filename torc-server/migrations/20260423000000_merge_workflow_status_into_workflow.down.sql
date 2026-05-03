@@ -3,6 +3,15 @@
 -- Recreates the satellite table, restores the status_id column with its FK,
 -- then re-creates the back-reference column added by 20260222000001 so
 -- subsequent down migrations replay cleanly.
+--
+-- LIMITATION: this rollback rewrites every workflow_status.id to match its
+-- workflow.id. The pre-merge schema technically allowed status_id to differ
+-- from workflow.id (the two tables had independent AUTOINCREMENT sequences),
+-- but in practice every code path that wrote workflow_status (create_workflow
+-- in this repo, plus the back-reference fixup in 20260222000001) paired the
+-- two IDs together — so for any database created via this codebase, the
+-- rewrite is a no-op. If a database was modified by an external tool that
+-- broke the pairing, this rollback will renumber the status rows.
 
 -- Step 1: Recreate the workflow_status table with the same shape it had
 -- after migration 20260222000001 ran.
@@ -15,11 +24,10 @@ CREATE TABLE workflow_status (
   workflow_id INTEGER NULL
 );
 
--- Step 2: One status row per workflow, with id = workflow.id (matches the
--- 1:1 invariant the original schema relied on, even though the FK only
--- enforced existence, not equality). has_detected_need_to_run_completion_script
--- was always 0 in practice (no code path ever set it), so a literal 0 is
--- faithful to the data.
+-- Step 2: One status row per workflow, with id = workflow.id. See the header
+-- comment for the limitation this assumes.
+-- has_detected_need_to_run_completion_script was always 0 in practice
+-- (no code path ever set it), so a literal 0 is faithful to the data.
 INSERT INTO workflow_status (id, run_id, is_canceled, is_archived, workflow_id)
 SELECT id, run_id, is_canceled, is_archived, id
 FROM workflow;

@@ -16,6 +16,7 @@
 from torc.openapi_client.models.access_check_response import AccessCheckResponse
 from torc.openapi_client.models.access_group_model import AccessGroupModel
 from torc.openapi_client.models.active_task_response import ActiveTaskResponse
+from torc.openapi_client.models.archive_workflow_request import ArchiveWorkflowRequest
 from torc.openapi_client.models.batch_complete_jobs_request import BatchCompleteJobsRequest
 from torc.openapi_client.models.batch_complete_jobs_response import BatchCompleteJobsResponse
 from torc.openapi_client.models.claim_action_request import ClaimActionRequest
