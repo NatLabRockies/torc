@@ -1093,9 +1093,9 @@ fn test_retry_job_from_running_status(start_server: &ServerProcess) {
         .expect("Failed to initialize jobs");
 
     // Get run_id
-    let workflow_status = apis::workflows_api::get_workflow_status(config, workflow_id)
-        .expect("Failed to get workflow status");
-    let run_id = workflow_status.run_id;
+    let workflow =
+        apis::workflows_api::get_workflow(config, workflow_id).expect("Failed to get workflow");
+    let run_id = workflow.run_id.unwrap_or(0);
 
     // Set job to Running (simulating job runner claiming it)
     apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
@@ -1133,9 +1133,9 @@ fn test_retry_job_from_failed_status(start_server: &ServerProcess) {
         .expect("Failed to initialize jobs");
 
     // Get run_id
-    let workflow_status = apis::workflows_api::get_workflow_status(config, workflow_id)
-        .expect("Failed to get workflow status");
-    let run_id = workflow_status.run_id;
+    let workflow =
+        apis::workflows_api::get_workflow(config, workflow_id).expect("Failed to get workflow");
+    let run_id = workflow.run_id.unwrap_or(0);
 
     // Create compute node for complete_job
     let compute_node = create_test_compute_node(config, workflow_id);
@@ -1188,9 +1188,9 @@ fn test_retry_job_invalid_status(start_server: &ServerProcess) {
         .expect("Failed to initialize jobs");
 
     // Get run_id
-    let workflow_status = apis::workflows_api::get_workflow_status(config, workflow_id)
-        .expect("Failed to get workflow status");
-    let run_id = workflow_status.run_id;
+    let workflow =
+        apis::workflows_api::get_workflow(config, workflow_id).expect("Failed to get workflow");
+    let run_id = workflow.run_id.unwrap_or(0);
 
     // Job should be Ready after initialization
     let job_before = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");

@@ -639,16 +639,6 @@ map_response_unprocessable!(
     ResetWorkflowStatusResponse,
     SuccessfulResponse
 );
-map_response_std!(
-    get_workflow_status_response,
-    GetWorkflowStatusResponse,
-    SuccessfulResponse
-);
-map_response_std!(
-    update_workflow_status_response,
-    UpdateWorkflowStatusResponse,
-    SuccessfulResponse
-);
 pub(crate) fn json_response<T>(body: &T) -> Response<Body>
 where
     T: serde::Serialize,

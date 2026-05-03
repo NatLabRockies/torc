@@ -119,7 +119,6 @@ __all__ = [
     "WorkflowAccessGroupModel",
     "WorkflowActionModel",
     "WorkflowModel",
-    "WorkflowStatusModel",
 ]
 
 # import apis into sdk package
@@ -228,5 +227,4 @@ from torc.openapi_client.models.version_response import VersionResponse as Versi
 from torc.openapi_client.models.workflow_access_group_model import WorkflowAccessGroupModel as WorkflowAccessGroupModel
 from torc.openapi_client.models.workflow_action_model import WorkflowActionModel as WorkflowActionModel
 from torc.openapi_client.models.workflow_model import WorkflowModel as WorkflowModel
-from torc.openapi_client.models.workflow_status_model import WorkflowStatusModel as WorkflowStatusModel
 

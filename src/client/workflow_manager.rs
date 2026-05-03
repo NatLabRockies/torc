@@ -454,22 +454,14 @@ impl WorkflowManager {
 
     /// Increment the run_id field of the workflow.
     pub fn bump_run_id(&self) -> Result<i64, TorcError> {
-        match apis::workflows_api::get_workflow_status(&self.config, self.workflow_id) {
-            Ok(status) => {
-                let mut new_status = status.clone();
-                new_status.run_id += 1;
-                let new_run_id = new_status.run_id;
-                match apis::workflows_api::update_workflow_status(
-                    &self.config,
-                    self.workflow_id,
-                    new_status,
-                ) {
-                    Ok(_) => Ok(new_run_id),
-                    Err(err) => Err(TorcError::ApiError(err.to_string())),
-                }
-            }
-            Err(err) => Err(TorcError::ApiError(err.to_string())),
-        }
+        let workflow = apis::workflows_api::get_workflow(&self.config, self.workflow_id)
+            .map_err(|err| TorcError::ApiError(err.to_string()))?;
+        let new_run_id = workflow.run_id.unwrap_or(0) + 1;
+        let mut update = WorkflowModel::new(workflow.name, workflow.user);
+        update.run_id = Some(new_run_id);
+        apis::workflows_api::update_workflow(&self.config, self.workflow_id, update)
+            .map_err(|err| TorcError::ApiError(err.to_string()))?;
+        Ok(new_run_id)
     }
 
     /// Initialize the file stats in the database.
@@ -640,17 +632,17 @@ impl WorkflowManager {
     }
 
     pub fn get_run_id(&self) -> Result<i64, TorcError> {
-        match apis::workflows_api::get_workflow_status(&self.config, self.workflow_id) {
-            Ok(status) => Ok(status.run_id),
+        match apis::workflows_api::get_workflow(&self.config, self.workflow_id) {
+            Ok(workflow) => Ok(workflow.run_id.unwrap_or(0)),
             Err(err) => Err(TorcError::ApiError(err.to_string())),
         }
     }
 
     /// Check the condtions of the workflow.
     pub fn check_workflow(&self, force: bool) -> Result<(), TorcError> {
-        match apis::workflows_api::get_workflow_status(&self.config, self.workflow_id) {
-            Ok(status) => {
-                if status.is_archived.unwrap_or(false) {
+        match apis::workflows_api::get_workflow(&self.config, self.workflow_id) {
+            Ok(workflow) => {
+                if workflow.is_archived.unwrap_or(false) {
                     return Err(TorcError::OperationNotAllowed(format!(
                         "Workflow {} is archived",
                         self.workflow_id

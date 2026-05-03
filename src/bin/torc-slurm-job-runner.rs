@@ -414,12 +414,12 @@ mod unix_main {
             create_compute_node(&config, args.workflow_id, &resources, &hostname, scheduler);
         let run_id = match utils::send_with_retries(
             &config,
-            || apis::workflows_api::get_workflow_status(&config, args.workflow_id),
+            || apis::workflows_api::get_workflow(&config, args.workflow_id),
             args.wait_for_healthy_database_minutes,
         ) {
-            Ok(status) => status.run_id,
+            Ok(workflow) => workflow.run_id.unwrap_or(0),
             Err(e) => {
-                error!("Error getting workflow status: {}", e);
+                error!("Error getting workflow: {}", e);
                 std::process::exit(1);
             }
         };

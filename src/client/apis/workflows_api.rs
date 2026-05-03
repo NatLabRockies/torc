@@ -86,13 +86,6 @@ pub enum GetWorkflowError {
     UnknownValue(serde_json::Value),
 }
 
-/// struct for typed errors of method [`get_workflow_status`]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum GetWorkflowStatusError {
-    UnknownValue(serde_json::Value),
-}
-
 /// struct for typed errors of method [`initialize_jobs`]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -196,13 +189,6 @@ pub enum UpdateWorkflowError {
     Status404(models::ErrorResponse),
     Status422(models::ErrorResponse),
     Status500(models::ErrorResponse),
-    UnknownValue(serde_json::Value),
-}
-
-/// struct for typed errors of method [`update_workflow_status`]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum UpdateWorkflowStatusError {
     UnknownValue(serde_json::Value),
 }
 
@@ -725,62 +711,6 @@ pub fn get_workflow(
     } else {
         let content = resp.text()?;
         let entity: Option<GetWorkflowError> = serde_json::from_str(&content).ok();
-        Err(Error::ResponseError(ResponseContent {
-            status,
-            content,
-            entity,
-        }))
-    }
-}
-
-pub fn get_workflow_status(
-    configuration: &configuration::Configuration,
-    id: i64,
-) -> Result<models::WorkflowStatusModel, Error<GetWorkflowStatusError>> {
-    // add a prefix to parameters to efficiently prevent name collisions
-    let p_path_id = id;
-
-    let uri_str = format!(
-        "{}/workflows/{id}/status",
-        configuration.base_path,
-        id = p_path_id
-    );
-    let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
-
-    if let Some(ref user_agent) = configuration.user_agent {
-        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
-    }
-    req_builder = configuration.apply_auth(req_builder);
-
-    let req = req_builder.build()?;
-    let resp = configuration.client.execute(req)?;
-
-    let status = resp.status();
-    let content_type = resp
-        .headers()
-        .get("content-type")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("application/octet-stream");
-    let content_type = super::ContentType::from(content_type);
-
-    if !status.is_client_error() && !status.is_server_error() {
-        let content = resp.text()?;
-        match content_type {
-            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
-            ContentType::Text => {
-                return Err(Error::from(serde_json::Error::custom(
-                    "Received `text/plain` content type response that cannot be converted to `models::WorkflowStatusModel`",
-                )));
-            }
-            ContentType::Unsupported(unknown_type) => {
-                return Err(Error::from(serde_json::Error::custom(format!(
-                    "Received `{unknown_type}` content type response that cannot be converted to `models::WorkflowStatusModel`"
-                ))));
-            }
-        }
-    } else {
-        let content = resp.text()?;
-        let entity: Option<GetWorkflowStatusError> = serde_json::from_str(&content).ok();
         Err(Error::ResponseError(ResponseContent {
             status,
             content,
@@ -1697,65 +1627,6 @@ pub fn update_workflow(
     } else {
         let content = resp.text()?;
         let entity: Option<UpdateWorkflowError> = serde_json::from_str(&content).ok();
-        Err(Error::ResponseError(ResponseContent {
-            status,
-            content,
-            entity,
-        }))
-    }
-}
-
-pub fn update_workflow_status(
-    configuration: &configuration::Configuration,
-    id: i64,
-    workflow_status_model: models::WorkflowStatusModel,
-) -> Result<models::WorkflowStatusModel, Error<UpdateWorkflowStatusError>> {
-    // add a prefix to parameters to efficiently prevent name collisions
-    let p_path_id = id;
-    let p_body_workflow_status_model = workflow_status_model;
-
-    let uri_str = format!(
-        "{}/workflows/{id}/status",
-        configuration.base_path,
-        id = p_path_id
-    );
-    let mut req_builder = configuration.client.request(reqwest::Method::PUT, &uri_str);
-
-    if let Some(ref user_agent) = configuration.user_agent {
-        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
-    }
-    req_builder = configuration.apply_auth(req_builder);
-    req_builder = req_builder.json(&p_body_workflow_status_model);
-
-    let req = req_builder.build()?;
-    let resp = configuration.client.execute(req)?;
-
-    let status = resp.status();
-    let content_type = resp
-        .headers()
-        .get("content-type")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("application/octet-stream");
-    let content_type = super::ContentType::from(content_type);
-
-    if !status.is_client_error() && !status.is_server_error() {
-        let content = resp.text()?;
-        match content_type {
-            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
-            ContentType::Text => {
-                return Err(Error::from(serde_json::Error::custom(
-                    "Received `text/plain` content type response that cannot be converted to `models::WorkflowStatusModel`",
-                )));
-            }
-            ContentType::Unsupported(unknown_type) => {
-                return Err(Error::from(serde_json::Error::custom(format!(
-                    "Received `{unknown_type}` content type response that cannot be converted to `models::WorkflowStatusModel`"
-                ))));
-            }
-        }
-    } else {
-        let content = resp.text()?;
-        let entity: Option<UpdateWorkflowStatusError> = serde_json::from_str(&content).ok();
         Err(Error::ResponseError(ResponseContent {
             status,
             content,

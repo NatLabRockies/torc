@@ -130,7 +130,6 @@ Class | Method
 *WorkflowsApi* | [**get_active_task_for_workflow**](docs/WorkflowsApi.md#get_active_task_for_workflow)<br/>**GET** /workflows/{id}/active_task<br/>
 *WorkflowsApi* | [**get_ready_job_requirements**](docs/WorkflowsApi.md#get_ready_job_requirements)<br/>**GET** /workflows/{id}/ready_job_requirements<br/>
 *WorkflowsApi* | [**get_workflow**](docs/WorkflowsApi.md#get_workflow)<br/>**GET** /workflows/{id}<br/>
-*WorkflowsApi* | [**get_workflow_status**](docs/WorkflowsApi.md#get_workflow_status)<br/>**GET** /workflows/{id}/status<br/>
 *WorkflowsApi* | [**initialize_jobs**](docs/WorkflowsApi.md#initialize_jobs)<br/>**POST** /workflows/{id}/initialize_jobs<br/>
 *WorkflowsApi* | [**is_workflow_complete**](docs/WorkflowsApi.md#is_workflow_complete)<br/>**GET** /workflows/{id}/is_complete<br/>
 *WorkflowsApi* | [**is_workflow_uninitialized**](docs/WorkflowsApi.md#is_workflow_uninitialized)<br/>**GET** /workflows/{id}/is_uninitialized<br/>
@@ -145,7 +144,6 @@ Class | Method
 *WorkflowsApi* | [**reset_job_status**](docs/WorkflowsApi.md#reset_job_status)<br/>**POST** /workflows/{id}/reset_job_status<br/>
 *WorkflowsApi* | [**reset_workflow_status**](docs/WorkflowsApi.md#reset_workflow_status)<br/>**POST** /workflows/{id}/reset_status<br/>
 *WorkflowsApi* | [**update_workflow**](docs/WorkflowsApi.md#update_workflow)<br/>**PUT** /workflows/{id}<br/>
-*WorkflowsApi* | [**update_workflow_status**](docs/WorkflowsApi.md#update_workflow_status)<br/>**PUT** /workflows/{id}/status<br/>
 
 
 ## Models
@@ -223,7 +221,6 @@ Class | Method
  - [WorkflowAccessGroupModel](docs/WorkflowAccessGroupModel.md)
  - [WorkflowActionModel](docs/WorkflowActionModel.md)
  - [WorkflowModel](docs/WorkflowModel.md)
- - [WorkflowStatusModel](docs/WorkflowStatusModel.md)
 
 
 <a id="authorization"></a>

@@ -5099,51 +5099,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-  /workflows/{id}/status:
-    get:
-      tags:
-      - workflows
-      operationId: get_workflow_status
-      parameters:
-      - name: id
-        in: path
-        description: Workflow ID
-        required: true
-        schema:
-          type: integer
-          format: int64
-      responses:
-        '200':
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/WorkflowStatusModel'
-    put:
-      tags:
-      - workflows
-      operationId: update_workflow_status
-      parameters:
-      - name: id
-        in: path
-        description: Workflow ID
-        required: true
-        schema:
-          type: integer
-          format: int64
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/WorkflowStatusModel'
-        required: true
-      responses:
-        '200':
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/WorkflowStatusModel'
 components:
   schemas:
     AccessCheckResponse:
@@ -6950,6 +6905,16 @@ components:
           - integer
           - 'null'
           format: int64
+        is_archived:
+          type:
+          - boolean
+          - 'null'
+          description: True when the workflow has been archived.
+        is_canceled:
+          type:
+          - boolean
+          - 'null'
+          description: True when a user (or scheduler) has canceled the workflow.
         metadata:
           type:
           - string
@@ -6964,6 +6929,12 @@ components:
           type:
           - string
           - 'null'
+        run_id:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          description: Current run number; incremented on each restart/recovery.
         slurm_config:
           type:
           - string
@@ -6982,23 +6953,3 @@ components:
           - 'null'
         user:
           type: string
-    WorkflowStatusModel:
-      type: object
-      required:
-      - is_canceled
-      - run_id
-      properties:
-        id:
-          type:
-          - integer
-          - 'null'
-          format: int64
-        is_archived:
-          type:
-          - boolean
-          - 'null'
-        is_canceled:
-          type: boolean
-        run_id:
-          type: integer
-          format: int64

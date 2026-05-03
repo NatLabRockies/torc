@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -36,16 +36,19 @@ class WorkflowModel(BaseModel):
     env: Optional[Dict[str, StrictStr]] = None
     execution_config: Optional[StrictStr] = None
     id: Optional[StrictInt] = None
+    is_archived: Optional[StrictBool] = Field(default=None, description="True when the workflow has been archived.")
+    is_canceled: Optional[StrictBool] = Field(default=None, description="True when a user (or scheduler) has canceled the workflow.")
     metadata: Optional[StrictStr] = None
     name: StrictStr
     project: Optional[StrictStr] = None
     resource_monitor_config: Optional[StrictStr] = None
+    run_id: Optional[StrictInt] = Field(default=None, description="Current run number; incremented on each restart/recovery.")
     slurm_config: Optional[StrictStr] = None
     slurm_defaults: Optional[StrictStr] = None
     timestamp: Optional[StrictStr] = None
     use_pending_failed: Optional[StrictBool] = None
     user: StrictStr
-    __properties: ClassVar[List[str]] = ["compute_node_expiration_buffer_seconds", "compute_node_ignore_workflow_completion", "compute_node_min_time_for_new_jobs_seconds", "compute_node_wait_for_healthy_database_minutes", "compute_node_wait_for_new_jobs_seconds", "description", "enable_ro_crate", "env", "execution_config", "id", "metadata", "name", "project", "resource_monitor_config", "slurm_config", "slurm_defaults", "timestamp", "use_pending_failed", "user"]
+    __properties: ClassVar[List[str]] = ["compute_node_expiration_buffer_seconds", "compute_node_ignore_workflow_completion", "compute_node_min_time_for_new_jobs_seconds", "compute_node_wait_for_healthy_database_minutes", "compute_node_wait_for_new_jobs_seconds", "description", "enable_ro_crate", "env", "execution_config", "id", "is_archived", "is_canceled", "metadata", "name", "project", "resource_monitor_config", "run_id", "slurm_config", "slurm_defaults", "timestamp", "use_pending_failed", "user"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -131,6 +134,16 @@ class WorkflowModel(BaseModel):
         if self.id is None and "id" in self.model_fields_set:
             _dict['id'] = None
 
+        # set to None if is_archived (nullable) is None
+        # and model_fields_set contains the field
+        if self.is_archived is None and "is_archived" in self.model_fields_set:
+            _dict['is_archived'] = None
+
+        # set to None if is_canceled (nullable) is None
+        # and model_fields_set contains the field
+        if self.is_canceled is None and "is_canceled" in self.model_fields_set:
+            _dict['is_canceled'] = None
+
         # set to None if metadata (nullable) is None
         # and model_fields_set contains the field
         if self.metadata is None and "metadata" in self.model_fields_set:
@@ -145,6 +158,11 @@ class WorkflowModel(BaseModel):
         # and model_fields_set contains the field
         if self.resource_monitor_config is None and "resource_monitor_config" in self.model_fields_set:
             _dict['resource_monitor_config'] = None
+
+        # set to None if run_id (nullable) is None
+        # and model_fields_set contains the field
+        if self.run_id is None and "run_id" in self.model_fields_set:
+            _dict['run_id'] = None
 
         # set to None if slurm_config (nullable) is None
         # and model_fields_set contains the field
@@ -188,10 +206,13 @@ class WorkflowModel(BaseModel):
             "env": obj.get("env"),
             "execution_config": obj.get("execution_config"),
             "id": obj.get("id"),
+            "is_archived": obj.get("is_archived"),
+            "is_canceled": obj.get("is_canceled"),
             "metadata": obj.get("metadata"),
             "name": obj.get("name"),
             "project": obj.get("project"),
             "resource_monitor_config": obj.get("resource_monitor_config"),
+            "run_id": obj.get("run_id"),
             "slurm_config": obj.get("slurm_config"),
             "slurm_defaults": obj.get("slurm_defaults"),
             "timestamp": obj.get("timestamp"),

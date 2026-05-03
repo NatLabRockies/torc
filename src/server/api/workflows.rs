@@ -10,10 +10,9 @@ use sqlx::Row;
 
 use crate::server::api_responses::{
     CancelWorkflowResponse, CreateWorkflowResponse, DeleteWorkflowResponse, GetWorkflowResponse,
-    GetWorkflowStatusResponse, IsWorkflowCompleteResponse, IsWorkflowUninitializedResponse,
-    ListJobDependenciesResponse, ListJobFileRelationshipsResponse,
-    ListJobUserDataRelationshipsResponse, ListWorkflowsResponse, ResetWorkflowStatusResponse,
-    UpdateWorkflowResponse, UpdateWorkflowStatusResponse,
+    IsWorkflowCompleteResponse, IsWorkflowUninitializedResponse, ListJobDependenciesResponse,
+    ListJobFileRelationshipsResponse, ListJobUserDataRelationshipsResponse, ListWorkflowsResponse,
+    ResetWorkflowStatusResponse, UpdateWorkflowResponse,
 };
 
 use crate::models;
@@ -46,13 +45,6 @@ pub trait WorkflowsApi<C> {
 
     /// Retrieve a workflow.
     async fn get_workflow(&self, id: i64, context: &C) -> Result<GetWorkflowResponse, ApiError>;
-
-    /// Return the workflow status.
-    async fn get_workflow_status(
-        &self,
-        id: i64,
-        context: &C,
-    ) -> Result<GetWorkflowStatusResponse, ApiError>;
 
     /// Return true if all jobs in the workflow are complete.
     async fn is_workflow_complete(
@@ -122,14 +114,6 @@ pub trait WorkflowsApi<C> {
         body: models::WorkflowModel,
         context: &C,
     ) -> Result<UpdateWorkflowResponse, ApiError>;
-
-    /// Update the workflow status.
-    async fn update_workflow_status(
-        &self,
-        id: i64,
-        body: models::WorkflowStatusModel,
-        context: &C,
-    ) -> Result<UpdateWorkflowStatusResponse, ApiError>;
 
     /// Delete a workflow.
     async fn delete_workflow(
@@ -275,11 +259,11 @@ impl WorkflowsApiImpl {
                 ,enable_ro_crate
                 ,project
                 ,metadata
+                ,slurm_config
+                ,execution_config
                 ,run_id
                 ,is_archived
                 ,is_canceled
-                ,slurm_config
-                ,execution_config
             FROM workflow
             "
         .to_string();
@@ -433,6 +417,9 @@ impl WorkflowsApiImpl {
                     .try_get::<Option<String>, _>("execution_config")
                     .ok()
                     .flatten(),
+                run_id: Some(record.get("run_id")),
+                is_canceled: Some(record.get::<i64, _>("is_canceled") != 0),
+                is_archived: Some(record.get::<i64, _>("is_archived") != 0),
             });
         }
 
@@ -623,19 +610,22 @@ where
             context.get().0.clone()
         );
 
-        // First get the current workflow status to preserve other fields
-        let current_status = match self.get_workflow_status(id, context).await? {
-            GetWorkflowStatusResponse::SuccessfulResponse(status) => status,
-            _ => {
-                error!(
-                    "Failed to get current workflow status for workflow_id={}",
-                    id
-                );
-                return Err(ApiError(
-                    "Failed to get current workflow status".to_string(),
-                ));
+        // First get the current workflow to preserve other fields and capture run_id
+        // for the cancellation event.
+        let current_workflow = match self.get_workflow(id, context).await? {
+            GetWorkflowResponse::SuccessfulResponse(wf) => wf,
+            GetWorkflowResponse::ForbiddenErrorResponse(err) => {
+                return Ok(CancelWorkflowResponse::DefaultErrorResponse(err));
+            }
+            GetWorkflowResponse::NotFoundErrorResponse(err) => {
+                return Ok(CancelWorkflowResponse::DefaultErrorResponse(err));
+            }
+            GetWorkflowResponse::DefaultErrorResponse(_) => {
+                error!("Failed to get current workflow for workflow_id={}", id);
+                return Err(ApiError("Failed to get current workflow".to_string()));
             }
         };
+        let current_run_id = current_workflow.run_id.unwrap_or(0);
 
         // Begin a transaction to ensure workflow cancellation and job cancellation are atomic
         let mut tx = match self.context.pool.begin().await {
@@ -669,7 +659,7 @@ where
         if result.rows_affected() == 0 {
             let _ = tx.rollback().await;
             let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("Workflow status not found with ID: {}", id)
+                "message": format!("Workflow not found with ID: {}", id)
             }));
             return Ok(CancelWorkflowResponse::DefaultErrorResponse(error_response));
         }
@@ -680,9 +670,9 @@ where
         let timestamp = Utc::now().timestamp_millis();
         let event_data = serde_json::json!({
             "category": "workflow_canceled",
-            "message": format!("Workflow {} (run_id={}) was canceled", id, current_status.run_id),
+            "message": format!("Workflow {} (run_id={}) was canceled", id, current_run_id),
             "workflow_id": id,
-            "run_id": current_status.run_id,
+            "run_id": current_run_id,
         });
         let event_data_str = event_data.to_string();
 
@@ -754,12 +744,16 @@ where
             return Err(database_error_with_msg(e, "Failed to commit transaction"));
         }
 
-        let response_json = serde_json::json!({
-            "id": current_status.id,
-            "is_canceled": true,
-            "is_archived": current_status.is_archived.unwrap_or(false),
-            "run_id": current_status.run_id,
-        });
+        // Re-fetch so the response reflects post-cancel state of the workflow row.
+        let updated = match self.get_workflow(id, context).await? {
+            GetWorkflowResponse::SuccessfulResponse(wf) => wf,
+            _ => {
+                error!("Failed to get workflow {} after cancel", id);
+                return Err(ApiError("Failed to get workflow after cancel".to_string()));
+            }
+        };
+        let response_json = serde_json::to_value(updated)
+            .map_err(|e| ApiError(format!("Failed to serialize workflow: {e}")))?;
         Ok(CancelWorkflowResponse::SuccessfulResponse(response_json))
     }
 
@@ -791,7 +785,10 @@ where
                     project,
                     metadata,
                     slurm_config,
-                    execution_config
+                    execution_config,
+                    run_id,
+                    is_canceled,
+                    is_archived
                 FROM workflow
                 WHERE id = ?
             "#,
@@ -845,6 +842,9 @@ where
                         .try_get::<Option<String>, _>("execution_config")
                         .ok()
                         .flatten(),
+                    run_id: Some(row.get("run_id")),
+                    is_canceled: Some(row.get::<i64, _>("is_canceled") != 0),
+                    is_archived: Some(row.get::<i64, _>("is_archived") != 0),
                 },
             )),
             Ok(None) => {
@@ -855,51 +855,6 @@ where
             }
             Err(e) => Err(database_error_with_msg(e, "Failed to get workflow")),
         }
-    }
-
-    /// Return the workflow status.
-    async fn get_workflow_status(
-        &self,
-        id: i64,
-        context: &C,
-    ) -> Result<GetWorkflowStatusResponse, ApiError> {
-        debug!(
-            "get_workflow_status({}) - X-Span-ID: {:?}",
-            id,
-            context.get().0.clone()
-        );
-
-        let row = match sqlx::query!(
-            "SELECT id, run_id, is_canceled, is_archived FROM workflow WHERE id = ?",
-            id
-        )
-        .fetch_optional(&*self.context.pool)
-        .await
-        {
-            Ok(Some(row)) => row,
-            Ok(None) => {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("Workflow status not found with ID: {}", id)
-                }));
-                return Ok(GetWorkflowStatusResponse::NotFoundErrorResponse(
-                    error_response,
-                ));
-            }
-            Err(e) => {
-                return Err(database_error_with_msg(e, "Failed to get workflow status"));
-            }
-        };
-
-        let workflow_status = models::WorkflowStatusModel {
-            id: Some(row.id),
-            is_canceled: row.is_canceled != 0,
-            is_archived: Some(row.is_archived != 0),
-            run_id: row.run_id,
-        };
-
-        Ok(GetWorkflowStatusResponse::SuccessfulResponse(
-            workflow_status,
-        ))
     }
 
     /// Return true if all jobs in the workflow are complete.
@@ -914,16 +869,26 @@ where
             context.get().0.clone()
         );
 
-        // Get workflow status to check if canceled
-        let workflow_status = match self.get_workflow_status(id, context).await? {
-            GetWorkflowStatusResponse::SuccessfulResponse(status) => status,
-            _ => {
-                error!("Failed to get workflow status for workflow_id={}", id);
-                return Err(ApiError("Failed to get workflow status".to_string()));
-            }
-        };
-
-        let is_canceled = workflow_status.is_canceled;
+        // Read the cancellation flag directly from the workflow row.
+        let is_canceled: bool =
+            match sqlx::query_scalar::<_, i64>("SELECT is_canceled FROM workflow WHERE id = ?")
+                .bind(id)
+                .fetch_optional(self.context.pool.as_ref())
+                .await
+            {
+                Ok(Some(v)) => v != 0,
+                Ok(None) => {
+                    let error_response = models::ErrorResponse::new(serde_json::json!({
+                        "message": format!("Workflow not found with ID: {}", id)
+                    }));
+                    return Ok(IsWorkflowCompleteResponse::NotFoundErrorResponse(
+                        error_response,
+                    ));
+                }
+                Err(e) => {
+                    return Err(database_error_with_msg(e, "Failed to get workflow"));
+                }
+            };
 
         if is_canceled {
             debug!("Workflow {} is canceled, returning complete=true", id);
@@ -1100,6 +1065,8 @@ where
             .map(|val| if val { 1 } else { 0 });
         let use_pending_failed_int = body.use_pending_failed.map(|val| if val { 1 } else { 0 });
         let enable_ro_crate_int = body.enable_ro_crate.map(|val| if val { 1 } else { 0 });
+        let is_canceled_int = body.is_canceled.map(|val| if val { 1 } else { 0 });
+        let is_archived_int = body.is_archived.map(|val| if val { 1 } else { 0 });
         let body_env = normalize_env_map(body.env.clone());
         if body.env.is_some() && body_env != current_workflow.env {
             let error_response = models::ErrorResponse::new(serde_json::json!({
@@ -1127,8 +1094,11 @@ where
                 project = COALESCE($10, project),
                 metadata = COALESCE($11, metadata),
                 slurm_config = COALESCE($12, slurm_config),
-                execution_config = COALESCE($13, execution_config)
-            WHERE id = $14
+                execution_config = COALESCE($13, execution_config),
+                run_id = COALESCE($14, run_id),
+                is_canceled = COALESCE($15, is_canceled),
+                is_archived = COALESCE($16, is_archived)
+            WHERE id = $17
             "#,
             body.name,
             body.description,
@@ -1143,6 +1113,9 @@ where
             body.metadata,
             body.slurm_config,
             body.execution_config,
+            body.run_id,
+            is_canceled_int,
+            is_archived_int,
             id
         )
         .execute(self.context.pool.as_ref())
@@ -1177,99 +1150,6 @@ where
 
         debug!("Modified workflow with id: {}", id);
         Ok(UpdateWorkflowResponse::SuccessfulResponse(updated_workflow))
-    }
-
-    /// Update the workflow status.
-    async fn update_workflow_status(
-        &self,
-        id: i64,
-        body: models::WorkflowStatusModel,
-        context: &C,
-    ) -> Result<UpdateWorkflowStatusResponse, ApiError> {
-        debug!(
-            "update_workflow_status({}) - X-Span-ID: {:?}",
-            id,
-            context.get().0.clone()
-        );
-
-        // First check if the workflow status exists
-        match self.get_workflow_status(id, context).await? {
-            GetWorkflowStatusResponse::SuccessfulResponse(_) => {}
-            GetWorkflowStatusResponse::ForbiddenErrorResponse(err) => {
-                return Ok(UpdateWorkflowStatusResponse::ForbiddenErrorResponse(err));
-            }
-            GetWorkflowStatusResponse::NotFoundErrorResponse(err) => {
-                return Ok(UpdateWorkflowStatusResponse::NotFoundErrorResponse(err));
-            }
-            GetWorkflowStatusResponse::DefaultErrorResponse(_) => {
-                error!(
-                    "Failed to get workflow status before update for workflow_id={}",
-                    id
-                );
-                return Err(ApiError("Failed to get workflow status".to_string()));
-            }
-        };
-
-        // Convert boolean values to integers for SQLite storage
-        let is_canceled_int = if body.is_canceled { 1 } else { 0 };
-        let is_archived_int = if body.is_archived.unwrap_or(false) {
-            1
-        } else {
-            0
-        };
-
-        debug!("Sending db workflow status update for ID: {}", id);
-        let result = match sqlx::query!(
-            r#"
-            UPDATE workflow
-            SET run_id = ?,
-                is_canceled = ?,
-                is_archived = ?
-            WHERE id = ?
-            "#,
-            body.run_id,
-            is_canceled_int,
-            is_archived_int,
-            id
-        )
-        .execute(&*self.context.pool)
-        .await
-        {
-            Ok(result) => result,
-            Err(e) => {
-                return Err(database_error_with_msg(
-                    e,
-                    "Failed to update workflow status",
-                ));
-            }
-        };
-
-        if result.rows_affected() == 0 {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("Workflow status not found with ID: {}", id)
-            }));
-            return Ok(UpdateWorkflowStatusResponse::NotFoundErrorResponse(
-                error_response,
-            ));
-        }
-
-        debug!("Updated workflow status for ID: {}", id);
-
-        // Return the updated workflow status
-        let updated_status = models::WorkflowStatusModel {
-            id: Some(id),
-            is_canceled: body.is_canceled,
-            is_archived: body.is_archived,
-            run_id: body.run_id,
-        };
-
-        debug!(
-            "Returning updated workflow status for ID: {}: {:?}",
-            id, updated_status
-        );
-        Ok(UpdateWorkflowStatusResponse::SuccessfulResponse(
-            updated_status,
-        ))
     }
 
     /// Delete a workflow.
@@ -1519,27 +1399,24 @@ where
         // Use force flag from query parameter (defaults to false)
         let force = force.unwrap_or(false);
 
-        let workflow_status = match self.get_workflow_status(id, context).await? {
-            GetWorkflowStatusResponse::SuccessfulResponse(status) => status,
-            GetWorkflowStatusResponse::ForbiddenErrorResponse(err) => {
+        let current_workflow = match self.get_workflow(id, context).await? {
+            GetWorkflowResponse::SuccessfulResponse(wf) => wf,
+            GetWorkflowResponse::ForbiddenErrorResponse(err) => {
                 // Return the forbidden error as a default error since this endpoint
                 // doesn't have a ForbiddenErrorResponse variant in the OpenAPI spec
                 return Ok(ResetWorkflowStatusResponse::DefaultErrorResponse(err));
             }
-            GetWorkflowStatusResponse::NotFoundErrorResponse(err) => {
+            GetWorkflowResponse::NotFoundErrorResponse(err) => {
                 return Ok(ResetWorkflowStatusResponse::NotFoundErrorResponse(err));
             }
-            GetWorkflowStatusResponse::DefaultErrorResponse(_) => {
-                error!(
-                    "Failed to get workflow status before reset for workflow_id={}",
-                    id
-                );
-                return Err(ApiError("Failed to get workflow status".to_string()));
+            GetWorkflowResponse::DefaultErrorResponse(_) => {
+                error!("Failed to get workflow before reset for workflow_id={}", id);
+                return Err(ApiError("Failed to get workflow".to_string()));
             }
         };
 
         // Check if workflow is archived
-        if workflow_status.is_archived.unwrap_or(false) {
+        if current_workflow.is_archived.unwrap_or(false) {
             let error_response = models::ErrorResponse::new(serde_json::json!({
                 "message": "Cannot reset archived workflow status. Unarchive the workflow first."
             }));
@@ -1663,15 +1540,19 @@ where
             return Err(database_error_with_msg(e, "Failed to commit transaction"));
         }
 
-        // Return success response with the reset values
+        // Return the post-reset workflow row.
         info!("Successfully reset workflow status for ID: {}", id);
+        let updated = match self.get_workflow(id, context).await? {
+            GetWorkflowResponse::SuccessfulResponse(wf) => wf,
+            _ => {
+                error!("Failed to get workflow {} after reset", id);
+                return Err(ApiError("Failed to get workflow after reset".to_string()));
+            }
+        };
+        let response_json = serde_json::to_value(updated)
+            .map_err(|e| ApiError(format!("Failed to serialize workflow: {e}")))?;
         Ok(ResetWorkflowStatusResponse::SuccessfulResponse(
-            serde_json::json!({
-                "id": id,
-                "run_id": workflow_status.run_id,
-                "is_canceled": false,
-                "is_archived": false,
-            }),
+            response_json,
         ))
     }
 

@@ -488,6 +488,15 @@ pub struct WorkflowModel {
     pub slurm_config: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub execution_config: Option<String>,
+    /// Current run number; incremented on each restart/recovery.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<i64>,
+    /// True when a user (or scheduler) has canceled the workflow.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_canceled: Option<bool>,
+    /// True when the workflow has been archived.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_archived: Option<bool>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -1446,17 +1455,9 @@ impl WorkflowModel {
             metadata: None,
             slurm_config: None,
             execution_config: None,
-        }
-    }
-}
-
-impl WorkflowStatusModel {
-    pub fn new(is_canceled: bool, run_id: i64) -> WorkflowStatusModel {
-        WorkflowStatusModel {
-            id: None,
-            is_canceled,
-            is_archived: Some(false),
-            run_id,
+            run_id: None,
+            is_canceled: None,
+            is_archived: None,
         }
     }
 }
@@ -1821,17 +1822,6 @@ pub struct ReloadAuthResponse {
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct WorkflowStatusModel {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub id: Option<i64>,
-    pub is_canceled: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub is_archived: Option<bool>,
-    pub run_id: i64,
-}
-
-#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IsCompleteResponse {
     pub is_canceled: bool,
     pub is_complete: bool,
@@ -1859,7 +1849,7 @@ mod tests {
         ClaimJobsBasedOnResources, ClaimNextJobsResponse, ComputeNodeModel, ComputeNodesResources,
         CreateJobsResponse, EventModel, FileModel, GetReadyJobRequirementsResponse, JobModel,
         JobStatus, ListComputeNodesResponse, ListFilesResponse, ResourceRequirementsModel,
-        ResultModel, UserDataModel, WorkflowModel, WorkflowStatusModel,
+        ResultModel, UserDataModel, WorkflowModel,
     };
     use serde_json::json;
 
@@ -1885,6 +1875,9 @@ mod tests {
             metadata: Some(json!({"k": "v"}).to_string()),
             slurm_config: None,
             execution_config: None,
+            run_id: Some(1),
+            is_canceled: Some(false),
+            is_archived: Some(false),
         };
         let serialized = serde_json::to_value(&workflow).unwrap();
         assert_eq!(serialized["name"], "wf");
@@ -1995,12 +1988,6 @@ mod tests {
             memory: "1m".into(),
             runtime: "P0DT1M".into(),
         };
-        let wf_status = WorkflowStatusModel {
-            id: Some(1),
-            is_canceled: false,
-            is_archived: Some(false),
-            run_id: 1,
-        };
         let _ =
             serde_json::from_value::<ComputeNodeModel>(serde_json::to_value(compute_node).unwrap())
                 .unwrap();
@@ -2013,9 +2000,6 @@ mod tests {
         let _ = serde_json::from_value::<EventModel>(serde_json::to_value(event).unwrap()).unwrap();
         let _ =
             serde_json::from_value::<ResourceRequirementsModel>(serde_json::to_value(rr).unwrap())
-                .unwrap();
-        let _ =
-            serde_json::from_value::<WorkflowStatusModel>(serde_json::to_value(wf_status).unwrap())
                 .unwrap();
     }
 
