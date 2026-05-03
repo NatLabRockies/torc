@@ -5543,13 +5543,10 @@ components:
       required:
       - is_canceled
       - is_complete
-      - needs_to_run_completion_script
       properties:
         is_canceled:
           type: boolean
         is_complete:
-          type: boolean
-        needs_to_run_completion_script:
           type: boolean
     IsUninitializedResponse:
       type: object
@@ -6975,11 +6972,6 @@ components:
           type:
           - string
           - 'null'
-        status_id:
-          type:
-          - integer
-          - 'null'
-          format: int64
         timestamp:
           type:
           - string
@@ -6996,10 +6988,6 @@ components:
       - is_canceled
       - run_id
       properties:
-        has_detected_need_to_run_completion_script:
-          type:
-          - boolean
-          - 'null'
         id:
           type:
           - integer

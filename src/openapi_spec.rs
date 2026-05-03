@@ -2074,7 +2074,6 @@ pub fn parity_report(source: &str) -> Result<Vec<String>, Box<dyn std::error::Er
             "slurm_defaults",
             "use_pending_failed",
             "enable_ro_crate",
-            "status_id",
             "slurm_config",
             "execution_config",
         ],
@@ -2096,23 +2095,13 @@ pub fn parity_report(source: &str) -> Result<Vec<String>, Box<dyn std::error::Er
     check_component_properties(
         &emitted,
         "WorkflowStatusModel",
-        &[
-            "id",
-            "is_canceled",
-            "is_archived",
-            "run_id",
-            "has_detected_need_to_run_completion_script",
-        ],
+        &["id", "is_canceled", "is_archived", "run_id"],
         &mut issues,
     );
     check_component_properties(
         &emitted,
         "IsCompleteResponse",
-        &[
-            "is_canceled",
-            "is_complete",
-            "needs_to_run_completion_script",
-        ],
+        &["is_canceled", "is_complete"],
         &mut issues,
     );
     check_component_properties(

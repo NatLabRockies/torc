@@ -20,7 +20,6 @@ Name | Type | Description | Notes
 **resource_monitor_config** | **String** |  | [optional] [default to nothing]
 **slurm_config** | **String** |  | [optional] [default to nothing]
 **slurm_defaults** | **String** |  | [optional] [default to nothing]
-**status_id** | **Int64** |  | [optional] [default to nothing]
 **timestamp** | **String** |  | [optional] [default to nothing]
 **use_pending_failed** | **Bool** |  | [optional] [default to nothing]
 **user** | **String** |  | [default to nothing]

@@ -133,19 +133,12 @@ async fn finalize_snapshot(opts: &ExportOptions) -> Result<()> {
         info!("Retained {remaining} workflow(s) after filter");
     }
 
-    // Always sweep FK orphans and orphan workflow_status rows, regardless of
-    // filter mode. Cascade only fires for parent rows the filter deleted;
-    // pre-existing orphans (from any code path that ran with foreign_keys=OFF
-    // — including the bare sqlite3 CLI, which defaults to OFF) survive
-    // VACUUM INTO and are data corruption, not fidelity to the source.
+    // Always sweep FK orphans regardless of filter mode. Cascade only fires
+    // for parent rows the filter deleted; pre-existing orphans (from any code
+    // path that ran with foreign_keys=OFF — including the bare sqlite3 CLI,
+    // which defaults to OFF) survive VACUUM INTO and are data corruption,
+    // not fidelity to the source.
     prune_orphans(&mut dst).await?;
-    // workflow_status has no FK declared back to workflow (the back-reference
-    // column was added via ALTER TABLE ADD COLUMN, which SQLite cannot extend
-    // with FK constraints), so foreign_key_check doesn't see its orphans.
-    sqlx::query("DELETE FROM workflow_status WHERE id NOT IN (SELECT status_id FROM workflow)")
-        .execute(&mut dst)
-        .await
-        .context("DELETE FROM workflow_status (orphan prune)")?;
 
     if filter_applied && !opts.preserve_access_groups {
         info!(

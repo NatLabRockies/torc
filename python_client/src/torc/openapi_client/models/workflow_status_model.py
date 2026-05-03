@@ -26,12 +26,11 @@ class WorkflowStatusModel(BaseModel):
     """
     WorkflowStatusModel
     """ # noqa: E501
-    has_detected_need_to_run_completion_script: Optional[StrictBool] = None
     id: Optional[StrictInt] = None
     is_archived: Optional[StrictBool] = None
     is_canceled: StrictBool
     run_id: StrictInt
-    __properties: ClassVar[List[str]] = ["has_detected_need_to_run_completion_script", "id", "is_archived", "is_canceled", "run_id"]
+    __properties: ClassVar[List[str]] = ["id", "is_archived", "is_canceled", "run_id"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -72,11 +71,6 @@ class WorkflowStatusModel(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if has_detected_need_to_run_completion_script (nullable) is None
-        # and model_fields_set contains the field
-        if self.has_detected_need_to_run_completion_script is None and "has_detected_need_to_run_completion_script" in self.model_fields_set:
-            _dict['has_detected_need_to_run_completion_script'] = None
-
         # set to None if id (nullable) is None
         # and model_fields_set contains the field
         if self.id is None and "id" in self.model_fields_set:
@@ -99,7 +93,6 @@ class WorkflowStatusModel(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "has_detected_need_to_run_completion_script": obj.get("has_detected_need_to_run_completion_script"),
             "id": obj.get("id"),
             "is_archived": obj.get("is_archived"),
             "is_canceled": obj.get("is_canceled"),

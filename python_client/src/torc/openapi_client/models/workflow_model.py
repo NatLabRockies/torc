@@ -42,11 +42,10 @@ class WorkflowModel(BaseModel):
     resource_monitor_config: Optional[StrictStr] = None
     slurm_config: Optional[StrictStr] = None
     slurm_defaults: Optional[StrictStr] = None
-    status_id: Optional[StrictInt] = None
     timestamp: Optional[StrictStr] = None
     use_pending_failed: Optional[StrictBool] = None
     user: StrictStr
-    __properties: ClassVar[List[str]] = ["compute_node_expiration_buffer_seconds", "compute_node_ignore_workflow_completion", "compute_node_min_time_for_new_jobs_seconds", "compute_node_wait_for_healthy_database_minutes", "compute_node_wait_for_new_jobs_seconds", "description", "enable_ro_crate", "env", "execution_config", "id", "metadata", "name", "project", "resource_monitor_config", "slurm_config", "slurm_defaults", "status_id", "timestamp", "use_pending_failed", "user"]
+    __properties: ClassVar[List[str]] = ["compute_node_expiration_buffer_seconds", "compute_node_ignore_workflow_completion", "compute_node_min_time_for_new_jobs_seconds", "compute_node_wait_for_healthy_database_minutes", "compute_node_wait_for_new_jobs_seconds", "description", "enable_ro_crate", "env", "execution_config", "id", "metadata", "name", "project", "resource_monitor_config", "slurm_config", "slurm_defaults", "timestamp", "use_pending_failed", "user"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -157,11 +156,6 @@ class WorkflowModel(BaseModel):
         if self.slurm_defaults is None and "slurm_defaults" in self.model_fields_set:
             _dict['slurm_defaults'] = None
 
-        # set to None if status_id (nullable) is None
-        # and model_fields_set contains the field
-        if self.status_id is None and "status_id" in self.model_fields_set:
-            _dict['status_id'] = None
-
         # set to None if timestamp (nullable) is None
         # and model_fields_set contains the field
         if self.timestamp is None and "timestamp" in self.model_fields_set:
@@ -200,7 +194,6 @@ class WorkflowModel(BaseModel):
             "resource_monitor_config": obj.get("resource_monitor_config"),
             "slurm_config": obj.get("slurm_config"),
             "slurm_defaults": obj.get("slurm_defaults"),
-            "status_id": obj.get("status_id"),
             "timestamp": obj.get("timestamp"),
             "use_pending_failed": obj.get("use_pending_failed"),
             "user": obj.get("user")

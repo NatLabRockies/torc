@@ -35,29 +35,17 @@ async fn setup_source_db(path: &Path) -> SqlitePool {
 }
 
 async fn seed(pool: &SqlitePool) -> SeedIds {
-    // Each workflow needs its own workflow_status row (FK).
-    let s1: i64 = sqlx::query_scalar("INSERT INTO workflow_status DEFAULT VALUES RETURNING id")
-        .fetch_one(pool)
-        .await
-        .unwrap();
-    let s2: i64 = sqlx::query_scalar("INSERT INTO workflow_status DEFAULT VALUES RETURNING id")
-        .fetch_one(pool)
-        .await
-        .unwrap();
-
     let alice: i64 = sqlx::query_scalar(
-        "INSERT INTO workflow (name, user, timestamp, status_id) \
-         VALUES ('alice-wf', 'alice', '2026-01-01', ?) RETURNING id",
+        "INSERT INTO workflow (name, user, timestamp) \
+         VALUES ('alice-wf', 'alice', '2026-01-01') RETURNING id",
     )
-    .bind(s1)
     .fetch_one(pool)
     .await
     .unwrap();
     let bob: i64 = sqlx::query_scalar(
-        "INSERT INTO workflow (name, user, timestamp, status_id) \
-         VALUES ('bob-wf', 'bob', '2026-01-01', ?) RETURNING id",
+        "INSERT INTO workflow (name, user, timestamp) \
+         VALUES ('bob-wf', 'bob', '2026-01-01') RETURNING id",
     )
-    .bind(s2)
     .fetch_one(pool)
     .await
     .unwrap();
@@ -205,15 +193,10 @@ async fn fresh_source_extended(tmp: &TempDir) -> (PathBuf, ExtendedIds) {
     let pool = setup_source_db(&src).await;
     let base = seed(&pool).await;
 
-    let s3: i64 = sqlx::query_scalar("INSERT INTO workflow_status DEFAULT VALUES RETURNING id")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
     let carol: i64 = sqlx::query_scalar(
-        "INSERT INTO workflow (name, user, timestamp, status_id) \
-         VALUES ('carol-wf', 'carol', '2026-01-01', ?) RETURNING id",
+        "INSERT INTO workflow (name, user, timestamp) \
+         VALUES ('carol-wf', 'carol', '2026-01-01') RETURNING id",
     )
-    .bind(s3)
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -282,10 +265,6 @@ async fn user_filter_preserves_ids_and_strips_acl_tables() {
         );
     }
 
-    // workflow_status has no cascade FK; the export prunes orphans explicitly
-    // so bob's status row is not left behind to leak workflow counts.
-    assert_eq!(count(&out, "SELECT COUNT(*) FROM workflow_status").await, 1);
-
     // ACL tables stripped by default in filtered mode.
     assert_eq!(count(&out, "SELECT COUNT(*) FROM access_group").await, 0);
     assert_eq!(
@@ -348,11 +327,10 @@ async fn full_copy_keeps_acl_tables() {
         .expect("export");
 
     assert_eq!(count(&out, "SELECT COUNT(*) FROM workflow").await, 2);
-    // No filter applied, so ACL tables remain intact and `workflow_status`
-    // keeps both rows. Orphan pruning still runs in unfiltered mode, but the
-    // seed produces a clean DB, so the sweep finds nothing to remove. Any
-    // pruning behavior with actual orphans is exercised by
-    // `full_copy_also_prunes_pre_existing_orphans`.
+    // No filter applied, so ACL tables remain intact. Orphan pruning still
+    // runs in unfiltered mode, but the seed produces a clean DB, so the sweep
+    // finds nothing to remove. Any pruning behavior with actual orphans is
+    // exercised by `full_copy_also_prunes_pre_existing_orphans`.
     assert_eq!(count(&out, "SELECT COUNT(*) FROM access_group").await, 1);
     assert_eq!(
         count(&out, "SELECT COUNT(*) FROM user_group_membership").await,
@@ -362,7 +340,6 @@ async fn full_copy_keeps_acl_tables() {
         count(&out, "SELECT COUNT(*) FROM workflow_access_group").await,
         2
     );
-    assert_eq!(count(&out, "SELECT COUNT(*) FROM workflow_status").await, 2);
 }
 
 #[tokio::test]
@@ -654,6 +631,80 @@ async fn full_copy_also_prunes_pre_existing_orphans() {
     // remains.
     assert_eq!(count(&out, "SELECT COUNT(*) FROM workflow").await, 2);
     assert_eq!(count(&out, "SELECT COUNT(*) FROM failure_handler").await, 1);
+}
+
+#[tokio::test]
+async fn workflow_status_is_not_reachable_as_orphan_after_workflow_delete() {
+    // Regression test for issue #300. Pre-refactor, workflow status lived in
+    // a separate workflow_status table connected via workflow.status_id with
+    // no enforced back-reference. Any code path that deleted a workflow with
+    // foreign_keys=OFF (including the bare sqlite3 CLI) left a stranded
+    // status row that pragma_foreign_key_check could not detect. After
+    // collapsing the satellite into workflow, the only place the status data
+    // can live is on the workflow row itself, so deleting the workflow is
+    // the only way to delete the status. This test pins that property in
+    // place by asserting the table no longer exists.
+    let tmp = TempDir::new().unwrap();
+    let src = tmp.path().join("src.db");
+    let pool = setup_source_db(&src).await;
+
+    // The workflow_status table must be gone — there is no orphan class to
+    // worry about, because the data is now in workflow itself.
+    let workflow_status_exists: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'workflow_status'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        workflow_status_exists, 0,
+        "workflow_status table should not exist after issue #300 migration"
+    );
+
+    // workflow.status_id must also be gone — its FK was the indirection
+    // that made the orphan class possible.
+    let status_id_exists: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pragma_table_info('workflow') WHERE name = 'status_id'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        status_id_exists, 0,
+        "workflow.status_id column should not exist after issue #300 migration"
+    );
+
+    // Status fields must live on workflow now.
+    for col in ["run_id", "is_canceled", "is_archived"] {
+        let n: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM pragma_table_info('workflow') WHERE name = ?")
+                .bind(col)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(n, 1, "workflow should have column {col}");
+    }
+
+    // Insert a workflow, delete it, confirm the status data goes with it
+    // (there is nowhere else for it to hide).
+    sqlx::query(
+        "INSERT INTO workflow (id, name, user, timestamp, run_id, is_canceled, is_archived) \
+         VALUES (1, 'wf', 'alice', '2026-01-01', 7, 1, 1)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("DELETE FROM workflow WHERE id = 1")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let remaining: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM workflow WHERE id = 1")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(remaining, 0);
+
+    pool.close().await;
 }
 
 #[tokio::test]

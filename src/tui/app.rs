@@ -385,7 +385,6 @@ pub struct WorkflowSummary {
     pub description: Option<String>,
     pub is_complete: bool,
     pub is_canceled: bool,
-    pub needs_completion_script: bool,
     pub total_jobs: usize,
     /// Counts indexed by `JobStatus as usize` (0 = Uninitialized .. 10 = PendingFailed).
     pub counts: [usize; 11],
@@ -927,7 +926,6 @@ impl App {
                             description: workflow.description,
                             is_complete: completion.is_complete,
                             is_canceled: completion.is_canceled,
-                            needs_completion_script: completion.needs_to_run_completion_script,
                             total_jobs: self.jobs_all.len(),
                             counts,
                         });

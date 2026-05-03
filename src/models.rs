@@ -485,8 +485,6 @@ pub struct WorkflowModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub status_id: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub slurm_config: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub execution_config: Option<String>,
@@ -1099,15 +1097,10 @@ impl GetReadyJobRequirementsResponse {
 }
 
 impl IsCompleteResponse {
-    pub fn new(
-        is_canceled: bool,
-        is_complete: bool,
-        needs_to_run_completion_script: bool,
-    ) -> IsCompleteResponse {
+    pub fn new(is_canceled: bool, is_complete: bool) -> IsCompleteResponse {
         IsCompleteResponse {
             is_canceled,
             is_complete,
-            needs_to_run_completion_script,
         }
     }
 }
@@ -1451,7 +1444,6 @@ impl WorkflowModel {
             enable_ro_crate: None,
             project: None,
             metadata: None,
-            status_id: None,
             slurm_config: None,
             execution_config: None,
         }
@@ -1465,7 +1457,6 @@ impl WorkflowStatusModel {
             is_canceled,
             is_archived: Some(false),
             run_id,
-            has_detected_need_to_run_completion_script: Some(false),
         }
     }
 }
@@ -1837,8 +1828,6 @@ pub struct WorkflowStatusModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_archived: Option<bool>,
     pub run_id: i64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub has_detected_need_to_run_completion_script: Option<bool>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -1846,7 +1835,6 @@ pub struct WorkflowStatusModel {
 pub struct IsCompleteResponse {
     pub is_canceled: bool,
     pub is_complete: bool,
-    pub needs_to_run_completion_script: bool,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -1895,7 +1883,6 @@ mod tests {
             enable_ro_crate: Some(true),
             project: Some("proj".to_string()),
             metadata: Some(json!({"k": "v"}).to_string()),
-            status_id: Some(1),
             slurm_config: None,
             execution_config: None,
         };
@@ -2013,7 +2000,6 @@ mod tests {
             is_canceled: false,
             is_archived: Some(false),
             run_id: 1,
-            has_detected_need_to_run_completion_script: Some(false),
         };
         let _ =
             serde_json::from_value::<ComputeNodeModel>(serde_json::to_value(compute_node).unwrap())

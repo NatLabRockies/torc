@@ -1330,18 +1330,16 @@ where
 
         // Inline run_id validation against tx for the same reason: validate_run_id uses a
         // fresh pool connection and would deadlock against the in-flight transaction.
-        let workflow_run_id_row = sqlx::query!(
-            "SELECT run_id FROM workflow_status WHERE id = ?",
-            job_workflow_id
-        )
-        .fetch_optional(&mut **tx)
-        .await
-        .map_err(|e| {
-            CompletionMutationError::Transport(database_lock_aware_error(
-                e,
-                "Failed to fetch workflow run_id",
-            ))
-        })?;
+        let workflow_run_id_row =
+            sqlx::query!("SELECT run_id FROM workflow WHERE id = ?", job_workflow_id)
+                .fetch_optional(&mut **tx)
+                .await
+                .map_err(|e| {
+                    CompletionMutationError::Transport(database_lock_aware_error(
+                        e,
+                        "Failed to fetch workflow run_id",
+                    ))
+                })?;
         match workflow_run_id_row {
             Some(row) if row.run_id == run_id => {}
             Some(row) => {

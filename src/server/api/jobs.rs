@@ -2417,7 +2417,7 @@ where
         })?;
 
         let workflow_is_canceled =
-            match sqlx::query("SELECT is_canceled FROM workflow_status WHERE workflow_id = $1")
+            match sqlx::query("SELECT is_canceled FROM workflow WHERE id = $1")
                 .bind(id)
                 .fetch_optional(&mut *conn)
                 .await
@@ -2941,10 +2941,9 @@ where
             SELECT j.id, j.workflow_id, j.name, j.command, j.status, j.failure_handler_id, j.attempt_id,
                    j.invocation_script, j.env, j.cancel_on_blocking_job_failure, j.supports_termination,
                    j.resource_requirements_id, j.scheduler_id, j.priority,
-                   ws.run_id as workflow_run_id
+                   w.run_id as workflow_run_id
             FROM job j
             JOIN workflow w ON j.workflow_id = w.id
-            JOIN workflow_status ws ON w.status_id = ws.id
             WHERE j.id = ?
             "#,
         )

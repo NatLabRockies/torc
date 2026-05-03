@@ -10,17 +10,16 @@ not use PostgreSQL- or DuckDB-specific functions.
 
 ## Schema Overview
 
-| Table                   | What it represents                                                  |
-| ----------------------- | ------------------------------------------------------------------- |
-| `workflow`              | Top-level workflow definition (one row per workflow)                |
-| `workflow_status`       | Per-workflow run state (canceled / archived flags + current run_id) |
-| `job`                   | Individual computational tasks within a workflow                    |
-| `resource_requirements` | Named resource specs (CPU/memory/runtime) shared by groups of jobs  |
-| `result`                | One row per job execution attempt — the primary fact table          |
-| `workflow_result`       | Pointer to the latest `result` row for each (workflow, job)         |
-| `compute_node`          | A worker process (local or Slurm allocation) that executed jobs     |
-| `file`                  | File artifacts that establish implicit job dependencies             |
-| `user_data`             | User-defined JSON artifacts that establish implicit dependencies    |
+| Table                   | What it represents                                                 |
+| ----------------------- | ------------------------------------------------------------------ |
+| `workflow`              | Top-level workflow definition + per-workflow run state             |
+| `job`                   | Individual computational tasks within a workflow                   |
+| `resource_requirements` | Named resource specs (CPU/memory/runtime) shared by groups of jobs |
+| `result`                | One row per job execution attempt — the primary fact table         |
+| `workflow_result`       | Pointer to the latest `result` row for each (workflow, job)        |
+| `compute_node`          | A worker process (local or Slurm allocation) that executed jobs    |
+| `file`                  | File artifacts that establish implicit job dependencies            |
+| `user_data`             | User-defined JSON artifacts that establish implicit dependencies   |
 
 The **`result`** table is the most important for analysis: it has actual measured CPU/memory/exec
 time per execution, plus return codes. Most "what failed" or "what was slow" questions start there.
@@ -55,16 +54,15 @@ Same integer scheme is used in `result.status` (the recorded status of a single 
 
 ## Workflow Status
 
-`workflow_status` does **not** map to a name like `job.status` does. It is a row-per-workflow record
-with boolean flags:
+Workflow status is **not** a named status like `job.status`; it lives as columns directly on the
+`workflow` row:
 
 - `is_canceled` — user (or scheduler) canceled the workflow.
-- `is_archived` — workflow has been archived (also see `workflow.is_archived`).
+- `is_archived` — workflow has been archived.
 - `run_id` — the current run number (incremented on each restart/recovery).
-- `has_detected_need_to_run_completion_script` — internal flag; usually ignore.
 
 To answer "is workflow X currently running?" you typically check whether any of its jobs are in
-status 3 (`pending`) or 4 (`running`), not `workflow_status` directly.
+status 3 (`pending`) or 4 (`running`), not these flags directly.
 
 ## Return Code Conventions
 
@@ -162,7 +160,7 @@ dependencies. Inspect it the same way.
 - Do not `SELECT *` from `result` for whole-DB scans — it can be very large. Always join through
   `workflow_result` or filter by `workflow_id` first.
 - Do not assume `job.status = 'failed'` works — `status` is an integer; use `= 6`.
-- Do not reason about "is this workflow done?" from `workflow_status` alone — check the latest job
-  statuses.
+- Do not reason about "is this workflow done?" from `workflow.is_canceled` / `workflow.is_archived`
+  alone — check the latest job statuses.
 - Do not modify the database (no INSERT/UPDATE/DELETE). datasight is read-only by design; if a query
   implies a mutation, refuse and suggest the equivalent `torc` CLI command.
