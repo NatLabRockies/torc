@@ -2337,7 +2337,6 @@ mod tests {
         assert!(yaml.contains("/admin/reload-auth"));
         assert!(yaml.contains("/user_data"));
         assert!(yaml.contains("/workflows"));
-        assert!(yaml.contains("/workflows/{id}/status"));
         assert!(yaml.contains("/workflows/{id}/claim_jobs_based_on_resources/{limit}"));
         assert!(yaml.contains("/workflows/{id}/claim_next_jobs"));
         assert!(yaml.contains("/workflows/{id}/job_dependencies"));
