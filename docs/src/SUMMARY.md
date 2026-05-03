@@ -110,6 +110,7 @@
   - [Dashboard Deployment](./specialized/tools/dashboard-deployment.md)
   - [Configuring AI Assistants](./specialized/tools/ai-assistants.md)
   - [AI-Assisted Workflow Management](./specialized/tools/ai-assistant.md)
+  - [Analyzing Workflows with datasight](./specialized/tools/datasight.md)
   - [Map Python Functions Across Workers](./specialized/tools/map_python_function_across_workers.md)
   - [Filtering CLI Output with Nushell](./specialized/tools/filtering-with-nushell.md)
   - [Shell Completions](./specialized/tools/shell-completions.md)

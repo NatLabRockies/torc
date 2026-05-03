@@ -12,6 +12,7 @@ use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use tracing_timing::{Builder, Histogram};
 
+use torc::server::export;
 use torc::server::http_server;
 use torc::server::logging;
 use torc::server::service;
@@ -142,6 +143,57 @@ enum Commands {
         #[command(subcommand)]
         action: ServiceAction,
     },
+    /// Export a (filtered) copy of the database to a standalone SQLite file.
+    ///
+    /// With no filter, produces a full copy. Supply --user, --access-group, or
+    /// positional workflow IDs to restrict the export to a subset. Workflow IDs
+    /// and all per-workflow data are preserved verbatim, so log files referring
+    /// to the original IDs continue to make sense in the exported database.
+    Export {
+        #[command(flatten)]
+        args: ExportArgs,
+    },
+}
+
+#[derive(Args, Clone)]
+struct ExportArgs {
+    /// Output path for the exported SQLite database.
+    #[arg(short, long)]
+    output: PathBuf,
+
+    /// Source database path. Defaults to DATABASE_URL.
+    #[arg(short, long)]
+    database: Option<String>,
+
+    /// Keep only workflows owned by this user (repeatable).
+    #[arg(long = "user", conflicts_with_all = ["access_groups", "workflow_ids"])]
+    users: Vec<String>,
+
+    /// Keep only workflows associated with this access group ID (repeatable).
+    #[arg(long = "access-group", conflicts_with_all = ["users", "workflow_ids"])]
+    access_groups: Vec<i64>,
+
+    /// Keep only these specific workflow IDs.
+    #[arg(conflicts_with_all = ["users", "access_groups"])]
+    workflow_ids: Vec<i64>,
+
+    /// Overwrite the output file if it already exists.
+    #[arg(long)]
+    overwrite: bool,
+
+    /// Preserve the access_group, workflow_access_group, and user_group_membership
+    /// tables in the exported database. Off by default because these tables
+    /// contain entries for users and groups outside the filtered set and are
+    /// difficult to sanitize without risking accidental leaks. Only use this
+    /// when producing a full copy or when the recipient is authorized to see
+    /// the entire access-control state.
+    #[arg(long)]
+    preserve_access_groups: bool,
+
+    /// Skip the final VACUUM on the output database. Faster, but the file
+    /// retains the original database's size even after rows are deleted.
+    #[arg(long)]
+    no_vacuum: bool,
 }
 
 #[derive(clap::Subcommand)]
@@ -218,6 +270,7 @@ fn main() -> Result<()> {
     match cli.command {
         Some(Commands::Service { action }) => handle_service_action(action),
         Some(Commands::Run { config }) => run_server(config),
+        Some(Commands::Export { args }) => handle_export(args),
         None => {
             // Default: run server with default config
             // We need to re-parse as "run" to get ServerConfig defaults from clap
@@ -229,6 +282,52 @@ fn main() -> Result<()> {
             }
         }
     }
+}
+
+fn handle_export(args: ExportArgs) -> Result<()> {
+    // Minimal logging setup — the export command writes a status line to stderr
+    // via tracing; defer to RUST_LOG if set, otherwise default to info.
+    let env_filter =
+        tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into());
+    let _ = tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(std::io::stderr)
+                .with_target(false)
+                .with_level(true),
+        )
+        .with(env_filter)
+        .try_init();
+
+    let source_db = match args.database {
+        Some(ref path) => path.clone(),
+        None => env::var("DATABASE_URL")
+            .map_err(|_| anyhow::anyhow!("--database not provided and DATABASE_URL not set"))?,
+    };
+
+    let filter = if !args.users.is_empty() {
+        export::Filter::Users(args.users.clone())
+    } else if !args.access_groups.is_empty() {
+        export::Filter::AccessGroups(args.access_groups.clone())
+    } else if !args.workflow_ids.is_empty() {
+        export::Filter::WorkflowIds(args.workflow_ids.clone())
+    } else {
+        export::Filter::None
+    };
+
+    let opts = export::ExportOptions {
+        source_db_url: source_db,
+        output_path: args.output,
+        filter,
+        overwrite: args.overwrite,
+        preserve_access_groups: args.preserve_access_groups,
+        run_final_vacuum: !args.no_vacuum,
+    };
+
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    runtime.block_on(export::run_export(opts))
 }
 
 fn handle_service_action(action: ServiceAction) -> Result<()> {
