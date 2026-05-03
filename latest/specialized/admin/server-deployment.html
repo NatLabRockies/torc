@@ -432,6 +432,107 @@ scale linearly with size.</li>
 <li><strong>Process death loses unsaved data.</strong> Always snapshot before stopping the server if you care about
 the current state. <code>SIGTERM</code>/<code>SIGINT</code> (graceful shutdown) does <strong>not</strong> automatically snapshot.</li>
 </ul>
+<h2 id="exporting-filtered-database-copies"><a class="header" href="#exporting-filtered-database-copies">Exporting Filtered Database Copies</a></h2>
+<p><code>torc-server export</code> produces a standalone SQLite copy of the live database, optionally filtered to
+a subset of workflows. The original workflow and job IDs are preserved verbatim, so log files,
+ticket references, and screenshots referring to the production IDs remain interpretable in the
+exported copy. The most common use case is <strong>handing a debugging copy to an end user</strong> who does not
+have direct access to the production database — for example, so they can analyze their workflows
+with <a href="../tools/datasight.html">datasight</a>, <code>sqlite3</code>, or another SQL tool without touching production.</p>
+<pre><code class="language-bash"># Hand a single user their workflows
+torc-server export --user alice --output alice.db
+
+# Export everything in a project's access group
+torc-server export --access-group 7 --output proj-energy.db
+
+# Pull a specific list of workflows (positional)
+torc-server export 42 99 314 --output requested.db
+
+# Full unfiltered copy (useful as a hot-backup)
+torc-server export --output snapshot.db
+</code></pre>
+<p>The filters are mutually exclusive — pick one of <code>--user</code> (repeatable), <code>--access-group</code>
+(repeatable), or positional workflow IDs. Without any filter, the command produces a full copy.</p>
+<h3 id="how-it-works"><a class="header" href="#how-it-works">How it works</a></h3>
+<ol>
+<li><strong>Snapshot.</strong> SQLite's <a href="https://sqlite.org/lang_vacuum.html#vacuuminto"><code>VACUUM INTO</code></a> writes a
+transactionally consistent, defragmented copy of the live database to the output path. This does
+<em>not</em> require quiescing the running server — readers and writers continue normally during the
+snapshot.</li>
+<li><strong>Filter.</strong> The output database is reopened with foreign keys enabled, and a single
+<code>DELETE FROM workflow WHERE id NOT IN (&lt;filter&gt;)</code> runs. Every per-workflow table has
+<code>ON DELETE CASCADE</code> on <code>workflow_id</code>, so jobs, files, results, events, ro_crate entities, compute
+nodes, etc. are removed automatically by the cascade chain — for the workflows the filter
+actually deleted.</li>
+<li><strong>Sweep orphans (always).</strong> Cascade only fires when the parent row IS deleted, so pre-existing
+orphans in the source DB survive the snapshot. Common sources: a <code>delete_workflow</code> code path that
+toggled <code>PRAGMA foreign_keys = OFF</code>, or a bare <code>sqlite3</code> CLI session (the CLI defaults to
+<code>foreign_keys = OFF</code>). The export iteratively runs <code>PRAGMA foreign_key_check</code> and deletes every
+reported violation until none remain. <code>workflow_status</code> is pruned separately (its back-reference
+column has no FK declared and so is invisible to <code>foreign_key_check</code>). This step runs for
+unfiltered exports too — FK violations are data corruption, not fidelity to the source.</li>
+<li><strong>Sanitize.</strong> If a filter was applied and <code>--preserve-access-groups</code> is not set, the exported
+database has its <code>user_group_membership</code> and <code>access_group</code> tables emptied. See
+<a href="#access-control-sanitization">Access-control sanitization</a> below.</li>
+<li><strong>Compact.</strong> A final <code>VACUUM</code> reclaims the space freed by the deletes (skip with <code>--no-vacuum</code>).</li>
+</ol>
+<p>If anything in steps 2–5 fails after step 1 has written the snapshot, the partial output file is
+removed before the error is reported — a failed export never leaves a half-finished database on
+disk.</p>
+<h3 id="flags"><a class="header" href="#flags">Flags</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Flag</th><th>Effect</th></tr></thead><tbody>
+<tr><td><code>-o</code>, <code>--output &lt;PATH&gt;</code></td><td>Output SQLite file path (required).</td></tr>
+<tr><td><code>-d</code>, <code>--database &lt;PATH&gt;</code></td><td>Source database path. Defaults to <code>DATABASE_URL</code>.</td></tr>
+<tr><td><code>--user &lt;NAME&gt;</code></td><td>Keep only workflows owned by this user. Repeatable.</td></tr>
+<tr><td><code>--access-group &lt;ID&gt;</code></td><td>Keep only workflows linked to this access-group ID. Repeatable.</td></tr>
+<tr><td>(positional)</td><td>Keep only these workflow IDs.</td></tr>
+<tr><td><code>--overwrite</code></td><td>Replace the output file if it already exists.</td></tr>
+<tr><td><code>--preserve-access-groups</code></td><td>Keep <code>access_group</code> / <code>user_group_membership</code> / <code>workflow_access_group</code> instead of stripping them.</td></tr>
+<tr><td><code>--no-vacuum</code></td><td>Skip the final <code>VACUUM</code>. Faster, but the output file retains the source database's allocated size.</td></tr>
+</tbody></table>
+</div>
+<p>If a filter is specified and matches zero workflows, the command errors out and removes the
+partially-written output file rather than producing an empty database.</p>
+<h3 id="access-control-sanitization"><a class="header" href="#access-control-sanitization">Access-control sanitization</a></h3>
+<p>By default, <code>torc-server export</code> strips three tables from any <strong>filtered</strong> export:</p>
+<ul>
+<li><code>user_group_membership</code> — has no per-workflow scoping, so leaving it intact would leak unrelated
+users' group affiliations.</li>
+<li><code>access_group</code> — group names and descriptions for groups across the whole server.</li>
+<li><code>workflow_access_group</code> — cascades away when <code>access_group</code> is emptied.</li>
+</ul>
+<p>This is conservative on purpose: there is no straightforward per-workflow filter that wouldn't risk
+accidentally leaking entries about other users or groups. If the recipient <em>is</em> authorized to see
+the entire access-control state (for example, when handing a full copy to another admin), pass
+<code>--preserve-access-groups</code> to keep the tables intact.</p>
+<p>For unfiltered (full-copy) exports, the access tables are kept as-is regardless — the operator
+running the command already has access to everything in the database.</p>
+<h3 id="recommended-workflow-for-end-user-requests"><a class="header" href="#recommended-workflow-for-end-user-requests">Recommended workflow for end-user requests</a></h3>
+<p>The expected interaction pattern is admin-mediated:</p>
+<ol>
+<li>End user asks for a copy of workflow <code>42</code> (or all workflows under user <code>alice</code>, etc.).</li>
+<li>Admin runs <code>torc-server export</code> with the appropriate filter on the server host.</li>
+<li>Admin reviews the output (<code>sqlite3 alice.db "SELECT id, user, name FROM workflow"</code>) and confirms
+it contains only the intended scope.</li>
+<li>Admin transfers the file to the user.</li>
+<li>User analyzes the copy locally — IDs match production, so anything that was in their logs or
+tickets continues to make sense.</li>
+</ol>
+<p>This avoids needing to grant the user direct filesystem access to the production database, while
+still giving them a faithful debugging artifact.</p>
+<h3 id="notes"><a class="header" href="#notes">Notes</a></h3>
+<ul>
+<li><strong>Live server safe.</strong> <code>VACUUM INTO</code> does not block the source server's writers or readers, and the
+export connection participates in SQLite's normal WAL coherency, so the snapshot reflects every
+committed transaction the running server can see.</li>
+<li><strong>Same-IDs guarantee.</strong> The export preserves all primary keys. By contrast,
+<a href="../../core/workflows/export-import-workflows.html"><code>torc workflows export</code></a> emits portable JSON
+that loses ID identity on import — use that flow when the recipient cannot get a SQLite file from
+an admin.</li>
+<li><strong>External files are not bundled.</strong> Only database rows are exported. Files referenced by <code>path</code> in
+the <code>file</code> table (job inputs, outputs, logs on shared filesystems) are not copied; the recipient
+analyzes metadata only unless those paths are independently shared.</li>
+</ul>
 <h2 id="complete-example-production-deployment"><a class="header" href="#complete-example-production-deployment">Complete Example: Production Deployment</a></h2>
 <pre><code class="language-bash">#!/bin/bash
 # Production deployment script
