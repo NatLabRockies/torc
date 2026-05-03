@@ -16,6 +16,8 @@ pub mod event_broadcast;
 pub mod header;
 pub mod htpasswd;
 // These modules are needed by the server binary and by the Rust-owned OpenAPI emitter.
+#[cfg(feature = "server-bin")]
+pub mod export;
 #[cfg(any(feature = "server-bin", feature = "openapi-codegen"))]
 pub mod http_server;
 #[cfg(feature = "openapi-codegen")]

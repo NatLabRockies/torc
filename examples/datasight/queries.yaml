@@ -1,0 +1,172 @@
+# Seed natural-language / SQL pairs for datasight against a torc SQLite DB.
+#
+# These are injected into the AI's system prompt as few-shot examples and
+# seeded into agent memory, so similar future questions return better answers.
+# Replace `:workflow_id` placeholders with real IDs when running by hand.
+
+- question: List all workflows for a user, newest first
+  sql: |
+    SELECT id, name, description, user, timestamp,
+           json_extract(metadata, '$.project') AS project
+    FROM workflow
+    WHERE user = 'alice'
+    ORDER BY timestamp DESC
+    LIMIT 50
+
+- question: How many jobs are in each status for workflow 123?
+  sql: |
+    SELECT
+      CASE status
+        WHEN 0  THEN 'uninitialized'
+        WHEN 1  THEN 'blocked'
+        WHEN 2  THEN 'ready'
+        WHEN 3  THEN 'pending'
+        WHEN 4  THEN 'running'
+        WHEN 5  THEN 'completed'
+        WHEN 6  THEN 'failed'
+        WHEN 7  THEN 'canceled'
+        WHEN 8  THEN 'terminated'
+        WHEN 9  THEN 'disabled'
+        WHEN 10 THEN 'pending_failed'
+      END AS status_name,
+      COUNT(*) AS job_count
+    FROM job
+    WHERE workflow_id = 123
+    GROUP BY status
+    ORDER BY job_count DESC
+
+- question: Show the most recent failed jobs in workflow 123
+  sql: |
+    SELECT j.id AS job_id, j.name, r.return_code, r.exec_time_minutes,
+           r.completion_time
+    FROM workflow_result wr
+    JOIN result r ON r.id = wr.result_id
+    JOIN job j ON j.id = wr.job_id
+    WHERE wr.workflow_id = 123
+      AND r.status = 6
+    ORDER BY r.completion_time DESC
+    LIMIT 50
+
+- question: Which jobs in workflow 123 exceeded their memory allocation?
+  sql: |
+    SELECT j.id AS job_id, j.name,
+           rr.memory AS configured_memory,
+           r.peak_memory_bytes,
+           rr.memory_bytes AS configured_memory_bytes,
+           ROUND(1.0 * r.peak_memory_bytes / rr.memory_bytes, 2)
+             AS overage_ratio
+    FROM workflow_result wr
+    JOIN result r ON r.id = wr.result_id
+    JOIN job j ON j.id = wr.job_id
+    JOIN resource_requirements rr ON rr.id = j.resource_requirements_id
+    WHERE wr.workflow_id = 123
+      AND r.peak_memory_bytes > rr.memory_bytes
+    ORDER BY overage_ratio DESC
+
+- question: Which jobs exceeded their CPU allocation?
+  sql: |
+    SELECT j.id AS job_id, j.name,
+           rr.num_cpus AS configured_cpus,
+           r.peak_cpu_percent,
+           ROUND(r.peak_cpu_percent / (rr.num_cpus * 100.0), 2)
+             AS overage_ratio
+    FROM workflow_result wr
+    JOIN result r ON r.id = wr.result_id
+    JOIN job j ON j.id = wr.job_id
+    JOIN resource_requirements rr ON rr.id = j.resource_requirements_id
+    WHERE wr.workflow_id = 123
+      AND r.peak_cpu_percent > rr.num_cpus * 100.0
+    ORDER BY overage_ratio DESC
+
+- question: Show failures grouped by return code
+  sql: |
+    SELECT r.return_code,
+           CASE r.return_code
+             WHEN 137 THEN 'OOM (SIGKILL)'
+             WHEN 139 THEN 'segfault'
+             WHEN 143 THEN 'SIGTERM'
+             WHEN 152 THEN 'timeout (Slurm SIGUSR1)'
+             ELSE 'other'
+           END AS likely_cause,
+           COUNT(*) AS occurrences
+    FROM workflow_result wr
+    JOIN result r ON r.id = wr.result_id
+    WHERE wr.workflow_id = 123
+      AND r.return_code != 0
+    GROUP BY r.return_code
+    ORDER BY occurrences DESC
+
+- question: What are the 20 longest-running jobs in workflow 123?
+  sql: |
+    SELECT j.id AS job_id, j.name, r.exec_time_minutes,
+           rr.runtime AS configured_runtime,
+           rr.runtime_s / 60.0 AS configured_minutes
+    FROM workflow_result wr
+    JOIN result r ON r.id = wr.result_id
+    JOIN job j ON j.id = wr.job_id
+    JOIN resource_requirements rr ON rr.id = j.resource_requirements_id
+    WHERE wr.workflow_id = 123
+    ORDER BY r.exec_time_minutes DESC
+    LIMIT 20
+
+- question: Average exec time and peak memory per resource group
+  sql: |
+    SELECT rr.name AS resource_group,
+           rr.num_cpus, rr.memory, rr.runtime,
+           COUNT(*) AS job_runs,
+           ROUND(AVG(r.exec_time_minutes), 2) AS avg_minutes,
+           MAX(r.peak_memory_bytes) AS max_peak_memory_bytes
+    FROM result r
+    JOIN job j ON j.id = r.job_id
+    JOIN resource_requirements rr ON rr.id = j.resource_requirements_id
+    WHERE r.workflow_id = 123
+    GROUP BY rr.id
+    ORDER BY avg_minutes DESC
+
+- question: Which compute nodes ran the most jobs?
+  sql: |
+    SELECT cn.hostname, cn.compute_node_type,
+           COUNT(*) AS jobs_run,
+           ROUND(SUM(r.exec_time_minutes), 1) AS total_exec_minutes
+    FROM result r
+    JOIN compute_node cn ON cn.id = r.compute_node_id
+    WHERE r.workflow_id = 123
+    GROUP BY cn.id
+    ORDER BY jobs_run DESC
+
+- question: Compare actual vs. configured runtime for jobs that timed out
+  sql: |
+    SELECT j.name,
+           rr.runtime AS configured,
+           ROUND(rr.runtime_s / 60.0, 2) AS configured_minutes,
+           ROUND(r.exec_time_minutes, 2) AS actual_minutes,
+           r.return_code
+    FROM workflow_result wr
+    JOIN result r ON r.id = wr.result_id
+    JOIN job j ON j.id = wr.job_id
+    JOIN resource_requirements rr ON rr.id = j.resource_requirements_id
+    WHERE wr.workflow_id = 123
+      AND (r.return_code = 152
+           OR r.exec_time_minutes > rr.runtime_s / 60.0)
+    ORDER BY actual_minutes DESC
+
+- question: Find workflows tagged with a specific project in metadata
+  sql: |
+    SELECT id, name, user, timestamp,
+           json_extract(metadata, '$.project') AS project
+    FROM workflow
+    WHERE json_extract(metadata, '$.project') = 'climate-2026'
+    ORDER BY timestamp DESC
+
+- question: How many distinct retry attempts has each failed job had?
+  sql: |
+    SELECT j.id AS job_id, j.name,
+           COUNT(*) AS attempts,
+           SUM(CASE WHEN r.status = 5 THEN 1 ELSE 0 END) AS completed,
+           SUM(CASE WHEN r.status = 6 THEN 1 ELSE 0 END) AS failed
+    FROM job j
+    JOIN result r ON r.job_id = j.id
+    WHERE j.workflow_id = 123
+    GROUP BY j.id
+    HAVING attempts > 1
+    ORDER BY attempts DESC
