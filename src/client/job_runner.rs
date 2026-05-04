@@ -650,6 +650,20 @@ impl JobRunner {
             info!("Created output directory: {}", self.output_dir.display());
         }
 
+        if self.workflow.enable_ro_crate == Some(true) {
+            crate::client::ro_crate_utils::create_workflow_provenance_entities(
+                &self.config,
+                self.workflow_id,
+                self.run_id,
+                &self.workflow.name,
+            );
+        }
+        crate::client::ro_crate_utils::create_software_entities(
+            &self.config,
+            self.workflow_id,
+            self.run_id,
+        );
+
         // Check and log server version
         let version_result = version_check::check_version(&self.config);
         let server_version = version_result
@@ -1497,18 +1511,6 @@ impl JobRunner {
             "Creating RO-Crate entities for {} output files from job {}",
             output_files.len(),
             job_id
-        );
-
-        crate::client::ro_crate_utils::create_workflow_provenance_entities(
-            &self.config,
-            self.workflow_id,
-            self.run_id,
-            &self.workflow.name,
-        );
-        crate::client::ro_crate_utils::create_software_entities(
-            &self.config,
-            self.workflow_id,
-            self.run_id,
         );
 
         // Fetch the job model to get job name for CreateAction
